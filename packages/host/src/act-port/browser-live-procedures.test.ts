@@ -51,8 +51,6 @@ let windows = 0;
 const panelOf = (): ActSender<Window> => ({
   sender: { window: ++windows },
   panel: true,
-  voice: false,
-  call: false,
 });
 
 /** One port main opened, as the test watches it: where it went, what main posted on it, and whether it closed. */
@@ -208,19 +206,19 @@ it.effect("only a panel with the Browser tab experiment on may attach a view", (
   Effect.gen(function* () {
     const off = fixture({ experimentOn: false });
     const on = fixture();
-    const voice: ActSender<Window> = { ...panelOf(), panel: false, voice: true };
+    const other: ActSender<Window> = { ...panelOf(), panel: false };
 
     const whileOff = yield* off.actPort.perform(
       { kind: ACT_KIND.BROWSER_LIVE_ATTACH, payload: ATTACH },
       panelOf(),
     );
-    const fromVoice = yield* on.actPort.perform(
+    const fromOther = yield* on.actPort.perform(
       { kind: ACT_KIND.BROWSER_LIVE_ATTACH, payload: ATTACH },
-      voice,
+      other,
     );
 
     assert.deepEqual(whileOff, REFUSED);
-    assert.deepEqual(fromVoice, REFUSED);
+    assert.deepEqual(fromOther, REFUSED);
     assert.deepEqual([...off.asked, ...on.asked], []);
     assert.deepEqual([...off.opened, ...on.opened], [], "no port is posted");
   }),

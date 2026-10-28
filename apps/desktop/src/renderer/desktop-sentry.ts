@@ -3,9 +3,8 @@
  *
  * Note that the SDK is a chunk of its own (`desktop-sentry-sdk.ts`), loaded
  * when the window's root asks, once its first paint is done, rather than
- * parsed and started before the root draws, because every window, the
- * panels, the voice window, and the call window alike, would otherwise pay
- * for it on its way to its first paint. The web tab loads its own the same
+ * parsed and started before the root draws, because every window would
+ * otherwise pay for it on its way to its first paint. The web tab loads its own the same
  * way (`apps/web/src/app/web-sentry.ts`). What is reported before it lands,
  * a window whose state could not be read or whose surface failed to render,
  * is kept for it, a few at most, and sent once it stands

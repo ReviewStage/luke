@@ -23,7 +23,6 @@ import { tasksActsContract } from "./tasks.js";
 import { terminalActsContract } from "./terminals.js";
 import { thisMacHostActsContract } from "./this-mac-host.js";
 import { updateActsContract } from "./updates.js";
-import { voiceRuntimeActsContract } from "./voice-runtime.js";
 import { windowSurfaceActsContract } from "./window-surface.js";
 import { workspaceActsContract } from "./workspaces.js";
 
@@ -64,7 +63,6 @@ export {
   TERMINAL_ACT_KIND,
   THIS_MAC_HOST_ACT_KIND,
   UPDATE_ACT_KIND,
-  VOICE_RUNTIME_ACT_KIND,
   WINDOW_SURFACE_ACT_KIND,
   WORKSPACE_ACT_KIND,
 } from "./kinds.js";
@@ -106,7 +104,6 @@ export const actContract = {
   ...terminalActsContract,
   ...thisMacHostActsContract,
   ...updateActsContract,
-  ...voiceRuntimeActsContract,
   ...windowSurfaceActsContract,
   ...workspaceActsContract,
 } satisfies Record<PortActKind, AnyContractProcedure>;

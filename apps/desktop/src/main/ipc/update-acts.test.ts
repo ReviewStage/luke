@@ -29,8 +29,6 @@ const SNAPSHOT: UpdateSnapshot = {
 const PANEL: ActSender<WebContents> = {
   sender: {} as WebContents,
   panel: true,
-  voice: false,
-  call: false,
 };
 
 const ports: TestActPort<WebContents>[] = [];

@@ -1,10 +1,8 @@
 /**
  * index.tsx -- the panel window's entry: `App`.
  *
- * Loaded by `index.html` alone. The panel is the one window that records
- * (`App` is where session replay starts), so neither the voice window's nor
- * the call window's entry mounts it. It is also the one window whose page
- * Sentry watches for freezes.
+ * Loaded by `index.html` alone. `App` is where session replay starts, and
+ * this is the window whose page Sentry watches for freezes.
  */
 
 import { App } from "@luke/panel/app";

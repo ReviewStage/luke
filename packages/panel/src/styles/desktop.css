@@ -71,8 +71,7 @@ body,
 
 /* The Mac panel window's page is clear under the shell, whose frame tint and
    solid sheet paint everything there is, so the window's sidebar material
-   (`panel-manager.ts`) frosts through the frame; the voice and call windows,
-   which hold no shell, keep their ground. */
+   (`panel-manager.ts`) frosts through the frame. */
 :root[data-luke-profile="desktop"]:has(.desktop-shell),
 :root[data-luke-profile="desktop"]:has(.desktop-shell) :is(body, #root) {
   background: transparent;

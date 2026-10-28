@@ -3,7 +3,7 @@
  *
  * The one check these procedures make is who asked, as for every task act:
  * only a panel draws a task's agents, so every one refuses the takeover and
- * the hidden voice window, in its own sentence. What the service answers
+ * any other window, in its own sentence. What the service answers
  * comes back as the panel's own answer; on its way it is noted by the
  * notices (`@luke/host/agent-notices`), which hold where each agent stands
  * so an end the panel is not looking at is still announced, and which

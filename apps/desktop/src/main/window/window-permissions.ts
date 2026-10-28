@@ -1,5 +1,5 @@
 /**
- * window-permissions.ts -- what Luke's own windows may ask Chromium for: the microphone, for the voice, and full screen, for a video played in the file viewer.
+ * window-permissions.ts -- what Luke's own windows may ask Chromium for: the microphone, for dictation, and full screen, for a video played in the file viewer.
  *
  * Every other permission is refused, and so is anything asked by a page that
  * is no window of Luke's own. The microphone is granted for audio alone,

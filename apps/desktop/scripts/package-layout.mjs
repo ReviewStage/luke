@@ -17,21 +17,9 @@ export const BUNDLE_FOLDER = {
  */
 export const NATIVE_HELPERS = [
   {
-    source: "MediaDuck.swift",
-    binary: "mac-media-duck",
-    frameworks: ["AppKit"],
-    folder: BUNDLE_FOLDER.RESOURCES,
-  },
-  {
     source: "MicrophoneRoute.swift",
     binary: "mac-microphone-route",
     frameworks: ["CoreAudio", "IOKit"],
-    folder: BUNDLE_FOLDER.RESOURCES,
-  },
-  {
-    source: "OutputVolume.swift",
-    binary: "mac-output-volume",
-    frameworks: ["CoreAudio"],
     folder: BUNDLE_FOLDER.RESOURCES,
   },
   // This Mac's `luke-host` command and login item (`HOST_LOGIN_ITEM`), in

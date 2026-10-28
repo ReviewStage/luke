@@ -1,13 +1,11 @@
 /**
  * tasks-procedures.test.ts -- the task list, lifecycle, and content acts, through the act port as a window calls them.
  *
- * Only a panel of this build's own renderer asks; the voice and call
- * windows, and a frame this build does not trust, are refused in each
+ * Only a panel of this build's own renderer asks; any other
+ * window, and a frame this build does not trust, are refused in each
  * kind's own words before the host is asked; a panel's ask reaches the host
  * with its payload as the kind's schema read it, and answers what the host
- * answered; a started task opens its call where it planned and voice is
- * ready; a microphone press opens a call about the task the host has open;
- * the browser opens only the addresses each kind may open; and what a task
+ * answered; the browser opens only the addresses each kind may open; and what a task
  * holds is read through the host, a page's source coloured, and a pull
  * request or an issue the service did not answer refused.
  */
@@ -43,7 +41,6 @@ import {
   type TasksPageSourceAnswer,
   type TasksStartAnswer,
 } from "@luke/features/tasks-view";
-import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
 import { vi } from "vitest";
@@ -64,12 +61,10 @@ import { type TestActPort, testActPort } from "./testing.js";
 // The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");
 
-const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
-const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
-const CALL: ActSender = { ...PANEL, panel: false, call: true };
+const PANEL: ActSender = { sender: SENDER, panel: true };
+const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-const AGENT_ID = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
 const SERVICE = "https://luke.test";
 const CONNECT_PAGE = `${SERVICE}/connect-github.html?intent=intent-1`;
 
@@ -95,7 +90,6 @@ const REFUSAL = {
   [TASKS_ACT_KIND.ADMIN_READ]: "Could not read the admin dashboard on this system.",
   [TASKS_ACT_KIND.ADMIN_FAVORITE]: "Could not star that account on this system.",
   [TASKS_ACT_KIND.GITHUB_DISCONNECT]: "Could not disconnect GitHub on this system.",
-  [TASKS_ACT_KIND.TASKS_TALK]: "Could not call that agent on this system.",
   [TASKS_ACT_KIND.TASKS_SET_STANDING]: "Could not change where that task stands on this system.",
   [TASKS_ACT_KIND.TASKS_FILE]: "Could not read that file on this system.",
   [TASKS_ACT_KIND.TASKS_TREE]: "Could not list that folder on this system.",
@@ -228,7 +222,6 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.ADMIN_READ, payload: ADMIN_READ_PARAMS },
   { kind: TASKS_ACT_KIND.ADMIN_FAVORITE, payload: { id: ADMIN_ACCOUNT_ID, favorite: true } },
   { kind: TASKS_ACT_KIND.GITHUB_DISCONNECT, payload: undefined },
-  { kind: TASKS_ACT_KIND.TASKS_TALK, payload: { agentId: AGENT_ID } },
   { kind: TASKS_ACT_KIND.TASKS_SET_STANDING, payload: { ...TASK, status: "done" } },
   {
     kind: TASKS_ACT_KIND.TASKS_FILE,
@@ -288,7 +281,6 @@ function windowPort(
 ) {
   const asked: string[] = [];
   const browsed: string[] = [];
-  const talked: VoiceCallAbout[] = [];
   const pagesListeners = new Set<(followed: TaskPagesFollowed) => void>();
   const historyListeners = new Set<(followed: TaskHistoryFollowed) => void>();
   const browserTabsListeners = new Set<(followed: TaskBrowserTabsFollowed) => void>();
@@ -462,9 +454,6 @@ function windowPort(
         return Promise.resolve();
       },
       serviceBaseUrl: options.serviceBaseUrl ?? SERVICE,
-      talkTo: (about) => {
-        talked.push(about);
-      },
     }),
   );
   ports.push(port);
@@ -481,7 +470,7 @@ function windowPort(
   const browserTabsMoved = (followed: TaskBrowserTabsFollowed) => {
     for (const listener of browserTabsListeners) listener(followed);
   };
-  return { client, asked, browsed, talked, script, pagesMoved, historyMoved, browserTabsMoved };
+  return { client, asked, browsed, script, pagesMoved, historyMoved, browserTabsMoved };
 }
 
 /** Any port kind's procedure, erased to the union of what every one takes and answers. */
@@ -500,22 +489,8 @@ async function settled(client: ActPortClient, kind: TasksKind, payload: AnyPaylo
   }
 }
 
-it("the voice and call windows are refused every task act in the kind's own words, and the host is not asked", async () => {
-  for (const actor of [VOICE, CALL]) {
-    const { client, asked, browsed, talked } = windowPort(actor);
-    for (const act of ACTS) {
-      assert.deepEqual(await settled(client, act.kind, act.payload), {
-        refused: REFUSAL[act.kind],
-      });
-    }
-    assert.deepEqual(asked, []);
-    assert.deepEqual(browsed, []);
-    assert.deepEqual(talked, []);
-  }
-});
-
-it("a frame this build does not trust is refused every task act, even as a panel, and the host is not asked", async () => {
-  const { client, asked, browsed, talked } = windowPort(PANEL, { trusted: false });
+it("a window that is not a panel is refused every task act in the kind's own words, and the host is not asked", async () => {
+  const { client, asked, browsed } = windowPort(OTHER_WINDOW);
   for (const act of ACTS) {
     assert.deepEqual(await settled(client, act.kind, act.payload), {
       refused: REFUSAL[act.kind],
@@ -523,7 +498,17 @@ it("a frame this build does not trust is refused every task act, even as a panel
   }
   assert.deepEqual(asked, []);
   assert.deepEqual(browsed, []);
-  assert.deepEqual(talked, []);
+});
+
+it("a frame this build does not trust is refused every task act, even as a panel, and the host is not asked", async () => {
+  const { client, asked, browsed } = windowPort(PANEL, { trusted: false });
+  for (const act of ACTS) {
+    assert.deepEqual(await settled(client, act.kind, act.payload), {
+      refused: REFUSAL[act.kind],
+    });
+  }
+  assert.deepEqual(asked, []);
+  assert.deepEqual(browsed, []);
 });
 
 it("the task acts reach the host from a panel and answer what it answered", async () => {
@@ -582,8 +567,8 @@ it("the task acts reach the host from a panel and answer what it answered", asyn
   ]);
 });
 
-it("a started task opens no call, with an agent or without", async () => {
-  const { client, talked, script } = windowPort(PANEL);
+it("a started task answers its plan, with an agent or without", async () => {
+  const { client, script } = windowPort(PANEL);
   script.start = { planId: TASK_ID };
   const start = (payload: AnyPayload) => settled(client, TASKS_ACT_KIND.TASKS_START, payload);
 
@@ -596,7 +581,6 @@ it("a started task opens no call, with an agent or without", async () => {
 
   assert.deepEqual(bare, { answer: { planId: TASK_ID } });
   assert.deepEqual(withAgent, bare);
-  assert.deepEqual(talked, []);
 });
 
 it("a key the host's answer carries beside what the kind's schema names reaches the window no more, the answer encoded by the kind's own schema", async () => {
@@ -609,26 +593,12 @@ it("a key the host's answer carries beside what the kind's schema names reaches 
   });
 });
 
-it("a start the host could not make is answered with why, and opens no call", async () => {
-  const { client, talked } = windowPort(PANEL);
+it("a start the host could not make is answered with why", async () => {
+  const { client } = windowPort(PANEL);
 
   assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_START, { name: "Invitations" }), {
     answer: { failure: TASK_CALL_FAILURE.UNANSWERED },
   });
-  assert.deepEqual(talked, []);
-});
-
-it("an agent's Call press opens a call into it on the task it names, and into an agent with no task with none", async () => {
-  const { client, talked } = windowPort(PANEL);
-
-  assert.deepEqual(
-    await settled(client, TASKS_ACT_KIND.TASKS_TALK, { agentId: AGENT_ID, taskId: TASK_ID }),
-    { answer: undefined },
-  );
-  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_TALK, { agentId: AGENT_ID }), {
-    answer: undefined,
-  });
-  assert.deepEqual(talked, [{ taskId: TASK_ID, agentId: AGENT_ID }, { agentId: AGENT_ID }]);
 });
 
 it("a web link opens an http or https address in the browser, and no other scheme nor an address past the cap", async () => {
@@ -1041,8 +1011,8 @@ it("a plan's pages are followed at the host once for every stream a panel holds 
   );
 });
 
-it("the voice window is refused a plan's pages, and the host follows nothing", async () => {
-  const { client, asked } = windowPort(VOICE);
+it("a window that is not a panel is refused a plan's pages, and the host follows nothing", async () => {
+  const { client, asked } = windowPort(OTHER_WINDOW);
   await assert.rejects(client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK));
   assert.deepEqual(asked, []);
 });
@@ -1062,7 +1032,7 @@ it("a plan's newest page of history is streamed to a panel as the host tells it,
   );
 });
 
-it("a task's Browser tabs are streamed to a panel as the host tells them, and let go as the stream closes; the voice window is refused them", async () => {
+it("a task's Browser tabs are streamed to a panel as the host tells them, and let go as the stream closes; a window that is not a panel is refused them", async () => {
   const { client, asked, browserTabsMoved } = windowPort(PANEL);
   const stream = await client[TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW](TASK);
   const heard = stream.next();
@@ -1079,7 +1049,7 @@ it("a task's Browser tabs are streamed to a panel as the host tells them, and le
     assert.deepEqual(asked, [`tabs-follow:${TASK_ID}`, `tabs-unfollow:${TASK_ID}`]),
   );
 
-  const voice = windowPort(VOICE);
-  await assert.rejects(voice.client[TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW](TASK));
-  assert.deepEqual(voice.asked, []);
+  const other = windowPort(OTHER_WINDOW);
+  await assert.rejects(other.client[TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW](TASK));
+  assert.deepEqual(other.asked, []);
 });

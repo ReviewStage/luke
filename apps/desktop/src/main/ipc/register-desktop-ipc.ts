@@ -13,7 +13,6 @@ import {
   terminalProcedures,
 } from "@luke/host/act-port";
 import type { AppStateSnapshot } from "@luke/host/app-state";
-import { PUSH } from "@luke/host/contract";
 import { startMacTerminal, worktreesRoot } from "@luke/host/node";
 import { LEAVE } from "@luke/host/quit";
 import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
@@ -35,7 +34,6 @@ import { macTerminalProcedures } from "./mac-terminal-acts";
 import { whenPageGone } from "./page-gone";
 import { clientSettingSideEffects } from "./settings-side-effects";
 import { updateProcedures } from "./update-acts";
-import { voiceRuntimeProcedures, voiceRuntimeReports } from "./voice-runtime";
 import { windowSurfaceProcedures, windowSurfaceReports } from "./window-surface";
 
 /** The widest a still of part of a panel is kept, in device pixels: a card's preview at twice its width, and no more. */
@@ -109,23 +107,8 @@ export function registerDesktopIpc(services: DesktopServices): void {
     services: effectServices,
   } = services;
   const { launch } = config;
-  const { panels, voiceWindow, callWindow } = windows;
+  const { panels } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
-
-  /**
-   * The voice window's own dependencies, built once: the act rows and the
-   * reports below are two readings of the same collaborators, and two objects
-   * carrying the same closures would only invite them to drift.
-   */
-  const voiceRuntime = {
-    panels,
-    voiceWindow,
-    state,
-    openExternal: config.openExternal,
-    liveDiagnostics: () => operator.host.liveDiagnostics(),
-    liveSession: operator.host,
-    recordProductEvent,
-  };
 
   const browserExperimentOn = () =>
     experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.BROWSER);
@@ -168,7 +151,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
       fork: (effect) => void run(effect),
     }),
     ...updateProcedures({ updates }),
-    ...voiceRuntimeProcedures(voiceRuntime),
     ...windowSurfaceProcedures({
       panels,
       requestMicrophone: () => native.requestMicrophone(),
@@ -201,7 +183,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
 
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
-    ...voiceRuntimeReports(voiceRuntime),
     // The development trace is the host's: a tapped wire event crosses to its
     // writer, which alone knows whether this run records anything.
     recordAgentTrace: (_context, trace) => {
@@ -228,12 +209,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
   registerBridgeHost({
     ipcMain,
     trustedSender: windows.trustedSender,
-    senderOf: (sender) => ({
-      sender,
-      panel: panels.owns(sender),
-      voice: voiceWindow.owns(sender),
-      call: callWindow.owns(sender),
-    }),
+    senderOf: (sender) => ({ sender, panel: panels.owns(sender) }),
     actPort: createActPortHandler(
       {
         account: {
@@ -261,20 +237,13 @@ export function registerDesktopIpc(services: DesktopServices): void {
             return contents === undefined ? undefined : windows.reporterOf(contents);
           },
           lastSettings: () => operator.settings(),
-          sideEffects: clientSettingSideEffects({
-            applyLoginItem: windows.applyLoginItem,
-            mediaDuck: native.mediaDuck,
-          }),
+          sideEffects: clientSettingSideEffects({ applyLoginItem: windows.applyLoginItem }),
         },
         tasks: {
           host: operator.host,
           colourCode,
           openExternal: config.openExternal,
           serviceBaseUrl: config.hostedServiceBaseUrl,
-          talkTo: (about) => {
-            const voice = voiceWindow.current();
-            if (voice) windowPushes.push(voice.webContents, PUSH.TASKS_TALK, about);
-          },
         },
         thisMacHost: { host: operator.host },
         workspaces: { host: operator.host, openExternal: config.openExternal },

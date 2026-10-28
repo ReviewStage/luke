@@ -108,6 +108,11 @@ export const windowSurfaceActsContract = {
   )
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.UndefinedOr(microphoneRouteSchema)),
+  [WINDOW_SURFACE_ACT_KIND.MICROPHONE_OPEN_SETTINGS]: actProcedure(
+    "Could not open the microphone privacy settings.",
+  )
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.Void),
   [WINDOW_SURFACE_ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: actProcedure(
     "Could not open the notification settings.",
   )

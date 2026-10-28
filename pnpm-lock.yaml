@@ -215,9 +215,6 @@ importers:
       '@luke/host':
         specifier: workspace:*
         version: link:../../packages/host
-      '@luke/live':
-        specifier: workspace:*
-        version: link:../../packages/live
       '@luke/panel':
         specifier: workspace:*
         version: link:../../packages/panel
@@ -1211,15 +1208,9 @@ importers:
       '@luke/features':
         specifier: workspace:*
         version: link:../features
-      '@luke/live':
-        specifier: workspace:*
-        version: link:../live
       '@luke/settings':
         specifier: workspace:*
         version: link:../settings
-      '@luke/voice':
-        specifier: workspace:*
-        version: link:../voice
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire

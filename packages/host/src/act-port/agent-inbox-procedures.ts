@@ -2,8 +2,8 @@
  * agent-inbox-procedures.ts -- the Inbox's asks of the host.
  *
  * The one check these procedures make is who asked, as for every task act:
- * only a panel draws the Inbox, so every one refuses the takeover and the
- * hidden voice window, in its own sentence. What the service answers comes
+ * only a panel draws the Inbox, so every one refuses the takeover and any
+ * other window, in its own sentence. What the service answers comes
  * back as the panel's own answer. A task's or an agent's inbox is followed
  * while a panel holds its stream open: the host follows one on the first stream of it and
  * lets it go with the last, and every change it tells reaches every stream

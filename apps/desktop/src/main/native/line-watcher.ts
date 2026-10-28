@@ -1,37 +1,17 @@
 import { NativeHelper } from "./native-helper";
 
-/**
- * What a parser returns for a line that says the helper cannot answer. A
- * symbol, so a watcher whose state is itself a string can still return one.
- */
-export const LINE_UNAVAILABLE: unique symbol = Symbol("line-unavailable");
-type LineUnavailable = typeof LINE_UNAVAILABLE;
-
-/**
- * A line's meaning: a state to report, the helper saying it cannot answer, or
- * nothing — a line that does not parse is dropped rather than guessed at.
- */
-type ParsedLine<State> = State | LineUnavailable | undefined;
-
 export interface LineWatcherOptions<State> {
   binary: string;
   /** `"pipe"` only for a watcher that writes the helper a word. */
   input?: "ignore" | "pipe";
-  parse: (line: string) => ParsedLine<State>;
+  /** A line's state to report, or nothing: a line that does not parse is dropped rather than guessed at. */
+  parse: (line: string) => State | undefined;
   onState: (state: State) => void;
   /**
-   * The helper cannot answer. Called at most once for an ending — a spawn that
-   * failed, an error, an exit — and never for a stop the app asked for. Called
-   * repeatedly, without ending the watch, for a parsed `LINE_UNAVAILABLE` when
-   * `unavailableLineEnds` is false.
+   * The helper cannot answer. Called at most once, for an ending — a spawn
+   * that failed, an error, an exit — and never for a stop the app asked for.
    */
   onUnavailable: () => void;
-  /**
-   * Whether a parsed `LINE_UNAVAILABLE` ends the watch. True for a helper whose
-   * refusal is final (the talk key never registers again); false for one whose
-   * subject can come back (the default output device changes).
-   */
-  unavailableLineEnds: boolean;
 }
 
 export interface LineWatcher {
@@ -64,11 +44,6 @@ export function lineWatcher<State>(options: LineWatcherOptions<State>): LineWatc
     if (done) return;
     const parsed = options.parse(line);
     if (parsed === undefined) return;
-    if (parsed === LINE_UNAVAILABLE) {
-      if (options.unavailableLineEnds) end();
-      else options.onUnavailable();
-      return;
-    }
     options.onState(parsed);
   };
 
