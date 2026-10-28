@@ -1319,7 +1319,7 @@ test("a sent mention of an agent of another task or none hangs its card's one re
   const notes = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => {
     restOn(chip);
     const card = document.querySelector(".luke-tooltip-card > *");
-    const words = card?.hasAttribute("data-chip-card-reading") ? "Reading" : card?.textContent;
+    const words = card?.hasAttribute("data-hover-card-skeleton") ? "Reading" : card?.textContent;
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
     });

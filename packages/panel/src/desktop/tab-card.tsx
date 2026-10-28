@@ -15,7 +15,7 @@ import { PageChipCard, TaskChipCard } from "../tasks/chip-cards.js";
 import { browserOf } from "../tasks/cloud-browser-pane.js";
 import { FileCard } from "../tasks/file-ref.js";
 import { type InboxBoardView, NEEDS_YOU, needsYouWords } from "../tasks/inbox-model.js";
-import { PageCard, PageNameCard } from "../tasks/page-card.js";
+import { PageCard, PageNameCard, PageNameSkeleton } from "../tasks/page-card.js";
 import { type PlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { TerminalCardFoot } from "../tasks/terminal-shells.js";
 import {
@@ -232,6 +232,7 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
         <PageChipCard
           place={subject.place}
           pageId={subject.pageId}
+          reading={<PageNameSkeleton name={subject.name} />}
           fallback={<PageNameCard name={subject.name} />}
         />
       );
