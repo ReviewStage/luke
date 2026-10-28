@@ -125,11 +125,16 @@ export function heldInboxes(options: {
     if (standing !== undefined) return standing;
     const own = followedOf(kind);
     const fromFeed = fedOf(kind);
-    // Note that an inbox's own follow stands over the feed, since it reads settled items the feed's bound leaves out.
+    const standingFollows = following.get(kind);
+    // Note that an inbox's own follow stands over the feed while it stands, since it reads settled items the feed's
+    // bound leaves out, and its items kept once it is let go stand only where the feed holds nothing of that inbox.
+    const ownOver = [...own.items].filter(
+      ([id]) => standingFollows?.has(id) === true || fromFeed?.has(id) !== true,
+    );
     const view =
       fromFeed === undefined || fromFeed.size === 0
         ? own
-        : { items: new Map([...fromFeed, ...own.items]), failed: own.failed };
+        : { items: new Map([...fromFeed, ...ownOver]), failed: own.failed };
     merged.set(kind, view);
     return view;
   };
@@ -161,6 +166,9 @@ export function heldInboxes(options: {
     if (byId === undefined || standing === undefined || standing.holders > 0) return;
     standing.stop?.();
     byId.delete(id);
+    // Note that the view is drawn anew, since an inbox let go may give way to the feed.
+    merged.delete(kind);
+    told();
     // Note that an inbox the feed holds gives its own follow's items up with it, so the feed's newer word is drawn,
     // while one the feed holds nothing of, its items all settled past the feed's bound, keeps them.
     if (!forget && fedOf(kind)?.has(id) !== true) return;
@@ -188,8 +196,14 @@ export function heldInboxes(options: {
     hold: (kind, id, follow) => {
       const byId = following.get(kind) ?? new Map<string, Following>();
       following.set(kind, byId);
-      const standing = byId.get(id) ?? { holders: 0, stop: undefined, lingering: undefined };
+      const was = byId.get(id);
+      const standing = was ?? { holders: 0, stop: undefined, lingering: undefined };
       byId.set(id, standing);
+      // Note that a follow just begun stands over the feed, so the view is drawn anew.
+      if (was === undefined) {
+        merged.delete(kind);
+        told();
+      }
       standing.lingering?.();
       standing.lingering = undefined;
       standing.holders += 1;

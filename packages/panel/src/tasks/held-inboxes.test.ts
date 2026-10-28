@@ -33,3 +33,37 @@ test("an inbox the account's feed holds nothing of keeps its own follow's items 
     "the billing task's items as its own follow last pushed them",
   );
 });
+
+test("an inbox's items kept from a follow let go give way to the account's feed once it holds that inbox again", () => {
+  let lapse: (() => void) | undefined;
+  const held = heldInboxes({
+    linger: (letGo) => {
+      lapse = letGo;
+      return () => undefined;
+    },
+    forget: false,
+  });
+  held.feed({ whole: true, scopes: [] });
+  const release = held.hold(INBOX_SCOPE_KIND.PLAN, BILLING.id, (_scope, hear) => {
+    hear({ items: [THRESHOLD] });
+    return () => undefined;
+  });
+  release();
+  lapse?.();
+
+  // The item is answered again, so the feed holds the billing task anew, its item newer than the one kept.
+  const answered = {
+    ...THRESHOLD,
+    revision: THRESHOLD.revision + 1,
+    updatedAt: THRESHOLD.updatedAt + 1,
+  };
+  held.feed({
+    whole: false,
+    scopes: [{ scope: { kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id }, items: [answered] }],
+  });
+  assert.deepEqual(
+    held.heldOf(INBOX_SCOPE_KIND.PLAN).items.get(BILLING.id),
+    [answered],
+    "the feed's newer word is drawn",
+  );
+});
