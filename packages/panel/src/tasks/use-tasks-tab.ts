@@ -1491,13 +1491,12 @@ export function useTasksTab(input: {
     [inboxAgent],
   );
   const inboxTaskAgents = useInboxTaskAgents(inboxView === undefined ? undefined : inboxTask);
-  // The task's agents' cloud Browser tabs, while the Browser tab experiment is on, which the panel draws on its own task alone.
+  // The task's agents' cloud Browser tabs, which the panel draws on its own task alone.
   const cloudTaskId =
     inboxView === undefined && pageAgents === undefined ? viewed.activeTaskId : undefined;
-  const cloudOn = useExperiment(EXPERIMENT.BROWSER);
-  const cloudListed = useCloudBrowserTabs(cloudTaskId, cloudOn);
+  const cloudListed = useCloudBrowserTabs(cloudTaskId, cloudTaskId !== undefined);
   // A draft of a tab in an agent's browser stands in the strip after the tabs the service lists.
-  const cloudDrafts = useCloudBrowserDrafts(cloudTaskId, cloudOn);
+  const cloudDrafts = useCloudBrowserDrafts(cloudTaskId, cloudTaskId !== undefined);
   // Note that a panel off its task lists none, rather than none read yet, so a cloud tab chosen there gives way.
   const cloudBrowsers = useMemo(
     () =>
