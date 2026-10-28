@@ -2475,6 +2475,39 @@ it.effect("an item no stamp names any more is dropped, its plan told holding not
   }),
 );
 
+it.effect(
+  "a window following the account's items through a sign-out is told there are none, then the next account's items whole once it signs in",
+  () =>
+    Effect.gen(function* () {
+      let signedIn: string | undefined = "user-dana";
+      const { call, asked, sealItems, live, accountItems, reset } = yield* subject({
+        accountId: () => signedIn,
+      });
+      sealItems(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW);
+      yield* settled;
+      deliverItems(live, [stampOf(HELD_ITEM, TASK_ID)], [HELD_ITEM]);
+      yield* toldTimes(accountItems, 1);
+
+      signedIn = undefined;
+      yield* reset;
+      yield* settled;
+      signedIn = "user-sam";
+      deliverItems(live, [stampOf(OTHER_ITEM, OTHER_TASK_ID)], [OTHER_ITEM]);
+      yield* TestClock.adjust("5 seconds");
+      yield* toldTimes(accountItems, 3);
+
+      assert.deepEqual(accountItems().slice(1), [
+        { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+        { whole: true, scopes: [{ scope: OTHER_PLAN_SCOPE, items: [OTHER_ITEM] }] },
+      ]);
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("account-items-live:")),
+        ["account-items-live:user-dana", "account-items-live:user-sam"],
+      );
+    }),
+);
+
 it.effect("a Start answers its agent before the task list carries the Start's transaction", () =>
   Effect.gen(function* () {
     const { call, startCommits } = yield* subject({ listed: () => Effect.never });

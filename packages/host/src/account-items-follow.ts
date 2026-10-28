@@ -1,4 +1,5 @@
 import {
+  CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountItems,
   type CodingAgentScopeItems,
   INBOX_SCOPE_KIND,
@@ -25,7 +26,7 @@ import {
   SubscriptionRef,
 } from "effect";
 import type { InboxTxWaits } from "./inbox-tx-waits.js";
-import { decodedLiveRows, LIVE_STATE, restarting } from "./live-follow.js";
+import { decodedLiveRows, LIVE_RESTART, LIVE_STATE, restarting } from "./live-follow.js";
 import { InboxScopeKey } from "./scope-inbox-follow.js";
 
 /**
@@ -48,7 +49,9 @@ import { InboxScopeKey } from "./scope-inbox-follow.js";
  * A window is told every plan and agent holding any as the follow starts
  * (`whole`), then only those that moved, one holding nothing now with no
  * items. A read refused as signed out ends the follow, which is read again
- * after `LIVE_RESTART`, and told whole again.
+ * after `LIVE_RESTART`, and told whole again. A window's follow outlives a
+ * sign-out: it is told there are none, and the next account's items whole
+ * once one signs in (`followSignedInItems`).
  */
 
 /** How long a follow no reader holds is kept, so a window coming back finds it standing. */
@@ -286,4 +289,32 @@ export function followAccountItems(
     }),
   );
   return restarting(attempt.pipe(Effect.andThen(RcMap.invalidate(items, userId)), Effect.as(true)));
+}
+
+/**
+ * The items of whoever `signedIn` names, until the fiber is let go: told
+ * unanswered while nobody is, then followed for whoever signs in next,
+ * looked for every `LIVE_RESTART`. Note that the window's stream stays open
+ * through a sign-out, and is followed again by nothing else, so this is
+ * what tells it the next account's items whole.
+ */
+export function followSignedInItems(
+  items: AccountItems,
+  signedIn: () => string | undefined,
+  tell: (told: CodingAgentAccountItems) => Effect.Effect<void>,
+): Effect.Effect<void> {
+  const account: Effect.Effect<string> = Effect.suspend(() => {
+    const userId = signedIn();
+    return userId === undefined
+      ? Effect.andThen(Effect.sleep(LIVE_RESTART), account)
+      : Effect.succeed(userId);
+  });
+  return Effect.suspend(() =>
+    Effect.andThen(
+      signedIn() === undefined
+        ? tell({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED })
+        : Effect.void,
+      Effect.flatMap(account, (userId) => followAccountItems(items, userId, tell)),
+    ),
+  );
 }

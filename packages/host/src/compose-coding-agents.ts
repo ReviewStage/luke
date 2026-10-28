@@ -97,7 +97,7 @@ import {
 import { Effect, Equal, FiberHandle, FiberMap, Option, RcMap, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
-import { type AccountItems, accountItems, followAccountItems } from "./account-items-follow.js";
+import { type AccountItems, accountItems, followSignedInItems } from "./account-items-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -392,6 +392,13 @@ function composed(
   /** The account's items as a window is told them. */
   const tellItems = (told: CodingAgentAccountItems) =>
     Effect.sync(() => kernel.emit(GATEWAY_EVENT.ACCOUNT_ITEMS_CHANGED, carried(told)));
+  /** Whether a window follows the account's items, so a sign-out follows them again for whoever signs in next. */
+  let itemsFollowed = false;
+  const followItems = followSignedInItems(
+    items,
+    () => (gate() ? dependencies.accountId() : undefined),
+    tellItems,
+  );
 
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.CODING_AGENTS_MODELS]: () =>
@@ -986,16 +993,16 @@ function composed(
       Effect.as(FiberHandle.clear(accountFollow), {}),
     [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW]: () =>
       Effect.gen(function* () {
-        const userId = dependencies.accountId();
-        const follow =
-          gate() && userId !== undefined
-            ? followAccountItems(items, userId, tellItems)
-            : tellItems(UNANSWERED);
-        yield* FiberHandle.run(itemsFollow, follow);
+        itemsFollowed = true;
+        yield* FiberHandle.run(itemsFollow, followItems);
         return {};
       }),
     [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_ITEMS_UNFOLLOW]: () =>
-      Effect.as(FiberHandle.clear(itemsFollow), {}),
+      Effect.gen(function* () {
+        itemsFollowed = false;
+        yield* FiberHandle.clear(itemsFollow);
+        return {};
+      }),
   };
 
   const reset = Effect.gen(function* () {
@@ -1008,8 +1015,8 @@ function composed(
     for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
     for (const userId of yield* RcMap.keys(accounts)) yield* RcMap.invalidate(accounts, userId);
     for (const userId of yield* RcMap.keys(items)) yield* RcMap.invalidate(items, userId);
-    // Note that a window still holding the account's items is told there are none, so what it was told of the account that left is not kept for the next.
-    yield* tellItems(UNANSWERED);
+    // Note that a window still following the account's items is told there are none, then the next account's whole once one signs in.
+    if (itemsFollowed) yield* FiberHandle.run(itemsFollow, followItems);
   });
 
   return { methods, lifetime: Effect.void, reset };
