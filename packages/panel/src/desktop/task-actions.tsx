@@ -556,15 +556,38 @@ export function useTaskMenuItems(
 export type TaskMenuItems = ReturnType<typeof useTaskMenuItems>;
 
 /**
- * The open task's shortcuts and the questions its menu asks, drawn in the
- * task's toolbar on every tab of the task, whichever tab is chosen and
- * whether or not the panel shows the plan, so each runs exactly as its menu
- * item would: Permanently delete still asks first, and a task already done
- * has no Mark done to offer. The items themselves are drawn by the Plan
- * tab, from its ⋯ and its right-click, and by a phone's header on its Plan
- * view (`useTaskMenuItems`).
+ * The open task's document menu and the questions its items ask, held on
+ * the task's page on every tab of the task, whichever tab is chosen and
+ * whether or not the panel shows the plan, and keyed by the task, so a
+ * question asked of one task never stands over the next. It offers the open
+ * task's Mark done and Permanently delete shortcuts, so each runs exactly
+ * as its menu item would: Permanently delete still asks first, and a task
+ * already done has no Mark done to offer. The items are handed up through
+ * `hand`, read as the Plan tab's ⋯ and right-click and a phone's header
+ * draw them (`useTaskMenuItems`), and the newest stand there from the draw
+ * that made them.
  */
-export function TaskActions({ actions }: { actions: TaskMenuItems }): React.JSX.Element {
+export function TaskActions({
+  tasks,
+  task,
+  onRename,
+  hand,
+}: {
+  tasks: TasksControl;
+  task: TaskSummary;
+  /** Puts the caret in the plan's own title, or opens a phone's head as the task's name field. */
+  onRename: () => void;
+  /** Where the items are handed up, for the menus that draw them. */
+  hand: React.RefObject<TaskMenuItems | undefined>;
+}): React.JSX.Element {
+  // Note that the open plan is unread only by a mark by hand, since its saves are seen as they land.
+  const actions = useTaskMenuItems(tasks, task.id, task.name, {
+    rename: onRename,
+    drawn: true,
+    unread: useReadMarks().markedUnread(task.id),
+    surface: TASK_MENU_SURFACE.DOCUMENT,
+  });
+  hand.current = actions;
   const { deletion } = actions;
   const asking = confirmAsked(deletion.stage);
   useAppCommand(APP_COMMAND.DELETE_TASK, asking || deletion.busy ? undefined : deletion.ask);

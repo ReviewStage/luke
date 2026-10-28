@@ -792,12 +792,16 @@ test("a plan's document opens on its title, with who created it and last edited 
   );
   const body = container.querySelector(".desktop-document .plan-document-body .plan-body");
   const first = body?.firstElementChild;
-  const byline = first?.nextElementSibling;
+  // A task from before statuses draws no standing chip, and still its repository's, under the title.
+  const chips = first?.nextElementSibling;
+  const byline = chips?.nextElementSibling;
 
   assert.equal(container.querySelector('nav[aria-label="Where this task is"]'), null);
   assert.equal(body?.previousElementSibling, null, "nothing stands over the document's title");
   assert.equal(first?.querySelector("h1")?.textContent, task.name, "the title leads the document");
-  assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the title");
+  assert.ok(chips?.classList.contains("plan-task-standing"), "the repository chip stands under it");
+  assert.match(chips?.textContent ?? "", /acme\/web/u);
+  assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the chips");
   assert.match(byline?.textContent ?? "", /^Created by .*Last edited by .*Lee Park/u);
   act(() => root.unmount());
   container.remove();

@@ -192,6 +192,8 @@ export interface TaskRepositoryDoor {
   readonly onChoose: (repository: string) => void;
   /** Counts the asks from elsewhere to open the menu, ⌘K's Change repository, each opening it. */
   readonly openRequest?: number | undefined;
+  /** Hears each ask the chip opened its menu for, so the page lets it go. */
+  readonly onAsked?: ((request: number) => void) | undefined;
   /** Why the service refused the last pick; none once one is kept. */
   readonly note?: string | undefined;
 }
@@ -301,7 +303,9 @@ function TaskStatusPicker({
  * repository's where the page hands the chip's doors, with the service's
  * refusal of the last pick beside it, and where its agents run while the
  * Local agents experiment is on and the member has a device or the task
- * runs on one; nothing for a task from a service before them.
+ * runs on one. A task from a service before statuses draws none of the
+ * standing chips, and still its repository's, which does not wait on them,
+ * since the plan's menu leaves Change repository to the chip.
  */
 export function TaskStandingChips({
   task,
@@ -316,35 +320,42 @@ export function TaskStandingChips({
 }): React.JSX.Element | null {
   const { status, priority } = task;
   const localAgents = useExperiment(EXPERIMENT.LOCAL_AGENTS);
-  if (status === undefined || priority === undefined) return null;
+  const standing = status !== undefined && priority !== undefined;
+  if (!standing && repository === undefined) return null;
   const runsOnDrawn =
-    localAgents && ((devices !== undefined && devices.length > 0) || task.runsOn !== undefined);
+    standing &&
+    localAgents &&
+    ((devices !== undefined && devices.length > 0) || task.runsOn !== undefined);
   return (
     <div className="plan-task-standing">
       <Inline gap={GAP.CONTROL}>
-        <TaskStatusPicker
-          status={status}
-          onPick={onSet === undefined ? undefined : (picked) => onSet({ status: picked })}
-        />
-        <Picker
-          label="Priority"
-          value={priority}
-          valueLabel={TASK_PRIORITY_WORDS[priority]}
-          valueIcon={<TaskPriorityMark priority={priority} />}
-          rows={PRIORITY_ROWS}
-          noMatch="No priorities match"
-          align={POPOVER_ALIGN.START}
-          width={CHIP_WIDTH.AUTO}
-          disabled={onSet === undefined}
-          onPick={(id) => {
-            const picked = priorityOf(id);
-            if (picked !== undefined && picked !== priority) onSet?.({ priority: picked });
-          }}
-        />
-        <TaskAssigneePicker
-          assignee={task.assignee}
-          onPick={onSet === undefined ? undefined : (assigneeId) => onSet({ assigneeId })}
-        />
+        {status === undefined || priority === undefined ? null : (
+          <>
+            <TaskStatusPicker
+              status={status}
+              onPick={onSet === undefined ? undefined : (picked) => onSet({ status: picked })}
+            />
+            <Picker
+              label="Priority"
+              value={priority}
+              valueLabel={TASK_PRIORITY_WORDS[priority]}
+              valueIcon={<TaskPriorityMark priority={priority} />}
+              rows={PRIORITY_ROWS}
+              noMatch="No priorities match"
+              align={POPOVER_ALIGN.START}
+              width={CHIP_WIDTH.AUTO}
+              disabled={onSet === undefined}
+              onPick={(id) => {
+                const picked = priorityOf(id);
+                if (picked !== undefined && picked !== priority) onSet?.({ priority: picked });
+              }}
+            />
+            <TaskAssigneePicker
+              assignee={task.assignee}
+              onPick={onSet === undefined ? undefined : (assigneeId) => onSet({ assigneeId })}
+            />
+          </>
+        )}
         {repository === undefined ? null : (
           // Keyed by the task, so another task starts the chip and its menu afresh and the same task keeps them.
           <RepositoryChip
@@ -354,6 +365,7 @@ export function TaskStandingChips({
             chooser={repository.chooser}
             onChoose={repository.onChoose}
             openRequest={repository.openRequest}
+            onAsked={repository.onAsked}
             align={POPOVER_ALIGN.START}
             width={CHIP_WIDTH.AUTO}
           />

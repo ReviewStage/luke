@@ -113,6 +113,13 @@ test("the repository chip stands among the chips where the page hands its doors,
 
   const without = drawn(TASK, () => undefined);
   assert.equal(without.textContent?.includes("acme/web"), false, "no doors, no chip");
+
+  // A task from a service before statuses draws no standing chip, and still its repository's.
+  const { status: _status, priority: _priority, ...before } = TASK;
+  const legacy = drawn(before, () => undefined, door);
+  await act(async () => undefined);
+  assert.ok(legacy.textContent?.includes("acme/web"), "the chip does not wait on the standing");
+  assert.equal(legacy.querySelector('[aria-label^="Status"]'), null);
 });
 
 test("a status picked from the menu is handed to the page, and the one standing is not picked again", () => {

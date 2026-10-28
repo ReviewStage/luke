@@ -30,7 +30,7 @@ import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { InboxIcon } from "lucide-react";
-import { memo, useCallback, useEffect, useId, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -86,7 +86,7 @@ import { OpenHereProvider, openPullRequestsHere } from "../tasks/use-open-link.j
 import { usePlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js";
-import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
+import type { TaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
@@ -108,9 +108,9 @@ import {
   useSidePanelDrawing,
 } from "./side-panel.js";
 import { useStrandedTaskBanner } from "./stranded-task-banner.js";
-import { type ShownTab, useTabViews } from "./strip-tabs.js";
+import { type DocumentMenu, type ShownTab, useTabViews } from "./strip-tabs.js";
 import { tabCard } from "./tab-card.js";
-import { TASK_MENU_SURFACE, TaskActions, useTaskMenuItems } from "./task-actions.js";
+import { TaskActions, type TaskMenuItems } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 import {
   ACTIVITY_BACK,
@@ -919,25 +919,32 @@ function PlanDocument({
   const openedRepository = opened?.repository ?? null;
   const reader = useMemo(() => ({ readerId: tasks.me }), [tasks.me]);
   const editAgents = useMemo(() => ({ control: agents, onOpen: openAgent }), [agents, openAgent]);
-  // Note that the open plan is unread only by a mark by hand, since its saves are seen as they land.
-  const reads = useReadMarks();
-  const unread = openedId === undefined ? false : reads.markedUnread(openedId);
-  // The task's own menu, which its Plan tab draws from its ⋯ and its
-  // right-click, and a phone's header on its Plan view; its shortcuts and
-  // the questions its items ask stand in the toolbar on every tab
-  // (`TaskActions`). Held above the states with no document, as the
-  // refusal above is.
-  const taskMenu = useTaskMenuItems(tasks, openedId ?? "", opened?.name ?? "", {
-    rename: beginRename,
-    drawn: true,
-    unread,
-    surface: TASK_MENU_SURFACE.DOCUMENT,
-  });
+  // The task's own menu, as the task's page holds it keyed by the task
+  // (`TaskActions`), handed up here for the Plan tab's ⋯ and right-click and
+  // a phone's header on its Plan view, each reading the newest items as it
+  // draws. Note that the page draws `TaskActions` ahead of the panel, so the
+  // items stand here by the time the panel's tabs read them.
+  const taskMenuHand = useRef<TaskMenuItems | undefined>(undefined);
+  const planMenu = useMemo<DocumentMenu>(
+    () => ({
+      groups: () => taskMenuHand.current?.groups() ?? [],
+      get subject() {
+        return taskMenuHand.current?.subject;
+      },
+      get footer() {
+        return taskMenuHand.current?.footer;
+      },
+    }),
+    [],
+  );
   // The repository chip's doors (`task-standing.tsx`): a pick is sent
   // through the task's own door, which answers why the service refused it,
-  // said beside the chip under the task it was about and no other; ⌘K's
+  // said beside the chip under the task it was about and no other. ⌘K's
   // Change repository asks the chip to open its menu, each ask counted so
-  // the same press opens it again.
+  // the same press opens it again: the ask stands until the chip answers it
+  // (`onAsked`), so a chip drawn again later does not open on an ask already
+  // answered, and the plan is shown first where the panel hides it, since
+  // the chip stands in the plan.
   const chooseRepository = useSteadyDoor((repository: string) => {
     if (opened === undefined) return;
     const { id: taskId } = opened;
@@ -950,10 +957,17 @@ function PlanDocument({
   const repositoryNote =
     refusal !== undefined && refusal.taskId === openedId ? refusal.note : undefined;
   const { repositories, repositoryMenu } = tasks;
+  const [answeredRequest, setAnsweredRequest] = useState(0);
   const menuRequest =
-    repositoryMenu !== undefined && repositoryMenu.taskId === openedId
+    repositoryMenu !== undefined &&
+    repositoryMenu.taskId === openedId &&
+    repositoryMenu.request > answeredRequest
       ? repositoryMenu.request
       : undefined;
+  const { onChoose: choosePanelTab } = tasks.sidePanel;
+  useEffect(() => {
+    if (menuRequest !== undefined && !planShown) choosePanelTab(SIDE_PANEL_TAB.PLAN);
+  }, [menuRequest, planShown, choosePanelTab]);
   const repositoryDoor = useMemo<TaskRepositoryDoor | undefined>(
     () =>
       openedId === undefined
@@ -962,6 +976,7 @@ function PlanDocument({
             chooser: repositories,
             onChoose: chooseRepository,
             openRequest: menuRequest,
+            onAsked: setAnsweredRequest,
             note: repositoryNote,
           },
     [openedId, repositories, chooseRepository, menuRequest, repositoryNote],
@@ -1234,7 +1249,7 @@ function PlanDocument({
   // What the header's ⋯ offers under the views follows what is on screen: the task's own menu on the Plan view, the chosen agent's on Agents, and the tab's on one chosen from Activity, the last two each naming what they act on (`shownTabGroups`).
   const shownGroups = (opener: HTMLElement): readonly (readonly MenuEntry[])[] =>
     pane === TASK_PANE.PLAN
-      ? taskMenu.groups()
+      ? planMenu.groups()
       : shownTabGroups(pane === TASK_PANE.AGENTS ? shownAgentTab : onTab, opener);
   const head = switched ? (
     <TaskHead
@@ -1254,7 +1269,7 @@ function PlanDocument({
           thing="Task"
           shown={tasks.shown}
           groups={(opener) => [taskPaneItems(pane, choosePane), ...shownGroups(opener)]}
-          ends={() => (pane === TASK_PANE.PLAN ? taskMenu : undefined)}
+          ends={() => (pane === TASK_PANE.PLAN ? planMenu : undefined)}
         />
       }
     />
@@ -1276,6 +1291,14 @@ function PlanDocument({
             >
               <TaskMentions value={mentions}>
                 <OpenHereProvider value={openHere}>
+                  {/* The task's menu, its shortcuts, and the questions its items ask, keyed by the task so none outlives it; drawn ahead of the panel, which reads the items. */}
+                  <TaskActions
+                    key={task.id}
+                    tasks={tasks}
+                    task={task}
+                    onRename={beginRename}
+                    hand={taskMenuHand}
+                  />
                   {head}
                   {/* Note that the column is hidden rather than left out while the
           panel fills the window, and keeps its layout beneath the panel, so
@@ -1330,8 +1353,6 @@ function PlanDocument({
                                   onNewTab={sideFocused ? sidePanel.onNewTab : mainTabs.onNewTab}
                                 />
                               ) : null}
-                              {/* The task's shortcuts and the questions its menu asks, on every tab; the menu itself is the Plan tab's. */}
-                              <TaskActions actions={taskMenu} />
                               {/* The chosen agent's ⋯, portalled in from its tab (`strip-tabs.tsx`'s `DoorsTab`), so it acts on what is under the bar. */}
                               <span
                                 ref={setActionsSlot}
@@ -1410,7 +1431,7 @@ function PlanDocument({
                         onOpenTarget={openTarget}
                         banner={stranded.banner}
                         plan={documentBody}
-                        planMenu={taskMenu}
+                        planMenu={planMenu}
                         task={{ name: task.name, status: listed.status }}
                         inbox={{
                           body: inboxBody,

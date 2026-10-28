@@ -238,6 +238,8 @@ export function RepositoryChip(props: {
   onListed?: ((repositories: readonly string[]) => void) | undefined;
   /** Counts the asks from elsewhere to open the menu, each opening it. */
   openRequest?: number | undefined;
+  /** Hears each ask the chip opened its menu for, so the asker can let it go. */
+  onAsked?: ((request: number) => void) | undefined;
   place: ChipPlace;
   /** A form row's chip: the edge its menu hangs from, the trailing one where none is named, as a Settings picker's does. */
   align?: PopoverAlign | undefined;
@@ -248,7 +250,7 @@ export function RepositoryChip(props: {
   /** A form row's chip: whether the row says its value is refused. */
   invalid?: true | undefined;
 }): React.JSX.Element {
-  const { chooser, openRequest, onUnreached, onListed, value } = props;
+  const { chooser, openRequest, onAsked, onUnreached, onListed, value } = props;
   const openSettings = useOpenSettings();
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -284,12 +286,15 @@ export function RepositoryChip(props: {
     return () => window.removeEventListener("focus", read);
   }, [read]);
 
-  // Each ask from elsewhere, such as the task menu's Change repository, opens the menu.
+  // Each ask from elsewhere, ⌘K's Change repository, opens the menu once, and is answered.
+  const answered = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (openRequest === undefined || openRequest === 0) return;
+    if (openRequest === undefined || openRequest === 0 || openRequest === answered.current) return;
+    answered.current = openRequest;
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setOpen(true);
-  }, [openRequest]);
+    onAsked?.(openRequest);
+  }, [openRequest, onAsked]);
 
   // Note that we hand focus back to where it came from, the chip or the task
   // menu's button, as a native menu returns it to its trigger, because

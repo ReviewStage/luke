@@ -285,6 +285,82 @@ test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from
 
   assert.deepEqual(asked.deleted, [TASK.id, OTHER.id]);
 });
+test("a question asked of one task does not outlive it: the delete the Plan tab's ⋯ asked for is withdrawn as another task opens in its place", () => {
+  const { tasks } = openTab();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const draw = (control: TasksControl) =>
+    act(() =>
+      root.render(
+        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: control }),
+      ),
+    );
+  draw(tasks);
+  const more = container.querySelector(".side-panel-bar .toolbar-tab-actions button");
+  assert.ok(more instanceof HTMLButtonElement);
+  openMenu(more);
+  choose("Permanently delete");
+  assert.equal(asking(), true);
+
+  const other: Task = { ...TASK, ...OTHER, document: TASK.document };
+  draw({
+    ...tasks,
+    activeTaskId: OTHER.id,
+    region: { kind: DOCUMENT_REGION.READY, task: other },
+  });
+  assert.equal(asking(), false, "the question went with the task it was asked of");
+});
+
+test("⌘K's Change repository shows the plan where the panel hides it, and the repository chip in the plan opens its menu for the ask once, not again on a later draw", () => {
+  const told: string[] = [];
+  const { tasks } = openTab({ [TASK.id]: "acme/app" });
+  const asked = (open: boolean): TasksControl => ({
+    ...tasks,
+    repositoryMenu: { taskId: TASK.id, request: 1 },
+    sidePanel: {
+      ...tasks.sidePanel,
+      open,
+      tab: open ? SIDE_PANEL_TAB.PLAN : SIDE_PANEL_TAB.COMMENTS,
+      onChoose: (tab) => told.push(`choose ${String(tab)}`),
+    },
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const draw = (control: TasksControl) =>
+    act(() =>
+      root.render(
+        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: control }),
+      ),
+    );
+  draw(asked(false));
+  assert.deepEqual(told, [`choose ${SIDE_PANEL_TAB.PLAN}`], "the ask shows the plan first");
+
+  draw(asked(true));
+  const chip = () =>
+    [...container.querySelectorAll<HTMLButtonElement>(".plan-task-standing button")].find((each) =>
+      each.textContent?.includes("acme/app"),
+    );
+  assert.equal(
+    chip()?.getAttribute("aria-expanded"),
+    "true",
+    "the chip opens its menu for the ask",
+  );
+
+  // The chip drawn afresh, as another tab and back would, opens nothing for the ask already answered.
+  draw(asked(true));
+  act(() => {
+    chip()?.click();
+  });
+  assert.equal(chip()?.getAttribute("aria-expanded"), "false");
+  draw({ ...asked(true), region: { kind: DOCUMENT_REGION.READING } });
+  draw(asked(true));
+  assert.equal(chip()?.getAttribute("aria-expanded"), "false", "no second opening");
+});
+
 test("the plan's name reaches the recording only as masked text, never in an attribute", () => {
   const { tasks } = openTab();
   openMenu(mountPlanTab(tasks));
