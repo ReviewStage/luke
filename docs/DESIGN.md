@@ -14,7 +14,8 @@ One spring drives everything that needs to travel: `--luke-spring`, and
 `--luke-spring-fast` (the same damping ratio at a higher frequency) for what is
 small or arrives over the window: a switch's thumb, and a menu, tooltip,
 dialog, palette, or toast rising into place. Settings pages change at once;
-task navigation does not travel. The window's panes are the one exception to
+task navigation travels only as a view transition (below), never by a motion
+of a page's own. The window's panes are the one exception to
 the spring: the sidebar and the side panel open, close, and fill the window on
 `--luke-motion-pane` over `--luke-duration-pane`, a plain ease-out, because a pane
 stands on the window's own edge and a spring's overshoot would part the two
@@ -62,7 +63,9 @@ way, FLIP-style, from where it was to where it now is.
 
 No motion is the browser's rather than a transition of ours: nothing borrows a
 native motion in place of the spring, so no renderer style sets
-`scroll-snap-type`.
+`scroll-snap-type`. A view transition is the one native mechanism allowed, and
+only played as ours: the browser takes the pictures, and every motion between
+them is timed on the tokens (below).
 
 Content arriving rides the pair every arriving element rides — opacity over
 `--luke-duration-quick`, any travel on `--luke-spring` — and content leaving goes first,
@@ -80,6 +83,36 @@ others from the same block, which ships a half-applied choreography. Use a CSS
 selector starts without fail, and the `from` keyframe holds the covered pose
 through the delay. Keyframes may read `var()` custom properties, which is how
 a component tells the stylesheet a measured distance.
+
+## View transitions
+
+A navigation between screens may carry the reader across with React's
+`<ViewTransition>` over the browser's View Transitions API, on these terms:
+
+- A boundary is one of `@luke/ui`'s (`view-transition.tsx`): `default="none"`,
+  listening for one kind of navigation by its transition type (`NAVIGATION`),
+  so a streamed reply, a Suspense reveal, or a deferred value moves nothing. A
+  navigation is the state update that changes the screen, run through
+  `navigate`, which is `startTransition` with its type added. An update that
+  arrives from the host's state, an external store, never animates.
+- Every `::view-transition-*` pseudo-element is timed on the motion tokens
+  (`view-transition.css`), the window's own `root` picture included, so no
+  duration or easing of the browser's survives. The pseudo-elements read the
+  tokens from `:root`, so reduced motion zeroes them there and a capture run
+  zeroes them there as well as on its stage.
+- What moves is a picture of the words, never the words: a group may change
+  size because it scales a snapshot, and nothing under it lays text out again.
+  A travel rides `--luke-spring` over `--luke-duration-shape`; its two pictures
+  crossfade on the arriving pair's beat. A swap leaves over
+  `--luke-duration-exit` first, and what arrives fades in rising on the spring.
+- A shared element, a task's title between the row that opened it and its
+  page, pairs by a name one place wears at a time.
+- A view transition plays into real content, never into a skeleton: a task
+  whose document is not in hand holds the screen that stood until it lands,
+  and turns at once, to its skeleton, once `--luke-late-delay` has passed
+  (`use-held-open.ts`).
+- While one plays, the window is pictures and takes no press, so a navigation
+  that plays keeps to a single beat of the vocabulary.
 
 ## Every layer of one gesture shares a beat
 

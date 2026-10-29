@@ -25,6 +25,7 @@ import {
   OneLine,
   RowHint,
   RowHintOptions,
+  TaskTitleTransition,
   TIME_LOOK,
   Time,
   Tooltip,
@@ -856,7 +857,13 @@ export function SidebarTask({
               />
             ) : (
               <>
-                <OneLine words={task.name}>{task.name}</OneLine>
+                {/* The title travels to the page from here alone where it was pressed here, since the page and the Tasks list name the task too. */}
+                <TaskTitleTransition
+                  taskId={task.id}
+                  travels={tasks.titleFrom === task.id && !open}
+                >
+                  <OneLine words={task.name}>{task.name}</OneLine>
+                </TaskTitleTransition>
                 {task.status === undefined ? null : (
                   <VisuallyHidden>, {TASK_STATUS_WORDS[task.status]}</VisuallyHidden>
                 )}

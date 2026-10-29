@@ -151,7 +151,7 @@ import {
   samePin,
 } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
-import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { AUTOMATIONS_PAGE, OPENED_FROM, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAdminAccess, useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { runningRuns } from "./automation-runs-tab.js";
@@ -1869,7 +1869,7 @@ function SidebarColumn({
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.onSelect(taskId);
+    tasks.onSelect(taskId, OPENED_FROM.SIDEBAR);
   };
   const showTasks = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);

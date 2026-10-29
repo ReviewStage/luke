@@ -65,6 +65,7 @@ import {
   TaskAgentsMark,
   TaskPriorityMark,
   TaskStatusMark,
+  TaskTitleTransition,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -775,7 +776,10 @@ function TaskListRow({
             }}
           >
             <span id={nameId} className={LIST_PRESS}>
-              <OneLine>{task.name}</OneLine>
+              {/* Note that it travels unless the sidebar's row, pressed, travels in its place. */}
+              <TaskTitleTransition taskId={task.id} travels={tasks.titleFrom !== task.id}>
+                <OneLine>{task.name}</OneLine>
+              </TaskTitleTransition>
               {spoken === "" ? null : (
                 <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>{spoken}</VisuallyHidden>
               )}

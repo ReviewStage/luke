@@ -343,6 +343,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     agents: agentsControl(),
     history: versionHistoryControl(),
     onSelect: ignore,
+    titleFrom: undefined,
     onRestoreTask: ignore,
     onShowAgent: ignore,
     onShowColumnTab: ignore,

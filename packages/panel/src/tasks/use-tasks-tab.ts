@@ -44,7 +44,7 @@ import type {
 } from "@luke/host/app-state";
 import { APP_SETTING_DEFAULTS, EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { STATUS_TONE } from "@luke/ui";
+import { NAVIGATION, navigate, STATUS_TONE } from "@luke/ui";
 import {
   isAgentTab,
   isChangesTab,
@@ -140,6 +140,7 @@ import {
   openChannelThread,
   standChannelPlace,
 } from "./use-channels.js";
+import { useHeldOpen } from "./use-held-open.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxPages } from "./use-inbox-pages.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
@@ -312,6 +313,14 @@ type AgentPlaceKind =
 type AgentPlaceOf<K extends AgentPlaceKind> = Extract<LinkPlace, { readonly kind: K }>;
 
 type AgentPlace = AgentPlaceOf<AgentPlaceKind>;
+
+/** Where a press that opens a task was made: a list of tasks, or the sidebar, whose row stays on screen as the page opens. */
+export const OPENED_FROM = {
+  LIST: "list",
+  SIDEBAR: "sidebar",
+} as const;
+
+export type OpenedFrom = (typeof OPENED_FROM)[keyof typeof OPENED_FROM];
 
 /** What may stand in the task's place, the window's own rather than the task's. */
 const STAND_IN = {
@@ -593,8 +602,10 @@ export interface TasksControl {
   agents: AgentsControl;
   /** The open plan's version history: whether it stands, its versions, the one drawn, and its restore. */
   history: VersionHistoryControl;
-  /** Opens a task from a list, the drawer, or the Inbox: in a narrow room on its plan. */
-  onSelect: (taskId: string) => void;
+  /** Opens a task from a list, the drawer, or the Inbox: in a narrow room on its plan. `from` says where it was pressed, which picks the title that travels to its page. */
+  onSelect: (taskId: string, from?: OpenedFrom) => void;
+  /** The task whose sidebar row's title travels to its page, as its press there asked; none where a list's row travels. */
+  titleFrom: string | undefined;
   /** Opens a task as the window's history goes back or forward to it, as it stood, since the history stands its panel itself. */
   onRestoreTask: (taskId: string) => void;
   /** Opens a task on one agent's tab: what a row's press or the call card's way back asks. */
@@ -1172,7 +1183,15 @@ export function useTasksTab(input: {
   // A fixture run draws its synthetic tasks in place of the account's,
   // signed out as every fixture run is.
   const fixture = tasksFixture?.fixtureTasksView(input.run);
-  const viewed = fixture ?? input.tasks;
+  // A task opened from here is drawn once its document lands, what stood
+  // holding the window meanwhile, so the two meet in one view transition
+  // (`use-held-open.ts`); landing takes down whatever stood in its place.
+  const landOpen = useCallback(() => setStandIn(undefined), []);
+  const held = useHeldOpen(fixture ?? input.tasks, landOpen);
+  const viewed = held.view;
+  // The task whose sidebar row was pressed to open it, whose title travels
+  // from there to its page; none where a list's row, which always travels, opened it.
+  const [titleFrom, setTitleFrom] = useState<string | undefined>(undefined);
   const accountSignedIn = input.signedIn;
   // A name, pin, status, priority, or assignee given here, a task's or an
   // agent's pin, and a pin's new place, are drawn by main the moment they
@@ -1645,9 +1664,15 @@ export function useTasksTab(input: {
   // Note that `onOpened` runs only once the task opened, because a task that
   // would not open must not leave the sidebar on another workspace, this
   // launch or the next.
+  const { await: awaitOpen, release: releaseOpen } = held;
   const openTask = useCallback(
     (taskId: string, onOpened: () => void, onRefused: () => void = () => undefined) => {
-      setStandIn(undefined);
+      // Note that the task open already, and a fixture's, which opens nowhere,
+      // are in hand, so the page turns at once; another stays as it stands
+      // until the task's document lands.
+      if (taskId === openTaskId || fixture !== undefined) {
+        navigate(NAVIGATION.TASK_OPEN, () => setStandIn(undefined));
+      } else awaitOpen(taskId);
       const ask = { taskId, over: openTaskId };
       // Another task asked for is timed to its document drawn ready; the one
       // open already has nothing to wait on.
@@ -1656,6 +1681,7 @@ export function useTasksTab(input: {
       const withdraw = () => {
         setAsked((held) => (held === ask ? undefined : held));
         if (opening.current === timed) opening.current = undefined;
+        releaseOpen(taskId);
         onRefused();
       };
       if (fixture === undefined) setAsked(ask);
@@ -1667,7 +1693,7 @@ export function useTasksTab(input: {
         onOpened();
       }, withdraw);
     },
-    [act, fixture, openTaskId],
+    [act, fixture, openTaskId, awaitOpen, releaseOpen],
   );
   // A leave is asked rather than told, so a refused one takes its ask back too.
   const leaveTask = useCallback(() => {
@@ -2335,7 +2361,8 @@ export function useTasksTab(input: {
     select(taskId);
   };
   // One opened from a list lands on its plan in a narrow room.
-  const selectListed = (taskId: string) => {
+  const selectListed = (taskId: string, from: OpenedFrom = OPENED_FROM.LIST) => {
+    setTitleFrom(from === OPENED_FROM.SIDEBAR ? taskId : undefined);
     openUnpinned(taskId);
     if (input.room === SHELL_ROOM.NARROW) sidePanel.onShow(taskId, SIDE_PANEL_TAB.PLAN);
   };
@@ -3212,6 +3239,7 @@ export function useTasksTab(input: {
     // a link names its own place (`openLink`), and the history opens a task
     // through `onRestoreTask` instead, standing the pane its step held.
     onSelect: guard(selectListed),
+    titleFrom,
     onRestoreTask: guard((taskId: string) => {
       setChosen((held) => (held !== undefined && pinOnTask(held.pin, taskId) ? undefined : held));
       select(taskId);
@@ -3331,7 +3359,8 @@ export function useTasksTab(input: {
       open: standIn?.kind === STAND_IN.BOARD,
       onOpen: guard(() => {
         setHistoryFor(undefined);
-        setStandIn({ kind: STAND_IN.BOARD });
+        setTitleFrom(undefined);
+        navigate(NAVIGATION.TASK_OPEN, () => setStandIn({ kind: STAND_IN.BOARD }));
       }),
       onClose: guard(() => setStandIn(undefined)),
     },

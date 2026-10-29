@@ -1400,6 +1400,7 @@ export const PlanBody = memo(function PlanBody({
               // Keyed by the plan, so words typed for one are saved to it as another opens.
               <EditableTitle
                 key={task.id}
+                taskId={task.id}
                 // A refused name stays in the title, beside the refusal, until the next rename.
                 name={rename?.asked ?? task.name}
                 entry={entry === EDITOR_PLACE.TITLE}

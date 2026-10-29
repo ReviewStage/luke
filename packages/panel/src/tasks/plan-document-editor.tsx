@@ -11,6 +11,7 @@ import {
   EditableHeading,
   PageHeader,
   RetryButton,
+  TaskTitleTransition,
 } from "@luke/ui";
 import { markdownClass } from "@luke/ui/markdown-class";
 import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
@@ -490,6 +491,7 @@ function boundTitle(element: HTMLElement): void {
  * puts the caret at its end, as ↑ from the text's first line does.
  */
 export function EditableTitle({
+  taskId,
   name,
   entry,
   editing,
@@ -498,6 +500,8 @@ export function EditableTitle({
   onRename,
   onDraft,
 }: {
+  /** The task the title names, whose title travels here from the row that opened it. */
+  taskId: string;
   name: string;
   /** Whether this block is where Tab enters the document. */
   entry: boolean;
@@ -617,32 +621,34 @@ export function EditableTitle({
       >
         <PageHeader
           title={
-            <EditableHeading
-              ref={text}
-              label="Task name"
-              onFocus={() => {
-                saved.current = false;
-              }}
-              onInput={(event) => {
-                saved.current = false;
-                if (!typed.current) {
-                  typed.current = true;
-                  tellUnsaved();
-                }
-                boundTitle(event.currentTarget);
-                const next = typedName(event.currentTarget);
-                echo.current = next === "" ? undefined : next;
-                onDraft(echo.current);
-                stamp.current += 1;
-                restartPause(stamp.current);
-              }}
-              onBlur={(event) => save(event.currentTarget)}
-              onLeave={(way, heading) => {
-                save(heading);
-                if (way === EDITABLE_HEADING_LEAVE.BACK) block.current?.focus();
-                else editing.open();
-              }}
-            />
+            <TaskTitleTransition taskId={taskId}>
+              <EditableHeading
+                ref={text}
+                label="Task name"
+                onFocus={() => {
+                  saved.current = false;
+                }}
+                onInput={(event) => {
+                  saved.current = false;
+                  if (!typed.current) {
+                    typed.current = true;
+                    tellUnsaved();
+                  }
+                  boundTitle(event.currentTarget);
+                  const next = typedName(event.currentTarget);
+                  echo.current = next === "" ? undefined : next;
+                  onDraft(echo.current);
+                  stamp.current += 1;
+                  restartPause(stamp.current);
+                }}
+                onBlur={(event) => save(event.currentTarget)}
+                onLeave={(way, heading) => {
+                  save(heading);
+                  if (way === EDITABLE_HEADING_LEAVE.BACK) block.current?.focus();
+                  else editing.open();
+                }}
+              />
+            </TaskTitleTransition>
           }
           actions={actions}
         />

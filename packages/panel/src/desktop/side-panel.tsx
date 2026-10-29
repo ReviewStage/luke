@@ -25,6 +25,8 @@ import {
   ListRow,
   type MenuRow,
   MenuRowList,
+  NAVIGATION,
+  navigate,
   RESIZE_EDGE_SIDE,
   ResizeEdge,
   type ResizeEdgeHandle,
@@ -34,6 +36,7 @@ import {
   ScrollArea,
   SidePanelIcon,
   SpinnerRegion,
+  TabBodyTransition,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -932,7 +935,8 @@ function stripTabs(input: {
     unread: unread.some((each) => sameTab(each, tab)),
     selected: chosen(tab),
     preview: panel.preview !== undefined && sameTab(tab, panel.preview),
-    onSelect: () => panel.onChoose(tab),
+    // A tab pressed is a navigation, so the panel's body fades through to it (`TabBodyTransition`).
+    onSelect: () => navigate(NAVIGATION.SIDE_TAB, () => panel.onChoose(tab)),
     onKeep: () => panel.onKeep(tab),
   });
   // The Inbox counts what waits on the developer after its name, dimmed as a
@@ -2647,85 +2651,89 @@ export function SidePanel({
       {/* The plan stays mounted while another tab is shown, hidden, so an
           edit not yet saved is neither sent on a tab switch nor lost with it,
           as it stayed in the column before it stood here. */}
-      {plan === undefined ? null : (
-        <FindScope
-          className="side-panel-content"
-          role="tabpanel"
-          aria-label={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.PLAN, plan: task }).label}
-          {...(planShown ? { id: panelId, "aria-labelledby": tabId } : {})}
-          hidden={!planShown}
-          active={keys && focused && !listing && tab === SIDE_PANEL_TAB.PLAN}
-          subject={{ task: taskId, tab: SIDE_PANEL_TAB.PLAN }}
-        >
-          {plan}
-        </FindScope>
-      )}
-      {listing ? (
-        <Fill ref={setActivitySlot} className="side-panel-content" />
-      ) : tab === SIDE_PANEL_TAB.PLAN && plan !== undefined ? null : tab === undefined ? (
-        <Fill className="side-panel-content">
-          {panel.closedTabs.length === 0 && !offersMore ? null : <NoTabs entries={offers} />}
-        </Fill>
-      ) : (
-        // A page's words stand in a sandboxed frame no find of the window
-        // reaches, so a page's tab finds itself, through its frame or in its
-        // source; a cloud Browser tab's page is drawn on a canvas, which no
-        // find of the window reaches either.
-        <FindScope
-          className="side-panel-content"
-          role="tabpanel"
-          id={panelId}
-          // Note that the words stay as the fallback, because a tab not yet listed (a cloud Browser's, while its listing is read) is no element to name the panel by.
-          aria-label={label}
-          aria-labelledby={tabId}
-          active={keys && focused && !isPageTab(tab) && !isCloudBrowserTab(tab)}
-          subject={{ task: taskId, tab }}
-        >
-          {/* Typing into a preview, as a review's comment or a terminal's line, keeps it as a tab of its own. */}
-          <div
-            className="side-panel-keeps contents"
-            onInputCapture={() => {
-              if (panel.preview !== undefined && sameTab(panel.preview, tab)) panel.onKeep(tab);
-            }}
+      <TabBodyTransition>
+        {plan === undefined ? null : (
+          <FindScope
+            className="side-panel-content"
+            role="tabpanel"
+            aria-label={
+              tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.PLAN, plan: task }).label
+            }
+            {...(planShown ? { id: panelId, "aria-labelledby": tabId } : {})}
+            hidden={!planShown}
+            active={keys && focused && !listing && tab === SIDE_PANEL_TAB.PLAN}
+            subject={{ task: taskId, tab: SIDE_PANEL_TAB.PLAN }}
           >
-            {/* Note that whatever the tab's body hands its ⋯ is handed for this tab, at any depth of the body (`useTabActions`). */}
-            <HandTabActionsContext.Provider value={(actions) => handTabActions(tab, actions)}>
-              <TabContent
-                tab={tab}
-                taskId={taskId}
-                codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK || repositoryPlace !== undefined}
-                repositoryPlace={repositoryPlace}
-                pagePlace={holderPlaceOf(holder, taskId)}
-                repository={repository}
-                files={files}
-                pages={taskPages}
-                agents={agents}
-                standings={standings}
-                shown={keys}
-                findActive={keys && focused}
-                onOpenTarget={onOpenTarget}
-                cards={cards}
-                onWorkerStatus={views.onWorkerStatus}
-                onWorkerHeld={views.onWorkerHeld}
-                fileTree={fileTree}
-                onBrowseFile={panel.onBrowseFile}
-                onFileHistory={panel.onFileHistory}
-                onCloseTab={panel.onClose}
-                pullRequestViews={panel.pullRequestViews}
-                onPullRequestView={panel.onPullRequestView}
-                shellsList={shellsList}
-                cloudBrowsers={cloudBrowsers}
-                cloudDrafts={cloudDrafts}
-                plan={plan}
-                inbox={inbox?.body}
-                transcript={transcript}
-                onTabActions={handTabActions}
-                onRunOnMac={macTerminalDoors.onOpenOnMac}
-              />
-            </HandTabActionsContext.Provider>
-          </div>
-        </FindScope>
-      )}
+            {plan}
+          </FindScope>
+        )}
+        {listing ? (
+          <Fill ref={setActivitySlot} className="side-panel-content" />
+        ) : tab === SIDE_PANEL_TAB.PLAN && plan !== undefined ? null : tab === undefined ? (
+          <Fill className="side-panel-content">
+            {panel.closedTabs.length === 0 && !offersMore ? null : <NoTabs entries={offers} />}
+          </Fill>
+        ) : (
+          // A page's words stand in a sandboxed frame no find of the window
+          // reaches, so a page's tab finds itself, through its frame or in its
+          // source; a cloud Browser tab's page is drawn on a canvas, which no
+          // find of the window reaches either.
+          <FindScope
+            className="side-panel-content"
+            role="tabpanel"
+            id={panelId}
+            // Note that the words stay as the fallback, because a tab not yet listed (a cloud Browser's, while its listing is read) is no element to name the panel by.
+            aria-label={label}
+            aria-labelledby={tabId}
+            active={keys && focused && !isPageTab(tab) && !isCloudBrowserTab(tab)}
+            subject={{ task: taskId, tab }}
+          >
+            {/* Typing into a preview, as a review's comment or a terminal's line, keeps it as a tab of its own. */}
+            <div
+              className="side-panel-keeps contents"
+              onInputCapture={() => {
+                if (panel.preview !== undefined && sameTab(panel.preview, tab)) panel.onKeep(tab);
+              }}
+            >
+              {/* Note that whatever the tab's body hands its ⋯ is handed for this tab, at any depth of the body (`useTabActions`). */}
+              <HandTabActionsContext.Provider value={(actions) => handTabActions(tab, actions)}>
+                <TabContent
+                  tab={tab}
+                  taskId={taskId}
+                  codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK || repositoryPlace !== undefined}
+                  repositoryPlace={repositoryPlace}
+                  pagePlace={holderPlaceOf(holder, taskId)}
+                  repository={repository}
+                  files={files}
+                  pages={taskPages}
+                  agents={agents}
+                  standings={standings}
+                  shown={keys}
+                  findActive={keys && focused}
+                  onOpenTarget={onOpenTarget}
+                  cards={cards}
+                  onWorkerStatus={views.onWorkerStatus}
+                  onWorkerHeld={views.onWorkerHeld}
+                  fileTree={fileTree}
+                  onBrowseFile={panel.onBrowseFile}
+                  onFileHistory={panel.onFileHistory}
+                  onCloseTab={panel.onClose}
+                  pullRequestViews={panel.pullRequestViews}
+                  onPullRequestView={panel.onPullRequestView}
+                  shellsList={shellsList}
+                  cloudBrowsers={cloudBrowsers}
+                  cloudDrafts={cloudDrafts}
+                  plan={plan}
+                  inbox={inbox?.body}
+                  transcript={transcript}
+                  onTabActions={handTabActions}
+                  onRunOnMac={macTerminalDoors.onOpenOnMac}
+                />
+              </HandTabActionsContext.Provider>
+            </div>
+          </FindScope>
+        )}
+      </TabBodyTransition>
       {macTerminalClose.question}
     </PanelFrame>
   );
