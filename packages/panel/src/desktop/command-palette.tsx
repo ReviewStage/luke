@@ -1528,7 +1528,7 @@ function agentPinRows(
 /**
  * The plan on screen's own commands, as its ⋯ menu offers them
  * (`task-actions.tsx`'s `taskActionGroups`): Rename where its page offers
- * the door its ⋯ asks, Version history, Cancel task on a task not already
+ * the door its ⋯ asks, Version history, New child task, Cancel task on a task not already
  * canceled, Change repository, and Open on GitHub where it has a
  * repository; each runs what its menu item runs, Version history and Open
  * on GitHub wearing their chords, Open on GitHub only while ⇧⌘O opens the
@@ -1550,6 +1550,7 @@ function taskCommandRows(
   const commands: readonly { item: PanelCommand; run: () => void }[] = [
     ...(renamed === undefined ? [] : [{ item: PANEL_COMMAND.RENAME_TASK, run: renamed }]),
     { item: PANEL_COMMAND.VERSION_HISTORY, run: () => tasks.history.onOpen(task.id) },
+    { item: PANEL_COMMAND.NEW_CHILD_TASK, run: () => tasks.onNewChildTask(task.id) },
     ...(settleOffered(task, SETTLED_STATUS.CANCELED)
       ? [
           {
