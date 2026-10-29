@@ -42,6 +42,8 @@
     "./agent-replay": "./src/agent-replay.js",
     "./agent-runtime-models": "./src/agent-runtime-models.js",
     "./agent-tools": "./src/agent-tools.js",
+    "./luke-tools-model": "./src/luke-tools-model.js",
+    "./luke-tools-wire": "./src/luke-tools-wire.js",
     "./agent-failure-words": "./src/agent-failure-words.js",
     "./chapters-model-choice": "./src/chapters-model-choice.js",
     "./agent-status": "./src/agent-status.js",

@@ -40,7 +40,7 @@ import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { agentName, RENAME_FAILED } from "../tasks/agent-model.js";
 import { agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
-import { peopleOf } from "../tasks/changes-card.js";
+import { peopleOf } from "../tasks/pull-request-card.js";
 import type { PullRequestMarked } from "../tasks/pull-request-mark.js";
 import { pullRequestOfTab } from "../tasks/pull-request-number.js";
 import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look.js";

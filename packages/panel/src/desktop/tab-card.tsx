@@ -8,14 +8,15 @@ import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import type { ReactNode } from "react";
 import { AgentCard, type AgentSubject } from "../tasks/agent-ref.js";
 import { AgentTabCard, type CardReading, taskFoot } from "../tasks/agent-tab-card.js";
-import { ChangesCard } from "../tasks/changes-card.js";
 import { PageChipCard, TaskChipCard } from "../tasks/chip-cards.js";
 import { browserOf } from "../tasks/cloud-browser-pane.js";
 import { FileCard } from "../tasks/file-ref.js";
 import { type InboxBoardView, NEEDS_YOU, needsYouWords } from "../tasks/inbox-model.js";
 import { PageCard, PageNameCard, PageNameSkeleton } from "../tasks/page-card.js";
+import { PullRequestCard } from "../tasks/pull-request-card.js";
 import { type PlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { TerminalCardFoot } from "../tasks/terminal-shells.js";
+import { openerOf } from "../tasks/use-link-standing.js";
 import {
   type FixedSidePanelTab,
   SIDE_PANEL_TAB,
@@ -208,16 +209,21 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
         />
       );
     // Note that a pull request not yet read hangs none, its tab naming it Pull request until it is.
-    case TAB_KIND.CHANGES:
-      return subject.pullRequest === undefined || subject.subject.agent === undefined ? null : (
-        <ChangesCard
-          subject={subject.subject}
-          models={subject.models}
-          pullRequest={subject.pullRequest}
-          people={subject.people}
-          onOpenAgent={subject.onOpenAgent}
+    case TAB_KIND.CHANGES: {
+      const { pullRequest, people } = subject;
+      if (pullRequest === undefined || subject.subject.agent === undefined) return null;
+      // Note that the agent's own read of who opened it stands in wherever the tab's names no one, as before its read or where its read of the people failed, since GitHub names a deleted account as its ghost rather than no one.
+      return (
+        <PullRequestCard
+          pullRequest={pullRequest}
+          lines={pullRequest}
+          files={pullRequest.changedFiles}
+          opener={people?.author ?? openerOf(pullRequest)}
+          agent={{ subject: subject.subject, models: subject.models, onOpen: subject.onOpenAgent }}
+          reviewers={people?.reviewers}
         />
       );
+    }
     // A Terminal tab hangs its agent's card, saying at its foot whose sandbox its shells run in.
     case TAB_KIND.TERMINAL:
       return (

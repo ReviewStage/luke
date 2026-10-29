@@ -383,7 +383,7 @@ describe("a pinned Changes tab's card", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
     restOn(drawPin(pin, TASK, openTask([summary])));
     await settled();
-    const tabCard = document.querySelector(".luke-tooltip-card [data-tab-card]");
+    const tabCard = document.querySelector(".luke-tooltip-card [data-pull-request-card]");
     assert.match(tabCard?.textContent ?? "", /Newer title/u);
     assert.match(tabCard?.textContent ?? "", /3 files/u);
     assert.match(tabCard?.textContent ?? "", /Expiry job/u);
@@ -396,7 +396,7 @@ describe("a pinned Changes tab's card", () => {
     restOn(drawPin(pin));
     await settled();
     assert.ok(card() !== null, "the pin's card stands");
-    assert.equal(document.querySelector(".luke-tooltip-card [data-tab-card]"), null);
+    assert.equal(document.querySelector(".luke-tooltip-card [data-pull-request-card]"), null);
     assert.deepEqual(reads, [AGENT]);
   });
 
@@ -405,7 +405,7 @@ describe("a pinned Changes tab's card", () => {
     restOn(drawPin(pin, TASK, openTask([])));
     await settled();
     assert.match(card()?.textContent ?? "", /No longer on this task/u);
-    assert.equal(document.querySelector(".luke-tooltip-card [data-tab-card]"), null);
+    assert.equal(document.querySelector(".luke-tooltip-card [data-pull-request-card]"), null);
   });
 });
 

@@ -2297,7 +2297,7 @@ test("a chip in the agent's words naming the pull request it opened, or a page u
   for (const chip of chips) {
     restOn(chip);
     const card = [...document.querySelectorAll(".luke-tooltip-card .luke-hover-card")].at(-1);
-    assert.equal(card?.hasAttribute("data-tab-card"), true, "the card is its tab's");
+    assert.equal(card?.hasAttribute("data-pull-request-card"), true, "the card is its tab's");
     assert.equal(
       card?.querySelector(".luke-hover-card-name")?.textContent,
       "Await the payment mock",

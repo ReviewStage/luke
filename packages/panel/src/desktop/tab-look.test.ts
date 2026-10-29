@@ -329,9 +329,10 @@ test("a link to an agent's pull request in the plan hangs the card its Pull requ
     restOn(control);
     const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
     const look = {
-      card: card?.hasAttribute("data-tab-card"),
+      card: card?.hasAttribute("data-pull-request-card"),
       name: card?.querySelector(".luke-hover-card-name")?.textContent,
-      agent: card?.querySelector(".luke-hover-card-sub")?.textContent,
+      agent: card?.querySelector('.luke-hover-card-row [data-actor-ref][data-kind="agent"]')
+        ?.textContent,
     };
     act(() => {
       control.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));

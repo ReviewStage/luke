@@ -42,8 +42,8 @@ import {
 } from "react";
 import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
-import { peopleOf } from "../tasks/changes-card.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
+import { peopleOf } from "../tasks/pull-request-card.js";
 import { openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";

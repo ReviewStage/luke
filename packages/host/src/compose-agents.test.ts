@@ -453,6 +453,7 @@ function fakeService() {
         asked.push(`review-options:${agentId}`);
         return REVIEW_OPTIONS;
       }),
+    lukeTools: () => Effect.die("no Luke tools read in this suite"),
     overviewChecks: (agentId) =>
       Effect.sync(() => {
         asked.push(`overview-checks:${agentId}`);

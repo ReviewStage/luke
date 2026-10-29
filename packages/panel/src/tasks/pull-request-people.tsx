@@ -15,11 +15,11 @@ import {
   XIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { ActorLine, ActorRef, ActorStack, type StackFace } from "../actor-ref.js";
+import { ActorRef, ActorStack, type StackFace } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 
 /**
- * pull-request-people.tsx -- who an agent's pull request names, drawn as every actor is: who opened it, and its reviewers as a facepile wearing where each stands.
+ * pull-request-people.tsx -- who an agent's pull request names, as its Pull request tab's header draws them: who opened it and when, and its reviewers as a facepile wearing where each stands.
  *
  * GitHub names everyone by an account of its own; the window names each as
  * the actor they are to the reader (`githubActor`). A GitHub account linked
@@ -31,11 +31,12 @@ import { useMemberDirectory } from "../member-directory.js";
  * asked for a red cross, a review asked for and not given an amber dot, and
  * a comment or a dismissed review quiet. Every name and word here is
  * the repository's, so the places drawing them are left out of the screen
- * recording, as the Changes tab is.
+ * recording, as the Changes tab is. The pull request's card names them too,
+ * each reviewer on a row of its own (`pull-request-card.tsx`).
  */
 
-/** Where a reviewer stands, in the words their face's pill and a comment's line say it. */
-const REVIEW_WORDS = {
+/** Where a reviewer stands, in the words their face's pill, a comment's line, and their row on the pull request's card say it. */
+export const REVIEW_WORDS = {
   [REVIEW_STATE.APPROVED]: "Approved",
   [REVIEW_STATE.CHANGES_REQUESTED]: "Changes requested",
   [REVIEW_STATE.DISMISSED]: "Dismissed",
@@ -132,14 +133,14 @@ export function ReviewStanding({ state }: { state: ReviewState }): React.JSX.Ele
   );
 }
 
-/** The reviewers as a facepile, each face wearing where they stand and hanging their card. */
+/** The reviewers as a facepile, each face wearing where they stand and hanging their card, the rest counted past `drawn`. */
 function ReviewerPile({
   reviewers,
-  drawn = 5,
+  drawn,
 }: {
   reviewers: NonNullable<AgentChangesPeople["reviewers"]>;
   /** How many faces stand before the rest are counted. */
-  drawn?: number;
+  drawn: number;
 }): React.JSX.Element {
   const name = useNamer();
   const faces: StackFace[] = reviewers.map(({ state }) => ({
@@ -153,30 +154,6 @@ function ReviewerPile({
       drawn={drawn}
       label="Reviewers"
     />
-  );
-}
-
-/** Who opened the pull request, in a line: "Opened by [face] dana". */
-export function OpenedBy({ person }: { person: GitHubPerson }): React.JSX.Element {
-  return (
-    <ActorLine>
-      {"Opened by "}
-      <PersonRef person={person} />
-    </ActorLine>
-  );
-}
-
-/** The reviewers in a line: "Reviewers [faces]". */
-export function ReviewersLine({
-  reviewers,
-}: {
-  reviewers: NonNullable<AgentChangesPeople["reviewers"]>;
-}): React.JSX.Element {
-  return (
-    <ActorLine>
-      {"Reviewers "}
-      <ReviewerPile reviewers={reviewers} />
-    </ActorLine>
   );
 }
 

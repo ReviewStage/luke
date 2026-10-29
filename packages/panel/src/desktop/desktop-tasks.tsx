@@ -39,10 +39,10 @@ import { agentActor, agentName, type SentLine } from "../tasks/agent-model.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
-import { peopleOf } from "../tasks/changes-card.js";
 import { taskHolder } from "../tasks/inbox-model.js";
 import { PlanBody, type SectionLinks, type TitleRename } from "../tasks/plan-body.js";
 import { CommentFocusScope } from "../tasks/plan-comments.js";
+import { peopleOf } from "../tasks/pull-request-card.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
 import {

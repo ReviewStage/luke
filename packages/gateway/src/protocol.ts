@@ -301,6 +301,7 @@ export const GATEWAY_METHOD = {
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
   AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
   AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
+  AGENTS_LUKE_TOOLS: "agents.lukeTools",
   /** The checks on one agent's pull request's head, as its overview draws them. */
   AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
   /** One agent's pull request's conversation and where its reviewers stand, as its overview draws them. */

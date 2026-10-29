@@ -24,6 +24,7 @@ import {
   type AgentGitHubImageView,
   type AgentListAnswer,
   type AgentListParams,
+  type AgentLukeToolsAnswerView,
   type AgentMessageParams,
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
@@ -112,6 +113,7 @@ export interface AgentProceduresDependencies {
       params: AgentPullRequestReadParams,
     ): Effect.Effect<AgentOverviewPullRequestAnswerView>;
     agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
+    agentLukeTools(params: AgentPullRequestParams): Effect.Effect<AgentLukeToolsAnswerView>;
     agentOverviewChecks(
       params: AgentPullRequestReadParams,
     ): Effect.Effect<AgentOverviewChecksAnswerView>;
@@ -482,6 +484,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
         return yield* host.agentReviewOptions(input);
+      },
+    ),
+    [AGENT_ACT_KIND.AGENTS_LUKE_TOOLS]: actPort[AGENT_ACT_KIND.AGENTS_LUKE_TOOLS].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.agentLukeTools(input);
       },
     ),
     [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]: actPort[AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS].effect(

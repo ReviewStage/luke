@@ -177,9 +177,9 @@ function cardAgent(page: HTMLElement): HTMLButtonElement {
   assert.ok(row, "the pull request has a row");
   hover(row);
   const named = document.querySelector<HTMLButtonElement>(
-    '.luke-tooltip-card .luke-hover-card-sub button[data-actor-ref][data-kind="agent"]',
+    '.luke-tooltip-card .luke-hover-card-row button[data-actor-ref][data-kind="agent"]',
   );
-  assert.ok(named, "the Changes card names the agent");
+  assert.ok(named, "the pull request's card names the agent");
   return named;
 }
 
