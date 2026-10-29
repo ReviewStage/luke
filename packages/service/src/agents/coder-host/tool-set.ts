@@ -180,6 +180,27 @@ export function kindToolsOf(agent: Pick<Agent, "kind">): ReadonlySet<KindTool> {
     : new Set([CODER_TOOL.DELETE_SECTION, CODER_TOOL.DELETE_AUTOMATION]);
 }
 
+/** The tools offered by who started the agent: `post_thread` to every agent but one under a pilot. */
+export type StarterTool = typeof CODER_TOOL.POST_THREAD;
+
+/**
+ * The tools an agent is offered by who started it, on every turn:
+ * `post_thread` to every agent but one under a pilot (`agentUnderPilot`), a
+ * coding agent or a sub-pilot a pilot started, which reports to that pilot
+ * with `message_agent` instead, since the threads the developer reads are
+ * the top pilot's alone. Note that the tool withheld is one its call would
+ * only be refused by (`inbox-store.ts`'s `postInboxThread`), and that its
+ * siblings stay, since none opens or adds to a thread: `withdraw_ask`
+ * settles an ask only on a thread of the agent's own, which such an agent
+ * never opens, `move_thread` moves a thread without a word added to it, and
+ * `read_threads` only reads.
+ */
+export function starterToolsOf(starter: {
+  readonly underPilot: boolean;
+}): ReadonlySet<StarterTool> {
+  return starter.underPilot ? new Set() : new Set([CODER_TOOL.POST_THREAD]);
+}
+
 /** The tools only an agent in a sandbox of Luke's is offered. */
 export type MachineTool = typeof CODER_TOOL.BROWSER;
 
@@ -197,12 +218,19 @@ export function machineToolsOf(agent: Pick<Agent, "machine">): ReadonlySet<Machi
 /** What of an agent decides which tools eve offers it. */
 export type CoderOfferedTo = Pick<Agent, "taskId" | "repository" | "kind" | "machine">;
 
-/** The coder's tools eve offers some agents and not others: each one some agent's task, repository, kind, machine, or Memory withholds. */
+/** What beside its own row decides which tools an agent is offered: whether its starter has Memory on, and whether it is under a pilot (`starterToolsOf`). */
+export interface OfferedBeside {
+  readonly memoryOn: boolean;
+  readonly underPilot: boolean;
+}
+
+/** The coder's tools eve offers some agents and not others: each one some agent's task, repository, kind, starter, machine, or Memory withholds. */
 const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
   ...taskToolsOf({ taskId: "any" }),
   ...repositoryToolsOf({ repository: "any", kind: AGENT_KIND.CODER }),
   ...kindToolsOf({ kind: AGENT_KIND.OPERATOR }),
   ...kindToolsOf({ kind: AGENT_KIND.CODER }),
+  ...starterToolsOf({ underPilot: false }),
   ...machineToolsOf({ machine: AGENT_MACHINE.VERCEL }),
   CODER_TOOL.REMEMBER,
   CODER_TOOL.RECALL,
@@ -211,18 +239,22 @@ const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
 /**
  * Every tool eve offers the agent on a turn, in the registry's order: each
  * coder's tool no agent is denied, and each narrowed one where its task,
- * its repository, its kind, or where it runs offers it, and `remember` and `recall` where
+ * its repository, its kind, who started it, or where it runs offers it, and `remember` and `recall` where
  * its starter has Memory on, the same rules eve's tool files read as each
  * turn starts (`apps/dev/host.ts`'s `offeredTaskTools`, `offeredRepositoryTools`,
- * `offeredKindTools`, and `memoryOffered`).
+ * `offeredKindTools`, `offeredStarterTools`, and `memoryOffered`).
  */
-export function offeredCoderTools(agent: CoderOfferedTo, memoryOn: boolean): readonly AgentTool[] {
+export function offeredCoderTools(
+  agent: CoderOfferedTo,
+  beside: OfferedBeside,
+): readonly AgentTool[] {
   const offered: ReadonlySet<AgentTool> = new Set<AgentTool>([
     ...taskToolsOf(agent),
     ...repositoryToolsOf(agent),
     ...kindToolsOf(agent),
+    ...starterToolsOf(beside),
     ...machineToolsOf(agent),
-    ...(memoryOn ? [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL] : []),
+    ...(beside.memoryOn ? [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL] : []),
   ]);
   return [...toolsOf(AGENT_ROLE.CODER)].filter(
     (tool) => !NARROWED_CODER_TOOLS.has(tool) || offered.has(tool),

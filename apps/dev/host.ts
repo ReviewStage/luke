@@ -1,3 +1,4 @@
+import { readAgentUnderPilot } from "@luke/database/models/agent-store";
 import { hostTurnId } from "@luke/database/models/ids";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
@@ -46,6 +47,8 @@ import {
   kindToolsOf,
   type RepositoryTool,
   repositoryToolsOf,
+  type StarterTool,
+  starterToolsOf,
   type TaskTool,
   taskToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
@@ -249,6 +252,30 @@ export function offeredKindTools(
       const agent = yield* host.agent(admitted.success);
       if (Result.isFailure(agent)) return new Set<KindTool>();
       return kindToolsOf(agent.success);
+    }),
+  );
+}
+
+/**
+ * The tools the session is offered by who started its agent for the turn it
+ * opens, for those tools' own files (`starterToolsOf`): none for a session
+ * the host does not admit or whose conversation is no agent's.
+ */
+export function offeredStarterTools(
+  auth: SessionAuth,
+  sessionId: string,
+): Promise<ReadonlySet<StarterTool>> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return new Set<StarterTool>();
+      const agent = yield* host.agent(admitted.success);
+      if (Result.isFailure(agent)) return new Set<StarterTool>();
+      const underPilot = yield* readAgentUnderPilot(
+        admitted.success.target.userId,
+        agent.success.id,
+      );
+      return starterToolsOf({ underPilot });
     }),
   );
 }
