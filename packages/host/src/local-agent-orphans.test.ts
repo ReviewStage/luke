@@ -1,5 +1,5 @@
 /**
- * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, keeping nothing past an agent's warm window: a saved folder let go of once its window ends and an unsaved one kept; a VM a run left deleted; an agent two answered reads in a row leave out removed whole where its state is saved, and kept where it is not, for a week; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a Mac's folder with unsaved work kept once and never checked again, and a pass that died never the last.
+ * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, keeping nothing past an agent's warm window: a saved folder let go of once its window ends and an unsaved one kept; a VM a run left deleted; an agent two answered reads in a row leave out removed whole where its state is saved, and kept where it is not, for a week; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a Mac's folder with unsaved work kept once and never checked again, and a pass that died never the last; and a listed agent's folder no save holds saved, then let go of after its window, one whose save fails kept without holding back the next, and one that ran directly on the Mac left as it is.
  *
  * The follower runs the real smolvm sandbox over a fake `smolvm` that keeps
  * its machines in a set, on a real temporary folder, against a fake service
@@ -20,6 +20,7 @@ import type { DeviceAgentClaimedLine } from "@luke/features";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
+  DEVICE_CAPABILITY,
   DEVICE_ISOLATION,
   DEVICE_PLATFORM,
   deviceAgentLayout,
@@ -30,6 +31,7 @@ import { ConfigProvider, Deferred, Duration, Effect, Exit, Layer, Option } from 
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
+import { sealAgentState } from "./node/agent-state-seal.js";
 import { smolvmSandbox } from "./node/smolvm-sandbox.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
@@ -38,6 +40,10 @@ const RUNNER_FOLDER = "/opt/luke-host/lib";
 const USER_ID = "user-fixture";
 /** The platform's check of a worktree, named so the fake smolvm answers it. */
 const UNSAVED_WORK_SCRIPT = "check-for-unsaved-work";
+/** The agents' state key as the service answers it: 32 bytes, in standard base64. */
+const STATE_KEY = Buffer.alloc(32, 7).toString("base64");
+/** Why a pack over its cap is refused, as the runner bundle's state command says it. */
+const OVER_CAP = "the agent's state holds 612.0 MB, over the 500.0 MB a pack may hold.";
 /** What smolvm answers a delete of a machine it has no record of. */
 const NOT_FOUND = {
   exitCode: 1,
@@ -60,6 +66,9 @@ const AGENT = {
   UNSAVED: "3d4e5f60-7182-4930-9c4d-5e6f7a8b9c0d",
   OTHER_INSTALL: "4e5f6071-8293-4a41-8d5e-6f7a8b9c0d1e",
   RECENT: "5f607182-93a4-4b52-9e6f-7a8b9c0d1e2f",
+  FROM_BEFORE: "607182a3-a4b5-4c63-8f70-8b9c0d1e2f30",
+  RAN_DIRECTLY: "0a1b2c3d-4e5f-4061-8728-394a5b6c7d8e",
+  OVER_CAP: "0b1c2d3e-4f50-4172-8839-4a5b6c7d8e9f",
 } as const;
 
 /** How many turns in a row must find nothing asked of the disk unanswered before the follower is taken to wait on the clock alone. */
@@ -103,11 +112,18 @@ interface Held {
  * prints, with what `held` lays out, every agent of it recorded as this
  * machine's but those `unowned` names, another install's, and each saved,
  * its last turn ended at `endedAt` says or within its window, but those
- * `unsaved` names, and kept since when `kept` says; its live-agents read answering `reads` one after another,
+ * `unsaved` names, and those `fromBefore` and `ranDirectly` name, which
+ * have no record of a save, and kept since when `kept` says; its live-agents read answering `reads` one after another,
  * and smolvm refusing each delete `deleteFails` says, by the machine and how
  * many times it was asked to delete it. `launches` hands launch lines whose
  * runners run until the test ends, and `keptLaunches` are kept from a run
- * that ended, whose settles the service refuses.
+ * that ended, whose settles the service refuses. Where `saving` says, the
+ * device saves its agents' state: each pack in a VM writes a pack and
+ * names no base, but those over their cap `tooLarge` names, and the service
+ * grants every save and commits it as the generation after the one it
+ * started from. Where `ranDirectly` names agents, the device is a Mac whose
+ * agents once ran directly on it, those with no record of how they ran,
+ * and every other agent recorded as run in a VM.
  */
 const following = (input: {
   readonly held: Held;
@@ -122,6 +138,9 @@ const following = (input: {
   readonly keptLaunches?: readonly { readonly id: string; readonly agentId: string }[];
   /** The first listing of what the VMs hold dies, as a bug would. */
   readonly firstListingDies?: boolean;
+  readonly fromBefore?: readonly string[];
+  readonly ranDirectly?: readonly string[];
+  readonly saving?: { readonly tooLarge?: readonly string[] };
 }) =>
   Effect.gen(function* () {
     const root = yield* temporaryDirectoryScoped("luke-agent-orphans-");
@@ -147,16 +166,20 @@ const following = (input: {
     ].filter((agentId) => !(input.unowned ?? []).includes(agentId));
     mkdirSync(`${stateRoot}/owned-agents`, { recursive: true });
     for (const agentId of owned) writeFileSync(`${stateRoot}/owned-agents/${agentId}`, "");
+    const unrecorded = [...(input.fromBefore ?? []), ...(input.ranDirectly ?? [])];
+    const inVms = owned.filter((agentId) => !(input.ranDirectly ?? []).includes(agentId));
     const saves = Object.fromEntries(
-      owned.map((agentId) => [
-        agentId,
-        {
-          userId: USER_ID,
-          generation: 1,
-          endedAt: input.endedAt?.[agentId] ?? ENDED_IN_WINDOW,
-          ...((input.unsaved ?? []).includes(agentId) ? { unsaved: {} } : {}),
-        },
-      ]),
+      owned
+        .filter((agentId) => !unrecorded.includes(agentId))
+        .map((agentId) => [
+          agentId,
+          {
+            userId: USER_ID,
+            generation: 1,
+            endedAt: input.endedAt?.[agentId] ?? ENDED_IN_WINDOW,
+            ...((input.unsaved ?? []).includes(agentId) ? { unsaved: {} } : {}),
+          },
+        ]),
     );
     writeFileSync(
       `${stateRoot}/local-agents.json`,
@@ -165,6 +188,13 @@ const following = (input: {
         launches: (input.keptLaunches ?? []).map((launch) => ({ userId: USER_ID, ...launch })),
         saves,
         ...(input.kept === undefined ? {} : { kept: input.kept }),
+        ...(input.ranDirectly === undefined
+          ? {}
+          : {
+              modes: Object.fromEntries(
+                inVms.map((agentId) => [agentId, DEVICE_ISOLATION.SANDBOX]),
+              ),
+            }),
       }),
     );
 
@@ -193,6 +223,17 @@ const following = (input: {
         case "exec":
           if (args.includes(UNSAVED_WORK_SCRIPT)) {
             return { stdout: input.unsavedWork ?? "", exitCode: 0 };
+          }
+          if (args[args.indexOf(`${RUNNER_FOLDER}/agent-runner.mjs`) + 1] === "state") {
+            if (!args.includes("pack")) return { exitCode: 0 };
+            if ((input.saving?.tooLarge ?? []).includes(name.slice("luke-".length))) {
+              return { stderr: `agent-runner state: ${OVER_CAP}\n`, exitCode: 3 };
+            }
+            return {
+              stdout: "agent-runner state pack: base none\n",
+              exitCode: 0,
+              until: Effect.sync(() => writeFileSync(args.at(-1) ?? "", "a pack\n")),
+            };
           }
           // Note that a runner runs until its processes are signalled in its VM, as the test's scope closes.
           if (args.some((each) => each.includes("process.kill"))) {
@@ -227,8 +268,23 @@ const following = (input: {
       claimRequest: () => Effect.succeed({ claimed: false as const }),
       answerRequest: () => Effect.succeed(true),
       githubToken: () => Effect.succeed(undefined),
-      saveState: () => Effect.succeed(undefined),
-      commitState: () => Effect.succeed(undefined),
+      saveState: (_deviceId: string, agentId: string) =>
+        Effect.succeed(
+          input.saving === undefined
+            ? undefined
+            : {
+                path: `agent-state/${agentId}/grant`,
+                upload: {
+                  url: `https://store.test/upload/${agentId}`,
+                  headers: {},
+                  expiresAt: Date.UTC(2026, 9, 30),
+                  maxBytes: 500 * 1024 * 1024,
+                },
+                key: STATE_KEY,
+              },
+        ),
+      commitState: (_deviceId: string, commit: { readonly fromGeneration: number | null }) =>
+        Effect.succeed(input.saving === undefined ? undefined : (commit.fromGeneration ?? 0) + 1),
       liveAgents: () =>
         Effect.suspend(() => {
           const index = reads;
@@ -260,7 +316,14 @@ const following = (input: {
       spawner.layer,
       NodePath.layer,
       NodeFileSystem.layer,
-      fakeHttpClientLayer(() => Promise.reject(new Error("this test fetches nothing"))),
+      // Note that the store takes every upload, and nothing else is fetched.
+      fakeHttpClientLayer(async (url, init) => {
+        if (input.saving === undefined || new URL(url).host !== "store.test") {
+          throw new Error("this test fetches nothing but uploads");
+        }
+        await new Response(init.body).arrayBuffer();
+        return new Response(null, { status: 200 });
+      }),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME: home, SHELL: "/bin/bash" })),
       Layer.succeed(Reporter, { report: (line) => reported.push(line) }),
       Layer.succeed(LocalAgentPlatform, {
@@ -268,15 +331,18 @@ const following = (input: {
         sandbox,
         runnerBundle: `${RUNNER_FOLDER}/agent-runner.mjs`,
         runnerEnv: {},
-        formerlyDirect: false,
+        formerlyDirect: input.ranDirectly !== undefined,
         deviceName: "rack-1",
         devicePlatform: DEVICE_PLATFORM.LINUX,
         deviceArch: DEVICE_ARCH.X64,
         deviceIsolation: DEVICE_ISOLATION.SANDBOX,
-        deviceCapabilities: [],
+        deviceCapabilities: input.saving === undefined ? [] : [DEVICE_CAPABILITY.AGENT_STATE],
         worktreeScript: () => "exit 0",
         unsavedWorkScript: input.unsavedWork === undefined ? undefined : () => UNSAVED_WORK_SCRIPT,
-        stateSealed: () => Effect.die("this device saves no state"),
+        stateSealed:
+          input.saving === undefined
+            ? () => Effect.die("this device saves no state")
+            : sealAgentState,
         stateOpened: () => Effect.die("this device restores no state"),
         diskFree: () => Effect.succeed(Option.none()),
       }),
@@ -319,6 +385,12 @@ const following = (input: {
       spawner.spawned.filter((each) => each.args.includes(`luke-${agentId}`)).length;
     const keptRecorded = () =>
       Object.keys(JSON.parse(readFileSync(`${stateRoot}/local-agents.json`, "utf8")).kept ?? {});
+    const saveOf = (agentId: string) =>
+      JSON.parse(readFileSync(`${stateRoot}/local-agents.json`, "utf8")).saves?.[agentId];
+    const packsOf = (agentId: string) =>
+      spawner.spawned.filter(
+        (each) => each.args.includes(`luke-${agentId}`) && each.args.includes("pack"),
+      ).length;
 
     return {
       home,
@@ -330,6 +402,8 @@ const following = (input: {
       checksRun,
       machineCommands,
       keptRecorded,
+      saveOf,
+      packsOf,
     };
   });
 
@@ -560,4 +634,83 @@ it.effect("a pass that died is reported, and the passes after it still run", () 
       assert.ok(device.reported.some((line) => line.includes("failed")));
     }),
   ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "this machine's folder no save holds, as an agent's from before saves, is saved once by a pass and let go of after its warm window, while another install's is left be",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const listed = [AGENT.FROM_BEFORE, AGENT.OTHER_INSTALL];
+        const device = yield* following({
+          held: { folderOnly: listed },
+          unowned: [AGENT.OTHER_INSTALL],
+          fromBefore: [AGENT.FROM_BEFORE],
+          saving: {},
+          reads: Array.from({ length: 5 }, () => listed),
+        });
+        yield* device.passed(1);
+
+        assert.equal(device.saveOf(AGENT.FROM_BEFORE)?.generation, 1);
+        assert.deepEqual(device.holdsOf(AGENT.FROM_BEFORE), { ...NOTHING, folder: true });
+        // Note that the window counts from the save, and passes stand five minutes apart.
+        yield* device.passed(5);
+
+        assert.deepEqual(device.holdsOf(AGENT.FROM_BEFORE), NOTHING);
+        assert.equal(device.packsOf(AGENT.FROM_BEFORE), 1);
+        assert.equal(device.holdsOf(AGENT.OTHER_INSTALL).folder, true);
+        assert.equal(device.machineCommands(AGENT.OTHER_INSTALL), 0);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a folder whose save fails, as a pack over its cap does, is kept and recorded unsaved, and the next pass saves another rather than trying it again at once",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const listed = [AGENT.OVER_CAP, AGENT.FROM_BEFORE];
+        const device = yield* following({
+          held: { folderOnly: listed },
+          fromBefore: listed,
+          saving: { tooLarge: [AGENT.OVER_CAP] },
+          reads: [listed, listed],
+        });
+        yield* device.passed(1);
+
+        assert.deepEqual(device.saveOf(AGENT.OVER_CAP), {
+          userId: USER_ID,
+          unsaved: { why: OVER_CAP },
+        });
+        assert.equal(device.saveOf(AGENT.FROM_BEFORE), undefined);
+        yield* device.passed(2);
+
+        assert.equal(device.saveOf(AGENT.FROM_BEFORE)?.generation, 1);
+        assert.equal(device.packsOf(AGENT.OVER_CAP), 1);
+        assert.equal(device.holdsOf(AGENT.OVER_CAP).folder, true);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "an agent that ran directly on the Mac is left as it is, while the pass saves the one beside it that ran in a VM",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const listed = [AGENT.RAN_DIRECTLY, AGENT.FROM_BEFORE];
+        const device = yield* following({
+          held: { folderOnly: listed },
+          ranDirectly: [AGENT.RAN_DIRECTLY],
+          fromBefore: [AGENT.FROM_BEFORE],
+          saving: {},
+          reads: [listed],
+        });
+        yield* device.passed(1);
+
+        assert.equal(device.saveOf(AGENT.FROM_BEFORE)?.generation, 1);
+        assert.equal(device.saveOf(AGENT.RAN_DIRECTLY), undefined);
+        assert.equal(device.packsOf(AGENT.RAN_DIRECTLY), 0);
+        assert.equal(device.holdsOf(AGENT.RAN_DIRECTLY).folder, true);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
 );
