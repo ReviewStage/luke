@@ -67,6 +67,7 @@ import type { AutomationSummary } from "@luke/features/automation-wire";
 import type { Channel } from "@luke/features/channel-wire";
 import { OPERATOR_NAME } from "@luke/features/model-label";
 import { formatCount } from "@luke/features/number-format";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TasksTreeAnswer } from "@luke/features/tasks-view";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
@@ -172,6 +173,7 @@ import {
   type PanelCommand,
   panelCommandOf,
 } from "../command-items.js";
+import { unreadShown } from "../failure-report.js";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand.js";
 import { memberRows } from "../member-rows.js";
 import { PANEL_SPAN, useKeystrokeSpans } from "../panel-spans.js";
@@ -716,7 +718,11 @@ function automationsNotice(
 /** A kind's notice after its rows: a refusal with Retry, a reading line a reader hears, or a line of its own, inset as the group's note is. */
 function NoticeLine({ notice }: { notice: PaletteNotice }): React.JSX.Element {
   if (notice.kind === PALETTE_NOTICE.FAILED) {
-    return <ErrorState onRetry={notice.onRetry}>{notice.line}</ErrorState>;
+    return (
+      <ErrorState failure={unreadShown(FAILURE_SURFACE.PALETTE_READ)} onRetry={notice.onRetry}>
+        {notice.line}
+      </ErrorState>
+    );
   }
   return (
     <NoteLine look={NOTE_LINE_LOOK.INSET} status={notice.kind === PALETTE_NOTICE.READING}>

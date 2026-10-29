@@ -1,5 +1,6 @@
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { REFRESH_FAILED_WORDS } from "@luke/features/words";
 import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState, Toolbar } from "@luke/ui";
 import { InboxIcon } from "@luke/ui/icons";
@@ -7,6 +8,7 @@ import { searchTokens } from "@luke/ui/search-tokens";
 import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
+import { unreadShown } from "../failure-report.js";
 import { useInboxCloser } from "../tasks/inbox-close.js";
 import {
   INBOX_COLUMNS,
@@ -227,7 +229,11 @@ export function SideInboxTab({
             <InboxListSkeleton />
           ) : inbox.failed ? (
             // A refresh that failed over rows already held leaves them drawn, with a line at the foot.
-            <ErrorState onRetry={inbox.onRetry} placement={ERROR_STATE_PLACEMENT.ROWS}>
+            <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.INBOX_READ)}
+              onRetry={inbox.onRetry}
+              placement={ERROR_STATE_PLACEMENT.ROWS}
+            >
               {listed.length === 0 ? INBOX_NOT_READ : REFRESH_FAILED_WORDS}
             </ErrorState>
           ) : inbox.read && searched !== undefined && listed.length === 0 ? (

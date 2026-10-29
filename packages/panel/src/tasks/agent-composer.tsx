@@ -17,6 +17,7 @@ import {
   retriesBesideRemedy,
 } from "@luke/features/failure-remedy";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { INTEGRATION_LABEL, pasteCutWords } from "@luke/features/words";
 import type { ShortcutChord } from "@luke/settings/shortcuts";
 import {
@@ -32,6 +33,7 @@ import {
 } from "@luke/ui";
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { OPENAI_KEY_MISSING_NOTE } from "@luke/ui/microphone-access";
+import { type ReportedFailure, UNREPORTED, type Unreported } from "@luke/ui/reported-failure";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
   type ComponentProps,
@@ -44,6 +46,7 @@ import {
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { failureShown, unreadShown } from "../failure-report.js";
 import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
@@ -572,6 +575,23 @@ export function AgentComposer({
   const retries = note !== undefined && note === composer.note;
   // An editor that could not be loaded is read again by its own Retry, while its note is the one shown.
   const reloads = unloaded !== undefined && words === unloaded;
+  // Note that a cut paste is the person's input checked, and an editor that did not load, a send that
+  // did not go, and every other note are failures of the app's, each reported under its own surface.
+  const noteFailure: ReportedFailure | Unreported | undefined =
+    note === undefined
+      ? undefined
+      : cut && words === pasteCutWords(maxLength)
+        ? UNREPORTED.INPUT
+        : reloads
+          ? unreadShown(FAILURE_SURFACE.BUNDLE_LOAD)
+          : note === composer.note
+            ? failureShown({ surface: FAILURE_SURFACE.AGENT_SEND, cause: note, about: { agentId } })
+            : failureShown({
+                surface: FAILURE_SURFACE.AGENT_COMPOSER,
+                cause: note.reason,
+                about: { agentId },
+                refused: true,
+              });
   const repositoryRemedy = useRepositoryRemedy();
   const remedy =
     note === undefined
@@ -845,10 +865,11 @@ export function AgentComposer({
               : undefined
           }
           note={
-            note === undefined
+            note === undefined || noteFailure === undefined
               ? undefined
               : {
                   words: note.text,
+                  failure: noteFailure,
                   remedy:
                     remedyWords === undefined || remedy === undefined
                       ? undefined

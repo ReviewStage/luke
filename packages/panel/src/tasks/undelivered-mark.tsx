@@ -1,5 +1,7 @@
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { FailureNote } from "@luke/ui";
 import { createContext, type ReactNode, useContext } from "react";
+import { failureShown } from "../failure-report.js";
 
 /**
  * undelivered-mark.tsx -- the quiet mark under a line the developer sent that did not go: "Not delivered" where the agent refused it for good, "Not sent" with Retry where it was refused for now, each a `FailureNote`.
@@ -65,8 +67,28 @@ export function useLineMarked(messageId: string): boolean {
 export function UndeliveredMark({ messageId }: { messageId: string }): ReactNode {
   const marks = useContext(MarksContext);
   if (marks.undelivered.has(messageId)) {
-    return <FailureNote>{UNDELIVERED_WORDS}</FailureNote>;
+    return (
+      <FailureNote
+        failure={failureShown({
+          surface: FAILURE_SURFACE.AGENT_SEND,
+          cause: FAILURE_CONDITION.REFUSED,
+          refused: true,
+        })}
+      >
+        {UNDELIVERED_WORDS}
+      </FailureNote>
+    );
   }
   if (!marks.unsent.has(messageId)) return null;
-  return <FailureNote onRetry={() => marks.retry(messageId)}>{UNSENT_WORDS}</FailureNote>;
+  return (
+    <FailureNote
+      failure={failureShown({
+        surface: FAILURE_SURFACE.AGENT_SEND,
+        cause: FAILURE_CONDITION.NOT_KEPT,
+      })}
+      onRetry={() => marks.retry(messageId)}
+    >
+      {UNSENT_WORDS}
+    </FailureNote>
+  );
 }

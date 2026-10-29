@@ -18,6 +18,7 @@ import { useCallback, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
 import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter, withoutPicks } from "../composer-drafts.js";
 import type { MenuAction } from "../desktop/action-menu.js";
+import { confirmFailure } from "../failure-report.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { messageFailureWords } from "./agent-model.js";
 import { cardTitle } from "./tool-call-model.js";
@@ -214,6 +215,7 @@ export function useInboxClose(
       void closer?.(item);
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
+    confirmFailure(FAILURE_SURFACE.INBOX_CLOSE),
   );
   const ask = () => {
     setAsked(item.revision);

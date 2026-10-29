@@ -196,7 +196,8 @@ test("a keep that failed says why with Retry and Remove, and Remove takes the pi
     failed?.textContent,
     "This plan already holds as many pictures as it can.RetryRemove",
   );
-  const [retry, remove] = [...(failed?.querySelectorAll("button") ?? [])];
+  const [retry, copy, remove] = [...(failed?.querySelectorAll("button") ?? [])];
+  assert.equal(copy?.getAttribute("aria-label"), "Copy details");
   assert.equal(retry?.textContent, "Retry");
   assert.equal(remove?.textContent, "Remove");
   act(() => remove?.click());

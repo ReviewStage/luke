@@ -23,6 +23,7 @@
  */
 
 import { Component, type ReactNode } from "react";
+import { UNREPORTED } from "../../reported-failure.js";
 import { ERROR_STATE_PLACEMENT, ErrorState } from "../error-state/error-state.js";
 
 /** What a place whose drawing failed says where its caller names nothing more fitting. */
@@ -41,7 +42,11 @@ export function ReloadState({
   onReload: () => void;
 }): React.JSX.Element {
   return (
-    <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onReload={onReload}>
+    <ErrorState
+      placement={ERROR_STATE_PLACEMENT.CENTRED}
+      onReload={onReload}
+      failure={UNREPORTED.BOUNDARY}
+    >
       {failure}
     </ErrorState>
   );

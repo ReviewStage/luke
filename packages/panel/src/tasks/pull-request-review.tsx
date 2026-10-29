@@ -3,6 +3,7 @@ import {
   REVIEW_EVENT,
   type ReviewEvent,
 } from "@luke/features/pull-request-write-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
   AnchoredPopover,
@@ -23,6 +24,7 @@ import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { GLYPH, MessageSquarePlusIcon } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { type ReactNode, useId, useRef, useState } from "react";
+import { confirmFailure } from "../failure-report.js";
 import { CommentEditor, overCommentBound } from "./comment-editor.js";
 import type { PendingReview } from "./line-comment.js";
 import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
@@ -241,15 +243,18 @@ export function PullRequestReview({
   const trigger = useRef<HTMLButtonElement>(null);
 
   // Note that the question stands, busy, until GitHub answers the discard, says its refusal in GitHub's words, and holds the panel open meanwhile as a review on its way does.
-  const discarding = useConfirmDialog({ subject: pending != null, surfaceOpen: open }, () =>
-    writes
-      .write({ action: PULL_REQUEST_ACTION.DISCARD_REVIEW })
-      .then(
-        (outcome): ActionResult =>
-          outcome.done
-            ? { status: ACTION_RESULT_STATUS.ACCEPTED }
-            : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
-      ),
+  const discarding = useConfirmDialog(
+    { subject: pending != null, surfaceOpen: open },
+    () =>
+      writes
+        .write({ action: PULL_REQUEST_ACTION.DISCARD_REVIEW })
+        .then(
+          (outcome): ActionResult =>
+            outcome.done
+              ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+              : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
+        ),
+    confirmFailure(FAILURE_SURFACE.PULL_REQUEST_REVIEW_DISCARD),
   );
   const sending = writes.pending !== undefined || discarding.stage !== CONFIRM_STAGE.RESTING;
 

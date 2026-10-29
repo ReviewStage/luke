@@ -1,8 +1,10 @@
 import { INBOX_MESSAGE_AUTHOR, type InboxMessage } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { type CommentAuthor, ErrorState } from "@luke/ui";
 import { type ReactNode, useEffect, useMemo } from "react";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
+import { unreadShown } from "../failure-report.js";
 import { usePerson } from "../member-directory.js";
 import { AgentActorRef, type AgentSubject } from "./agent-ref.js";
 import { AttachedFileChips } from "./attached-file-chips.js";
@@ -145,6 +147,7 @@ function CommentFiles({
       {failed.length === 0 ? null : (
         <div data-inbox-files-failed="">
           <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.INBOX_FILES_READ)}
             onRetry={() => {
               for (const file of failed) onRetryImage(file.attachmentId);
             }}

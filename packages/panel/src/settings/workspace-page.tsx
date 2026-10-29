@@ -4,6 +4,8 @@ import type {
   WorkspaceSentry,
   WorkspaceSentryInstallation,
 } from "@luke/features/sentry-install-wire";
+import type { FailureSurface } from "@luke/features/shown-failure";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { dayAndTimeText } from "@luke/features/time-format";
 import { readingWords } from "@luke/features/words";
 import {
@@ -97,6 +99,7 @@ import { copyLinkItem, useChordLinks } from "../copy-link-item.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { sharedWords } from "../desktop/workspace-ref.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
+import { confirmFailure, failureShown, refusedShown, unreadShown } from "../failure-report.js";
 import { encodeImage } from "../feedback-images.js";
 import { memberRows } from "../member-rows.js";
 import { useOpenPerson } from "../person-door.js";
@@ -365,10 +368,21 @@ const WORKSPACE_SKELETON: readonly SettingsSectionSkeletonShape[] = [
 type ListRead<Item> = { readonly items: readonly Item[] } | { readonly failed: string } | undefined;
 
 /** A card's line where the read of its rows did not land: the read failure, then Retry, in the rows' place. */
-function ReadFailed({ line, onRetry }: { line: string; onRetry: () => void }): React.JSX.Element {
+function ReadFailed({
+  line,
+  surface,
+  onRetry,
+}: {
+  line: string;
+  /** Where the read failed, which its report names. */
+  surface: FailureSurface;
+  onRetry: () => void;
+}): React.JSX.Element {
   return (
     <SettingsLine>
-      <ErrorState onRetry={onRetry}>{line}</ErrorState>
+      <ErrorState failure={unreadShown(surface)} onRetry={onRetry}>
+        {line}
+      </ErrorState>
     </SettingsLine>
   );
 }
@@ -462,11 +476,16 @@ function MemberRow({
     onChanged(members);
     return ACCEPTED;
   };
-  const remove = useConfirmDialog({ subject: may.remove, surfaceOpen: true }, () =>
-    act(ACT_KIND.WORKSPACE_MEMBER_REMOVE, { workspaceId, userId }).then(answered, refusedWith),
+  const remove = useConfirmDialog(
+    { subject: may.remove, surfaceOpen: true },
+    () =>
+      act(ACT_KIND.WORKSPACE_MEMBER_REMOVE, { workspaceId, userId }).then(answered, refusedWith),
+    confirmFailure(FAILURE_SURFACE.WORKSPACE_MEMBER_REMOVE, { workspaceId }),
   );
-  const makeOwner = useConfirmDialog({ subject: may.transfer, surfaceOpen: true }, () =>
-    act(ACT_KIND.WORKSPACE_TRANSFER, { workspaceId, userId }).then(answered, refusedWith),
+  const makeOwner = useConfirmDialog(
+    { subject: may.transfer, surfaceOpen: true },
+    () => act(ACT_KIND.WORKSPACE_TRANSFER, { workspaceId, userId }).then(answered, refusedWith),
+    confirmFailure(FAILURE_SURFACE.WORKSPACE_TRANSFER, { workspaceId }),
   );
   const giveRole = (role: WorkspaceInvitation["role"]) => {
     setRefusal(undefined);
@@ -543,7 +562,7 @@ function MemberRow({
             </span>
           ),
           description: <OneLine hint={wholeWordsHint(member.email)}>{member.email}</OneLine>,
-          error: refusal,
+          error: refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_MEMBER),
           control: (
             <>
               <SettingsRowValue>{ROLE_WORDS[member.role]}</SettingsRowValue>
@@ -626,11 +645,14 @@ function MemberLeave({
   const { act } = useAct();
   const workspaceId = workspace.id;
   const automations = useOwnAutomations(workspaceId);
-  const leave = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    act(ACT_KIND.WORKSPACE_LEAVE, { workspaceId }).then(() => {
-      onLeft();
-      return ACCEPTED;
-    }, refusedWith),
+  const leave = useConfirmDialog(
+    { subject: true, surfaceOpen: true },
+    () =>
+      act(ACT_KIND.WORKSPACE_LEAVE, { workspaceId }).then(() => {
+        onLeft();
+        return ACCEPTED;
+      }, refusedWith),
+    confirmFailure(FAILURE_SURFACE.WORKSPACE_LEAVE),
   );
   const automationsLine =
     automations.names === undefined
@@ -765,16 +787,19 @@ function OwnerLeave({
   ).map((row) => row.member);
   const [chosenId, setChosenId] = useState<string>();
   const heir = admins.find((each) => each.userId === chosenId) ?? admins[0];
-  const transfer = useConfirmDialog({ subject: heir !== undefined, surfaceOpen: true }, () =>
-    heir === undefined
-      ? Promise.resolve(ACCEPTED)
-      : act(ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: workspace.id, userId: heir.userId }).then(
-          (items) => {
-            onChanged(items);
-            return ACCEPTED;
-          },
-          refusedWith,
-        ),
+  const transfer = useConfirmDialog(
+    { subject: heir !== undefined, surfaceOpen: true },
+    () =>
+      heir === undefined
+        ? Promise.resolve(ACCEPTED)
+        : act(ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: workspace.id, userId: heir.userId }).then(
+            (items) => {
+              onChanged(items);
+              return ACCEPTED;
+            },
+            refusedWith,
+          ),
+    confirmFailure(FAILURE_SURFACE.WORKSPACE_TRANSFER),
   );
   return (
     <>
@@ -883,7 +908,14 @@ function TeamMembers({
       />
     );
   }
-  if ("failed" in members) return <ReadFailed line={members.failed} onRetry={onRetry} />;
+  if ("failed" in members)
+    return (
+      <ReadFailed
+        line={members.failed}
+        surface={FAILURE_SURFACE.WORKSPACE_MEMBERS_READ}
+        onRetry={onRetry}
+      />
+    );
   return (
     <>
       {members.items.map((member) => (
@@ -1109,6 +1141,7 @@ function Invitations({
       if (cancelling !== undefined) cancel(cancelling.id);
       return Promise.resolve(ACCEPTED);
     },
+    confirmFailure(FAILURE_SURFACE.WORKSPACE_INVITATION_CANCEL),
   );
 
   return (
@@ -1155,12 +1188,24 @@ function Invitations({
         </div>
         {note === undefined ? null : (
           <SettingsLine>
-            <ErrorState>{note}</ErrorState>
+            <ErrorState
+              failure={failureShown({
+                surface: FAILURE_SURFACE.WORKSPACE_INVITE,
+                cause: FAILURE_CONDITION.REFUSED,
+                refused: true,
+              })}
+            >
+              {note}
+            </ErrorState>
           </SettingsLine>
         )}
       </Stack>
       {firstReadFailed !== undefined ? (
-        <ReadFailed line={firstReadFailed} onRetry={read} />
+        <ReadFailed
+          line={firstReadFailed}
+          surface={FAILURE_SURFACE.WORKSPACE_INVITATIONS_READ}
+          onRetry={read}
+        />
       ) : pending === undefined ? (
         <SettingsRowsSkeleton
           label={readingWords("the invitations")}
@@ -1319,7 +1364,7 @@ function ManagedGitHub({
         leading={GITHUB_MARK}
         label="GitHub"
         description={connected ? GITHUB_CONNECTED_LINE.MANAGES : GITHUB_UNCONNECTED.MANAGES}
-        error={refusal ?? addRefusal}
+        error={refusedShown(refusal ?? addRefusal, FAILURE_SURFACE.WORKSPACE_GITHUB)}
       >
         {() => (
           <>
@@ -1385,7 +1430,7 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
           description={
             connections.length === 0 ? GITHUB_UNCONNECTED.MEMBER : GITHUB_CONNECTED_LINE.MEMBER
           }
-          error={addRefusal}
+          error={refusedShown(addRefusal, FAILURE_SURFACE.WORKSPACE_GITHUB)}
         >
           {() => add}
         </SettingsRow>
@@ -1454,16 +1499,19 @@ function ManagedSentry({
   const stillListed =
     leaving !== undefined &&
     sentry.installations.some((one) => one.installationId === leaving.installationId);
-  const disconnect = useConfirmDialog({ subject: stillListed, surfaceOpen: true }, () =>
-    leaving === undefined
-      ? Promise.resolve(ACCEPTED)
-      : act(ACT_KIND.WORKSPACE_SENTRY_DISCONNECT, {
-          workspaceId,
-          installationId: leaving.installationId,
-        }).then((now) => {
-          onChanged(now);
-          return ACCEPTED;
-        }, refusedWith),
+  const disconnect = useConfirmDialog(
+    { subject: stillListed, surfaceOpen: true },
+    () =>
+      leaving === undefined
+        ? Promise.resolve(ACCEPTED)
+        : act(ACT_KIND.WORKSPACE_SENTRY_DISCONNECT, {
+            workspaceId,
+            installationId: leaving.installationId,
+          }).then((now) => {
+            onChanged(now);
+            return ACCEPTED;
+          }, refusedWith),
+    confirmFailure(FAILURE_SURFACE.WORKSPACE_GITHUB_DISCONNECT),
   );
   const actions = [
     sentry.installations.map((installation) => ({
@@ -1490,7 +1538,7 @@ function ManagedSentry({
           leading: SENTRY_MARK,
           label: "Sentry",
           description: sentryLine(sentry, true),
-          error: refusal,
+          error: refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SENTRY),
           control:
             sentry.installations.length > 0 ? null : (
               <Button
@@ -1528,7 +1576,14 @@ function ManagedSentry({
 function WorkspaceSentryRow({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
   const { read, retry, changed } = useSentryRead(workspace.id);
   if (read === undefined) return null;
-  if ("failed" in read) return <ReadFailed line={READ_FAILED.SENTRY} onRetry={retry} />;
+  if ("failed" in read)
+    return (
+      <ReadFailed
+        line={READ_FAILED.SENTRY}
+        surface={FAILURE_SURFACE.WORKSPACE_SENTRY_READ}
+        onRetry={retry}
+      />
+    );
   const { sentry } = read;
   if (!sentry.configured) return null;
   if (managesWorkspace(workspace)) {
@@ -1620,11 +1675,14 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
   const [refusal, setRefusal] = useState<string>();
   const button = useRef<HTMLButtonElement | null>(null);
   const set = workspace.photoVersion !== undefined;
-  const remove = useConfirmDialog({ subject: manages && set, surfaceOpen: true }, () =>
-    act(ACT_KIND.WORKSPACE_PHOTO_SET, { workspaceId, photo: null }).then(
-      () => ACCEPTED,
-      refusedWith,
-    ),
+  const remove = useConfirmDialog(
+    { subject: manages && set, surfaceOpen: true },
+    () =>
+      act(ACT_KIND.WORKSPACE_PHOTO_SET, { workspaceId, photo: null }).then(
+        () => ACCEPTED,
+        refusedWith,
+      ),
+    confirmFailure(FAILURE_SURFACE.WORKSPACE_WRITE),
   );
   // Note that focus goes back to Rename once the rename has settled, because
   // the button is disabled while it is out and a disabled one takes no focus.
@@ -1721,7 +1779,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
             />
           ),
           description: identityLine(workspace),
-          error: refusal,
+          error: refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_WRITE),
           control: (
             <>
               {rename}
@@ -1765,7 +1823,11 @@ export function WorkspacePage({
   if (workspace === undefined) {
     return control.listFailed ? (
       <SettingsSection>
-        <ReadFailed line="Your workspaces could not be read." onRetry={control.onRetryList} />
+        <ReadFailed
+          line="Your workspaces could not be read."
+          surface={FAILURE_SURFACE.WORKSPACES_READ}
+          onRetry={control.onRetryList}
+        />
       </SettingsSection>
     ) : (
       <SettingsSectionsSkeleton

@@ -1,5 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   ANNOUNCE,
   AuthPage,
@@ -11,6 +12,7 @@ import {
   TextLink,
   WingFace,
 } from "@luke/ui";
+import { failureShown } from "./failure-report.js";
 import { useAnnounceShown } from "./use-announce-shown.js";
 
 /** What the gate says while it waits on the browser. */
@@ -61,7 +63,18 @@ export function SignInGate({
     <AuthPage
       mark={<WingFace />}
       title="Welcome to Luke"
-      error={failure}
+      error={
+        failure === undefined
+          ? undefined
+          : {
+              words: failure,
+              failure: failureShown({
+                surface: FAILURE_SURFACE.ACCOUNT_SIGN_IN,
+                cause: FAILURE_CONDITION.REFUSED,
+                refused: true,
+              }),
+            }
+      }
       footnote={
         waiting || macAppLink !== undefined ? (
           <>

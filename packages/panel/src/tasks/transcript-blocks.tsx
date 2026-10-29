@@ -108,6 +108,7 @@ import {
   markdownStep,
   TRANSCRIPT_REMARK_STEPS,
 } from "@luke/ui/markdown";
+import { UNREPORTED } from "@luke/ui/reported-failure";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
   type ComponentProps,
@@ -1461,7 +1462,9 @@ export function TranscriptTodos({
       <FoldBody className="mt-list-gap mr-0 mb-tight-gap ml-transcript-gutter select-text">
         <TodoItems todos={todos} live={live} />
         {errorText === undefined ? null : (
-          <FailureNote time={FAILURE_NOTE_TIME.PAST}>{errorText}</FailureNote>
+          <FailureNote failure={UNREPORTED.TOOL} time={FAILURE_NOTE_TIME.PAST}>
+            {errorText}
+          </FailureNote>
         )}
       </FoldBody>
     </Tool>
@@ -1634,7 +1637,9 @@ export function TranscriptSubagent({
     <div className="subagent-row @container/subagent-row text-caption-inline">
       {row}
       {errorText === undefined ? null : (
-        <FailureNote time={FAILURE_NOTE_TIME.PAST}>{errorText}</FailureNote>
+        <FailureNote failure={UNREPORTED.TOOL} time={FAILURE_NOTE_TIME.PAST}>
+          {errorText}
+        </FailureNote>
       )}
     </div>
   );

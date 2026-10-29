@@ -1,4 +1,5 @@
 import { MAC_REPOSITORY_BOUNDS, type MacRepository } from "@luke/features/mac-terminal-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
@@ -19,6 +20,7 @@ import {
 } from "@luke/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { refusedShown, unreadShown } from "../failure-report.js";
 import { MAC_REPOSITORIES } from "./pages.js";
 
 /**
@@ -138,7 +140,10 @@ function MacRepositoryRow({
         if (changed) write({ repository, command: typed === "" ? null : typed });
       }}
     >
-      <SettingsRow label={repository} error={rejection}>
+      <SettingsRow
+        label={repository}
+        error={refusedShown(rejection, FAILURE_SURFACE.MAC_REPOSITORY_WRITE)}
+      >
         {(control) => (
           <>
             <TextField
@@ -184,7 +189,12 @@ export function MacRepositoriesGroup({ workspaceId }: { workspaceId: string }): 
       </SettingsLine>
       {read.failed ? (
         <SettingsLine>
-          <ErrorState onRetry={read.reread}>{NOT_READ}</ErrorState>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.MAC_REPOSITORIES_READ)}
+            onRetry={read.reread}
+          >
+            {NOT_READ}
+          </ErrorState>
         </SettingsLine>
       ) : read.names === undefined ? (
         <SettingsRowsSkeleton

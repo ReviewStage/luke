@@ -6,6 +6,7 @@ import {
   type ReviewThread,
 } from "@luke/features/agent-wire";
 import { imageTypeOfPath } from "@luke/features/github-image";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wire";
 import { REFRESH_FAILED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -70,6 +71,7 @@ import {
   type DiffSelection,
   FILE_NOTE_LINE,
 } from "../diff-view/contract.js";
+import { failureShown, unreadShown } from "../failure-report.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { agentStillWriting } from "./agent-model.js";
 import {
@@ -1923,7 +1925,14 @@ export function AgentChangesTab({
   const unkept = refreshFailed && !out && (pullRequest === null || shownFile === undefined);
   if ("failure" in answer || unkept) {
     return (
-      <ErrorState onRetry={refresh} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+      <ErrorState
+        failure={failureShown({
+          surface: FAILURE_SURFACE.AGENT_CHANGES_READ,
+          cause: "failure" in answer ? answer : FAILURE_CONDITION.UNREAD,
+        })}
+        onRetry={refresh}
+        placement={ERROR_STATE_PLACEMENT.CENTRED}
+      >
         {CHANGES_WORDS.FAILED}
       </ErrorState>
     );
@@ -1973,7 +1982,9 @@ export function AgentChangesTab({
       )}
       <PullRequestWriteNote writes={viewedFiles} />
       {refreshFailed && !out ? (
-        <ErrorState onRetry={refresh}>{REFRESH_FAILED_WORDS}</ErrorState>
+        <ErrorState failure={unreadShown(FAILURE_SURFACE.AGENT_CHANGES_REFRESH)} onRetry={refresh}>
+          {REFRESH_FAILED_WORDS}
+        </ErrorState>
       ) : null}
       {pullRequest.truncated ? (
         <TabNotice>

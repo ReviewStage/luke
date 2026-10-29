@@ -10,6 +10,7 @@ import {
   Tooltip,
   useMenu,
 } from "@luke/ui";
+import type { ShownError } from "@luke/ui/reported-failure";
 import { type KeyboardEvent, type ReactNode, useRef } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 
@@ -43,8 +44,8 @@ interface MenuRowWords {
   /** What rides the label's line without naming the row: a Modified word, a mark. */
   adornment?: ReactNode;
   description?: ReactNode;
-  /** What went wrong with the row's last act, or nothing while none did. */
-  error?: ReactNode;
+  /** What went wrong with the row's last act, and the failure beneath it, or nothing while none did. */
+  error?: ShownError | undefined;
   /** What the row grows under its line and owns alone, a stored key's field. */
   below?: ReactNode;
   /** The provider's or service's mark the row leads with. */

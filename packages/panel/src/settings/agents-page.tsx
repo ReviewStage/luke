@@ -12,6 +12,7 @@ import {
   type ProviderKeyStatus,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
@@ -35,6 +36,7 @@ import { useSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
+import { refusalShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
 import { OPEN_SETTINGS_LABEL } from "../open-settings.js";
 import {
@@ -241,7 +243,7 @@ function DefaultRows({
         detail={note}
         changed={read.base !== AGENT_DEFAULT_CHOICE.model}
         saves={modelWrite.saves}
-        error={modelWrite.rejection}
+        error={refusalShown(modelWrite.rejection, FAILURE_SURFACE.SETTING_WRITE)}
         value={read.base}
         valueLabel={modelLabel(read.base, models)}
         valueIcon={listed !== undefined ? <HarnessMark provider={listed.provider} /> : null}
@@ -264,7 +266,12 @@ function DefaultRows({
             modelsRetrying ? (
               <Spinner delay label={readingWords("models")} />
             ) : (
-              <ErrorState onRetry={onRetryModels}>{MODELS_READ_FAILED}</ErrorState>
+              <ErrorState
+                failure={unreadShown(FAILURE_SURFACE.MODELS_READ)}
+                onRetry={onRetryModels}
+              >
+                {MODELS_READ_FAILED}
+              </ErrorState>
             )
           ) : undefined
         }
@@ -324,7 +331,7 @@ function DefaultRows({
             saves={effortWrite.saves}
           />
         }
-        error={effortWrite.rejection}
+        error={refusalShown(effortWrite.rejection, FAILURE_SURFACE.SETTING_WRITE)}
       >
         {() => (
           <ChoiceBar
@@ -345,7 +352,7 @@ function DefaultRows({
             <SettingMarks changed={window !== CONTEXT_WINDOW.LONG} saves={contextWrite.saves} />
           }
           description={longWindowNote(windows)}
-          error={contextWrite.rejection}
+          error={refusalShown(contextWrite.rejection, FAILURE_SURFACE.SETTING_WRITE)}
         >
           {() => (
             <ChoiceBar
@@ -477,7 +484,10 @@ function AgentsSection({
         />
       ) : readFailed ? (
         <SettingsLine>
-          <ErrorState onRetry={() => setAttempt((count) => count + 1)}>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.AGENT_DEFAULTS_READ)}
+            onRetry={() => setAttempt((count) => count + 1)}
+          >
             {PAGE_LINE.FAILED}
           </ErrorState>
         </SettingsLine>

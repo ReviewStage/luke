@@ -36,6 +36,7 @@ import {
   TextField,
   useMinute,
 } from "@luke/ui";
+import { inputProblem } from "@luke/ui/reported-failure";
 import { type ReactNode, type RefObject, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { MentionNode } from "../plan-editor/contract.js";
 import { SwitchRow } from "../settings/switch-row.js";
@@ -537,7 +538,9 @@ function DatePickerPanel({
   const endField = (which: DateEnd, moment: DateWallMoment) => (
     <FormField
       label={which === DATE_END.START ? WORDS.START_DATE : WORDS.END_DATE}
-      error={draft.typing?.end === which && draft.typing.invalid ? WORDS.UNREAD : undefined}
+      error={
+        draft.typing?.end === which && draft.typing.invalid ? inputProblem(WORDS.UNREAD) : undefined
+      }
     >
       {(control) =>
         timed ? (

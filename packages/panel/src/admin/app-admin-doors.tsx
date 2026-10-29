@@ -16,9 +16,11 @@
 
 import type { AdminReadParams, AdminRefused } from "@luke/features/admin-wire";
 import { ADMIN_UNANSWERED } from "@luke/features/admin-wire";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { ACT_KIND } from "@luke/host/acts";
 import { COLLECTION_STATE, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { askAct } from "../act.js";
+import { failureShown } from "../failure-report.js";
 import {
   type AdminDoors,
   AdminDoorsProvider,
@@ -73,7 +75,18 @@ function GateRefusal({ words }: { words: string }): React.JSX.Element {
       filters={undefined}
       state={COLLECTION_STATE.ERROR}
       loadingLabel="Admin"
-      error={<ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED}>{words}</ErrorState>}
+      error={
+        <ErrorState
+          failure={failureShown({
+            surface: FAILURE_SURFACE.ADMIN_GATE,
+            cause: FAILURE_CONDITION.REFUSED,
+            refused: true,
+          })}
+          placement={ERROR_STATE_PLACEMENT.CENTRED}
+        >
+          {words}
+        </ErrorState>
+      }
     />
   );
 }

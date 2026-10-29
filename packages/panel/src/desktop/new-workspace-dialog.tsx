@@ -1,3 +1,4 @@
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { WORKSPACE_BOUNDS } from "@luke/features/workspace-wire";
 import {
   DIALOG_TONE,
@@ -10,6 +11,7 @@ import {
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
+import { confirmFailure } from "../failure-report.js";
 import { useFormDialog } from "./use-form-dialog.js";
 
 /**
@@ -54,6 +56,7 @@ export function useNewWorkspaceDialog(
         return { status: ACTION_RESULT_STATUS.ACCEPTED };
       });
     },
+    confirmFailure(FAILURE_SURFACE.WORKSPACE_CREATE),
   );
   const blank = name.trim() === "";
   const form = useFormDialog(confirm, !blank);

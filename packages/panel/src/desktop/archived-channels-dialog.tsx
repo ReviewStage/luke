@@ -1,4 +1,5 @@
 import type { ArchivedChannel } from "@luke/features/channel-wire";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
@@ -19,6 +20,7 @@ import {
   Time,
 } from "@luke/ui";
 import { useState } from "react";
+import { failureShown, unreadShown } from "../failure-report.js";
 import type { ChannelsControl } from "../tasks/use-channels.js";
 import { useArchivedChannels } from "../tasks/use-channels.js";
 
@@ -121,7 +123,12 @@ function ArchivedList({
         {ARCHIVED_WORDS.READING}
       </NoteLine>
     ) : (
-      <ErrorState onRetry={archived.onRefresh}>{ARCHIVED_WORDS.NOT_READ}</ErrorState>
+      <ErrorState
+        failure={unreadShown(FAILURE_SURFACE.CHANNELS_ARCHIVED_READ, { workspaceId })}
+        onRetry={archived.onRefresh}
+      >
+        {ARCHIVED_WORDS.NOT_READ}
+      </ErrorState>
     );
   }
   if (listed.length === 0) {
@@ -142,7 +149,21 @@ function ArchivedList({
           ))}
         </List>
       </ScrollArea>
-      <ErrorLine>{refusal}</ErrorLine>
+      <ErrorLine
+        error={
+          refusal === undefined
+            ? undefined
+            : {
+                words: refusal,
+                failure: failureShown({
+                  surface: FAILURE_SURFACE.CHANNEL_UNARCHIVE,
+                  cause: FAILURE_CONDITION.REFUSED,
+                  about: { workspaceId },
+                  refused: true,
+                }),
+              }
+        }
+      />
     </>
   );
 }

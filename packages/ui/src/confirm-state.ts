@@ -1,5 +1,6 @@
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useMemo, useRef, useState } from "react";
+import type { ReportedFailure } from "./reported-failure.js";
 
 /**
  * What a line's dangerous control is currently asking.
@@ -82,11 +83,20 @@ export function confirmWithdrawable(stage: ConfirmStage): boolean {
   return stage === CONFIRM_STAGE.ASKING;
 }
 
+/** Why a confirmed act was refused: its sentence, and the refusal as the app reports it. */
+export interface ConfirmRejection {
+  readonly words: string;
+  readonly failure: ReportedFailure;
+}
+
+/** What a refused answer is reported as, built by the app that asked from the answer that refused it. */
+export type ConfirmFailure = (refused: ActionResult) => ReportedFailure;
+
 /** One confirming action, as the line that offers it holds it. */
 export interface HeldConfirm {
   stage: ConfirmStage;
-  /** Why the answer was refused, if it was. A refusal is an answer too. */
-  rejection: string | undefined;
+  /** Why the answer was refused, if it was, and the refusal as reported. A refusal is an answer too. */
+  rejection: ConfirmRejection | undefined;
   /** True while the answer that was given is running. */
   busy: boolean;
   ask: () => void;
@@ -106,13 +116,16 @@ export interface HeldConfirm {
  * the render that discovers its subject or its surface gone rather than from an
  * effect, the way an emptied filter is: a question whose subject or whose
  * surface has gone must never be drawn once and taken back on the next frame.
+ * A refusal is handed on with what `failure` builds of the answer that
+ * refused it, so whatever draws it reports it.
  */
 export function useConfirm(
   surroundings: ConfirmSurroundings,
   action: () => Promise<ActionResult>,
+  failure: ConfirmFailure,
 ): HeldConfirm {
   const [held, setHeld] = useState<ConfirmStage>(CONFIRM_STAGE.RESTING);
-  const [rejection, setRejection] = useState<string>();
+  const [refused, setRefused] = useState<ActionResult>();
   const stage = confirmStage(held, surroundings);
   if (stage !== held) setHeld(stage);
   // Read by the withdrawal, which a dialog holds as a callback rather than a
@@ -129,10 +142,10 @@ export function useConfirm(
   // fresh question is a fresh decision, not one carrying the last one's
   // answer under it.
   const ask = useCallback(() => {
-    setRejection(undefined);
+    setRefused(undefined);
     setHeld(CONFIRM_STAGE.ASKING);
   }, []);
-  const clear = useCallback(() => setRejection(undefined), []);
+  const clear = useCallback(() => setRefused(undefined), []);
   // The act is read as the press lands, so the confirm handed down stands across draws and still runs the newest.
   const newestAction = useRef(action);
   newestAction.current = action;
@@ -141,7 +154,7 @@ export function useConfirm(
     void newestAction
       .current()
       .then((result) => {
-        setRejection(result.status === ACTION_RESULT_STATUS.ACCEPTED ? undefined : result.reason);
+        setRefused(result.status === ACTION_RESULT_STATUS.ACCEPTED ? undefined : result);
       })
       // Settled in `finally` rather than after the answer, because a carrier
       // that rejects rather than answering is still a line that has to be
@@ -154,6 +167,18 @@ export function useConfirm(
       });
   }, []);
 
+  // Note that the failure is built of the answer once per answer, by the
+  // newest builder, since the app keeps a refusal the same one for as long
+  // as its answer is.
+  const newestFailure = useRef(failure);
+  newestFailure.current = failure;
+  const rejection = useMemo(
+    () =>
+      refused === undefined || refused.status === ACTION_RESULT_STATUS.ACCEPTED
+        ? undefined
+        : { words: refused.reason, failure: newestFailure.current(refused) },
+    [refused],
+  );
   return useMemo(
     () => ({
       stage,

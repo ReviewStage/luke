@@ -14,6 +14,7 @@ import {
   type PlanCommentWriter,
 } from "@luke/features/plan-comment-wire";
 import type { PlanSection } from "@luke/features/plan-document";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { IRREVERSIBLE_WORDS, pasteCutWords } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -99,6 +100,7 @@ import {
   type PlanCommentsControl,
   usePlanCommentsControl as usePlanCommentsControlOrUndefined,
 } from "@luke/ui/plan-comments";
+import { UNREPORTED } from "@luke/ui/reported-failure";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Equal, Schema } from "effect";
@@ -131,6 +133,7 @@ import {
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { enterSubmitKey } from "../enter-sends.js";
+import { confirmFailure, failureShown, unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { usePerson } from "../member-directory.js";
 import {
@@ -495,23 +498,27 @@ function CommentEntry({
     on: { threadId: thread.id, entryId: entry.id },
   });
   const drafts = useDraftWriter();
-  const deleting = useConfirmDialog({ subject: true, surfaceOpen: true }, async () => {
-    const deleted = await doors.control.act(
-      thread.id,
-      first
-        ? { action: PLAN_COMMENT_ACTION.DELETE_THREAD }
-        : { action: PLAN_COMMENT_ACTION.DELETE, entry: entry.id },
-    );
-    if (!deleted) {
-      return {
-        status: ACTION_RESULT_STATUS.REJECTED,
-        reason: doors.control.notes.get(thread.id) ?? COMMENT_NOT_DELETED,
-      };
-    }
-    // Words left unsent on what went go with it, so no plan is marked holding a draft no box opens.
-    drafts.drop((place) => writtenOn(place, thread.id, first ? undefined : entry.id));
-    return { status: ACTION_RESULT_STATUS.ACCEPTED };
-  });
+  const deleting = useConfirmDialog(
+    { subject: true, surfaceOpen: true },
+    async () => {
+      const deleted = await doors.control.act(
+        thread.id,
+        first
+          ? { action: PLAN_COMMENT_ACTION.DELETE_THREAD }
+          : { action: PLAN_COMMENT_ACTION.DELETE, entry: entry.id },
+      );
+      if (!deleted) {
+        return {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: doors.control.notes.get(thread.id) ?? COMMENT_NOT_DELETED,
+        };
+      }
+      // Words left unsent on what went go with it, so no plan is marked holding a draft no box opens.
+      drafts.drop((place) => writtenOn(place, thread.id, first ? undefined : entry.id));
+      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+    },
+    confirmFailure(FAILURE_SURFACE.PLAN_COMMENT_DELETE),
+  );
   const copyLink = useCopyLinkItem()({
     kind: LINK_PLACE.COMMENT,
     planId: doors.control.planId,
@@ -979,12 +986,16 @@ function ReplyField({
     go(unsent);
   };
   // Note that Discard asks first, since a send not sent is kept nowhere else.
-  const discard = useConfirmDialog({ subject: unsent !== undefined, surfaceOpen: true }, () => {
-    setUnsent(undefined);
-    // Note that words written again after a discard are a new comment, so they go under a new key.
-    attempt.current = undefined;
-    return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-  });
+  const discard = useConfirmDialog(
+    { subject: unsent !== undefined, surfaceOpen: true },
+    () => {
+      setUnsent(undefined);
+      // Note that words written again after a discard are a new comment, so they go under a new key.
+      attempt.current = undefined;
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+    confirmFailure(FAILURE_SURFACE.PLAN_COMMENT_DISCARD),
+  );
   return (
     <ComposerFrame
       look={variant === REPLY_VARIANT.FIRST ? COMPOSER_LOOK.BARE : COMPOSER_LOOK.CARD}
@@ -1003,6 +1014,10 @@ function ReplyField({
           <CommentWords words={unsent.words} />
           <FailureNote
             onRetry={retry}
+            failure={failureShown({
+              surface: FAILURE_SURFACE.PLAN_COMMENT_SEND,
+              cause: failure === undefined ? FAILURE_CONDITION.NOT_KEPT : FAILURE_CONDITION.REFUSED,
+            })}
             also={
               <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={discard.ask}>
                 {COMMENT_WORDS.DISCARD}
@@ -1057,7 +1072,21 @@ function ReplyField({
           busyLabel: COMMENT_WORDS.SENDING,
         }}
         // Note that a file refused is said over a dictation's note or a cut paste, as the agent box says it.
-        note={note === undefined ? undefined : { words: note }}
+        note={
+          note === undefined
+            ? undefined
+            : {
+                words: note,
+                failure:
+                  note === said
+                    ? UNREPORTED.INPUT
+                    : failureShown({
+                        surface: FAILURE_SURFACE.PLAN_COMMENT_SEND,
+                        cause: FAILURE_CONDITION.REFUSED,
+                        refused: true,
+                      }),
+              }
+        }
       />
     </ComposerFrame>
   );
@@ -1370,7 +1399,15 @@ function ThreadCard({
         />
       ) : note === undefined ? null : (
         // Note that a resolved thread has no field to stand a failure under, so its Reopen's is said on its own.
-        <FailureNote>{note}</FailureNote>
+        <FailureNote
+          failure={failureShown({
+            surface: FAILURE_SURFACE.PLAN_THREAD_REOPEN,
+            cause: FAILURE_CONDITION.REFUSED,
+            refused: true,
+          })}
+        >
+          {note}
+        </FailureNote>
       )}
     </CommentCard>
   );
@@ -2425,7 +2462,11 @@ export function PlanCommentsTab({
             data-empty={!control.failed && listed.length === 0 && control.read ? "" : undefined}
           >
             {control.failed ? (
-              <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={control.onRetry}>
+              <ErrorState
+                failure={unreadShown(FAILURE_SURFACE.PLAN_COMMENTS_READ)}
+                placement={ERROR_STATE_PLACEMENT.CENTRED}
+                onRetry={control.onRetry}
+              >
                 The comments could not be read.
               </ErrorState>
             ) : listed.length === 0 ? (

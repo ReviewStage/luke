@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { inputProblem } from "../../reported-failure.js";
 import { FormField } from "../form-field/form-field.js";
 import { SettingsRow } from "../settings-row/settings-row.js";
 import {
@@ -278,7 +279,7 @@ test("inside a field, a text entry is named, described, and marked invalid by th
     createElement(FormField, {
       label: "Workspace name",
       description: "Everyone sees it.",
-      error: "Give it a name.",
+      error: inputProblem("Give it a name."),
       children: (field) =>
         createElement(TextField, { field, value: "", onChange: () => undefined }),
     }),
@@ -316,7 +317,7 @@ test("a text entry standing alone in a settings row reports itself invalid while
   const row = (error: string | undefined) =>
     createElement(SettingsRow, {
       label: "Schedule",
-      error,
+      error: inputProblem(error),
       children: (control) => [
         createElement(TextField, {
           key: "cron",

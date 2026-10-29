@@ -3,6 +3,7 @@ import {
   type AgentAttachment,
   type AgentTranscriptMessage,
 } from "@luke/features/agent-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
@@ -22,6 +23,7 @@ import {
   useDraft,
   useDraftWriter,
 } from "../composer-drafts.js";
+import { confirmFailure } from "../failure-report.js";
 import { AgentComposer } from "./agent-composer.js";
 import { type LineAttachment, LinePicturesWatch, useLineAttachments } from "./agent-pictures.js";
 import type { PublishedDoors } from "./agent-published.js";
@@ -184,10 +186,14 @@ export function EditComposer({
     edit.onSend(draft, attachments);
   };
   // Note that the send answers at once: the tab takes it in turn behind any send, and says there if it did not go.
-  const confirm = useConfirmDialog({ subject: edit.cuts, surfaceOpen: true }, () => {
-    send();
-    return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-  });
+  const confirm = useConfirmDialog(
+    { subject: edit.cuts, surfaceOpen: true },
+    () => {
+      send();
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+    confirmFailure(FAILURE_SURFACE.MESSAGE_EDIT),
+  );
   const composer: AgentComposerControl = {
     draft,
     setDraft: (text) => {

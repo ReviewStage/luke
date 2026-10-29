@@ -1,5 +1,6 @@
 import type { Channel } from "@luke/features/channel-wire";
 import { channelPlace } from "@luke/features/link-grammar";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { CONFIRM_LOSS, ConfirmDialog, useConfirmDialog } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { useState } from "react";
@@ -7,6 +8,7 @@ import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { answered } from "../desktop/channel-dialog.js";
+import { confirmFailure } from "../failure-report.js";
 import { channelEditable, channelUnread } from "./channels-model.js";
 import type { ChannelsControl } from "./use-channels.js";
 
@@ -64,6 +66,7 @@ export function useChannelMenu({
       doomed === undefined
         ? Promise.resolve(answered(undefined))
         : channels.onArchive(doomed.channel.id).then(answered),
+    confirmFailure(FAILURE_SURFACE.CHANNEL_ARCHIVE),
   );
   const groups = (channel: Channel): MenuAction[][] => {
     const copyLink = copyLinkItem(channelPlace(channel.id));

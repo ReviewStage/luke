@@ -3,6 +3,7 @@ import { Children, createContext, isValidElement, type ReactNode, useContext } f
 import { cssCustomProperties } from "../../css.js";
 import { ImageOffIcon } from "../../icons/icons.js";
 import { PICTURE_STATE, type PictureState } from "../../picture-cache.js";
+import type { ReportedFailure } from "../../reported-failure.js";
 import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, Card } from "../card/card.js";
 import { ERROR_STATE_ELEMENT, ErrorState } from "../error-state/error-state.js";
 import { PictureTile } from "../picture-tile/picture-tile.js";
@@ -108,24 +109,30 @@ function failedWords(words: string): string {
  * land this time, the failure's sentence and Retry (`ErrorState`), a span
  * since a picture may stand inside a paragraph.
  */
-export function PictureStandIn({
-  state,
-  words,
-  why = NOT_AVAILABLE,
-  onRetry,
-}: {
-  state: typeof PICTURE_STATE.READING | typeof PICTURE_STATE.MISSING | typeof PICTURE_STATE.FAILED;
-  /** The picture's words, its alt text or caption; empty where it has none. */
-  words: string;
-  /** Why a gone picture is not there, after its words. */
-  why?: string | undefined;
-  /** Reads a failed picture again. */
-  onRetry?: (() => void) | undefined;
-}): React.JSX.Element {
+export function PictureStandIn(
+  props: {
+    /** The picture's words, its alt text or caption; empty where it has none. */
+    words: string;
+  } & (
+    | {
+        state: typeof PICTURE_STATE.READING | typeof PICTURE_STATE.MISSING;
+        /** Why a gone picture is not there, after its words. */
+        why?: string | undefined;
+      }
+    | {
+        state: typeof PICTURE_STATE.FAILED;
+        /** Reads a failed picture again. */
+        onRetry?: (() => void) | undefined;
+        /** The read that did not land, as the app reports it. */
+        failure: ReportedFailure;
+      }
+  ),
+): React.JSX.Element {
+  const { state, words } = props;
   if (state === PICTURE_STATE.READING) return <Spinner delay label={READING_LABEL} />;
-  if (state === PICTURE_STATE.FAILED) {
+  if (props.state === PICTURE_STATE.FAILED) {
     return (
-      <ErrorState as={ERROR_STATE_ELEMENT.SPAN} onRetry={onRetry}>
+      <ErrorState as={ERROR_STATE_ELEMENT.SPAN} onRetry={props.onRetry} failure={props.failure}>
         {failedWords(words)}
       </ErrorState>
     );
@@ -133,7 +140,7 @@ export function PictureStandIn({
   return (
     <span className={STAND_IN}>
       <ImageOffIcon aria-hidden="true" />
-      <span>{goneWords(words, why)}</span>
+      <span>{goneWords(words, props.why ?? NOT_AVAILABLE)}</span>
     </span>
   );
 }
@@ -149,7 +156,14 @@ function TileFace({
   why: string | undefined;
 }): ReactNode {
   if (state.kind === PICTURE_STATE.FAILED) {
-    return <PictureStandIn state={state.kind} words={words} onRetry={state.retry} />;
+    return (
+      <PictureStandIn
+        state={state.kind}
+        words={words}
+        onRetry={state.retry}
+        failure={state.failure}
+      />
+    );
   }
   if (state.kind !== PICTURE_STATE.READY) {
     return <PictureStandIn state={state.kind} words={words} why={why} />;

@@ -1,3 +1,4 @@
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { type TerminalAction, type TerminalBar, terminalLook } from "@luke/features/terminal-model";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import {
@@ -15,6 +16,7 @@ import {
 import { useMemo, useState } from "react";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
+import { unreadShown } from "../failure-report.js";
 import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { TERMINAL_FIND, type TerminalFind } from "../terminal/contract.js";
@@ -207,7 +209,11 @@ export function TerminalTab({
             <StateBar key={session.state.kind} bar={bar} onAction={session.onAction} />
           )}
           {session.failed ? (
-            <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={session.retryBundle}>
+            <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.BUNDLE_LOAD)}
+              placement={ERROR_STATE_PLACEMENT.CENTRED}
+              onRetry={session.retryBundle}
+            >
               {TERMINAL_LOAD_FAILED}
             </ErrorState>
           ) : (

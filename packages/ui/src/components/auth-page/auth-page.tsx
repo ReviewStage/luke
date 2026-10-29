@@ -1,5 +1,7 @@
 import { Children, type MouseEvent, type ReactNode, useId } from "react";
-import { BUTTON_VARIANT, ButtonLink } from "../button/button.js";
+import { isReported, type ShownError } from "../../reported-failure.js";
+import { BUTTON_SIZE, BUTTON_VARIANT, ButtonLink } from "../button/button.js";
+import { FailureCopy } from "../failure-copy/failure-copy.js";
 
 /**
  * auth-page.tsx -- the page a sign-in, a consent, or a connection is drawn on: one card, centred in the window, with nothing else on the page.
@@ -17,7 +19,10 @@ import { BUTTON_VARIANT, ButtonLink } from "../button/button.js";
  * The artwork is decoration, hidden from a reader, since the title says what
  * the card is and how it stands. The error stands in an alert region from the
  * first render, empty until it says something, because a reader announces a
- * region filling more surely than one arriving.
+ * region filling more surely than one arriving. A failure of the app's
+ * comes with the failure beneath it, reported as it first stands, and its
+ * details to copy stand under its words, the compact copy glyph alone,
+ * named "Copy details", outside the alert so a reader hears the words alone.
  *
  * It is drawn in Tailwind utilities over the theme, with no shadcn/ui base:
  * the card is no `Card`, whose corners, shadow, and insets are a page's
@@ -54,8 +59,8 @@ export function AuthPage({
   /** What the page is for, or how it ended, which names it. */
   title: ReactNode;
   description?: ReactNode;
-  /** What went wrong, or nothing while nothing has. */
-  error?: ReactNode;
+  /** What went wrong and the failure beneath it, or nothing while nothing has. */
+  error?: ShownError | undefined;
   /** The way on, such as Open Luke, or nothing where there is none. */
   action?: AuthAction | undefined;
   /** A closing note under everything else ("You can close this window"). */
@@ -92,8 +97,13 @@ export function AuthPage({
           </div>
         ) : null}
         <p className="luke-auth-error m-0 mt-luke-16 empty:mt-0 text-danger" role="alert">
-          {said(error) ? error : null}
+          {error !== undefined && said(error.words) ? error.words : null}
         </p>
+        {error !== undefined && said(error.words) && isReported(error.failure) ? (
+          <div className="luke-auth-error-copy mt-luke-4 flex justify-center">
+            <FailureCopy failure={error.failure} size={BUTTON_SIZE.COMPACT} />
+          </div>
+        ) : null}
         {action === undefined ? null : (
           <div className="luke-auth-action flex justify-center mt-luke-24">
             <ButtonLink

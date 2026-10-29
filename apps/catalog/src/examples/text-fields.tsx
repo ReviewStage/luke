@@ -17,7 +17,9 @@ import {
   TextArea,
   TextField,
 } from "@luke/ui";
+import { inputProblem } from "@luke/ui/reported-failure";
 import { useState } from "react";
+import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -125,7 +127,13 @@ function TextFields(): React.JSX.Element {
             </Held>
             <Held start="Acme">
               {(value, onChange) => (
-                <FormField label="Workspace name" error="A workspace by that name already exists.">
+                <FormField
+                  label="Workspace name"
+                  error={{
+                    words: "A workspace by that name already exists.",
+                    failure: CATALOG_FAILURE,
+                  }}
+                >
                   {(field) => <TextField field={field} value={value} onChange={onChange} />}
                 </FormField>
               )}
@@ -272,7 +280,10 @@ function TextFields(): React.JSX.Element {
         <div className="catalog-column">
           <Held start="every night">
             {(value, onChange) => (
-              <SettingsRow label="Cron" error="That isn't a schedule Luke can read.">
+              <SettingsRow
+                label="Cron"
+                error={inputProblem("That isn't a schedule Luke can read.")}
+              >
                 {(control) => (
                   <TextField
                     label="Cron"

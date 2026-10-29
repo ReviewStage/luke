@@ -2,6 +2,7 @@ import { type ReactNode, useId } from "react";
 import { cn } from "../../cn.js";
 import { CheckIcon } from "../../face/glyphs.js";
 import { AlertIcon } from "../../icons/lucide-glyphs.js";
+import type { ShownError } from "../../reported-failure.js";
 import {
   Item,
   ItemActions,
@@ -190,8 +191,8 @@ export function SettingsRow({
   leading?: ReactNode;
   /** What rides the label's line after it without naming the control: a Modified word, a mark. */
   adornment?: ReactNode;
-  /** What went wrong with the last write, or nothing while none did. */
-  error?: ReactNode;
+  /** What went wrong with the last write, and the failure beneath it, or nothing while none did. */
+  error?: ShownError | undefined;
   /** How the row stands; in a section's card where none is named. */
   density?: SettingsRowDensity | undefined;
   /** Where the row's edge stands; at the card's where none is named. */
@@ -212,7 +213,7 @@ export function SettingsRow({
   const descriptionId = `${id}description`;
   const errorId = `${id}error`;
   const controlId = `${id}control`;
-  const failed = said(error);
+  const failed = error !== undefined && said(error.words);
   const described = said(description);
   const led = said(leading);
   const describedBy = [described ? descriptionId : undefined, failed ? errorId : undefined]
@@ -280,9 +281,7 @@ export function SettingsRow({
             {below(control)}
           </div>
         )}
-        <ErrorLine id={errorId} level={ANNOUNCE.ALERT}>
-          {failed ? error : null}
-        </ErrorLine>
+        <ErrorLine id={errorId} level={ANNOUNCE.ALERT} error={failed ? error : undefined} />
       </Item>
     </div>
   );

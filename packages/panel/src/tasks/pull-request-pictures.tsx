@@ -16,6 +16,7 @@ import {
   useState,
 } from "react";
 import { useAct } from "../act.js";
+import { pictureUnread } from "../failure-report.js";
 import { PictureBlock } from "../picture-block.js";
 import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
 import { type GitHubPictureDrawer, GitHubPictureLink } from "./transcript-blocks.js";
@@ -227,7 +228,7 @@ function GitHubPicture({
   alt: string;
   linked: boolean;
 }): React.JSX.Element {
-  const state = usePicture(agentId, src, useGitHubImageRead());
+  const state = usePicture(agentId, src, useGitHubImageRead(), pictureUnread);
   const door = useContext(EntryViewerContext);
   // Note that a picture landing tells the entry, so a viewer already open walks it too.
   useEffect(() => door?.landed(), [door, state.kind]);

@@ -1,4 +1,5 @@
 import { ADMIN_METRICS_WINDOW, type AdminMetricsWindow } from "@luke/features/admin-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   ErrorState,
   GAP,
@@ -11,6 +12,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { CalendarRangeIcon, SlidersHorizontalIcon } from "lucide-react";
+import { unreadShown } from "../../failure-report.js";
 
 /** Every range a view may read, shortest first. */
 const ALL_WINDOWS: readonly AdminMetricsWindow[] = Object.values(ADMIN_METRICS_WINDOW);
@@ -56,6 +58,7 @@ export function Refreshing({
   return (
     <Stack gap={GAP.SECTION}>
       <ErrorState
+        failure={unreadShown(FAILURE_SURFACE.ADMIN_REFRESH)}
         onRetry={() => {
           if (!refreshing) onRetry();
         }}

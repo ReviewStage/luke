@@ -1,4 +1,6 @@
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { unreadShown } from "../../failure-report.js";
 
 /**
  * The failed read in the page's place, under the page's own toolbar, so the
@@ -18,6 +20,7 @@ export function AdminErrorState({
 }): React.JSX.Element {
   return (
     <ErrorState
+      failure={unreadShown(FAILURE_SURFACE.ADMIN_READ)}
       placement={ERROR_STATE_PLACEMENT.CENTRED}
       onRetry={() => {
         if (!refreshing) onRetry();

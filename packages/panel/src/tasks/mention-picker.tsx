@@ -19,6 +19,7 @@ import {
 } from "@luke/features/mention-link";
 import type { PageLine } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import {
   countWords,
@@ -81,6 +82,7 @@ import {
 import { type RefObject, useEffect, useId, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
+import { unreadShown } from "../failure-report.js";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { memberRows, YOU_WORD } from "../member-rows.js";
@@ -1208,7 +1210,11 @@ function MentionMenu({
             <>
               {reading ? <Spinner delay label="Reading" /> : null}
               {failures.map((failure) => (
-                <ErrorState key={failure.read} onRetry={failure.retry}>
+                <ErrorState
+                  failure={unreadShown(FAILURE_SURFACE.MENTIONS_READ)}
+                  key={failure.read}
+                  onRetry={failure.retry}
+                >
                   {readFailedWords(failure.read)}
                 </ErrorState>
               ))}

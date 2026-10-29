@@ -4,6 +4,7 @@ import {
   CHAPTERS_MODEL_LIST,
   type ChaptersModelId,
 } from "@luke/features/chapters-model-choice";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
@@ -22,6 +23,7 @@ import { useSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
+import { refusalShown, unreadShown } from "../failure-report.js";
 import { SettingMarks } from "./marks.js";
 
 /**
@@ -106,7 +108,7 @@ export function ChaptersModelSection({ signedIn }: { signedIn: boolean }): React
           label="Model"
           adornment={<SettingMarks changed={model !== CHAPTERS_MODEL_DEFAULT} saves={saves} />}
           description={SECTION_LINE.DETAIL}
-          error={rejection}
+          error={refusalShown(rejection, FAILURE_SURFACE.SETTING_WRITE)}
         >
           {() => (
             <ChoiceBar
@@ -125,7 +127,10 @@ export function ChaptersModelSection({ signedIn }: { signedIn: boolean }): React
         </SettingsRow>
       ) : readFailed ? (
         <SettingsLine>
-          <ErrorState onRetry={() => setAttempt((count) => count + 1)}>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.CHAPTERS_MODEL_READ)}
+            onRetry={() => setAttempt((count) => count + 1)}
+          >
             {SECTION_LINE.FAILED}
           </ErrorState>
         </SettingsLine>

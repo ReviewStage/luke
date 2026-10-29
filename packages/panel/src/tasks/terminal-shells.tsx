@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { AgentSummary } from "@luke/features/agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { TERMINAL_STATE, type TerminalState } from "@luke/features/terminal-model";
 import { sandboxRead } from "@luke/features/terminal-store";
 import {
@@ -39,6 +40,7 @@ import { useInlineRename } from "@luke/ui/use-inline-rename";
 import type { ReactNode, RefObject } from "react";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { rowMenu } from "../desktop/action-menu.js";
+import { confirmFailure, unreadShown } from "../failure-report.js";
 import { AgentRef, type AgentSubject } from "./agent-ref.js";
 import type { PaneOver } from "./file-view.js";
 import { AgentGlyph } from "./tab-look.js";
@@ -162,7 +164,9 @@ function UnlistedShells({ state }: { state: TerminalState }): React.JSX.Element 
   if (state.kind !== TERMINAL_STATE.UNREACHABLE) return <ShellsSkeleton />;
   return (
     <Fill className="terminal-shells-wait px-list-inset py-row-inset" data-failed="">
-      <ErrorState>{SHELLS_UNREAD}</ErrorState>
+      <ErrorState failure={unreadShown(FAILURE_SURFACE.TERMINAL_SHELLS_READ)}>
+        {SHELLS_UNREAD}
+      </ErrorState>
     </Fill>
   );
 }
@@ -215,7 +219,11 @@ function ShellRow({
   const renaming = rename.editing;
   const kill = `End ${shell.title}`;
   // Ending a shell ends what runs in it, which nothing brings back, so it asks first.
-  const ending = useConfirmDialog({ subject: true, surfaceOpen }, () => session.onKill(shell.id));
+  const ending = useConfirmDialog(
+    { subject: true, surfaceOpen },
+    () => session.onKill(shell.id),
+    confirmFailure(FAILURE_SURFACE.TERMINAL_STOP),
+  );
   return (
     <>
       <ListRow

@@ -11,6 +11,7 @@ import {
   BROWSER_LIVE_MOUSE_BUTTON,
   type BrowserLiveHistory,
 } from "@luke/features/browser-live-wire";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { BROWSER_TAB_OPEN_FAILURE, type BrowserTabOpenFailure } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { surfaceKeepsPress } from "@luke/settings/shortcuts";
@@ -64,6 +65,7 @@ import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
+import { failureShown } from "../failure-report.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
@@ -823,7 +825,15 @@ export function CloudBrowserDraftPane({
       />
       {refused === undefined ? null : (
         <div className={STANDING_CLASS}>
-          <FailureNote>{refused}</FailureNote>
+          <FailureNote
+            failure={failureShown({
+              surface: FAILURE_SURFACE.BROWSER_OPEN,
+              cause: FAILURE_CONDITION.REFUSED,
+              refused: true,
+            })}
+          >
+            {refused}
+          </FailureNote>
         </div>
       )}
       <Fill clip className={BODY_CLASS}>

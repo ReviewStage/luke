@@ -1,4 +1,5 @@
 import type { MemorySummary } from "@luke/features/memory-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   countWords,
   readFailedWords,
@@ -61,6 +62,7 @@ import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, ActorRef, commentAuthor } from "../actor-ref.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
+import { confirmFailure, unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { PEOPLE_FILTER_WORDS } from "../member-rows.js";
@@ -544,8 +546,10 @@ function MemoryList({
   if (standing.size !== selected.size) setSelected(standing);
   const chosen = listed.filter((each) => standing.has(each.memory.id)).map((each) => each.memory);
   const forgettable = asked.filter((memory) => memory.forgettable);
-  const forgetConfirm = useConfirmDialog({ subject: asked.length > 0, surfaceOpen: true }, () =>
-    onForget(forgettable.map((memory) => memory.id)),
+  const forgetConfirm = useConfirmDialog(
+    { subject: asked.length > 0, surfaceOpen: true },
+    () => onForget(forgettable.map((memory) => memory.id)),
+    confirmFailure(FAILURE_SURFACE.MEMORY_FORGET),
   );
   const askForget = (memories: readonly MemorySummary[]) => {
     setAsked(memories);
@@ -778,7 +782,12 @@ export function MemorySection({
   if (workspace === undefined) {
     return workspacesFailed ? (
       <SettingsLine>
-        <ErrorState onRetry={onRetryWorkspaces}>{PAGE_LINE.WORKSPACES_FAILED}</ErrorState>
+        <ErrorState
+          failure={unreadShown(FAILURE_SURFACE.WORKSPACES_READ)}
+          onRetry={onRetryWorkspaces}
+        >
+          {PAGE_LINE.WORKSPACES_FAILED}
+        </ErrorState>
       </SettingsLine>
     ) : (
       <MemoriesSkeleton label={READING_LABEL.WORKSPACES} />
@@ -803,7 +812,10 @@ export function MemorySection({
           </MemberDirectory>
         ) : readFailed ? (
           <SettingsLine>
-            <ErrorState onRetry={() => setAttempt((count) => count + 1)}>
+            <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.MEMORIES_READ)}
+              onRetry={() => setAttempt((count) => count + 1)}
+            >
               {PAGE_LINE.FAILED}
             </ErrorState>
           </SettingsLine>

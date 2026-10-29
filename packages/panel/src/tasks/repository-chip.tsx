@@ -1,5 +1,6 @@
 import type { GitHubRepository } from "@luke/features";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import { countWords, orList, REFRESH_FAILED_WORDS, readingWords } from "@luke/features/words";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
@@ -30,6 +31,7 @@ import { GLYPH } from "@luke/ui/icons";
 import { repositoryFailureNote } from "@luke/ui/tasks-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { failureShown } from "../failure-report.js";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { RepositoryCard, repositoryMenuRow } from "../repository-row.js";
@@ -354,7 +356,10 @@ export function RepositoryChip(props: {
   );
   const note =
     failure !== undefined ? (
-      <ErrorState onRetry={read}>
+      <ErrorState
+        failure={failureShown({ surface: FAILURE_SURFACE.REPOSITORIES_READ, cause: failure })}
+        onRetry={read}
+      >
         {listed === undefined ? repositoryFailureNote(failure) : REFRESH_FAILED_WORDS}
       </ErrorState>
     ) : listed !== undefined && !listed.installed && listed.repositories.length === 0 ? (

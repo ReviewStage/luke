@@ -5,6 +5,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { PictureSet, PictureSetTile, PictureStandIn } from "../../index.js";
 import { PICTURE_STATE } from "../../picture-cache.js";
+import { recordedFailure } from "../../testing/reported-failure.js";
+
+/** The failure beneath a picture whose read did not land. */
+const { failure: FAILURE } = recordedFailure();
 
 /**
  * picture-set.test.ts -- a set of pictures is a list its caller names; a
@@ -141,7 +145,7 @@ test("a picture whose read did not land says it could not be read, and its Retry
       { label: "Pictures the call answered", count: 1, thumbnails: true, children: undefined },
       createElement(PictureSetTile, {
         key: "failed",
-        state: { kind: PICTURE_STATE.FAILED, retry: () => pressed.push("retry") },
+        state: { kind: PICTURE_STATE.FAILED, retry: () => pressed.push("retry"), failure: FAILURE },
         words: "Members",
         onOpen: () => pressed.push("open"),
       }),
@@ -152,7 +156,10 @@ test("a picture whose read did not land says it could not be read, and its Retry
   expect(container.querySelector('[role="alert"]')?.textContent).toContain(
     "Members could not be read.",
   );
-  expect(presses.map((press) => press.textContent)).toEqual(["Retry"]);
+  expect(presses.map((press) => press.ariaLabel ?? press.textContent)).toEqual([
+    "Retry",
+    "Copy details",
+  ]);
   act(() => (presses[0] as HTMLButtonElement).click());
   expect(pressed).toEqual(["retry"]);
 });
@@ -167,7 +174,9 @@ test("the last tile drawn, failed, keeps its Retry in reach rather than under ho
         createElement(PictureSetTile, {
           key: String(at),
           state:
-            at === 5 ? { kind: PICTURE_STATE.FAILED, retry: () => retried.push("sixth") } : READY,
+            at === 5
+              ? { kind: PICTURE_STATE.FAILED, retry: () => retried.push("sixth"), failure: FAILURE }
+              : READY,
           words: `Screen ${String(at + 1)}`,
           onOpen: () => undefined,
         }),

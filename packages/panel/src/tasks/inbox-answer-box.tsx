@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { AGENT_STATUS, type AgentAttachment, type AgentSummary } from "@luke/features/agent-wire";
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { pasteCutWords } from "@luke/features/words";
 import { EXPERIMENT } from "@luke/settings";
 import {
@@ -13,11 +13,13 @@ import {
   STATUS_TONE,
 } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
+import { UNREPORTED } from "@luke/ui/reported-failure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useRef, useState } from "react";
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
+import { failureShown, unreadShown } from "../failure-report.js";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
 import {
   COMPOSER_INPUT,
@@ -522,6 +524,18 @@ function AnswerCard({
     refusal ??
     (cut ? pasteCutWords(INBOX_BOUNDS.MAX_MESSAGE_CHARS) : undefined) ??
     (field.failed ? EDITOR_LOAD_FAILED : undefined);
+  // Note that a cut paste is the person's input checked; every other note is the app's, reported as a refusal by its condition.
+  const noteFailure =
+    noted === undefined && refusal === undefined && cut
+      ? UNREPORTED.INPUT
+      : noted === undefined && refusal === undefined && field.failed
+        ? unreadShown(FAILURE_SURFACE.BUNDLE_LOAD)
+        : failureShown({
+            surface: FAILURE_SURFACE.INBOX_ANSWER,
+            cause: FAILURE_CONDITION.REFUSED,
+            about: { inboxItemId: item.id },
+            refused: true,
+          });
   // Note that the note is let go once the agent is back, since what it said no longer stands, and only that note, never one a later send left meanwhile.
   const unarchive = () =>
     void onUnarchiveAgent().then((result) => {
@@ -607,8 +621,12 @@ function AnswerCard({
           note === undefined
             ? undefined
             : noted?.unarchive === true
-              ? { words: note, remedy: { label: UNARCHIVE, onClick: unarchive } }
-              : { words: note }
+              ? {
+                  words: note,
+                  failure: noteFailure,
+                  remedy: { label: UNARCHIVE, onClick: unarchive },
+                }
+              : { words: note, failure: noteFailure }
         }
         nod={nod}
         starts={starts}

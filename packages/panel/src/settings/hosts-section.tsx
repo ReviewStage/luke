@@ -7,6 +7,7 @@ import {
   hostInstallCommand,
   hostUpgradeCommand,
 } from "@luke/features/host-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { agoText, momentText } from "@luke/features/time-format";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -53,6 +54,7 @@ import {
   presenceStanding,
   useDevicePresence,
 } from "../device-presence.js";
+import { confirmFailure, unreadShown } from "../failure-report.js";
 import { useExperiment } from "../use-app-state.js";
 import { MenuRow } from "./menu-row.js";
 import {
@@ -208,7 +210,11 @@ function HostRow({
   /** Where this Mac stands, on the row of the machine it is enrolled as alone. */
   thisMac?: ThisMacHost | undefined;
 }): React.JSX.Element {
-  const removing = useConfirmDialog({ subject: true, surfaceOpen: true }, () => onRemove(host.id));
+  const removing = useConfirmDialog(
+    { subject: true, surfaceOpen: true },
+    () => onRemove(host.id),
+    confirmFailure(FAILURE_SURFACE.HOST_REMOVE),
+  );
   // Note that a service older than platforms listed only Linux servers.
   const platform = host.platform ?? DEVICE_PLATFORM.LINUX;
   const seen = `${DEVICE_PLATFORM_NAME[platform]} · ${seenWords(host, book, now)}`;
@@ -293,7 +299,11 @@ function AddHostsDialog({
   onRevoke: () => Promise<ActionResult>;
   onClose: () => void;
 }): React.JSX.Element {
-  const revoking = useConfirmDialog({ subject: true, surfaceOpen: true }, onRevoke);
+  const revoking = useConfirmDialog(
+    { subject: true, surfaceOpen: true },
+    onRevoke,
+    confirmFailure(FAILURE_SURFACE.HOST_REVOKE),
+  );
   return (
     <Dialog
       open
@@ -475,7 +485,10 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
             </>
           ) : readFailed ? (
             <SettingsLine>
-              <ErrorState onRetry={() => setAttempt((count) => count + 1)}>
+              <ErrorState
+                failure={unreadShown(FAILURE_SURFACE.HOSTS_READ)}
+                onRetry={() => setAttempt((count) => count + 1)}
+              >
                 {WORDS.READ_FAILED}
               </ErrorState>
             </SettingsLine>
@@ -495,7 +508,17 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
           >
             {WORDS.ADD}
           </Button>
-          <ErrorLine level={ANNOUNCE.ALERT}>{addFailed ? WORDS.ADD_FAILED : null}</ErrorLine>
+          <ErrorLine
+            level={ANNOUNCE.ALERT}
+            error={
+              addFailed
+                ? {
+                    words: WORDS.ADD_FAILED,
+                    failure: unreadShown(FAILURE_SURFACE.HOST_INSTALL_COMMAND),
+                  }
+                : undefined
+            }
+          />
         </div>
       ) : null}
       {shown === undefined ? null : (

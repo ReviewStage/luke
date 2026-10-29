@@ -1,10 +1,12 @@
 import type { InboxCodeBlock } from "@luke/features/inbox-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { CodeRef } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { readingWords } from "@luke/features/words";
 import { ANNOUNCE, ErrorState, FileCodeCard, SpinnerRegion, TabNotice } from "@luke/ui";
 import { useEffect, useRef, useState } from "react";
 import { copyThroughShell } from "../copy-feedback.js";
+import { unreadShown } from "../failure-report.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { CodeSnippet } from "./code-snippet.js";
 import { FileRef } from "./file-ref.js";
@@ -112,7 +114,12 @@ export function InboxCodeCard({
         ) : (
           <TabNotice>
             {shown.again ? (
-              <ErrorState onRetry={() => setAsked((was) => was + 1)}>{shown.line}</ErrorState>
+              <ErrorState
+                failure={unreadShown(FAILURE_SURFACE.INBOX_CODE_READ)}
+                onRetry={() => setAsked((was) => was + 1)}
+              >
+                {shown.line}
+              </ErrorState>
             ) : (
               <p>{shown.line}</p>
             )}

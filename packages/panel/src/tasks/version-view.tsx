@@ -20,6 +20,7 @@ import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useRef, useState } from "react";
 import { PhoneHead } from "../desktop/phone-head.js";
+import { unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { TOAST_HOLD, type ToastNotice, undoToast, useToast } from "../toast.js";
 import { DocumentScroll } from "./document-frame.js";
@@ -215,7 +216,9 @@ function VersionContent({
   if (read.kind === HISTORY_READ.FAILED) {
     return (
       <div className={VERSION_NOTE}>
-        <ErrorState onRetry={onRetry}>{VERSION_FAILED}</ErrorState>
+        <ErrorState failure={unreadShown(FAILURE_SURFACE.PLAN_VERSION_READ)} onRetry={onRetry}>
+          {VERSION_FAILED}
+        </ErrorState>
       </div>
     );
   }

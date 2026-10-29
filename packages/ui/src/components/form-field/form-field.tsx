@@ -1,5 +1,6 @@
 import { FIELD_WORDS } from "@luke/features/words";
 import { type ReactNode, useId } from "react";
+import type { ShownError } from "../../reported-failure.js";
 import { Field, FieldDescription, FieldLabel } from "../../shadcn/field.js";
 import { ErrorLine } from "../error-line/error-line.js";
 import { LengthCounter } from "../length-counter/length-counter.js";
@@ -11,7 +12,9 @@ import { LengthCounter } from "../length-counter/length-counter.js";
  * read as one with its words, so no caller wires an id by hand: the label
  * names the control, the description and the error describe it, and an
  * error marks it invalid. The error is the one `ErrorLine` every form part
- * says what went wrong in. A field is to be filled unless it says otherwise:
+ * says what went wrong in, handed as what it says and whether it is the
+ * person's input checked (`inputProblem`) or a failure of the app's, which
+ * is reported and offers its details to copy. A field is to be filled unless it says otherwise:
  * one that may be left empty (`optional`) says Optional after its label, in
  * the label, so a reader hears it with the field's name, and the control of
  * one that may not is marked required (`aria-required`), never the native
@@ -56,8 +59,8 @@ export function FormField({
   description?: ReactNode;
   /** Whether the field may be left empty, which its label then says. */
   optional?: boolean | undefined;
-  /** What is wrong with the value, or nothing while it is fine. */
-  error?: ReactNode;
+  /** What is wrong with the value, or what refused it, and the failure beneath; nothing while it is fine. */
+  error?: ShownError | undefined;
   /** How many characters the control holds of the most it takes, where it takes a limited number. */
   count?: { readonly length: number; readonly limit: number } | undefined;
   children: (control: FieldControl) => ReactNode;
@@ -67,7 +70,7 @@ export function FormField({
   const labelId = `${id}label`;
   const descriptionId = `${id}description`;
   const errorId = `${id}error`;
-  const failed = said(error);
+  const failed = error !== undefined && said(error.words);
   const described = said(description);
   const describedBy = [described ? descriptionId : undefined, failed ? errorId : undefined]
     .filter((part) => part !== undefined)
@@ -97,7 +100,7 @@ export function FormField({
         "aria-required": optional ? undefined : true,
       })}
       {described ? <FieldDescription id={descriptionId}>{description}</FieldDescription> : null}
-      <ErrorLine id={errorId}>{failed ? error : null}</ErrorLine>
+      <ErrorLine id={errorId} error={failed ? error : undefined} />
     </Field>
   );
 }

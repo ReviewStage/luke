@@ -62,7 +62,7 @@ import {
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { clockText, dateOfText, dayAndTimeText, timeZoneNames } from "@luke/features/time-format";
 import {
   SENTRY_LEVEL,
@@ -151,6 +151,7 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { GLYPH } from "@luke/ui/icons";
+import { inputProblem, UNREPORTED } from "@luke/ui/reported-failure";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
@@ -169,6 +170,7 @@ import { useAppCommand } from "../app-commands.js";
 import { useScreenRef, useScreenSplit } from "../column-split.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
+import { confirmFailure, failureShown, unreadShown } from "../failure-report.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { useCreator } from "../member-directory.js";
 import { useOpenSettings } from "../open-settings.js";
@@ -653,7 +655,12 @@ function UnreadServersRow({
       <SettingsRow
         label={INTEGRATION_LABEL.many}
         below={() => (
-          <ErrorState onRetry={onRetry}>Your connected integrations could not be read.</ErrorState>
+          <ErrorState
+            onRetry={onRetry}
+            failure={unreadShown(FAILURE_SURFACE.AUTOMATION_INTEGRATIONS_READ)}
+          >
+            Your connected integrations could not be read.
+          </ErrorState>
         )}
       />
     );
@@ -809,7 +816,7 @@ function ScheduleRows({
       >
         {(field) =>
           field === SCHEDULE_FIELD.CRON ? (
-            <SettingsRow label="Cron" error={zoneRefused ? undefined : problem}>
+            <SettingsRow label="Cron" error={zoneRefused ? undefined : inputProblem(problem)}>
               {(control) => (
                 <span className={AUTOMATION_FIELD}>
                   <TextField
@@ -829,7 +836,7 @@ function ScheduleRows({
           ) : (
             <SettingsRow
               label={schedule.kind === SCHEDULE_KIND.WEEKLY ? "Day and time" : "Time"}
-              error={zoneRefused ? undefined : problem}
+              error={zoneRefused ? undefined : inputProblem(problem)}
             >
               {(control) => (
                 <>
@@ -886,7 +893,7 @@ function ScheduleRows({
         rows={zones.map((zone) => ({ id: zone, label: zoneLabel(zone) }))}
         placeholder="Search time zones"
         noMatch="No time zones match"
-        error={zoneRefused ? problem : undefined}
+        error={zoneRefused ? inputProblem(problem) : undefined}
         onPick={onTimezone}
       />
     </>
@@ -1405,7 +1412,7 @@ function FilterRow({
   const field = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(() => values.join(", "));
   return (
-    <SettingsRow label={label} description={detail} error={problem}>
+    <SettingsRow label={label} description={detail} error={inputProblem(problem)}>
       {(control) => (
         <span className={AUTOMATION_FIELD}>
           <TextField
@@ -1466,7 +1473,21 @@ function SentryRows({
   // Note that a read still out, or one that failed, installs nothing, so an existing trigger stays editable, a failed one saying so above its rows.
   if (sentry.read !== undefined && sentry.read.installations.length === 0) {
     return (
-      <SettingsRow label="Sentry isn't installed" error={sentry.refusal}>
+      <SettingsRow
+        label="Sentry isn't installed"
+        error={
+          sentry.refusal === undefined
+            ? undefined
+            : {
+                words: sentry.refusal,
+                failure: failureShown({
+                  surface: FAILURE_SURFACE.AUTOMATION_SENTRY_INSTALL,
+                  cause: FAILURE_CONDITION.REFUSED,
+                  refused: true,
+                }),
+              }
+        }
+      >
         {() => (
           <Button
             variant={BUTTON_VARIANT.PRIMARY}
@@ -1488,7 +1509,14 @@ function SentryRows({
       {sentry.failed ? (
         <SettingsRow
           label="Sentry"
-          below={() => <ErrorState onRetry={sentry.onRetry}>{SENTRY_UNREAD}</ErrorState>}
+          below={() => (
+            <ErrorState
+              onRetry={sentry.onRetry}
+              failure={unreadShown(FAILURE_SURFACE.AUTOMATION_SENTRY_READ)}
+            >
+              {SENTRY_UNREAD}
+            </ErrorState>
+          )}
         />
       ) : null}
       <SelectRow
@@ -1535,7 +1563,7 @@ function SentryRows({
       <SettingsRow
         label="Same issue again after"
         description={`Hours before one Sentry issue can start another run, from 1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}.`}
-        error={problems[DRAFT_FIELD.COOLDOWN]}
+        error={inputProblem(problems[DRAFT_FIELD.COOLDOWN])}
       >
         {(control) => (
           <span className={AUTOMATION_FIELD}>
@@ -1639,6 +1667,7 @@ function WebhookRows({
         return ACCEPTED;
       });
     },
+    confirmFailure(FAILURE_SURFACE.AUTOMATION_SECRET_ROTATE, { automationId: automation?.id }),
   );
   const url =
     automation?.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK ? automation.webhookUrl : undefined;
@@ -1885,8 +1914,15 @@ function AgentRow({
       <SettingsRow
         label="Agent"
         description={AGENT_DETAIL}
-        error={problem}
-        below={() => <ErrorState onRetry={retryAgents}>{AGENTS_UNREAD}</ErrorState>}
+        error={inputProblem(problem)}
+        below={() => (
+          <ErrorState
+            onRetry={retryAgents}
+            failure={unreadShown(FAILURE_SURFACE.AUTOMATION_AGENTS_READ)}
+          >
+            {AGENTS_UNREAD}
+          </ErrorState>
+        )}
       />
     );
   }
@@ -1942,7 +1978,12 @@ function AgentRow({
       note={
         words !== "" ? (
           searchFailed ? (
-            <ErrorState onRetry={retryAgents}>{AGENT_SEARCH_FAILED}</ErrorState>
+            <ErrorState
+              onRetry={retryAgents}
+              failure={unreadShown(FAILURE_SURFACE.AUTOMATION_AGENTS_SEARCH)}
+            >
+              {AGENT_SEARCH_FAILED}
+            </ErrorState>
           ) : undefined
         ) : agents === undefined ? (
           <Spinner delay label={readingWords("agents")} />
@@ -1951,7 +1992,7 @@ function AgentRow({
         ) : undefined
       }
       noMatch={NO_MATCH.AGENTS}
-      error={problem}
+      error={inputProblem(problem)}
       onOpen={() => searchAgents("")}
       onSearch={searchAgents}
       onPick={(agentId) => {
@@ -2006,7 +2047,7 @@ function RunsGroup({
               ? undefined
               : `Runs start here, and also work in ${andList(also)}.`
         }
-        error={problems[DRAFT_FIELD.REPOSITORY]}
+        error={inputProblem(problems[DRAFT_FIELD.REPOSITORY])}
       >
         {(control) =>
           taskBacked ? null : (
@@ -2159,7 +2200,7 @@ function EditorForm({
             error={
               draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE
                 ? undefined
-                : problems[DRAFT_FIELD.SCHEDULE]
+                : inputProblem(problems[DRAFT_FIELD.SCHEDULE])
             }
             onChange={(triggerKind) => onDraft({ triggerKind })}
           />
@@ -2221,7 +2262,7 @@ function EditorForm({
           />
           {/* What stops a save, said under the prompt once a save was pressed. */}
           {problems[DRAFT_FIELD.PROMPT] === undefined ? null : (
-            <ErrorState>{problems[DRAFT_FIELD.PROMPT]}</ErrorState>
+            <ErrorState failure={UNREPORTED.INPUT}>{problems[DRAFT_FIELD.PROMPT]}</ErrorState>
           )}
         </SettingsSection>
         <RunsGroup
@@ -2606,10 +2647,14 @@ export function AutomationEditor({
   // Note that any way out of the page, a crumb, Escape, a run's agent, the sidebar, ⌘K, history,
   // or Settings, asks first while something written would be lost, and goes once Leave is pressed.
   const [leavingBy, setLeavingBy] = useState<{ readonly leave: () => void } | undefined>(undefined);
-  const leaving = useConfirmDialog({ subject: leavingBy !== undefined, surfaceOpen: true }, () => {
-    leavingBy?.leave();
-    return Promise.resolve(ACCEPTED);
-  });
+  const leaving = useConfirmDialog(
+    { subject: leavingBy !== undefined, surfaceOpen: true },
+    () => {
+      leavingBy?.leave();
+      return Promise.resolve(ACCEPTED);
+    },
+    confirmFailure(FAILURE_SURFACE.AUTOMATION_LEAVE),
+  );
   const askLeave = useRef<LeaveAsk>(() => undefined);
   askLeave.current = (leave) => {
     setLeavingBy({ leave });
@@ -2638,6 +2683,7 @@ export function AutomationEditor({
         return ACCEPTED;
       });
     },
+    confirmFailure(FAILURE_SURFACE.AUTOMATION_DELETE, { automationId: automation?.id }),
   );
   const runsRead = {
     mine: automation === undefined || automation.mine === true,
@@ -2692,9 +2738,20 @@ export function AutomationEditor({
       setup={
         <AutomationSetup>
           {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
-            <FailureNote>{problems[DRAFT_FIELD.NAME]}</FailureNote>
+            <FailureNote failure={UNREPORTED.INPUT}>{problems[DRAFT_FIELD.NAME]}</FailureNote>
           ) : null}
-          {refusal === undefined ? null : <FailureNote>{refusal}</FailureNote>}
+          {refusal === undefined ? null : (
+            <FailureNote
+              failure={failureShown({
+                surface: FAILURE_SURFACE.AUTOMATION_SAVE,
+                cause: FAILURE_CONDITION.REFUSED,
+                about: { automationId: automation?.id },
+                refused: true,
+              })}
+            >
+              {refusal}
+            </FailureNote>
+          )}
           <EditorForm
             draft={draft}
             automation={automation}

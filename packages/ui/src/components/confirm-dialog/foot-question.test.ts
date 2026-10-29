@@ -5,9 +5,13 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
+import { recordedFailure } from "../../testing/reported-failure.js";
 import { Dialog } from "../dialog/dialog.js";
 import { DialogActions } from "../dialog/dialog-actions.js";
 import { CONFIRM_LOSS, FootQuestion, useConfirmDialog } from "./confirm-dialog.js";
+
+/** The failure beneath a refusal. */
+const { failure: FAILURE } = recordedFailure();
 
 /**
  * foot-question.test.ts -- a question asked inside a dialog about something
@@ -46,11 +50,14 @@ afterEach(() => {
 /** A key's dialog: the key with Delete key, which asks at the foot, and Done; the key goes once its deletion lands. */
 function KeyDialog({ answers, onDone }: { answers: Answers; onDone: () => void }) {
   const [key, setKey] = useState(true);
-  const confirm = useConfirmDialog({ subject: key, surfaceOpen: true }, () =>
-    new Promise<ActionResult>((answer) => answers.push(answer)).then((result) => {
-      if (result.status === ACTION_RESULT_STATUS.ACCEPTED) setKey(false);
-      return result;
-    }),
+  const confirm = useConfirmDialog(
+    { subject: key, surfaceOpen: true },
+    () =>
+      new Promise<ActionResult>((answer) => answers.push(answer)).then((result) => {
+        if (result.status === ACTION_RESULT_STATUS.ACCEPTED) setKey(false);
+        return result;
+      }),
+    () => FAILURE,
   );
   return createElement(Dialog, {
     open: true,

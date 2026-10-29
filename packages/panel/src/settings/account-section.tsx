@@ -27,6 +27,7 @@ import type { ActionResult } from "@luke/wire";
 import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { confirmFailure, unreadShown } from "../failure-report.js";
 import { showToast, TOAST_HOLD } from "../toast.js";
 import { useHeldThroughExit } from "../use-held-through-exit.js";
 import { useBusyPress } from "./busy-press.js";
@@ -118,7 +119,10 @@ function GitHubTokenRow(): React.JSX.Element {
         below={
           token === undefined && readFailed
             ? () => (
-                <FailureNote onRetry={() => setAttempt((n) => n + 1)}>
+                <FailureNote
+                  failure={unreadShown(FAILURE_SURFACE.ACCOUNT_TOKEN_READ)}
+                  onRetry={() => setAttempt((n) => n + 1)}
+                >
                   {TOKEN_READ_FAILED}
                 </FailureNote>
               )
@@ -167,7 +171,11 @@ export function AccountSection({
   const signOut = useBusyPress(() => signOutSayingFailure(onSignOut));
   // Note that the section is only drawn while its page is, so the page
   // leaving takes the question with it.
-  const deletion = useConfirmDialog({ subject: true, surfaceOpen: true }, onDeleteAccount);
+  const deletion = useConfirmDialog(
+    { subject: true, surfaceOpen: true },
+    onDeleteAccount,
+    confirmFailure(FAILURE_SURFACE.ACCOUNT_DELETE),
+  );
 
   // Note that each row stands in a wrapper wearing its search anchor, because
   // a pressed result lands on and rings the whole row, as it did before the

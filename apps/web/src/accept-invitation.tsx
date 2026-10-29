@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { WEB_APP_URL } from "./SiteChrome";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
+import { UNREPORTED } from "@luke/ui/reported-failure";
 import { mountPrerenderedPage } from "./mount-page";
 
 /**
@@ -192,7 +193,7 @@ function SignInCard({ title, body }: { title: string; body: string }): React.JSX
       title={title}
       description={body}
       pending={pending}
-      failed={failed}
+      failed={failed ? UNREPORTED.NO_REPORTER : undefined}
       onPress={begin}
     />
   );

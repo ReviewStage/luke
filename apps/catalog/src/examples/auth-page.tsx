@@ -13,6 +13,7 @@ import {
   WingFace,
 } from "@luke/ui";
 import { useState } from "react";
+import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -93,7 +94,7 @@ function AuthPages(): React.JSX.Element {
               title="Sign in to accept your invitation"
               description="Sign in with the account that uses someone@acme-corporation.example."
               pending="github"
-              failed
+              failed={CATALOG_FAILURE}
               onPress={() => undefined}
             />
           </div>
@@ -153,7 +154,10 @@ function AuthPages(): React.JSX.Element {
               mark={<Face />}
               title="Join acme-corporation-engineering-platform"
               description="Sign in with the provider your workspace administrator connected."
-              error="The provider refused the request. Try again, or ask an administrator."
+              error={{
+                words: "The provider refused the request. Try again, or ask an administrator.",
+                failure: CATALOG_FAILURE,
+              }}
             >
               <ProviderChoices />
             </AuthPage>

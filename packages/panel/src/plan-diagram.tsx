@@ -1,3 +1,4 @@
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   Button,
   CARD_CORNER,
@@ -14,6 +15,7 @@ import { type ReactNode, useContext, useState } from "react";
 import { DIAGRAM_REFUSED_LINE } from "./bundle-loader.js";
 import { coarsePointerNow, useCoarsePointer } from "./coarse-pointer.js";
 import { diagramAlt, heldDrawing, useAppearance, useDrawing } from "./diagram-drawing.js";
+import { failureShown } from "./failure-report.js";
 import { SHELL_ROOM } from "./shell-room.js";
 import { ShellRoomContext } from "./stage-room.js";
 import { AttachmentViewer } from "./tasks/attachment-viewer.js";
@@ -70,7 +72,18 @@ function DiagramPicture({ url, alt }: { url: string; alt: string }): React.JSX.E
 
 /** The line a refused fence stands under. */
 function RefusedLine({ onRetry }: { onRetry?: (() => void) | undefined }): React.JSX.Element {
-  return <FailureNote onRetry={onRetry}>{DIAGRAM_REFUSED_LINE}</FailureNote>;
+  return (
+    <FailureNote
+      failure={failureShown({
+        surface: FAILURE_SURFACE.PLAN_DIAGRAM,
+        cause: FAILURE_CONDITION.REFUSED,
+        refused: true,
+      })}
+      onRetry={onRetry}
+    >
+      {DIAGRAM_REFUSED_LINE}
+    </FailureNote>
+  );
 }
 
 /** A diagram opened over the window at its own pixels, until it is closed. */

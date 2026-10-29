@@ -41,6 +41,7 @@ import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
+import { unreadShown } from "../failure-report.js";
 import { FindScope } from "../find-in-tab.js";
 import { usePageWorkspace } from "../links-at-hand.js";
 import { MemberDirectory } from "../member-directory.js";
@@ -713,7 +714,11 @@ export function DesktopAgentPage({
         <Fill as={FILL_ELEMENT.SECTION} className="agent-page" aria-label="Agent">
           {toolbar}
           {agents.listFailed ? (
-            <ErrorState onRetry={agents.onRetryList} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+            <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.AGENTS_READ)}
+              onRetry={agents.onRetryList}
+              placement={ERROR_STATE_PLACEMENT.CENTRED}
+            >
               {NOT_READ}
             </ErrorState>
           ) : (

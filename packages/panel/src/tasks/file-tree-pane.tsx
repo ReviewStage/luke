@@ -1,4 +1,5 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TasksTreeAnswer } from "@luke/features/tasks-view";
 import { noMatchWords, readingWords, TERM } from "@luke/features/words";
 import {
@@ -19,6 +20,7 @@ import {
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef, useState } from "react";
 import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
+import { unreadShown } from "../failure-report.js";
 import {
   type FileMark,
   type FileTreeHandle,
@@ -118,7 +120,11 @@ export function FileTreeStage({
 }): React.JSX.Element {
   if (module === undefined) {
     return missed ? (
-      <FailureNote look={FAILURE_NOTE_LOOK.LIST} onRetry={onRetryBundle}>
+      <FailureNote
+        failure={unreadShown(FAILURE_SURFACE.BUNDLE_LOAD)}
+        look={FAILURE_NOTE_LOOK.LIST}
+        onRetry={onRetryBundle}
+      >
         {TREE_LOAD_FAILED}
       </FailureNote>
     ) : (
@@ -132,7 +138,11 @@ export function FileTreeStage({
         <SpinnerRegion delay label={TREE_WORDS.READING} />
       ) : null}
       {standing.kind === TREE_STANDING.FAILED ? (
-        <FailureNote look={FAILURE_NOTE_LOOK.LIST} onRetry={standing.retry ? onRetry : undefined}>
+        <FailureNote
+          failure={unreadShown(FAILURE_SURFACE.FILE_TREE_READ)}
+          look={FAILURE_NOTE_LOOK.LIST}
+          onRetry={standing.retry ? onRetry : undefined}
+        >
           {standing.notice}
         </FailureNote>
       ) : null}

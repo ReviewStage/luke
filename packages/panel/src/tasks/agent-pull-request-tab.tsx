@@ -31,6 +31,7 @@ import {
   type PullRequestThreadView,
 } from "@luke/features/link-grammar";
 import { formatCount } from "@luke/features/number-format";
+import type { FailureSurface } from "@luke/features/shown-failure";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { workingTime } from "@luke/features/time-format";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
@@ -142,6 +143,7 @@ import {
   type TabActionGroups,
   useHandedTabActions,
 } from "../desktop/strip-tabs.js";
+import { pictureUnread, unreadShown } from "../failure-report.js";
 import { lazyRoute } from "../lazy-route.js";
 import { scrollerOf } from "../scroll-within.js";
 import { SHELL_ROOM } from "../shell-room.js";
@@ -692,7 +694,7 @@ function ProxiedCheckAvatar({
   name: string;
   src: string;
 }): React.JSX.Element {
-  const state = usePicture(agentId, src, useGitHubImageRead());
+  const state = usePicture(agentId, src, useGitHubImageRead(), pictureUnread);
   return (
     <CheckSquare name={name} src={state.kind === PICTURE_STATE.READY ? state.url : undefined} />
   );
@@ -930,10 +932,21 @@ function TitleSkeleton(): React.JSX.Element {
 }
 
 /** A part whose read failed: its sentence and its own Retry, where the part would have stood. */
-function PartFailure({ line, onRetry }: { line: string; onRetry: () => void }): React.JSX.Element {
+function PartFailure({
+  line,
+  surface,
+  onRetry,
+}: {
+  line: string;
+  /** Where the read failed, which its report names. */
+  surface: FailureSurface;
+  onRetry: () => void;
+}): React.JSX.Element {
   return (
     <div className="pull-request-failure px-row-inset">
-      <ErrorState onRetry={onRetry}>{line}</ErrorState>
+      <ErrorState failure={unreadShown(surface)} onRetry={onRetry}>
+        {line}
+      </ErrorState>
     </div>
   );
 }
@@ -1568,7 +1581,13 @@ function PullRequestHead({
     return <HeadSkeleton />;
   }
   if (part.kind !== PART.LANDED) {
-    return <PartFailure line={PULL_REQUEST_WORDS.FAILED} onRetry={parts.ask.pullRequest} />;
+    return (
+      <PartFailure
+        line={PULL_REQUEST_WORDS.FAILED}
+        surface={FAILURE_SURFACE.PULL_REQUEST_READ}
+        onRetry={parts.ask.pullRequest}
+      />
+    );
   }
   const pullRequest = part.value;
   const { author, mergedAt } = pullRequest;
@@ -1802,7 +1821,11 @@ function ChecksPart({
       {part.kind === PART.PENDING ? (
         <ChecksSkeleton />
       ) : (
-        <PartFailure line={PULL_REQUEST_WORDS.CHECKS_FAILED} onRetry={parts.ask.checks} />
+        <PartFailure
+          line={PULL_REQUEST_WORDS.CHECKS_FAILED}
+          surface={FAILURE_SURFACE.PULL_REQUEST_CHECKS_READ}
+          onRetry={parts.ask.checks}
+        />
       )}
     </Section>
   );
@@ -1907,6 +1930,7 @@ function ConversationPart({
           <ConversationSkeleton />
         ) : (
           <PartFailure
+            surface={FAILURE_SURFACE.PULL_REQUEST_CONVERSATION_READ}
             line={PULL_REQUEST_WORDS.CONVERSATION_FAILED}
             onRetry={parts.ask.conversation}
           />

@@ -7,6 +7,7 @@ import {
 } from "@luke/features/automation-list-model";
 import { AUTOMATION_FIRING, type AutomationRunSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { momentText, sinceText } from "@luke/features/time-format";
 import { TRIGGER_CATALOG } from "@luke/features/trigger-catalog";
 import {
@@ -42,6 +43,7 @@ import { ClockIcon, ExternalLinkIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, automationRunActor } from "../actor-ref.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
+import { unreadShown } from "../failure-report.js";
 import { centreWithin, scrollerOf } from "../scroll-within.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
@@ -279,7 +281,11 @@ function RunsBody({
         ) : runs === undefined ? (
           <RunsSkeleton />
         ) : "failed" in runs ? (
-          <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.AUTOMATION_RUNS_READ, { automationId })}
+            onRetry={onRetry}
+            placement={ERROR_STATE_PLACEMENT.CENTRED}
+          >
             Its runs could not be read.
           </ErrorState>
         ) : runs.runs.length === 0 ? (
