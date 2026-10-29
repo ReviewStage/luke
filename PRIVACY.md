@@ -486,7 +486,10 @@ handed into its machine with Claude Code, where a command the agent runs can
 read it, unlike in a Vercel Sandbox. It reaches GitHub with a short-lived token our
 service hands your Mac, as for a host below: the token stays on your Mac,
 outside the machine and every folder it can see, and the agent sees only a
-placeholder. To run them, the app downloads smolvm from its GitHub release
+placeholder. Each machine lasts only for one turn of its agent's: it is made
+fresh as the turn starts and deleted as the turn ends, whatever ended it, and
+the token kept for it is deleted with it. The agent's folder stays on your
+Mac between turns. To run them, the app downloads smolvm from its GitHub release
 once, keeps it in Luke's own folder on your Mac only once it matches the
 checksum Luke pins, checks the files it runs against those checksums again
 before each use, and pulls the public sandbox image our hosts run. An agent
@@ -501,8 +504,11 @@ token cut to that one repository, good for an hour and renewed every 50
 minutes. Your own saved GitHub token is never sent. Each agent on a host runs
 in a virtual machine of its own (smolvm), and the token stays on the box,
 outside that machine and outside every folder it can see: the host keeps it in
-a file readable only by its own user for as long as the agent runs, and
-deletes it with the agent. The agent sees only a placeholder. Its `git` and
+a file readable only by its own user for one turn of the agent's, and
+deletes it as the turn ends. The agent's machine lasts only for that turn too:
+it is made fresh as the turn starts and deleted as the turn ends, whatever
+ended it, while the agent's folder stays on the box between turns. The agent
+sees only a placeholder. Its `git` and
 `gh` send that placeholder, and smolvm, on the box, puts the real token in
 place of it only on HTTPS requests to GitHub. The token is never logged and
 never written to the conversation's record. As on This Mac, a Claude Code agent's plan

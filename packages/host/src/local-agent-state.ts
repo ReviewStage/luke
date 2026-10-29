@@ -23,7 +23,9 @@ const STATE_FILE = "local-agents.json";
  * first launch or files until a discard removes its folder. The folder and
  * the VM stand in the user's own `~/.luke/agents` and smolvm store, which
  * every Luke install for that user shares, so `luke-host uninstall` reads
- * this to remove its own and no other's (`apps/host/scripts/luke-host.sh`).
+ * this to remove its own and no other's (`apps/host/scripts/luke-host.sh`),
+ * and the follower to delete the VMs its own runs left standing as its gate
+ * opens (`ownedAgents`).
  */
 const OWNED_FOLDER = "owned-agents";
 
@@ -128,6 +130,14 @@ export const keepOwnedAgent = (stateRoot: string, agentId: string) =>
     yield* fileSystem.makeDirectory(owned, { recursive: true, mode: 0o700 });
     yield* fileSystem.writeFileString(path.join(owned, agentId), "");
   }).pipe(Effect.ignore);
+
+/** The agents kept as ones whose folder and VM this machine made, by id; none where the record cannot be read. */
+export const ownedAgents = (stateRoot: string) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    return yield* fileSystem.readDirectory(path.join(stateRoot, OWNED_FOLDER));
+  }).pipe(Effect.orElseSucceed((): readonly string[] => []));
 
 /** The agent given no longer kept as one whose folder and VM this machine made, once its folder is gone. */
 export const forgetOwnedAgent = (stateRoot: string, agentId: string) =>

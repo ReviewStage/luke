@@ -17,23 +17,25 @@ import {
 import { keptToolBinary, localAgentTool } from "../local-agent-tools.js";
 
 /**
- * smolvm-sandbox.ts -- a sandboxed device's VM per local agent, through the `smolvm` CLI (https://github.com/smol-machines/smolvm): made from Luke's sandbox image with the agent's folder mounted at the same path, the runner run in it, stopped once the runner ends, and deleted with the agent.
+ * smolvm-sandbox.ts -- a sandboxed device's VM for each turn of a local agent's, through the `smolvm` CLI (https://github.com/smol-machines/smolvm): made fresh from Luke's sandbox image with the agent's folder mounted at the same path as its runner starts, the runner run in it, and deleted once the runner ends, with the GitHub token kept for it.
  *
- * One machine per agent, named for it, made the first time its runner
- * starts and started again for every later launch, so what the agent
- * installed outside its folder lasts until it is discarded, or until the
- * pin moves: a stopped machine smolvm says was made from another image is
- * deleted and made again from the pinned one, with the mounts of now, as
- * its runner starts, and a running one is never touched. The machine
- * boots the pinned image (`SANDBOX_IMAGE`), the one the cloud's sandbox is
- * built from, with networking on, the agent's folder and the folder of the
- * runner's bundle mounted at the paths they have on the device (the bundle
- * read-only), so every path the service hands out stands in both, and a
+ * One machine per agent, named for it, which lives for one turn: every
+ * start makes it fresh from the pinned image (`SANDBOX_IMAGE`), with the
+ * mounts of now, once any machine of that name a run that died left
+ * standing is deleted, and the turn's end deletes it again (`deleted`).
+ * So the device holds no VM's disk between turns, and what the agent
+ * installed outside its folder (`apt`, `/usr/local`) lasts only for its
+ * turn, while what it keeps in its folder, its home and caches among it,
+ * stays for the next. The machine boots the pinned image, the one the
+ * cloud's sandbox is built from, with networking on, the agent's folder
+ * and the folder of the runner's bundle mounted at the paths they have on
+ * the device (the bundle read-only), so every path the service hands out stands in both, and a
  * workload that only sleeps, as root, since `machine exec` runs inside the
  * running workload's container. Nested KVM is passed through where the
  * device has `/dev/kvm` (`SmolvmSandboxOptions.nested`), and never on a Mac.
  *
- * Every command in the VM, the runner and a check of the folder alike, runs
+ * Every command in the VM, the runner and a check of the folder alike (in a
+ * VM made for the check alone, since none stands between turns), runs
  * through `machine exec -i`, without which its output is held until it
  * exits, and no TTY: as the device's own user (`--user uid:gid`), since a
  * mount keeps the device's owners and the image's own user could not write
@@ -55,12 +57,13 @@ import { keptToolBinary, localAgentTool } from "../local-agent-tools.js";
  * `authorization` header smolvm sets on every request to `github.com`, for
  * git, whose own Basic encoding of a placeholder smolvm could not see. Both
  * are fed from files under the device's state, outside every folder the VM
- * mounts, which smolvm reads on every request, so the renewal rewriting
- * them (`githubToken`) takes effect at once; never a variable of the
- * device's, which smolvm reads only as the machine starts, and bindings
- * cannot change on a machine once made. A git run on the device itself, as
- * the worktree's script runs, reads the same file through a credential
- * helper of its environment (`deviceGit`), never the token.
+ * mounts, written before the machine is made and removed with it at the
+ * turn's end, which smolvm reads on every request, so the renewal
+ * rewriting them (`githubToken`) takes effect at once; never a variable of
+ * the device's, which smolvm reads only as the machine starts, and
+ * bindings cannot change on a machine once made. A git run on the device
+ * itself, as the worktree's script runs, reads the same file through a
+ * credential helper of its environment (`deviceGit`), never the token.
  *
  * A Linux host runs the `smolvm` at the path its service names, which its
  * daemon checked answers the pinned release; a Mac runs the pinned release
@@ -68,7 +71,7 @@ import { keptToolBinary, localAgentTool } from "../local-agent-tools.js";
  * before it registers as sandboxed (`ready`) pulls the image once through a
  * throwaway machine, which leaves smolvm's own seed of it behind, so every
  * agent's VM made afterwards starts from a copy of that disk rather than
- * pulling the image again.
+ * pulling the image again, as every turn's fresh machine does.
  *
  * Nothing `smolvm` prints is kept but the last line of a failure to make or
  * start a machine, which names no secret: a credential is only ever a
@@ -202,53 +205,30 @@ function vmFolders(folder: string) {
   };
 }
 
-/** The code smolvm gives a machine that does not exist, under `--error-format json`. */
-const NOT_FOUND = "NOT_FOUND";
-
 /** The states smolvm says a machine that is not running is in, by its own names: made and never started, stopped, or crashed. */
 const STOPPED_STATE = { CREATED: "created", STOPPED: "stopped", FAILED: "failed" } as const;
 const STOPPED_STATES: ReadonlySet<string> = new Set(Object.values(STOPPED_STATE));
 
-/** What smolvm says of a machine under `machine status --json`: its state, and the image it was made from, as it was named. */
+/** What smolvm says of a machine under `machine status --json`: its state. */
 const decodeStatus = Schema.decodeUnknownOption(
-  Schema.fromJsonString(
-    Schema.Struct({ state: Schema.String, image: Schema.NullOr(Schema.String) }),
-  ),
+  Schema.fromJsonString(Schema.Struct({ state: Schema.String })),
 );
 
 /** A failure as smolvm prints it under `--error-format json`: a stable code, and its words. */
 const decodeFailure = Schema.decodeUnknownOption(
-  Schema.fromJsonString(
-    Schema.Struct({ error: Schema.Struct({ code: Schema.String, message: Schema.String }) }),
-  ),
+  Schema.fromJsonString(Schema.Struct({ error: Schema.Struct({ message: Schema.String }) })),
 );
 
-/**
- * Whether a machine smolvm says was made from `image` runs the pinned one:
- * the same digest where the pin names one, since a registry may be spelled
- * with or without its tag beside it (smolvm's own canonical form drops it),
- * and the same reference otherwise.
- */
-function isPinned(image: string | null): boolean {
-  const digestOf = (reference: string) => reference.split("@")[1];
-  const pinned = digestOf(SANDBOX_IMAGE);
-  if (image === null) return false;
-  return pinned === undefined ? image === SANDBOX_IMAGE : digestOf(image) === pinned;
-}
-
-/** A failure smolvm printed: its code where it printed one as JSON, and its words, the last line where it did not, cut short. */
-function failureOf(printed: string): { readonly code: string | undefined; readonly words: string } {
+/** A failure smolvm printed, in its words where it printed them as JSON and as the last line where it did not, cut short. */
+function failureOf(printed: string): string {
   const last = printed.trim().split("\n").at(-1) ?? "";
   return Option.match(decodeFailure(last), {
-    onNone: () => ({ code: undefined, words: last.slice(0, FAILURE_CHARACTERS) }),
-    onSome: ({ error }) => ({
-      code: error.code,
-      words: error.message.slice(0, FAILURE_CHARACTERS),
-    }),
-  });
+    onNone: () => last,
+    onSome: ({ error }) => error.message,
+  }).slice(0, FAILURE_CHARACTERS);
 }
 
-/** A sandboxed device's VMs through `smolvm`: the launch that starts a runner in its agent's VM, and the VM's lifetime around it. */
+/** A sandboxed device's VMs through `smolvm`: the launch that starts a runner in its agent's VM, and the VM's one turn around it. */
 export function smolvmSandbox(options: SmolvmSandboxOptions): {
   readonly launch: (runner: LocalAgentRunner) => LocalAgentCommand;
   readonly sandbox: LocalAgentSandbox;
@@ -304,7 +284,7 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
     ).pipe(
       Effect.timeoutOption(STATUS_TIMEOUT),
       Effect.map(Option.flatten),
-      Effect.orElseSucceed(() => Option.none<{ state: string; image: string | null }>()),
+      Effect.orElseSucceed(() => Option.none<{ state: string }>()),
     );
 
   /** Whether a `smolvm` command ran and exited 0. */
@@ -313,6 +293,28 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
       ran(args, within),
       Option.exists((each) => each.code === 0),
     );
+
+  /**
+   * The agent's machine deleted where smolvm has one; whether none stands.
+   * One still running is stopped first, gracefully and then at once where
+   * that failed, so nothing of the agent's is left running in it. Note that
+   * a delete smolvm refused for a machine it no longer has leaves nothing
+   * standing.
+   */
+  const machineGone = (agentId: string) =>
+    Effect.gen(function* () {
+      const status = yield* statusOf(agentId);
+      if (Option.isNone(status)) return true;
+      const name = machineOf(agentId);
+      if (
+        !STOPPED_STATES.has(status.value.state) &&
+        !(yield* succeeded(["machine", "stop", "--name", name], STOP_TIMEOUT))
+      ) {
+        yield* ran(["machine", "stop", "--name", name, "--timeout", "0"], STOP_TIMEOUT);
+      }
+      const removed = yield* succeeded(["machine", "delete", "--name", name, "-f"], STOP_TIMEOUT);
+      return removed || Option.isNone(yield* statusOf(agentId));
+    });
 
   const exec = (command: LocalAgentSandboxCommand): LocalAgentCommand => {
     const folders = vmFolders(command.folder);
@@ -468,49 +470,31 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
             if (!(yield* fileSystem.exists(each))) yield* replaced(each, "");
           }
         }
-        // Note that a stopped machine made from another image is deleted, its folder and credentials kept, so the start below makes it again from the pinned one; a running one is never touched.
-        const status = yield* statusOf(agentId);
-        if (
-          Option.exists(status, (each) => STOPPED_STATES.has(each.state) && !isPinned(each.image))
-        ) {
-          const removed = yield* ran(
-            ["machine", "delete", "--name", machineOf(agentId), "-f", "--error-format", "json"],
-            STOP_TIMEOUT,
-          );
-          if (Option.isNone(removed)) {
-            return yield* unavailable(
-              "smolvm did not delete the machine made from an earlier image",
-            );
-          }
-          if (removed.value.code !== 0) {
-            return yield* unavailable(
-              `the machine made from an earlier image could not be deleted: ${failureOf(removed.value.printed).words}`,
-            );
-          }
+        // Note that a machine of the agent's still standing is what a run that died left, so it is deleted first and every turn starts on a fresh one, its folder and credentials kept.
+        if (!(yield* machineGone(agentId))) {
+          return yield* unavailable("the machine a run before left could not be deleted");
         }
-        const start = ["machine", "start", "--name", machineOf(agentId), "--error-format", "json"];
-        const first = yield* ran(start, START_TIMEOUT);
-        if (Option.isNone(first)) return yield* unavailable("smolvm did not start the machine");
-        if (first.value.code === 0) return;
-        // Note that only a machine smolvm says does not exist is made; one that exists and will not boot says why, rather than colliding with its own name.
-        const why = failureOf(first.value.printed);
-        if (why.code !== NOT_FOUND) return yield* unavailable(why.words);
         const made = yield* ran(created(agentId, folder, github), START_TIMEOUT);
         if (Option.isNone(made)) return yield* unavailable("smolvm did not make the machine");
-        if (made.value.code !== 0) return yield* unavailable(failureOf(made.value.printed).words);
-        const up = yield* ran(start, START_TIMEOUT);
-        if (Option.isNone(up)) return yield* unavailable("smolvm did not start the machine");
-        if (up.value.code !== 0) return yield* unavailable(failureOf(up.value.printed).words);
+        if (made.value.code !== 0) return yield* unavailable(failureOf(made.value.printed));
+        const up = yield* ran(
+          ["machine", "start", "--name", machineOf(agentId), "--error-format", "json"],
+          START_TIMEOUT,
+        );
+        if (Option.exists(up, (each) => each.code === 0)) return;
+        // Note that a machine made that would not start is deleted again, so it holds no disk until the next launch.
+        yield* machineGone(agentId);
+        return yield* unavailable(
+          Option.match(up, {
+            onNone: () => "smolvm did not start the machine",
+            onSome: (each) => failureOf(each.printed),
+          }),
+        );
       }).pipe(
         Effect.catchTag("PlatformError", () =>
           Effect.fail(unavailable("the agent's folders could not be made")),
         ),
       ),
-
-    woken: (agentId) =>
-      AGENT_ID.test(agentId)
-        ? succeeded(["machine", "start", "--name", machineOf(agentId)], START_TIMEOUT)
-        : Effect.succeed(false),
 
     exec,
 
@@ -533,29 +517,16 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
         ),
       ),
 
-    // Note that a graceful stop that fails is followed by one that kills the workload at once, so a later launch never finds the agent's leftovers still running.
-    stopped: (agentId) =>
-      Effect.gen(function* () {
-        const name = machineOf(agentId);
-        if (yield* succeeded(["machine", "stop", "--name", name], STOP_TIMEOUT)) return true;
-        return yield* succeeded(
-          ["machine", "stop", "--name", name, "--timeout", "0"],
-          STOP_TIMEOUT,
-        );
-      }),
-
+    // Note that the token goes whether or not the machine did, since no turn runs on it any more.
     deleted: (agentId) =>
       Effect.gen(function* () {
         if (!AGENT_ID.test(agentId)) return true;
-        const name = machineOf(agentId);
-        yield* ran(["machine", "stop", "--name", name], STOP_TIMEOUT);
-        const removed = yield* succeeded(["machine", "delete", "--name", name, "-f"], STOP_TIMEOUT);
+        const gone = yield* machineGone(agentId);
         const fileSystem = yield* FileSystem.FileSystem;
         yield* Effect.ignore(
           fileSystem.remove(credentialsOf(agentId).folder, { recursive: true, force: true }),
         );
-        // Note that a delete smolvm refused for a machine it no longer has leaves nothing standing.
-        return removed || Option.isNone(yield* statusOf(agentId));
+        return gone;
       }),
 
     githubToken: (agentId, token) =>

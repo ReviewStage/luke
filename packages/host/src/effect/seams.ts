@@ -162,16 +162,17 @@ export interface LocalAgentSandboxCommand {
 }
 
 /**
- * The VM each of a sandboxed device's agents runs in
+ * The VM each of a sandboxed device's agents runs a turn in
  * (`@luke/host/node`'s `smolvmSandbox`), beside the launch that starts the
- * runner in it: the VM made and started before a runner starts, each of
- * the agent's processes in it signalled before the runner's process is
- * killed, since killing a command run in a VM ends what it runs at once
- * with no signal, the VM stopped once its runner has ended, and deleted
- * when the agent is discarded. The agent's GitHub token is kept on the
- * device, outside every folder the VM mounts, where the VM's credential
- * bindings read it on every request, so the VM only ever holds a
- * placeholder. Only the local agents concern asks for it.
+ * runner in it. A VM lives for one turn: it is made fresh and started
+ * before a runner starts, each of the agent's processes in it is signalled
+ * before the runner's process is killed, since killing a command run in a
+ * VM ends what it runs at once with no signal, and it is deleted once its
+ * runner has ended; a check of the agent's folder between turns makes one
+ * of its own and deletes it after. The agent's GitHub token is kept on the
+ * device for the turn alone, outside every folder the VM mounts, where the
+ * VM's credential bindings read it on every request, so the VM only ever
+ * holds a placeholder. Only the local agents concern asks for it.
  */
 export interface LocalAgentSandbox {
   /** Where the VM's own image keeps what a runner runs on, which the device registers in place of any copy of its own. */
@@ -193,7 +194,12 @@ export interface LocalAgentSandbox {
     LocalAgentSandboxUnavailable,
     ChildProcessSpawner.ChildProcessSpawner | FileSystem | Path.Path | HttpClient
   >;
-  /** The agent's VM made where it has none, or made again where it stands stopped on an image other than the pinned one, its folder mounted at the same path, and started; it fails where it could not be. */
+  /**
+   * The agent's VM made fresh from the pinned image, its folder mounted at
+   * the same path, and started, once any VM of the agent's a run that died
+   * left standing is deleted; it fails where it could not be, leaving no VM
+   * it made standing.
+   */
   readonly started: (agent: {
     readonly agentId: string;
     readonly folder: string;
@@ -204,21 +210,19 @@ export interface LocalAgentSandbox {
     LocalAgentSandboxUnavailable,
     ChildProcessSpawner.ChildProcessSpawner | FileSystem
   >;
-  /** The agent's VM started where it was made already, for a check of its folder between its turns; whether it stands. */
-  readonly woken: (
-    agentId: string,
-  ) => Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner>;
   /** The process a command run inside the agent's VM is, its variables handed by name and never as arguments. */
   readonly exec: (command: LocalAgentSandboxCommand) => LocalAgentCommand;
   /** Every process of the agent's in its VM asked to end (SIGTERM), so the runner ends as it would on a signal of its own. */
   readonly signalled: (
     agentId: string,
   ) => Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner>;
-  /** The agent's VM stopped, with everything still running in it, killed at once where a graceful stop failed; whether it stopped. */
-  readonly stopped: (
-    agentId: string,
-  ) => Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner>;
-  /** The agent's VM deleted, and the token kept for it beside it; its folder is the follower's to remove. Whether the VM is gone, since one left standing stays in the record an uninstall deletes by. */
+  /**
+   * The agent's VM deleted, stopped first where it still runs, and the
+   * token kept for it beside it: every turn's end, and a discard's. Its
+   * folder is the follower's. Whether the VM is gone, since one left
+   * standing is deleted again before its launch is settled, and stays in
+   * the record an uninstall deletes by.
+   */
   readonly deleted: (
     agentId: string,
   ) => Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner | FileSystem>;
@@ -283,10 +287,11 @@ export interface LocalAgentPlatformSeam {
    */
   readonly unsavedWorkScript?: ((input: { readonly worktree: string }) => string) | undefined;
   /**
-   * The VM each agent runs in: `launch` starts the runner inside it, and the
-   * follower makes, stops and deletes it around the runner, keeps the
-   * agent's GitHub token out of its folder, and checks the folder for
-   * unsaved work in it rather than on the device.
+   * The VM each agent runs a turn in: `launch` starts the runner inside it,
+   * and the follower makes it fresh for each turn and deletes it as the
+   * turn ends, keeps the agent's GitHub token out of its folder, and checks
+   * the folder for unsaved work in a VM made for the check rather than on
+   * the device.
    */
   readonly sandbox: LocalAgentSandbox;
   /**
