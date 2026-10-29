@@ -12,8 +12,9 @@
  *
  * What it carries is chosen here rather than read from the failure whole:
  * names, tags, codes, HTTP statuses, faults, ids, the app's state, and the
- * cause's own message with every credential-shaped run replaced
- * (`credential-redaction.ts`) and cut at a bound. There is no field for what
+ * cause's own message, every string read from the cause with each
+ * credential-shaped run replaced (`credential-redaction.ts`) and cut at a
+ * bound. There is no field for what
  * a person typed, a transcript, a plan, or a file. Note that a cause's
  * message is the error's own words, as an error's words already reach
  * Sentry (root `AGENTS.md`), and a refusal's is the sentence the service or
@@ -221,8 +222,8 @@ const SHOWN_FAILURE_FINGERPRINT = "shown-failure";
 /** The code of a failure whose cause names none and has no name. */
 const UNNAMED_CODE = "unnamed";
 
-/** How long a cause's message may be once redacted; past it, the rest is cut. */
-const MESSAGE_BOUND = 500;
+/** How long text read from a cause may be once redacted; past it, the rest is cut. */
+const TEXT_BOUND = 500;
 
 /** How deep a cause's chain is read: past it, the rest is left out. */
 const CHAIN_BOUND = 5;
@@ -244,10 +245,21 @@ function numberOf(value: unknown, key: string): number | undefined {
   return Predicate.isNumber(read) ? read : undefined;
 }
 
-/** A message as it may be sent: every credential-shaped run replaced, and cut at the bound. */
-function sendableMessage(message: string): string {
-  const redacted = redactCredentials(message);
-  return redacted.length > MESSAGE_BOUND ? `${redacted.slice(0, MESSAGE_BOUND)}…` : redacted;
+/**
+ * Text read from a cause as it may be sent: every credential-shaped run
+ * replaced, and cut at the bound. Note that a name, a tag, a code, and a
+ * fault pass here as a message does, because each is whatever string the
+ * cause held, and a code becomes a tag and the issue's fingerprint besides.
+ */
+function sendableText(text: string): string {
+  const redacted = redactCredentials(text);
+  return redacted.length > TEXT_BOUND ? `${redacted.slice(0, TEXT_BOUND)}…` : redacted;
+}
+
+/** A string a cause holds under `key`, as it may be sent, or nothing. */
+function sendableOf(value: unknown, key: string): string | undefined {
+  const read = stringOf(value, key);
+  return read === undefined ? undefined : sendableText(read);
 }
 
 /**
@@ -260,17 +272,20 @@ function sendableMessage(message: string): string {
  */
 function factsOf(cause: unknown): CauseFacts {
   if (FAILURE_CONDITIONS.has(cause) && Predicate.isString(cause)) return { code: cause };
-  if (Predicate.isString(cause)) return { message: sendableMessage(cause) };
-  const code = numberOf(cause, "code")?.toString() ?? stringOf(cause, "code");
+  if (Predicate.isString(cause)) return { message: sendableText(cause) };
+  const code = numberOf(cause, "code")?.toString() ?? sendableOf(cause, "code");
   const message = stringOf(cause, "message") ?? stringOf(cause, "reason");
   return {
-    name: cause instanceof Error ? cause.name : stringOf(cause, "name"),
-    tag: stringOf(cause, "_tag"),
+    name: cause instanceof Error ? sendableText(cause.name) : sendableOf(cause, "name"),
+    tag: sendableOf(cause, "_tag"),
     code:
-      code ?? stringOf(cause, "failure") ?? stringOf(cause, "refusal") ?? stringOf(cause, "status"),
+      code ??
+      sendableOf(cause, "failure") ??
+      sendableOf(cause, "refusal") ??
+      sendableOf(cause, "status"),
     status: numberOf(cause, "status") ?? numberOf(cause, "statusCode"),
-    fault: stringOf(cause, "fault"),
-    message: message === undefined || message === "" ? undefined : sendableMessage(message),
+    fault: sendableOf(cause, "fault"),
+    message: message === undefined || message === "" ? undefined : sendableText(message),
   };
 }
 
