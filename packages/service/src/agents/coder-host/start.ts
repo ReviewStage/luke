@@ -6,10 +6,10 @@ import {
   type AgentPlace,
   createAgent,
   discardAgent,
-  listAgents,
   nativeRuntimesOfReached,
   readAgentByKey,
   readAgentContext,
+  taskPilotStands,
 } from "@luke/database/models/agent-store";
 import type { HandedFile } from "@luke/database/models/attached-file-parts";
 import { devicesNamed } from "@luke/database/models/device-store";
@@ -478,11 +478,14 @@ function operatorPlace(place: StartPlace, fitter: ReplayFitter | undefined): boo
 }
 
 /**
- * What a fresh Start on the task makes: its pilot where the task is worked in
- * pilot mode and no pilot of it stands unarchived, else a coder. A pilot is
- * refused as not permitted for an account with the Pilot experiment off: the
- * account the Start is made for, which for a coding agent's `start_agent` is
- * its starter, so a sub-pilot is held to whoever started the pilot above it.
+ * What a fresh Start on the task asks for: its pilot where the task is worked
+ * in pilot mode and no pilot of it stands unarchived, whoever started it,
+ * else a coder. A pilot is refused as not permitted for an account with the
+ * Pilot experiment off: the account the Start is made for, which for a coding
+ * agent's `start_agent` is its starter, so a sub-pilot is held to whoever
+ * started the pilot above it. Note that the store asks again under the task's
+ * lock (`createAgent`), so a Start that raced another to the task's pilot
+ * makes a coder.
  */
 const freshKindOn = Effect.fnUntraced(function* (
   userId: string,
@@ -493,8 +496,7 @@ const freshKindOn = Effect.fnUntraced(function* (
   DatabaseServices
 > {
   if (task.mode !== TASK_MODE.PILOT) return AGENT_KIND.CODER;
-  const standing = yield* hostedStoreOrUnavailable(listAgents(userId, task.id));
-  if (standing.some((agent) => agent.kind === AGENT_KIND.PILOT)) return AGENT_KIND.CODER;
+  if (yield* hostedStoreOrUnavailable(taskPilotStands(task.id))) return AGENT_KIND.CODER;
   if (!(yield* hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.PILOT)))) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }

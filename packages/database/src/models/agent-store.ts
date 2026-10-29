@@ -690,6 +690,31 @@ function liveOperatorOf(userId: string, organizationId: string): SQL | undefined
   );
 }
 
+/**
+ * The task's pilot standing unarchived, any but the one named, by the task's
+ * id alone: a pilot is the task's whoever started it and whoever asks, so no
+ * reader's reach narrows it, and a caller has reached the task before asking.
+ */
+const findLivePilot = SqlSchema.findOneOption({
+  Request: Schema.Struct({ taskId: Schema.String, besides: Schema.NullOr(Schema.String) }),
+  Result: IdRowSchema,
+  execute: ({ taskId, besides }) =>
+    Database.use((db) =>
+      db
+        .select({ id: agentTable.id })
+        .from(agentTable)
+        .where(
+          and(
+            eq(agentTable.taskId, taskId),
+            eq(agentTable.kind, AGENT_KIND.PILOT),
+            isNull(agentTable.archivedAt),
+            besides === null ? undefined : ne(agentTable.id, besides),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
 /** Read under the workspace's lock a Start takes, by the member alone, since only they reach their operator. */
 const findLiveOperator = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
@@ -2005,6 +2030,14 @@ const deleteConversationRow = SqlSchema.void({
     Database.use((db) => db.delete(conversations).where(eq(conversations.id, conversationId))),
 });
 
+/** The kind a Start makes, read under its task's lock: the kind asked, bar a pilot where another pilot of the task stands, which makes a coder. */
+const kindUnderLock = Effect.fnUntraced(function* (started: NewAgent) {
+  if (started.kind !== AGENT_KIND.PILOT) return started.kind ?? AGENT_KIND.CODER;
+  const besides = started.startedFrom?.agentId ?? null;
+  const standing = yield* findLivePilot({ taskId: started.taskId, besides });
+  return Option.isSome(standing) ? AGENT_KIND.CODER : AGENT_KIND.PILOT;
+});
+
 /**
  * Starts an agent on a task of the account's workspace, or in a workspace
  * of the account's with no task: a `coding_agent` conversation of the
@@ -2016,7 +2049,10 @@ const deleteConversationRow = SqlSchema.void({
  * A Start of the member's operator answers the one standing in the
  * workspace where there is one, whatever its key, and writes nothing; one
  * the index finds another Start made first meanwhile is answered too, the
- * conversation opened for it taken back.
+ * conversation opened for it taken back. A task has one pilot, so a pilot
+ * asked of a task another stands on unarchived, as a Start that raced
+ * another finds under the task's lock, is made a coder; the pilot a
+ * continue goes on from is no other.
  * Nothing where the account reaches no such task or is no member of the
  * workspace.
  */
@@ -2037,6 +2073,7 @@ export function createAgent(
           return Option.some({ agent: existing.value, created: false });
         }
         const organizationId = reached.value.organizationId;
+        const kind = yield* kindUnderLock(started);
         // A member's operator is one per workspace, so a Start of it answers the one standing.
         if (started.kind === AGENT_KIND.OPERATOR) {
           const standing = yield* findLiveOperator({ userId, organizationId });
@@ -2074,7 +2111,7 @@ export function createAgent(
           mentionedServers: storedServers(started.mentionedServers ?? []),
           githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
           payer: started.payer ?? null,
-          kind: started.kind ?? AGENT_KIND.CODER,
+          kind,
           machine: started.machine ?? AGENT_MACHINE.VERCEL,
           deviceId: started.deviceId ?? null,
           now,
@@ -2707,6 +2744,11 @@ const updateLiveOperatorArchived = SqlSchema.findAll({
         .returning({ id: agentTable.id }),
     ),
 });
+
+/** Whether a pilot of the task stands unarchived, whoever started it, read by the task's id alone for a caller that has reached the task. */
+export function taskPilotStands(taskId: string): AgentStoreEffect<boolean> {
+  return Effect.map(findLivePilot({ taskId, besides: null }), Option.isSome);
+}
 
 /** The member's operator standing in the workspace; none where none stands or the member is no member of it. */
 export function readStandingOperator(
