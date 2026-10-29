@@ -18,6 +18,7 @@ import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/wo
 import { AGENT_KIND, AGENT_STATUS } from "@luke/features/agent-wire";
 import { nextScheduledRun, readSchedule } from "@luke/features/automation-schedule";
 import {
+  AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
   AUTOMATION_SCOPE,
@@ -96,11 +97,18 @@ const firstDue = /* @__PURE__ */ Effect.fnUntraced(function* (
   return nextScheduledRun(trigger, new Date(now)) ?? null;
 });
 
-/** The action as the catalog takes it: a named model must be one offered the account, refused as an invalid request otherwise. */
+/**
+ * The action as the catalog takes it and the store keeps it: a named model
+ * must be one offered the account, refused as an invalid request otherwise.
+ * Note that the kind is stored as `coding-agent` whichever spelling the
+ * request sent, because the release still serving through a deploy reads
+ * that one alone until the rename's migration has run.
+ */
 const checkedAction = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  action: AutomationAction,
+  asked: AutomationAction,
 ): Effect.fn.Return<AutomationAction, HostedRefusal, DatabaseServices | ModelCatalog> {
+  const action = { ...asked, kind: AUTOMATION_ACTION.CODING_AGENT };
   if (action.choice === undefined) return action;
   yield* acceptedAgentChoice(userId, action.choice).pipe(
     Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),

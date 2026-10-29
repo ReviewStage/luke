@@ -744,6 +744,39 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
+    "an automation made or edited with the action kind `agent` is stored as `coding-agent`, the one spelling the release still serving reads",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openAccounts;
+        const made = weekdays(task.workspaceId);
+        const { automation } = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+            method: "POST",
+            body: { ...made, action: { ...made.action, kind: AUTOMATION_ACTION.AGENT } },
+          }),
+        );
+        const storedKind = Database.use((db) =>
+          db
+            .select({ action: automationTable.action })
+            .from(automationTable)
+            .where(eq(automationTable.id, automation.id)),
+        ).pipe(Effect.map((rows) => rows.map((row) => row.action.kind)));
+        const afterCreate = yield* storedKind;
+
+        yield* ask(automationPath(automation.id), owner, {
+          method: "PATCH",
+          body: { action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Triage, then fix one." } },
+        });
+        const afterEdit = yield* storedKind;
+
+        assert.deepEqual(afterCreate, [AUTOMATION_ACTION.CODING_AGENT]);
+        assert.deepEqual(afterEdit, [AUTOMATION_ACTION.CODING_AGENT]);
+      }),
+  );
+
+  it.effect(
     "the live statements of a workspace's automations and of one's runs deliver what the held list and history answer, each run's agent and why it failed alike, and nothing to another account",
     () =>
       Effect.gen(function* () {
