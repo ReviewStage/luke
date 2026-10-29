@@ -117,6 +117,7 @@ import { SLIDER_EXAMPLE } from "./examples/slider";
 import { SOCIAL_SIGN_IN_EXAMPLE } from "./examples/social-sign-in";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
+import { SPRING_MOTION_EXAMPLE } from "./examples/spring-motion";
 import { SWATCHES_EXAMPLE } from "./examples/swatches";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
 import { TAB_NOTICES_EXAMPLE } from "./examples/tab-notices";
@@ -231,6 +232,7 @@ export const EXAMPLES: readonly Example[] = [
   ROW_MARKS_EXAMPLE,
   SELECTION_EXAMPLE,
   LIST_MOTION_EXAMPLE,
+  SPRING_MOTION_EXAMPLE,
   ROVING_KEYS_EXAMPLE,
   MENU_EXAMPLE,
   MENU_SECTIONS_EXAMPLE,
