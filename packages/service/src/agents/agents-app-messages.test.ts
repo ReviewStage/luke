@@ -19,7 +19,7 @@ import { readConversationPicture } from "@luke/database/models/conversation-pict
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { writePage } from "@luke/database/models/plan-pages";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { readTask } from "@luke/database/models/task-store";
+import { readTask, savePlanText } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { agentPin } from "@luke/database/schemas";
 import { agentTable } from "@luke/database/schemas/agent";
@@ -109,6 +109,7 @@ import {
   receiptOf,
   refusal,
   request,
+  SAVED,
   SIZED_PNG,
   SMALL_WINDOW,
   SNAPSHOT,
@@ -511,6 +512,55 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.equal(eve.sent.length, sends + 1);
         yield* switched(false);
         assert.deepEqual(told(sends + 1), [[`Bearer ${owner}`, sessionId, "Running is now off."]]);
+      }),
+  );
+
+  it.effect(
+    "a top pilot task's Running switched off stops the turn of an agent on its child task but leaves its pilot's, switched off again stops nothing, and switched on tells the stopped agent alone to carry on",
+    () =>
+      Effect.gen(function* () {
+        const resumeWords =
+          "Running is on again. Carry on where you stopped, and first re-read your pull request's " +
+          "reviews, comments, and checks, since nothing woke you while stopped.";
+        const eve = fakeEve();
+        const top = yield* startedAgent(eve, { running: true });
+        // The child is named and planned as the top task is, so its agents' Starts send the line `agentStartedOn` takes.
+        const child = yield* startTask(top.owner, {
+          name: "Teammate invitations",
+          repository: RELAY_FULL_NAME,
+        });
+        yield* savePlanText(top.owner, child.id, SAVED);
+        yield* Database.use((db) =>
+          db.update(taskTable).set({ mode: TASK_MODE.PILOT }).where(eq(taskTable.id, top.task.id)),
+        );
+        yield* Database.use((db) =>
+          db.update(taskTable).set({ parentTaskId: top.task.id }).where(eq(taskTable.id, child.id)),
+        );
+        yield* Database.use((db) =>
+          db
+            .update(agentTable)
+            .set({ kind: AGENT_KIND.PILOT })
+            .where(eq(agentTable.id, top.agent.id)),
+        );
+        const coder = yield* agentStartedOn({ ...top, task: child }, eve, { running: true });
+        // An agent on the child whose turn had ended is neither stopped nor told to carry on.
+        yield* agentStartedOn({ ...top, task: child }, eve, { running: false });
+        const switched = (running: boolean) =>
+          top.ask(request(TASK(top.task.id), top.owner, { method: "PATCH", body: { running } }));
+        const resumes = () =>
+          eve.sent
+            .filter((each) => each.message.message === resumeWords)
+            .map((each) => each.sessionId);
+        assert.equal((yield* switched(true)).status, HOSTED_HTTP_STATUS.OK);
+
+        assert.equal((yield* switched(false)).status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(eve.cancelled, [[coder.sessionId, "turn_0"]]);
+        assert.equal((yield* switched(false)).status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(eve.cancelled, [[coder.sessionId, "turn_0"]]);
+
+        assert.deepEqual(resumes(), []);
+        assert.equal((yield* switched(true)).status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(resumes(), [coder.sessionId]);
       }),
   );
 

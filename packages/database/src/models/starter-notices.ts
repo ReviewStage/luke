@@ -7,7 +7,10 @@
  * comes. So each ending within the window is due a line to the starter: a
  * turn that failed, abandoned among them, a turn stopped by anyone but the
  * starter itself (`turns.cancel_requested_by`), and the agent archived by
- * anyone but its starter. A completed turn is due nothing.
+ * anyone but its starter. A completed turn is due nothing, and neither is a
+ * turn its pilot tree's Running switched off stopped
+ * (`turns.cancel_requested_for_running`): the whole tree stopped at once, and
+ * the switch on again resumes it, so no pilot is woken to hear of it.
  *
  * Each is keyed by the turn it ended, or by the agent for its archive, and
  * a line already standing under that key in the starter's conversation is
@@ -101,16 +104,19 @@ function answeringStarter() {
 }
 
 /**
- * A Stop the starter did not make: one no agent made, the developer's or
- * Luke's, or one another agent made. Note that a Stop under a tool call's
- * key that names no agent is left out, because only a Stop from before
- * `cancel_requested_by` was written stands so, and its caller, which may
- * be the starter, is unknown.
+ * A Stop the starter did not make, and not its tree's Running switched
+ * off: one no agent made, the developer's or Luke's, or one another agent
+ * made. Note that a Stop under a tool call's key that names no agent is left
+ * out, because only a Stop from before `cancel_requested_by` was written
+ * stands so, and its caller, which may be the starter, is unknown.
  */
 function stoppedByAnother() {
-  return or(
-    and(isNull(turns.cancelRequestedBy), isNull(turns.cancelRequestKey)),
-    and(isNotNull(turns.cancelRequestedBy), ne(turns.cancelRequestedBy, starter.id)),
+  return and(
+    eq(turns.cancelRequestedForRunning, false),
+    or(
+      and(isNull(turns.cancelRequestedBy), isNull(turns.cancelRequestKey)),
+      and(isNotNull(turns.cancelRequestedBy), ne(turns.cancelRequestedBy, starter.id)),
+    ),
   );
 }
 

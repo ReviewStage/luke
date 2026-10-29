@@ -40,6 +40,7 @@ function turn(times: {
     failure: null,
     failureDetail: null,
     cancelRequestedAt: null,
+    cancelRequestedForRunning: false,
     queuedAt: new Date(times.queuedAt),
     startedAt: times.startedAt === undefined ? null : new Date(times.startedAt),
     settledAt: times.settledAt === undefined ? null : new Date(times.settledAt),

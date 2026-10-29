@@ -1,0 +1,1 @@
+ALTER TABLE "turns" ADD COLUMN "cancel_requested_for_running" boolean DEFAULT false NOT NULL;

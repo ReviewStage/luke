@@ -131,6 +131,7 @@ import {
   restoreRevision,
   saveDeveloperEdit,
 } from "./plan-notes.js";
+import { resumeRunningTree, stopRunningTree } from "./running-tree.js";
 import { type TaskParent, taskParentOf } from "./task-parent.js";
 
 export interface TasksProcedureSeams extends EveReach, SandboxStopReach {
@@ -763,7 +764,12 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const { task: plan, txid, mergePolicyMoved, runningMoved } = task.value;
       // The pilot is told only of a switch that moved under the row's lock, so a repeat of the same switch wakes no one.
       if (mergePolicyMoved) yield* tellPilotOfMergePolicy(seams, request, writer, userId, taskId);
-      if (runningMoved) yield* tellPilotOfRunning(seams, request, writer, userId, taskId);
+      // The tree is stopped or resumed before its pilot is told, so the pilot wakes to the tree as the switch left it.
+      if (runningMoved) {
+        const switched = plan.running === true ? resumeRunningTree : stopRunningTree;
+        yield* switched(seams, request, writer, userId, taskId);
+        yield* tellPilotOfRunning(seams, request, writer, userId, taskId);
+      }
       return txid === undefined ? { plan } : { plan, txid };
     }),
 
