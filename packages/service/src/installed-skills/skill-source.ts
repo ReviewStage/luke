@@ -14,12 +14,20 @@
  * pinned, so a preview, the install after it, and every file of one skill
  * are read from one tree, whatever lands on the branch between.
  *
+ * A preview or an install pins its ref by reading the commit whole from
+ * its archive (`repository-archive.ts`), one download whatever the number
+ * of skills, and answers every file read at that commit from it; the
+ * commit is still listed from its tree, and a file the archive lacks still
+ * read through the contents API, because an archive leaves out what
+ * `export-ignore` marks. A commit GitHub serves no archive of within its
+ * bounds is read file by file, one request each, as every read was before.
+ *
  * Skill folders are found as the `skills` tool finds them in a repository
  * it was not told about (`skill-discovery.ts`), every copy of a name kept
  * for its `SKILL.md` to settle which stands (`skill-paste-install.ts`). The
- * whole tree is listed in one
- * read, which also gives every file's size, so a folder past a skill's
- * bounds is refused before any of its files is read.
+ * whole tree is listed in one read, which also gives every file's size,
+ * so a folder past a skill's bounds is refused before any of its files is
+ * read.
  *
  * A GitHub that does not answer, or answers past its rate limit, is
  * refused as unanswered; a repository nobody reaches as not reachable.
@@ -42,12 +50,17 @@ import {
   send,
 } from "../github/github-app.js";
 import { githubReachOrRefusal } from "../github/github-refusal.js";
+import { type RepositoryArchive, readRepositoryArchive } from "../github/repository-archive.js";
 import {
   readCommitSha,
   readRepositoryFile,
   repositorySegments,
 } from "../github/repository-file.js";
-import { GIT_ENTRY, readRepositoryFolder } from "../github/repository-folder.js";
+import {
+  GIT_ENTRY,
+  type RepositoryFolder,
+  readRepositoryFolder,
+} from "../github/repository-folder.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../http/http-effect.js";
 import {
   DISCOVERY_FILE,
@@ -76,6 +89,8 @@ export interface SkillRepository {
   readonly access: GitHubTokenAccess | null;
   /** Whether GitHub says the repository is public: answered anonymously, or listed as not private. */
   readonly public: boolean;
+  /** The commit read whole from its archive, where the ref was pinned that way; a read at its sha is answered from it. */
+  readonly archive?: RepositoryArchive;
 }
 
 /** One file of a skill folder, by its path from the folder, and its size as the tree says. */
@@ -212,6 +227,110 @@ export const pinnedCommit = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { ref: named, sha };
 });
 
+/**
+ * The ref pinned by reading its commit whole from its archive, with the
+ * repository carrying it, so every read after this one at that commit is
+ * answered from memory; pinned as `pinnedCommit` pins it, carrying none,
+ * where GitHub serves no archive of it within its bounds.
+ */
+export const pinnedArchive = /* @__PURE__ */ Effect.fnUntraced(function* (
+  repository: SkillRepository,
+  ref: string | undefined,
+): Effect.fn.Return<
+  { readonly ref: string; readonly sha: string; readonly repository: SkillRepository },
+  HostedRefusal,
+  HttpClient.HttpClient | DatabaseServices
+> {
+  const named = ref ?? repository.defaultBranch;
+  const archive = yield* readRepositoryArchive(repository, repository.bearer, named);
+  if (Option.isSome(archive)) {
+    const { sha } = archive.value;
+    return { ref: named, sha, repository: { ...repository, archive: archive.value } };
+  }
+  return { ...(yield* pinnedCommit(repository, ref)), repository };
+});
+
+/** The repository's archive where it is of the commit read at, so a read there is answered from it. */
+function archiveAt(repository: SkillRepository, sha: string): RepositoryArchive | undefined {
+  return repository.archive?.sha === sha ? repository.archive : undefined;
+}
+
+/**
+ * One file of the commit as bytes, from its archive where the repository
+ * carries one holding it, else through the contents API; nothing where
+ * GitHub holds no regular file there or carries no bytes for it. Note that
+ * a file the archive lacks is still asked of GitHub, because an archive
+ * leaves out what the repository's `.gitattributes` marks `export-ignore`,
+ * which the tree still lists.
+ */
+const commitFile = /* @__PURE__ */ Effect.fnUntraced(function* (
+  repository: SkillRepository,
+  sha: string,
+  path: string,
+): Effect.fn.Return<
+  Uint8Array | undefined,
+  HostedRefusal,
+  HttpClient.HttpClient | DatabaseServices
+> {
+  const archived = archiveAt(repository, sha)?.files.get(path);
+  if (archived !== undefined) return archived;
+  const file = yield* onRepository(
+    repository,
+    readRepositoryFile(repository.bearer, repository, sha, path),
+  );
+  return file.regular ? file.content : undefined;
+});
+
+/**
+ * Every file of the commit by its path and size: what one read of its tree
+ * lists as a file, never a link, and every file of its archive besides.
+ * Note that both are read because each lacks what the other holds: an
+ * archive leaves out what `export-ignore` marks, and a tree past GitHub's
+ * bound is cut short. A tree GitHub does not answer is left to the archive
+ * where there is one, so a commit already read whole is not refused for
+ * the one listing request a limit refused.
+ */
+const commitFiles = /* @__PURE__ */ Effect.fnUntraced(function* (
+  repository: SkillRepository,
+  sha: string,
+): Effect.fn.Return<
+  readonly { readonly name: string; readonly size: number }[],
+  HostedRefusal,
+  HttpClient.HttpClient | DatabaseServices
+> {
+  const archive = archiveAt(repository, sha);
+  // Note that a commit's sha names its tree as a branch's name would, so the listing is of the pinned commit.
+  const read = onRepository(
+    repository,
+    readRepositoryFolder(
+      repository.bearer,
+      { fullName: repository.fullName, defaultBranch: sha },
+      "",
+      true,
+    ),
+  );
+  const listed = Effect.map(read, (folder) => Option.some(folder));
+  const tree = yield* archive === undefined
+    ? listed
+    : Effect.catch(listed, () => Effect.succeed(Option.none<RepositoryFolder>()));
+  const files = new Map<string, number>();
+  if (Option.isSome(tree) && tree.value.found) {
+    if (tree.value.truncated) {
+      yield* Effect.logWarning(
+        `The tree of ${repository.fullName} was cut short; skills past it are found in its archive alone`,
+      );
+    }
+    for (const entry of tree.value.entries) {
+      if (entry.type === GIT_ENTRY.BLOB && entry.link !== true)
+        files.set(entry.name, entry.size ?? 0);
+    }
+  }
+  for (const [name, bytes] of archive?.files ?? []) {
+    if (!files.has(name)) files.set(name, bytes.byteLength);
+  }
+  return [...files].map(([name, size]) => ({ name, size }));
+});
+
 /** The folder's plugin as a key to spread, where a manifest groups it. */
 function pluginOf(
   groups: ReadonlyMap<string, string>,
@@ -229,13 +348,8 @@ const discoveryText = /* @__PURE__ */ Effect.fnUntraced(function* (
   path: string | undefined,
 ): Effect.fn.Return<string | undefined, HostedRefusal, HttpClient.HttpClient | DatabaseServices> {
   if (path === undefined || !blobs.has(path)) return undefined;
-  const file = yield* onRepository(
-    repository,
-    readRepositoryFile(repository.bearer, repository, sha, path),
-  );
-  return file.regular && file.content !== undefined
-    ? new TextDecoder().decode(file.content)
-    : undefined;
+  const bytes = yield* commitFile(repository, sha, path);
+  return bytes === undefined ? undefined : new TextDecoder().decode(bytes);
 });
 
 /**
@@ -253,28 +367,9 @@ export const skillFolders = /* @__PURE__ */ Effect.fnUntraced(function* (
   HostedRefusal,
   HttpClient.HttpClient | DatabaseServices
 > {
-  // Note that a commit's sha names its tree as a branch's name would, so the listing is of the pinned commit.
-  const tree = yield* onRepository(
-    repository,
-    readRepositoryFolder(
-      repository.bearer,
-      { fullName: repository.fullName, defaultBranch: sha },
-      "",
-      true,
-    ),
-  );
-  if (!tree.found) return [];
-  if (tree.truncated) {
-    yield* Effect.logWarning(
-      `The tree of ${repository.fullName} was cut short; skills past it are not found`,
-    );
-  }
   // A path holding a backslash or a step out of its folder is one no skill may keep (`installed_skill_file_relative`).
-  const blobs = tree.entries.filter(
-    (entry) =>
-      entry.type === GIT_ENTRY.BLOB &&
-      !entry.name.includes("\\") &&
-      repositorySegments(entry.name) !== undefined,
+  const blobs = (yield* commitFiles(repository, sha)).filter(
+    (entry) => !entry.name.includes("\\") && repositorySegments(entry.name) !== undefined,
   );
   const skillFiles = new Set(
     blobs
@@ -304,7 +399,7 @@ export const skillFolders = /* @__PURE__ */ Effect.fnUntraced(function* (
       return [
         {
           path: folder === "" ? blob.name : blob.name.slice(folder.length + 1),
-          bytes: blob.size ?? 0,
+          bytes: blob.size,
         },
       ];
     }),
@@ -327,12 +422,7 @@ export const readSkillFolderFile = /* @__PURE__ */ Effect.fnUntraced(function* (
   HostedRefusal,
   HttpClient.HttpClient | DatabaseServices
 > {
-  const fullPath = folder.path === "" ? path : `${folder.path}/${path}`;
-  const file = yield* onRepository(
-    repository,
-    readRepositoryFile(repository.bearer, repository, sha, fullPath),
-  );
-  return file.regular ? file.content : undefined;
+  return yield* commitFile(repository, sha, folder.path === "" ? path : `${folder.path}/${path}`);
 });
 
 /**

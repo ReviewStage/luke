@@ -36,6 +36,9 @@ export const GIT_ENTRY = {
   COMMIT: "commit",
 } as const;
 
+/** The mode git gives a blob that is a symbolic link rather than a file. */
+const LINK_MODE = "120000";
+
 type GitEntry = (typeof GIT_ENTRY)[keyof typeof GIT_ENTRY];
 
 /** What GitHub answers for a tree: each entry by its name within the tree, a blob's size, and whether it cut the listing short. */
@@ -45,16 +48,18 @@ const TreeSchema = Schema.Struct({
     Schema.Struct({
       path: Schema.String,
       type: Schema.Literals(Object.values(GIT_ENTRY)),
+      mode: Schema.optionalKey(Schema.String),
       size: Schema.optionalKey(Schema.Number),
     }),
   ),
   truncated: Schema.Boolean,
 });
 
-/** One entry of a folder: its name, or its path from the folder in a recursive listing, what git holds it as, and a blob's size in bytes where GitHub said it. */
+/** One entry of a folder: its name, or its path from the folder in a recursive listing, what git holds it as, whether a blob is a link, and a blob's size in bytes where GitHub said it. */
 interface RepositoryEntry {
   readonly name: string;
   readonly type: GitEntry;
+  readonly link?: true;
   readonly size?: number;
 }
 
@@ -102,11 +107,12 @@ export function readRepositoryFolder(
         const answer = yield* readBody(response, TreeSchema);
         return {
           found: true,
-          entries: answer.tree.map((entry) =>
-            entry.size === undefined
-              ? { name: entry.path, type: entry.type }
-              : { name: entry.path, type: entry.type, size: entry.size },
-          ),
+          entries: answer.tree.map((entry) => ({
+            name: entry.path,
+            type: entry.type,
+            ...(entry.mode === LINK_MODE ? { link: true as const } : undefined),
+            ...(entry.size === undefined ? undefined : { size: entry.size }),
+          })),
           truncated: answer.truncated,
           ...(answer.sha === undefined ? undefined : { sha: answer.sha }),
         } satisfies RepositoryFolder;
