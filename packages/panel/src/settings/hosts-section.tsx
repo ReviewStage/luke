@@ -180,13 +180,13 @@ const REMOVED =
  * Mac may be either, since the service lists no word of how a Mac joined.
  */
 const REMOVE_WORDS = {
-  SERVER: { body: REMOVED, uninstall: "Run this on the host to take Luke off it" },
+  SERVER: { body: REMOVED, uninstall: "Run this on the host to remove Luke from it" },
   THIS_MAC: {
     body: `${REMOVED} To use it again, choose Turn on again under This Mac.`,
     uninstall: undefined,
   },
   MAC: {
-    body: `${REMOVED} If it runs This Mac in a Luke app, choose Turn on again there to use it again.`,
+    body: `${REMOVED} If you added it from the Luke app on it, choose Turn on again under This Mac there to use it again.`,
     uninstall: "If you used the install command, run this on it",
   },
 } as const;
