@@ -106,6 +106,9 @@ export type TaskStoreEffect<A> = Effect.Effect<A, TaskStoreFailure, DatabaseServ
 /** The member a task was to be assigned to is no member of its workspace, or of the one it moves to; nothing was written. */
 export class TaskAssigneeNotMember extends Data.TaggedError("TaskAssigneeNotMember") {}
 
+/** The change named another repository for a task that has a parent or children, which work in their tree's repository; nothing was written. */
+export class TaskTreeRepositoryLocked extends Data.TaggedError("TaskTreeRepositoryLocked") {}
+
 /** A coding agent stands at work that a delete was not told was stopped: one started on the task, or handed a message, while it or the others were stopped. */
 export class TaskAgentUnstopped extends Data.TaggedError("TaskAgentUnstopped") {}
 
@@ -897,6 +900,58 @@ const lockTask = SqlSchema.findOneOption({
     ),
 });
 
+/** Whether any task is a child of this one. */
+const hasChildren = SqlSchema.findOneOption({
+  Request: Schema.Struct({ taskId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ taskId }) =>
+    Database.use((db) =>
+      db.select({ id: task.id }).from(task).where(eq(task.parentTaskId, taskId)).limit(1),
+    ),
+});
+
+/**
+ * Refuses a change that names another repository for a task in a tree: one
+ * with a parent, or with children, works in its tree's repository, so only
+ * the repository it already holds, spelled as GitHub spells it, may be named.
+ */
+const treeRepositoryHeld = Effect.fnUntraced(function* (
+  locked: Pick<TaskRow, "id" | "repository" | "parentTaskId">,
+  asked: string | null,
+): Effect.fn.Return<void, TaskStoreFailure | TaskTreeRepositoryLocked, DatabaseServices> {
+  const held = locked.repository;
+  if (asked === held) return;
+  if (asked !== null && held !== null && asked.toLowerCase() === held.toLowerCase()) return;
+  const inTree =
+    locked.parentTaskId !== null || Option.isSome(yield* hasChildren({ taskId: locked.id }));
+  if (inTree) return yield* new TaskTreeRepositoryLocked();
+});
+
+/** The task row as it stands, unlocked: what a caller reads to refuse a change before it stops anything. */
+const readTaskRow = SqlSchema.findOneOption({
+  Request: TaskKeySchema,
+  Result: TaskRowSchema,
+  execute: ({ userId, taskId }) =>
+    Database.use((db) => db.select(TASK_COLUMNS).from(task).where(reachableTask(userId, taskId))),
+});
+
+/**
+ * Refuses, with `TaskTreeRepositoryLocked`, a repository another than the
+ * one a task in a tree holds, as `updateTaskCommitted` does under the task's
+ * lock; a caller that stops work before it writes asks first, so a refused
+ * change stops nothing. A task the account does not reach passes, for the
+ * write to answer as not found.
+ */
+export function checkTreeRepository(
+  userId: string,
+  taskId: string,
+  asked: string | null,
+): Effect.Effect<void, TaskStoreFailure | TaskTreeRepositoryLocked, DatabaseServices> {
+  return Effect.flatMap(readTaskRow({ userId, taskId }), (row) =>
+    Option.isNone(row) ? Effect.void : treeRepositoryHeld(row.value, asked),
+  );
+}
+
 /** The columns of the row a change writes: the pin is the reader's own and none of the row's. */
 const TaskColumnChangesSchema = Schema.Struct({
   name: Schema.optionalKey(Schema.String),
@@ -1385,7 +1440,7 @@ export function updateTask<E = never, R = never>(
   moveGuard?: TaskMoveGuard<E, R>,
 ): Effect.Effect<
   Option.Option<Task>,
-  TaskStoreFailure | TaskAssigneeNotMember | E,
+  TaskStoreFailure | TaskAssigneeNotMember | TaskTreeRepositoryLocked | E,
   DatabaseServices | R
 > {
   return Effect.map(
@@ -1408,7 +1463,7 @@ export function updateTaskCommitted<E = never, R = never>(
   moveGuard?: TaskMoveGuard<E, R>,
 ): Effect.Effect<
   Option.Option<TaskUpdated<Task>>,
-  TaskStoreFailure | TaskAssigneeNotMember | E,
+  TaskStoreFailure | TaskAssigneeNotMember | TaskTreeRepositoryLocked | E,
   DatabaseServices | R
 > {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -1416,6 +1471,9 @@ export function updateTaskCommitted<E = never, R = never>(
       Effect.gen(function* () {
         const locked = yield* lockTask({ userId, taskId });
         if (Option.isNone(locked)) return Option.none();
+        if (changes.repository !== undefined) {
+          yield* treeRepositoryHeld(locked.value, changes.repository);
+        }
         if (changes.organizationId !== undefined && moveGuard !== undefined) {
           yield* moveGuard(
             changes.repository === undefined ? locked.value.repository : changes.repository,

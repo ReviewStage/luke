@@ -62,6 +62,7 @@ import {
   type TaskBlockWritten,
 } from "@luke/database/models/task-block-store";
 import {
+  checkTreeRepository,
   createTaskCommitted,
   deleteTaskCommitted,
   listTasks,
@@ -697,6 +698,17 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       if (changes.mergePolicy !== undefined) {
         yield* topPilotTask(yield* reachedTask(userId, taskId));
       }
+      // A repository another than its tree's is refused before anything is stopped too; the store holds it again under the lock.
+      // Note that the name GitHub resolved is asked, not the one typed, so a renamed repository's old name is the one held.
+      if (reached !== undefined) {
+        yield* checkTreeRepository(userId, taskId, reached.repository).pipe(
+          Effect.catch((failure) =>
+            failure._tag === "TaskTreeRepositoryLocked"
+              ? Effect.fail(HOSTED_REFUSAL.CHILD_REPOSITORY_LOCKED)
+              : hostedStoreOrUnavailable(Effect.fail(failure)),
+          ),
+        );
+      }
       const archiving = changes.archived === true;
       if (archiving) {
         const agents = yield* hostedStoreOrUnavailable(listAgents(userId, taskId));
@@ -741,7 +753,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
             ? Effect.fail(failure.refusal)
             : failure._tag === "TaskAssigneeNotMember"
               ? Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)
-              : hostedStoreOrUnavailable(Effect.fail(failure)),
+              : failure._tag === "TaskTreeRepositoryLocked"
+                ? Effect.fail(HOSTED_REFUSAL.CHILD_REPOSITORY_LOCKED)
+                : hostedStoreOrUnavailable(Effect.fail(failure)),
         ),
       );
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
