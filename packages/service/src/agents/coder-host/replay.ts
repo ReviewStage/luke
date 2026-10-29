@@ -189,7 +189,7 @@ const REPLAY_WORDS = {
   DEVELOPER: "The developer",
   LUKE: "Luke",
   FORMER_MEMBER: "A former member",
-  STARTING_AGENT: "The coding agent that started it",
+  STARTING_AGENT: "The agent that started it",
   ATTACHED: "Attached file",
 } as const;
 
@@ -640,8 +640,7 @@ interface CarriedWork {
 /** Where the work a source carried stands, for a source that made no branch of its own: the copy made for it of the agent it took up, or that agent's own branch and pull request. */
 function carriedWhere(carried: CarriedWork): string {
   const { agent, copiedBranch } = carried;
-  const named =
-    agent === undefined ? "another coding agent" : `the coding agent ${agentNamedWithId(agent)}`;
+  const named = agent === undefined ? "another agent" : `the agent ${agentNamedWithId(agent)}`;
   const lead = `It never made a branch of its own: it took up the work of ${named}`;
   const branch = agent?.branch ?? null;
   const own =
@@ -688,7 +687,7 @@ function whereOf(
         ? ` Its own branch was \`${source.branch}\`${pull}.`
         : taken === undefined || taken.branch === null
           ? ""
-          : ` It made no branch of its own; the coding agent it took up, ${agentNamedWithId(taken)}, worked on \`${taken.branch}\`${pullWords(carried?.published ?? null)}.`;
+          : ` It made no branch of its own; the agent it took up, ${agentNamedWithId(taken)}, worked on \`${taken.branch}\`${pullWords(carried?.published ?? null)}.`;
     if (inPullRequest && source.branch !== null) {
       return (
         `Its checkout, ${what}, is copied to the branch \`${copy.branch}\`, made for you: ${fetchWords(copy.branch)}.` +
@@ -741,8 +740,8 @@ function preambleOf(
 ): string {
   const name = agentNamedWithId(source);
   const lead = forked.at
-    ? `You are a fork of the coding agent ${name}, taken at one of its messages: you start from its transcript as it stood there, and it may have gone on since without you.`
-    : `You continue the work of the coding agent ${name}, which stopped before it was done.`;
+    ? `You are a fork of the agent ${name}, taken at one of its messages: you start from its transcript as it stood there, and it may have gone on since without you.`
+    : `You continue the work of the agent ${name}, which stopped before it was done.`;
   const where = `${whereOf(source, published, copy, carried, inPullRequest)}${forkCaveat(forked.at, forked.edited)}`;
   const left = counts.total - counts.kept - counts.summarized;
   const unfit = counts.total - counts.kept;

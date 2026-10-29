@@ -62,6 +62,19 @@ test("a first message reads back as its brief, its replay, and its note, whateve
   });
 });
 
+test("a note under the agent's heading as it was spelled before it was reworded reads as the agent's note", () => {
+  const text = firstMessageText("Fix it.", replay, "Carry on.", START_NOTE_HEADING.AGENT).replace(
+    "## Note from the agent that started you",
+    "## Note from the coding agent that started you",
+  );
+
+  assert.deepEqual(firstMessageParts(text).note, {
+    heading: START_NOTE_HEADING.AGENT,
+    text: "Carry on.",
+    files: { text: 0, other: 0 },
+  });
+});
+
 test("a note behind its marker is read with no replay, with how many files are its own, and a brief whose prose holds a note's heading is never split on it", () => {
   const brief = "Write the guide.\n\n## Note from the developer\n\nExplain this heading.";
   const text = firstMessageText(

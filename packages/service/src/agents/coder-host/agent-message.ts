@@ -68,12 +68,12 @@ export const MESSAGE_AGENT_REFUSAL = {
     `Not sent: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered, and the message as text of at ` +
     `most ${MAX_MESSAGE_WORDS_CHARS} characters.`,
   SELF: "Not sent: that id is your own; message another agent.",
-  NO_AGENT: `Not sent: no coding agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
+  NO_AGENT: `Not sent: no agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
   ARCHIVED:
     "Not sent: that agent is archived, so it takes no message and is not woken until a member unarchives it.",
   STARTER_LEFT:
     "Not sent: the member who started that agent has left your workspace, so nothing reaches it.",
-  NO_SERVICE: "Not sent: this deployment cannot reach the coding agents' service.",
+  NO_SERVICE: "Not sent: this deployment cannot reach the agents' service.",
   NOT_PERMITTED:
     "Not sent: that agent runs on its starter's own GitHub token or plan, so only they and their agents can message it.",
   NOT_REACHABLE:
@@ -126,7 +126,7 @@ const readMessage = Schema.decodeUnknownResult(MESSAGE_AGENT_INPUT);
 export const MESSAGE_AGENT_TOOL = {
   name: AGENT_TOOL.MESSAGE_AGENT,
   description:
-    "Send another coding agent of your workspace a message, by its id, on any task. It lands in that agent's " +
+    "Send another agent of your workspace a message, by its id, on any task. It lands in that agent's " +
     "conversation under your name, opening with your mention link and closing with how to answer you, and " +
     "only the two of you see it: a running agent reads it at its next step, and an idle one starts a turn on it. " +
     "Answers `accepted` once that agent's session has taken it, without waiting for it to act or reply, or " +

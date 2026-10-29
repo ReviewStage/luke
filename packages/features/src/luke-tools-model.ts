@@ -85,7 +85,7 @@ const LUKE_TOOL_WORDS = {
   },
   [AGENT_TOOL.LIST_AGENTS]: {
     group: LUKE_TOOL_GROUP.AGENTS,
-    summary: "Lists the workspace's coding agents",
+    summary: "Lists the workspace's agents",
   },
   [AGENT_TOOL.READ_AGENT]: {
     group: LUKE_TOOL_GROUP.AGENTS,
@@ -97,7 +97,7 @@ const LUKE_TOOL_WORDS = {
   },
   [AGENT_TOOL.START_AGENT]: {
     group: LUKE_TOOL_GROUP.AGENTS,
-    summary: "Starts a new coding agent on a task",
+    summary: "Starts a new agent on a task",
   },
   [AGENT_TOOL.STOP_AGENT]: {
     group: LUKE_TOOL_GROUP.AGENTS,

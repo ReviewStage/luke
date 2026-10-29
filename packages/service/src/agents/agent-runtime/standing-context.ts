@@ -23,7 +23,7 @@ import { openThreadsText } from "../../tasks/comment-tools.js";
 const TASK_MARKER = "[task]";
 const DEVELOPER_TIME_MARKER = "[the developer's time]";
 const DOCUMENT_MARKER = "[saved document]";
-const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
+const AGENT_EDITS_MARKER = "[recent edits by agents]";
 const BRIEF_MARKER = "[the developer's brief for the task]";
 /** The marker the sections the developer last wrote ride behind, which the brain is told to keep as written. */
 const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";

@@ -245,7 +245,7 @@ function agentNoteOf(
 ): string {
   // The store holds an id in lower case, whatever case the link spelled it in.
   const agent = reads.agents.get(agentId.toLowerCase());
-  if (agent === undefined) return `The coding agent "${name}": not found in your workspace.`;
+  if (agent === undefined) return `The agent "${name}": not found in your workspace.`;
   const archived = agent.archived ? ", archived," : "";
   const branch = agent.branch === null ? "" : ` on the branch \`${agent.branch}\``;
   const working = agent.repository === null ? "" : ` working in \`${agent.repository}\``;
@@ -256,7 +256,7 @@ function agentNoteOf(
   const message = agent.archived
     ? ""
     : ` To message it, call \`${AGENT_TOOL.MESSAGE_AGENT}\` with its id.`;
-  return `The developer pointed you at another coding agent of your workspace ${taskWords(agent, task)}, "${agent.name}" (id \`${agent.id}\`)${archived}${working}${branch}${pullRequest}.${readingOf(agent, task?.repository ?? null)}${message} Its conversation is not yours to read.`;
+  return `The developer pointed you at another agent of your workspace ${taskWords(agent, task)}, "${agent.name}" (id \`${agent.id}\`)${archived}${working}${branch}${pullRequest}.${readingOf(agent, task?.repository ?? null)}${message} Its conversation is not yours to read.`;
 }
 
 /** What a member's role is said as. */

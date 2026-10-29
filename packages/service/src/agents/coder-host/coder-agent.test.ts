@@ -580,7 +580,7 @@ test("the session sends whatever is ready for the developer to look at or review
       // An agent another coding agent started sends that agent what it would post instead.
       assert.ok(
         inbox?.includes(
-          "Where another coding agent started you, as your first message says, threads to the developer are that agent's to post",
+          "Where another agent started you, as your first message says, threads to the developer are that agent's to post",
         ),
         brief,
       );

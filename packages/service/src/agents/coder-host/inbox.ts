@@ -383,7 +383,7 @@ export const INBOX_REFUSAL = {
     "Not posted: your threads are the developer's alone, which no teammate sees; name the developer in to, or leave to out.",
   ADDRESSEE_CANNOT_SEE:
     "Not posted: the member you addressed cannot see your task, so they would never see the thread; address someone who can, or leave to out.",
-  NO_AGENT: "Not done: this conversation is no coding agent's.",
+  NO_AGENT: "Not done: this conversation is no agent's.",
   UNAVAILABLE: "Not done: the service could not reach its store.",
 } as const;
 

@@ -363,8 +363,8 @@ export const ROW_PART = {
   LONE_CALL: "lone-call",
   /** A subagent, which runs together with the calls beside it, and which a group and a fold count apart from the calls. */
   SUBAGENT: "subagent",
-  /** A call that started a coding agent, which runs together with the calls beside it as a call does, and which a fold counts apart from them. */
-  CODING_AGENT: "coding-agent",
+  /** A call that started an agent, which runs together with the calls beside it as a call does, and which a fold counts apart from them. */
+  AGENT: "agent",
   /** Reasoning, which runs with the calls beside it but is never counted, and stands on its own row where no call is beside it. */
   NOTE: "note",
   /** A message that reached the turn while it ran, from whoever sent it: it ends a run of calls, and a finished turn's fold splits around it, so it stands where it arrived. */
@@ -482,24 +482,24 @@ export function sameTurnRow<B>(a: TurnRow<B>, b: TurnRow<B>): boolean {
 interface Held {
   readonly calls: number;
   readonly subagents: number;
-  readonly codingAgents: number;
+  readonly startedAgents: number;
   readonly messages: number;
 }
 
 /** What a finished turn's folded lead says it holds. */
-function foldedSummary({ calls, subagents, codingAgents, messages }: Held): string {
+function foldedSummary({ calls, subagents, startedAgents, messages }: Held): string {
   const line = [
     ...(calls > 0 ? [countWords(calls, { one: "tool call", many: "tool calls" })] : []),
     ...(subagents > 0 ? [countWords(subagents, { one: "subagent", many: "subagents" })] : []),
-    ...(codingAgents > 0 ? [countWords(codingAgents, { one: "agent", many: "agents" })] : []),
+    ...(startedAgents > 0 ? [countWords(startedAgents, { one: "agent", many: "agents" })] : []),
     ...(messages > 0 ? [countWords(messages, { one: "message", many: "messages" })] : []),
   ];
   return line.join(", ");
 }
 
 /** What a group's line says it holds: its calls, a coding agent's start among them, then its subagents, in the words its fold says them in once the turn has finished. */
-function groupSummary({ calls, subagents, codingAgents }: Held): string {
-  const tools = calls + codingAgents;
+function groupSummary({ calls, subagents, startedAgents }: Held): string {
+  const tools = calls + startedAgents;
   const said = [
     ...(tools > 0 ? [countWords(tools, { one: "tool call", many: "tool calls" })] : []),
     ...(subagents > 0 ? [countWords(subagents, { one: "subagent", many: "subagents" })] : []),
@@ -507,9 +507,9 @@ function groupSummary({ calls, subagents, codingAgents }: Held): string {
   return said.join(", ");
 }
 
-/** Whether a block is work a group gathers: a call, a subagent, or a start of a coding agent. */
+/** Whether a block is work a group gathers: a call, a subagent, or a start of an agent. */
 function isWork(part: RowPart): boolean {
-  return part === ROW_PART.CALL || part === ROW_PART.SUBAGENT || part === ROW_PART.CODING_AGENT;
+  return part === ROW_PART.CALL || part === ROW_PART.SUBAGENT || part === ROW_PART.AGENT;
 }
 
 /** Whether a block runs together with the work beside it: that work, or a thought. */
@@ -548,7 +548,7 @@ function groupedRows<B>(
   let group: Keyed<B>[] = [];
   const flush = (trailing: boolean) => {
     const held = counted(group, read);
-    const work = held.calls + held.subagents + held.codingAgents;
+    const work = held.calls + held.subagents + held.startedAgents;
     const [first] = group;
     if (first === undefined) return;
     const open = trailing && moving;
@@ -581,20 +581,20 @@ function groupedRows<B>(
   return rows;
 }
 
-/** How many calls, subagents, coding agents started, and of the model's messages a lead's blocks hold. */
+/** How many calls, subagents, agents started, and of the model's messages a lead's blocks hold. */
 function counted<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): Held {
   let calls = 0;
   let subagents = 0;
-  let codingAgents = 0;
+  let startedAgents = 0;
   let messages = 0;
   for (const { block } of blocks) {
     const part = read.part(block);
     if (part === ROW_PART.CALL || part === ROW_PART.LONE_CALL) calls += 1;
     if (part === ROW_PART.SUBAGENT) subagents += 1;
-    if (part === ROW_PART.CODING_AGENT) codingAgents += 1;
+    if (part === ROW_PART.AGENT) startedAgents += 1;
     if (part === ROW_PART.WORDS) messages += 1;
   }
-  return { calls, subagents, codingAgents, messages };
+  return { calls, subagents, startedAgents, messages };
 }
 
 /**
@@ -688,7 +688,7 @@ function foldedLead<B>(
 
 /** How much of what blocks hold a finished turn folds away: their work. */
 function foldable(held: Held): number {
-  return held.calls + held.subagents + held.codingAgents;
+  return held.calls + held.subagents + held.startedAgents;
 }
 
 /** A stretch of a finished turn's lead: a message that reached the turn, on its own row, or the work between two such messages. */

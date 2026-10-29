@@ -286,7 +286,7 @@ export const AGENT_TOOL_REFUSAL = {
     "Not run: narrow the tasks by words of their name, by a status " +
     `(${Object.values(TASK_STATUS).join(", ")}), and by an assignee as a member's mention link ` +
     "or null, and page them by an offset of 0 or more.",
-  NO_AGENT: `Not run: no coding agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
+  NO_AGENT: `Not run: no agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
   NO_WORKSPACE:
     "Not run: your workspace could not be read for you, so no agent is reached from here.",
   STORE: "Not run: the agents could not be read just now. The call may be made again.",
@@ -330,7 +330,7 @@ export const STOP_AGENT_REFUSAL = {
     "Not stopped: that agent is archived, and an archived agent's turn was stopped as it was archived.",
   NOT_READY:
     "Not stopped: that agent's turn is still coming up, so there is no turn to stop yet; call again in a moment.",
-  NO_SERVICE: "Not stopped: this deployment cannot reach the coding agents' service.",
+  NO_SERVICE: "Not stopped: this deployment cannot reach the agents' service.",
   UNAVAILABLE:
     "Not stopped: the service could not reach that agent's session just now. The call may be made again.",
   NATIVE_NOT_HERE:
@@ -370,7 +370,7 @@ export const START_AGENT_REFUSAL = {
     `Not started: start_agent no longer makes a task; make it with ${AGENT_TOOL.CREATE_TASK}, then ` +
     "start the agent on it by its taskId.",
   NO_SUCH_TASK: `Not started: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
-  NO_SERVICE: "Not started: this deployment cannot reach the coding agents' service.",
+  NO_SERVICE: "Not started: this deployment cannot reach the agents' service.",
   NO_REPOSITORY: "Not started: this task names no GitHub repository yet.",
   SOURCE_NO_REPOSITORY:
     "Not started: that agent works on no task and in no GitHub repository, so there is no " +
@@ -396,13 +396,13 @@ export const START_AGENT_REFUSAL = {
   PLAN_INELIGIBLE:
     "Not started: the plan's provider said the account is not eligible to run it; its starter chooses the API key in Settings.",
   CREDENTIAL_MISSING:
-    "Not started: no subscription or API key of its starter's pays for that model, and Luke's key pays for no coding agent; its starter connects one in Settings › Agents, or start it on a model whose provider is connected.",
+    "Not started: no subscription or API key of its starter's pays for that model, and Luke's key pays for no agent; its starter connects one in Settings › Agents, or start it on a model whose provider is connected.",
   API_KEY_UNREADABLE:
     "Not started: the API key that would pay for it is saved but cannot be read here; its starter saves it again in Settings › Agents.",
   DEVICE_REMOVED:
     "Not started: the host it would run on was removed. Continue it in the cloud, or ask the member to add the host again.",
   NO_SOURCE:
-    "Not started: no coding agent of your workspace has that id to start from; " +
+    "Not started: no agent of your workspace has that id to start from; " +
     `${AGENT_TOOL.LIST_AGENTS} names them.`,
   SOURCE_OTHER_TASK:
     "Not started: that agent works on another task than the taskId named, or on none; leave " +
@@ -661,7 +661,7 @@ const START_AGENT_INPUT = Schema.Struct({
           ),
         ),
       }),
-      "Another coding agent of your workspace to take over from, on its own task, or on no " +
+      "Another agent of your workspace to take over from, on its own task, or on no " +
         "task where it has none: the new " +
         "agent is handed its brief and its transcript (with Luke's summary of the steps that " +
         "do not fit) and a copy of its work, runs on its model unless you name one, and hears " +
@@ -747,7 +747,7 @@ const readStart = Schema.decodeUnknownResult(START_AGENT_CALL);
 export const LIST_AGENTS_TOOL = {
   name: AGENT_TOOL.LIST_AGENTS,
   description:
-    "List the coding agents of your workspace, on any task or none and started by any member, " +
+    "List the agents of your workspace, on any task or none and started by any member, " +
     "yourself left out: each with its id, its title (how the developer sees it named; a member's operator is named Luke instead), the model " +
     "and effort it runs on with the model's name to say it by, its status (starting, running, " +
     "completed, failed, cancelled) and why where it failed, its repository and the branch its " +
@@ -768,7 +768,7 @@ export const LIST_AGENTS_TOOL = {
 export const CODER_READ_AGENT_TOOL = {
   name: AGENT_TOOL.READ_AGENT,
   description:
-    "Read one coding agent of your workspace by its id, on any task and started by any member: " +
+    "Read one agent of your workspace by its id, on any task and started by any member: " +
     `what ${AGENT_TOOL.LIST_AGENTS} says of it, the branch it pushed and the pull request from it ` +
     "as GitHub holds them, and the tail of its transcript, what it last said and which tools it " +
     "called on what, newest last, each entry cut to " +
@@ -784,7 +784,7 @@ export const CODER_READ_AGENT_TOOL = {
 export const START_AGENT_TOOL = {
   name: AGENT_TOOL.START_AGENT,
   description:
-    "Start a new coding agent on the task you work on, or on another task of your workspace by " +
+    "Start a new agent on the task you work on, or on another task of your workspace by " +
     `its taskId as ${AGENT_TOOL.LIST_TASKS} answered it, exactly as the developer's Start ` +
     "button would: on the task's plan itself with no prompt, or on the prompt given in the " +
     "plan's place, with the note after either and any pictures images names, which it sees as " +
@@ -819,7 +819,7 @@ export const START_AGENT_TOOL = {
 export const LIST_MODELS_TOOL = {
   name: AGENT_TOOL.LIST_MODELS,
   description:
-    `List the models you may start a coding agent on with ${AGENT_TOOL.START_AGENT}, as the ` +
+    `List the models you may start an agent on with ${AGENT_TOOL.START_AGENT}, as the ` +
     `member you act for is offered them: each with its catalog id, which ${AGENT_TOOL.START_AGENT}'s ` +
     "model takes, the model's name to say it by, and the efforts it lists, one of which its " +
     "effort takes; and the member's default model and effort, which a start naming neither runs " +
@@ -852,7 +852,7 @@ export const UPDATE_TASK_TOOL = {
 export const STOP_AGENT_TOOL = {
   name: AGENT_TOOL.STOP_AGENT,
   description:
-    "Stop a coding agent of your workspace by its id, as the developer's Stop button would: " +
+    "Stop an agent of your workspace by its id, as the developer's Stop button would: " +
     "its turn under way is cancelled and its status reads cancelled, while the agent stays " +
     "available, its transcript and branch kept, and a later message starts a new turn. Stop " +
     "an agent you or the developer started that is going the wrong way, or one the developer " +
@@ -1009,7 +1009,7 @@ const readUpdateAsked = Schema.decodeUnknownResult(UPDATE_AGENT_INPUT);
 export const UPDATE_AGENT_TOOL = {
   name: AGENT_TOOL.UPDATE_AGENT,
   description:
-    "Change a coding agent of your workspace by its id, as the developer's own menu, model " +
+    "Change an agent of your workspace by its id, as the developer's own menu, model " +
     "chip, and composer would, for the developer you work for: rename it (empty clears the " +
     "title), move it to another model and effort, and context window, from its next step, as " +
     `${AGENT_TOOL.LIST_MODELS} lists them, pin or unpin it in that ` +
@@ -1358,7 +1358,7 @@ function agentIntroduction(agent: Agent): string {
  */
 function startedByNote(starter: Agent, note: string | undefined): string {
   const lead =
-    `You were started by another coding agent of your workspace, ${agentIntroduction(starter)}, ` +
+    `You were started by another agent of your workspace, ${agentIntroduction(starter)}, ` +
     `not by the developer. To report back to it, call ${AGENT_TOOL.MESSAGE_AGENT} with its agentId, ${starter.id}. ` +
     "Threads to the developer are that agent's to post: post none yourself, and send that agent what " +
     "you would have posted in one instead, a pull request ready for review, a decision, a question, " +

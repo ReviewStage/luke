@@ -782,7 +782,7 @@ export const taskDeleteAnswerSchema = EffectSchema.Struct({
 });
 
 /** How a coding agent whose row is gone is named: a discarded start, or a row from before the journal. */
-export const UNKNOWN_AGENT_LABEL = "a coding agent";
+export const UNKNOWN_AGENT_LABEL = "an agent";
 
 /** How a plan's history is read: the newest revisions first, a page at a time. */
 export const PLAN_HISTORY_BOUNDS = {

@@ -978,7 +978,7 @@ const machineOfStart = Effect.fnUntraced(function* (
 });
 
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
-export const startAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
+export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* (
   eve: Effect.Effect<
     AgentSessions<EveTypedTurn>,
     HostedRefusal,

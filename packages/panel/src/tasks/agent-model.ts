@@ -1920,7 +1920,7 @@ const AGENT_READING: RowReading<AgentPart> = {
     if (part.kind === AGENT_PART.ARRIVED) return ROW_PART.ARRIVED;
     if (part.kind !== AGENT_PART.TOOL) return ROW_PART.NOTE;
     if (isDelegation(part)) return ROW_PART.SUBAGENT;
-    if (startedAgentOf(part) !== undefined) return ROW_PART.CODING_AGENT;
+    if (startedAgentOf(part) !== undefined) return ROW_PART.AGENT;
     // Note that what the agent showed is never grouped, because a group folds closed once the agent moves on and would fold the pictures with it.
     return isTodos(part) || isShownSet(part) || keptRecording(part)
       ? ROW_PART.LONE_CALL
