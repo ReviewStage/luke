@@ -10,13 +10,18 @@
   /* A card, clipped to its corners so its head's hover fill follows them and
      a ring inside it is drawn inside its control, in the caption's type; a
      card whose head holds controls is its frame, so they stand inside it. */
-  :is(.luke-disclosure, .luke-disclosure-frame)[data-look="card"] {
+  :is(.luke-disclosure, .luke-disclosure-frame):is([data-look="card"], [data-look="dock"]) {
     --luke-focus-ring-offset: var(--luke-focus-ring-inset);
     overflow: clip;
     border: 1px solid var(--luke-color-border);
     border-radius: var(--luke-control-radius);
-    background: var(--luke-color-surface);
+    background: var(--luke-color-fill-hover);
     font-size: var(--luke-type-caption-size);
+  }
+
+  /* A dock stands on the card ground a list's card does, so two docks stacked over the composer read as one system. */
+  :is(.luke-disclosure, .luke-disclosure-frame)[data-look="dock"] {
+    background: var(--luke-color-surface);
   }
 
   /* A head with controls of its own (`DisclosureFrame`): one row of the

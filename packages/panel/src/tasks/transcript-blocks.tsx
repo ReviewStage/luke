@@ -1494,7 +1494,7 @@ export function TranscriptTodosDock({
 }): ReactNode {
   const { done, total } = todosCount(todos);
   return (
-    <Disclosure look={DISCLOSURE_LOOK.CARD} data-todos-dock="" aria-label="To-dos">
+    <Disclosure look={DISCLOSURE_LOOK.DOCK} data-todos-dock="" aria-label="To-dos">
       <DisclosureSummary look={DISCLOSURE_SUMMARY.HEAD}>
         <DisclosureChevron />
         <GlyphSlot>
