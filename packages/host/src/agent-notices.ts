@@ -1,4 +1,5 @@
 import type {
+  AccountInboxAgent,
   AccountInboxAnswer,
   AccountInboxAutomation,
   AccountInboxEntry,
@@ -274,10 +275,46 @@ function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice[
   }));
 }
 
+/**
+ * Each agent the open items of agents with no task name, once, as a service
+ * before `agents` leaves the window to list them: how many it holds open,
+ * how many are asks among those that wait on the account (`waiting`, as
+ * `waitingOnAccount` keeps them), and when the latest changed, named as its
+ * latest names it. Note that its settled items are not among them, since
+ * such a service names none.
+ */
+function agentsOfOpenItems(
+  items: readonly AccountTasklessEntry[],
+  waiting: readonly AccountTasklessEntry[],
+): AppInboxSlice["agents"] {
+  const toDo = new Set(waiting.filter(asking).map((item) => item.id));
+  const held = new Map<string, AppInboxSlice["agents"][number]>();
+  // The read answers its items the latest changed first, so an agent's first is the one it is named by.
+  for (const item of items) {
+    const was = held.get(item.agentId);
+    held.set(item.agentId, {
+      ...(was ?? {
+        agentId: item.agentId,
+        ...(item.agentKind === undefined ? undefined : { agentKind: item.agentKind }),
+        agentTitle: item.agentTitle,
+        agentModel: item.agentModel,
+        automationId: item.automationId,
+        automationName: item.automationName,
+        repository: item.repository,
+        ...(item.workspaceId === undefined ? undefined : { workspaceId: item.workspaceId }),
+        updatedAt: item.updatedAt,
+      }),
+      items: (was?.items ?? 0) + 1,
+      toDo: (was?.toDo ?? 0) + (toDo.has(item.id) ? 1 : 0),
+    });
+  }
+  return [...held.values()];
+}
+
 /** What an answer of the inbox read carries that the window and the Dock are told of. */
 type InboxAnswered = Pick<
   AccountInboxAnswer,
-  "items" | "plans" | "planless" | "automations" | "failedRuns"
+  "items" | "plans" | "planless" | "automations" | "agents" | "failedRuns"
 >;
 
 /** Whether two answers say alike everything the window draws of each item of an agent with no task: when it last changed, its agent's title and model, the automation and repository standing in a task's place, and the workspace whose list it stands in, which change without the item's stamp moving, a service first naming the workspace among them. */
@@ -318,6 +355,33 @@ function sameAutomations(
         was.automationId === held.automationId &&
         was.items === held.items &&
         was.updatedAt === held.updatedAt
+      );
+    })
+  );
+}
+
+/** Whether two answers list the same agents with no task holding items, alike in order, count, To do count, instant, and everything the window names each by. */
+function sameAgents(
+  one: readonly AccountInboxAgent[],
+  other: readonly AccountInboxAgent[],
+): boolean {
+  return (
+    one.length === other.length &&
+    one.every((held, at) => {
+      const was = other[at];
+      return (
+        was !== undefined &&
+        was.agentId === held.agentId &&
+        was.items === held.items &&
+        was.toDo === held.toDo &&
+        was.updatedAt === held.updatedAt &&
+        was.agentKind === held.agentKind &&
+        was.agentTitle === held.agentTitle &&
+        was.agentModel === held.agentModel &&
+        was.automationId === held.automationId &&
+        was.automationName === held.automationName &&
+        was.repository === held.repository &&
+        was.workspaceId === held.workspaceId
       );
     })
   );
@@ -389,7 +453,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
      * What the window holds of an answer: each task's items waiting on the
      * account and every task holding one, and beside them the items of
      * agents with no task, every member's listed as a task's are, and the
-     * automations holding them.
+     * automations and the agents holding them.
      */
     function sliceOf(
       answer: InboxAnswered,
@@ -403,6 +467,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         })),
         taskless: waitingTaskless(listed),
         automations: answer.automations ?? [],
+        // A service before `agents` names only the agents something waits on.
+        agents: answer.agents ?? agentsOfOpenItems(listed, answer.planless ?? []),
         failedRuns: answer.failedRuns ?? [],
       };
     }
@@ -435,11 +501,12 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         (was.answer.planless?.length ?? 0) === (answer.planless?.length ?? 0) &&
         was.listed.length === listed.length
       ) {
-        // Note that the tasks and automations holding items, and what an item with no task is named
+        // Note that the tasks, automations, and agents holding items, and what an item with no task is named
         // by, may move with nothing waiting moving, an archive, a rename, or a hold let go, so they are written alone.
         if (
           sameTasks(was.answer.plans, answer.plans) &&
           sameAutomations(was.answer.automations ?? [], answer.automations ?? []) &&
+          sameAgents(was.answer.agents ?? [], answer.agents ?? []) &&
           sameTaskless(was.listed, listed)
         ) {
           return;
@@ -448,6 +515,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
           ...was.answer,
           plans: answer.plans,
           automations: answer.automations ?? [],
+          agents: answer.agents ?? [],
           planless: answer.planless ?? [],
         };
         waiting = { ...was, answer: moved, listed };

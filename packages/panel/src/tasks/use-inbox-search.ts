@@ -43,7 +43,7 @@ function searchOrder(groups: readonly InboxGroup[], readerId: string | undefined
 /** The listed workspace's Inbox, followed while `asked`; see the module's head. */
 export function useInboxSearch(tasks: TasksControl, asked: boolean): InboxSearch {
   const { inboxTasks, tasks: standing } = tasks.listed;
-  const waiting = tasks.inboxTaskless;
+  const agents = tasks.inboxAgents;
   // Note that nothing is followed while no search asks.
   const holdings = useMemo(
     () =>
@@ -52,10 +52,10 @@ export function useInboxSearch(tasks: TasksControl, asked: boolean): InboxSearch
             ...taskHoldings(
               inboxTasks.filter((holding) => standing.some((task) => task.id === holding.taskId)),
             ),
-            ...agentHoldings(waiting),
+            ...agentHoldings(agents),
           ]
         : NO_HOLDINGS,
-    [asked, inboxTasks, standing, waiting],
+    [asked, inboxTasks, standing, agents],
   );
   const read = useHolderInboxItems(holdings);
   const workspaceId = tasks.workspace?.id;
@@ -64,12 +64,12 @@ export function useInboxSearch(tasks: TasksControl, asked: boolean): InboxSearch
       ? inboxGroups(read.items, {
           tasks: inboxTasks,
           listed: standing,
-          agents: waiting,
+          agents,
           workspaceId,
         })
       : [];
     return searchOrder(groups, tasks.me);
-  }, [asked, inboxTasks, standing, read.items, waiting, workspaceId, tasks.me]);
+  }, [asked, inboxTasks, standing, read.items, agents, workspaceId, tasks.me]);
   // Note that an inbox counts as read only once its push holds what main says it now holds, since an older push kept from the last search may lack the item sought.
   const reading = read.pending;
   const { onRetry } = read;
