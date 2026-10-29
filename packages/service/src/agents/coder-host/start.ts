@@ -64,7 +64,7 @@ import {
 } from "@luke/features/agent-wire";
 import type { GitHubAccess } from "@luke/features/github-repositories-wire";
 import { agentName, automationRun } from "@luke/features/model-label";
-import { AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
+import { agentFallbackChoice, type ModelChoice } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import { TASK_MODE, type Task } from "@luke/features/task-wire";
 import { bothInOrder, causeKind, failureKind } from "@luke/runtime/effect";
@@ -323,7 +323,7 @@ export type StartServices = DatabaseServices | HttpClient.HttpClient | GitHubApp
 /** What an account may start an agent on: the models the catalog offers it, and the choice a Start naming none runs on. */
 export interface AccountModelChoices {
   readonly offered: readonly OfferedModel[];
-  /** The account's stored default, or Luke's where it stored none; it may have since left the catalog. */
+  /** The account's stored default, which may have since left the catalog, or where it stored none the fallback its credentials pay for (`agentFallbackChoice`). */
   readonly defaultChoice: ModelChoice;
 }
 
@@ -332,8 +332,9 @@ export interface AccountModelChoices {
  * is offered it (`offeredToAccount`), so a fast version withheld from it,
  * its key's organization never granted fast mode, is not among them, and
  * the account's default choice beside them. This is the one source a Start
- * is checked against and the agent tools list the choices from, so the two
- * never disagree. A catalog or a store that could not be read is an outage.
+ * is checked against, the agent tools list the choices from, and the
+ * preferences snapshot answers an unstored default from, so none of them
+ * disagree. A catalog or a store that could not be read is an outage.
  */
 export const accountModelChoices = (userId: string) =>
   Effect.map(modelChoicesRead(userId), (read) => read.choices);
@@ -371,7 +372,7 @@ const modelChoicesRead = /* @__PURE__ */ Effect.fnUntraced(function* (
     markedUnconnected(userId, offeredToAccount(read, fastOffer), keys),
   );
   const stored = preferences?.agent;
-  return { choices: { offered, defaultChoice: stored ?? AGENT_DEFAULT_CHOICE }, keys };
+  return { choices: { offered, defaultChoice: stored ?? agentFallbackChoice(offered) }, keys };
 });
 
 /**

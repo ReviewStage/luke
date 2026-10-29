@@ -738,8 +738,9 @@ export function modelConnectWords(model: CatalogModel): string | undefined {
  * Why a choice cannot run, and the press that connects what would run it:
  * the note a model menu and Settings' Default model stand under the choice
  * where no subscription or API key of the account's pays for its model, as
- * a new account holding only an OpenAI key finds its Claude default; none
- * for a choice something pays for, or one the catalog no longer lists.
+ * an account finds the Claude default it stored once its Claude credential
+ * is gone; none for a choice something pays for, or one the catalog no
+ * longer lists.
  */
 export function unrunnableChoice(
   models: readonly CatalogModel[],
