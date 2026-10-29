@@ -80,7 +80,13 @@ import {
   PROVIDER_KEY_PROVIDER,
 } from "@luke/features/provider-key-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
-import { PLAN_ACTOR, TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
+import {
+  PLAN_ACTOR,
+  TASK_BOUNDS,
+  TASK_MODE,
+  TASK_PRIORITY,
+  TASK_STATUS,
+} from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { MESSAGE_CHANNEL, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { settleJsonSchemaGolden } from "@luke/wire/testing";
@@ -1800,6 +1806,40 @@ test("an agent whose starter has left the workspace makes no task in it", async 
   const refused = await call(CODER_TOOL.CREATE_TASK, { name: "Left behind" });
   assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(refused));
   assert.deepEqual(await tasksNamed(agents.caller.userId, workspaceId, "Left behind"), []);
+});
+
+test("only a pilot makes a task in pilot mode, as a child of another", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const alice = agents.caller.userId;
+  const asked = { name: "Billing rewrite", parentTaskId: tasks.invitations, mode: TASK_MODE.PILOT };
+  const call = (as: Awaited<ReturnType<typeof peerCaller>>) =>
+    as(CODER_TOOL.CREATE_TASK, asked, `call-${randomUUID()}`);
+
+  // A coder asking for one makes nothing.
+  const coder = await peerCaller(hostOf(true), agents.caller, eve.services);
+  assert.deepEqual(await call(coder), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: CREATE_TASK_REFUSAL.NOT_PILOT,
+  });
+  assert.deepEqual(await tasksNamed(alice, workspaceId, asked.name), []);
+
+  // A pilot makes its child a pilot task.
+  const pilot = await claimed(alice, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    taskId: tasks.invitations,
+    kind: AGENT_KIND.PILOT,
+    planSnapshot: "# Teammate invitations",
+    prompt: null,
+  });
+  const made = await call(await peerCaller(hostOf(true), pilot, eve.services));
+  assert.ok(isRecord(made.task) && isWireString(made.task.id), JSON.stringify(made));
+  const stored = Option.getOrThrow(await database.run(readTask(alice, made.task.id)));
+  assert.deepEqual(
+    [stored.task.mode, stored.task.parentTaskId],
+    [TASK_MODE.PILOT, tasks.invitations],
+  );
 });
 
 test("a task an agent makes runs on the device its member last chose, away or not, one since removed makes none, and with no device left it runs in the cloud", async () => {

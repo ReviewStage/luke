@@ -1,15 +1,18 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { recordRevision } from "@luke/database/models/plan-revisions";
 import { createTaskOnce, readTask } from "@luke/database/models/task-store";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import { githubRepositoryFullNameSchema } from "@luke/features/github-repositories-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import {
   PLAN_ACTOR,
   TASK_BOUNDS,
+  TASK_MODE,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
   type TaskOrigin,
+  taskModeSchema,
   taskPrioritySchema,
   taskStatusSchema,
 } from "@luke/features/task-wire";
@@ -71,7 +74,9 @@ import { workspaceNamingOf, writtenMention } from "./written-mentions.js";
  * the caller's workspace that the member reaches, it is made that task's
  * child, to any depth, and takes the parent's repository and machine
  * rather than its own, refused where the call names another repository
- * (`tasks/task-parent.ts`). It is made
+ * (`tasks/task-parent.ts`). Only a pilot may make a task in pilot mode, and
+ * only as a child, which is how it gives a part too big for one pull request
+ * a pilot of its own; every other task is worked by its agents. It is made
  * under an id drawn from eve's key for the call (`called-id.ts`), so a call
  * run again answers the task it made and makes no second.
  * Every answer is data the model reads, never a credential.
@@ -160,7 +165,8 @@ export const CREATE_TASK_REFUSAL = {
     `${TASK_BOUNDS.MAX_BODY_CHARS} characters or none, a status ` +
     `(${Object.values(TASK_STATUS).join(", ")}) or none, a priority ` +
     `(${Object.values(TASK_PRIORITY).join(", ")}) or none, an assignee as a member's ` +
-    `mention link or none, and a parent task by the id ${AGENT_TOOL.LIST_TASKS} answered or none.`,
+    `mention link or none, a parent task by the id ${AGENT_TOOL.LIST_TASKS} answered or none, ` +
+    `and a mode (${Object.values(TASK_MODE).join(", ")}) or none.`,
   NOT_MEMBER:
     "Not made: that assignee is no member of the workspace, or names no person; name a member by " +
     `the mention link ${AGENT_TOOL.LIST_TASKS} hands you, or leave it out for no one.`,
@@ -172,6 +178,12 @@ export const CREATE_TASK_REFUSAL = {
   PARENT_REPOSITORY:
     "Not made: a child task always works in its parent's repository; leave repository out to " +
     "take the parent's, or make it with no parent to work in another.",
+  NOT_PILOT:
+    "Not made: only a pilot makes a task in pilot mode; leave mode out to make one its agents " +
+    "work, or tell your pilot the task is too big for one pull request.",
+  PILOT_NO_PARENT:
+    "Not made: a task in pilot mode is a child task of yours; give it a parentTaskId, your own " +
+    "task's id where it is a part of your work.",
 } as const;
 
 const CREATE_TASK_INPUT = Schema.Struct({
@@ -216,6 +228,14 @@ const CREATE_TASK_INPUT = Schema.Struct({
       `The task to make it a child of, by the id ${AGENT_TOOL.LIST_TASKS} answered: a part of ` +
         "that task's work, which works in its repository and runs on its machine. Left out, it " +
         "stands at the top.",
+    ),
+  ),
+  mode: Schema.optionalKey(
+    describeWire(
+      taskModeSchema,
+      "How it is worked: agent, by the agents started on it, or pilot, by a pilot of its own " +
+        "that breaks it into child tasks, for a child too big for one pull request. Only a " +
+        "pilot may ask for pilot, and only with a parentTaskId; left out, agent.",
     ),
   ),
 });
@@ -282,7 +302,14 @@ export function runCreateTask(
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.UNREADABLE));
   }
-  const { name, brief, plan, status, priority, assignee, parentTaskId } = asked.success;
+  const { name, brief, plan, status, priority, assignee, parentTaskId, mode } = asked.success;
+  // Note that a pilot task is only a pilot's to make, as a child, since its first agent is a pilot of its own.
+  if (mode === TASK_MODE.PILOT && call.caller.agent.kind !== AGENT_KIND.PILOT) {
+    return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.NOT_PILOT));
+  }
+  if (mode === TASK_MODE.PILOT && parentTaskId === undefined) {
+    return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.PILOT_NO_PARENT));
+  }
   const assigneeId =
     assignee === undefined || assignee === null ? undefined : assigneeIdOf(assignee);
   if (assignee !== undefined && assignee !== null && assigneeId === undefined) {
@@ -353,6 +380,7 @@ export function runCreateTask(
               ...(assigneeId === undefined ? undefined : { assigneeId }),
               ...(runsOn.asked === undefined ? undefined : { runsOn: runsOn.asked }),
               ...(parent === undefined ? undefined : { parentTaskId: parent.id }),
+              ...(mode === undefined ? undefined : { mode }),
               origin: originOf(call),
             });
             if (Option.isSome(once) && text !== "") {
