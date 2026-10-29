@@ -4,7 +4,7 @@
  * A native harness's runner is handed one bearer for its agent's session,
  * which it presents as `Authorization: Bearer` on every call to the server.
  * The store keeps its SHA-256 alone, on the agent's row
- * (`coding_agent.runner_token_hash`), so a read of the row cannot be replayed
+ * (`agent.runner_token_hash`), so a read of the row cannot be replayed
  * as the bearer. A bearer whose digest no standing agent holds, a retired
  * one's among them, admits nothing.
  */

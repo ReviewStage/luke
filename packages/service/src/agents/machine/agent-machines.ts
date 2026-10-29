@@ -2,7 +2,7 @@
  * agent-machines.ts -- the two agent machines behind one: each call answered by the machine its agent's row names, Vercel Sandbox or the starter's Mac.
  *
  * A call that holds an agent asks the machine its row names
- * (`coding_agent.machine`), and one that holds a place or a runner asks the
+ * (`agent.machine`), and one that holds a place or a runner asks the
  * machine that place names. A call that holds a session alone, as a door
  * and a later call's find do, asks the Mac first whether the session is a
  * local agent's, and Vercel Sandbox otherwise, so a sandbox's session costs

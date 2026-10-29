@@ -10,7 +10,7 @@
  * coding agent's tabs are listed only to one who sees that agent and, for
  * one on a task, that task too (`agentVisibleTo`), so an agent on no task
  * is reached by the agent alone, and any other reads as none at all. A task's tabs are its agents' together, each read
- * through the agent's own row (`coding_agent.task_id`), never the task the
+ * through the agent's own row (`agent.task_id`), never the task the
  * tab's row was written under, so a tab follows its agent. Whether the member may drive the tab, which a coding
  * agent on its starter's own token keeps to the starter, is the service's to
  * decide from the agent this answers beside the tab.
