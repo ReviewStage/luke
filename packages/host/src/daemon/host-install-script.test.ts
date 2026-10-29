@@ -558,7 +558,7 @@ describe("the host's install script", () => {
     { appHost: false, kept: false },
     { appHost: true, kept: true },
   ])(
-    "a Mac's uninstall removes the agents' folders and clones under the installing user's home, never root's, unless the Luke app's state is there (app state: $appHost)",
+    "a Mac's uninstall removes the agents' folders under the installing user's home, never root's, and leaves the clones the desktop app shares, unless the Luke app's state is there (app state: $appHost)",
     ({ appHost, kept }) => {
       const bin = folder();
       const home = folder();
@@ -592,7 +592,7 @@ describe("the host's install script", () => {
 
       expect(answer.status).toBe(0);
       expect(existsSync(join(home, ".luke/agents"))).toBe(kept);
-      expect(existsSync(join(home, ".luke/clones"))).toBe(kept);
+      expect(existsSync(join(home, ".luke/clones"))).toBe(true);
       expect(existsSync(join(home, ".luke/keep"))).toBe(true);
       expect(existsSync(join(rootHome, ".luke/agents"))).toBe(true);
       expect(existsSync(join(rootHome, ".luke/clones"))).toBe(true);

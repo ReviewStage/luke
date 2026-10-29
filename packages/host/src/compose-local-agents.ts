@@ -635,10 +635,13 @@ export function composeLocalAgents(
 
         /** A launch whose runner never started, kept and settled as not started, naming why where the device says. */
         const notStarted = (agentId: string, id: string, refusal?: DeviceLaunchRefusal) =>
-          Effect.andThen(
-            keepLaunch(userId, id, agentId),
-            settledLaunch(id, { exitCode: NOT_STARTED, refusal }),
-          );
+          Effect.gen(function* () {
+            yield* keepLaunch(userId, id, agentId);
+            const ending = { exitCode: NOT_STARTED, refusal };
+            // Note that a launch whose VM would not stop as its start was given up stays kept with how it ended, which every beat stops again before it settles (`vmLetGo`).
+            if (unstopped.has(id)) return void endings.set(id, ending);
+            yield* settledLaunch(id, ending);
+          });
 
         /** The agent's own repository made where it has none, reading the agent's GitHub token where it has one through the sandbox's helper, never the token itself: a folder for an agent with no repository. */
         const madeWorktree = (

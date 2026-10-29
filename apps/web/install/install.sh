@@ -339,7 +339,11 @@ boot_run() {
 # would delete the machine.
 boot_interrupted() {
   trap - INT TERM
-  [ -z "$boot_job" ] || kill "$boot_job" 2>/dev/null || true
+  # Note that the step is waited out before the machine goes, since a create still finishing after the delete would leave the machine behind; `timeout` ends only once smolvm has.
+  if [ -n "$boot_job" ]; then
+    kill "$boot_job" 2>/dev/null || true
+    wait "$boot_job" 2>/dev/null || true
+  fi
   remove_boot_machine "$removal" || true
   fail_unstarted "The VM boot check was interrupted"
 }

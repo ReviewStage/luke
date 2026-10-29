@@ -123,6 +123,8 @@ const followingDevice = (
     readonly clock?: Clock.Clock;
     /** How many of the first stops of a VM fail, as smolvm's can. */
     readonly vmStopFails?: number;
+    /** Setting the commit identity in the VM fails, so the launch is given up after its VM started. */
+    readonly identityFails?: boolean;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -140,7 +142,11 @@ const followingDevice = (
         return { stdout: "/usr/bin:/bin", exitCode: 0 };
       if (program === "/bin/bash") return { exitCode: 0 };
       if (program === VM_RUNNER) return runner;
-      if (program === VM_EXEC) return { exitCode: 0 };
+      if (program === VM_EXEC)
+        return {
+          exitCode:
+            options.identityFails === true && args.includes(CHECKOUT_IDENTITY_SCRIPT) ? 1 : 0,
+        };
       return undefined;
     });
     const registered: DeviceAgentDevice[] = [];
@@ -685,6 +691,27 @@ it.effect(
         assert.deepEqual(vm.stopped, [AGENT_ID]);
         assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
         yield* until(() => keptLaunches(files).length === 0);
+      }),
+    ),
+);
+
+it.effect(
+  "a launch given up after its VM started, whose VM would not stop, is settled as not started only once a beat has stopped it",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { settled, files, vm, reported } = yield* followingDevice(() => Effect.void, {
+          identityFails: true,
+          vmStopFails: 1,
+        });
+        yield* until(() => reported.includes("a local agent's VM could not be stopped"));
+
+        assert.deepEqual([settled, vm.stopped, keptLaunches(files)], [[], [], [LINE_ID]]);
+        yield* beatsOn(1);
+        yield* until(() => settled.length > 0);
+
+        assert.deepEqual(vm.stopped, [AGENT_ID]);
+        assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 1 }]);
       }),
     ),
 );
