@@ -705,6 +705,7 @@ export class StreamRelay {
         ? read
         : Effect.andThen(this.#landDue(eveTurnId, event.type, standing), read);
     const ids = {
+      userId: standing.target.userId,
       conversationId: standing.target.conversationId,
       sessionId: standing.sessionId,
       ...(standing.agentId !== undefined ? { agentId: standing.agentId } : undefined),

@@ -3,7 +3,7 @@ import type { InstalledSkillFilesRefusal } from "@luke/features/installed-skill-
 import type { ModelProvider } from "@luke/features/models-wire";
 import type { RepositoryUnreached } from "@luke/features/repository-reach-wire";
 import { readEither } from "@luke/wire/effect";
-import { type Cause, Effect, type Layer, Option, Result, Stream } from "effect";
+import { type Cause, Effect, type Layer, Option, Result, type Scope, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { type UnparsedWireValue, unparsedWire, wireUuidSchema } from "../core.js";
 import { ANY_METHOD, ANY_PATH } from "../route.js";
@@ -304,14 +304,20 @@ export function resolvedAccount<Input>(
   );
 }
 
-/** The bearer's account, or the invalid-token refusal. */
+/**
+ * The bearer's account, or the invalid-token refusal. The account is the
+ * request's log annotation `userId` from here until the request's scope
+ * closes, so every line the route writes after it names the account, and
+ * every issue it raises names it as Sentry's user (`observability/sentry.ts`).
+ */
 export const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: { readonly resolveUserId: UserIdResolver },
   request: Request,
-): Effect.fn.Return<string, HostedRefusal> {
+): Effect.fn.Return<string, HostedRefusal, Scope.Scope> {
   const account = yield* resolvedAccount(seams.resolveUserId, request);
   if (Option.isNone(account))
     return yield* Effect.fail<HostedRefusal>(HOSTED_REFUSAL.INVALID_TOKEN);
+  yield* Effect.annotateLogsScoped({ userId: account.value });
   return account.value;
 });
 

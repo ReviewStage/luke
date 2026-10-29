@@ -42,6 +42,11 @@ export type AccountSnapshot =
       provider: AccountProvider;
     };
 
+/** The signed-in account's own id, or none while nobody is signed in or the identity stored names none. */
+export function signedInAccountId(account: AccountSnapshot | undefined): string | undefined {
+  return account?.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
+}
+
 /**
  * An account snapshot as it crosses to a window, the type above as a schema:
  * what an act that answers the account carries back to the window that asked.
