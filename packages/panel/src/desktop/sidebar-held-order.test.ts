@@ -277,3 +277,28 @@ test("grouped by assignee, a group whose last task is given away slides out wher
     ["Ada Lovelace"],
   );
 });
+
+test("grouped by assignee, a child task stands under its parent in the parent's group, never in its own assignee's", () => {
+  const shared = { ...WORKSPACE, memberCount: 2 };
+  window.localStorage.setItem(
+    "luke.sidebarTaskViews",
+    JSON.stringify({ [WORKSPACE.id]: { grouping: "assignee", order: "updated" } }),
+  );
+  const ada = { userId: "user-ada", name: "Ada Lovelace" };
+  const grace = { userId: "user-grace", name: "Grace Hopper" };
+  const { container, draw } = mountSidebar([]);
+  draw(
+    [
+      { ...task("t-1", "Cleanup", 2), assignee: ada },
+      { ...task("t-2", "Probe", 1), assignee: grace, parentTaskId: "t-1" },
+    ],
+    { workspace: shared, workspaces: [shared] },
+  );
+  assert.deepEqual(groups(container), [["Ada Lovelace", ["Cleanup"]]]);
+
+  const fold = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Child tasks of Cleanup"]',
+  );
+  act(() => fold?.click());
+  assert.deepEqual(groups(container), [["Ada Lovelace", ["Cleanup", "Probe"]]]);
+});
