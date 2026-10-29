@@ -462,13 +462,14 @@ export interface VercelSandboxApi {
   /**
    * What a command that exited printed on stderr, the tail kept, every value
    * named in `secrets` and every token-shaped run redacted, for a log; none
-   * where Vercel has none or did not answer in time.
+   * where it printed nothing there, and unavailable where Vercel refused or
+   * did not answer within `EXIT_WAIT`.
    */
   readonly commandStderrTail: (
     sandboxSessionId: string,
     commandId: string,
     secrets?: readonly string[],
-  ) => Effect.Effect<string | undefined>;
+  ) => Effect.Effect<string | undefined, SandboxUnavailable>;
   /** Ends a command with SIGTERM; one already gone counts as ended. */
   readonly kill: (
     sandboxSessionId: string,
@@ -1457,7 +1458,13 @@ export function vercelSandboxApi(
             SANDBOX_CALL.LOGS,
             HttpClientRequest.get(url, { headers: asked.headers }),
           ).pipe(Effect.timeoutOption(SANDBOX_API.EXIT_WAIT));
-          if (Option.isNone(read) || !succeeded(read.value.status)) return undefined;
+          if (Option.isNone(read)) {
+            return yield* new SandboxUnavailable({
+              call: SANDBOX_CALL.LOGS,
+              detail: "no answer in time",
+            });
+          }
+          if (!succeeded(read.value.status)) return yield* refused(SANDBOX_CALL.LOGS, read.value);
           let stderr = "";
           for (const line of read.value.text.split("\n")) {
             if (line.trim() === "") continue;
@@ -1471,7 +1478,7 @@ export function vercelSandboxApi(
             }
           }
           return stderr === "" ? undefined : stderrTail(stderr, secrets);
-        }).pipe(Effect.orElseSucceed(() => undefined)),
+        }),
       kill: (sandboxSessionId, commandId) =>
         Effect.gen(function* () {
           const asked = yield* credentials(SANDBOX_CALL.KILL);

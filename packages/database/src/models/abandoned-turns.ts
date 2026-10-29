@@ -170,8 +170,8 @@ type LostTurnEnd =
       readonly failureDetail: string;
     };
 
-/** What a native agent's turn whose runner went away says it failed of, as a runner's own failed end says why. */
-const RUNNER_LOST_DETAIL = "the agent's runner stopped before its turn ended";
+/** What a native agent's turn whose runner went away says it failed of, as a runner's own failed end says why; a caller that knows how the runner ended appends that after it. */
+export const RUNNER_LOST_DETAIL = "the agent's runner stopped before its turn ended";
 
 /** The turns still queued or running of the standing coding agent's conversation named, oldest first. */
 const agentRunningTurns = SqlSchema.findAll({
@@ -200,7 +200,8 @@ const agentRunningTurns = SqlSchema.findAll({
  * relay's own end takes; whether this write settled it, a turn already
  * ended being a repeat. The end stands alone in the turn's sequence: the
  * relay's count of what it told is not known here, and the writer settles
- * the row by the turn's id.
+ * the row by the turn's id. A write the writer refused is logged by its
+ * word, since the turn it leaves running would otherwise say nothing of why.
  */
 const settledLost = (
   writer: Pick<StoreWriter, "consume">,
@@ -208,8 +209,8 @@ const settledLost = (
   end: LostTurnEnd,
   now: number,
 ) =>
-  Effect.map(
-    writer.consume(
+  Effect.gen(function* () {
+    const written = yield* writer.consume(
       { userId: turn.userId, conversationId: turn.conversationId },
       {
         kind: RUN_EVENT.TURN_ENDED,
@@ -220,9 +221,15 @@ const settledLost = (
         responseIds: [],
         at: now,
       },
-    ),
-    (written) => Result.isSuccess(written) && written.success === STORE_WRITE_EFFECT.WRITTEN,
-  );
+    );
+    if (Result.isFailure(written)) {
+      yield* Effect.logWarning(`a lost turn's settle was refused: ${written.failure.refusal}`).pipe(
+        Effect.annotateLogs({ conversationId: turn.conversationId, turnId: turn.id }),
+      );
+      return false;
+    }
+    return written.success === STORE_WRITE_EFFECT.WRITTEN;
+  });
 
 export interface AbandonedTurnSweepStore {
   readonly writer: Pick<StoreWriter, "consume">;

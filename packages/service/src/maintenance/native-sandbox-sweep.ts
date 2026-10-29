@@ -27,28 +27,41 @@
  * (it drains its END to Luke before it exits): the sweep settles that turn
  * as failed (`settleRunnerLostTurns`), so the agent offers Continue rather
  * than running for a day, and its sandbox is stopped once the grace passes,
- * as any ended run's is. Nothing is relaunched.
+ * as any ended run's is. The turn keeps how the runner ended, its exit code
+ * and the redacted tail of its stderr, after the fixed sentence, and the
+ * settle is logged as an error under the agent's ids and reported as an
+ * issue. Nothing is relaunched.
  *
  * Every call is bounded so the sweep's minute holds: a few pages of the
  * list, a set number of sandboxes read against the store, taken from a
  * window that moves along the list from one sweep to the next, and a set
- * number of stops. What is asked of Vercel is a page, a name, and a session; what
- * is logged of a failure is its status.
+ * number of stops. What is asked of Vercel is a page, a name, a session, and
+ * a dead runner's stderr; what is logged of a failure is its status, and of a
+ * dead runner its exit and its stderr's redacted tail.
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
+import {
+  RUNNER_LOST_DETAIL,
+  runningTurnIds,
+  settleRunnerLostTurns,
+} from "@luke/database/models/abandoned-turns";
 import { readNativeRunStanding } from "@luke/database/models/agent-store";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
-import { Duration, Effect, Option, Result, type Schema } from "effect";
+import { redactCredentials } from "@luke/features/credential-redaction";
+import { TURN_FAILURE } from "@luke/features/turn-run";
+import { Cause, Data, Duration, Effect, ErrorReporter, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { holdingRunnerIfFree } from "../agents/coder-host/runner-lease.js";
 import { retireWarmRunner } from "../agents/coder-host/runner-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { RUNNER_TAG, SANDBOX_NAME, taggedRunner } from "../agents/machine/vercel-machine.js";
+import { FAILURE_CHARS } from "../agents/native-events/runner-moments.js";
 import {
+  COMMAND_GONE,
+  type CommandExit,
   deploymentOidcToken,
   type ListedSandbox,
   SANDBOX_STATUS,
@@ -162,12 +175,18 @@ const runnerStanding = (
     return exit === null ? RUNNER_STANDING.RUNNING : RUNNER_STANDING.EXITED;
   }).pipe(Effect.orElseSucceed((): RunnerStanding => RUNNER_STANDING.MOVED_ON));
 
+/** A runner that exited: its command, and its exit code, or gone where Vercel no longer knows the command. */
+interface ExitedRunner {
+  readonly commandId: string;
+  readonly exit: Exclude<CommandExit, null>;
+}
+
 /**
- * The command of the runner that exited, where the sandbox, read afresh,
- * still runs the session it was listed in and the runner its tags name
- * there has exited, or Vercel no longer knows its command. None for a
- * runner not yet tagged (a launch under way, which clears the runner's tags
- * first), or where Vercel does not answer.
+ * The runner that exited, where the sandbox, read afresh, still runs the
+ * session it was listed in and the runner its tags name there has exited,
+ * or Vercel no longer knows its command. None for a runner not yet tagged
+ * (a launch under way, which clears the runner's tags first), or where
+ * Vercel does not answer.
  */
 const exitedRunner = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
   Effect.gen(function* () {
@@ -178,8 +197,102 @@ const exitedRunner = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
     const runner = taggedRunner(fresh);
     if (runner === undefined || runner.sandboxSessionId !== sandbox.running) return undefined;
     const exit = yield* api.commandExit(runner.sandboxSessionId, runner.commandId);
-    return exit === null ? undefined : runner.commandId;
+    return exit === null ? undefined : { commandId: runner.commandId, exit };
   }).pipe(Effect.orElseSucceed(() => undefined));
+
+/**
+ * What a runner that died mid-turn printed on stderr before it went, its
+ * tail redacted (`commandStderrTail`); none where it printed nothing, and
+ * none, with a warning, where Vercel did not answer within its wait, so a
+ * slow read costs the sweep's minute no more than that and the exit code is
+ * kept all the same.
+ */
+const lostRunnerStderr = (api: VercelSandboxApi, sandbox: NativeSandbox, commandId: string) =>
+  api
+    .commandStderrTail(sandbox.running, commandId)
+    .pipe(
+      Effect.catch((unavailable) =>
+        Effect.as(
+          Effect.logWarning(`a lost runner's stderr was not read: ${unavailable.message}`).pipe(
+            Effect.annotateLogs({ agentId: sandbox.agentId, sandboxSessionId: sandbox.running }),
+          ),
+          undefined,
+        ),
+      ),
+    );
+
+/** A lost runner's turn's failure detail: the fixed sentence the status words match on, then how the runner ended, redacted and bounded as a runner's own failure is. */
+function runnerLostDetail(exit: ExitedRunner["exit"], stderr: string | undefined): string {
+  const ended = `exit ${exit === COMMAND_GONE ? "unknown" : String(exit)}, stderr: ${stderr ?? "none"}`;
+  return `${RUNNER_LOST_DETAIL}: ${redactCredentials(ended)}`.slice(0, FAILURE_CHARS);
+}
+
+/**
+ * A runner that died mid-turn without its END, reported as one issue
+ * whatever the agent, since the ids, exit, and stderr ride as attributes
+ * rather than in its message.
+ */
+class RunnerLost extends Data.TaggedError("RunnerLost")<{
+  readonly agentId: string;
+  readonly conversationId: string;
+  readonly turnIds: readonly string[];
+  readonly sandboxSessionId: string;
+  readonly exitCode: string;
+  readonly stderr: string;
+}> {
+  override get message(): string {
+    return RUNNER_LOST_DETAIL;
+  }
+
+  override readonly [ErrorReporter.attributes] = {
+    agentId: this.agentId,
+    conversationId: this.conversationId,
+    turnIds: this.turnIds.join(","),
+    sandboxSessionId: this.sandboxSessionId,
+    exitCode: this.exitCode,
+    stderr: this.stderr,
+    failure: TURN_FAILURE.MODEL,
+  };
+}
+
+/**
+ * The turns of a run whose runner died mid-turn settled failed with how it
+ * ended, read before the store is read again so the settle follows that
+ * read at once, logged once as an error under the agent's ids and reported as an
+ * issue, since nothing the user did ends a run this way.
+ */
+const settledLostRunner = (
+  writer: Pick<StoreWriter, "consume">,
+  sandbox: NativeSandbox,
+  conversationId: string,
+  runner: ExitedRunner & { readonly stderr: string | undefined },
+  now: Date,
+) =>
+  Effect.gen(function* () {
+    const { stderr } = runner;
+    const detail = runnerLostDetail(runner.exit, stderr);
+    const turnIds = yield* runningTurnIds(conversationId);
+    yield* settleRunnerLostTurns(writer, conversationId, now.getTime(), detail, new Set(turnIds));
+    const lost = new RunnerLost({
+      agentId: sandbox.agentId,
+      conversationId,
+      turnIds,
+      sandboxSessionId: sandbox.running,
+      exitCode: String(runner.exit),
+      stderr: stderr === undefined ? "none" : redactCredentials(stderr),
+    });
+    yield* Effect.logError(detail).pipe(
+      Effect.annotateLogs({
+        agentId: sandbox.agentId,
+        conversationId,
+        turnId: turnIds.join(","),
+        sandboxSessionId: sandbox.running,
+        failure: TURN_FAILURE.MODEL,
+        exitCode: lost.exitCode,
+      }),
+    );
+    yield* ErrorReporter.report(Cause.fail(lost));
+  });
 
 /** Whether the run of the sandbox's agent still has a turn queued or running, read from the store. */
 const runGoesOn = (sandbox: NativeSandbox) =>
@@ -275,10 +388,13 @@ const endSandbox = (
     if (Option.isSome(going)) {
       const exited = yield* exitedRunner(api, sandbox);
       if (exited === undefined) return SANDBOX_ENDING.LEFT;
+      const stderr = yield* lostRunnerStderr(api, sandbox, exited.commandId);
       // Read again just before the settle, so a message that relaunched the runner since keeps its turn.
       if (Option.isNone(yield* runGoesOn(sandbox))) return SANDBOX_ENDING.LEFT;
-      if ((yield* exitedRunner(api, sandbox)) !== exited) return SANDBOX_ENDING.LEFT;
-      yield* settleRunnerLostTurns(writer, going.value, now.getTime());
+      if ((yield* exitedRunner(api, sandbox))?.commandId !== exited.commandId) {
+        return SANDBOX_ENDING.LEFT;
+      }
+      yield* settledLostRunner(writer, sandbox, going.value, { ...exited, stderr }, now);
       return SANDBOX_ENDING.LOST;
     }
     if (Option.isNone(yield* runEnded(sandbox, now))) return SANDBOX_ENDING.LEFT;
