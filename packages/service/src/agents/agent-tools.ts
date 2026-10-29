@@ -27,6 +27,7 @@ import {
   turnStoppedUnderReached,
 } from "@luke/database/models/message-reads";
 import { readPageById } from "@luke/database/models/plan-pages";
+import { lockTasksForBlocks } from "@luke/database/models/task-block-store";
 import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
 import {
   listTasks,
@@ -158,6 +159,7 @@ import {
   blockChangesNamed,
   blockWritesAsked,
   taskBlockReadingsNow,
+  tasksOfWrites,
   writeTaskBlocks,
 } from "./task-block-changes.js";
 import {
@@ -2145,6 +2147,10 @@ export function runUpdateTask(
       // The task's change, its place in the sidebar, and its blocks are one transaction, so a place
       // refused, its section deleted meanwhile, or a block refused takes the change back with it.
       const writing = Effect.gen(function* () {
+        // Every task the blocks name is locked before the task's change, so the change takes no lock first that another call's blocks wait on.
+        if (blocking !== undefined) {
+          yield* lockTasksForBlocks(userId, tasksOfWrites(blocking.success));
+        }
         const task =
           Object.keys(asWritten).length === 0
             ? Option.some(read.value.task)

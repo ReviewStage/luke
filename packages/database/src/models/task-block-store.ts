@@ -102,6 +102,21 @@ const lockReachableTasks = SqlSchema.findAll({
     ),
 });
 
+/** The tasks under these ids the account reaches, under an update lock taken in id order. */
+const lockReachableTasksForUpdate = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, taskIds: Schema.Array(Schema.String) }),
+  Result: IdRowSchema,
+  execute: ({ userId, taskIds }) =>
+    Database.use((db) =>
+      db
+        .select({ id: task.id })
+        .from(task)
+        .where(and(inArray(task.id, taskIds), taskReachableBy(userId)))
+        .orderBy(asc(task.id))
+        .for("update"),
+    ),
+});
+
 /** The tasks blocking this one that the account reaches, the earliest added first. */
 const findBlockers = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
@@ -290,6 +305,25 @@ export function addTaskBlock(
         return Option.some(writtenOf(yield* insertBlock({ ...pair, now })));
       }),
     ),
+  );
+}
+
+/**
+ * Locks for update, in id order, every task a transaction is about to
+ * change and write blocks between, before the first of those writes, so
+ * each write finds its rows already held. Note that a caller that changes a
+ * task and then adds its blocks needs this, because the change holds that
+ * task alone, and two such callers joining each other's tasks would each
+ * hold a row the other's block write waits on. Answers how many of the tasks
+ * the account reaches.
+ */
+export function lockTasksForBlocks(
+  userId: string,
+  taskIds: readonly string[],
+): TaskBlockEffect<number> {
+  return Effect.map(
+    lockReachableTasksForUpdate({ userId, taskIds: [...new Set(taskIds)] }),
+    (rows) => rows.length,
   );
 }
 

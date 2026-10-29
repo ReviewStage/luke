@@ -141,12 +141,7 @@ export const blockWritesAsked = (
         ...pairsOf(taskId, blocks?.add, "blocks"),
       ],
     };
-    const others = new Set(
-      [...writes.removes, ...writes.adds].flatMap((pair) => [
-        pair.blockerTaskId,
-        pair.blockedTaskId,
-      ]),
-    );
+    const others = new Set(tasksOfWrites(writes));
     if (writes.adds.some((pair) => pair.blockerTaskId === pair.blockedTaskId)) {
       return Result.fail(TASK_BLOCK_REFUSAL.SELF);
     }
@@ -161,6 +156,14 @@ export const blockWritesAsked = (
     }
     return Result.succeed(writes);
   });
+
+/** Every task the blocks asked name, the task changed among them. */
+export function tasksOfWrites(writes: TaskBlockWrites): string[] {
+  return [...writes.removes, ...writes.adds].flatMap((pair) => [
+    pair.blockerTaskId,
+    pair.blockedTaskId,
+  ]);
+}
 
 /**
  * Writes the blocks asked, those taken away first, inside the caller's
