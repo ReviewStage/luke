@@ -53,6 +53,7 @@ import {
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import { INLINE_SPAN, readInline } from "../plan-editor/composer-markdown.js";
+import { type CommandCard, commandCard } from "./command-card-model.js";
 import { fileRefText } from "./file-ref-model.js";
 import { shortCommit } from "./file-tab-model.js";
 import { askHeadWords } from "./inbox-ask-words.js";
@@ -99,6 +100,8 @@ export interface ToolCallView {
   readonly server?: string;
   /** For the same calls, the connection they ran on, which the window names by the account's own name where it holds more than one (`connection-names.tsx`); `server` stands where it does not know it. */
   readonly connection?: string;
+  /** For a command that has answered, the card its output reads as, a test run or a commit, drawn under its row (`command-card-model.ts`); absent where it reads as neither. */
+  readonly card?: CommandCard;
 }
 
 /** The escape every terminal colour and cursor sequence starts with. */
@@ -981,12 +984,15 @@ const AGENT_TOOL_VIEWS = {
   [AGENT_TOOL.BASH]: ({ input, output }) => {
     const command = stringAt(input, "command") ?? "";
     const description = commandDescription(stringAt(input, "description"));
+    const shown = output === undefined ? undefined : commandOutput(output);
+    const card = shown === undefined ? undefined : commandCard(command, shown.text);
     return {
       kind: CALL_KIND.COMMAND,
       subject: command,
       ...(description === undefined ? undefined : { description }),
       input: { kind: TOOL_BLOCK.COMMAND, text: command },
-      output: output === undefined ? undefined : commandOutput(output),
+      output: shown,
+      ...(card === undefined ? undefined : { card }),
     };
   },
   [AGENT_TOOL.READ_FILE]: ({ input, output }) => ({

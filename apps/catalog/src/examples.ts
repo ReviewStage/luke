@@ -26,6 +26,7 @@ import { COMBOBOX_EXAMPLE } from "./examples/combobox";
 import { COMMAND_ASK_EXAMPLE } from "./examples/command-ask";
 import { COMMAND_DIALOG_EXAMPLE } from "./examples/command-dialog";
 import { COMMENTS_EXAMPLE } from "./examples/comments";
+import { COMMIT_CARDS_EXAMPLE } from "./examples/commit-cards";
 import { COMPOSER_FOOTS_EXAMPLE } from "./examples/composer-foots";
 import { COMPOSER_FRAMES_EXAMPLE } from "./examples/composer-frames";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
@@ -122,6 +123,7 @@ import { SWITCHES_EXAMPLE } from "./examples/switches";
 import { TAB_NOTICES_EXAMPLE } from "./examples/tab-notices";
 import { TABS_EXAMPLE } from "./examples/tabs";
 import { TASK_MARKS_EXAMPLE } from "./examples/task-marks";
+import { TEST_RESULTS_CARDS_EXAMPLE } from "./examples/test-results-cards";
 import { TEXT_BUTTONS_EXAMPLE } from "./examples/text-buttons";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
 import { TEXT_LINKS_EXAMPLE } from "./examples/text-links";
@@ -186,6 +188,8 @@ export const EXAMPLES: readonly Example[] = [
   CONFIRM_DIALOGS_EXAMPLE,
   COPY_BUTTONS_EXAMPLE,
   CODE_CARDS_EXAMPLE,
+  TEST_RESULTS_CARDS_EXAMPLE,
+  COMMIT_CARDS_EXAMPLE,
   COMMAND_ASK_EXAMPLE,
   COMMAND_DIALOG_EXAMPLE,
   COMMENTS_EXAMPLE,

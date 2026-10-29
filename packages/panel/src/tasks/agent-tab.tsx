@@ -28,6 +28,7 @@ import {
   BUTTON_VARIANT,
   Button,
   CodeCard,
+  CommitCard,
   DisclosureChevron,
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
@@ -46,6 +47,7 @@ import {
   TEXT_LINK_LOOK,
   TEXT_TONE,
   TEXT_VARIANT,
+  TestResultsCard,
   Text,
   TextLink,
   useAnnounce,
@@ -158,6 +160,7 @@ import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { AgentTabSkeleton, ComposerSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
 import { dockedTodos, newestTodos, taskTodos, todosOfPart } from "./agent-todos.js";
 import { ArchivedComposerNote } from "./archived-note.js";
+import { COMMAND_CARD, type CommandCard } from "./command-card-model.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
 import { ContinueAgent, ContinuedComposerNote, ContinuedTrail } from "./continue-agent.js";
 import { CopyMessageAction } from "./copy-message.js";
@@ -531,6 +534,19 @@ function calledAgentActor(
   };
 }
 
+/** The card a command's output reads as, a test run or a commit, standing under its row as the pictures a call answered do, so it is seen without opening the row. */
+function CommandCardView({ card }: { card: CommandCard }): ReactNode {
+  return (
+    <div className="mt-list-gap mr-0 mb-item-gap ml-transcript-gutter">
+      {card.kind === COMMAND_CARD.COMMIT ? (
+        <CommitCard commit={card.commit} />
+      ) : (
+        <TestResultsCard run={card.run} />
+      )}
+    </div>
+  );
+}
+
 /** One tool call: its row, and its input and answer under it once opened, a stop naming the worker it stopped by its job where `jobs` knows it, and a call about an agent naming it by its chip where `cards` or its answer know it; an answer its page carried cut drawn as `cut` says. */
 function ToolCallView({
   part,
@@ -569,6 +585,7 @@ function ToolCallView({
         errorText={part.errorText}
         cut={cut}
       />
+      {view.card === undefined ? null : <CommandCardView card={view.card} />}
       <CallPictures tool={part.tool} input={part.input} output={part.output} />
     </>
   );
