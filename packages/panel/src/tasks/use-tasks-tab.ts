@@ -140,7 +140,6 @@ import {
   openChannelThread,
   standChannelPlace,
 } from "./use-channels.js";
-import { useHeldOpen } from "./use-held-open.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxPages } from "./use-inbox-pages.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
@@ -1183,12 +1182,7 @@ export function useTasksTab(input: {
   // A fixture run draws its synthetic tasks in place of the account's,
   // signed out as every fixture run is.
   const fixture = tasksFixture?.fixtureTasksView(input.run);
-  // A task opened from here is drawn once its document lands, what stood
-  // holding the window meanwhile, so the two meet in one view transition
-  // (`use-held-open.ts`); landing takes down whatever stood in its place.
-  const landOpen = useCallback(() => setStandIn(undefined), []);
-  const held = useHeldOpen(fixture ?? input.tasks, landOpen);
-  const viewed = held.view;
+  const viewed = fixture ?? input.tasks;
   // The task whose sidebar row was pressed to open it, whose title travels
   // from there to its page; none where a list's row, which always travels, opened it.
   const [titleFrom, setTitleFrom] = useState<string | undefined>(undefined);
@@ -1664,15 +1658,15 @@ export function useTasksTab(input: {
   // Note that `onOpened` runs only once the task opened, because a task that
   // would not open must not leave the sidebar on another workspace, this
   // launch or the next.
-  const { await: awaitOpen, release: releaseOpen } = held;
   const openTask = useCallback(
     (taskId: string, onOpened: () => void, onRefused: () => void = () => undefined) => {
-      // Note that the task open already, and a fixture's, which opens nowhere,
-      // are in hand, so the page turns at once; another stays as it stands
-      // until the task's document lands.
+      // Note that only the task open already, and a fixture's, which opens
+      // nowhere, turn the page as a navigation, because their content is in
+      // hand; another is read first, and a view transition into its skeleton
+      // would show nothing worth carrying the reader across to.
       if (taskId === openTaskId || fixture !== undefined) {
         navigate(NAVIGATION.TASK_OPEN, () => setStandIn(undefined));
-      } else awaitOpen(taskId);
+      } else setStandIn(undefined);
       const ask = { taskId, over: openTaskId };
       // Another task asked for is timed to its document drawn ready; the one
       // open already has nothing to wait on.
@@ -1681,7 +1675,6 @@ export function useTasksTab(input: {
       const withdraw = () => {
         setAsked((held) => (held === ask ? undefined : held));
         if (opening.current === timed) opening.current = undefined;
-        releaseOpen(taskId);
         onRefused();
       };
       if (fixture === undefined) setAsked(ask);
@@ -1693,7 +1686,7 @@ export function useTasksTab(input: {
         onOpened();
       }, withdraw);
     },
-    [act, fixture, openTaskId, awaitOpen, releaseOpen],
+    [act, fixture, openTaskId],
   );
   // A leave is asked rather than told, so a refused one takes its ask back too.
   const leaveTask = useCallback(() => {

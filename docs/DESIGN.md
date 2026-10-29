@@ -107,10 +107,10 @@ A navigation between screens may carry the reader across with React's
   `--luke-duration-exit` first, and what arrives fades in rising on the spring.
 - A shared element, a task's title between the row that opened it and its
   page, pairs by a name one place wears at a time.
-- A view transition plays into real content, never into a skeleton: a task
-  whose document is not in hand holds the screen that stood until it lands,
-  and turns at once, to its skeleton, once `--luke-late-delay` has passed
-  (`use-held-open.ts`).
+- A view transition plays into real content, never into a skeleton: only a
+  navigation whose content is in hand plays one, such as the Tasks list
+  giving way to the task it stood over. A task the host must read first turns
+  the page at once, as before.
 - While one plays, the window is pictures and takes no press, so a navigation
   that plays keeps to a single beat of the vocabulary.
 

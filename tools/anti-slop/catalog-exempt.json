@@ -2,7 +2,9 @@
   "notAComponent": {
     "DisclosureFind": "A context provider: draws only its children.",
     "DisclosureScope": "A context provider: draws only its children.",
-    "RevealArea": "A context provider: draws only its children."
+    "RevealArea": "A context provider: draws only its children.",
+    "TabBodyTransition": "A view-transition boundary: draws only its children, and moves only in a navigation, which a still example cannot show.",
+    "TaskTitleTransition": "A view-transition boundary: draws only its children, in a box that hugs them, and moves only in a navigation, which a still example cannot show."
   },
   "awaitingAnExample": [
     "MenuRowList",
