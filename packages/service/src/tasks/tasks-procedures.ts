@@ -699,8 +699,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         yield* topPilotTask(yield* reachedTask(userId, taskId));
       }
       // A repository another than its tree's is refused before anything is stopped too; the store holds it again under the lock.
-      if (changes.repository !== undefined) {
-        yield* checkTreeRepository(userId, taskId, changes.repository).pipe(
+      // Note that the name GitHub resolved is asked, not the one typed, so a renamed repository's old name is the one held.
+      if (reached !== undefined) {
+        yield* checkTreeRepository(userId, taskId, reached.repository).pipe(
           Effect.catch((failure) =>
             failure._tag === "TaskTreeRepositoryLocked"
               ? Effect.fail(HOSTED_REFUSAL.CHILD_REPOSITORY_LOCKED)
