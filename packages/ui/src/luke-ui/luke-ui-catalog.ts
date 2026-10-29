@@ -103,16 +103,19 @@ export const LUKE_UI_CATALOG = defineCatalog(LUKE_UI_SCHEMA, {
       description: "Facts one under another, each a muted label and its value at the line's end.",
     },
     [LUKE_UI_COMPONENT.TABLE]: {
-      props: z.object({
-        label: z.string().min(1),
-        columns: z
-          .array(z.object({ label: z.string().min(1), numeric: z.boolean().optional() }))
-          .min(1),
-        rows: z.array(z.array(z.union([z.string(), z.number()]))).min(1),
-      }),
+      // Note that a row of another length is refused rather than drawn, because the table draws a cell per column and would drop a cell past the last or blank one short of it.
+      props: z
+        .object({
+          label: z.string().min(1),
+          columns: z
+            .array(z.object({ label: z.string().min(1), numeric: z.boolean().optional() }))
+            .min(1),
+          rows: z.array(z.array(z.union([z.string(), z.number()]))).min(1),
+        })
+        .refine((table) => table.rows.every((row) => row.length === table.columns.length)),
       slots: [],
       description:
-        "Records compared across columns: each row one cell per column, in order; a numeric column's figures line up at its end. `label` names the table for a screen reader.",
+        "Records compared across columns: each row exactly one cell per column, in order; a numeric column's figures line up at its end. `label` names the table for a screen reader.",
     },
     [LUKE_UI_COMPONENT.BADGE]: {
       props: STATUS,
