@@ -16,6 +16,8 @@ export const EXPERIMENT = {
   LOCAL_AGENTS: "local-agents",
   /** Channels: a workspace's threads read as Slack-style streams by topic, the sidebar listing channels in place of the Inbox and the tasks. */
   CHANNELS: "channels",
+  /** Pilot: a new task can start with one pilot agent that plans the work, splits it into child tasks, and runs a coding agent on each. */
+  PILOT: "pilot",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
@@ -39,6 +41,15 @@ export interface ExperimentEntry {
  * there is no status to drift and every experiment is off until turned on.
  */
 export const EXPERIMENTS = [
+  {
+    key: EXPERIMENT.PILOT,
+    name: "Pilot",
+    detail:
+      "Start a new task with one pilot agent that plans the work, splits it into child tasks, " +
+      "and runs a coding agent on each.",
+    owner: "Charles",
+    since: "2026-10-29",
+  },
   {
     key: EXPERIMENT.LOCAL_AGENTS,
     name: "Local agents",
