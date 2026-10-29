@@ -9,7 +9,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
  * (`desktop-sidebar.tsx`), a phone's places bar (`mobile-bar.tsx`), and
  * each task's badge on the Tasks page's List and Board. The Inbox's row
  * counts the open threads that wait on the developer, a question or an
- * update not yet opened, the threads its For you lists (`inbox-model.ts`'s
+ * update not yet opened, the threads its Needs you lists (`inbox-model.ts`'s
  * `needsYou`), while a task's badge counts its questions alone, as main
  * counts them. Each channel's row counts the same threads the Inbox's does,
  * by the channel each lives in (`useChannelWaiting`), so the channels' add
@@ -46,7 +46,7 @@ function toDoByTask(
  * Every thread waiting on the developer in the listed workspace's Inbox:
  * each standing task's open items main lists as theirs, and every open item
  * from an agent with no task of that workspace (`listedIn`) that waits on
- * them (`waitsOnReader`), a question or a notice alike, as For you lists
+ * them (`waitsOnReader`), a question or a notice alike, as Needs you lists
  * them. Note that a notice counts until it is opened, because opening it
  * settles it as Got it does; a teammate's thread and a settled one never
  * count, and one the reader settles leaves main's read the moment it is
@@ -64,9 +64,6 @@ function waitingThreads(tasks: TasksControl): readonly Pick<AppInboxWaitingItem,
   return [...ofTasks, ...taskless];
 }
 
-/** What the Inbox's and a channel's count are said with, after the figure, as the list they count is named: "3 for you". */
-export const FOR_YOU_NOUN = "for you";
-
 /** How many questions wait on the developer on each task, by task, as main counts them; a task where none waits is left out, and every one while signed out. */
 export function useTasksWaiting(tasks: TasksControl): ReadonlyMap<string, number> {
   const byTask = useMemo(
@@ -77,7 +74,7 @@ export function useTasksWaiting(tasks: TasksControl): ReadonlyMap<string, number
 }
 
 /**
- * How many threads wait on the developer in the Inbox, as many as For you
+ * How many threads wait on the developer in the Inbox, as many as Needs you
  * lists, the number that reaches zero once each question is answered and
  * each update opened (`waitingThreads`); a teammate's is listed in the
  * Inbox, and waits on the teammate. None while signed out.

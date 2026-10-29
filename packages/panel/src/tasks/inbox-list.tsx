@@ -1,7 +1,7 @@
 import { type InboxPerson, inboxAddressedTo } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { readFailedWords, TERM } from "@luke/features/words";
 import {
+  ANNOUNCE,
   AttentionMark,
   BUTTON_SIZE,
   BUTTON_VARIANT,
@@ -142,6 +142,7 @@ import {
   holderName,
   INBOX_GROUPING,
   INBOX_HOLDER,
+  INBOX_NOT_READ,
   INBOX_SHOW,
   INBOX_SORT,
   INBOX_STATUS_GROUP,
@@ -207,11 +208,11 @@ import { cardTitle } from "./tool-call-model.js";
  * reads it, and its row, its menu, U, and Mark all as read in the view's
  * menu mark it read or unread (`use-inbox-read-marks.ts`). An item settled
  * and read is done with (`isDone`), and its row stands back, gray, with no
- * word saying so: the chosen row For you keeps once it is answered or read,
+ * word saying so: the chosen row Needs you keeps once it is answered or read,
  * until another is chosen (`use-held-inbox-list.ts`), and every such row All lists. A folded task
  * counts what in it needs the developer, at rest, and says nothing where
  * none does. The head names the Inbox and, at its right, offers the view's
- * menu: first what the list holds, For you, the open threads that wait on
+ * menu: first what the list holds, Needs you, the open threads that wait on
  * the developer, a question or an update not yet opened, as the sidebar's
  * Inbox row counts them, or All, every item,
  * the head naming All after the Inbox's name; then Group by, None, one
@@ -232,7 +233,7 @@ import { cardTitle } from "./tool-call-model.js";
  * item listed, the list says so in the Inbox's empty state, offering the
  * scope that holds something, as a mail app's empty unread view does; the
  * item the pane shows keeps its place there, though no row. A task's own
- * Inbox lists one task's items in one run, so its view's menu offers For you
+ * Inbox lists one task's items in one run, so its view's menu offers Needs you
  * and All alone, kept apart
  * from the window's, and its list has no groups. Either list
  * is resized from its right edge as the sidebar is, and keeps one width
@@ -288,16 +289,16 @@ const SKELETON_ROWS = [
 /** How wide a placeholder row's time stands, as wide as a short "2h". */
 const SKELETON_TIME = "20px";
 
-/** What each scope is called, in the view's menu and, but for For you, after the Inbox's name at its head, and its glyph in the menu. */
+/** What each scope is called, in the view's menu and, but for Needs you, after the Inbox's name at its head, and its glyph in the menu. */
 const SCOPE_WORDS = {
-  [INBOX_SHOW.TO_DO]: { label: "For you", icon: <GLYPH.TODOS /> },
+  [INBOX_SHOW.TO_DO]: { label: NEEDS_YOU.LABEL, icon: <GLYPH.TODOS /> },
   [INBOX_SHOW.ALL]: { label: "All", icon: <InboxIcon /> },
 } as const satisfies Record<InboxShow, { label: string; icon: React.JSX.Element }>;
 
 /** The scopes every Inbox's view's menu offers, in its order. */
 const INBOX_SCOPES = [INBOX_SHOW.TO_DO, INBOX_SHOW.ALL] as const satisfies readonly InboxShow[];
 
-/** The Inbox's name at its head: the scope after it, but for For you, where the Inbox opens, since no other control on the head says it. */
+/** The Inbox's name at its head: the scope after it, but for Needs you, where the Inbox opens, since no other control on the head says it. */
 function inboxTitle(show: InboxShow): string {
   return show === INBOX_SHOW.TO_DO ? "Inbox" : `Inbox · ${SCOPE_WORDS[show].label}`;
 }
@@ -312,7 +313,7 @@ function channelTitle(name: string, show: InboxShow): string {
  * All leaves out only what Whose does.
  */
 const SHOW_EMPTY = {
-  [INBOX_SHOW.TO_DO]: "Nothing to do",
+  [INBOX_SHOW.TO_DO]: NEEDS_YOU.NONE,
   [INBOX_SHOW.ALL]: "Nothing here",
 } as const satisfies Record<InboxShow, string>;
 
@@ -321,16 +322,13 @@ const SHOW_INSTEAD = {
   [INBOX_SHOW.ALL]: "Show all",
 } as const;
 
-/** The scope an empty scope offers instead: All from For you where it holds anything; none where nothing is there to show. */
+/** The scope an empty scope offers instead: All from Needs you where it holds anything; none where nothing is there to show. */
 function insteadOf(show: InboxShow, counts: InboxCounts): keyof typeof SHOW_INSTEAD | undefined {
   return show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.ALL] > 0 ? INBOX_SHOW.ALL : undefined;
 }
 
 /** What All says where Whose, naming someone, leaves out every item. */
 const NOTHING_THEIRS = "Nothing in the inbox is theirs";
-
-/** What the empty state's press says where it lists everyone's items again, Whose having left out every item. */
-const SHOW_EVERYONES = "Show everyone's";
 
 /** What each status group is called, and its glyph, a list grouped by status heading it. */
 const STATUS_WORDS = {
@@ -343,7 +341,7 @@ const STATUS_WORDS = {
 /** What the view's submenu of whose items is called. */
 const WHOSE = "Whose";
 
-/** What the chip over the list says its × does. */
+/** What the chip over the list says its × does, and the empty state's press where Whose left out every item. */
 const CLEAR_WHOSE = "Show everyone's items";
 
 /**
@@ -772,7 +770,7 @@ function whoseEntries(
 
 /**
  * The head's button that drops the view's menu: first the scopes the Inbox
- * offers, For you and All, the one shown checked;
+ * offers, Needs you and All, the one shown checked;
  * then, on the window's Inbox, Group by and Order by, each a submenu with its
  * choice checked; Whose, Anyone, Me, or a teammate by face and name;
  * Media previews; and Mark all as read at its foot.
@@ -1043,7 +1041,7 @@ export function ShowEmpty({
             }
           : everyone !== undefined
             ? {
-                label: SHOW_EVERYONES,
+                label: CLEAR_WHOSE,
                 onClick: () => {
                   onList();
                   everyone.onWhose(EVERYONES);
@@ -1122,7 +1120,7 @@ function ListSearch({ search }: { search: InboxSearchHead }): React.JSX.Element 
 
 /**
  * The list's head: the Inbox's name, the scope after it where that is not
- * For you, and the view's menu at the list's top right, which chooses the
+ * Needs you, and the view's menu at the list's top right, which chooses the
  * scope and, on the window's Inbox, the rest of how it lists; a task's own
  * Inbox lists one task's items in one run, so its menu offers its scopes
  * alone. On the window's Inbox its heading and its button glide as the
@@ -1229,7 +1227,7 @@ function ListHead({
           asked={{ ask: asked.ask }}
         />
         {search}
-        <ErrorLine>{channel?.refusal}</ErrorLine>
+        <ErrorLine level={ANNOUNCE.ALERT}>{channel?.refusal}</ErrorLine>
         {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
       </>
     );
@@ -1271,7 +1269,7 @@ function ListHead({
         />
       )}
       {search}
-      <ErrorLine>{channel?.refusal}</ErrorLine>
+      <ErrorLine level={ANNOUNCE.ALERT}>{channel?.refusal}</ErrorLine>
       {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
     </>
   );
@@ -1281,9 +1279,6 @@ function ListHead({
 export function SearchEmpty({ searched }: { searched: string }): React.JSX.Element {
   return <NoteLine look={NOTE_LINE_LOOK.ROWS}>{`No items match “${searched.trim()}”.`}</NoteLine>;
 }
-
-/** What the Inbox says where a read of its items, or of the tasks holding them, did not answer. */
-const INBOX_NOT_READ = readFailedWords(`some ${TERM.INBOX_ITEM.many}`);
 
 /** The words of the way on from an Inbox with nothing in it. */
 const NEW_TASK_LABEL = "New task";
@@ -1444,7 +1439,7 @@ interface RowFocus {
 
 /**
  * Keeps the keyboard in the list when the row holding it is no longer
- * drawn, as For you leaves out an item answered on another Mac while its
+ * drawn, as Needs you leaves out an item answered on another Mac while its
  * row is focused: the keyboard goes to View options, the control that
  * chooses what the list leaves out, as it does from a row leaving the list
  * while it fades. Note that a removed row fires no blur, so the row last focused is
@@ -1599,7 +1594,7 @@ export function InboxList({
     onResize,
   });
   // Note that a row names its task wherever no task's header stands over it, and a teammate's face wherever no person's does.
-  // A row whose item is done with is drawn gray, the chosen row kept on For you and every such row on All alike.
+  // A row whose item is done with is drawn gray, the chosen row kept on Needs you and every such row on All alike.
   // A row leaving the list is the list's motion's rather than one of the keyboard's rows (`ListMotion`).
   const row = (listed: InboxListed, leaving: boolean) => (
     <InboxItemRow

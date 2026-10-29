@@ -53,7 +53,7 @@ const CLOSE_ITEM_LABEL = "Resolve without answering";
 /** What a toast says of a close the service did not take, by what had become of the item. */
 const NOT_TAKEN = {
   CHANGED: "The agent changed this item before you resolved it.",
-  SETTLED: "This item was already settled.",
+  SETTLED: "This item was already resolved.",
 } as const;
 
 /** How a close says what became of it: aloud, a toast saying why one was not taken, or not at all, for a batch of closes that counts its refusals in one toast. */

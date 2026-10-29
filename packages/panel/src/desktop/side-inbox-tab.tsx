@@ -23,6 +23,7 @@ import {
 } from "../tasks/inbox-list.js";
 import {
   INBOX_GROUPING,
+  INBOX_NOT_READ,
   INBOX_SHOW,
   type InboxHolder,
   type InboxListed,
@@ -227,7 +228,7 @@ export function SideInboxTab({
           ) : inbox.failed ? (
             // A refresh that failed over rows already held leaves them drawn, with a line at the foot.
             <ErrorState onRetry={inbox.onRetry} placement={ERROR_STATE_PLACEMENT.ROWS}>
-              {listed.length === 0 ? "The inbox could not be read." : REFRESH_FAILED_WORDS}
+              {listed.length === 0 ? INBOX_NOT_READ : REFRESH_FAILED_WORDS}
             </ErrorState>
           ) : inbox.read && searched !== undefined && listed.length === 0 ? (
             <SearchEmpty searched={searched} />

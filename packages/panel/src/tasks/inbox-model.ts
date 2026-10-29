@@ -1130,6 +1130,9 @@ export const NEEDS_YOU = {
   NONE: "Nothing needs you",
 } as const;
 
+/** What the Inbox, the window's or a task's own, says where a read of its items did not answer. */
+export const INBOX_NOT_READ = "The inbox could not be read.";
+
 /** A count of what waits on the developer with its words, as a card's corner or a badge says it: "1 needs you", "3 need you". */
 export function needsYouWords(count: number): string {
   return `${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`;
