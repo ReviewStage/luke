@@ -1,6 +1,6 @@
 import { keepIdentity, MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
 import { describeWire, readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
-import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
+import { Effect, Schema as EffectSchema, Option, Result, SchemaTransformation } from "effect";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import {
@@ -191,16 +191,30 @@ export const NATIVE_AGENT_RUNTIMES = [AGENT_RUNTIME.CLAUDE_CODE, AGENT_RUNTIME.C
 export type NativeAgentRuntime = (typeof NATIVE_AGENT_RUNTIMES)[number];
 
 /**
- * What kind of agent a row is: a coder, which every agent started on work is,
- * or a member's operator, the one agent per member per workspace that
- * manages their other agents, started blank with no task and no repository.
+ * What kind of agent a row is: a coder, which every agent started on work is;
+ * a pilot, which stands on a task worked in pilot mode (`TASK_MODE.PILOT`),
+ * breaks it into child tasks, and runs coders on them, started on its task
+ * and repository as a coder is; or a member's operator, the one agent per
+ * member per workspace that manages their other agents, started blank with
+ * no task and no repository.
  */
 export const AGENT_KIND = {
   CODER: "coder",
+  PILOT: "pilot",
   OPERATOR: "operator",
 } as const;
 
 export type AgentKind = (typeof AGENT_KIND)[keyof typeof AGENT_KIND];
+
+/**
+ * An agent's kind as a reader decodes it off the wire. Note that a kind this
+ * build does not know reads as a coder rather than refused, because a list
+ * carries every agent's kind and one row of a kind added later would
+ * otherwise fail the whole list for every build shipped before it.
+ */
+export const agentKindSchema = EffectSchema.Literals(Object.values(AGENT_KIND)).pipe(
+  EffectSchema.catchDecoding(() => Effect.succeed(Option.some(AGENT_KIND.CODER))),
+);
 
 /**
  * Where an agent's runner and checkout live: a Vercel Sandbox, as every
@@ -792,7 +806,7 @@ export const agentSummarySchema = EffectSchema.Struct({
   /** The agent's title as its tab shows it; null until one is generated, and after a rename cleared it, when the tab shows the model's name. */
   title: EffectSchema.NullOr(EffectSchema.String),
   /** What kind of agent it is, said only of a member's operator, which the panel draws as Luke in a row of his own; absent for a coder, and from a service before operators. */
-  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_KIND))),
+  kind: EffectSchema.optionalKey(agentKindSchema),
   /** Where its runner runs, said only of a local agent on its starter's device; absent for one in a sandbox, and from a service older than it. */
   machine: EffectSchema.optionalKey(EffectSchema.Literal(AGENT_MACHINE.DEVICE)),
   /**

@@ -310,7 +310,7 @@ export const agentTable = pgTable(
      * conversation's lock (`steer.ts`), from another function's connection where the eve apps relay.
      */
     runnerTokenHash: text("runner_token_hash"),
-    /** What the agent is: a coder, or its member's operator; a coder for every row from before the column. */
+    /** What the agent is (`AGENT_KIND`): a coder, a task's pilot, or its member's operator; a coder for every row from before the column. */
     kind: text("kind").$type<AgentKind>().notNull().default(AGENT_KIND.CODER),
     /** Where the agent's runner and checkout live; a Vercel Sandbox for every row from before the column. */
     machine: text("machine").$type<AgentMachineKind>().notNull().default(AGENT_MACHINE.VERCEL),
