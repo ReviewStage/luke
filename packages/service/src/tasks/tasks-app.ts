@@ -2,7 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { readPlanAttachment } from "@luke/database/models/plan-attachments";
 import { readPlanCommentFile } from "@luke/database/models/plan-comments";
 import { HTTP_METHOD } from "@luke/wire";
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer, Option, type Scope } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -47,7 +47,7 @@ export interface TasksAppSeams {
 /** What the route may require of the function that stands it: the store. */
 export type TasksAppServices = DatabaseServices;
 
-type TasksServices = TasksAppServices | HttpServerRequest.HttpServerRequest;
+type TasksServices = TasksAppServices | HttpServerRequest.HttpServerRequest | Scope.Scope;
 
 /**
  * GET serves one attachment of the plan as its bytes, to the members of the

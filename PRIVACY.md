@@ -1137,9 +1137,11 @@ one is replaced. In
 the address of a request or of the page that a trace carries, the value of
 each query parameter and the fragment are replaced, and so is any part of its
 path shaped like a credential, such as a long token; the scheme, the host, the
-rest of the path, and the parameters' names are sent as they were. Luke does
-not attach your Luke account, and does not enable Sentry Replay, screenshots,
-or profiling.
+rest of the path, and the parameters' names are sent as they were. Each
+report and log line names the Luke account signed in at the time by its id
+alone, never your email, your name, or your GitHub or Google login, so that we
+can find every error one person met; one sent while nobody is signed in names
+no account. Luke does not enable Sentry Replay, screenshots, or profiling.
 Fixture and evidence runs send nothing to Sentry.
 
 **Error, performance, and agent reports from our service.** Our service and
@@ -1181,9 +1183,14 @@ and so is any part of its path shaped like a credential, such as a long token;
 the scheme, the host, the rest of the path, and the parameters' names are sent
 as the request carried them. An address written elsewhere, such as in a header
 or the words of an error or a log line, is sent as it was written. Terminal
-tabs' bytes are not sent. What reaches
-Sentry is kept under Sentry's retention, not tied to your account, and is not
-erased when you delete your account.
+tabs' bytes are not sent. A report or a log line made while
+answering a request you signed in for, or while running one of your agents,
+names your Luke account by its id alone, never your email, your name, or a
+login, wherever our service knows whose it was, so that we can find every
+error one person met. What reaches Sentry is kept under Sentry's retention
+and is not erased when you delete your account: Sentry gives us no way to
+erase one account's reports, so they stay, naming an account that no longer
+exists, until that retention ends.
 
 **What earlier versions left on our service.** Earlier versions of Luke
 followed your agent sessions, kept a notebook, and pushed briefings to
@@ -1438,8 +1445,8 @@ traces for about one page load in ten, and a warning for each kind of request
 the page's security policy refused, once in each tab, naming only the
 policy's directive and the refused address's origin, or the browser's own
 word for it, such as inline, all using Sentry's default data
-collection, as described under "Crash and performance reports from the Mac
-app", where the page's address, your browser's details, and the addresses of
+collection and each naming the account signed in in that tab, as described
+under "Crash and performance reports from the Mac app", where the page's address, your browser's details, and the addresses of
 the requests it made take the place of the Mac's. Your browser contacts
 PostHog and Sentry (see "Who we send it to") directly, so each sees your
 network address.
@@ -1513,7 +1520,8 @@ and error, performance, and agent reports by Sentry.
   PostHog keeps what it holds.
   Luke stops recording for the rest of the session, and starts again the next
   time you open it or sign in. Sentry reporting continues, and what Sentry
-  already received is not tied to your account and is not erased with it. Deleting does not affect your Google or GitHub account
+  already received, which names your account by its id, is not erased with
+  it but kept until Sentry's retention ends. Deleting does not affect your Google or GitHub account
   or the account at any service you connected, and does not revoke the Luke
   GitHub App (revoke it in GitHub's settings). It asks Vercel Connect to
   revoke every integration's grant it holds; if Vercel Connect cannot

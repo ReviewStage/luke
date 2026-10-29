@@ -44,6 +44,7 @@ import {
   Predicate,
   Result,
   Schema,
+  type Scope,
 } from "effect";
 import {
   FetchHttpClient,
@@ -624,7 +625,7 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
-  HttpServerRequest.HttpServerRequest | DatabaseServices | R
+  HttpServerRequest.HttpServerRequest | DatabaseServices | Scope.Scope | R
 > {
   const { read, ended, idled, alive, title } = options;
   const incoming = yield* HttpServerRequest.HttpServerRequest;
@@ -637,6 +638,8 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   const admitted = yield* hostedStoreOrUnavailable(admitRunnerBearer(bearer));
   if (Option.isNone(admitted)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   const { target } = admitted.value;
+  // Every line the batch writes, and every issue it raises, names the account the agent runs for.
+  yield* Effect.annotateLogsScoped({ userId: target.userId });
   const agent = yield* hostedStoreOrUnavailable(
     readAgentOfConversation(target.userId, target.conversationId),
   );

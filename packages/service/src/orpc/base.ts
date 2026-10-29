@@ -65,6 +65,9 @@ export interface HostedCaller {
   readonly userId: string;
 }
 
+/** A caller handed on with the services its procedure runs under, the caller's account among their log annotations (`forAccount`). */
+type AccountContext<Caller extends HostedCaller> = Caller & WithEffectContext<WebServices>;
+
 /** A Better Auth session's account, and the headers that carry it on to the plugin. */
 interface HostedSessionCaller extends HostedCaller {
   readonly sessionHeaders: Headers;
@@ -89,26 +92,46 @@ const procedureAnnotated = middlewareGen<HostedContext, WithEffectContext<WebSer
   return yield* next({ context: { "effect/context": annotated } });
 });
 
+/**
+ * The services handed on with the caller's account among their log
+ * annotations, as `userId`, so every line the procedure writes names the
+ * account and every issue it raises names it as Sentry's user
+ * (`observability/sentry.ts`), on the terms `procedureAnnotated` sets its path.
+ */
+function forAccount(context: HostedContext, userId: string): WithEffectContext<WebServices> {
+  const services = context["effect/context"];
+  return {
+    "effect/context": Context.add(services, References.CurrentLogAnnotations, {
+      ...Context.get(services, References.CurrentLogAnnotations),
+      userId,
+    }),
+  };
+}
+
 /** The hosted contract to implement, every procedure taking the context above. */
 export const hosted = implement(hostedContract).$context<HostedContext>().use(procedureAnnotated);
 
 /** The caller by its bearer, or with no `Authorization` at all, the browser's session cookie (`auth/bearer.ts`'s `resolveHostedUserId`). */
 export function accountMiddleware(resolveUserId: UserIdResolver) {
-  return middlewareGen<HostedContext, HostedCaller>(function* ({ context, next }) {
+  return middlewareGen<HostedContext, AccountContext<HostedCaller>>(function* ({ context, next }) {
     const account = yield* resolvedAccount(resolveUserId, context.request);
     if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    return yield* next({ context: { userId: account.value } });
+    return yield* next({
+      context: { userId: account.value, ...forAccount(context, account.value) },
+    });
   });
 }
 
 /** The caller by its bearer alone: a request with no `Authorization`, one only a cookie could name, is refused (`hostedCarriesBearer`). */
 export function bearerOnlyMiddleware(resolveUserId: UserIdResolver) {
-  return middlewareGen<HostedContext, HostedCaller>(function* ({ context, next }) {
+  return middlewareGen<HostedContext, AccountContext<HostedCaller>>(function* ({ context, next }) {
     if (!hostedCarriesBearer(context.request))
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     const account = yield* resolvedAccount(resolveUserId, context.request);
     if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    return yield* next({ context: { userId: account.value } });
+    return yield* next({
+      context: { userId: account.value, ...forAccount(context, account.value) },
+    });
   });
 }
 
@@ -147,10 +170,11 @@ export function actsForDevice(caller: DeviceCaller, deviceId: string): boolean {
 
 /** The caller as a device (`deviceCallerOf`), by its bearer alone, on `bearerOnlyMiddleware`'s terms. */
 export function deviceMiddleware(resolveUserId: UserIdResolver) {
-  return middlewareGen<HostedContext, DeviceCaller>(function* ({ context, next }) {
+  return middlewareGen<HostedContext, AccountContext<DeviceCaller>>(function* ({ context, next }) {
     if (!hostedCarriesBearer(context.request))
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    return yield* next({ context: yield* deviceCallerOf(resolveUserId, context.request) });
+    const caller = yield* deviceCallerOf(resolveUserId, context.request);
+    return yield* next({ context: { ...caller, ...forAccount(context, caller.userId) } });
   });
 }
 
@@ -202,7 +226,10 @@ export const keyRingMiddleware = middlewareGen<HostedContext, { readonly ring: K
  * unauthenticated.
  */
 export function sessionMiddleware(resolveSessionUserId: SessionUserIdResolver) {
-  return middlewareGen<HostedContext, HostedSessionCaller>(function* ({ context, next }) {
+  return middlewareGen<HostedContext, AccountContext<HostedSessionCaller>>(function* ({
+    context,
+    next,
+  }) {
     const sessionHeaders = sessionCredential(context.request.headers);
     if (sessionHeaders === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     // The resolver reads a request's headers alone, so it is handed one carrying the credential and nothing else.
@@ -212,6 +239,8 @@ export function sessionMiddleware(resolveSessionUserId: SessionUserIdResolver) {
       Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
     );
     if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    return yield* next({ context: { userId: account.value, sessionHeaders } });
+    return yield* next({
+      context: { userId: account.value, sessionHeaders, ...forAccount(context, account.value) },
+    });
   });
 }

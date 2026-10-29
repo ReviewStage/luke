@@ -5,6 +5,8 @@
  * only that in the chunk, and no window's entry carries any of it.
  */
 
+import { signedInAccountId } from "@luke/credentials/snapshot";
+import { logNamingAccount } from "@luke/features/sentry-account";
 import {
   eventWithoutAccessTokens,
   SPANS_NAMING_ACCESS_TOKENS,
@@ -12,6 +14,7 @@ import {
   withoutAccessTokens,
 } from "@luke/features/sentry-breadcrumbs";
 import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@luke/features/sentry-tracing";
+import { appStateNow } from "@luke/panel/use-app-state";
 import {
   browserTracingIntegration,
   captureException,
@@ -52,6 +55,11 @@ const PANEL_SPAN_OP = "ui.panel";
  * goes through, and its reports reach main as requests of their own, which
  * are never traced (`sentryTracesRequest`).
  *
+ * Main names the signed-in account as its SDK's user, which every event the
+ * window sends through it takes; a log line the window sends leaves with the
+ * account read from the window's document as it does, and the window sets no
+ * user of its own (`@luke/features/sentry-account`).
+ *
  * Tracing keeps long animation frames, which name the script that held a
  * slow frame, and Interaction to Next Paint, which the SDK's web vitals
  * report by default. The panel alone also has its page watched for
@@ -72,6 +80,7 @@ export function initDesktopSentry(options: DesktopSentryOptions): DesktopSentry 
     tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
     beforeBreadcrumb: withoutAccessTokens,
     beforeSend: eventWithoutAccessTokens,
+    beforeSendLog: (log) => logNamingAccount(log, signedInAccountId(appStateNow()?.account)),
     ignoreSpans: SPANS_NAMING_ACCESS_TOKENS,
     beforeSendSpan: withStreamedSpan(spanWithoutAccessTokens),
   });
