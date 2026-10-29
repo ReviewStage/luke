@@ -964,7 +964,7 @@ test("Next follows the way the keys last went: after K it offers the nearest ite
   assert.equal(readTitle(page), "How is a failed email retried?");
   assert.equal(offered()?.querySelector(".inbox-next-title")?.textContent, "Expire after 7 days?");
   assert.ok(wordsOf(offered())?.endsWith("J"));
-  assert.equal(offered()?.getAttribute("aria-keyshortcuts"), "J Alt+ArrowDown");
+  assert.equal(offered()?.getAttribute("aria-keyshortcuts"), "J");
 
   pressKey("j");
   pressKey("k");
@@ -974,7 +974,7 @@ test("Next follows the way the keys last went: after K it offers the nearest ite
   assert.equal(next.querySelector(".inbox-next-lead")?.textContent, "Next ↑");
   assert.equal(next.querySelector(".inbox-next-title")?.textContent, "Alert at 80%?");
   assert.ok(wordsOf(next)?.endsWith("K"));
-  assert.equal(next.getAttribute("aria-keyshortcuts"), "K Alt+ArrowDown");
+  assert.equal(next.getAttribute("aria-keyshortcuts"), "K");
   act(() => next.click());
   assert.equal(readTitle(page), "Alert at 80%?");
   act(() => keys.unmount());

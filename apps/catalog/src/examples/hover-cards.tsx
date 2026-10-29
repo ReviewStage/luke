@@ -6,7 +6,6 @@ import {
   DocumentIcon,
   FolderIcon,
   GAP,
-  HOVER_CARD_ROW_FOCUS,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardFigures,
@@ -33,9 +32,8 @@ import { CatalogSection } from "../section";
  * end; quieter rows under the name, one a press and one text; and a rule
  * before the rows it lists, every one, scrolling and fading past a few rather
  * than counting the rest, each row a button the pointer crosses onto the
- * card to press, rows that open nothing yet hang a card of their own, each a
- * stop the keyboard rests on, and a long body that is no list scrolling the
- * same way; and a card's figures under a rule, each label at the card's edge
+ * card to press, rows that open nothing yet hang a card of their own, and a
+ * long body that is no list scrolling the same way; and a card's figures under a rule, each label at the card's edge
  * and its count at the other; and each card's skeleton beside it, its glyph or
  * its mark in the loaded card's slot, so its head stands still as what it says
  * is read. Each card shows once the pointer rests on
@@ -303,7 +301,6 @@ function HoverCards(): React.JSX.Element {
               <HoverCard>
                 <HoverCardHead glyph={<PinIcon />} name="Linear" sub="3 tools" />
                 <HoverCardRule />
-                {/* Note that each row opens nothing yet hangs a card, so it is a stop Tab rests on, washed as a pressed row is under the keyboard. */}
                 <HoverCardList label="Linear tools">
                   {CATALOG_TOOLS.map(({ title, summary }) => (
                     <li key={title}>
@@ -316,11 +313,7 @@ function HoverCards(): React.JSX.Element {
                           </HoverCard>
                         }
                       >
-                        <HoverCardRow
-                          focus={HOVER_CARD_ROW_FOCUS.STOP}
-                          glyph={null}
-                          label={title}
-                        />
+                        <HoverCardRow glyph={null} label={title} />
                       </Tooltip>
                     </li>
                   ))}

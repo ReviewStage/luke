@@ -1377,7 +1377,7 @@ test("a row's mark over its time, the first item of its menu, and U each mark an
   );
 
   // Note that U acts only on the chosen item, so another row's menu does not name it.
-  assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Show details⌥↓", "—", "Mark as read"]);
+  assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Mark as read"]);
   act(() => menuItem("Mark as read").click());
   await settle();
   assert.equal(unreadOf(page, retry), false);
@@ -1385,8 +1385,6 @@ test("a row's mark over its time, the first item of its menu, and U each mark an
     "Copy link",
     "—",
     "Mark as unreadU",
-    "—",
-    "Show details⌥↓",
     "—",
     "Resolve without answering",
   ]);
