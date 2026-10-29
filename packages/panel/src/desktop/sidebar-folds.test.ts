@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { AGENT_STATUS } from "@luke/features/agent-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+import { TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -273,4 +273,60 @@ test("a child task stands under its parent, folded until the parent's chevron op
     for (const root of roots.splice(0)) root.unmount();
   });
   assert.deepEqual(names(mountSidebar(tasks)), ["Parent", "Child", "Grandchild", "Other"]);
+});
+
+/** A task on acme/relay named for its id, under `parentTaskId` where one is named. */
+function family(id: string, parentTaskId?: string, more: Partial<TaskSummary> = {}): TaskSummary {
+  return {
+    ...task(id, id, "acme/relay"),
+    ...(parentTaskId === undefined ? undefined : { parentTaskId }),
+    ...more,
+  };
+}
+
+/** The names of the rows a list of the sidebar draws, in order. */
+function rowNames(within: HTMLElement, list: string): (string | null | undefined)[] {
+  return [...within.querySelectorAll(`nav[aria-label="${list}"] .luke-list-row-title`)].map(
+    (title) => title.firstChild?.textContent,
+  );
+}
+
+/** The chevron folding a task's child tasks. */
+function childFold(within: HTMLElement, name: string): HTMLButtonElement {
+  const found = within.querySelector<HTMLButtonElement>(
+    `button[aria-label="Child tasks of ${name}"]`,
+  );
+  assert.ok(found, `${name}'s fold is drawn`);
+  return found;
+}
+
+test("a pinned parent's child tasks stand under it in Pinned, folded until opened, and none at the top of Tasks", () => {
+  const sidebar = mountSidebar(
+    tasksControl({
+      tasks: [
+        family("Cleanup", undefined, { pinnedAt: 5 }),
+        family("Probe", "Cleanup"),
+        family("Sweep", "Cleanup"),
+      ],
+    }),
+  );
+  assert.deepEqual(rowNames(sidebar, "Pinned"), ["Cleanup"]);
+  assert.deepEqual(rowNames(sidebar, "Tasks"), []);
+
+  act(() => childFold(sidebar, "Cleanup").click());
+  assert.deepEqual(rowNames(sidebar, "Pinned"), ["Cleanup", "Probe", "Sweep"]);
+  assert.deepEqual(rowNames(sidebar, "Tasks"), []);
+});
+
+test("a Done parent the view hides takes its child tasks out of the sidebar with it", () => {
+  const sidebar = mountSidebar(
+    tasksControl({
+      tasks: [
+        family("Shipped", undefined, { status: TASK_STATUS.DONE }),
+        family("Follow-up", "Shipped", { status: TASK_STATUS.IN_PROGRESS }),
+        family("Other", undefined, { status: TASK_STATUS.IN_PROGRESS }),
+      ],
+    }),
+  );
+  assert.deepEqual(rowNames(sidebar, "Tasks"), ["Other"]);
 });

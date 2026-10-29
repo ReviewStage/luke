@@ -2,9 +2,9 @@
  * nested-rows.ts -- a sidebar list's rows with child tasks nested under their parents, held steady while they stand as they did, and the fold a parent's row draws over them.
  *
  * Every list of the sidebar's tasks, Tasks' groups and the account's
- * sections alike, draws its rows through `drawnTaskRows`, so a child task
- * stands under its parent wherever both stand in one list and at the top
- * where its parent stands elsewhere or nowhere. The rows a list draws are
+ * sections alike, draws its rows through `drawnTaskRows`, each child task
+ * first moved into the list holding its parent (`homedTaskRows`), so it
+ * stands under its parent wherever that stands. The rows a list draws are
  * handed to `useLeaving`, which takes a list handed anew as a list changed,
  * so they are handed back as the same list for as long as each row stands
  * where it stood, at the same depth and fold.
@@ -41,8 +41,11 @@ function sameDrawn(was: readonly DrawnTaskRow[], now: readonly DrawnTaskRow[]): 
   );
 }
 
+/** A drawn row as a move reads it: how deep it stands. */
+type Depth = Pick<DrawnTaskRow, "depth">;
+
 /** For each drawn row, the index of the row it stands nested under; -1 for a row at the top. */
-function parentsOf(nested: readonly DrawnTaskRow[]): number[] {
+function parentsOf(nested: readonly Depth[]): number[] {
   const above: number[] = [];
   return nested.map(({ depth }, at) => {
     const parent = depth === 0 ? -1 : (above[depth - 1] ?? -1);
@@ -53,7 +56,7 @@ function parentsOf(nested: readonly DrawnTaskRow[]): number[] {
 }
 
 /** The drawn rows standing beside the one at `at`, itself among them: those nested under the same parent, or at the top, by their index among the drawn. */
-export function siblingsAt(nested: readonly DrawnTaskRow[], at: number): number[] {
+export function siblingsAt(nested: readonly Depth[], at: number): number[] {
   const parents = parentsOf(nested);
   const parent = parents[at];
   return nested.flatMap((_, each) => (parents[each] === parent ? [each] : []));
@@ -66,7 +69,7 @@ export function siblingsAt(nested: readonly DrawnTaskRow[], at: number): number[
  * from under its parent, or past its last sibling.
  */
 export function movedBeside(
-  nested: readonly DrawnTaskRow[],
+  nested: readonly Depth[],
   from: number,
   to: number,
 ): number | undefined {
