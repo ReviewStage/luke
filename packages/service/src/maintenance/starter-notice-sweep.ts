@@ -11,7 +11,8 @@
  *
  * The line goes under the ending's own key, the turn's id or the archived
  * agent's, so one that landed is never sent again, and one refused or cut
- * off is due again next minute until the window has passed. Each call is
+ * off, or held while its starter's pilot tree is stopped, is due again next
+ * minute until the window has passed. Each call is
  * bounded so the sweep's minute holds.
  */
 
@@ -83,7 +84,9 @@ function noticeLine(notice: DueStarterNotice, step: string): string {
 
 /**
  * One ending's line handed to its starter; whether it is done. A starter
- * gone or archived since is told by no one, and counts as done.
+ * gone or archived since is told by no one, and counts as done. A starter on
+ * a child task of a stopped pilot tree is never handed here: its endings
+ * are held as not due until Running is on (`dueStarterNotices`).
  */
 const tell = (eveFor: EveForAccount, due: DueStarterNotice) =>
   Effect.gen(function* () {

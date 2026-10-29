@@ -11,7 +11,7 @@ import {
   readAgentPublished,
 } from "@luke/database/models/agent-store";
 import { linkedGitHubUserIds } from "@luke/database/models/github-token-store";
-import type { TaskStoreEffect } from "@luke/database/models/task-store";
+import { readTreeStopped, type TaskStoreEffect } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { AGENT_BOUNDS, AGENT_STATUS } from "@luke/features/agent-wire";
@@ -96,7 +96,8 @@ import {
  * an agent comments only inside a turn, so one idle since before is not its
  * author. That is what keeps an agent's own replies from waking it. A
  * failed check reaches only an agent idle since before it failed, since an
- * agent at work waits on its own checks. An archived agent is told nothing.
+ * agent at work waits on its own checks. An archived agent is told nothing,
+ * nor is one on a child task of a pilot tree whose Running switch is off.
  *
  * That wait is the fourth thing told: every check on the pull request's
  * head finished, told only to an agent at work on it, so the message ends
@@ -819,6 +820,10 @@ function checksCompletedKey(wake: AgentWake, checks: HeadChecks): string {
   return JSON.stringify([AGENT_WAKE.CHECKS_COMPLETED, wake.repository, wake.sha, outcomes]);
 }
 
+/** Whether the agent works on a child task of a pilot tree whose Running switch is off, which nothing wakes until it is on (`readTreeStopped`). */
+const onStoppedTree = ({ userId, agent }: OwnedAgent) =>
+  agent.taskId === null ? Effect.succeed(false) : readTreeStopped(userId, agent.taskId);
+
 /** The agents a delivery is about: those on its branches, or, for a comment, those whose pull request it is. */
 function agentsOf(wake: AgentWake) {
   if (wake.branches.length > 0) {
@@ -829,7 +834,9 @@ function agentsOf(wake: AgentWake) {
 }
 
 /**
- * Tells every agent the delivery is about that `agentIsWoken` admits, each
+ * Tells every agent the delivery is about that `agentIsWoken` admits, bar
+ * one on a child task of a stopped pilot tree (`onStoppedTree`), which is
+ * told nothing and re-reads its pull request once it is resumed, each
  * through eve as the deployment acting for its owner, under the delivery's
  * id; answers how many were told. Every check finished is told only where
  * they all did, to the agents standing on that head, under its own key
@@ -849,8 +856,11 @@ export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(func
   const told = yield* Effect.gen(function* () {
     const agents = yield* agentsOf(wake);
     const turns = yield* latestTurnsOfReached(agents.map(({ agent }) => agent.conversationId));
-    const admitted = agents.filter(({ agent }) =>
-      agentIsWoken(wake, agent, turns.get(agent.conversationId), lukeLogin, now),
+    const admitted = yield* Effect.filter(
+      agents.filter(({ agent }) =>
+        agentIsWoken(wake, agent, turns.get(agent.conversationId), lukeLogin, now),
+      ),
+      (owned) => Effect.map(onStoppedTree(owned), (stopped) => !stopped),
     );
     // Checks finished on a commit an agent has pushed past end none of its waits.
     const woken = checksCompleted
