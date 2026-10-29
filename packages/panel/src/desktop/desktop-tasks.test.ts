@@ -57,10 +57,10 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
 import { ToastHost } from "../toast.js";
 import "../file-tree/index.js";
+import { askKept } from "../act.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
-import { askKept } from "../act.js";
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",

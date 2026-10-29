@@ -32,7 +32,7 @@ import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
 } from "@luke/features/pull-request-chapters-view";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskMode } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
@@ -99,7 +99,7 @@ const CHAPTERS_UNANSWERED: PullRequestChaptersAnswerView = {
 };
 
 /** Why a Start did not start, with the answer that said so, which a shown failure reports. */
-export type StartFailure = Failure & { readonly cause?: unknown };
+type StartFailure = Failure & { readonly cause?: unknown };
 
 /** An agent's act that never answered, settled as unanswered with the error beneath. */
 const agentUnreached = unreachedAs(AGENT_CALL_FAILURE.UNANSWERED);

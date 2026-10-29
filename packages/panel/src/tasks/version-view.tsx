@@ -19,6 +19,7 @@ import {
 import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useRef, useState } from "react";
+import type { Kept } from "../act.js";
 import { PhoneHead } from "../desktop/phone-head.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { TOAST_HOLD, type ToastNotice, undoToast, useToast } from "../toast.js";
@@ -29,7 +30,6 @@ import { type MentionedTask, useMentionLink } from "./task-mentions.js";
 import { TextTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history.js";
-import type { Kept } from "../act.js";
 
 /**
  * version-view.tsx -- one version of a plan, drawn read-only with what it changed marked, under a bar with its restore.

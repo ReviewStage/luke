@@ -10,7 +10,6 @@ import {
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCallFailure,
-  type AutomationRunView,
   type AutomationView,
 } from "@luke/features/automation-view";
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";

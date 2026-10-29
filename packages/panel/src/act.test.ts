@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
+import { FAILURE_KIND, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { ACT_UNREACHED_WORDS } from "@luke/features/words";
 import { type ActSender, accountAskProcedures } from "@luke/host/act-port";
 import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
@@ -10,6 +11,7 @@ import { Effect } from "effect";
 import { afterEach, it, vi } from "vitest";
 import { askAct, askActResult } from "./act.js";
 import { installActPortClient } from "./app-bridge.js";
+import { installShownFailureReporter, reportShownFailure } from "./failure-report.js";
 import { fakeActPort, refusedOnPort } from "./testing/app-bridge.js";
 
 /**
@@ -98,13 +100,16 @@ it("a kind whose port fails with no refusal rejects the caller with the fixed se
   );
 });
 
-it("a row reading an act's answer is told the fixed sentence for a transport failure and the host's own for a refusal", async () => {
+it("a row reading an act's answer is told the fixed sentence for a transport failure and the host's own for a refusal, and the first reports as unexpected", async () => {
   vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const kinds: string[] = [];
+  const uninstall = installShownFailureReporter((report) => kinds.push(report.kind));
   const reasonFor = async (failure: Error) => {
     fakeActPort({ [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.reject(failure) });
     const answer = await askActResult(
       askAct(ACT_KIND.PROVIDER_KEYS_READ).then(() => ({ status: ACTION_RESULT_STATUS.ACCEPTED })),
     );
+    reportShownFailure({ surface: FAILURE_SURFACE.SETTING_WRITE, cause: answer });
     return "reason" in answer ? answer.reason : undefined;
   };
 
@@ -113,4 +118,6 @@ it("a row reading an act's answer is told the fixed sentence for a transport fai
     await reasonFor(refusedOnPort("Could not read your API keys on this system.")),
     "Could not read your API keys on this system.",
   );
+  uninstall();
+  assert.deepEqual(kinds, [FAILURE_KIND.UNEXPECTED, FAILURE_KIND.REFUSED]);
 });

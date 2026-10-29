@@ -1264,7 +1264,8 @@ export const PlanBody = memo(function PlanBody({
     const queue = writes.current;
     const sent = queuedWrite(queue, () => {
       const now = latestPlan.current;
-      if (save === undefined || unit === undefined || item === undefined) return notKept(FAILURE_CONDITION.NOT_KEPT);
+      if (save === undefined || unit === undefined || item === undefined)
+        return notKept(FAILURE_CONDITION.NOT_KEPT);
       if (now.id !== pressedOn) return notKept(FAILURE_CONDITION.NOT_KEPT);
       const base = planTextNow(queue, now);
       const value = taskSet(base, unit.from + at, item.line, ticked);

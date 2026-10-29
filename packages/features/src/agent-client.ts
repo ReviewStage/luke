@@ -403,14 +403,15 @@ function pullRequestRead(agentId: string, number: number | undefined) {
 
 /**
  * The refusal a hosted failure is, where it is one the caller names, with
- * the fields that refusal carries; unanswered for everything else. Either
- * carries the failure beneath it, with the trace its call travelled under,
- * which the window reports and never draws.
+ * the fields that refusal carries; unanswered for everything else, with the
+ * failure beneath it and the trace its call travelled under, which the
+ * window reports and never draws.
  */
 function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
-  const cause = hostedFailureFacts(failed);
   const failure = failed._tag === "HostedRefused" ? named[failed.refusal] : undefined;
-  if (failed._tag !== "HostedRefused" || failure === undefined) return { ...UNANSWERED, cause };
+  if (failed._tag !== "HostedRefused" || failure === undefined) {
+    return { ...UNANSWERED, cause: hostedFailureFacts(failed) };
+  }
   const unreached = failed.data?.unreached;
   const resetsAt = failed.data?.resetsAt;
   const provider = failed.data?.provider;
@@ -418,7 +419,6 @@ function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
   const refusedDevice = failed.data?.refusedDevice;
   return {
     failure,
-    cause,
     ...(unreached === undefined ? undefined : { unreached }),
     ...(resetsAt === undefined ? undefined : { resetsAt }),
     ...(provider === undefined ? undefined : { provider }),

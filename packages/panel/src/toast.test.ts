@@ -339,6 +339,58 @@ test("a failure toast reports what failed: an unexpected one as an error line an
   assert.ok(!beneath.stack?.includes("fixture-secret"));
 });
 
+test("a failure toast for a hosted call that never answered reports what the host kept of it, the trace the service's lines carry unredacted", () => {
+  mount(WINDOW.TALL);
+  const lines: { message: string; attributes: unknown }[] = [];
+  const recording: ShownFailureSentry = {
+    captureException: () => "",
+    logger: {
+      warn: (message, attributes) => lines.push({ message, attributes }),
+      error: (message, attributes) => lines.push({ message, attributes }),
+    },
+  };
+  const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
+
+  act(() =>
+    show?.({
+      words: "Luke didn't hear back.",
+      tone: STATUS_TONE.DANGER,
+      hold: TOAST_HOLD.FAILED,
+      failure: {
+        surface: FAILURE_SURFACE.AGENT_START,
+        cause: {
+          failure: "unanswered",
+          cause: {
+            _tag: "HostedUnanswered",
+            fault: "network",
+            errorName: "TypeError",
+            traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+          },
+        },
+      },
+    }),
+  );
+  uninstall();
+
+  assert.deepEqual(lines, [
+    {
+      message: "A failure was shown on agent.start: unanswered",
+      attributes: {
+        "failure.surface": "agent.start",
+        "failure.kind": "unexpected",
+        "failure.code": "unanswered",
+        "error.code": "unanswered",
+        "error.root.name": "TypeError",
+        "error.root.tag": "HostedUnanswered",
+        "error.root.fault": "network",
+        "hosted.trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "app.online": true,
+        "app.account": "unread",
+      },
+    },
+  ]);
+});
+
 test("an Undo toast says the act in the success tone, and its Undo takes the act back and sends the toast away", () => {
   mount(WINDOW.TALL);
   const undone: string[] = [];

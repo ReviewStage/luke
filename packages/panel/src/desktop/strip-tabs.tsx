@@ -34,8 +34,8 @@ import { useCopyToast } from "../copy-feedback.js";
 import type { HeldTranscript } from "../tasks/agent-tab-card.js";
 import {
   type CopiedTranscript,
-  type TranscriptUnread,
   type TranscriptCopy,
+  type TranscriptUnread,
   transcriptMarkdown,
 } from "../tasks/transcript-copy.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
@@ -650,14 +650,11 @@ export function useTranscriptCopier(): TranscriptCopier {
       failure: { surface: FAILURE_SURFACE.TRANSCRIPT_COPY, cause },
     });
   return (read) => (copy) => {
-    read().then(
-      (transcript) => {
-        if (transcript === undefined) return unread(FAILURE_CONDITION.UNREAD);
-        if ("unread" in transcript) return unread(transcript.unread);
-        return copyWithToast(transcriptMarkdown(transcript, copy), TRANSCRIPT_COPIED_NOTE);
-      },
-      unread,
-    );
+    read().then((transcript) => {
+      if (transcript === undefined) return unread(FAILURE_CONDITION.UNREAD);
+      if ("unread" in transcript) return unread(transcript.unread);
+      return copyWithToast(transcriptMarkdown(transcript, copy), TRANSCRIPT_COPIED_NOTE);
+    }, unread);
   };
 }
 

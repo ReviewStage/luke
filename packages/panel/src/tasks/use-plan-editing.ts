@@ -189,8 +189,7 @@ function saveLeft(
   }
   const sent = editorSent(now, request);
   left.door(request).then(
-    (answered) =>
-      keepLeft(left, editorAnswered(sent, answered), saving, failureOf(answered)),
+    (answered) => keepLeft(left, editorAnswered(sent, answered), saving, failureOf(answered)),
     (refused: Error) => keepLeft(left, editorRefused(sent, refused.message), saving, refused),
   );
 }

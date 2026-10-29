@@ -2,8 +2,8 @@ import type { PlanDocument, PlanRevisionLine } from "@luke/features/task-wire";
 import type { TasksRevisionAnswer, TasksRevisionsAnswer } from "@luke/features/tasks-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { revisionOfSave } from "./plan-history-model.js";
 import { type ActedResult, askKept, type Kept } from "../act.js";
+import { revisionOfSave } from "./plan-history-model.js";
 
 /**
  * use-plan-history.ts -- the open plan's history as its version history holds it: the revisions read, the version chosen, and its restore.

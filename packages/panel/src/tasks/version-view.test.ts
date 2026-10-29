@@ -1,18 +1,18 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { FAILURE_CONDITION } from "@luke/features/shown-failure";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { KEPT, notKept } from "../act.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost, type ToastNotice, useToast } from "../toast.js";
 import { HISTORY_READ } from "./use-plan-history.js";
 import { sayRestored, useVersionRestore, VersionView } from "./version-view.js";
-import { FAILURE_CONDITION } from "@luke/features/shown-failure";
-import { KEPT, notKept } from "../act.js";
 
 /**
  * version-view.test.ts -- Restore this version restores at once, asking nothing, a refusal said in a toast; and a restored version is said in the window's toast: with an Undo where the history names the version that stood before, which restores that one and says so where it is refused. Synthetic throughout.

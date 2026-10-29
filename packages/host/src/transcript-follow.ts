@@ -10,13 +10,13 @@ import {
   type AgentTranscriptMessage,
   applyMessagesPage,
 } from "@luke/features/agent-wire";
+import { FAILURE_FACT, type FailureFacts } from "@luke/features/failure-facts";
 import {
   type AgentTranscriptLiveAnswer,
   agentTranscriptLiveRowsSchema,
   LIVE_SIGNED_OUT,
   type TranscriptNowAnswer,
 } from "@luke/features/live-wire";
-import { FAILURE_FACT, type FailureFacts } from "@luke/features/failure-facts";
 import { joinedWindowRows, windowMessagesOf } from "@luke/features/transcript-window";
 import {
   Data,
@@ -215,7 +215,9 @@ function sealedOf(
         return Effect.succeed(Option.none());
       }
       const { failure, cause } = answer;
-      return Effect.fail(new SealUnanswered(cause === undefined ? { failure } : { failure, cause }));
+      return Effect.fail(
+        new SealUnanswered(cause === undefined ? { failure } : { failure, cause }),
+      );
     }),
     Effect.retry({ schedule: Schedule.spaced(RESEAL), times: RESEALS }),
   );

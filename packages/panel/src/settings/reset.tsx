@@ -18,9 +18,9 @@ import { BUTTON_VARIANT, Button, IconButton, STATUS_TONE } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { KEPT, type Kept, notKept } from "../act.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import type { SettingsWrites } from "./writes.js";
-import { KEPT, type Kept, notKept } from "../act.js";
 
 /** What the toast says once a page's reset landed, by the group it reset. */
 const RESET_NOTES = {
@@ -77,10 +77,13 @@ function writeBack(writes: SettingsWrites, held: readonly HeldSetting[]): Promis
     (before, [field, value]) =>
       before.then((taken) =>
         taken.kept
-          ? writes.setting(field, value).then(
-              (result) => (result.status === ACTION_RESULT_STATUS.ACCEPTED ? KEPT : notKept(result)),
-              notKept,
-            )
+          ? writes
+              .setting(field, value)
+              .then(
+                (result) =>
+                  result.status === ACTION_RESULT_STATUS.ACCEPTED ? KEPT : notKept(result),
+                notKept,
+              )
           : taken,
       ),
     Promise.resolve(KEPT),

@@ -22,6 +22,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { askKept } from "../act.js";
 import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -33,7 +34,6 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
 import { useInboxWaiting } from "./places-waiting.js";
 import { TasksPage } from "./tasks-page.js";
-import { askKept } from "../act.js";
 
 /**
  * tasks-page.test.ts -- the Tasks page the sidebar's Tasks row opens: its List runs the pinned tasks first, then the rest under

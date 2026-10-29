@@ -53,11 +53,11 @@ import {
   repositoryNotReachableDataSchema,
 } from "./contract/errors.js";
 import { hostedContract } from "./contract/index.js";
-import { FAILURE_FACT, type FailureFacts } from "./failure-facts.js";
 import { outputWireSchema } from "./contract/output-schema.js";
+import { FAILURE_FACT, type FailureFacts } from "./failure-facts.js";
 import { hostUpgradeNeededDataSchema } from "./host-wire.js";
-import { SENTRY_TRACES_SAMPLE_RATE } from "./sentry-tracing.js";
 import { installedSkillRefusedDataSchema } from "./installed-skill-route-wire.js";
+import { SENTRY_TRACES_SAMPLE_RATE } from "./sentry-tracing.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -385,7 +385,8 @@ export function hostedClient(options: HostedClientOptions): HostedClient {
         if (wire === undefined) return output;
         // SAFETY: the link's serializer read the output out of the response's JSON text.
         const read = readServiceAnswer(wire)(output as UnparsedWireValue);
-        if (Result.isFailure(read)) throw new HostedUnanswered({ fault: HOSTED_FAULT.OUTPUT_UNREAD });
+        if (Result.isFailure(read))
+          throw new HostedUnanswered({ fault: HOSTED_FAULT.OUTPUT_UNREAD });
         return read.success;
       },
     ],

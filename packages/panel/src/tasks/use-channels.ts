@@ -347,7 +347,8 @@ export function useChannels(workspaceId: string | undefined, shown: boolean): Ch
           : written(act(ACT_KIND.CHANNELS_UNARCHIVE, { workspaceId, channelId })),
       onMove: (threadId, channelId) =>
         act(ACT_KIND.CHANNELS_MOVE, { threadId, channelId }).then(
-          (view) => ("failure" in view ? { words: REFUSAL_WORDS[view.failure], cause: view } : undefined),
+          (view) =>
+            "failure" in view ? { words: REFUSAL_WORDS[view.failure], cause: view } : undefined,
           (cause: unknown) => ({ words: ACT_UNREACHED_WORDS, cause }),
         ),
       onLook: (channelId) => {

@@ -14,6 +14,7 @@ import type {
 import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { KEPT } from "../act.js";
 import type { SummaryPin } from "../desktop/task-summary.js";
 import type { TranscriptFollower } from "../tasks/use-agent-transcript.js";
 import { type AgentsControl, MODELS_READ } from "../tasks/use-agents.js";
@@ -24,7 +25,6 @@ import {
   type TasksControl,
   type VersionHistoryControl,
 } from "../tasks/use-tasks-tab.js";
-import { KEPT } from "../act.js";
 
 const ignore = () => undefined;
 

@@ -3,11 +3,13 @@
 import assert from "node:assert/strict";
 import type { AgentAgentAnswer } from "@luke/features/agent-view";
 import { AGENT_BOUNDS } from "@luke/features/agent-wire";
+import { FAILURE_SURFACE, type ShownFailureReport } from "@luke/features/shown-failure";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { installShownFailureReporter } from "./failure-report.js";
 import { AgentComposer } from "./tasks/agent-composer.js";
 import { useAgentComposer } from "./tasks/use-agent-composer.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
@@ -138,6 +140,25 @@ test("a picture pasted into the agent's box is held as its chip, the paste writi
     assert.deepEqual(held(container), { chips: ["pasted.png"], note: null }, box);
     assert.equal(composerEditor(container).textContent, "", `${box} writes no words`);
   }
+});
+
+test("a file this machine cannot read says so in the agent's box and is reported with why", async () => {
+  const reports: ShownFailureReport[] = [];
+  const uninstall = installShownFailureReporter((report) => reports.push(report));
+  const unreadable = new DOMException("The file could not be read.", "NotReadableError");
+  const file = Object.assign(new File(["notes"], "notes.txt", { type: "text/plain" }), {
+    arrayBuffer: () => Promise.reject(unreadable),
+  });
+  const container = await mounted("agent");
+
+  await drop(container, [file]);
+  uninstall();
+
+  assert.deepEqual(held(container), { chips: [], note: "notes.txt couldn't be read." });
+  assert.deepEqual(
+    reports.map((report) => [report.surface, report.cause]),
+    [[FAILURE_SURFACE.ATTACHMENT_READ, unreadable]],
+  );
 });
 
 test("pictures past the bytes a message carries together leave the last out of the agent's box, and the note says why", async () => {

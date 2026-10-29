@@ -257,6 +257,26 @@ test("a page a read already out hands over after the tab let go of its stream is
   assert.deepEqual(heard, []);
 });
 
+test("a stream that breaks while it is read is heard as a page that could not be read, with what broke it", async () => {
+  const broke = new Error("The act port closed.");
+  const stream: AsyncIteratorObject<AgentTranscriptPage> = {
+    next: () => Promise.reject(broke),
+    return: () => Promise.resolve({ done: true, value: undefined }),
+    [Symbol.asyncIterator]: () => stream,
+    [Symbol.asyncDispose]: () => Promise.resolve(),
+  };
+  // SAFETY: the follower calls this one procedure, and reads what it answers as an async iterator alone.
+  fakeActPort({
+    [ACT_KIND.AGENTS_TRANSCRIPT]: () => Promise.resolve(stream),
+  } as unknown as Parameters<typeof fakeActPort>[0]);
+  const heard: AgentTranscriptPage[] = [];
+
+  const stop = windowTranscriptFollower(AGENT, (page) => heard.push(page));
+  for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  stop();
+  assert.deepEqual(heard, [{ failure: AGENT_CALL_FAILURE.UNANSWERED, cause: broke }]);
+});
+
 test("an agent that ended stays followed while its tab is shown, so the lines a call into it writes still reach the tab", () => {
   const { follower, asked, push } = scriptedFollower();
   const { seen, draw } = drawn(follower);

@@ -1882,14 +1882,14 @@ export function useTasksTab(input: {
   const pinRepository = (repository: string, pinned: boolean) => {
     if (fixture !== undefined) return;
     askKept(act(ACT_KIND.TASKS_PIN_REPOSITORY, { repository, pinned })).then((changed) => {
-        if (changed.kept) return;
-        toast({
-          words: pinned ? REPOSITORY_PIN_FAILED_NOTES.PIN : REPOSITORY_PIN_FAILED_NOTES.UNPIN,
-          tone: STATUS_TONE.DANGER,
-          hold: TOAST_HOLD.FAILED,
-          failure: { surface: FAILURE_SURFACE.REPOSITORY_PIN, cause: changed.cause },
-        });
+      if (changed.kept) return;
+      toast({
+        words: pinned ? REPOSITORY_PIN_FAILED_NOTES.PIN : REPOSITORY_PIN_FAILED_NOTES.UNPIN,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: { surface: FAILURE_SURFACE.REPOSITORY_PIN, cause: changed.cause },
       });
+    });
   };
 
   // Each agent's pins in flight, the newest last, which the next waits on,
@@ -2031,14 +2031,14 @@ export function useTasksTab(input: {
     const [first, ...rest] = writes;
     if (first === undefined || fixture !== undefined) return;
     askKept(act(ACT_KIND.TASKS_WRITE_SECTION, { writes: [first, ...rest] })).then((changed) => {
-        if (changed.kept) return;
-        toast({
-          words: SECTION_WRITE_FAILED_NOTE,
-          tone: STATUS_TONE.DANGER,
-          hold: TOAST_HOLD.FAILED,
-          failure: { surface: FAILURE_SURFACE.SECTION_WRITE, cause: changed.cause },
-        });
+      if (changed.kept) return;
+      toast({
+        words: SECTION_WRITE_FAILED_NOTE,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: { surface: FAILURE_SURFACE.SECTION_WRITE, cause: changed.cause },
       });
+    });
   };
 
   // Each task's status choices made here so far, counted as each is sent,

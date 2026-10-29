@@ -23,6 +23,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
+import { KEPT } from "../act.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -33,7 +34,6 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
 import { TasksBoard } from "./tasks-board.js";
 import { TasksList } from "./tasks-list.js";
-import { KEPT } from "../act.js";
 
 /**
  * tasks-held-order.test.ts -- the Tasks page's List and Columns hold each

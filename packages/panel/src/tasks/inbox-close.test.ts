@@ -13,6 +13,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { KEPT } from "../act.js";
 import {
   DRAFT_PLACE,
   type InboxPlace,
@@ -21,7 +22,6 @@ import {
 } from "../composer-drafts.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { KEPT } from "../act.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { type InboxCloser, useInboxClose, useInboxCloser } from "./inbox-close.js";
 

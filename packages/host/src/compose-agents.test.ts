@@ -20,6 +20,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/agent-wire";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
+import { FAILURE_FACT, GATE_CLOSED_BY } from "@luke/features/failure-facts";
 import { GITHUB_IMAGE_TYPE } from "@luke/features/github-image";
 import { GITHUB_TOKEN_REJECTION } from "@luke/features/github-token-wire";
 import {
@@ -723,6 +724,12 @@ type TranscriptLive = PolledLive<(typeof TRANSCRIPT_PARTS)[number]>;
 /** That the service answers a live read, its rows polled from the test's script (`polledLive`). */
 const LIVE_ANSWERED = "answered";
 
+/** What a call the closed account gate kept from the service answers: unanswered, saying the gate stood closed for want of an account. */
+const GATE_CLOSED_SIGNED_OUT = {
+  failure: AGENT_CALL_FAILURE.UNANSWERED,
+  cause: { _tag: FAILURE_FACT.GATE_CLOSED, code: GATE_CLOSED_BY.NO_ACCOUNT },
+};
+
 /** The parts of a transcript's live read, of a plan's or an agent's inbox's, and of the account inbox's. */
 const TRANSCRIPT_PARTS = [
   "messages",
@@ -1216,11 +1223,10 @@ it.effect(
       const signedOut = yield* subject({ signedIn: false });
       const offline = yield* subject({ sendsNetwork: false });
 
-      assert.deepEqual(yield* signedOut.call(GATEWAY_METHOD.AGENTS_MODELS), {
-        failure: AGENT_CALL_FAILURE.UNANSWERED,
-      });
+      assert.deepEqual(yield* signedOut.call(GATEWAY_METHOD.AGENTS_MODELS), GATE_CLOSED_SIGNED_OUT);
       assert.deepEqual(yield* offline.call(GATEWAY_METHOD.AGENTS_LIST, { taskId: TASK_ID }), {
         failure: AGENT_CALL_FAILURE.UNANSWERED,
+        cause: { _tag: FAILURE_FACT.GATE_CLOSED, code: GATE_CLOSED_BY.NO_NETWORK },
       });
       assert.deepEqual(signedOut.asked, []);
       assert.deepEqual(offline.asked, []);
@@ -1713,7 +1719,10 @@ it.effect(
       assert.ok(seals > 1 && seals < 60, `read ${seals} times`);
       assert.deepEqual(pages().at(-1), {
         transcript: FOLLOWED,
-        page: { failure: AGENT_CALL_FAILURE.UNANSWERED },
+        page: {
+          failure: AGENT_CALL_FAILURE.UNANSWERED,
+          cause: { _tag: FAILURE_FACT.SEAL_UNANSWERED, code: AGENT_CALL_FAILURE.UNANSWERED },
+        },
       });
       yield* TestClock.adjust("1 minute");
       yield* settled;
@@ -1833,9 +1842,7 @@ it.effect(
       const signedOut = yield* subject({ signedIn: false });
       yield* signedOut.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
-      assert.deepEqual(signedOut.pages(), [
-        { transcript: FOLLOWED, page: { failure: AGENT_CALL_FAILURE.UNANSWERED } },
-      ]);
+      assert.deepEqual(signedOut.pages(), [{ transcript: FOLLOWED, page: GATE_CLOSED_SIGNED_OUT }]);
       assert.deepEqual(signedOut.asked, []);
 
       const followed = yield* subject();
@@ -2190,9 +2197,7 @@ it.effect(
       const signedOut = yield* subject({ signedIn: false });
       yield* signedOut.call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
       yield* settled;
-      assert.deepEqual(signedOut.told(), [
-        { scope: PLAN_SCOPE, inbox: { failure: AGENT_CALL_FAILURE.UNANSWERED } },
-      ]);
+      assert.deepEqual(signedOut.told(), [{ scope: PLAN_SCOPE, inbox: GATE_CLOSED_SIGNED_OUT }]);
       assert.deepEqual(signedOut.asked, []);
     }),
 );
@@ -2297,7 +2302,7 @@ it.effect(
       nobody.sealAccount(LIVE_ANSWERED);
       yield* nobody.call(GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW);
       yield* settled;
-      assert.deepEqual(nobody.accountInboxes(), [{ failure: AGENT_CALL_FAILURE.UNANSWERED }]);
+      assert.deepEqual(nobody.accountInboxes(), [GATE_CLOSED_SIGNED_OUT]);
       assert.deepEqual(nobody.asked, []);
 
       const { call, asked, sealAccount, accountInboxes } = yield* subject();
@@ -2786,7 +2791,7 @@ it.effect(
         refused.map((refusal) => refusal._tag),
         ["InvalidParamsRefusal", "InvalidParamsRefusal"],
       );
-      assert.deepEqual(unanswered, { failure: AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(unanswered, GATE_CLOSED_SIGNED_OUT);
       assert.deepEqual(asked, [`memories:${WORKSPACE_ID}`, `forget:${WORKSPACE_ID}:${MEMORY.id}`]);
       assert.deepEqual(signedOut.asked, []);
     }),
