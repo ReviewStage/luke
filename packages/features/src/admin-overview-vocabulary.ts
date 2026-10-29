@@ -62,7 +62,7 @@ export type FunnelStep = (typeof FUNNEL_STEP)[keyof typeof FUNNEL_STEP];
 export const REACH_FEATURE = {
   /** Created a task or wrote a plan revision as the developer. */
   TASKS: "tasks",
-  CODING_AGENTS: "codingAgents",
+  AGENTS: "agents",
   /** Answered an inbox item. */
   INBOX: "inbox",
   /** Has an integration connected, their own or their workspace's; a state, not a use. */

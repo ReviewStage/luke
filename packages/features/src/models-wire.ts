@@ -19,7 +19,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * its provider's mark, so the provider travels as a word of this wire's own
  * rather than being read off the id.
  *
- * The account's default is the `codingAgent` part of the preferences
+ * The account's default is the `agent` part of the preferences
  * snapshot at `/api/account/preferences`: one model, one effort, and the
  * standard context window where it was chosen, read beside the settings
  * preferences the desktop syncs through its own client and written on its
@@ -154,5 +154,5 @@ export type ModelChoice = typeof modelChoiceSchema.Type;
 
 /** The coding-agent part written on its own (PUT): the body carries nothing else, so the settings preferences stand as they were. */
 export const agentDefaultWriteSchema = EffectSchema.Struct({
-  codingAgent: modelChoiceSchema,
+  agent: modelChoiceSchema,
 });

@@ -166,7 +166,7 @@ it.layer(getTestDB())("the notices an operator reads of its member's agents", (i
           trigger: TURN_TRIGGER.ASK,
           at: T0,
         });
-        const swept = T0 + TURN_ABANDON.CODING_AGENT_AFTER_MS + 1;
+        const swept = T0 + TURN_ABANDON.AGENT_AFTER_MS + 1;
         yield* sweepAbandonedTurns({ writer }, { now: swept });
 
         assert.deepEqual(yield* unreadOf(standing), [

@@ -334,7 +334,7 @@ const modelChoicesRead = /* @__PURE__ */ Effect.fnUntraced(function* (
   const offered = yield* hostedStoreOrUnavailable(
     markedUnconnected(userId, offeredToAccount(read, fastOffer), keys),
   );
-  const stored = preferences?.codingAgent;
+  const stored = preferences?.agent;
   return { choices: { offered, defaultChoice: stored ?? AGENT_DEFAULT_CHOICE }, keys };
 });
 

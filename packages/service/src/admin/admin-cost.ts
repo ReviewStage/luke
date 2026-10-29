@@ -219,7 +219,7 @@ function median(values: readonly number[]): number | null {
 function emptyDay(day: string): AdminCostDay {
   return {
     day,
-    [COST_SOURCE.CODING_AGENTS]: 0,
+    [COST_SOURCE.AGENTS]: 0,
     [COST_SOURCE.LUKE]: 0,
     [COST_SOURCE.DICTATION]: 0,
   };

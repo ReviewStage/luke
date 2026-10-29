@@ -110,9 +110,7 @@ test("with no OpenAI key saved, Dictate says to add one in settings, and the pre
   assert.equal(page.button("Dictate").length, 0);
   assert.equal(press.disabled, false, "the press is the way to Settings");
   act(() => press.click());
-  assert.deepEqual(page.opened, [
-    { page: SETTINGS_VIEW.CODING_AGENTS, section: SETTINGS_SECTION.CODEX },
-  ]);
+  assert.deepEqual(page.opened, [{ page: SETTINGS_VIEW.AGENTS, section: SETTINGS_SECTION.CODEX }]);
 });
 
 test("with an OpenAI key saved, Dictate is offered", async () => {

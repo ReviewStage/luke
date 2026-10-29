@@ -411,7 +411,7 @@ it.layer(getTestDB())("the member's operator", (it) => {
           ensure(member, workspaceId, true, () => Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY)),
         );
         yield* writeAccountPreferences(member, {
-          codingAgent: { model: "retired/model", effort: "high" },
+          agent: { model: "retired/model", effort: "high" },
         });
         const refusedChoice = yield* Effect.result(ensure(member, workspaceId, true));
 

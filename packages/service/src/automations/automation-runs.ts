@@ -450,7 +450,7 @@ const steerClaimed = Effect.fnUntraced(function* (
  */
 const workingAgents = Effect.fnUntraced(function* (automation: Automation, now: number) {
   // An agent's run is settled by the sweep past its bound, so a run older than that holds no agent at work.
-  const since = new Date(now - TURN_ABANDON.CODING_AGENT_AFTER_MS);
+  const since = new Date(now - TURN_ABANDON.AGENT_AFTER_MS);
   const started = yield* startedRunAgents(automation.id, since);
   const target =
     automation.targetKind === AUTOMATION_TARGET.SAME_AGENT && automation.targetAgentId !== null

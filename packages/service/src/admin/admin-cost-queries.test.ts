@@ -175,7 +175,7 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
         assert.deepEqual(tokenRows(usage), [
           {
             day: YESTERDAY,
-            source: COST_SOURCE.CODING_AGENTS,
+            source: COST_SOURCE.AGENTS,
             model: MODEL.OPUS,
             fastRefused: true,
             inputTokens: 200,
@@ -183,7 +183,7 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
           },
           {
             day: TODAY,
-            source: COST_SOURCE.CODING_AGENTS,
+            source: COST_SOURCE.AGENTS,
             model: MODEL.OPUS,
             fastRefused: false,
             inputTokens: 30,

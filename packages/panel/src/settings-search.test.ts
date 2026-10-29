@@ -151,7 +151,7 @@ test("the OpenAI key dictation runs on is found by that word, on Codex's row in 
   });
   for (const query of ["dictation key", "dictate key"]) {
     const agents = (searchSettings(entries, query)?.groups ?? []).find(
-      (group) => group.page === SETTINGS_VIEW.CODING_AGENTS,
+      (group) => group.page === SETTINGS_VIEW.AGENTS,
     );
     assert.deepEqual(
       agents?.items.map((entry) => entry.id),

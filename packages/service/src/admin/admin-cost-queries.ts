@@ -83,7 +83,7 @@ const TURN_INSTANT = sql`coalesce(${turns.settledAt}, ${turns.queuedAt})`;
  * are its conversation's children, as `turnUsagesOf` sums an agent's; every
  * other turn is Luke's own.
  */
-const TURN_SOURCE = sql<string>`case when ${conversations.kind} = ${CONVERSATION_KIND.CODING_AGENT} or ${parentConversation.kind} = ${CONVERSATION_KIND.CODING_AGENT} then ${COST_SOURCE.CODING_AGENTS} else ${COST_SOURCE.LUKE} end`;
+const TURN_SOURCE = sql<string>`case when ${conversations.kind} = ${CONVERSATION_KIND.CODING_AGENT} or ${parentConversation.kind} = ${CONVERSATION_KIND.CODING_AGENT} then ${COST_SOURCE.AGENTS} else ${COST_SOURCE.LUKE} end`;
 
 /**
  * One element per share a turn's tokens were priced in: its by-model
@@ -96,7 +96,7 @@ const TURN_SHARES = sql`jsonb_array_elements(case when jsonb_typeof(${turns.usag
 
 const TokenRowSchema = Schema.Struct({
   day: Schema.String,
-  source: Schema.Literals([COST_SOURCE.CODING_AGENTS, COST_SOURCE.LUKE]),
+  source: Schema.Literals([COST_SOURCE.AGENTS, COST_SOURCE.LUKE]),
   userId: Schema.String,
   model: Schema.NullOr(Schema.String),
   fastRefused: Schema.Boolean,

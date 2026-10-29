@@ -16,7 +16,7 @@ export const SETTINGS_PAGE = {
    * The coding agents' default model and effort and the account's own provider API keys, which are the account's on
    * the service rather than stored settings.
    */
-  CODING_AGENTS: "coding-agents",
+  AGENTS: "agents",
   /** The member's own machines that run their local agents, Linux servers and Macs alike, each the service's rather than a stored setting. */
   HOSTS: "hosts",
   /** The services the account connects for its agents, each the account's on the service rather than a stored setting. */

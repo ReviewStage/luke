@@ -261,7 +261,7 @@ function reachRows(since: Date) {
         ),
       ),
     queryBuilder
-      .select({ tag: tag(REACH_FEATURE.CODING_AGENTS), userId: userIdOf(agentTable.userId) })
+      .select({ tag: tag(REACH_FEATURE.AGENTS), userId: userIdOf(agentTable.userId) })
       .from(agentTable)
       .where(gte(agentTable.createdAt, since)),
     queryBuilder

@@ -747,7 +747,7 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   );
   assert.ok(message.includes("Threads to the developer are that agent's to post"), message);
   // An agent's own pick of a model is no member's new default.
-  assert.equal((await database.run(readAccountPreferences(caller.userId)))?.codingAgent, undefined);
+  assert.equal((await database.run(readAccountPreferences(caller.userId)))?.agent, undefined);
 
   const again = await call(CODER_TOOL.START_AGENT, { prompt }, "call-start");
   assert.ok(isRecord(again.agent));
@@ -2395,7 +2395,7 @@ test("list_agents and read_agent say why each failed agent failed: a turn failed
   const abandoned = await agentOn(bob, tasks.billing);
   await turnOn(abandoned, false);
   await database.run(
-    sweepAbandonedTurns({ writer }, { now: NOW + TURN_ABANDON.CODING_AGENT_AFTER_MS + 1 }),
+    sweepAbandonedTurns({ writer }, { now: NOW + TURN_ABANDON.AGENT_AFTER_MS + 1 }),
   );
   const afterCompleted = await agentOn(bob, tasks.billing);
   await turnOn(afterCompleted, true);
@@ -3117,7 +3117,7 @@ test("list_models for a Claude Code agent lists its Claude models alone, their f
 
   // A GPT default is offered to a start, and is not one a Claude Code agent may move to.
   await database.run(
-    writeAccountPreferences(agents.caller.userId, { codingAgent: { model: SOL, effort: "low" } }),
+    writeAccountPreferences(agents.caller.userId, { agent: { model: SOL, effort: "low" } }),
   );
   const offeredFor = async (input: WireBoundaryInput) => {
     const listed = await call(CODER_TOOL.LIST_MODELS, input);
