@@ -439,12 +439,12 @@ class ReachKey extends Data.Class<{
   readonly member: string | undefined;
 }> {}
 
-/** One repository token as minted: for which workspace and member, through which installation, for which repository, cut to what. */
+/** One installation token as minted: for which workspace and member, through which installation, for which repository or none for every one, cut to what. */
 class TokenKey extends Data.Class<{
   readonly organizationId: string;
   readonly member: string | undefined;
   readonly installationId: number;
-  readonly repository: string;
+  readonly repository: string | undefined;
   readonly permissions: InstallationTokenPermissions;
 }> {}
 
@@ -477,6 +477,9 @@ export interface GitHubRepositoryToken {
   readonly token: Redacted.Redacted;
   readonly access: GitHubTokenAccess;
 }
+
+/** A token to read public repositories on, and whose it is. */
+export type GitHubPublicReadToken = Omit<GitHubRepositoryToken, "repository">;
 
 /** What the browser is sent to GitHub with to authorize the App once, so the installer is confirmed. */
 interface GitHubAuthorizeRequest {
@@ -601,6 +604,25 @@ export interface GitHubAppService {
     member: string | undefined,
   ) => Effect.Effect<
     Option.Option<GitHubRepositoryToken>,
+    GitHubWorkspaceReadFailure,
+    HttpClient.HttpClient | DatabaseServices
+  >;
+  /**
+   * A token to read a public repository on where `repositoryReadToken`
+   * has none, rather than asking GitHub anonymously, whose sixty requests
+   * an hour are per address and so shared with whatever else leaves the
+   * deployment's: the member's own token where they keep one GitHub has
+   * not refused, since GitHub limits it apart from the App, else one
+   * minted on the workspace's first active installation, cut to contents
+   * read and naming no repository, which GitHub answers for any public
+   * repository as well as the installation's own; none where neither is
+   * held.
+   */
+  readonly publicReadToken: (
+    organizationId: string,
+    member: string,
+  ) => Effect.Effect<
+    Option.Option<GitHubPublicReadToken>,
     GitHubWorkspaceReadFailure,
     HttpClient.HttpClient | DatabaseServices
   >;
@@ -1573,14 +1595,15 @@ function githubAppService(
 
   /**
    * A token minted for the key's one repository, by its name, which is one
-   * repository on the installation's one account, and how long it is kept:
-   * until `KEPT.TOKEN_MARGIN` before GitHub expires it, and never past its
-   * hour, whatever clock GitHub's `expires_at` was read against.
+   * repository on the installation's one account, or for none named, and
+   * how long it is kept: until `KEPT.TOKEN_MARGIN` before GitHub expires
+   * it, and never past its hour, whatever clock GitHub's `expires_at` was
+   * read against.
    */
   const repositoryTokenOf = (key: TokenKey) =>
     Effect.gen(function* () {
       const minted = yield* mint(key.installationId, {
-        repositories: [key.repository],
+        ...(key.repository === undefined ? undefined : { repositories: [key.repository] }),
         permissions: key.permissions,
       });
       const now = yield* Clock.currentTimeMillis;
@@ -1678,13 +1701,12 @@ function githubAppService(
         return yield* Cache.get(reaches, key);
       });
 
-    /** The member's own token for a repository reached on it, read afresh; none where they no longer keep one GitHub accepts. */
-    const memberRepositoryToken = (reached: ReachedOnToken) =>
-      Effect.map(memberToken(reached.member), (held) =>
+    /** The member's own token, read afresh, and whose it is; none where they no longer keep one GitHub accepts. */
+    const memberReadToken = (member: string) =>
+      Effect.map(memberToken(member), (held) =>
         Result.isFailure(held)
-          ? Option.none<GitHubRepositoryToken>()
-          : Option.some<GitHubRepositoryToken>({
-              repository: reached.repository,
+          ? Option.none<GitHubPublicReadToken>()
+          : Option.some<GitHubPublicReadToken>({
               token: held.success.token,
               access: {
                 kind: GITHUB_ACCESS.TOKEN,
@@ -1694,6 +1716,55 @@ function githubAppService(
               },
             }),
       );
+
+    /** The member's own token for a repository reached on it, on the terms of `memberReadToken`. */
+    const memberRepositoryToken = (reached: ReachedOnToken) =>
+      Effect.map(
+        memberReadToken(reached.member),
+        Option.map((held): GitHubRepositoryToken => ({ repository: reached.repository, ...held })),
+      );
+
+    /**
+     * The token `publicReadToken` answers, as its declaration says. Note that
+     * the installation is chosen by the status the store holds rather than
+     * read from GitHub, so a preview of a public repository costs the App no
+     * read beyond its one mint an hour; and that a mint GitHub refuses moves
+     * on to the next active one, because a reach that found the owner's
+     * installation stops there and leaves an earlier link a missed webhook
+     * left active unmended.
+     */
+    const publicReadToken = (organizationId: string, member: string) =>
+      Effect.gen(function* () {
+        const held = yield* memberReadToken(member);
+        if (Option.isSome(held)) return held;
+        const connected = yield* installationsOfWorkspace(organizationId);
+        for (const one of connected) {
+          if (one.status !== GITHUB_INSTALLATION_STATUS.ACTIVE) continue;
+          const key = new TokenKey({
+            organizationId,
+            member: undefined,
+            installationId: one.installationId,
+            repository: undefined,
+            permissions: INSTALLATION_TOKEN_PERMISSIONS.READ,
+          });
+          const minted = yield* Cache.get(tokens, key).pipe(
+            Effect.map((kept) => Option.some(kept.token)),
+            Effect.catch((failure) =>
+              Effect.as(
+                Effect.logWarning(`A public read token was not minted: ${failure.message}`),
+                Option.none<Redacted.Redacted>(),
+              ),
+            ),
+          );
+          if (Option.isSome(minted)) {
+            return Option.some<GitHubPublicReadToken>({
+              token: minted.value,
+              access: { kind: GITHUB_ACCESS.APP },
+            });
+          }
+        }
+        return Option.none<GitHubPublicReadToken>();
+      });
 
     /**
      * A token for the one repository the workspace or the member reaches:
@@ -1816,6 +1887,7 @@ function githubAppService(
           member,
           () => INSTALLATION_TOKEN_PERMISSIONS.READ,
         ),
+      publicReadToken,
       repositoryPullRequestToken: (organizationId, fullName, member) =>
         repositoryToken(organizationId, fullName, member, (on) =>
           on.ciReadable
