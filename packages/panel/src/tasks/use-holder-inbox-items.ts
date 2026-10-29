@@ -94,8 +94,9 @@ export function inboxGroups(
     readonly workspaceId: string | undefined;
   },
 ): readonly InboxGroup[] {
+  const listed = new Map(holders.listed.map((task) => [task.id, task]));
   const ofTasks = holders.tasks.flatMap(({ taskId }) => {
-    const task = holders.listed.find((each) => each.id === taskId);
+    const task = listed.get(taskId);
     if (task === undefined) return [];
     return [{ holder: taskHolder(task), items: read[INBOX_SCOPE_KIND.PLAN].get(taskId) ?? [] }];
   });
@@ -147,9 +148,12 @@ function currentOf(
   /** The account's feed: a holder it holds nothing of is current. */
   fed: FedKind,
 ): ReadonlySet<string> {
+  const ofKind = new Map(
+    holdings.flatMap((holding) => (holding.kind === kind ? [[holding.id, holding] as const] : [])),
+  );
   return new Set(
     [...pushed].flatMap(([id, held]) => {
-      const holding = holdings.find((each) => each.kind === kind && each.id === id);
+      const holding = ofKind.get(id);
       const absentFromFeed = fed !== undefined && !Object.hasOwn(fed, id);
       return holding === undefined || absentFromFeed || newest(held) >= holding.updatedAt
         ? [id]

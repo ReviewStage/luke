@@ -295,8 +295,14 @@ export function ConfirmDialog({
   restoreTo?: RestoreTo | undefined;
   /** What the card holds under its body: the field, where the question asks one. */
   children?: React.ReactNode;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const answer = useAnswerState(confirm);
+  // Note that a question never yet shown draws nothing, because a shut card
+  // draws nothing either and the first asking draws it afresh (`openings`),
+  // while a list offering it on every row would otherwise build a card for each.
+  const [everShown, setEverShown] = useState(answer.shown);
+  if (answer.shown && !everShown) setEverShown(true);
+  if (!everShown && !answer.shown) return null;
   // Note that an answer under way is hidden with its surface rather than
   // drawn over whatever stands in its place, because the window then
   // presents something else; the act itself finishes all the same.

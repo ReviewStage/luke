@@ -2,7 +2,7 @@ import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-
 import { ACT_KIND } from "@luke/host/acts";
 import { isVideoDataUrl, PAGE_THUMB_SIZE, PageThumb } from "@luke/ui";
 import { AppWindowIcon, FilmIcon, ImageOffIcon } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { INBOX_MEDIA, type InboxMedia } from "./inbox-model.js";
@@ -155,7 +155,8 @@ export function useRowMediaReads(
     },
     [act],
   );
-  return { images, onImages, pages, onPages };
+  // Note that the reads are one value while nothing in them moved, since every row is handed them and a row handed a new value draws again.
+  return useMemo(() => ({ images, onImages, pages, onPages }), [images, onImages, pages, onPages]);
 }
 
 /** One picture's tile: the picture once read, a film's glyph for a recording, which a tile cannot play, and its glyph where the read did not answer. */

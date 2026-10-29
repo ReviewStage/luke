@@ -1,5 +1,6 @@
 import { type InboxPerson, inboxAddressedTo } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { sameFieldsBy, sameShape } from "@luke/features/turn-rows";
 import { readFailedWords, TERM } from "@luke/features/words";
 import {
   AttentionMark,
@@ -90,7 +91,16 @@ import {
   UsersIcon,
 } from "@luke/ui/icons";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { type RefObject, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  type RefObject,
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
 import { useAutomation } from "../automation-directory.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -407,7 +417,7 @@ function drawnWidth(width: number, alone: boolean): string | undefined {
  * the pointer rests on it or it holds the keyboard, and the last item of
  * its menu.
  */
-export function InboxItemRow({
+function ItemRow({
   listed,
   chosen,
   open = chosen,
@@ -587,6 +597,27 @@ export function InboxItemRow({
     </>
   );
 }
+
+/**
+ * Whether two of a row's props draw alike: every prop the same value, but
+ * its listed item, which the list builds anew on every render (`inboxList`),
+ * read as the same item under a holder of the same fields.
+ */
+function sameRowDraw(a: ItemRowProps, b: ItemRowProps): boolean {
+  return sameFieldsBy(a, b, {
+    listed: (ours, theirs) => ours.item === theirs.item && sameShape(ours.holder, theirs.holder, 2),
+  });
+}
+
+type ItemRowProps = Parameters<typeof ItemRow>[0];
+
+/**
+ * An item's row (`ItemRow`), drawn again only where its props read otherwise
+ * (`sameRowDraw`). Note that this is what keeps a long Inbox quick, because
+ * the page above the list draws again on every pointer crossing, choice, and
+ * push, and only the rows whose item or state moved need draw with it.
+ */
+export const InboxItemRow = memo(ItemRow, sameRowDraw);
 
 /**
  * What every group head of the list is handed beside its glyph and name: its
@@ -1598,6 +1629,20 @@ export function InboxList({
     label: "Resize inbox list",
     onResize,
   });
+  // Note that the rows are handed doors that stand the same across renders, each calling the one the list was handed last,
+  // because the page hands new ones on every render and a row given a new door draws again (`InboxItemRow`).
+  const handed = useRef({ onChoose, onMark, onClose, onAskMove });
+  handed.current = { onChoose, onMark, onClose, onAskMove };
+  const choose = useCallback((listed: InboxListed) => handed.current.onChoose(listed), []);
+  const mark = useCallback(
+    (listed: InboxListed, unread: boolean) => handed.current.onMark?.(listed, unread),
+    [],
+  );
+  const close = useCallback<InboxCloser>(
+    (item, saying) => handed.current.onClose?.(item, saying) ?? Promise.resolve(false),
+    [],
+  );
+  const askMove = useCallback((listed: InboxListed) => handed.current.onAskMove?.(listed), []);
   // Note that a row names its task wherever no task's header stands over it, and a teammate's face wherever no person's does.
   // A row whose item is done with is drawn gray, the chosen row kept on For you and every such row on All alike.
   // A row leaving the list is the list's motion's rather than one of the keyboard's rows (`ListMotion`).
@@ -1618,10 +1663,10 @@ export function InboxList({
       media={media}
       ref={leaving ? undefined : rows.hold(listed.item.id)}
       selectKey={leaving ? undefined : listed.item.id}
-      onChoose={onChoose}
-      onMark={onMark}
-      onClose={onClose}
-      onAskMove={onAskMove}
+      onChoose={choose}
+      onMark={onMark === undefined ? undefined : mark}
+      onClose={onClose === undefined ? undefined : close}
+      onAskMove={onAskMove === undefined ? undefined : askMove}
     />
   );
   const needingYou = (items: readonly InboxListed[]) =>
