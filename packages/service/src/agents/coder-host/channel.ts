@@ -14,6 +14,7 @@ import {
 import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import { EVE_HOST_TURN_POLICY } from "../eve-host/channel.js";
 import { messageAuth, ownedAuth, type SessionOwnership } from "../eve-host/door.js";
+import type { EveFailure } from "../eve-host/relay.js";
 
 /**
  * channel.ts -- how the coding-agent service's eve channel is configured.
@@ -54,7 +55,8 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../eve-host/door.
  * turn failed for its session's end (`host.ts`'s `sessionEnded`) and the
  * agent reads as failed at once. A completed session is settled with the
  * same word as a failed one, because to the developer the two are one: the
- * agent is gone and no message reaches it.
+ * agent is gone and no message reaches it. A failed session hands on eve's
+ * code and message too, which the turn keeps as why it failed.
  */
 const TURN_POLICY: TurnPolicy = EVE_HOST_TURN_POLICY.STEER;
 
@@ -124,7 +126,7 @@ export function coderChannelInput(
   resolveUserId: BearerAccount,
   ownership: SessionOwnership,
   deployment: DeploymentActor,
-  sessionEnded: (sessionId: string) => Promise<void>,
+  sessionEnded: (sessionId: string, failed?: EveFailure) => Promise<void>,
 ): EveChannelInput {
   return {
     auth: ownedAuth(
@@ -135,7 +137,7 @@ export function coderChannelInput(
     uploadPolicy: UPLOAD_POLICY,
     onMessage: (context) => ({ auth: messageAuth(context) }),
     events: {
-      "session.failed": (data) => sessionEnded(data.sessionId),
+      "session.failed": (data) => sessionEnded(data.sessionId, data),
       "session.completed": (_data, _channel, ctx) => sessionEnded(ctx.session.id),
     },
   };

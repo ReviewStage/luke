@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { NATIVE_MOMENT } from "./native-moments.js";
+import { NATIVE_ENDING, NATIVE_MOMENT } from "./native-moments.js";
 import { heldProjection, projectMoments } from "./native-projection.js";
 
 test("a call of a tool the record does not hold is reported, but the harness's own ToolSearch is left out without a word", () => {
@@ -23,4 +23,35 @@ test("a call of a tool the record does not hold is reported, but the harness's o
     },
   );
   assert.deepEqual(reports, ["A call to SendMessage names no stored tool and is not recorded."]);
+});
+
+test("a warm launch that fails after its turn ended at its IDLE fails no turn of its own", () => {
+  const context = {
+    conversationId: "c_projection",
+    now: 0,
+    model: undefined,
+    registered: () => true,
+    report: () => undefined,
+  };
+  const idled = projectMoments(
+    heldProjection(null),
+    [
+      { kind: NATIVE_MOMENT.ACTIVE },
+      { kind: NATIVE_MOMENT.ENDED, ending: NATIVE_ENDING.DONE, warm: true },
+    ],
+    { ...context, sequence: 0 },
+  );
+  const crashed = projectMoments(
+    idled.state,
+    [
+      {
+        kind: NATIVE_MOMENT.ENDED,
+        ending: NATIVE_ENDING.FAILED,
+        detail: "failed app-server exited",
+        launchFailed: true,
+      },
+    ],
+    { ...context, sequence: 1 },
+  );
+  assert.deepEqual(crashed.writes, []);
 });

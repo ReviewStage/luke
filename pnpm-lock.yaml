@@ -968,8 +968,8 @@ importers:
         specifier: ^30.0.1
         version: 30.0.1(@noble/hashes@2.3.0)
       streamdown:
-        specifier: 2.7.0
-        version: 2.7.0(react-dom@19.2.8)(react@19.2.8)
+        specifier: 2.7.1
+        version: 2.7.1(react-dom@19.2.8)(react@19.2.8)
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
@@ -1199,8 +1199,8 @@ importers:
         specifier: 4.0.1
         version: 4.0.1
       streamdown:
-        specifier: 2.7.0
-        version: 2.7.0(react-dom@19.2.8)(react@19.2.8)
+        specifier: 2.7.1
+        version: 2.7.1(react-dom@19.2.8)(react@19.2.8)
       tailwind-merge:
         specifier: 3.7.0
         version: 3.7.0
@@ -7539,8 +7539,8 @@ packages:
   std-env@4.2.0:
     resolution: {integrity: sha512-oCUKSupKTHX53EyjDtuZQ64pjLJ6yYCtpmEw0goYxtjG9KpbRe8KAsl2tBUGU9DyMcJ0RwJ8GqJAFzMXcXW1Rw==}
 
-  streamdown@2.7.0:
-    resolution: {integrity: sha512-SHYTCveHpRJfcIC8r+5EANczK21R0iNYo4i7wNaLeLeQjEnaVk4xMFhgV4E/mix69BpFSBui1NOESEXKlZfReA==}
+  streamdown@2.7.1:
+    resolution: {integrity: sha512-pIz4XOB+e7iyqSJABXC9PoyHifBZVQx/7U0Qo/vdOIERqGXfgEhJxkXENsuWMO8TGXkaQ5ewV9jnliK7q47T8w==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
@@ -14191,7 +14191,7 @@ snapshots:
 
   std-env@4.2.0: {}
 
-  streamdown@2.7.0(react-dom@19.2.8)(react@19.2.8):
+  streamdown@2.7.1(react-dom@19.2.8)(react@19.2.8):
     dependencies:
       clsx: 2.1.1
       hast-util-to-jsx-runtime: 2.3.6

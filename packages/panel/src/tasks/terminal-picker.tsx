@@ -6,7 +6,7 @@ import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import { PlusIcon, Shortcut } from "@luke/ui";
 import { CommandDialog, type CommandGroup, type CommandItem } from "@luke/ui/command";
 import { useEffect, useState } from "react";
-import { agentName } from "./agent-model.js";
+import { agentName, startsOwnAgents } from "./agent-model.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AgentGlyph, agentEndMark } from "./tab-look.js";
 import { TerminalStanding } from "./terminal-shells.js";
@@ -127,6 +127,8 @@ export function TerminalPicker({
   // Note that a task whose agents are not read yet offers none, nor to start one.
   const read = agents.agents !== undefined;
   const listed = agents.agents ?? [];
+  // A pilot task's agents are its pilot's to start, so its picker offers no Start (`startsOwnAgents`).
+  const offersStart = startsOwnAgents(agents.mode);
   const [selected, setSelected] = useState("");
   const open = pick !== undefined;
   // Each opening starts on the agent chosen to begin with, or the first, and reads how every sandbox stands.
@@ -134,7 +136,9 @@ export function TerminalPicker({
   if (opened !== open) {
     setOpened(open);
     if (open) {
-      setSelected(pick.chosen ?? listed[0]?.id ?? (start.available ? START_ROW : ""));
+      setSelected(
+        pick.chosen ?? listed[0]?.id ?? (offersStart && start.available ? START_ROW : ""),
+      );
     }
   }
   useEffect(() => {
@@ -148,22 +152,24 @@ export function TerminalPicker({
   // Note that a task with no agent offers to start one, and that agents not read yet offer nothing.
   const groups: readonly CommandGroup[] =
     read && listed.length === 0
-      ? [
-          {
-            id: START_ROW,
-            items: [
-              {
-                id: START_ROW,
-                words: START_WORDS,
-                label: START_WORDS,
-                icon: <PlusIcon />,
-                detail: start.available ? undefined : start.reason,
-                disabled: !start.available,
-                onSelect: () => choose(onStartAgent),
-              },
-            ],
-          },
-        ]
+      ? !offersStart
+        ? []
+        : [
+            {
+              id: START_ROW,
+              items: [
+                {
+                  id: START_ROW,
+                  words: START_WORDS,
+                  label: START_WORDS,
+                  icon: <PlusIcon />,
+                  detail: start.available ? undefined : start.reason,
+                  disabled: !start.available,
+                  onSelect: () => choose(onStartAgent),
+                },
+              ],
+            },
+          ]
       : [
           {
             id: AGENTS_GROUP,

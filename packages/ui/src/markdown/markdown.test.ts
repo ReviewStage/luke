@@ -115,6 +115,22 @@ test("a note follows a new address rewriter for the same words", () => {
   assert.equal(container.querySelector("a")?.getAttribute("href"), "");
 });
 
+test("a transcript that stops streaming keeps the words the reader selected while it streamed", () => {
+  const words = "The lock is taken first. Concurrent callers join one renewal.";
+  const { container, root } = drawn({ look: MARKDOWN_LOOK.TRANSCRIPT, words, streaming: true });
+  const paragraph = container.querySelector("p");
+  assert.ok(paragraph);
+  const selection = document.getSelection();
+  assert.ok(selection);
+  selection.selectAllChildren(paragraph);
+  act(() =>
+    root.render(
+      createElement(Markdown, { look: MARKDOWN_LOOK.TRANSCRIPT, words, streaming: false }),
+    ),
+  );
+  assert.equal(selection.toString(), words);
+});
+
 test("a task box is named by its item, asks with its item's place in the words, and flips back when the change is not saved", async () => {
   const asked: number[] = [];
   const words = "Steps:\n\n- [ ] Write the migration\n- [ ] Wire the row";

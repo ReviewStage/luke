@@ -94,7 +94,7 @@
     "react-dom": "catalog:",
     "recharts": "3.8.0",
     "remark-gfm": "4.0.1",
-    "streamdown": "2.7.0",
+    "streamdown": "2.7.1",
     "tailwind-merge": "3.7.0"
   },
   "devDependencies": {

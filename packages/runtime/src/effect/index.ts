@@ -1,7 +1,8 @@
 export { bothInOrder } from "./both-in-order.js";
-export { causeKind, failureKind } from "./failure-kind.js";
+export { causeKind, failureDetail, failureKind } from "./failure-kind.js";
 export { catchAllButInterrupt, unlessInterrupted } from "./fallback.js";
 export { onOwnFiber } from "./own-fiber.js";
+export { type ReportedAttributes, reportUnexpected } from "./reported-failure.js";
 export {
   type SerialQueue,
   type SerialQueueOptions,

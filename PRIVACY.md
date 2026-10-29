@@ -1164,8 +1164,9 @@ with its message, stack trace, and
 the lines of code around it; performance traces of a share of the requests
 they answer, each database query, and each request they make, with the
 method, the address and the names of its query parameters, the status, the
-browser's or app's user agent, and the query's text; every line they log;
-counts and timings; and, each minute, whether the scheduled sweep ran. They do
+browser's or app's user agent, and the query's text; every line they log,
+with the values it was logged under, such as the ids of the agent, the
+conversation, and the turn it is about; counts and timings; and, each minute, whether the scheduled sweep ran. They do
 not send a request's headers or body, the values of local variables, or the IP
 address a request came from. Luke's agents send what Sentry's SDK collects by
 default, apart from request bodies and what a model is sent or answers: every
@@ -1176,7 +1177,7 @@ on from, which its agent trace still shows; performance traces of each
 request they answer, each database query, and each request they make, with
 their headers, addresses, the names of their query parameters, and database
 query parameters, and the IP address a request came from; every line they
-log; and Sentry's agent traces of each turn, which name the model and each
+log, with the values it was logged under; and Sentry's agent traces of each turn, which name the model and each
 tool called and say how long each call took, how many tokens it used, and
 whether it failed. Neither the agents nor the web functions send Sentry the
 instructions or messages sent to a model (the plan, the conversation, or what

@@ -252,7 +252,15 @@ export default defineHook({
             // admitting the session, whose reads would otherwise run for every one of them.
             if (host.relaysQuietly(event, state)) return;
             const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
-            if (Result.isFailure(admitted)) return;
+            if (Result.isFailure(admitted)) {
+              // Every event of a session not admitted is dropped, which is said once a session rather than every event.
+              if (state.get().unadmittedSaid === true) return;
+              state.update((held) => ({ ...held, unadmittedSaid: true }));
+              yield* Effect.logWarning(
+                `The events of a session not admitted are dropped: ${admitted.failure}`,
+              ).pipe(Effect.annotateLogs({ sessionId: ctx.session.id }));
+              return;
+            }
             yield* host.relay(event, admitted.success, ctx.session, state, prompt.get());
           }),
         );

@@ -292,7 +292,7 @@ test("a refresh that failed after the tasks were read keeps the rows drawn under
   assert.match(first.querySelector('[role="alert"]')?.textContent ?? "", /could not be read/u);
 });
 
-test("a row and a card count the questions waiting on the reader, a notice and a teammate's question counting nowhere, while the sidebar counts the notice too, as For you lists it", async () => {
+test("a row and a card count the questions waiting on the reader, a notice and a teammate's question counting nowhere, while the sidebar counts the notice too, as Needs you lists it", async () => {
   const page = await mountPage();
   const sidebar = { count: -1 };
   function Sidebar() {

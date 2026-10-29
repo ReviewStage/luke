@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import * as Sentry from "@sentry/effect";
-import { Effect, Fiber, Layer, Logger } from "effect";
+import { Effect, ErrorReporter, Fiber, Layer, Logger } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { recordingSentry, sentOfType } from "../testing/sentry-transport.js";
 import { sentryCronCheckIns, sentryLogger, sentryReportedFetch, standReported } from "./sentry.js";
@@ -57,6 +57,26 @@ it.effect("an effect under error reporting is captured once, and an interruption
 );
 
 it.effect(
+  "a reported failure's ids land as tags on its issue, and its other attributes as extra data",
+  () =>
+    Effect.gen(function* () {
+      const sentry = recordingSentry();
+      const failure = Object.assign(new TypeError("refused"), {
+        // Note that a BigInt is among them, which no JSON serializes, as a report's attributes may hold anything.
+        [ErrorReporter.attributes]: { agentId: "a", turnId: "t", route: "/api/agents", rows: 2n },
+      });
+      yield* Effect.exit(Effect.withErrorReporting(Effect.fail(failure))).pipe(
+        Effect.provide(sentry.layer),
+      );
+      const [event] = sentOfType(sentry.sent, "event").map((item) => JSON.parse(item.text));
+      assert.deepEqual(
+        { tags: [event.tags.agentId, event.tags.turnId], route: event.extra.route },
+        { tags: ["a", "t"], route: "/api/agents" },
+      );
+    }),
+);
+
+it.effect(
   "a stood service is captured once whether it fails or its runner cannot run it, and not when it is interrupted",
   () =>
     Effect.gen(function* () {
@@ -76,19 +96,39 @@ it.effect(
     }),
 );
 
-it.effect("a log line becomes a Sentry log, and a span a Sentry span", () =>
-  Effect.gen(function* () {
-    const sentry = recordingSentry();
-    yield* Effect.logWarning("a title could not be generated").pipe(
-      Effect.withSpan("web/title"),
-      Effect.provide(Logger.layer([sentryLogger])),
-      Effect.provide(sentry.layer),
-    );
-    const logs = sentOfType(sentry.sent, "log").map((item) => item.text);
-    const spans = sentry.sent.filter((item) => item.type !== "log").map((item) => item.text);
-    assert.ok(logs.some((text) => text.includes("a title could not be generated")));
-    assert.ok(spans.some((text) => text.includes("web/title")));
-  }),
+it.effect(
+  "a log line becomes a Sentry log with its annotations, on the trace of the span it was written under",
+  () =>
+    Effect.gen(function* () {
+      const sentry = recordingSentry();
+      const span = yield* Effect.gen(function* () {
+        yield* Effect.logWarning("a title could not be generated").pipe(
+          Effect.annotateLogs({ agentId: "a" }),
+        );
+        return yield* Effect.currentSpan;
+      }).pipe(
+        Effect.withSpan("web/title"),
+        Effect.provide(Logger.layer([sentryLogger])),
+        Effect.provide(sentry.layer),
+      );
+      const [log] = sentOfType(sentry.sent, "log").flatMap((item) => JSON.parse(item.text).items);
+      assert.deepEqual(
+        {
+          body: log.body,
+          agentId: log.attributes.agentId?.value,
+          traceId: log.trace_id,
+          spanId: log.attributes["sentry.trace.parent_span_id"]?.value,
+        },
+        {
+          body: "a title could not be generated",
+          agentId: "a",
+          traceId: span.traceId,
+          spanId: span.spanId,
+        },
+      );
+      const spans = sentOfType(sentry.sent, "span").map((item) => item.text);
+      assert.ok(spans.some((text) => text.includes("web/title")));
+    }),
 );
 
 it.effect(

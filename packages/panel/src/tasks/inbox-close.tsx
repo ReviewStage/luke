@@ -1,5 +1,5 @@
 import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
-import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
+import { INBOX_STATUS, type InboxItem, type InboxStatus } from "@luke/features/inbox-wire";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { countWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -51,11 +51,12 @@ const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
  */
 const CLOSE_ITEM_LABEL = "Resolve without answering";
 
-/** What a toast says of a close the service did not take, by what had become of the item. */
+/** What a toast says of a close the service did not take, by what had become of the item: still open, the agent having changed it; answered; or resolved. */
 const NOT_TAKEN = {
-  CHANGED: "The agent changed this item before you resolved it.",
-  SETTLED: "This item was already settled.",
-} as const;
+  [INBOX_STATUS.OPEN]: "The agent changed this item before you resolved it.",
+  [INBOX_STATUS.ANSWERED]: "This item was already answered.",
+  [INBOX_STATUS.CLOSED]: "This item was already resolved.",
+} as const satisfies Record<InboxStatus, string>;
 
 /** How a close says what became of it: aloud, a toast saying why one was not taken, or not at all, for a batch of closes that counts its refusals in one toast. */
 interface CloseSaying {
@@ -131,10 +132,7 @@ export function useInboxCloser({
           if ("failure" in answer) return say(messageFailureWords(answer.failure), answer);
           attempts.current.delete(item.id);
           if (!answer.taken) {
-            return say(
-              answer.item.status === INBOX_STATUS.OPEN ? NOT_TAKEN.CHANGED : NOT_TAKEN.SETTLED,
-              { failure: answer.item.status },
-            );
+            return say(NOT_TAKEN[answer.item.status], { failure: answer.item.status });
           }
           // Note that only the answer the box held as the close was pressed goes, since a message on the thread may have been begun while the close was out.
           if (pressed !== undefined) {

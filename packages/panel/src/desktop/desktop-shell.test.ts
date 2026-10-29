@@ -841,12 +841,12 @@ test("on a phone the bar's Inbox wears the count the drawer's row shows, named i
     },
     { overlay: SIDEBAR_OVERLAY.OPEN },
   );
-  const inbox = barItems(page).find((item) => spokenName(item) === "Inbox, 3 for you");
+  const inbox = barItems(page).find((item) => spokenName(item) === "Inbox, 3 need you");
   assert.ok(inbox, "the bar's Inbox is named with its count");
   assert.match(inbox.textContent ?? "", /3/u, "the Inbox's count is drawn");
   assert.match(
     placeRow(page, "Inbox")?.textContent ?? "",
-    /^Inbox3 for you/u,
+    /^Inbox3 need you/u,
     "the drawer counts the same",
   );
   // Note that the drawer's count wears the unread dot's blue, not a tally's ink.

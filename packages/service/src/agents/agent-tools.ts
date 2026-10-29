@@ -327,6 +327,9 @@ export const UPDATE_TASK_REFUSAL = {
   GITHUB_UNANSWERED:
     "Not run: GitHub did not answer whether the workspace reaches that repository. The call " +
     "may be made again.",
+  TREE_REPOSITORY:
+    "Not run: a task with a parent or with children works in its tree's repository, so it " +
+    "cannot be given another; leave the repository as it is.",
   NO_SECTION:
     "Not run: the developer you work for keeps no section of this workspace under that id; " +
     `${AGENT_TOOL.LIST_TASKS} names the sections.`,
@@ -431,6 +434,10 @@ export const START_AGENT_REFUSAL = {
     "Not started: that task is worked in pilot mode and has no pilot, so this agent would be its " +
     "pilot, and Pilot is off for the member you start for. Ask them to turn it on in Settings › " +
     "Experimental.",
+  STARTER_CONTINUE:
+    "Not started: you can't continue an agent that started you, directly or through the agents " +
+    "between you, since the agents it started would report to a pilot you started; tell its " +
+    "starter, or ask a member to continue it.",
   SOURCE_RUNNING:
     "Not started: that agent is still starting or working, and a continue would take over work " +
     "it is still doing. Wait until it ends, message it, or fork it at a messageId to try another " +
@@ -1600,6 +1607,25 @@ const earlierContinuationsOf = (
     );
   });
 
+/**
+ * Whether the agent is started, directly or through the agents between,
+ * by the ancestor, read on the starter links as stored now, since a pilot's
+ * takeover moves them after an agent's session began. The links form a
+ * chain that ends at an agent with no starter; one already seen ends it.
+ */
+const startedThrough = (userId: string, agentId: string, ancestorId: string) =>
+  Effect.gen(function* () {
+    const seen = new Set<string>();
+    let at: string | null = agentId;
+    while (at !== null && !seen.has(at)) {
+      seen.add(at);
+      const read: Option.Option<Agent> = yield* readAgent(userId, at);
+      at = Option.isSome(read) ? read.value.startedByAgentId : null;
+      if (at === ancestorId) return true;
+    }
+    return false;
+  });
+
 /** The place a start from another agent lands in, the source's own, once the source is read and found fit to start from, with the agents that already continued it; or why it is not. */
 const sourceLanding = (
   caller: AgentCaller,
@@ -1628,6 +1654,10 @@ const sourceLanding = (
       const at = yield* messageSeqOf(userId, conversationId, from.messageId, role);
       if (Option.isNone(at)) return Result.fail(START_AGENT_REFUSAL.NO_MESSAGE);
       return Result.succeed({ place, continuedBy: [] });
+    }
+    // Note that a continue of an agent that started the caller records the caller as the new agent's starter and, for a pilot, moves the agents it started under it, so the two would name each other.
+    if (yield* startedThrough(callerUserId(caller), caller.agent.id, source.id)) {
+      return Result.fail(START_AGENT_REFUSAL.STARTER_CONTINUE);
     }
     // A continue takes over work that has ended; one already continued is
     // continued again, since a continuation may itself fail or go wrong, and
@@ -2196,6 +2226,9 @@ export function runUpdateTask(
           Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_SECTION)),
         ),
         Effect.catchTag("TaskBlockRefused", ({ words }) => Effect.succeed(Result.fail(words))),
+        Effect.catchTag("TaskTreeRepositoryLocked", () =>
+          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.TREE_REPOSITORY)),
+        ),
       );
       if (Result.isFailure(changed)) return agentToolRejected(changed.failure);
       const { task, blocksChanged } = changed.success;

@@ -81,6 +81,7 @@ import {
 } from "@luke/features/provider-key-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import {
+  MERGE_POLICY,
   PLAN_ACTOR,
   TASK_BOUNDS,
   TASK_MODE,
@@ -1436,6 +1437,53 @@ test("start_agent from another agent refuses, in words the model acts on and sta
   assert.equal(eve.sent.length, 0, "no refusal opens a session");
 });
 
+test("start_agent refuses a coder continuing the pilot that started it, directly or through the coder between them, starting nothing, and still forks it", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const pilot = await claimed(caller.userId, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    taskId: tasks.invitations,
+    planSnapshot: "# Teammate invitations",
+    prompt: null,
+    kind: AGENT_KIND.PILOT,
+  });
+  const coder = await claimed(caller.userId, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    taskId: tasks.invitations,
+    planSnapshot: "# Teammate invitations",
+    prompt: null,
+    startedByAgentId: pilot.id,
+  });
+  const grandchild = await claimed(caller.userId, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    taskId: tasks.invitations,
+    planSnapshot: "# Teammate invitations",
+    prompt: null,
+    startedByAgentId: coder.id,
+  });
+  await saidTurnOn(pilot, "Handed the invitations on.");
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), coder, eve.services);
+  const deepCall = await peerCaller(hostOf(true), grandchild, eve.services);
+  const [messageId] = tailMessageIds(await call(CODER_TOOL.READ_AGENT, { agentId: pilot.id }));
+  assert.ok(messageId !== undefined);
+
+  assert.deepEqual(await call(CODER_TOOL.START_AGENT, { from: { agentId: pilot.id } }, "call-up"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: START_AGENT_REFUSAL.STARTER_CONTINUE,
+  });
+  assert.deepEqual(
+    await deepCall(CODER_TOOL.START_AGENT, { from: { agentId: pilot.id } }, "call-up-deep"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_AGENT_REFUSAL.STARTER_CONTINUE },
+  );
+  assert.equal(eve.sent.length, 0, "no refusal opens a session");
+  const forked = await call(CODER_TOOL.START_AGENT, { from: { agentId: pilot.id, messageId } });
+  assert.equal(forked.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(forked));
+});
+
 /** A teammate's agent on the task given, started on the branch given, its session recorded. */
 async function agentOnBranch(
   userId: string,
@@ -1835,6 +1883,40 @@ test("an agent whose starter has left the workspace makes no task in it", async 
   const refused = await call(CODER_TOOL.CREATE_TASK, { name: "Left behind" });
   assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(refused));
   assert.deepEqual(await tasksNamed(agents.caller.userId, workspaceId, "Left behind"), []);
+});
+
+test("only a pilot makes a task in pilot mode, as a child of another", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const alice = agents.caller.userId;
+  const asked = { name: "Billing rewrite", parentTaskId: tasks.invitations, mode: TASK_MODE.PILOT };
+  const call = (as: Awaited<ReturnType<typeof peerCaller>>) =>
+    as(CODER_TOOL.CREATE_TASK, asked, `call-${randomUUID()}`);
+
+  // A coder asking for one makes nothing.
+  const coder = await peerCaller(hostOf(true), agents.caller, eve.services);
+  assert.deepEqual(await call(coder), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: CREATE_TASK_REFUSAL.NOT_PILOT,
+  });
+  assert.deepEqual(await tasksNamed(alice, workspaceId, asked.name), []);
+
+  // A pilot makes its child a pilot task.
+  const pilot = await claimed(alice, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    taskId: tasks.invitations,
+    kind: AGENT_KIND.PILOT,
+    planSnapshot: "# Teammate invitations",
+    prompt: null,
+  });
+  const made = await call(await peerCaller(hostOf(true), pilot, eve.services));
+  assert.ok(isRecord(made.task) && isWireString(made.task.id), JSON.stringify(made));
+  const stored = Option.getOrThrow(await database.run(readTask(alice, made.task.id)));
+  assert.deepEqual(
+    [stored.task.mode, stored.task.parentTaskId],
+    [TASK_MODE.PILOT, tasks.invitations],
+  );
 });
 
 test("a task an agent makes runs on the device its member last chose, away or not, one since removed makes none, and with no device left it runs in the cloud", async () => {
@@ -2564,7 +2646,7 @@ function sessionEndsOf(host: CoderHost) {
       admits: CODER_DEPLOYMENT_TURNS,
       presents: CODER_DEPLOYMENT_PRESENCE,
     },
-    (sessionId) => database.run(host.sessionEnded(sessionId)),
+    (sessionId, failed) => database.run(host.sessionEnded(sessionId, failed)),
   );
   const failed = events?.["session.failed"];
   const completed = events?.["session.completed"];
@@ -2611,6 +2693,14 @@ test("an agent whose session eve says failed reads as failed for its session's e
 
   await ends.failed(agents.teammates.sessionId);
   assert.deepEqual(await standingAsRead(call, agents.teammates.id), failed);
+  const settled = await database.run(
+    latestTurnsOf(agents.teammates.userId, [agents.teammates.conversationId]),
+  );
+  assert.equal(
+    settled.get(agents.teammates.conversationId)?.failureDetail,
+    "WORKFLOW_EXECUTION_FAILED The run threw.",
+    "eve's code and message stand on the turn",
+  );
   await ends.failed(agents.teammates.sessionId);
   assert.deepEqual(
     await standingAsRead(call, agents.teammates.id),
@@ -3461,6 +3551,32 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: READ_TASK_REFUSAL.UNREADABLE,
   });
+});
+
+test("read_task names a grandchild's merge policy as its top task's, whatever the grandchild's own column holds", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const top = await database.run(createTask(caller.userId, { organizationId: workspaceId }));
+  const child = await database.run(
+    createTask(caller.userId, { organizationId: workspaceId, parentTaskId: top.id }),
+  );
+  const grandchild = await database.run(
+    createTask(caller.userId, { organizationId: workspaceId, parentTaskId: child.id }),
+  );
+  await database.run(
+    Effect.flatMap(Database, (db) =>
+      db.update(task).set({ mergePolicy: MERGE_POLICY.HOLD }).where(eq(task.id, top.id)),
+    ),
+  );
+
+  const read = await call(CODER_TOOL.READ_TASK, { taskId: grandchild.id });
+  assert.equal(
+    isRecord(read.task) && read.task.topTaskMergePolicy,
+    MERGE_POLICY.HOLD,
+    JSON.stringify(read),
+  );
 });
 
 test("create_task, update_task, list_tasks, and read_task carry a task's status, priority, and key, list_tasks narrows by status, and an unknown status is refused", async () => {

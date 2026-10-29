@@ -29,6 +29,6 @@ export default eveChannel(
       presents: CODER_DEPLOYMENT_PRESENCE,
     },
     // The end of a session eve tells the channel alone, run here on the edge's runner; the host logs its own failures.
-    (sessionId) => runAgent(host.sessionEnded(sessionId)),
+    (sessionId, failed) => runAgent(host.sessionEnded(sessionId, failed)),
   ),
 );

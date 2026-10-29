@@ -134,7 +134,7 @@ const openedThroughRelay = (owner: string, conversationId: string, opened: reado
     const relay = new StreamRelay({
       writer: yield* storeWriter({ tools: CODER_TOOL_SET }),
       now: () => Date.UTC(2026, 9, 23),
-      report: () => undefined,
+      report: () => Effect.void,
     });
     const standing = {
       sessionId: `wrun_${randomUUID()}`,

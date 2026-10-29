@@ -19,12 +19,12 @@ import type { ConversationTarget } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { AGENT_KIND, CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { causeKind } from "@luke/runtime/effect";
+import { causeKind, reportUnexpected } from "@luke/runtime/effect";
 import { Effect, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
-import { MESSAGE_ROLE, type UnparsedWireValue, type WireRecord } from "../../core.js";
+import { MESSAGE_ROLE, TURN_FAILURE, type UnparsedWireValue, type WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import {
@@ -49,6 +49,8 @@ import {
   SESSION_STANDING,
 } from "../eve-host/conversation.js";
 import {
+  type EveFailure,
+  failureDetailOf,
   foldedQuietly,
   type RelayStanding,
   type RelayStateStore,
@@ -315,11 +317,16 @@ export interface CoderHost extends HostAdmission {
    * so the agent reads as failed at once rather than running until the
    * sweep's day-long bound. eve names the session itself, from inside its
    * own run, so nothing is admitted: a session no agent's conversation
-   * records settles nothing. Never fails, since its caller is eve's channel
+   * records settles nothing. A session eve failed hands its code and message
+   * on, which each turn it settles keeps as why it failed, and the failure is
+   * reported, since no member asked for it. Never fails, since its caller is eve's channel
    * adapter: a store failure is logged and dropped, and the sweep's bound
    * still ends the turn in time.
    */
-  sessionEnded(sessionId: string): Effect.Effect<void, never, DatabaseServices>;
+  sessionEnded(
+    sessionId: string,
+    failed?: EveFailure,
+  ): Effect.Effect<void, never, DatabaseServices>;
   /**
    * Relays one event of a worker's session into the child conversation its
    * delegation was recorded under, as a child turn on the recorded pair; a
@@ -648,7 +655,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       const relay = new StreamRelay({
         writer,
         now: seams.now,
-        report: (message) => console.warn(message),
+        report: (message) => Effect.logWarning(message),
       });
       yield* relay.handle(event, standing);
     });
@@ -829,16 +836,32 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         ),
       ),
 
-    sessionEnded: (sessionId) =>
+    sessionEnded: (sessionId, failed) =>
       Effect.gen(function* () {
+        const failureDetail = failed === undefined ? undefined : failureDetailOf(failed);
+        if (failureDetail !== undefined) {
+          yield* reportUnexpected(TURN_FAILURE.SESSION_ENDED, {
+            sessionId,
+            failure: TURN_FAILURE.SESSION_ENDED,
+            failureDetail,
+          });
+        }
         const writer = yield* seams.writer();
-        yield* settleEndedSession(writer, sessionId, { now: seams.now() });
+        const settled = yield* settleEndedSession(writer, sessionId, {
+          now: seams.now(),
+          failureDetail,
+        });
+        // A session that failed with no turn standing settled nothing, so its failure is said here.
+        if (failureDetail !== undefined && settled === 0) {
+          yield* Effect.logWarning(`a session failed with no turn standing: ${failureDetail}`);
+        }
       }).pipe(
         Effect.catchCause((cause) =>
           Effect.logWarning(
             `The turn of ended session ${sessionId} was not settled: ${causeKind(cause)}`,
           ),
         ),
+        Effect.annotateLogs({ sessionId }),
       ),
 
     relayChild: (event, session, state) =>
@@ -934,6 +957,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           sessionId: session.id,
           target: admitted.target,
           turn: opened,
+          ...(agent !== undefined ? { agentId: agent.id } : undefined),
           ...(model !== undefined ? { model } : undefined),
           ...(agent !== undefined ? { reasoningEffort: agent.effort } : undefined),
           ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),

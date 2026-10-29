@@ -67,6 +67,8 @@ function keyOf(
       ...(row.fastAccess === null ? undefined : { fastAccess: row.fastAccess }),
       reportFast: (access) =>
         seams.run(setProviderKeyFastAccess(userId, provider, row.sealedKey, access)),
+      // A line the runner could not write has nowhere else to be said, and never replaces the step's own failure.
+      said: (line) => seams.run(line).catch(() => undefined),
     },
   };
 }
