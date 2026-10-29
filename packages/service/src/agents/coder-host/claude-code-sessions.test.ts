@@ -105,7 +105,11 @@ import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_SNAPSHOT } from "../repository-snapshot.js";
 import { deploymentOidcToken, SESSION_TAG } from "../vercel-sandbox-api.js";
 import { CODER } from "./bounds.js";
-import { type ClaudeCodeSessionsOptions, claudeCodeSessions } from "./claude-code-sessions.js";
+import {
+  type ClaudeCodeSessionsOptions,
+  claudeCodeDeniedTools,
+  claudeCodeSessions,
+} from "./claude-code-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
 import { RUNNER_ENDED, retireWarmRunner, runnerEnded, runnerIdled } from "./runner-sessions.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
@@ -2490,6 +2494,44 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(!JSON.stringify(yield* launchLines(runner)).includes("And the tests."));
         assert.ok(JSON.stringify(yield* launchLines(api.commands[1])).includes("And the tests."));
       }),
+  );
+
+  it.effect("a pilot's launch denies the tools that edit a file, and a coder's denies none", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = runnerSandboxApi();
+      const { userId, agent: coder } = yield* openAgent;
+      assert.ok(coder.taskId !== null);
+      const started = yield* createAgent(userId, {
+        taskId: coder.taskId,
+        idempotencyKey: "start-pilot",
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        planSnapshot: null,
+        prompt: null,
+        repository: null,
+        kind: AGENT_KIND.PILOT,
+      });
+      assert.ok(Option.isSome(started));
+      const sessions = yield* claudeCodeSessions({
+        userId,
+        eventsUrl: EVENTS_URL,
+        linesUrl: LINES_URL,
+        mcpUrl: MCP_URL,
+        integrations: () => Effect.succeed([]),
+        instructions: () => Effect.succeed(INSTRUCTIONS),
+        nextSequence: () => Effect.succeed(0),
+        deniedTools: claudeCodeDeniedTools,
+      }).pipe(Effect.provide(services(api)));
+
+      yield* sessions.open(message(started.value.agent, "Plan it."));
+      yield* sessions.open(message(coder, "Fix it."));
+
+      const [pilotConfig] = (yield* launchLines(api.commands[0])) as [ClaudeCodeConfig];
+      const [coderConfig] = (yield* launchLines(api.commands[1])) as [ClaudeCodeConfig];
+      assert.deepEqual(pilotConfig.deniedTools, ["Edit", "Write", "NotebookEdit"]);
+      assert.equal(coderConfig.deniedTools, undefined);
+    }),
   );
 
   it.effect(

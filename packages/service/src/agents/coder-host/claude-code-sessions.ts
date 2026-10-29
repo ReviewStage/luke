@@ -33,7 +33,7 @@ import { deviceLayout } from "@luke/database/models/device-store";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
+import { AGENT_KIND, AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -74,6 +74,14 @@ const MAC_LOGIN: { readonly env: Readonly<Record<string, string>> } = { env: {} 
 /** The effort the CLI takes for the agent's own, where it names one of the SDK's. */
 function effortOf(effort: string): Effort | undefined {
   return Object.values(EFFORT).find((level) => level === effort);
+}
+
+/** Claude Code's built-in tools that change a file, by the CLI's names. */
+const CLAUDE_CODE_EDITING_TOOLS = ["Edit", "Write", "NotebookEdit"] as const;
+
+/** The built-in tools an agent of its kind goes without: a pilot never changes code, so it has none that edits a file. */
+export function claudeCodeDeniedTools(agent: Agent): readonly string[] {
+  return agent.kind === AGENT_KIND.PILOT ? CLAUDE_CODE_EDITING_TOOLS : [];
 }
 
 /** What Claude Code's sessions are handed beside what every harness's are. */
