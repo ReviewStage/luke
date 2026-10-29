@@ -113,6 +113,7 @@ import {
   localAgentRefusalWords,
   openingLineOf,
   type SentLine,
+  startsOwnAgents,
 } from "./agent-model.js";
 import {
   CLOSED_TAB_STRIP,
@@ -1285,6 +1286,7 @@ export function useTasksTab(input: {
     listedAgents: tasks.tasks.some((task) => task.id === viewed.activeTaskId)
       ? liveAgents
       : undefined,
+    mode: tasks.tasks.find((task) => task.id === viewed.activeTaskId)?.mode,
     onOpenIntegrations: input.onOpenIntegrations,
     onOpenApiKeys: input.onOpenApiKeys,
     me: input.accountId,
@@ -1356,7 +1358,8 @@ export function useTasksTab(input: {
   // that nothing reaches the service until the draft is sent or called.
   const openDraftNow = useRef(agents.onNewDraft);
   openDraftNow.current = agents.onNewDraft;
-  // Note that an archive still out wants none, since the agent it took comes back if refused, and
+  // Note that an archive still out wants none, since the agent it took comes back if refused, nor
+  // does a pilot task, whose agents its pilot starts (`startsOwnAgents`), and
   // neither does New task's start of an agent, since main opens its task before the start answers,
   // whose agent no list holds yet, and its answer opens the agent's tab, or its draft if refused.
   const draftWanted =
@@ -1364,7 +1367,8 @@ export function useTasksTab(input: {
     startingTask === undefined &&
     agents.agentIds !== undefined &&
     agents.onUnarchive === undefined &&
-    !agents.archiving;
+    !agents.archiving &&
+    startsOwnAgents(agents.mode);
   const draftTask = viewed.activeTaskId;
   useEffect(() => {
     if (draftWanted && draftTask !== undefined) openDraftNow.current();

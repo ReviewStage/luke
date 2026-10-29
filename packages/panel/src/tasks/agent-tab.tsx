@@ -121,6 +121,7 @@ import {
   macOwnerOf,
   messageWords,
   nativeSubagent,
+  offersContinue,
   offersStop,
   type PlacedMessage,
   placedMessages,
@@ -2939,6 +2940,8 @@ function AgentTabBody({
     attachments: composer.unsent.attachments,
     taskId: agent.planId,
   };
+  // On a pilot task only its pilot continues, so a coding agent there offers no Continue anywhere.
+  const continues = offersContinue(control.mode, agent);
   // The failed end line holds the press, Continue again once another agent continued this one.
   const pressed = endLineOffersContinue({
     status: agent.status,
@@ -3007,11 +3010,12 @@ function AgentTabBody({
               agentId={agent.id}
               control={control}
               carry={continued.length > 0 ? carry : undefined}
+              offers={continues}
               label={continued.length > 0 ? CONTINUE_AGAIN_LABEL : CONTINUE_LABEL}
             />
           ) : undefined
         }
-        continuable={continued.length > 0 || control.continueAgent !== undefined}
+        continuable={continued.length > 0 || (continues && control.continueAgent !== undefined)}
         endTrail={
           // Note that the box's note names them while it stands, so the transcript names them only where an archive took the box.
           continued.length === 0 || control.onUnarchive === undefined ? undefined : (
@@ -3029,7 +3033,9 @@ function AgentTabBody({
             />
           )
         }
-        closedRemedy={<ContinueAgent agentId={agent.id} control={control} carry={carry} />}
+        closedRemedy={
+          <ContinueAgent agentId={agent.id} control={control} carry={carry} offers={continues} />
+        }
       />
     </MessagePlaceProvider>
   );

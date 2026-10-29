@@ -32,6 +32,7 @@ import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
 } from "@luke/features/pull-request-chapters-view";
+import type { TaskMode } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
 import { STATUS_TONE } from "@luke/ui";
@@ -216,6 +217,8 @@ export interface AgentsControl {
   readModels: () => void;
   /** Reads the account's default now, for a menu opening or the Settings page. */
   readDefault: () => Promise<AgentDefaultAnswer>;
+  /** How the open task is worked, which says what its members start of their own (`startsOwnAgents`); none where no task is open, or before the task list names it. */
+  mode: TaskMode | undefined;
   /** The open task's draft agent; nothing while it has none. */
   draft: AgentDraft | undefined;
   /** Opens a draft agent on the open task, or answers the one it has, by its key. */
@@ -642,6 +645,8 @@ export function useAgents(input: {
   agentId?: string | undefined;
   /** The open task's repository, or null while it names none. */
   repository: string | null;
+  /** How the open task is worked; none where no task is open, or before the task list names it. */
+  mode?: TaskMode | undefined;
   /**
    * Every agent the task list followed live carries, on a task or with
    * none, the archived ones among them; none where it is not followed, or
@@ -1527,6 +1532,7 @@ export function useAgents(input: {
     origin: ours(list) ? list.origin : undefined,
     agentIds,
     heldIds: standing?.map((agent) => agent.id),
+    mode: taskId === undefined ? undefined : input.mode,
     draft,
     onNewDraft,
     onForkDraft,
