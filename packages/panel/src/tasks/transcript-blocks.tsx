@@ -150,6 +150,7 @@ import {
   type ToolState,
   ToolStateMark,
   ToolSummary,
+  ToolTerminal,
 } from "../ai-elements/tool.js";
 import { OUTSIDE_GLYPH_CLASS } from "../picture-block.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
@@ -1129,7 +1130,8 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
 
 /**
  * One tool call: its row saying what it did, closed until clicked, and its
- * input and answer under it once opened. A command is the closed row's
+ * input and answer under it once opened, a command's as one terminal card
+ * (`ToolTerminal`). A command is the closed row's
  * preview, dropped once the body under it shows the command whole behind
  * its prompt, or by a find, which draws that body hidden, and so is any
  * subject the input says whole, a read's path or a search's pattern
@@ -1183,16 +1185,32 @@ export function TranscriptTool({
         }
       />
       <ToolContent bare>
-        <ToolInput block={input} />
-        {cut === undefined ? (
-          <ToolOutput block={output} errorText={errorText} />
+        {input.kind === TOOL_BLOCK.COMMAND ? (
+          cut === undefined ? (
+            <ToolTerminal input={input} block={output} errorText={errorText} />
+          ) : (
+            <CutWords cut={cut} waiting={CUT_WORDS.OUTPUT}>
+              <ToolTerminal
+                input={input}
+                block={{ kind: TOOL_BLOCK.TEXT, text: cutText(cut) }}
+                errorText={undefined}
+              />
+            </CutWords>
+          )
         ) : (
-          <CutWords cut={cut} waiting={CUT_WORDS.OUTPUT}>
-            <ToolOutput
-              block={{ kind: TOOL_BLOCK.TEXT, text: cutText(cut) }}
-              errorText={undefined}
-            />
-          </CutWords>
+          <>
+            <ToolInput block={input} />
+            {cut === undefined ? (
+              <ToolOutput block={output} errorText={errorText} />
+            ) : (
+              <CutWords cut={cut} waiting={CUT_WORDS.OUTPUT}>
+                <ToolOutput
+                  block={{ kind: TOOL_BLOCK.TEXT, text: cutText(cut) }}
+                  errorText={undefined}
+                />
+              </CutWords>
+            )}
+          </>
         )}
       </ToolContent>
     </Tool>

@@ -132,6 +132,17 @@ test("a described command keeps its description open and drops the command its b
   assert.doesNotMatch(line(drawing), /pnpm check/u);
 });
 
+test("an open row whose body says its subject drops its verb's colon, which its closed row keeps before the subject", () => {
+  const input = JSON.stringify({ text: "Merge on green" }, null, 2);
+  const drawing = drawn(
+    call(CALL_KIND.REMEMBER, "Merge on green", { kind: TOOL_BLOCK.JSON, text: input }),
+  );
+  assert.equal(line(drawing), "Saved to memory: Merge on green");
+
+  press(drawing);
+  assert.equal(line(drawing), "Saved to memory");
+});
+
 const PLAN_LINE = "Refuse a withdrawn invite link the way a used one is refused";
 
 /** The plan an agent was handed, as its transcript opens on it. */

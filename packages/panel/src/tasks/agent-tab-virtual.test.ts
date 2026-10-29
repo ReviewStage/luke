@@ -429,6 +429,17 @@ async function farTally(far: AgentTranscriptMessage, query: string) {
   return findTally();
 }
 
+test("⌘F counts a far call's JSON input as its card reads it, in words rather than JSON", async () => {
+  const listed = {
+    type: "tool-linear_list_issues",
+    toolCallId: "m-7-list",
+    state: "output-available",
+    input: { team: "LUKE", state: "open" },
+    output: { issues: [] },
+  };
+  assert.equal(await farTally(farReply([listed]), "team: LUKE"), "1 of 1");
+});
+
 test("⌘F finds a phrase across a far call's verb and subject, as its line reads", async () => {
   const shown = {
     type: "tool-show_page",

@@ -114,7 +114,7 @@ const CODEX_ITEMS: readonly {
       results: null,
     },
     line: ["Searched the web for", "banker's rounding in JavaScript"],
-    body: ['"type": "search"'],
+    body: ["type: search"],
   },
 
   {
@@ -131,7 +131,7 @@ const CODEX_ITEMS: readonly {
     input: { server: "sentry", tool: "search_issues", arguments: { query: "invoice" } },
     output: "3 issues match invoice",
     line: ["Ran", "search_issues", "Sentry"],
-    body: ['"query": "invoice"', "3 issues match invoice"],
+    body: ["Inputinvoice", "3 issues match invoice"],
   },
 ];
 
