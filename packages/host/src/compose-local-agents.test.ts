@@ -665,6 +665,31 @@ it.effect(
 );
 
 it.effect(
+  "a runner's VM that would not stop as it ended keeps its launch unsettled until a beat has stopped it, then settles it with the exit code",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { settled, files, spawned, vm, reported } = yield* followingDevice(
+          () => Effect.void,
+          { vmStopFails: 1 },
+        );
+        yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* until(() => reported.length > 0);
+
+        assert.deepEqual(reported, ["a local agent's VM could not be stopped"]);
+        assert.deepEqual([settled, vm.stopped, keptLaunches(files)], [[], [], [LINE_ID]]);
+        yield* beatsOn(1);
+        yield* until(() => settled.length > 0);
+
+        assert.deepEqual(vm.stopped, [AGENT_ID]);
+        assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
+        yield* until(() => keptLaunches(files).length === 0);
+      }),
+    ),
+);
+
+it.effect(
   "a launch the service holds the device to that it runs nothing for is settled as a runner gone, again on the next beat where the service did not take it",
   () =>
     Effect.scoped(

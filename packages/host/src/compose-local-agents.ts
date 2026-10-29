@@ -579,8 +579,15 @@ export function composeLocalAgents(
          * between turns; whether it stands. The last hold let go of stops the
          * VM, so a check between turns never leaves it running, and never
          * stops it under a runner. A VM a discard deleted is held by nothing.
+         * Where a runner's launch (`lineId`) holds it and the stop fails, the
+         * launch joins `unstopped`, so a beat stops it again before the
+         * launch is settled.
          */
-        const vmHeld = <E, R>(agentId: string, start: Effect.Effect<boolean, E, R>) =>
+        const vmHeld = <E, R>(
+          agentId: string,
+          start: Effect.Effect<boolean, E, R>,
+          lineId?: string,
+        ) =>
           Effect.gen(function* () {
             const lock = vmLockOf(agentId);
             const up = yield* lock.withPermit(
@@ -599,8 +606,9 @@ export function composeLocalAgents(
                     if (held === undefined) return;
                     if (held > 1) return vmHolds.set(agentId, held - 1);
                     vmHolds.delete(agentId);
-                    if (!(yield* platform.sandbox.stopped(agentId)))
-                      report("a local agent's VM could not be stopped");
+                    if (yield* platform.sandbox.stopped(agentId)) return;
+                    if (lineId !== undefined) unstopped.set(lineId, VM_STOP_TRIES);
+                    report("a local agent's VM could not be stopped");
                   }),
                 )
                 .pipe(Effect.provideContext(services)),
@@ -802,6 +810,7 @@ export function composeLocalAgents(
                 sandbox.started({ agentId, folder: layout.folder, github: withRepository }),
                 true,
               ),
+              line.id,
             ).pipe(
               Scope.provide(runnerScope),
               Effect.as(Option.none<string>()),
@@ -869,6 +878,8 @@ export function composeLocalAgents(
               endings.set(line.id, ending);
               runners.delete(agentId);
               yield* Scope.close(runnerScope, Exit.void);
+              // Note that a launch whose VM would not stop stays kept, which every beat stops again before it settles (`vmLetGo`).
+              if (unstopped.has(line.id)) return;
               yield* settledLaunch(line.id, ending);
             }).pipe(Effect.forkIn(agentScope));
             runners.set(agentId, { lineId: line.id, stdin, handle, exited });

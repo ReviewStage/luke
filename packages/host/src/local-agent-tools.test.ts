@@ -111,4 +111,29 @@ describe("localAgentTool", () => {
       assert.strictEqual(yield* fileSystem.readFileString(kept), "#!/bin/sh\necho tool\n");
     }).pipe(Effect.scoped, Effect.provide(NODE)),
   );
+
+  it.effect(
+    "removes the tool's other releases once a build is answered, fetched or kept, and nothing beside the tool's own folder",
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const root = yield* temporaryDirectoryScoped("luke-tools-");
+        const { archive, pin } = yield* release;
+        const fetching = fakeHttpClientLayer(() => new Response(archive));
+        const folders = `${root}/agent-tools`;
+        yield* fileSystem.makeDirectory(`${folders}/tool/0.9/bin`, { recursive: true });
+        yield* fileSystem.writeFileString(`${folders}/tool/0.9/bin/tool`, "old");
+        yield* fileSystem.makeDirectory(`${folders}/other/0.9`, { recursive: true });
+
+        yield* localAgentTool(root, pin).pipe(Effect.provide(fetching));
+        assert.deepStrictEqual(yield* fileSystem.readDirectory(`${folders}/tool`), ["1.0"]);
+
+        yield* fileSystem.makeDirectory(`${folders}/tool/0.8`, { recursive: true });
+        yield* localAgentTool(root, pin).pipe(Effect.provide(fetching));
+
+        assert.deepStrictEqual(yield* fileSystem.readDirectory(`${folders}/tool`), ["1.0"]);
+        assert.isTrue(yield* fileSystem.exists(`${folders}/tool/1.0/bin/tool`));
+        assert.isTrue(yield* fileSystem.exists(`${folders}/other/0.9`));
+      }).pipe(Effect.scoped, Effect.provide(NODE)),
+  );
 });
