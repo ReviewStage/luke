@@ -435,8 +435,8 @@ export const START_AGENT_REFUSAL = {
     "pilot, and Pilot is off for the member you start for. Ask them to turn it on in Settings › " +
     "Experimental.",
   TREE_STOPPED:
-    "Not started: that task is a child task of a pilot tree whose Running switch is off, so no " +
-    "agent starts or goes on there until a member switches Running on, on the top task.",
+    "Not started: that task is a child task of a stopped pilot tree, so no agent starts or goes " +
+    "on there until someone presses Start on the top task.",
   STARTER_CONTINUE:
     "Not started: you can't continue an agent that started you, directly or through the agents " +
     "between you, since the agents it started would report to a pilot you started; tell its " +
