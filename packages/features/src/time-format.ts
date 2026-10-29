@@ -24,6 +24,10 @@ import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from "@luke/runtime/vocabulary"
 const WEEK_MS = 7 * DAY_MS;
 const MINUTE_SECONDS = 60;
 const HOUR_MINUTES = 60;
+const DAY_HOURS = 24;
+
+/** How many days a run goes before its length counts days rather than hours. */
+const DAYS_COUNTED_PAST = 2;
 
 /** The spans a row counts in, longest first, each with its letter; past the last, the row names the date. */
 const SINCE_UNITS = [
@@ -209,13 +213,25 @@ export function callHeading(startedAt: number, now: number): string {
 /** What separates how long a turn worked from when it ended, and a call's heading from its length. */
 export const WORKED_SEPARATOR = " · ";
 
-/** How long a run has gone, as devtools count it: "42s" under a minute, "1m 12s" under an hour, and "1h 3m" past it. */
+/** A length in two units, the smaller left out where it is zero: "2m", not "2m 0s". */
+function twoUnits(large: number, largeUnit: string, small: number, smallUnit: string): string {
+  return small === 0 ? `${large}${largeUnit}` : `${large}${largeUnit} ${small}${smallUnit}`;
+}
+
+/**
+ * How long a run has gone, as devtools count it: "42s" under a minute,
+ * "1m 12s" under an hour, "1h 3m" under two days, and "21d 9h" past them,
+ * a zero second unit left out ("2m", "1h", "3d").
+ */
 export function workingTime(elapsedMs: number): string {
   const seconds = Math.floor(Math.max(0, elapsedMs) / SECOND_MS);
   if (seconds < MINUTE_SECONDS) return `${seconds}s`;
   const minutes = Math.floor(seconds / MINUTE_SECONDS);
-  if (minutes < HOUR_MINUTES) return `${minutes}m ${seconds % MINUTE_SECONDS}s`;
-  return `${Math.floor(minutes / HOUR_MINUTES)}h ${minutes % HOUR_MINUTES}m`;
+  if (minutes < HOUR_MINUTES) return twoUnits(minutes, "m", seconds % MINUTE_SECONDS, "s");
+  const hours = Math.floor(minutes / HOUR_MINUTES);
+  if (hours < DAYS_COUNTED_PAST * DAY_HOURS)
+    return twoUnits(hours, "h", minutes % HOUR_MINUTES, "m");
+  return twoUnits(Math.floor(hours / DAY_HOURS), "d", hours % DAY_HOURS, "h");
 }
 
 /**
