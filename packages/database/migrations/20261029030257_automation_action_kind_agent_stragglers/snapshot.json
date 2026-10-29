@@ -1,8 +1,7 @@
 {
-  "id": "86a92316-ad7c-4780-9fb6-c570ad31afc7",
+  "id": "83e77b87-a564-4b70-9843-d43a1cd84b92",
   "prevIds": [
-    "8c1cb1e4-aa00-489a-9682-bac8c8efa42c",
-    "d4e16b4b-aa88-4052-bfb6-f5bc2f9f282e"
+    "6de81a75-94f7-432f-808a-e04773cb279f"
   ],
   "version": "8",
   "dialect": "postgres",
@@ -21,13 +20,13 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "coding_agent_delegation",
+      "name": "agent_delegation",
       "entityType": "tables",
       "schema": "public"
     },
     {
       "isRlsEnabled": false,
-      "name": "coding_agent",
+      "name": "agent",
       "entityType": "tables",
       "schema": "public"
     },
@@ -45,13 +44,13 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "coding_agent_runner_lease",
+      "name": "agent_runner_lease",
       "entityType": "tables",
       "schema": "public"
     },
     {
       "isRlsEnabled": false,
-      "name": "coding_agent_wakeup",
+      "name": "agent_wakeup",
       "entityType": "tables",
       "schema": "public"
     },
@@ -701,7 +700,7 @@
       "name": "child_conversation_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent_delegation"
+      "table": "agent_delegation"
     },
     {
       "type": "text",
@@ -714,7 +713,7 @@
       "name": "call_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent_delegation"
+      "table": "agent_delegation"
     },
     {
       "type": "text",
@@ -727,7 +726,7 @@
       "name": "model",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent_delegation"
+      "table": "agent_delegation"
     },
     {
       "type": "text",
@@ -740,7 +739,7 @@
       "name": "effort",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent_delegation"
+      "table": "agent_delegation"
     },
     {
       "type": "uuid",
@@ -753,7 +752,7 @@
       "name": "id",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "uuid",
@@ -766,7 +765,7 @@
       "name": "task_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -779,7 +778,7 @@
       "name": "organization_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "uuid",
@@ -792,7 +791,7 @@
       "name": "automation_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "jsonb",
@@ -805,7 +804,7 @@
       "name": "automation_origin",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "jsonb",
@@ -818,7 +817,7 @@
       "name": "started_from",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "uuid",
@@ -831,7 +830,7 @@
       "name": "started_by_agent_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -844,7 +843,7 @@
       "name": "user_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "uuid",
@@ -857,7 +856,7 @@
       "name": "conversation_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -870,7 +869,7 @@
       "name": "model",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -883,7 +882,7 @@
       "name": "effort",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -896,7 +895,7 @@
       "name": "context_window",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -909,7 +908,7 @@
       "name": "plan_snapshot",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -922,7 +921,7 @@
       "name": "prompt",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -935,7 +934,7 @@
       "name": "repository",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "jsonb",
@@ -948,7 +947,7 @@
       "name": "repositories",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -961,7 +960,7 @@
       "name": "branch",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -974,7 +973,7 @@
       "name": "start_branch",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -987,7 +986,7 @@
       "name": "title",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "jsonb",
@@ -1000,7 +999,7 @@
       "name": "last_step",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "timestamp with time zone",
@@ -1013,7 +1012,7 @@
       "name": "compacted_at",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "jsonb",
@@ -1026,7 +1025,7 @@
       "name": "published",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "jsonb",
@@ -1039,7 +1038,7 @@
       "name": "published_read",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "timestamp with time zone",
@@ -1052,7 +1051,7 @@
       "name": "archived_at",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "jsonb",
@@ -1065,7 +1064,7 @@
       "name": "archived_by",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "jsonb",
@@ -1078,7 +1077,7 @@
       "name": "disabled_servers",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "jsonb",
@@ -1091,7 +1090,7 @@
       "name": "mentioned_servers",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -1104,7 +1103,7 @@
       "name": "author",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -1117,7 +1116,7 @@
       "name": "github_access",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -1130,7 +1129,7 @@
       "name": "payer",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -1143,7 +1142,7 @@
       "name": "runner_token_hash",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -1156,7 +1155,7 @@
       "name": "kind",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -1169,7 +1168,7 @@
       "name": "machine",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "uuid",
@@ -1182,7 +1181,7 @@
       "name": "device_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "text",
@@ -1195,7 +1194,7 @@
       "name": "idempotency_key",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "timestamp with time zone",
@@ -1208,7 +1207,7 @@
       "name": "created_at",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "type": "uuid",
@@ -1465,7 +1464,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "coding_agent_id",
+      "name": "agent_id",
       "entityType": "columns",
       "schema": "public",
       "table": "agent_pin"
@@ -1507,7 +1506,7 @@
       "name": "agent_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent_runner_lease"
+      "table": "agent_runner_lease"
     },
     {
       "type": "uuid",
@@ -1520,7 +1519,7 @@
       "name": "holder",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent_runner_lease"
+      "table": "agent_runner_lease"
     },
     {
       "type": "timestamp with time zone",
@@ -1533,7 +1532,7 @@
       "name": "held_until",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent_runner_lease"
+      "table": "agent_runner_lease"
     },
     {
       "type": "uuid",
@@ -1546,7 +1545,7 @@
       "name": "id",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent_wakeup"
+      "table": "agent_wakeup"
     },
     {
       "type": "uuid",
@@ -1559,7 +1558,7 @@
       "name": "agent_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent_wakeup"
+      "table": "agent_wakeup"
     },
     {
       "type": "text",
@@ -1572,7 +1571,7 @@
       "name": "prompt",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent_wakeup"
+      "table": "agent_wakeup"
     },
     {
       "type": "timestamp with time zone",
@@ -1585,7 +1584,7 @@
       "name": "due_at",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent_wakeup"
+      "table": "agent_wakeup"
     },
     {
       "type": "integer",
@@ -1598,7 +1597,7 @@
       "name": "attempts",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent_wakeup"
+      "table": "agent_wakeup"
     },
     {
       "type": "timestamp with time zone",
@@ -1611,7 +1610,7 @@
       "name": "created_at",
       "entityType": "columns",
       "schema": "public",
-      "table": "coding_agent_wakeup"
+      "table": "agent_wakeup"
     },
     {
       "type": "uuid",
@@ -4351,7 +4350,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "coding_agent_id",
+      "name": "agent_id",
       "entityType": "columns",
       "schema": "public",
       "table": "automation_run"
@@ -7857,7 +7856,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "coding_agent_model",
+      "name": "agent_model",
       "entityType": "columns",
       "schema": "public",
       "table": "account_preference"
@@ -7870,7 +7869,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "coding_agent_effort",
+      "name": "agent_effort",
       "entityType": "columns",
       "schema": "public",
       "table": "account_preference"
@@ -7883,7 +7882,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "coding_agent_context_window",
+      "name": "agent_context_window",
       "entityType": "columns",
       "schema": "public",
       "table": "account_preference"
@@ -9708,7 +9707,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "coding_agent_id",
+      "name": "agent_id",
       "entityType": "columns",
       "schema": "public",
       "table": "agent_section_entry"
@@ -10152,10 +10151,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "coding_agent_user_idempotency",
+      "name": "agent_user_idempotency",
       "entityType": "indexes",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "nameExplicit": true,
@@ -10180,10 +10179,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "coding_agent_task_created",
+      "name": "agent_task_created",
       "entityType": "indexes",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "nameExplicit": true,
@@ -10201,10 +10200,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "coding_agent_conversation",
+      "name": "agent_conversation",
       "entityType": "indexes",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "nameExplicit": true,
@@ -10229,10 +10228,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "coding_agent_org_created",
+      "name": "agent_org_created",
       "entityType": "indexes",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "nameExplicit": true,
@@ -10257,10 +10256,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "coding_agent_org_taskless_created",
+      "name": "agent_org_taskless_created",
       "entityType": "indexes",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "nameExplicit": true,
@@ -10278,10 +10277,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "coding_agent_started_from_agent",
+      "name": "agent_started_from_agent",
       "entityType": "indexes",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "nameExplicit": true,
@@ -10299,10 +10298,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "coding_agent_runner_token_hash",
+      "name": "agent_runner_token_hash",
       "entityType": "indexes",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "nameExplicit": true,
@@ -10327,10 +10326,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "coding_agent_member_operator",
+      "name": "agent_member_operator",
       "entityType": "indexes",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "nameExplicit": true,
@@ -10392,7 +10391,7 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "coding_agent_id",
+          "value": "agent_id",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,
@@ -10425,10 +10424,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "coding_agent_wakeup_due",
+      "name": "agent_wakeup_due",
       "entityType": "indexes",
       "schema": "public",
-      "table": "coding_agent_wakeup"
+      "table": "agent_wakeup"
     },
     {
       "nameExplicit": true,
@@ -10446,10 +10445,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "coding_agent_wakeup_agent",
+      "name": "agent_wakeup_agent",
       "entityType": "indexes",
       "schema": "public",
-      "table": "coding_agent_wakeup"
+      "table": "agent_wakeup"
     },
     {
       "nameExplicit": true,
@@ -11289,7 +11288,7 @@
         }
       ],
       "isUnique": false,
-      "where": "\"coding_agent_id\" is null",
+      "where": "\"agent_id\" is null",
       "with": "",
       "method": "btree",
       "concurrently": false,
@@ -13087,7 +13086,7 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "coding_agent_id",
+          "value": "agent_id",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,
@@ -13300,7 +13299,7 @@
       "table": "account_provider_key"
     },
     {
-      "nameExplicit": true,
+      "nameExplicit": false,
       "columns": [
         "child_conversation_id"
       ],
@@ -13311,10 +13310,10 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "coding_agent_delegation_child_conversation_id_conversations_id_",
+      "name": "agent_delegation_child_conversation_id_conversations_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "coding_agent_delegation"
+      "table": "agent_delegation"
     },
     {
       "nameExplicit": false,
@@ -13328,10 +13327,10 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "coding_agent_plan_id_plan_id_fk",
+      "name": "agent_task_id_task_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "nameExplicit": false,
@@ -13345,10 +13344,10 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "coding_agent_organization_id_organization_id_fkey",
+      "name": "agent_organization_id_organization_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "nameExplicit": false,
@@ -13362,10 +13361,10 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "coding_agent_automation_id_automation_id_fkey",
+      "name": "agent_automation_id_automation_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "nameExplicit": false,
@@ -13373,16 +13372,16 @@
         "started_by_agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "coding_agent_started_by_agent_id_coding_agent_id_fkey",
+      "name": "agent_started_by_agent_id_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "nameExplicit": false,
@@ -13396,10 +13395,10 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "coding_agent_user_id_user_id_fk",
+      "name": "agent_user_id_user_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "nameExplicit": false,
@@ -13413,10 +13412,10 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "coding_agent_conversation_id_conversations_id_fk",
+      "name": "agent_conversation_id_conversations_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "nameExplicit": false,
@@ -13430,10 +13429,10 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "coding_agent_device_id_device_id_fkey",
+      "name": "agent_device_id_device_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "coding_agent"
+      "table": "agent"
     },
     {
       "nameExplicit": false,
@@ -13523,16 +13522,16 @@
     {
       "nameExplicit": false,
       "columns": [
-        "coding_agent_id"
+        "agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "agent_pin_coding_agent_id_coding_agent_id_fkey",
+      "name": "agent_pin_agent_id_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "agent_pin"
@@ -13543,16 +13542,16 @@
         "agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "coding_agent_runner_lease_agent_id_coding_agent_id_fkey",
+      "name": "agent_runner_lease_agent_id_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "coding_agent_runner_lease"
+      "table": "agent_runner_lease"
     },
     {
       "nameExplicit": false,
@@ -13560,16 +13559,16 @@
         "agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "coding_agent_wakeup_agent_id_coding_agent_id_fkey",
+      "name": "agent_wakeup_agent_id_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "coding_agent_wakeup"
+      "table": "agent_wakeup"
     },
     {
       "nameExplicit": false,
@@ -14036,7 +14035,7 @@
         "target_agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
@@ -14084,16 +14083,16 @@
     {
       "nameExplicit": false,
       "columns": [
-        "coding_agent_id"
+        "agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "automation_run_coding_agent_id_coding_agent_id_fkey",
+      "name": "automation_run_agent_id_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "automation_run"
@@ -14104,7 +14103,7 @@
         "claimed_agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
@@ -14206,7 +14205,7 @@
         "agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
@@ -14257,7 +14256,7 @@
         "agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
@@ -14512,7 +14511,7 @@
         "agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
@@ -14971,7 +14970,7 @@
         "operator_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
@@ -14988,7 +14987,7 @@
         "agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
@@ -15005,7 +15004,7 @@
         "operator_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
@@ -15022,7 +15021,7 @@
         "agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
@@ -15124,7 +15123,7 @@
         "agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
@@ -15141,7 +15140,7 @@
         "asked_agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
@@ -15192,7 +15191,7 @@
         "agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
@@ -15243,7 +15242,7 @@
         "agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
@@ -15328,7 +15327,7 @@
         "agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
@@ -15583,7 +15582,7 @@
         "creator_agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
@@ -15682,16 +15681,16 @@
     {
       "nameExplicit": false,
       "columns": [
-        "coding_agent_id"
+        "agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "agent_section_entry_coding_agent_id_coding_agent_id_fkey",
+      "name": "agent_section_entry_agent_id_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "agent_section_entry"
@@ -15804,7 +15803,7 @@
         "agent_id"
       ],
       "schemaTo": "public",
-      "tableTo": "coding_agent",
+      "tableTo": "agent",
       "columnsTo": [
         "id"
       ],
@@ -15881,7 +15880,7 @@
     {
       "columns": [
         "user_id",
-        "coding_agent_id"
+        "agent_id"
       ],
       "nameExplicit": false,
       "name": "agent_pin_pkey",
@@ -15981,7 +15980,7 @@
     {
       "columns": [
         "user_id",
-        "coding_agent_id"
+        "agent_id"
       ],
       "nameExplicit": false,
       "name": "agent_section_entry_pkey",
@@ -16026,9 +16025,9 @@
         "child_conversation_id"
       ],
       "nameExplicit": false,
-      "name": "coding_agent_delegation_pkey",
+      "name": "agent_delegation_pkey",
       "schema": "public",
-      "table": "coding_agent_delegation",
+      "table": "agent_delegation",
       "entityType": "pks"
     },
     {
@@ -16036,9 +16035,9 @@
         "id"
       ],
       "nameExplicit": false,
-      "name": "coding_agent_pkey",
+      "name": "agent_pkey",
       "schema": "public",
-      "table": "coding_agent",
+      "table": "agent",
       "entityType": "pks"
     },
     {
@@ -16056,9 +16055,9 @@
         "agent_id"
       ],
       "nameExplicit": false,
-      "name": "coding_agent_runner_lease_pkey",
+      "name": "agent_runner_lease_pkey",
       "schema": "public",
-      "table": "coding_agent_runner_lease",
+      "table": "agent_runner_lease",
       "entityType": "pks"
     },
     {
@@ -16066,9 +16065,9 @@
         "id"
       ],
       "nameExplicit": false,
-      "name": "coding_agent_wakeup_pkey",
+      "name": "agent_wakeup_pkey",
       "schema": "public",
-      "table": "coding_agent_wakeup",
+      "table": "agent_wakeup",
       "entityType": "pks"
     },
     {

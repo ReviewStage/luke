@@ -22,7 +22,7 @@ import * as SqlClient from "effect/sql/SqlClient";
  */
 
 const MIGRATION = "20261029013202_automation_action_kind_agent";
-const STRAGGLERS = "20261029015642_automation_action_kind_agent_stragglers";
+const STRAGGLERS = "20261029030257_automation_action_kind_agent_stragglers";
 
 /** A migrations folder holding the migrations whose names `keep` takes, and no other. */
 function foldersWhere(keep: (name: string) => boolean) {
