@@ -996,7 +996,7 @@ export function PlanDocumentEditor({
           : {
               doors: mentions,
               source: {
-                taskId: task.id,
+                holder: { taskId: task.id },
                 taskName: task.name,
                 workspace: mentions.place.workspace,
                 repository: task.repository,

@@ -394,6 +394,7 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodingAgent
           : hostedStoreOrUnavailable(
               readMentioned(userId, pointed, {
                 task,
+                agentId: agent.id,
                 workspaceId: agent.organizationId,
               }),
             ),
@@ -417,7 +418,7 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodingAgent
     return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
   }
   const reads = yield* Effect.fromResult(reached.reads);
-  const mentioned = reviewers ? undefined : mentionedContext(pointed, task, reads);
+  const mentioned = reviewers ? undefined : mentionedContext(pointed, task, reads, agent.id);
   const running = yield* Effect.fromResult(read.running);
   const label = yield* Effect.fromResult(read.label);
   // Each image is kept beside the agent's conversation before eve is handed it, so eve is told its id and the

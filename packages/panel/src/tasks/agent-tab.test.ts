@@ -1054,13 +1054,13 @@ test("a message from an agent the line keeps no chip of is named by the name its
 
 /** A task's page in the workspace `acme`, whose agent's transcript draws a thread's chip. */
 const TASK_PAGE: TaskMentionsValue = {
-  taskId: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
+  holder: { taskId: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b" },
   taskName: "Invitations",
   workspace: "acme",
   repository: "acme/relay",
   text: () => "",
   doors: {
-    taskId: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
+    holder: { taskId: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b" },
     place: { workspace: "acme", repository: "acme/relay" },
     anchors: new Set(),
     onOpenTask: () => undefined,

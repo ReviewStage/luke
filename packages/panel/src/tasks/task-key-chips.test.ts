@@ -82,13 +82,13 @@ function listTasks(): void {
 /** What a plan's page hands its places, each task a chip opened kept. */
 function planPage(opened: Mention[]): TaskMentionsValue {
   return {
-    taskId: PLAN_ID,
+    holder: { taskId: PLAN_ID },
     taskName: "Rollout",
     workspace: STAGE.slug ?? "",
     repository: null,
     text: () => "",
     doors: {
-      taskId: PLAN_ID,
+      holder: { taskId: PLAN_ID },
       place: { workspace: STAGE.slug ?? "", repository: null },
       anchors: new Set(),
       onOpenTask: (mention) => opened.push(mention),

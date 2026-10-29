@@ -40,9 +40,9 @@ import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./agent-model.js";
  * what its address says.
  */
 
-/** Where the words a chip stands in are: the plan's id, or none off a plan, and the workspace's slug its mentions are written under. */
+/** Where the words a chip stands in are: the plan's id, none off a plan, and the workspace's slug its mentions are written under. */
 export interface ChipWhere {
-  readonly taskId: string;
+  readonly taskId: string | undefined;
   readonly workspace: string;
 }
 
@@ -300,7 +300,11 @@ function wordsWorkspace(
   namedId: string | undefined,
 ): Workspace | undefined {
   const workspaces = planning?.workspaces ?? [];
-  const taskWorkspaceId = planning?.tasks.find((task) => task.id === where.taskId)?.workspaceId;
+  const { taskId } = where;
+  const taskWorkspaceId =
+    taskId === undefined
+      ? undefined
+      : planning?.tasks.find((task) => task.id === taskId)?.workspaceId;
   return (
     workspaces.find((each) => each.id === taskWorkspaceId) ??
     workspaces.find((each) => each.id === namedId) ??

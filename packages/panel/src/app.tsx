@@ -388,8 +388,9 @@ function AppWindow(): React.JSX.Element {
     room,
   );
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
-  // A pull request a listed task's agent opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
+  // A pull request a listed task's agent, or a listed agent on no task, opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
   const listedTasks = tasks.tasks;
+  const listedAgents = planning?.tasklessAgents;
   // An Admin link opens while the account's access is still being read, the
   // place waiting on it, and never for an account that is no admin
   // (`link-route.ts`).
@@ -624,7 +625,7 @@ function AppWindow(): React.JSX.Element {
   return (
     <OpenSettingsProvider value={openSettings}>
       <OpenLinkProvider value={openLukeLink}>
-        <ListedPullRequests tasks={listedTasks}>
+        <ListedPullRequests tasks={listedTasks} agents={listedAgents}>
           <PageWorkspaceProvider value={copyLink.onPageWorkspace}>
             <OpenPersonProvider value={openPerson}>
               <OpenFeedbackProvider value={openFeedbackAbout}>

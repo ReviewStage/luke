@@ -150,6 +150,7 @@ import { ComposerField } from "./composer-field.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import type { EditAgents } from "./edit-ref.js";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
+import { holderTaskId } from "./mention-holder.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
 import { CommentFiles } from "./plan-comment-files.js";
 import { EDITOR_ROOM_CLASS } from "./plan-document-editor.js";
@@ -817,7 +818,7 @@ function MentionCommentText({
         pasted: (words) =>
           pastedMentionNode(words, mentions.doors.place, {
             known,
-            taskId: mentions.taskId,
+            taskId: holderTaskId(mentions.holder),
             text: mentions.text,
           }),
       }}

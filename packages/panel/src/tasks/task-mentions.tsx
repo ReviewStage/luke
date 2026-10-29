@@ -17,6 +17,7 @@ import type { LinkDrawer } from "../markdown-message.js";
 import type { MentionNode } from "../plan-editor/contract.js";
 import { agentActor, agentName } from "./agent-model.js";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
+import type { MentionHolder } from "./mention-holder.js";
 import type {
   MentionAgentsReader,
   MentionableAgent,
@@ -52,24 +53,25 @@ import { useOpenTask } from "./use-open-link.js";
  * agent's tab at a time, so the box drawn is the current agent's.
  */
 
-/** A task's page's mentions: the task, its text as saved, and the doors its chips open through. */
+/** A task's page's mentions: what holds them, its text as saved, and the doors its chips open through. */
 export interface TaskMentionsValue {
-  readonly taskId: string;
+  /** The task, or the agent on no task, whose page it is; none for a place neither holds. */
+  readonly holder: MentionHolder | undefined;
   readonly taskName: string;
   /** The slug of the task's workspace, which a mention of it is written under. */
   readonly workspace: string;
   /** The task's repository, `owner/name`; null before one is chosen. */
   readonly repository: string | null;
-  /** The id of the workspace whose installation the repository is read through, where no task names it (`NO_TASK`). */
+  /** The id of the workspace whose installation the repository is read through, where no task names it. */
   readonly workspaceId?: string | undefined;
   readonly text: () => string;
-  /** The pages agents showed on the task, which an `@` offers; none off a task. */
+  /** The pages agents showed on the task, or the agent on no task showed itself, which an `@` offers; none where neither holds the place. */
   readonly pages?: readonly MentionablePage[] | undefined;
   /** The task's coding agents, which an `@` offers first; none off a task. */
   readonly agents?: readonly MentionableAgent[] | undefined;
   /** Reads the workspace's coding agents, which an `@` offers after the task's own. */
   readonly readAgents?: MentionAgentsReader | undefined;
-  /** The pull requests the task's agents published, which an `@` offers; none off a task. */
+  /** The pull requests the task's agents published, or the agent on no task did, which an `@` offers; none elsewhere. */
   readonly pullRequests?: readonly MentionablePullRequest[] | undefined;
   readonly doors: MentionDoors;
 }
@@ -116,14 +118,18 @@ export function useTaskMentions(): TaskMentionsValue | undefined {
   return useContext(TaskMentionsContext);
 }
 
-/** Where no task's page stands, or a page stands with no task, its task: none, so a section of any plan is drawn as found, and none is offered. */
-export const NO_TASK = "";
-
 /** The anchors of no task. */
 const NO_ANCHORS: ReadonlySet<string> = new Set();
 
 /** What a press on a task's chip does with no opener at hand, as in a test of one surface: nothing. */
 const OPEN_NOTHING = (): void => undefined;
+
+/** What an agent on no task holds on its own page, which an `@` there offers: the agent, the pages it showed, and the pull request it opened, as the page has read them. */
+interface TasklessHolding {
+  readonly agentId: string;
+  readonly pages: readonly MentionablePage[] | undefined;
+  readonly pullRequests: readonly MentionablePullRequest[];
+}
 
 /** A place no task holds, as an agent an automation started stands in: its workspace's slug, which a mention is written under, its id, which its repository is read through, and the repository, null where none is chosen yet, as in New task. */
 export interface TasklessPlace {
@@ -135,7 +141,8 @@ export interface TasklessPlace {
 /**
  * The mentions of a page no task holds, as the page of an agent an
  * automation started is: its repository's files and folders, its skills,
- * and the servers, and no plan's sections; a task or a section a message
+ * and the servers, and no plan's sections; on an agent's own page, the
+ * pages it showed and the pull request it opened, which `holds` hands; a task or a section a message
  * names opens through `onOpenTask`, and a file through `onOpenFile`, in
  * the panel beside the page, which reads it by the place's workspace and
  * repository, or on GitHub where the place hands none. A place of no
@@ -148,18 +155,22 @@ export function tasklessMentions(
   onOpenTask: MentionDoors["onOpenTask"],
   readAgents?: MentionAgentsReader,
   opens: Partial<Pick<MentionDoors, "pullRequestOf" | "onOpenFile">> = {},
+  holds?: TasklessHolding,
 ): TaskMentionsValue {
   const { workspace, workspaceId, repository } = place;
+  const holder = holds === undefined ? undefined : { agentId: holds.agentId };
   return {
-    taskId: NO_TASK,
+    holder,
     taskName: "",
     workspace,
     workspaceId,
     repository,
     text: () => "",
+    pages: holds?.pages,
     readAgents,
+    pullRequests: holds?.pullRequests,
     doors: {
-      taskId: NO_TASK,
+      holder,
       place: { workspace, repository },
       anchors: NO_ANCHORS,
       onOpenTask,
@@ -269,7 +280,7 @@ export function useMentionDoors(task?: MentionedTask): MentionDoors {
   const openTask = useOpenTask();
   const windowDoors = useMemo<MentionDoors>(
     () => ({
-      taskId: task?.taskId ?? NO_TASK,
+      holder: task === undefined ? undefined : { taskId: task.taskId },
       place: task?.place ?? { workspace: "", repository: null },
       anchors: task?.anchors ?? NO_ANCHORS,
       onOpenTask: openTask ?? OPEN_NOTHING,

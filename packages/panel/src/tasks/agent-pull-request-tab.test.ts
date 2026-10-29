@@ -3362,7 +3362,7 @@ test("its reviewers stand compactly, three faces and a count of the rest: where 
   );
 });
 
-test("the stack it stands in sits beside its branches; its menu lists it tip first, and opens an agent's Pull request tab on its task, this one or another, an agent on no task its page, and one no agent owns on GitHub", async () => {
+test("the stack it stands in sits beside its branches; its menu lists it tip first, and opens an agent's Pull request tab on its task, this one or another, an agent on no task's on its page, and one no agent owns on GitHub", async () => {
   const elsewhere = "3c5e7a9b-1d2f-4a6b-8c0e-2f4a6b8c0e1d";
   const entry = (number: number, agent?: { id: string; taskId: string | null }) => ({
     number,
@@ -3434,7 +3434,7 @@ test("the stack it stands in sits beside its branches; its menu lists it tip fir
       place: { kind: LINK_PLACE.CHANGES, planId: AGENT.planId, agentId: sibling.id },
     },
     { workspace: "", place: { kind: LINK_PLACE.CHANGES, planId: elsewhere, agentId: away.id } },
-    { workspace: "", place: { kind: LINK_PLACE.AGENT, agentId: taskless.id } },
+    { workspace: "", place: { kind: LINK_PLACE.CHANGES, agentId: taskless.id } },
   ]);
   assert.deepEqual(opened, ["https://github.com/acme/relay/pull/46"]);
 });

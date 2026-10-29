@@ -371,7 +371,7 @@ test("a mention of an agent the window lists not, laid in a message box as an In
         target: encodeMention({ kind: MENTION_KIND.AGENT, agentId: PRORATE.id }, PLACE),
       },
       doors: {
-        taskId: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+        holder: { taskId: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d" },
         place: PLACE,
         anchors: new Set<string>(),
         onOpenTask: () => undefined,
@@ -404,7 +404,7 @@ test("a mention of its own task's agent whose tile the page knows no harness of 
         target: encodeMention({ kind: MENTION_KIND.AGENT, agentId: PRORATE.id }, PLACE),
       },
       doors: {
-        taskId: BILLING.id,
+        holder: { taskId: BILLING.id },
         place: PLACE,
         anchors: new Set<string>(),
         onOpenTask: () => undefined,

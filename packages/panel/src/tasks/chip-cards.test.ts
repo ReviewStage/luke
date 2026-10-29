@@ -390,13 +390,13 @@ const taskCards = {
 
 /** The plan's page, whose words the section's heading is read from. */
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: TASK.name,
   workspace: PLACE.workspace,
   repository: PLACE.repository,
   text: () => PLAN_TEXT,
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: PLACE,
     anchors: new Set(["goal", "roll-it-out"]),
     onOpenTask: () => undefined,
@@ -553,9 +553,9 @@ test("a plan's chip hangs the plan's card, and a section's the same card's head 
 test("a plan's chip on another plan's page hangs the card the plan's tab hangs, and one of a plan the window lists not that tab's own name card", async () => {
   const elsewhere: TaskMentionsValue = {
     ...PAGE,
-    taskId: OTHER_TASK,
+    holder: { taskId: OTHER_TASK },
     taskName: "Another plan",
-    doors: { ...PAGE.doors, taskId: OTHER_TASK, anchors: new Set() },
+    doors: { ...PAGE.doors, holder: { taskId: OTHER_TASK }, anchors: new Set() },
   };
   const container = await drawn(
     [

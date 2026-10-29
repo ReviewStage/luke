@@ -2,8 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { listPublishedAgentsById, taskNamesOf } from "@luke/database/models/agent-store";
 import { listPages } from "@luke/database/models/plan-pages";
 import { agentName } from "@luke/features/model-label";
-import type { PageLine } from "@luke/features/page-wire";
-import { taskPageOwner } from "@luke/features/page-wire";
+import type { PageLine, PageOwner } from "@luke/features/page-wire";
 import type { Task } from "@luke/features/task-wire";
 import { Effect, Option, Schema } from "effect";
 import { listMembers } from "../accounts/workspace-members.js";
@@ -15,10 +14,11 @@ import {
   type MentionedReads,
   mentionedIds,
   NO_MENTIONED_READS,
+  pagesOwnerOf,
 } from "./mentioned-context.js";
 
 /**
- * mentioned-reads.ts -- the pages a message mentions on its agent's own plan, and the coding agents and people it mentions anywhere in its agent's workspace, read as the sender at the send, for `mentioned-context.ts` to hand.
+ * mentioned-reads.ts -- the pages a message mentions on its agent's own plan, or, for an agent on no plan, among those it showed itself, and the coding agents and people it mentions anywhere in its agent's workspace, read as the sender at the send, for `mentioned-context.ts` to hand.
  *
  * A page is read as its newest version names it, title and number and no
  * HTML, through the read the plan's side panel lists them by, so the sender is handed nothing of the plan they could
@@ -34,19 +34,20 @@ import {
  * agent, and no person, which is nearly every message.
  */
 
-/** Where a message lands: the plan its agent works on, if any, and the workspace its agent stands in. */
+/** Where a message lands: the plan its agent works on, if any, the agent itself where it stands yet, whose own pages it holds on no plan, and the workspace its agent stands in. */
 export interface MentionPlace {
   readonly task: Task | undefined;
+  readonly agentId?: string | undefined;
   readonly workspaceId: string;
 }
 
 /** An agent's id as a mention spells it, read as the store holds it: a UUID in lower case; nothing for one that is no UUID. */
 const agentIdOf = Schema.decodeUnknownOption(wireUuidSchema);
 
-/** Each page named that the task holds, by id, as its newest version names it. */
-const readPages = (userId: string, taskId: string, named: readonly string[]) =>
+/** Each page named that its owner holds, by id, as its newest version names it. */
+const readPages = (userId: string, owner: PageOwner, named: readonly string[]) =>
   Effect.map(
-    listPages(userId, taskPageOwner(taskId)),
+    listPages(userId, owner),
     (lines) =>
       new Map<string, PageLine>(
         lines.filter((line) => named.includes(line.id)).map((line) => [line.id, line]),
@@ -102,16 +103,17 @@ export function readMentioned(
   words: string,
   place: MentionPlace,
 ): Effect.Effect<MentionedReads, StoreFailure, DatabaseServices> {
-  const { task } = place;
-  const named = mentionedIds(words, task);
+  const { task, agentId } = place;
+  const named = mentionedIds(words, task, agentId);
+  const owner = pagesOwnerOf(task, agentId);
   if (named.pages.length === 0 && named.agents.length === 0 && named.people.length === 0) {
     return Effect.succeed(NO_MENTIONED_READS);
   }
   return Effect.all({
     pages:
-      task === undefined
+      owner === undefined || named.pages.length === 0
         ? Effect.succeed(new Map<string, PageLine>())
-        : readPages(userId, task.id, named.pages),
+        : readPages(userId, owner, named.pages),
     agents: readAgents(userId, place.workspaceId, named.agents),
     people:
       named.people.length === 0

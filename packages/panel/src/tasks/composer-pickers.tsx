@@ -9,6 +9,7 @@ import type {
 } from "../plan-editor/contract.js";
 import type { ComposerFieldMentions } from "./composer-field.js";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
+import { holderTaskId } from "./mention-holder.js";
 import { MENTION_MENU_SIDE, type MentionMenuSide, useMentionPicker } from "./mention-picker.js";
 import { MentionedServers, type MentionedServersPlace } from "./server-card.js";
 import { useSkillOpener } from "./skill-chip.js";
@@ -169,7 +170,7 @@ export function useComposerPickers({
                   ? undefined
                   : pastedMentionNode(words, taskMentions.doors.place, {
                       known,
-                      taskId: taskMentions.taskId,
+                      taskId: holderTaskId(taskMentions.holder),
                       text: taskMentions.text,
                     }),
             },

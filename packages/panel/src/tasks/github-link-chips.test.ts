@@ -177,14 +177,14 @@ function stateWith(workspace: Workspace): AppStateSnapshot {
 
 /** The plan's page, as its words' chips stand on it. */
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: TASK.name,
   workspace: "acme",
   workspaceId: "workspace-acme",
   repository: "acme/relay",
   text: () => "",
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: { workspace: "acme", repository: "acme/relay" },
     anchors: new Set(),
     onOpenTask: () => undefined,

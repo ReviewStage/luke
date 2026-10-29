@@ -4,7 +4,7 @@ import { AGENT_BOUNDS, type AgentPullRequest, type AgentSummary } from "@luke/fe
 import { LINK_PLACE, pullRequestAddressOf } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { listedPullRequestOf, pullRequestAgentOf } from "@luke/ui/pull-request-link";
+import { listedPullRequestOf } from "@luke/ui/pull-request-link";
 import { Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -394,13 +394,8 @@ function useOwnedPullRequest(url: string): OwnedPullRequest | undefined {
   const tasks = useAppSlice(APP_SLICE.TASKS);
   if (tasks === undefined) return undefined;
   const number = pullRequestAddressOf(url)?.number;
-  const listed = listedPullRequestOf(url, tasks.tasks);
-  if (listed !== undefined) return { ...listed, number };
-  const taskless = (tasks.tasklessAgents ?? []).flatMap((agent) =>
-    agent.pullRequest === undefined ? [] : [{ agentId: agent.id, url: agent.pullRequest.url }],
-  );
-  const agentId = pullRequestAgentOf(url, taskless);
-  return agentId === undefined ? undefined : { agentId, taskId: undefined, number };
+  const listed = listedPullRequestOf(url, tasks.tasks, tasks.tasklessAgents);
+  return listed === undefined ? undefined : { ...listed, number };
 }
 
 /** The Pull request tab's card of a pull request the window lists an agent of opening, read as it is hung. */

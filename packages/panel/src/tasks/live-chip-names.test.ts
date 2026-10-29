@@ -115,13 +115,13 @@ const STATE: AppStateSnapshot = stateWith(
 
 /** The plan's page, whose heading was renamed after a section's link was written. */
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: TASK.name,
   workspace: "acme",
   repository: "acme/relay",
   text: () => "## Rollout plan\n\nStore first.\n",
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: { workspace: "acme", repository: "acme/relay" },
     anchors: new Set(["rollout-plan"]),
     onOpenTask: () => undefined,

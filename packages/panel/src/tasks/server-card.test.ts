@@ -183,13 +183,13 @@ const TRANSCRIPT: readonly AgentTranscriptMessage[] = [
 
 /** A plan's page, which an agent's box takes mentions on. */
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: "Backlog",
   workspace: PLACE.workspace,
   repository: PLACE.repository,
   text: () => "## Goal\n\nTriage.\n",
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: PLACE,
     anchors: new Set(["goal"]),
     onOpenTask: ignore,

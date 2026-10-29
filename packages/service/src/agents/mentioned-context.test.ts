@@ -540,6 +540,22 @@ test("a page the send did not find on the plan is named as gone, an agent it did
   assert.equal(elsewhere, undefined);
 });
 
+test("an agent on no task is handed a page it showed itself, and nothing of another agent's", () => {
+  const SELF_ID = "7a7a7a7a-0000-4000-8000-000000000000";
+  const pageOf = (agentId: string) =>
+    mentionMarkdown({ kind: MENTION_KIND.PAGE, agentId, pageId: PAGE_ID }, "Chart", PLACE);
+  const ids = mentionedIds(`See ${pageOf(SELF_ID)}.`, undefined, SELF_ID);
+  const own = mentionedContext(`See ${pageOf(SELF_ID)}.`, undefined, READS, SELF_ID);
+  const theirs = mentionedContext(`See ${pageOf(OTHER_AGENT_ID)}.`, undefined, READS, SELF_ID);
+
+  assert.deepEqual(ids.pages, [PAGE_ID]);
+  assert.match(
+    own ?? "",
+    /the page "Invites by week" \(id `[^`]+`, version 3\) that you showed\./u,
+  );
+  assert.equal(theirs, undefined);
+});
+
 test("an agent mentioned in upper case is found as the store holds it", () => {
   const part =
     mentionedContext(`See ${agent("Store", OTHER_AGENT_ID.toUpperCase())}.`, TASK, READS) ?? "";
