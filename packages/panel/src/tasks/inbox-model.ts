@@ -1896,6 +1896,17 @@ export function inboxSteps(
   return { at: at + 1, total: rowed.length, previous: rowed[at - 1], next: rowed[at + 1] };
 }
 
+/** The list's first and last rows, in its own order, its grouping and filter as drawn and a folded group's items left out; none where it draws no row. */
+export function inboxEnds(
+  view: InboxListView,
+  folded: (key: string) => boolean,
+): { readonly first: InboxListed; readonly last: InboxListed } | undefined {
+  const rowed = rowedItems(view, folded, undefined);
+  const first = rowed[0];
+  const last = rowed.at(-1);
+  return first === undefined || last === undefined ? undefined : { first, last };
+}
+
 /** Which way the reader last stepped through the list, K up and J down, which Next follows. */
 export const INBOX_DIRECTION = {
   UP: "up",

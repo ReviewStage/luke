@@ -301,6 +301,17 @@ test("one column wide, the item's bar says where it stands in the list, and its 
   act(() => keys.unmount());
 });
 
+test("with nothing chosen, J chooses the list's first row, as the empty pane beside it says", async () => {
+  const { page } = mount();
+  await settle();
+  const keys = standKeymap();
+  layOut(page, 900);
+  assert.equal(page.querySelector("[data-inbox-title]"), null, "nothing is chosen");
+  pressKey("j");
+  assert.equal(readTitle(page), "How is a failed email retried?");
+  act(() => keys.unmount());
+});
+
 test("a chosen item whose plan leaves the account's list, deleted on another Mac, leaves the pane beside the list empty rather than choosing another", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
