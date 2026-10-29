@@ -1029,7 +1029,7 @@ function PlanCard({
   const status = lead.plan ? (listed ?? handed) : undefined;
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin" data-message-id={messageId}>
-      <Plan data-task-card="" aria-label={lead.label}>
+      <Plan data-origin-plan="" aria-label={lead.label}>
         <PlanHeader>
           <PlanIcon>
             {status === undefined ? lead.icon : <TaskStatusMark status={status} />}

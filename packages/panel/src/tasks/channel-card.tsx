@@ -128,7 +128,9 @@ function ChannelCardBody({ channel }: { channel: Channel | ArchivedChannel }): R
       ? undefined
       : [...(members ?? []), ...(former ?? [])].find((each) => each.userId === createdBy);
   if (createdBy !== undefined && maker === undefined && reading) {
-    return <HoverCardSkeleton glyph={<GLYPH.CHANNEL />} name={channel.name} sub />;
+    return (
+      <HoverCardSkeleton glyph={<GLYPH.CHANNEL />} name={channel.name} sub data-channel-card="" />
+    );
   }
   return (
     <HoverCard data-channel-card="">

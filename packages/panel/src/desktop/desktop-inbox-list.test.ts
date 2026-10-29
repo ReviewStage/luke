@@ -697,7 +697,7 @@ test("a task done or canceled keeps its items listed and counted as any other's,
   assert.equal(rowStatus(page, "Quarantine the flaky test?"), undefined);
 
   restOn(rowNamed(page, "Alert at 80%?"));
-  const card = document.querySelector(".luke-tooltip-card [data-inbox-row-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-inbox-item-card]");
   assert.ok(
     card?.querySelector('[data-holder-ref] .luke-task-status-mark[data-status="done"]'),
     "the card's task chip wears the task's status",
@@ -1765,9 +1765,9 @@ test("grouped by status, an item its agent withdrew stands under Closed, apart f
   assert.ok(closed?.querySelector("svg.lucide-circle-slash"), "Closed wears the slashed circle");
 
   const settledGlyph = (title: string) => {
-    hoveredCard(rowNamed(page, title), "[data-inbox-row-card]");
+    hoveredCard(rowNamed(page, title), "[data-inbox-item-card]");
     const card =
-      document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-row-card]") ??
+      document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-item-card]") ??
       assert.fail("the row's card is hung");
     return [
       card.querySelector("svg.lucide-circle-slash") !== null,
@@ -1904,11 +1904,11 @@ test("a thread's row says the ask itself while one is open, led by its kind's gl
   act(() => rowNamed(page, CHOSEN.title).click());
   await settle();
   assert.deepEqual(rowLines(page, STEPS.title), [true, "Every step ticked · Mark done"]);
-  hoveredCard(rowNamed(page, STEPS.title), "[data-inbox-row-card]");
+  hoveredCard(rowNamed(page, STEPS.title), "[data-inbox-item-card]");
   assert.deepEqual(
     [
       ...document.querySelectorAll(
-        '.luke-tooltip-card [data-inbox-row-card] ul[aria-label="Steps"] > li',
+        '.luke-tooltip-card [data-inbox-item-card] ul[aria-label="Steps"] > li',
       ),
     ].map((step) => step.getAttribute("data-done")),
     ["true", "true", "true"],

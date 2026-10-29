@@ -423,8 +423,8 @@ function cardOn(row: HTMLElement | null): readonly (string | boolean | null | un
   assert.ok(row, "the row is drawn");
   document.documentElement.dataset.keyboard = "true";
   focusRestOn(row);
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
-  assert.ok(card, "the row hangs a tab's card");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
+  assert.ok(card, "the row hangs its agent's card");
   return [
     card.querySelector(".luke-hover-card-name")?.textContent,
     card.querySelector(".luke-hover-card-corner")?.textContent,
@@ -537,7 +537,7 @@ test("in an agent's transcript, a call that folds open in place still hangs its 
 
   // Note that the chip is words, not a control, so the pointer is how it is reached.
   restOn(chip ?? assert.fail("the call's agent chip"));
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
 
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Invoice export");
 });
@@ -894,7 +894,7 @@ test("a call about the plan or another task hangs that task's card as its Plan t
 
   assert.deepEqual(cardOf("edit_plan"), { task: "task-invoices", name: "Invoice export" });
   assert.deepEqual(cardOf("read_task"), { task: "task-retries", name: "Retry audit" });
-  assert.deepEqual(cardOf("create_task"), { task: undefined, name: "Billing cleanup" });
+  assert.deepEqual(cardOf("create_task"), { task: "", name: "Billing cleanup" });
 });
 
 /** eve's `connection_execute` running Linear's `list_issues`, and the call it ran as the record keeps it, under Linear's remote name. */

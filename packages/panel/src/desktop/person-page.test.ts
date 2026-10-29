@@ -518,7 +518,7 @@ test("a waiting item is the Inbox's own row: its task named on a line of its own
   assert.ok(row.querySelector(".home-row-meta time"), "its time stands at its end");
 
   restOn(row);
-  const card = document.querySelector(".luke-tooltip-card [data-inbox-row-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-inbox-item-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, RETRY_429.title);
 });
 
@@ -536,7 +536,7 @@ test("an agent's row says its failure at its end and hangs the agent's card whil
   assert.equal(button(page, "Jittered backoff").querySelector(".failed-mark"), null);
 
   restOn(row);
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Flaky retry");
 });
 

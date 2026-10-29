@@ -460,7 +460,7 @@ test("an agent's tab beside the Inbox hangs the agent's card, as its tab in the 
   const tab = container.querySelector<HTMLElement>('aside[aria-label="Panel"] [role="tab"]');
   assert.ok(tab, "the agent's tab stands beside the Inbox");
   restOn(tab);
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.ok(card, "the agent's card is hung");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Batch the invitations");
 });

@@ -248,7 +248,7 @@ test("an agent continued from another opens on the plan's card, the folded Conti
   assert.equal(cards.length, 2);
   // The plan's card is titled by the brief's first line.
   assert.match(
-    cards[0]?.querySelector("[data-task-card] > summary")?.textContent ?? "",
+    cards[0]?.querySelector("[data-origin-plan] > summary")?.textContent ?? "",
     /Invite flow/u,
   );
   assert.equal(headOf(container), "Continued from Wire the start from field · 3 steps");
@@ -360,7 +360,7 @@ test("an agent continued from an automation's run opens on the run's Prompt card
     firstMessageText("Triage the failing check.", replay(), undefined),
     run,
   );
-  const prompt = container.querySelector(".agent-origin [data-task-card]");
+  const prompt = container.querySelector(".agent-origin [data-origin-plan]");
   assert.equal(prompt?.getAttribute("aria-label"), "Prompt");
   assert.match(
     container.querySelector(".agent-origin .luke-message-line-sender")?.textContent ?? "",
@@ -381,8 +381,8 @@ test("a first message whose markers do not add up is drawn whole as the plan's c
   const { container } = await drawn(agent, text);
   assert.equal(container.querySelector("[data-replay-card]"), null);
   assert.equal(container.querySelectorAll(".agent-origin").length, 1);
-  press(container.querySelector("[data-task-card] > summary"));
-  assert.match(container.querySelector("[data-task-card]")?.textContent ?? "", /Use seven days\./u);
+  press(container.querySelector("[data-origin-plan] > summary"));
+  assert.match(container.querySelector("[data-origin-plan]")?.textContent ?? "", /Use seven days\./u);
 });
 
 test("on an agent's own page, which lists no source, the card names the source as a read of it does, wearing its harness's mark, and opens it as a link to it would", async () => {

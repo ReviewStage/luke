@@ -1799,11 +1799,11 @@ test("an item's card shows a to-do naming no steps of its own its title as its o
   world.inboxes = new Map([[BILLING.id, [ROTATE]]]);
   const { page } = mount();
   await settle();
-  hoveredCard(rowNamed(page, ROTATE.title), "[data-inbox-row-card]");
+  hoveredCard(rowNamed(page, ROTATE.title), "[data-inbox-item-card]");
   assert.deepEqual(
     [
       ...document.querySelectorAll(
-        '.luke-tooltip-card [data-inbox-row-card] ul[aria-label="Steps"] > li',
+        '.luke-tooltip-card [data-inbox-item-card] ul[aria-label="Steps"] > li',
       ),
     ].map((step) => step.textContent),
     ["Rotate the deployment key"],

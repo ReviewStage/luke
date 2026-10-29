@@ -111,10 +111,10 @@ export type CardSubject =
       readonly address: string;
     };
 
-/** A thing's card where the window holds nothing more of it: its glyph and its name. */
+/** A task's card where the window lists no such task: its glyph and the name the place knows it by. */
 function NamedCard({ glyph, name }: { glyph: ReactNode; name: string }): React.JSX.Element {
   return (
-    <HoverCard data-tab-card="">
+    <HoverCard data-task-card="">
       <HoverCardHead glyph={glyph} name={name} />
     </HoverCard>
   );
@@ -141,7 +141,7 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
   const waiting = inbox.waiting.length;
   const latest = waiting > 0 ? inbox.waiting.at(-1) : inbox.settled[0];
   return (
-    <HoverCard data-tab-card="">
+    <HoverCard data-inbox-card="">
       <HoverCardHead
         glyph={tabLook({ kind: TAB_KIND.INBOX }).icon}
         name={TAB_WORDS.INBOX}
@@ -251,7 +251,7 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
       );
     case TAB_KIND.BROWSER:
       return (
-        <HoverCard data-tab-card="">
+        <HoverCard data-browser-card="">
           <HoverCardHead
             glyph={subject.owner.icon}
             name={subject.title}

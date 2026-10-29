@@ -97,7 +97,7 @@ test("an archived agent's row hangs its tab's card beside it, its name and when 
   );
   assert.ok(row, "the archived agent is listed");
   restOn(row);
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Retry audit");
   assert.match(card?.querySelector(".luke-hover-card-corner")?.textContent ?? "", /^Archived · /u);
 });
@@ -140,7 +140,7 @@ function archivedCardNotes(me: string | undefined, archivedBy: AgentArchivedBy):
   );
   restOn(row ?? assert.fail("the row is drawn"));
   return [
-    ...document.querySelectorAll(".luke-tooltip-card [data-tab-card] .luke-hover-card-note"),
+    ...document.querySelectorAll(".luke-tooltip-card [data-agent-card] .luke-hover-card-note"),
   ].map((note) => note.textContent ?? "");
 }
 

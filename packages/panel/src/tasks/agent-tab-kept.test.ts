@@ -158,8 +158,8 @@ function cardOn(row: HTMLElement | null): readonly (string | boolean | null | un
   document.documentElement.dataset.keyboard = "true";
   act(() => row.blur());
   focusRestOn(row);
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
-  assert.ok(card, "the row hangs a tab's card");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
+  assert.ok(card, "the row hangs its agent's card");
   return [
     card.querySelector(".luke-hover-card-name")?.textContent,
     card.querySelector(".luke-hover-card-corner")?.textContent,

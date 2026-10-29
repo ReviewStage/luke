@@ -182,7 +182,7 @@ test("the line naming who sent the plan stands under its card, then when it was 
   const { container } = await mount({ reader: DEAN.userId, main: { agent: AGENT.id } });
 
   const card =
-    container.querySelector<HTMLElement>(".agent-origin [data-task-card]") ??
+    container.querySelector<HTMLElement>(".agent-origin [data-origin-plan]") ??
     assert.fail("the page opens on its card");
   const line = senderLine(container);
   assert.ok(

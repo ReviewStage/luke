@@ -267,7 +267,7 @@ test("rested on, the row hangs the agent's card beside it, naming it as its tab'
   const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
   restOn(press);
 
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Remove the stale copy");
 });
 
@@ -341,7 +341,7 @@ test("the row's card says the agent last moved when its row does, the end of its
   const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
   restOn(press);
 
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.equal(
     card?.querySelector(".luke-hover-card-corner")?.textContent,
     "2m",

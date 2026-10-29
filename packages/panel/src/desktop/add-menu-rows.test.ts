@@ -100,7 +100,7 @@ test("a failed agent's row in the column's \"+\" wears the failed mark and a hea
   assert.deepEqual(endMarks(options.get("Invoice sweep")), []);
 
   restOn(options.get("Invoice sweep") ?? assert.fail("the agent is listed"));
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Invoice sweep");
 });
 
@@ -128,6 +128,6 @@ test("a Terminal row in the side panel's \"+\" wears its agent's failed mark, an
   const row = options.get("Billing export");
   assert.deepEqual(endMarks(row), ["Failed"]);
   restOn(row ?? assert.fail("the terminal is listed"));
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Billing export");
 });

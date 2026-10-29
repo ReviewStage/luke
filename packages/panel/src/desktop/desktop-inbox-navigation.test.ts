@@ -519,7 +519,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     "the planless agent's row wears no tile, its card naming the agent",
   );
   assert.match(
-    hoveredCard(mark, "[data-inbox-row-card]") ?? "",
+    hoveredCard(mark, "[data-inbox-item-card]") ?? "",
     /^Quarantine the flaky test\?.*Nightly flake sweep.*Sweep the flaky tests$/su,
   );
 
@@ -586,7 +586,7 @@ test("an item's card names the automation that holds it by a chip that hangs the
   restOn(rowNamed(page, "Quarantine the flaky test?"));
   const chip =
     document.querySelector<HTMLElement>(
-      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="agent"]',
+      '.luke-tooltip-card [data-inbox-item-card] [data-holder-ref][data-kind="agent"]',
     ) ?? assert.fail("the card names the automation by its chip");
   restOn(chip);
   await settle();
@@ -613,7 +613,7 @@ test("an item from a service that names no workspace for it still names its auto
   restOn(rowNamed(page, "Quarantine the flaky test?"));
   restOn(
     document.querySelector<HTMLElement>(
-      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="agent"]',
+      '.luke-tooltip-card [data-inbox-item-card] [data-holder-ref][data-kind="agent"]',
     ) ?? assert.fail("the card names the automation by its chip"),
   );
 
@@ -732,7 +732,7 @@ test("an untitled agent an automation started goes by its automation's name in t
   await settle();
 
   const row = rowNamed(page, "Quarantine the flaky test?");
-  assert.match(hoveredCard(row, "[data-inbox-row-card]") ?? "", /Nightly flake sweep$/u);
+  assert.match(hoveredCard(row, "[data-inbox-item-card]") ?? "", /Nightly flake sweep$/u);
 });
 
 test("an item's row offers Copy link on a right-click, copying the item's link under the agent that posted it, whichever task holds it", async () => {

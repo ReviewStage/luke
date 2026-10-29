@@ -271,7 +271,7 @@ export function InboxItemCard({
       : undefined;
   const working = line !== undefined && agentStillWriting(line.status);
   return (
-    <HoverCard data-inbox-row-card="">
+    <HoverCard data-inbox-item-card="">
       <HoverCardHead
         glyph={inboxItemGlyph(item)}
         name={cardTitle(item.title)}
@@ -375,12 +375,9 @@ function HolderRef({
   const known = useAutomation(automationId ?? undefined);
   const glyph = <HolderGlyph holder={holder} />;
   const name = holderName(holder);
-  const fallback = (
-    <HoverCard>
-      <HoverCardHead glyph={glyph} name={name} />
-    </HoverCard>
-  );
+  const head = <HoverCardHead glyph={glyph} name={name} />;
   if (holder.kind !== INBOX_HOLDER.TASK) {
+    const fallback = <HoverCard data-actor-card={ACTOR_KIND.AUTOMATION}>{head}</HoverCard>;
     return (
       <InlineRef
         look={INLINE_REF_LOOK.PILL}
@@ -397,7 +394,13 @@ function HolderRef({
               automationId={automationId}
               workspace={workspaceId}
               wordsWorkspaceId={workspaceId}
-              reading={<HoverCardSkeleton glyph={glyph} name={name} />}
+              reading={
+                <HoverCardSkeleton
+                  glyph={glyph}
+                  name={name}
+                  data-actor-card={ACTOR_KIND.AUTOMATION}
+                />
+              }
               fallback={fallback}
             />
           )
@@ -413,7 +416,9 @@ function HolderRef({
       look={INLINE_REF_LOOK.PILL}
       glyph={glyph}
       label={name}
-      card={<TaskChipCard taskId={task.id} fallback={fallback} />}
+      card={
+        <TaskChipCard taskId={task.id} fallback={<HoverCard data-task-card="">{head}</HoverCard>} />
+      }
       onPress={
         openPlace === undefined
           ? undefined

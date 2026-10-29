@@ -315,7 +315,7 @@ async function cardOf(chip: Element | undefined) {
   const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
   assert.ok(card, "the chip hangs a card");
   const look = {
-    tab: card.matches("[data-tab-card]"),
+    agent: card.matches("[data-agent-card]"),
     pullRequest: card.matches("[data-pull-request-card]"),
     reading: card.matches("[data-hover-card-skeleton]"),
     led: card.querySelector(".luke-hover-card-lead") !== null,
@@ -433,7 +433,7 @@ test("an agent on another task hangs its tab's card, the workspace's agents its 
 
   const card = await cardOf(container.querySelector("[data-mention-ref]") ?? undefined);
 
-  assert.equal(card.tab, true, "the card is the agent's tab's own");
+  assert.equal(card.agent, true, "the card is the agent's tab's own");
   assert.equal(card.name, "Prorate seat changes");
   assert.equal(card.model, "Opus 5.5 High");
   assert.doesNotMatch(card.corner ?? "", /Working/u, "the corner says no word of its work");
@@ -632,7 +632,7 @@ test("Luke and an agent named as actors hang Luke's card and the agent's tab's c
   const agentCard = await cardOf(agent);
   assert.equal(lukeCard.actor, ACTOR_KIND.LUKE);
   assert.deepEqual(
-    [agentCard.tab, agentCard.led, agentCard.name, agentCard.foot],
+    [agentCard.agent, agentCard.led, agentCard.name, agentCard.foot],
     [true, true, "Prorate seat changes", "On Billing by seat"],
   );
 });

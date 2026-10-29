@@ -298,7 +298,7 @@ test("the agent's card hung from a Changes card previews its running step while 
   const latestStep = (shown: "agent" | "plan") => {
     const { page } = mount(shown);
     hover(cardAgent(page));
-    const words = [...document.querySelectorAll(".luke-tooltip-card [data-tab-card]")]
+    const words = [...document.querySelectorAll(".luke-tooltip-card [data-agent-card]")]
       .map((card) => card.textContent ?? "")
       .join(" | ");
     act(() => root?.unmount());

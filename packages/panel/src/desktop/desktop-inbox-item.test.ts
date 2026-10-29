@@ -618,7 +618,7 @@ test("a thread draws a comment's files over its words: an agent's pictures stand
 });
 
 function standingCard(): readonly [string | null | undefined, string | null | undefined] {
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.ok(card, "an agent's card is hung");
   return [
     card.querySelector(".luke-hover-card-name")?.textContent,
@@ -658,7 +658,7 @@ test("the thread names its agent as one button wherever it does, its message's c
   );
   reach(comment);
   assert.deepEqual(standingCard(), ["Alerts", undefined]);
-  assert.deepEqual(openings("[data-tab-card]"), [], "the name is the way to the tab");
+  assert.deepEqual(openings("[data-agent-card]"), [], "the name is the way to the tab");
   act(() => comment.click());
   assert.deepEqual(asked.previewedAgents, [AGENT.id], "the agent reads beside the item");
   assert.deepEqual(asked.shownAgents, []);
@@ -705,7 +705,7 @@ test("an item's row hangs the thread's card beside it, as a sidebar task's row h
     false,
     "the row wears no agent's tile, its card naming the agent",
   );
-  const words = hoveredCard(row, "[data-inbox-row-card]") ?? "";
+  const words = hoveredCard(row, "[data-inbox-item-card]") ?? "";
   assert.match(
     words,
     /^How is a failed email retried\?.*Billing usage alerts/u,
@@ -714,7 +714,7 @@ test("an item's row hangs the thread's card beside it, as a sidebar task's row h
   assert.match(words, /Answered/u);
   assert.match(words, /Alerts$/u, "the agent that asked stands at its foot");
   const card =
-    document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-row-card]") ??
+    document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-item-card]") ??
     assert.fail("the thread's card is hung");
   assert.ok(
     card.querySelector('.luke-hover-card-row-end .state-glyph[data-state="working"]'),
@@ -726,7 +726,7 @@ test("an item's row hangs the thread's card beside it, as a sidebar task's row h
     card.click();
   });
   assert.equal(row.getAttribute("aria-current"), null);
-  assert.ok(document.querySelector(".luke-tooltip-card [data-inbox-row-card]"));
+  assert.ok(document.querySelector(".luke-tooltip-card [data-inbox-item-card]"));
   act(() => row.click());
   assert.equal(row.getAttribute("aria-current"), "page");
   assert.deepEqual(asked.shownAgents, [], "the press stays in the Inbox");
@@ -738,11 +738,11 @@ test("an item's card says whom an open item waits on, the reader as Needs you an
   const { page } = mount();
   await settle();
   assert.match(
-    hoveredCard(rowNamed(page, "Alert at 80%?"), "[data-inbox-row-card]") ?? "",
+    hoveredCard(rowNamed(page, "Alert at 80%?"), "[data-inbox-item-card]") ?? "",
     /Needs you/u,
   );
   assert.match(
-    hoveredCard(rowNamed(page, "Expire after 7 days?"), "[data-inbox-row-card]") ?? "",
+    hoveredCard(rowNamed(page, "Expire after 7 days?"), "[data-inbox-item-card]") ?? "",
     /Waiting on Charles Pan/u,
   );
 });
@@ -764,9 +764,9 @@ test("an item's card names its task as the window names a task everywhere: the k
     standing: [{ ...BILLING, name: LONG, number: 182, status: TASK_STATUS.IN_PROGRESS }, INVITES],
   });
   await settle();
-  hoveredCard(rowNamed(page, THRESHOLD.title), "[data-inbox-row-card]");
+  hoveredCard(rowNamed(page, THRESHOLD.title), "[data-inbox-item-card]");
   const card =
-    document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-row-card]") ??
+    document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-item-card]") ??
     assert.fail("the row's card is hung");
   const head = card.querySelector("[data-holder-detail]");
   assert.deepEqual(
@@ -933,7 +933,7 @@ test("a settled item offers, over its box, the next item that needs you as the I
   assert.ok(wearsAgentTile(next), "the next item's agent stands by its tile");
   assert.equal(next.querySelector("[data-agent-ref]"), null, "the tile hangs no card of its own");
   assert.match(
-    hoveredCard(next, "[data-inbox-row-card]") ?? "",
+    hoveredCard(next, "[data-inbox-item-card]") ?? "",
     /^Alert at 80%\?Needs you.*Billing usage alerts/u,
     "the card is the item's own",
   );

@@ -746,7 +746,7 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
   const row = document.querySelectorAll<HTMLElement>('[role="option"]')[1];
   assert.ok(row, "the agent is listed");
   restOn(row);
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Invoice export");
   assert.equal(card?.querySelector(".luke-hover-card-corner")?.textContent, undefined);
   assert.ok(
@@ -794,7 +794,7 @@ test("an agent with no task hangs its card beside its row and is named as its ta
   );
   assert.ok(row, "the agent is listed");
   restOn(row);
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Cataloged Opus");
 });
 
@@ -3051,7 +3051,7 @@ test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its I
   );
 
   restOn(needs);
-  const card = document.querySelector(".luke-tooltip-card [data-inbox-row-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-inbox-item-card]");
   assert.equal(
     card?.querySelector(".luke-hover-card-name")?.textContent,
     "Which webhook secret should rotate?",

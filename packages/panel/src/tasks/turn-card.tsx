@@ -148,7 +148,7 @@ function RunCard({
     <time dateTime={new Date(startedAt).toISOString()}>{runSpanText(startedAt, endedAt, now)}</time>
   );
   return (
-    <HoverCard>
+    <HoverCard data-turn-card="">
       <HoverCardHead
         glyph={provider === undefined ? undefined : <HarnessMark provider={provider} />}
         name={

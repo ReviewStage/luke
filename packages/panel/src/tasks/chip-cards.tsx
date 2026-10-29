@@ -33,8 +33,8 @@ import { useTaskMentions } from "./task-mentions.js";
  * sidebar row and from a chip in an agent's words: a plan's is the plan's
  * card (`../desktop/task-card.tsx`), and a section's or a version's the
  * same card's head with the section's heading or the version under it in
- * the agents' stead; a page's is its tab's, its title, its version, and
- * when it last moved over a preview of it (`page-card.tsx`), a plan's page
+ * the agents' stead; a page's is its tab's, its title, its version, when
+ * it last moved, and who showed it over a preview of it (`page-card.tsx`), a plan's page
  * read from what the window holds where the plan is open, and the page of
  * any other plan or of an agent on no task, which the window holds nothing
  * of, read as the card is first hung (`ReadPageChipCard`); a person's is their card (`../actor-ref.tsx`); an Inbox item's is
