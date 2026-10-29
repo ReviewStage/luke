@@ -9,7 +9,7 @@
  * coding agents cancel any auto-merge they armed, and on merge on green it
  * gives the held pull requests their go; the words open with
  * `MERGE_POLICY_NOTICE_LEAD`, which the pilot's instructions key on. Start
- * is told in one line, `WORK_STARTED_NOTICE`, which the pilot's
+ * is told in one line, `START_WORK_NOTICE`, which the pilot's
  * instructions key on word for word; Stop is told nothing, since the
  * switch stops the pilot with its tree (`running-tree.ts`) and a note would
  * only wake it again.
@@ -51,7 +51,7 @@ export const MERGE_POLICY_NOTICE = {
 } as const satisfies Record<MergePolicy, string>;
 
 /** What the pilot is told when a member presses Start on its tree's top task, word for word. */
-const WORK_STARTED_NOTICE = "Work started.";
+const START_WORK_NOTICE = "Start work when ready.";
 
 /** A top task's pilot, of the agents standing on it: its newest standing pilot; none where it has none. */
 export function pilotOf(agents: readonly Agent[]): Agent | undefined {
@@ -156,7 +156,7 @@ export function tellPilotOfRunning(
     writer,
     userId,
     taskId,
-    (task) => (task.running ? WORK_STARTED_NOTICE : undefined),
+    (task) => (task.running ? START_WORK_NOTICE : undefined),
     true,
   );
 }
