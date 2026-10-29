@@ -23,6 +23,7 @@ import {
 } from "@luke/database/models/writer";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import { AGENT_PAYER, type AgentPayer } from "@luke/features/agent-wire";
+import { redactCredentials } from "@luke/features/credential-redaction";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -31,7 +32,19 @@ import {
   type ProviderKeyProvider,
 } from "@luke/features/provider-key-wire";
 import { HTTP_METHOD, type WireValue, WireValueSchema } from "@luke/wire";
-import { Clock, Duration, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
+import {
+  Cause,
+  Clock,
+  Data,
+  Duration,
+  Effect,
+  ErrorReporter,
+  Layer,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+} from "effect";
 import {
   FetchHttpClient,
   HttpRouter,
@@ -108,7 +121,10 @@ import {
  * turn, asks for the agent's title where none stands yet
  * (`../coder-host/title.ts`), which names its untitled task with it, once
  * the answer has left (`../../http/after-response.ts`), so the runner never
- * waits on the title model.
+ * waits on the title model. A turn the batch failed is said in the log once
+ * its row is written, by the ids it is found by and its redacted detail,
+ * and reported as an issue unless the plan's limit failed it, which its user
+ * expects.
  */
 
 /** The path a runner posts its events to. */
@@ -373,6 +389,42 @@ function unapplied(batch: RunnerEventBatch, after: number | null): RunnerEventBa
     });
 }
 
+/** A native turn that failed, as its issue names it: by its harness and failure kind, its ids and detail its attributes. */
+class NativeTurnFailed extends Data.TaggedError("NativeTurnFailed")<{
+  readonly message: string;
+  readonly [ErrorReporter.attributes]: Readonly<Record<string, string>>;
+}> {}
+
+/** A failed turn of the batch, which it says once its row is written. */
+type FailedTurn = Extract<NativeWrite, { kind: typeof NATIVE_WRITE.FAILED }>;
+
+/**
+ * Says a turn that failed in the log, and reports it as an issue unless its
+ * user expected it. Note that the ids are the log's annotations, never its
+ * words, so a line is found by them.
+ */
+function sayTurnFailed(
+  failed: FailedTurn,
+  harness: ConversationRuntime,
+  ids: Readonly<Record<string, string>>,
+) {
+  const attributes = {
+    ...ids,
+    harness,
+    turnId: failed.turnId,
+    failure: failed.failure,
+    detail: redactCredentials(failed.detail),
+  };
+  const issue = new NativeTurnFailed({
+    message: `a ${harness} turn failed: ${failed.failure}`,
+    [ErrorReporter.attributes]: attributes,
+  });
+  return Effect.andThen(
+    Effect.logError("runner-events: a native turn failed").pipe(Effect.annotateLogs(attributes)),
+    failed.expected ? Effect.void : ErrorReporter.report(Cause.fail(issue)),
+  );
+}
+
 /** Says a write the writer refused, which is passed over rather than posted again. */
 function reportRefused(what: string, result: Result.Result<unknown, { readonly refusal: string }>) {
   return Result.isFailure(result)
@@ -440,6 +492,9 @@ function landWrite(
         briefTokens: estimatedTokens(JSON.stringify(applying.brief)),
         at: now,
       });
+    case NATIVE_WRITE.FAILED:
+      // Said once the batch has landed, so a turn is said failed only once its row is.
+      return Effect.void;
     case NATIVE_WRITE.WAKEUPS:
       return replaceAgentWakeups(
         applying.agentId,
@@ -554,6 +609,7 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
       ends,
       idle,
       turns: turnsMovedBy(writes),
+      failed: writes.filter((write): write is FailedTurn => write.kind === NATIVE_WRITE.FAILED),
       keepsAlive,
     };
     return sequence === null || (last === undefined && !keepsAlive)
@@ -587,9 +643,8 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   const routing = yield* hostedStoreOrUnavailable(readAgentRouting(target.userId, agent.value.id));
   const runtime = Option.map(routing, (row) => row.runtime);
-  const reader =
-    read ??
-    (Option.contains(runtime, CONVERSATION_RUNTIME.CODEX) ? codexMoments : claudeCodeMoments);
+  const codex = Option.contains(runtime, CONVERSATION_RUNTIME.CODEX);
+  const reader = read ?? (codex ? codexMoments : claudeCodeMoments);
   const body = yield* readBodyBytesEffect(MAX_BODY_BYTES);
   const batch = readBatch(yield* parseJsonBytes(body));
   if (Option.isNone(batch)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -611,9 +666,19 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   );
   // Note that a conversation cleared, or a bearer retired, since the bearer was read takes nothing more.
   if (Option.isNone(applied)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  const { taskId } = agent.value;
+  const { runtimeSessionId } = admitted.value;
+  for (const failed of applied.value.failed) {
+    const harness = codex ? CONVERSATION_RUNTIME.CODEX : CONVERSATION_RUNTIME.CLAUDE_CODE;
+    yield* sayTurnFailed(failed, harness, {
+      agentId: agent.value.id,
+      conversationId: target.conversationId,
+      ...(taskId === null ? undefined : { taskId }),
+      ...(runtimeSessionId === undefined ? undefined : { sandboxSessionId: runtimeSessionId }),
+    });
+  }
   // The task follows the turns the batch moved, once their rows are written: a turn starting takes
   // it up, and a turn's end may have finished its work (`tasks/task-finish.ts`).
-  const { taskId } = agent.value;
   if (taskId !== null && applied.value.turns.started) {
     yield* reopenTaskForWork(target.userId, taskId);
   }

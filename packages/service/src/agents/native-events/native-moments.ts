@@ -152,6 +152,14 @@ export type NativeMoment =
       readonly kind: typeof NATIVE_MOMENT.ENDED;
       readonly ending: NativeEnding;
       readonly detail?: string;
+      /** Whether the launch stays warm past the turn's end, as an IDLE says, rather than ending with it. */
+      readonly warm?: boolean;
+      /**
+       * Whether the runner said the harness or the launch failed, rather than
+       * that its input closed: such an end before the launch's first turn
+       * opens one, so why it failed is kept.
+       */
+      readonly launchFailed?: boolean;
       /**
        * The wakeups the agent is left to be delivered, each due in epoch
        * milliseconds, which replace those it had: what a released wait named,

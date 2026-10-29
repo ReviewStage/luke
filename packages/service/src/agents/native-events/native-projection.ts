@@ -13,6 +13,7 @@ import {
   type RunUsage,
   sessionKey,
   TURN_FAILURE,
+  type TurnFailure,
 } from "../../core.js";
 import { EVE_HOST_TURN, EVE_HOST_TURN_KIND } from "../eve-host/bounds.js";
 import {
@@ -107,6 +108,8 @@ const TurnSchema = Schema.Struct({
   usage: Schema.optionalKey(UsageSchema),
   /** Why the newest model turn failed, where it did. */
   failure: Schema.optionalKey(Schema.String),
+  /** Whether the plan's limit refused the turn, a failure its user expects. */
+  limited: Schema.optionalKey(Schema.Boolean),
   /** The MCP servers mentioned to the agent that this turn took as it started, which its calls are handed whatever the switches say. */
   servers: Schema.optionalKey(Schema.Array(Schema.String)),
 });
@@ -125,6 +128,8 @@ const NativeProjectionSchema = Schema.Struct({
   metered: Schema.optionalKey(UsageSchema),
   /** When a batch last kept the runner's sandbox alive (`../sandbox-keep-alive.ts`), in epoch milliseconds. */
   keptAliveAt: Schema.optionalKey(Schema.Number),
+  /** Whether the launch went warm at its turn's IDLE with no turn since, so a failure it ends on is no turn's. */
+  warm: Schema.optionalKey(Schema.Boolean),
 });
 export type NativeProjection = typeof NativeProjectionSchema.Type;
 
@@ -171,6 +176,8 @@ export const NATIVE_WRITE = {
   WAKEUPS: "wakeups",
   /** Record what the newest model call read on the agent's row, which its context ring reads. */
   CONTEXT: "context",
+  /** Say a turn's failure in the log, and as an issue where its user did not expect it. */
+  FAILED: "failed",
 } as const;
 
 export type NativeWrite =
@@ -185,6 +192,14 @@ export type NativeWrite =
   | { readonly kind: typeof NATIVE_WRITE.WAKEUPS; readonly wakeups: readonly NativeWakeup[] }
   | { readonly kind: typeof NATIVE_WRITE.COMPACTED }
   | { readonly kind: typeof NATIVE_WRITE.CONTEXT; readonly usage: NativeContextUsage }
+  | {
+      readonly kind: typeof NATIVE_WRITE.FAILED;
+      readonly turnId: string;
+      readonly failure: TurnFailure;
+      readonly detail: string;
+      /** Whether the turn failed as its user expects, on the plan's limit, which opens no issue. */
+      readonly expected: boolean;
+    }
   | {
       readonly kind: typeof NATIVE_WRITE.PLAN_STATUS;
       readonly status: PlanStatus;
@@ -272,6 +287,8 @@ class Fold {
   turn(): Turn {
     const held = this.state.turn;
     if (held !== undefined) return held;
+    const { warm: _warm, ...cold } = this.state;
+    this.state = cold;
     const id = nativeTurnId(this.#context.conversationId, this.#context.sequence);
     this.writes.push({ kind: NATIVE_WRITE.ENQUEUE, turnId: id });
     const { origin, trigger } = EVE_HOST_TURN_KIND[EVE_HOST_TURN.TYPED];
@@ -408,13 +425,30 @@ class Fold {
     });
   }
 
+  /**
+   * The turn a launch's end settles: the one under way, or, where the launch
+   * failed before its first, one opened for it, so why it failed is kept.
+   * None for any other end that finds no turn, nor for a warm launch's, whose
+   * turn already ended at its IDLE.
+   */
+  #endedTurn(
+    moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.ENDED }>,
+  ): Turn | undefined {
+    const held = this.state.turn;
+    if (held !== undefined) return held;
+    if (moment.launchFailed !== true || this.state.warm === true) return undefined;
+    return this.turn();
+  }
+
   /** The turn's end: its words told whole, then its status, cost, and why it failed, where it did. */
   #ended(moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.ENDED }>): void {
     // Note that the wakeups are the launch's, written whether or not a turn was under way.
     if (moment.wakeups !== undefined) {
       this.writes.push({ kind: NATIVE_WRITE.WAKEUPS, wakeups: moment.wakeups });
     }
-    const held = this.state.turn;
+    const held = this.#endedTurn(moment);
+    const { warm: _warm, ...cold } = this.state;
+    this.state = moment.warm === true ? { ...cold, warm: true } : cold;
     if (held === undefined) return;
     const turn = this.#closed(held);
     const status = statusOf(moment.ending, turn.failure);
@@ -435,6 +469,15 @@ class Fold {
       responseIds: [],
       at: this.#context.now,
     });
+    if (failed) {
+      this.writes.push({
+        kind: NATIVE_WRITE.FAILED,
+        turnId: turn.id,
+        failure: TURN_FAILURE.MODEL,
+        detail,
+        expected: turn.limited === true || this.state.rateLimit !== undefined,
+      });
+    }
     this.#setTurn(undefined);
     // Note that a limit is the launch's: the next launch is refused again or it is not.
     const { rateLimit: _spent, rateLimitResetsAt: _resets, ...rest } = this.state;
@@ -548,6 +591,10 @@ class Fold {
         const resetsAt =
           moment.status === PLAN_STATUS.LIMIT_REACHED ? this.state.rateLimitResetsAt : undefined;
         const turnOpenedAt = this.state.turn?.openedAt;
+        const turn = this.state.turn;
+        if (turn !== undefined && moment.status === PLAN_STATUS.LIMIT_REACHED) {
+          this.#setTurn({ ...turn, limited: true });
+        }
         this.writes.push({
           kind: NATIVE_WRITE.PLAN_STATUS,
           status: moment.status,
