@@ -8,9 +8,11 @@
  * through `steerAgentWritten`, so it wakes and acts. On hold it has its
  * coding agents cancel any auto-merge they armed, and on merge on green it
  * gives the held pull requests their go; the words open with
- * `MERGE_POLICY_NOTICE_LEAD`, which the pilot's instructions key on. A
- * running switch is told in one line, `RUNNING_NOTICE`'s, which the pilot's
- * instructions and the tree's stop key on word for word.
+ * `MERGE_POLICY_NOTICE_LEAD`, which the pilot's instructions key on. Running
+ * switched on is told in one line, `RUNNING_ON_NOTICE`, which the pilot's
+ * instructions key on word for word; switched off is told nothing, since the
+ * switch stops the pilot with its tree (`running-tree.ts`) and a note would
+ * only wake it again.
  *
  * A switch is written before the pilot is told, and the words name the value
  * the task holds as the notice is sent, read again then, so of two switches
@@ -47,11 +49,8 @@ export const MERGE_POLICY_NOTICE = {
     "irreversible changes, open product questions, and UI changes the plan didn't spell out.",
 } as const satisfies Record<MergePolicy, string>;
 
-/** What the pilot is told for each side its tree's running switch is switched to, word for word. */
-const RUNNING_NOTICE = {
-  ON: "Running is now on.",
-  OFF: "Running is now off.",
-} as const;
+/** What the pilot is told when its tree's running switch is switched on, word for word. */
+const RUNNING_ON_NOTICE = "Running is now on.";
 
 /** A top task's pilot, of the agents standing on it: its newest standing pilot; none where it has none. */
 export function pilotOf(agents: readonly Agent[]): Agent | undefined {
@@ -60,8 +59,8 @@ export function pilotOf(agents: readonly Agent[]): Agent | undefined {
 
 /**
  * Tells the pilot of the top task `taskId` the words `noticeOf` makes of the
- * task as it now stands, as the member `userId` said them; logs and answers
- * nothing where it could not be told.
+ * task as it now stands, as the member `userId` said them, and nothing where
+ * it makes none; logs and answers nothing where it could not be told.
  */
 const tellPilot = /* @__PURE__ */ Effect.fnUntraced(
   function* (
@@ -70,14 +69,16 @@ const tellPilot = /* @__PURE__ */ Effect.fnUntraced(
     writer: Effect.Effect<StoreWriter>,
     userId: string,
     taskId: string,
-    noticeOf: (task: TaskHeader) => string,
+    noticeOf: (task: TaskHeader) => string | undefined,
   ) {
     const pilot = pilotOf(yield* listAgents(userId, taskId));
     const task = yield* readTaskHeader(userId, taskId);
     if (pilot === undefined || Option.isNone(task)) return;
+    const text = noticeOf(task.value);
+    if (text === undefined) return;
     const eve = yield* eveFor<EveTypedTurn>(reach, request, userId);
     yield* steerAgentWritten(eve, writer, userId, pilot, {
-      text: noticeOf(task.value),
+      text,
       clientKey: randomUUID(),
       sender: { kind: MESSAGE_SENDER.MEMBER, userId },
     });
@@ -108,7 +109,12 @@ export function tellPilotOfMergePolicy(
   );
 }
 
-/** Tells the pilot of the top task `taskId` whether its tree now runs, as the member `userId` said it. */
+/**
+ * Tells the pilot of the top task `taskId` that its tree now runs, as the
+ * member `userId` said it. Note that the task is read again as the notice
+ * goes, so a switch back off meanwhile, which stopped the pilot, wakes it
+ * with nothing.
+ */
 export function tellPilotOfRunning(
   reach: EveReach,
   request: Request,
@@ -117,6 +123,6 @@ export function tellPilotOfRunning(
   taskId: string,
 ) {
   return tellPilot(reach, request, writer, userId, taskId, (task) =>
-    task.running ? RUNNING_NOTICE.ON : RUNNING_NOTICE.OFF,
+    task.running ? RUNNING_ON_NOTICE : undefined,
   );
 }

@@ -1389,6 +1389,23 @@ export function readTreeStopped(userId: string, taskId: string): TaskStoreEffect
 }
 
 /**
+ * Whether nothing automated may wake a task's agents: its top task
+ * (`readTopTaskRow`), itself where it stands at the top, is worked in pilot
+ * mode with its running switch off. Unlike `readTreeStopped`, the top task
+ * counts, since Running off stops its pilot too; a member's own message
+ * still wakes the pilot, and a member's Start still lands there, so only the
+ * automated doors read this one. False for a task the account does not reach.
+ */
+export function readTreeHeld(userId: string, taskId: string): TaskStoreEffect<boolean> {
+  return Effect.map(readTopTaskRow(userId, taskId), (rows) =>
+    Option.match(rows, {
+      onNone: () => false,
+      onSome: ({ top }) => top.mode === TASK_MODE.PILOT && !top.running,
+    }),
+  );
+}
+
+/**
  * The task as `readTask` reads it, held under the row's lock until the
  * enclosing transaction ends, so a save formatted from it is not crossed by
  * a rename.
