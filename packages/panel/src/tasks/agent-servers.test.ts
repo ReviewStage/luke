@@ -538,7 +538,7 @@ test("a server's problem fades where its row cuts it short, as every cut line of
   assert.equal(problem?.textContent, "Linear refused the sign-in.");
 });
 
-test("a server's own error is no part of its row's sentence, and stands quoted after it in the problem's hint", async () => {
+test("a server's own error is no part of its row's sentence, and stands quoted in the card its row hangs", async () => {
   answerLinear({
     reason: INTEGRATION_TOOLS_PROBLEM.REJECTED,
     message: "workspace is suspended",
@@ -548,24 +548,17 @@ test("a server's own error is no part of its row's sentence, and stands quoted a
   const words = problem.textContent;
 
   restOn(problem);
-  const hint = document.querySelector('[role="tooltip"]:not([inert])');
-
-  assert.equal(words, "Linear could not be reached.");
-  assert.equal(
-    hint?.textContent,
-    "Linear could not be reached. Linear said: “workspace is suspended”",
-  );
-
-  restOn(serverPress(container, "Linear") ?? assert.fail("no Linear row"));
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
+
+  assert.equal(words, "Linear could not be reached.");
   assert.ok(
     [...(card?.querySelectorAll(".luke-hover-card-note") ?? [])].some(
       (note) => note.textContent === "Linear said: “workspace is suspended”",
     ),
-    "the server's card says the server's own words too",
+    "the server's card says the server's own words",
   );
 });
 
