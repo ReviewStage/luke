@@ -10,11 +10,6 @@ import {
   writeAccountPreferences,
 } from "@luke/database/models/account-store";
 import {
-  claimQueueHead,
-  type QueuedMessageRow,
-  readAgentQueue,
-} from "@luke/database/models/agent-queue-store";
-import {
   type Agent,
   archiveAgent,
   createAgent,
@@ -78,7 +73,6 @@ import {
   ACCOUNT_INBOX_ARCHIVED,
   accountInboxAnswerSchema,
 } from "@luke/features/account-inbox-wire";
-import { QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
 import {
   firstMessageParts,
   firstMessageText,
@@ -89,7 +83,6 @@ import {
   START_NOTE_HEADING,
   stepsBytes,
 } from "@luke/features/agent-replay";
-import { LINE_GRACE_MILLIS } from "@luke/features/agent-status";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
 import {
   AGENT_ARCHIVER,
@@ -113,12 +106,10 @@ import {
   agentPageAnswerSchema,
   agentPartAnswerSchema,
   agentPullRequestAnswerSchema,
-  agentQueueAnswerSchema,
   CHECK_SUMMARY,
   LOCAL_AGENT_REFUSAL,
   PART_CUT_FIELD,
   PULL_REQUEST_STATE,
-  QUEUE_CHANGE,
   TRANSCRIPT_PARTS_QUERY,
 } from "@luke/features/agent-wire";
 import {
@@ -157,7 +148,7 @@ import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/i
 import { transcriptNowAnswerSchema } from "@luke/features/live-wire";
 import { lukeToolsAnswerSchema } from "@luke/features/luke-tools-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
-import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import {
   PULL_REQUEST_ACTION,
@@ -177,34 +168,16 @@ import {
   taskStartAnswerSchema,
 } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+import type { WireBoundaryInput } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
-import { noNetwork, temporaryDirectory } from "@luke/wire/testing";
+import { temporaryDirectory } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
 import { and, eq, sql } from "drizzle-orm";
-import {
-  Clock,
-  type Context,
-  DateTime,
-  Deferred,
-  Duration,
-  Effect,
-  Fiber,
-  Latch,
-  Layer,
-  Option,
-  Queue,
-  Redacted,
-  Result,
-  type Schema,
-} from "effect";
-import { HttpRouter } from "effect/http";
+import { Clock, DateTime, Deferred, Duration, Effect, Fiber, Option, Queue, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import type { MessageReceivedPart } from "eve/client";
 import { afterEach, type TestContext, vi } from "vitest";
-import { requestUserId } from "../auth/bearer.js";
 import {
   AssistantMessageBuilder,
   isRecord,
@@ -221,34 +194,74 @@ import {
   userMessage,
   userMetadataOf,
 } from "../core.js";
-import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
-import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
+import { SERVER_EVENT } from "../events/server-events.js";
 import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
 import { PULL_REQUEST_QUEUED_OPERATION } from "../github/pull-request-merging.js";
-import { type AfterResponse, keptAfterResponse } from "../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
-import { type InboxTitleModelOf, inboxProcedures } from "../inbox/inbox-procedures.js";
+import type { InboxTitleModelOf } from "../inbox/inbox-procedures.js";
 import { answerInboxAsk, closeInboxItem, postInboxThread } from "../inbox/inbox-store.js";
-import { hostedFetch } from "../orpc/handler.js";
-import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
-import type { WebServices } from "../runtime.js";
 import { MERGE_POLICY_NOTICE } from "../tasks/merge-policy-notice.js";
-import { tasksProcedures } from "../tasks/tasks-procedures.js";
-import { connectAgentApiKeys } from "../testing/agent-credentials.js";
+import {
+  AGENT,
+  AGENT_GITHUB_IMAGE,
+  AGENT_INBOX,
+  AGENT_LUKE_TOOLS,
+  AGENT_MESSAGES,
+  AGENT_NEWEST,
+  AGENT_OVERVIEW,
+  AGENT_STARTS,
+  AGENT_STOP,
+  type Answer,
+  agentStartedOn,
+  countedFor,
+  deploymentFor,
+  drivenWhileStarting,
+  fakeEve,
+  freshInstallation,
+  INBOX_ATTACHMENT,
+  installations,
+  LONG_TURNS,
+  messageAs,
+  messagedAgent,
+  ORIGIN,
+  openTask,
+  PUBLISHED,
+  publishedPullRequest,
+  publishedPullRequestDrafted,
+  RELAY,
+  RELAY_FULL_NAME,
+  reachRequests,
+  readAnswer,
+  refusal,
+  request,
+  SAVED,
+  SCRIPTED_SVG,
+  SMALL_WINDOW,
+  SNAPSHOT,
+  SOL,
+  SUBAGENT_MESSAGES,
+  SUBAGENT_NEWEST,
+  sessionCookieOf,
+  standing,
+  startAs,
+  TASK,
+  TASK_AGENTS,
+  TASKS,
+  userTexts,
+  WORKSPACE_AGENTS,
+  WORKSPACE_STARTS,
+} from "../testing/agents-app.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import {
   connectWorkspaceGitHub,
-  type FakeGitHub,
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
   githubReaching,
   type InstallationFixture,
   openGithubUser,
   type RepositoryScript,
   type SentToGitHub,
-  standingGithubRow,
 } from "../testing/github-app-fake.js";
-import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
-import { keepAwakeDetached, scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
+import { scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
 import {
   fixtureOidcToken,
   SOURCE_SANDBOX,
@@ -256,30 +269,13 @@ import {
   sourceCheckout,
   sourceSandbox,
 } from "../testing/source-sandbox.js";
-import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
-import { agentsApp } from "./agents-app.js";
-import { agentsProcedures } from "./agents-procedures.js";
 import { receivedMessage } from "./attached-files.js";
-import { queueAtTurnEnd, sendQueued, sweepAgentQueues } from "./coder-host/agent-queue.js";
 import { CODER } from "./coder-host/bounds.js";
-import { instancePublishedCache } from "./coder-host/published.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
-import { steerAgentWritten } from "./coder-host/steer.js";
-import { cancelledTurn } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { EVE_HOST_TURN } from "./eve-host/bounds.js";
-import {
-  type AgentSessions,
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-  EveUnreachable,
-} from "./eve-host/eve-sessions.js";
-import { messagesProcedures } from "./messages-procedures.js";
-import { type SandboxStopReach, sessionSandboxesLayer } from "./session-sandboxes.js";
-import { AgentSandbox } from "./terminal/agent-sandbox.js";
+import { EVE_SEND_OUTCOME, type EveMessage } from "./eve-host/eve-sessions.js";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers
@@ -292,652 +288,6 @@ import { AgentSandbox } from "./terminal/agent-sandbox.js";
  * and the store PGlite. Synthetic accounts, bearers, tasks, and words
  * throughout.
  */
-
-const ORIGIN = "https://luke.test";
-const TASK_AGENTS = "/api/plans/agents";
-const AGENT_MESSAGES = "/api/agents/messages";
-const SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
-const AGENT_NEWEST = "/api/agents/messages-newest";
-const SUBAGENT_NEWEST = "/api/agents/subagent-messages-newest";
-const AGENT_STARTS = "/api/agents/agents";
-/** A Start in a workspace with no task, by the workspace's id. */
-const WORKSPACE_STARTS = "/api/workspaces/agents";
-const AGENT = "/api/agents/agent";
-const AGENT_INBOX = "/api/agents/{id}/inbox";
-/** Luke's own tools an agent is offered and where its `run_on_mac` stands, as its MCP popover reads them. */
-const AGENT_LUKE_TOOLS = "/api/agents/luke-tools";
-const WORKSPACE_AGENTS = "/api/agents";
-/** The overview's three reads, each its own route. */
-const AGENT_OVERVIEW = [
-  "/api/agents/overview-pull-request",
-  "/api/agents/overview-checks",
-  "/api/agents/overview-conversation",
-] as const;
-/** The public paths the inbox's procedures answer on the hosted oRPC router, its attachment's bytes aside. */
-const INBOX_PROCEDURE_PATH = /^\/api\/(?:inbox(?:\/.*)?|(?:plans|agents)\/[^/]+\/inbox)$/u;
-/** The account's tasks, served by the hosted oRPC router, each naming its agents in brief. */
-const TASKS = "/api/plans";
-/** One task, served by the hosted oRPC router, whose delete stops the task's agents through the same Stop. */
-const TASK = (taskId: string) => `${TASKS}/${taskId}`;
-/** Luke's Stop on a task, served by the hosted oRPC router, which reaches the brain's eve as the request's caller. */
-/** Luke's own transcript of a task, served by the hosted oRPC router. */
-/** A task's own path, its Stop, or its transcript, by the task's id, which the router serves where the old groups serve flattened keys. */
-const TASK_PATH =
-  /^\/api\/plans\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/stop|\/messages)?$/u;
-/** One part of a message of an agent's or a worker's transcript, whole, at its public path on the hosted oRPC router. */
-const TRANSCRIPT_PART_PATH =
-  /^\/api\/agents\/[^/]+\/(?:subagents\/[^/]+\/)?messages\/[^/]+\/parts\/[^/]+$/u;
-
-const RELAY = { owner: "Acme", name: "Relay" } as const;
-const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
-
-/** Where the group serves an image an agent's pull request's overview names. */
-const AGENT_GITHUB_IMAGE = "/api/agents/github-image";
-
-/** An SVG a repository might hold, with a script in it that must never run as a page of the service. */
-const SCRIPTED_SVG = new TextEncoder().encode(
-  '<svg xmlns="http://www.w3.org/2000/svg"><script>fetch("/api/plans")</script></svg>',
-);
-
-/** The installation ids handed out so far: one installation stands for one workspace, so each task's workspace connects its own. */
-let installationsConnected = 0;
-
-/** A fresh installation reaching the repository, on an account of its own. */
-function freshInstallation(): InstallationFixture {
-  installationsConnected += 1;
-  return { id: 7 + installationsConnected, login: RELAY.owner, repositories: [RELAY] };
-}
-
-const SAVED =
-  "## Goal\n\nInvite a teammate by email.\n\n## Assumptions\n\n- Invites expire after 7 days.\n";
-
-/** The saved plan as Copy writes it, its name as a title over its text, which is what an agent started on the task is handed. */
-const SNAPSHOT = `# Teammate invitations\n\n${SAVED}`;
-
-const SOL = "openai/gpt-6.1-sol";
-
-/** A model offering two context windows, as OpenAI prices its long context apart. */
-const GPT_LONG = "openai/gpt-5.5";
-
-/** How many long turns a long source's transcript holds past its brief. */
-const LONG_TURNS = 30;
-
-/** A model with a small window, which a long replay does not fit whole. */
-const SMALL_WINDOW = { model: "anthropic/claude-sonnet-4.9", tokens: 60_000 } as const;
-
-/** The models offered, each with its prices in dollars per token, one with two windows. */
-const CATALOG: readonly OfferedModel[] = [
-  {
-    id: SMALL_WINDOW.model,
-    name: "Claude Sonnet 4.9",
-    provider: MODEL_PROVIDER.ANTHROPIC,
-    efforts: ["low", "high"],
-    contextWindow: SMALL_WINDOW.tokens,
-  },
-  {
-    id: AGENT_DEFAULT_CHOICE.model,
-    name: "Claude Opus 5.5",
-    provider: MODEL_PROVIDER.ANTHROPIC,
-    efforts: ["low", "medium", "high", "max"],
-    pricing: { inputUsd: 0.000004, outputUsd: 0.00002, cachedInputUsd: 0.0000002 },
-  },
-  {
-    id: SOL,
-    name: "GPT-6.1 Sol",
-    provider: MODEL_PROVIDER.OPENAI,
-    efforts: ["low", "high"],
-    pricing: { inputUsd: 0.000002, outputUsd: 0.00001, cachedInputUsd: 0.000001 },
-  },
-  {
-    id: GPT_LONG,
-    name: "GPT-5.5",
-    provider: MODEL_PROVIDER.OPENAI,
-    efforts: ["low", "high"],
-    contextWindow: 1_050_000,
-    contextWindows: { standardTokens: 272_000, longTokens: 1_050_000 },
-  },
-];
-
-interface Answer {
-  readonly status: number;
-  readonly body: WireBoundaryInput;
-}
-
-/** One session opened, as the fake eve saw it. */
-interface Opened {
-  readonly authorization: string;
-  readonly message: EveMessage;
-  readonly sessionId: string;
-}
-
-/** One follow-up handed to a session, as the fake eve saw it. */
-interface Sent {
-  readonly authorization: string;
-  readonly sessionId: string;
-  readonly message: EveMessage;
-}
-
-/** How the fake eve answers a follow-up: accepted with a delivery of its own, or one of the refusals the client reads. */
-type SendAnswer =
-  | typeof EVE_SEND_OUTCOME.ACCEPTED
-  | typeof EVE_SEND_OUTCOME.NOT_READY
-  | typeof EVE_SEND_OUTCOME.RETIRED
-  | typeof EVE_SEND_OUTCOME.FAILED;
-
-/** The cookie a browser signed in to the account sends, as the faked auth service reads it. */
-function sessionCookieOf(userId: string): string {
-  return `better-auth.session_token=${userId}`;
-}
-
-/** How the fake eve writes down the deployment acting for an account, apart from any bearer a request carried. */
-function deploymentFor(account: string): string {
-  return `deployment for ${account}`;
-}
-
-/** eve as the group reaches it, answering from a script and writing down every open, send, cancel, and retire, with who asked it. */
-function fakeEve(
-  options: {
-    readonly reachable?: boolean;
-    readonly cancels?: boolean;
-    readonly sends?: SendAnswer;
-    /** How many cancels eve holds every cancel's answer for, so a caller asking them one at a time never hears back. */
-    readonly cancelsTogether?: number;
-    /** What eve looks at as it is asked to retire a session, written down beside the retire. */
-    readonly resetSees?: Effect.Effect<boolean>;
-    /** What happens while a cancel is out, before eve answers it, as a turn's end racing the Stop does. */
-    readonly cancelling?: Effect.Effect<void>;
-  } = {},
-) {
-  const together = Latch.makeUnsafe(options.cancelsTogether === undefined);
-  const opened: Opened[] = [];
-  const sent: Sent[] = [];
-  const cancelled: (readonly [string, string])[] = [];
-  /** Who asked each cancel, in order: the request's bearer, or the deployment acting for an account. */
-  const cancelledAs: string[] = [];
-  /** Every session eve was asked to retire, in order. */
-  const reset: string[] = [];
-  /** Who asked each retire, in order, as `cancelledAs` writes it. */
-  const resetAs: string[] = [];
-  /** What `resetSees` saw at each retire, in order. */
-  const resetSaw: boolean[] = [];
-  let sessions = 0;
-  let deliveries = 0;
-  const eve = (authorization: string): AgentSessions => ({
-    open: (message) =>
-      Effect.suspend(() => {
-        if (options.reachable === false) {
-          return Effect.fail(
-            new EveUnreachable({
-              // SAFETY: the client's own error shape, built by the fake at the transport it stands for.
-              cause: {
-                _tag: "RequestError",
-                reason: { _tag: "TransportError" },
-                message: "refused",
-              } as never,
-            }),
-          );
-        }
-        sessions += 1;
-        const sessionId = `wrun_01M${String(sessions).padStart(22, "0")}`;
-        opened.push({ authorization, message, sessionId });
-        return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId });
-      }),
-    send: (sessionId, message) =>
-      Effect.sync(() => {
-        sent.push({ authorization, sessionId, message });
-        switch (options.sends ?? EVE_SEND_OUTCOME.ACCEPTED) {
-          case EVE_SEND_OUTCOME.ACCEPTED:
-            deliveries += 1;
-            return {
-              outcome: EVE_SEND_OUTCOME.ACCEPTED,
-              sessionId,
-              deliveryId: `delivery-${deliveries}`,
-            };
-          case EVE_SEND_OUTCOME.NOT_READY:
-            return { outcome: EVE_SEND_OUTCOME.NOT_READY };
-          case EVE_SEND_OUTCOME.RETIRED:
-            return { outcome: EVE_SEND_OUTCOME.RETIRED };
-          case EVE_SEND_OUTCOME.FAILED:
-            return { outcome: EVE_SEND_OUTCOME.FAILED, status: 500 };
-        }
-      }),
-    cancel: (sessionId, eveTurnId) =>
-      Effect.suspend(() => {
-        cancelled.push([sessionId, eveTurnId]);
-        cancelledAs.push(authorization);
-        if (cancelled.length >= (options.cancelsTogether ?? 0)) together.openUnsafe();
-        return Effect.as(
-          Effect.andThen(together.await, options.cancelling ?? Effect.void),
-          options.cancels === false
-            ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
-            : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED },
-        );
-      }),
-    reset: (sessionId) =>
-      Effect.flatMap(options.resetSees ?? Effect.succeed(true), (saw) =>
-        Effect.sync(() => {
-          reset.push(sessionId);
-          resetAs.push(authorization);
-          resetSaw.push(saw);
-          return { outcome: EVE_RESET_OUTCOME.RESET };
-        }),
-      ),
-  });
-  return { eve, opened, sent, cancelled, cancelledAs, reset, resetAs, resetSaw };
-}
-
-/** The deployment's environment with no key of its own, which a test gives the one it reads. */
-const NO_KEYS: HostedEnvironmentValues = {
-  posthogPersonalApiKey: undefined,
-  posthogProjectId: undefined,
-  posthogApiHost: undefined,
-  posthogProjectApiKey: undefined,
-  posthogIngestHost: undefined,
-  cronSecret: undefined,
-  eveDeploymentSecret: undefined,
-  githubWebhookSecret: undefined,
-  providerKeyEncryptionKeys: undefined,
-};
-
-/** What the endpoints counted, across the file; a test reads its own account's. */
-const ANALYTICS = recordingProductAnalytics();
-
-/** How many of one event the account was counted for. */
-const countedFor = (userId: string, name: string) =>
-  ANALYTICS.recorded.filter((event) => event.userId === userId && event.name === name).length;
-
-/**
- * The public path of each route the hosted oRPC router answers, by the
- * flattened key a test names it with: the rewrite carries this path to the
- * router in `route-path`, and keeps the agent's id in the `id` query beside
- * it, as a request here does.
- */
-const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
-  ["/api/plans/agents", (id: string) => `/api/plans/${id}/agents`],
-  ["/api/agents/agent", (id: string) => `/api/agents/${id}`],
-  ["/api/agents/calls", (id: string) => `/api/agents/${id}/calls`],
-  ["/api/agents/stop", (id: string) => `/api/agents/${id}/stop`],
-  ["/api/agents/queue", (id: string) => `/api/agents/${id}/queue`],
-  ["/api/agents/agents", (id: string) => `/api/agents/${id}/agents`],
-  ["/api/workspaces/agents", (id: string) => `/api/workspaces/${id}/agents`],
-  ["/api/agents/messages-newest", (id: string) => `/api/agents/${id}/messages/newest`],
-  ["/api/agents/changes", (id: string) => `/api/agents/${id}/changes`],
-  ["/api/agents/review-options", (id: string) => `/api/agents/${id}/review-options`],
-  ["/api/agents/luke-tools", (id: string) => `/api/agents/${id}/luke-tools`],
-  ["/api/agents/pull-request", (id: string) => `/api/agents/${id}/pull-request`],
-  ["/api/agents/pull-request-action", (id: string) => `/api/agents/${id}/pull-request/action`],
-  ["/api/agents/pull-request-viewed", (id: string) => `/api/agents/${id}/pull-request/viewed`],
-  ["/api/agents/overview-pull-request", (id: string) => `/api/agents/${id}/overview/pull-request`],
-  ["/api/agents/overview-checks", (id: string) => `/api/agents/${id}/overview/checks`],
-  ["/api/agents/overview-conversation", (id: string) => `/api/agents/${id}/overview/conversation`],
-]);
-
-/** The request at its public path, for a route the hosted oRPC router answers; none for any other route. */
-function publicRequest(request: Request): Request | undefined {
-  const url = new URL(request.url);
-  const publicPath = ORPC_PUBLIC_PATH.get(url.pathname);
-  if (publicPath === undefined) return undefined;
-  url.pathname = publicPath(encodeURIComponent(url.searchParams.get("id") ?? ""));
-  return new Request(url, request);
-}
-
-/**
- * The group over the test's own database, GitHub, and eve, stood once and
- * answering every request of the test, so what it keeps between two
- * requests, the published answers, is kept as one function instance keeps
- * it; let go with the test's scope.
- */
-const standing = (
-  bearers: ReadonlyMap<string, string>,
-  github: FakeGitHub,
-  eve: ReturnType<typeof fakeEve>,
-  summaryModel: SummaryModelOf = () => Effect.succeed(undefined),
-  sessionSandboxes: SandboxStopReach["sessionSandboxes"] = sessionSandboxesLayer,
-  titleModel: InboxTitleModelOf = () => Effect.succeed(undefined),
-  afterResponse: Layer.Layer<AfterResponse> | Layer.Layer<never> = Layer.empty,
-) =>
-  Effect.gen(function* () {
-    const client = yield* SqlClient.SqlClient;
-    const services = Layer.mergeAll(
-      afterResponse,
-      Layer.succeed(SqlClient.SqlClient, client),
-      Layer.succeed(Database, yield* Database),
-      Layer.succeed(Clock.Clock, yield* Clock.Clock),
-      Layer.succeed(HostedEnvironment, NO_KEYS),
-      github.layer,
-      modelCatalogOf(CATALOG),
-      integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
-      ANALYTICS.layer,
-    );
-    // Every account behind a bearer is signed in on a browser of its own too, whose cookie names it.
-    const sessions = new Map(
-      [...bearers.values()].map((userId) => [sessionCookieOf(userId), userId]),
-    );
-    const seams = {
-      // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
-      resolveUserId: (incoming: Request) =>
-        requestUserId(
-          incoming,
-          (input) => {
-            const sub = bearers.get(input.headers.get("authorization") ?? "");
-            return Effect.succeed(sub === undefined ? undefined : { sub });
-          },
-          (input) =>
-            Effect.succeed(Option.fromNullishOr(sessions.get(input.headers.get("cookie") ?? ""))),
-        ),
-      eveOrigin: () => ORIGIN,
-      eve: (authorization: Redacted.Redacted) => eve.eve(Redacted.value(authorization)),
-      // The deployment acting for an account, an agent's starter for another agent's message or the
-      // account a cookie named, which the fake writes down apart from any bearer.
-      eveAs: (account: string) => eve.eve(deploymentFor(account)),
-      workspaces: yield* fakeWorkspaceSeams,
-      summaryModel,
-      sessionSandboxes,
-      titleModel,
-      keepAwake: keepAwakeDetached,
-    };
-    const agents = HttpRouter.toWebHandler(
-      agentsApp(seams).pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
-    );
-    // SAFETY: the plans and messages procedures yield the services above alone, which is all a test provides of the web runtime's services.
-    const webServices = (yield* Effect.context<never>().pipe(
-      Effect.provide(services),
-    )) as Context.Context<WebServices>;
-    // One cache of the kept published answers for both resources that read them, as the hosted router hands it.
-    const shared = { ...seams, published: instancePublishedCache() };
-    const routed = hostedFetch({
-      agentPullRequests: agentPullRequestProcedures(shared),
-      agents: agentsProcedures({
-        ...shared,
-        sandbox: Layer.effect(AgentSandbox, Effect.die("the agents routes reach no sandbox")),
-      }),
-      inbox: inboxProcedures(seams),
-      messages: messagesProcedures(seams),
-      plans: tasksProcedures(seams),
-    });
-    yield* Effect.addFinalizer(() => Effect.promise(() => agents.dispose()));
-    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, Luke's Stop, an agent's transcript, its Pull request tab, and the inbox land on the hosted oRPC router. */
-    const fetch = (request: Request) =>
-      Effect.promise(() => {
-        const procedure = publicRequest(request);
-        if (procedure !== undefined) return routed(procedure, webServices);
-        const url = new URL(request.url);
-        const { pathname } = url;
-        if (pathname !== INBOX_ATTACHMENT && INBOX_PROCEDURE_PATH.test(pathname)) {
-          return routed(request, webServices);
-        }
-        const id = url.searchParams.get("id");
-        if (pathname === AGENT_MESSAGES && id !== null) {
-          url.pathname = `/api/agents/${encodeURIComponent(id)}/messages`;
-          return routed(new Request(url, request), webServices);
-        }
-        const call = url.searchParams.get("call");
-        if (pathname === SUBAGENT_MESSAGES && id !== null && call !== null) {
-          url.pathname = `/api/agents/${encodeURIComponent(id)}/subagents/${encodeURIComponent(call)}/messages`;
-          return routed(new Request(url, request), webServices);
-        }
-        if (pathname === SUBAGENT_NEWEST && id !== null && call !== null) {
-          url.pathname = `/api/agents/${encodeURIComponent(id)}/subagents/${encodeURIComponent(call)}/messages/newest`;
-          return routed(new Request(url, request), webServices);
-        }
-        if (pathname === WORKSPACE_AGENTS || TRANSCRIPT_PART_PATH.test(pathname)) {
-          return routed(request, webServices);
-        }
-        return pathname === TASKS || TASK_PATH.test(pathname)
-          ? routed(request, webServices)
-          : agents.handler(request);
-      });
-    const ask = (request: Request) =>
-      Effect.gen(function* () {
-        const response = yield* fetch(request);
-        const text = yield* Effect.promise(() => response.text());
-        // SAFETY: the group answers JSON; the test compares it as the wire value it is, and an answer
-        // with no body is compared as its text so a failure names what came back.
-        const body = (text.length === 0 ? text : JSON.parse(text)) as WireBoundaryInput;
-        return { status: response.status, body } satisfies Answer;
-      });
-    return { ask, fetch };
-  });
-
-/** Where a path the hosted oRPC router answers names its id. */
-const ID_SEGMENT = "{id}";
-
-function request(
-  path: string,
-  bearer: string | undefined,
-  init: {
-    method?: string;
-    body?: WireBoundaryInput;
-    id?: string;
-    after?: string;
-    call?: string;
-    wait?: string;
-    before?: string;
-    parts?: string;
-    archived?: string | undefined;
-    attachment?: string;
-    picture?: string;
-    src?: string;
-    number?: string;
-    /** A browser's session cookie, sent beside the bearer or, with no account named, in its place. */
-    cookie?: string;
-  } = {},
-): Request {
-  // A path the hosted oRPC router answers names its id as a segment; an old group's reads it from the query.
-  const named = path.includes(ID_SEGMENT);
-  const url = new URL(
-    named && init.id !== undefined ? path.replace(ID_SEGMENT, encodeURIComponent(init.id)) : path,
-    ORIGIN,
-  );
-  if (init.id !== undefined && !named) url.searchParams.set("id", init.id);
-  if (init.archived !== undefined) url.searchParams.set("archived", init.archived);
-  if (init.after !== undefined) url.searchParams.set("after", init.after);
-  if (init.call !== undefined) url.searchParams.set("call", init.call);
-  if (init.wait !== undefined) url.searchParams.set("wait", init.wait);
-  if (init.before !== undefined) url.searchParams.set("before", init.before);
-  if (init.parts !== undefined) url.searchParams.set("parts", init.parts);
-  if (init.attachment !== undefined) url.searchParams.set("attachment", init.attachment);
-  if (init.picture !== undefined) url.searchParams.set("picture", init.picture);
-  if (init.src !== undefined) url.searchParams.set("src", init.src);
-  if (init.number !== undefined) url.searchParams.set("number", init.number);
-  const headers = new Headers();
-  if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
-  // Every client of the service names its JSON body so, which the hosted oRPC router reads a body by.
-  if (init.body !== undefined) headers.set("content-type", "application/json");
-  if (init.cookie !== undefined) headers.set("cookie", init.cookie);
-  return new Request(url, {
-    method: init.method ?? "GET",
-    headers,
-    ...(init.body === undefined ? undefined : { body: JSON.stringify(init.body) }),
-  });
-}
-
-/** An answer read as the wire declares it, failing the test where it is not one. */
-function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
-  schema: S,
-  status: number,
-  answered: Answer,
-): S["Type"] {
-  assert.equal(answered.status, status, JSON.stringify(answered.body));
-  const read = readEither(schema)(unparsedWire(answered.body));
-  if (Result.isFailure(read))
-    return assert.fail(`the answer is not the wire's: ${read.failure.refusal}`);
-  return read.success;
-}
-
-const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
-
-/** The steps a read held while its agent starts is driven by: past its hold, and under the grace an agent with no turn reads as starting within. */
-const STARTING_READ_STEPS =
-  Math.floor(
-    (Duration.toMillis(CODER.STARTING_GRACE) - Duration.toMillis(CODER.MESSAGES_HOLD)) /
-      Duration.toMillis(CODER.MESSAGES_POLL),
-  ) - 1;
-
-/**
- * A held read of a starting agent driven to its answer, each step taken
- * only after a round trip to the test's database. Note that the steps are
- * paced by the database rather than by the loop, because the read reaches
- * its hold only after queries of its own: steps the loop races ahead with
- * either pass the hold before the read waits on it, leaving its join
- * waiting on a clock nothing moves, or, unbounded, carry the clock past the
- * grace so the page reads the agent failed. A round trip queued behind the
- * read's own keeps the two in step, and the bound keeps the clock inside
- * the grace whatever the database's pace.
- */
-const drivenWhileStarting = <A, E>(fiber: Fiber.Fiber<A, E>) =>
-  Effect.gen(function* () {
-    for (let attempt = 0; attempt < STARTING_READ_STEPS; attempt += 1) {
-      if (fiber.pollUnsafe() !== undefined) return yield* Fiber.join(fiber);
-      yield* Effect.orDie(
-        Database.use((db) => db.select({ id: conversations.id }).from(conversations).limit(1)),
-      );
-      yield* TestClock.adjust(CODER.MESSAGES_POLL);
-      yield* Effect.yieldNow;
-    }
-    return yield* Fiber.join(fiber);
-  });
-
-/**
- * An owner who holds one task on the repository, its workspace connected to
- * an installation reaching it, another account beside them, and the group
- * over that GitHub and the eve given.
- */
-const openTask = (
-  options: {
-    readonly repository?: string | null;
-    readonly eve?: ReturnType<typeof fakeEve>;
-    /** What the repository answers on its own paths, for a test of what an agent published. */
-    readonly github?: RepositoryScript;
-    /** The other account's GitHub token, or none where it holds no GitHub sign-in at all; the standing row's when unsaid. */
-    readonly otherToken?: string | null;
-    /** The model a replay's summary is written on; none unless a test names one. */
-    readonly summaryModel?: SummaryModelOf;
-    /** The sandboxes an archive stops; Vercel's own, which a test with no token in its environment finds unavailable, unless a test scripts them. */
-    readonly sessionSandboxes?: SandboxStopReach["sessionSandboxes"];
-    /** The model an untitled inbox thread's title is generated on; none unless a test names one. */
-    readonly titleModel?: InboxTitleModelOf;
-    /** Where a request's after-response work goes; run inline, before the answer is read, unless a test keeps it (`keptAfterResponse`). */
-    readonly afterResponse?: Layer.Layer<AfterResponse>;
-  } = {},
-) =>
-  Effect.gen(function* () {
-    const owner = yield* openGithubUser();
-    const other = yield* otherAccount(options.otherToken);
-    // Luke's key pays for no coding agent, so both accounts start and message theirs on their own keys.
-    yield* connectAgentApiKeys(owner);
-    yield* connectAgentApiKeys(other);
-    const task = yield* startTask(owner, {
-      name: "Teammate invitations",
-      repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
-    });
-    yield* savePlanText(owner, task.id, SAVED);
-    const installation = freshInstallation();
-    assert.equal(
-      yield* connectWorkspaceGitHub(task.workspaceId, installation),
-      LINK_OUTCOME.LINKED,
-    );
-    const bearers = new Map([
-      [`Bearer ${owner}`, owner],
-      [`Bearer ${other}`, other],
-    ]);
-    const github = githubReaching([installation], undefined, undefined, options.github);
-    const eve = options.eve ?? fakeEve();
-    const { ask, fetch } = yield* standing(
-      bearers,
-      github,
-      eve,
-      options.summaryModel,
-      options.sessionSandboxes,
-      options.titleModel,
-      options.afterResponse,
-    );
-    return { owner, other, task, installation, eve, github, ask, fetch };
-  });
-
-/** An account beside the owner: signed in with GitHub on the token given, the standing row's when unsaid, or with no GitHub sign-in at all. */
-const otherAccount = (token: string | null | undefined) =>
-  Effect.gen(function* () {
-    if (token === undefined) return yield* openGithubUser();
-    if (token !== null) {
-      return yield* openGithubUser({
-        ...standingGithubRow(yield* Clock.currentTimeMillis),
-        accessToken: token,
-      });
-    }
-    const db = yield* Database;
-    const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-    return userId;
-  });
-
-/** The pull request an agent published from its branch, as GitHub holds it. */
-const PUBLISHED = { branch: "luke/teammate-invitations", number: 12, headSha: "c0ffee1" } as const;
-
-/** The repository answering the published pull request's reads, its overview's among them: no checks, no comments, no reviews. */
-/** The same, the pull request a draft while `draft` says it is, its head the commit given, GitHub's short fixture one unless told. */
-const publishedPullRequestDrafted =
-  (draft: () => boolean, headSha: string = PUBLISHED.headSha): RepositoryScript =>
-  (sent) => {
-    const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
-    const pull = `${repository}/pulls/${PUBLISHED.number}`;
-    const commit = `${repository}/commits/${PUBLISHED.headSha}`;
-    // The overview's checks name the head by the ref GitHub keeps on the pull request.
-    const head = `${repository}/commits/refs%2Fpull%2F${PUBLISHED.number}%2Fhead`;
-    switch (new URL(sent.url).pathname) {
-      case `${repository}/pulls`:
-        return Response.json([{ number: PUBLISHED.number }]);
-      case pull:
-        return Response.json({
-          number: PUBLISHED.number,
-          title: "Expire teammate invitations",
-          html_url: `https://github.com/${RELAY_FULL_NAME}/pull/${PUBLISHED.number}`,
-          state: "open",
-          draft: draft(),
-          merged: false,
-          merged_at: null,
-          additions: 4,
-          deletions: 1,
-          changed_files: 1,
-          body: "Invitations expire.",
-          body_html: "<p>Invitations expire.</p>",
-          base: { ref: "main" },
-          head: { ref: PUBLISHED.branch, sha: headSha },
-          created_at: "2026-10-15T09:00:00Z",
-          mergeable_state: "clean",
-          user: null,
-          requested_reviewers: [],
-        });
-      case `${commit}/check-runs`:
-      case `${head}/check-runs`:
-        return Response.json({ check_runs: [] });
-      case `${commit}/status`:
-      case `${head}/status`:
-        return Response.json({ statuses: [] });
-      case `${repository}/issues/${PUBLISHED.number}/comments`:
-      case `${pull}/reviews`:
-        return Response.json([]);
-      default:
-        return undefined;
-    }
-  };
-
-const publishedPullRequest = publishedPullRequestDrafted(() => false);
-
-/** What GitHub was asked on the way to a repository token: the installation read, its listing and the token minted for it, and the repository's own token. */
-function reachRequests(sent: readonly SentToGitHub[], installationId: number) {
-  const app = `https://api.github.com/app/installations/${installationId}`;
-  const mints = sent.filter((one) => one.url === `${app}/access_tokens`);
-  const forRepository = (one: SentToGitHub) => "repositories" in JSON.parse(one.body);
-  return {
-    installationReads: sent.filter((one) => one.url === app).length,
-    listings: sent.filter((one) => new URL(one.url).pathname === "/installation/repositories")
-      .length,
-    listingMints: mints.filter((one) => !forRepository(one)).length,
-    repositoryMints: mints.filter(forRepository).length,
-  };
-}
 
 it.layer(getTestDB())("the coding-agent routes", (it) => {
   it.effect(
@@ -1595,9 +945,9 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           repository: RELAY_FULL_NAME,
         });
         const team = yield* openWorkspace(owner);
-        installationsConnected += 1;
+        installations.connected += 1;
         const ledgerOnly: InstallationFixture = {
-          id: 7 + installationsConnected,
+          id: 7 + installations.connected,
           login: RELAY.owner,
           repositories: [{ owner: RELAY.owner, name: "Ledger" }],
         };
@@ -4137,23 +3487,6 @@ it.layer(getTestDB())("what the reviewer and label pickers offer", (it) => {
   );
 });
 
-/** A message to the agent as the bearer given, with the body given. */
-function messageAs(bearer: string | undefined, agentId: string, body: WireBoundaryInput): Request {
-  return request(AGENT_MESSAGES, bearer, { method: "POST", id: agentId, body });
-}
-
-/** The words of each user row of a transcript page, in order. */
-function userTexts(page: {
-  readonly messages: readonly AgentTranscriptMessage[];
-}): readonly (string | undefined)[] {
-  return page.messages
-    .filter((message) => message.role === MESSAGE_ROLE.USER)
-    .map((message) => {
-      const part = message.parts.find((each) => isRecord(each) && each.type === "text");
-      return isRecord(part) && isWireString(part.text) ? part.text : undefined;
-    });
-}
-
 it.layer(getTestDB())("an agent's kept pull request", (it) => {
   /** Where the published pull request stands on GitHub as a test moves it: when it merged, none while open, and whether GitHub refuses every read for its rate limit. */
   interface Standing {
@@ -4337,97 +3670,12 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
 });
 
 it.layer(getTestDB())("messaging a coding agent", (it) => {
-  /** An agent started on the owner's task, its session claimed, and its first turn where asked. */
-  const startedAgent = (
-    eve: ReturnType<typeof fakeEve>,
-    turn: { readonly running: boolean } | undefined,
-    sessionSandboxes?: SandboxStopReach["sessionSandboxes"],
-    afterResponse?: Layer.Layer<AfterResponse>,
-  ) =>
-    Effect.flatMap(
-      openTask({
-        eve,
-        ...(sessionSandboxes === undefined ? undefined : { sessionSandboxes }),
-        ...(afterResponse === undefined ? undefined : { afterResponse }),
-      }),
-      (opened) => agentStartedOn(opened, eve, turn),
-    );
-
-  /** Another agent the owner starts on the task opened, its turn running or ended as `turn` says, as `startedAgent` starts the first. */
-  const agentStartedOn = (
-    opened: Effect.Success<ReturnType<typeof openTask>>,
-    eve: ReturnType<typeof fakeEve>,
-    turn: { readonly running: boolean } | undefined,
-  ) =>
-    Effect.gen(function* () {
-      const agent = readAnswer(
-        agentAnswerSchema,
-        HOSTED_HTTP_STATUS.CREATED,
-        yield* opened.ask(startAs(opened.owner, opened.task.id, { idempotencyKey: randomUUID() })),
-      ).agent;
-      const stored = yield* readAgent(opened.owner, agent.id);
-      assert.ok(Option.isSome(stored));
-      const target = { userId: opened.owner, conversationId: stored.value.conversationId };
-      const sessionId = eve.opened.at(-1)?.sessionId ?? "";
-      assert.equal(yield* claimRuntimeSession(target, sessionId, new Date()), true);
-      const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-      const turnId = randomUUID();
-      if (turn !== undefined) {
-        yield* writer.enqueueTurn(target, {
-          turnId,
-          origin: TURN_ORIGIN.TYPED,
-          eveTurnId: "turn_0",
-        });
-        yield* writer.consume(target, {
-          kind: RUN_EVENT.TURN_STARTED,
-          conversationId: sessionKey(target.conversationId),
-          turnId,
-          sequence: 1,
-          origin: RUN_TURN_ORIGIN.TYPED,
-          trigger: TURN_TRIGGER.ASK,
-          at: 0,
-        });
-        // eve's receipt of the Start's first message takes the line the Start wrote into the turn, as the relay does.
-        const taken = yield* writer.takeAwaitingLine(target, { text: SNAPSHOT, turnId });
-        assert.equal(Result.getOrUndefined(taken)?.length, 1);
-        if (!turn.running) {
-          yield* writer.consume(target, {
-            kind: RUN_EVENT.TURN_ENDED,
-            conversationId: sessionKey(target.conversationId),
-            turnId,
-            sequence: 2,
-            status: RUN_STATUS.SUCCEEDED,
-            responseIds: [],
-            at: 0,
-          });
-        }
-      }
-      /** The transcript as the owner reads it now: the developer's lines, and the status. */
-      const transcript = () =>
-        Effect.map(
-          opened.ask(request(AGENT_MESSAGES, opened.owner, { id: agent.id })),
-          (answered) => {
-            const page = readAnswer(agentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered);
-            return { lines: userTexts(page), status: page.status };
-          },
-        );
-      /** A message of the owner's under the key given, or one minted, answered as the wire declares a message taken. */
-      const sent = (text: string, clientKey = randomUUID()) =>
-        Effect.map(opened.ask(messageAs(opened.owner, agent.id, { text, clientKey })), (answered) =>
-          readAnswer(agentMessageAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, answered),
-        );
-      return { ...opened, agent, target, sessionId, writer, turnId, transcript, sent };
-    });
-
-  /** Where an agent's Stop lands. */
-  const AGENT_STOP = "/api/agents/stop";
-
   it.effect(
     "over a browser's session cookie a message reaches the agent as the deployment acting for the cookie's account, and over the bearer as ever over the bearer",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, agent, ask, sessionId } = yield* startedAgent(eve, { running: false });
+        const { owner, agent, ask, sessionId } = yield* messagedAgent(eve, { running: false });
         const message = (text: string) => ({ text, clientKey: randomUUID() });
 
         const overCookie = yield* ask(
@@ -4465,7 +3713,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, agent, ask, target, writer, turnId } = yield* startedAgent(eve, {
+        const { owner, agent, ask, target, writer, turnId } = yield* messagedAgent(eve, {
           running: true,
         });
         const shot = {
@@ -4525,7 +3773,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, agent, ask, fetch, target, writer, turnId } = yield* startedAgent(eve, {
+        const { owner, agent, ask, fetch, target, writer, turnId } = yield* messagedAgent(eve, {
           running: true,
         });
         const data = Buffer.from(SIZED_PNG).toString("base64");
@@ -4580,9 +3828,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "over a browser's session cookie a Stop, an Archive, and the task's archive each cancel the turn under way as the deployment acting for the cookie's account",
     () =>
       Effect.gen(function* () {
-        const stopped = yield* startedAgent(fakeEve(), { running: true });
-        const archived = yield* startedAgent(fakeEve(), { running: true });
-        const withTask = yield* startedAgent(fakeEve(), { running: true });
+        const stopped = yield* messagedAgent(fakeEve(), { running: true });
+        const archived = yield* messagedAgent(fakeEve(), { running: true });
+        const withTask = yield* messagedAgent(fakeEve(), { running: true });
 
         const stop = yield* stopped.ask(
           request(AGENT_STOP, undefined, {
@@ -4627,7 +3875,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const sandboxes = yield* scriptedSessionSandboxes();
-        const { owner, task, ask } = yield* startedAgent(
+        const { owner, task, ask } = yield* messagedAgent(
           fakeEve(),
           { running: false },
           sandboxes.layer,
@@ -4647,7 +3895,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, task, agent, sessionId, ask } = yield* startedAgent(eve, {
+        const { owner, task, agent, sessionId, ask } = yield* messagedAgent(eve, {
           running: false,
         });
         const switched = (mergePolicy: MergePolicy) =>
@@ -4684,7 +3932,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, task, ask, sessionId } = yield* startedAgent(eve, { running: true });
+        const { owner, task, ask, sessionId } = yield* messagedAgent(eve, { running: true });
 
         const deleted = yield* ask(
           request(TASK(task.id), undefined, {
@@ -4720,7 +3968,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           }),
         ).pipe(Effect.provide(services), Effect.orDie);
         const eve = fakeEve({ resetSees: alone });
-        const { owner, task, ask, sessionId } = yield* startedAgent(eve, { running: true });
+        const { owner, task, ask, sessionId } = yield* messagedAgent(eve, { running: true });
 
         const deleted = yield* ask(request(TASK(task.id), owner, { method: "DELETE" }));
 
@@ -4739,7 +3987,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve({ cancelsTogether: 2 });
-        const first = yield* startedAgent(eve, { running: true });
+        const first = yield* messagedAgent(eve, { running: true });
         const second = yield* agentStartedOn(first, eve, { running: true });
 
         const deleted = yield* first.ask(
@@ -4765,10 +4013,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         // An idle agent of the owner's, which the teammate messages.
-        const messaged = yield* startedAgent(fakeEve(), { running: false });
+        const messaged = yield* messagedAgent(fakeEve(), { running: false });
         yield* joinWorkspace(messaged.task.workspaceId, messaged.other);
         // A running agent of the owner's, which the teammate stops, and then deletes its task.
-        const stopped = yield* startedAgent(fakeEve(), { running: true });
+        const stopped = yield* messagedAgent(fakeEve(), { running: true });
         yield* joinWorkspace(stopped.task.workspaceId, stopped.other);
         const teammate = sessionCookieOf(stopped.other);
 
@@ -4813,7 +4061,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: true });
+        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: true });
         const cookie = sessionCookieOf(other);
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
 
@@ -4855,7 +4103,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, target, sessionId, ask } = yield* startedAgent(eve, {
+        const { owner, other, task, agent, target, sessionId, ask } = yield* messagedAgent(eve, {
           running: true,
         });
         yield* joinWorkspace(task.workspaceId, other);
@@ -4912,7 +4160,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, sessionId, ask } = yield* startedAgent(eve, {
+        const { owner, other, task, agent, sessionId, ask } = yield* messagedAgent(eve, {
           running: false,
         });
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
@@ -4937,7 +4185,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, agent, ask } = yield* startedAgent(eve, undefined);
+        const { owner, agent, ask } = yield* messagedAgent(eve, undefined);
 
         const refused = yield* ask(request(AGENT, owner, { method: "DELETE", id: agent.id }));
 
@@ -4955,7 +4203,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, ask } = yield* startedAgent(eve, { running: true });
+        const { owner, other, task, ask } = yield* messagedAgent(eve, { running: true });
 
         const refused = yield* ask(
           request(TASK(task.id), owner, {
@@ -4979,8 +4227,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a model change of a Claude Code agent is refused another provider's model or a context window, and takes a Claude model, its summary naming its runtime, while an eve agent's takes any as before",
     () =>
       Effect.gen(function* () {
-        const onEve = yield* startedAgent(fakeEve(), undefined);
-        const onClaudeCode = yield* startedAgent(fakeEve(), undefined);
+        const onEve = yield* messagedAgent(fakeEve(), undefined);
+        const onClaudeCode = yield* messagedAgent(fakeEve(), undefined);
         const stored = Option.getOrThrow(
           yield* readAgent(onClaudeCode.owner, onClaudeCode.agent.id),
         );
@@ -5035,7 +4283,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a member's Archive of a teammate's agent records the member on it, which its summary names, and an Unarchive clears it",
     () =>
       Effect.gen(function* () {
-        const { other, task, agent, ask } = yield* startedAgent(fakeEve(), { running: false });
+        const { other, task, agent, ask } = yield* messagedAgent(fakeEve(), { running: false });
         yield* joinWorkspace(task.workspaceId, other);
         const changed = (archived: boolean) =>
           Effect.map(
@@ -5057,7 +4305,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a member's archive of a plan, as an older build asks it, stops its running agent first and settles the plan instead, Canceled with no merged pull request and Done with one, stamping no archive, and its unarchive puts the plan back to work",
     () =>
       Effect.gen(function* () {
-        const { owner, other, task, agent, ask, eve, sessionId } = yield* startedAgent(fakeEve(), {
+        const { owner, other, task, agent, ask, eve, sessionId } = yield* messagedAgent(fakeEve(), {
           running: true,
         });
         yield* joinWorkspace(task.workspaceId, other);
@@ -5122,7 +4370,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a plan's archive is refused as not ready while one of its agents holds a message awaiting its turn, which no Stop can name yet, before any Stop is sent, and leaves the plan and the agent standing",
     () =>
       Effect.gen(function* () {
-        const { owner, task, agent, ask, sent, eve } = yield* startedAgent(fakeEve(), {
+        const { owner, task, agent, ask, sent, eve } = yield* messagedAgent(fakeEve(), {
           running: true,
         });
         yield* sent("Rename the subject line too.");
@@ -5140,9 +4388,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a message the running turn took in after its second step reads as arriving after that step of the turn's journal, which closes behind it, while the line that opened the turn names no place",
     () =>
       Effect.gen(function* () {
-        const { agent, ask, owner, target, writer, turnId, sent } = yield* startedAgent(fakeEve(), {
-          running: true,
-        });
+        const { agent, ask, owner, target, writer, turnId, sent } = yield* messagedAgent(
+          fakeEve(),
+          {
+            running: true,
+          },
+        );
         const turn = { conversationId: sessionKey(target.conversationId), turnId };
         /** The turn's step begun, as the relay tells the step's start. */
         const stepBegun = (step: number) =>
@@ -5186,780 +4437,17 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       }),
   );
 
-  /** Where a change to an agent's queue lands. */
-  const AGENT_QUEUE = "/api/agents/queue";
-
-  /** One change to the agent's queue as its owner asks it, and the queue it answers. */
-  const queueChanged = (
-    ask: (request: Request) => Effect.Effect<Answer>,
-    owner: string,
-    agentId: string,
-    change: WireBoundaryInput,
-  ) =>
-    Effect.map(
-      ask(request(AGENT_QUEUE, owner, { method: "POST", id: agentId, body: change })),
-      (answered) => readAnswer(agentQueueAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).queue,
-    );
-
-  it.effect(
-    "messages queued behind the running turn wait there, edited, held, and put in order, none of them sent, and read on the agent's transcript",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { agent, ask, owner } = yield* startedAgent(eve, { running: true });
-        const sentBefore = eve.sent.length;
-        for (const text of ["First", "Second", "Third"]) {
-          yield* queueChanged(ask, owner, agent.id, {
-            change: QUEUE_CHANGE.ADD,
-            text,
-            clientKey: randomUUID(),
-          });
-        }
-        const [first, second, third] = (yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.RESUME,
-        })).messages;
-        assert.ok(first !== undefined && second !== undefined && third !== undefined);
-        yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.EDIT,
-          messageId: second.id,
-          text: "Second, reworded",
-        });
-        yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.REORDER,
-          order: [third.id, first.id, second.id],
-        });
-        yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.HOLD,
-          messageId: first.id,
-          held: true,
-        });
-
-        assert.equal(eve.sent.length, sentBefore, "nothing goes while the turn runs");
-        const page = readAnswer(
-          agentMessagesAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
-        );
-        assert.deepEqual(
-          page.queue?.messages.map((message) => [message.text, message.editing ?? false]),
-          [
-            ["Third", false],
-            ["First", true],
-            ["Second, reworded", false],
-          ],
-        );
-      }),
-  );
-
-  it.effect(
-    "a message queued while the agent stands idle goes at once as its member's own message, under its own key, and leaves the queue",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { agent, ask, owner, target } = yield* startedAgent(eve, { running: false });
-        const clientKey = randomUUID();
-        const queue = yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.ADD,
-          text: "Now the dark variant.",
-          clientKey,
-        });
-
-        assert.deepEqual(queue.messages, []);
-        assert.ok(
-          JSON.stringify(eve.sent.at(-1)?.message.message).includes("Now the dark variant."),
-        );
-        assert.equal(
-          yield* sentLineStands(owner, target.conversationId, sentLineId(clientKey)),
-          true,
-        );
-      }),
-  );
-
-  it.effect(
-    "every change to the queue moves its revision on, and the page still carries the queue once it stands empty",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { agent, ask, owner } = yield* startedAgent(eve, { running: true });
-        const revisions: number[] = [];
-        const changed = (change: WireBoundaryInput) =>
-          Effect.tap(queueChanged(ask, owner, agent.id, change), (queue) =>
-            Effect.sync(() => revisions.push(queue.revision)),
-          );
-        const [queued] = (yield* changed({
-          change: QUEUE_CHANGE.ADD,
-          text: "Run tests",
-          clientKey: randomUUID(),
-        })).messages;
-        assert.ok(queued !== undefined);
-        yield* changed({ change: QUEUE_CHANGE.EDIT, messageId: queued.id, text: "Run the tests" });
-        yield* changed({ change: QUEUE_CHANGE.REORDER, order: [queued.id] });
-        // Held, so the Resume after the Stop hands nothing on.
-        yield* changed({ change: QUEUE_CHANGE.HOLD, messageId: queued.id, held: true });
-        yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
-        yield* changed({ change: QUEUE_CHANGE.RESUME });
-        yield* changed({ change: QUEUE_CHANGE.DELETE, messageId: queued.id });
-
-        for (const [at, revision] of revisions.entries()) {
-          assert.ok(
-            at === 0 || revision > (revisions[at - 1] ?? 0),
-            `change ${at} moved the revision on`,
-          );
-        }
-        assert.ok(
-          (revisions[4] ?? 0) > (revisions[3] ?? 0) + 1,
-          "the Stop's pause moved it on too",
-        );
-        const page = readAnswer(
-          agentMessagesAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
-        );
-        assert.deepEqual(page.queue, { messages: [], revision: revisions.at(-1) });
-      }),
-  );
-
-  it.effect(
-    "an edited message steered goes once with its new words, never its old ones, and leaves the queue",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { agent, ask, owner } = yield* startedAgent(eve, { running: true });
-        const [queued] = (yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.ADD,
-          text: "Run tests",
-          clientKey: randomUUID(),
-        })).messages;
-        assert.ok(queued !== undefined);
-        yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.HOLD,
-          messageId: queued.id,
-          held: true,
-        });
-
-        const queue = yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.STEER,
-          messageId: queued.id,
-          text: "Run tests and fix failures",
-        });
-
-        assert.deepEqual(queue.messages, []);
-        const said = eve.sent.map((each) => JSON.stringify(each.message.message));
-        assert.equal(
-          said.filter((words) => words.includes("Run tests and fix failures")).length,
-          1,
-        );
-        assert.equal(
-          said.filter((words) => words.includes("Run tests") && !words.includes("fix failures"))
-            .length,
-          0,
-          "the words the edit replaced never went",
-        );
-      }),
-  );
-
-  it.effect("a queued message steered goes into the running turn now and leaves the queue", () =>
-    Effect.gen(function* () {
-      const eve = fakeEve();
-      const { agent, ask, owner, target } = yield* startedAgent(eve, { running: true });
-      const clientKey = randomUUID();
-      const [queued] = (yield* queueChanged(ask, owner, agent.id, {
-        change: QUEUE_CHANGE.ADD,
-        text: "Also the emails.",
-        clientKey,
-      })).messages;
-      assert.ok(queued !== undefined);
-      const queue = yield* queueChanged(ask, owner, agent.id, {
-        change: QUEUE_CHANGE.STEER,
-        messageId: queued.id,
-      });
-
-      assert.deepEqual(queue.messages, []);
-      assert.equal(
-        yield* sentLineStands(owner, target.conversationId, sentLineId(clientKey)),
-        true,
-      );
-    }),
-  );
-
-  /**
-   * An agent whose turn ran while the owner queued `texts`, then ended: the
-   * queue at that end as the runner's events route hands it on (with GitHub
-   * and no network), and the queue as the owner reads it on the transcript.
-   */
-  const queuedBehindEndedTurn = (
-    eve: ReturnType<typeof fakeEve>,
-    texts: readonly string[],
-    ending: typeof RUN_STATUS.SUCCEEDED | typeof RUN_STATUS.FAILED = RUN_STATUS.SUCCEEDED,
-  ) =>
-    Effect.gen(function* () {
-      const { agent, ask, owner, target, writer, turnId, github } = yield* startedAgent(eve, {
-        running: true,
-      });
-      for (const text of texts) {
-        yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.ADD,
-          text,
-          clientKey: randomUUID(),
-        });
-      }
-      yield* writer.consume(target, {
-        kind: RUN_EVENT.TURN_ENDED,
-        conversationId: sessionKey(target.conversationId),
-        turnId,
-        sequence: 2,
-        status: ending,
-        responseIds: [],
-        at: 0,
-      });
-      const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
-      const eveFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
-      const reach = Layer.mergeAll(github.layer, noNetwork);
-      const turnEnded = queueAtTurnEnd(eveFor, stored).pipe(Effect.provide(reach));
-      /** One queued message handed on, as a hand-off does once it read the queue's head. */
-      const handedOn = (message: QueuedMessageRow) =>
-        sendQueued(eveFor, stored, message).pipe(Effect.provide(reach));
-      // Note that the read at once says whether it would have held, and when the clock alone moves it, which the page itself does not carry.
-      const queued = Effect.map(
-        ask(request(AGENT_MESSAGES, owner, { id: agent.id, wait: "none" })),
-        (answered) => {
-          // SAFETY: the route answers a page as a JSON object.
-          const {
-            holds: _holds,
-            wakeIn: _wakeIn,
-            ...page
-          } = answered.body as Record<string, WireBoundaryInput>;
-          return readAnswer(agentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, {
-            status: answered.status,
-            body: page,
-          }).queue;
-        },
-      );
-      /** One queued message sent as a hand-off sends it, the hand-off cut off before the message left the queue. */
-      const sentAlone = (message: QueuedMessageRow) =>
-        Effect.flatMap(eveFor(message.userId), (eveAs) =>
-          steerAgentWritten(eveAs, storeWriter({ tools: CODER_TOOL_SET }), message.userId, stored, {
-            text: message.text,
-            clientKey: message.clientKey,
-            sender: { kind: MESSAGE_SENDER.MEMBER, userId: message.userId },
-          }),
-        ).pipe(Effect.provide(reach));
-      /** The maintenance sweep's pass over the queues standing unpaused. */
-      const swept = sweepAgentQueues(eveFor).pipe(Effect.provide(reach));
-      return { agent, ask, owner, turnEnded, handedOn, sentAlone, swept, queued, stored };
-    });
-
-  /** How many times eve was handed words holding `text`. */
-  const handedCount = (eve: ReturnType<typeof fakeEve>, text: string) =>
-    eve.sent.filter((each) => JSON.stringify(each.message.message).includes(text)).length;
-
-  it.effect(
-    "at the turn's end the queue hands on its first message alone, and nothing more while that one awaits its turn",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { turnEnded, queued } = yield* queuedBehindEndedTurn(eve, ["First", "Second"]);
-
-        yield* turnEnded;
-        yield* turnEnded;
-        assert.deepEqual(
-          (yield* queued)?.messages.map((message) => message.text),
-          ["Second"],
-        );
-        assert.equal(handedCount(eve, "First"), 1);
-        assert.equal(handedCount(eve, "Second"), 0);
-      }),
-  );
-
-  it.effect(
-    "a message an edit held past its turn's end is passed over, keeps its place, and goes once its hold lapses",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { agent, ask, owner, turnEnded, swept, queued } = yield* queuedBehindEndedTurn(eve, [
-          "Edited",
-        ]);
-        const [edited] = (yield* queued)?.messages ?? [];
-        assert.ok(edited !== undefined);
-        yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.HOLD,
-          messageId: edited.id,
-          held: true,
-        });
-
-        yield* turnEnded;
-        assert.equal(
-          handedCount(eve, "Edited"),
-          0,
-          "the turn's end passes over a message being edited",
-        );
-
-        // The edit's window closed without letting go: its hold lapses, and the sweep hands it on.
-        yield* TestClock.adjust(Duration.millis(LINE_GRACE_MILLIS + 1));
-        yield* swept;
-        yield* swept;
-        assert.equal(handedCount(eve, "Edited"), 1);
-        assert.deepEqual((yield* queued)?.messages ?? [], []);
-      }),
-  );
-
-  it.effect(
-    "a hand-off cut off after its message went, its claim still standing, is finished by the sweep once the claim lapses, the message sent once",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { swept, queued, stored, sentAlone } = yield* queuedBehindEndedTurn(eve, ["Cut off"]);
-        const head = Option.getOrThrow(yield* claimQueueHead(stored.id));
-        yield* sentAlone(head);
-        assert.deepEqual(
-          (yield* queued)?.messages ?? [],
-          [],
-          "no window lists a message on its way",
-        );
-
-        yield* swept;
-        assert.equal(handedCount(eve, "Cut off"), 1, "a standing claim is not handed on again");
-        yield* TestClock.adjust(Duration.millis(LINE_GRACE_MILLIS + 1));
-        yield* swept;
-        assert.equal(handedCount(eve, "Cut off"), 1, "the repeat under its key sends nothing");
-        assert.deepEqual(
-          Option.getOrThrow(yield* readAgentQueue(stored.userId, stored.id)).messages,
-          [],
-          "the message left the queue rather than standing claimed",
-        );
-      }),
-  );
-
-  it.effect(
-    "an idle agent's page names when a queued message's edit lapses, which moves the queue with no row written",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { agent, ask, owner, queued } = yield* queuedBehindEndedTurn(eve, ["Edited"]);
-        const [edited] = (yield* queued)?.messages ?? [];
-        assert.ok(edited !== undefined);
-        yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.HOLD,
-          messageId: edited.id,
-          held: true,
-        });
-
-        const read = yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, wait: "none" }));
-
-        // SAFETY: the route answers a page as a JSON object.
-        const body = read.body as Record<string, WireBoundaryInput>;
-        assert.equal(body.holds, false, "nothing runs, so the read would not hold");
-        assert.equal(body.wakeIn, LINE_GRACE_MILLIS);
-      }),
-  );
-
-  it.effect(
-    "a turn that ended failed pauses the queue rather than handing on, keeping its messages",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { turnEnded, queued } = yield* queuedBehindEndedTurn(
-          eve,
-          ["First"],
-          RUN_STATUS.FAILED,
-        );
-
-        yield* turnEnded;
-
-        assert.equal(handedCount(eve, "First"), 0);
-        const queue = yield* queued;
-        assert.deepEqual(
-          queue?.messages.map((message) => message.text),
-          ["First"],
-        );
-        assert.deepEqual(queue?.paused, { because: QUEUE_PAUSE.TURN_FAILED });
-      }),
-  );
-
-  it.effect(
-    "two hand-offs that read the same head at one turn's end, its IDLE's and its END's, send that message once",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { handedOn, queued, stored } = yield* queuedBehindEndedTurn(eve, ["First", "Second"]);
-        // Both hand-offs read the head before either sent it, as two racing at one end do.
-        const head = Option.getOrThrow(yield* claimQueueHead(stored.id));
-
-        yield* handedOn(head);
-        yield* handedOn(head);
-
-        assert.equal(handedCount(eve, "First"), 1);
-        const queue = yield* queued;
-        assert.deepEqual(
-          queue?.messages.map((message) => message.text),
-          ["Second"],
-        );
-        assert.equal(queue?.paused, undefined, "the hand-off that lost the race pauses nothing");
-      }),
-  );
-
-  it.effect(
-    "a hand-off eve refuses keeps the message in its place and pauses the queue under the refusal",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve({ sends: EVE_SEND_OUTCOME.FAILED });
-        const { turnEnded, queued } = yield* queuedBehindEndedTurn(eve, ["First", "Second"]);
-        const before = (yield* queued)?.revision ?? 0;
-
-        yield* turnEnded;
-
-        const queue = yield* queued;
-        assert.ok(
-          (queue?.revision ?? 0) > before,
-          "the refusal's pause moved the queue on, which wakes its readers",
-        );
-        assert.deepEqual(
-          queue?.messages.map((message) => message.text),
-          ["First", "Second"],
-        );
-        assert.equal(queue?.paused?.because, QUEUE_PAUSE.REFUSED);
-        assert.notEqual(queue?.paused?.refusal, undefined);
-      }),
-  );
-
-  it.effect(
-    "a message queued while the agent starts waits behind its first turn and goes once that turn ends",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { agent, ask, owner, target, writer, github } = yield* startedAgent(eve, undefined);
-        const sentBefore = eve.sent.length;
-        const queue = yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.ADD,
-          text: "Then open the pull request.",
-          clientKey: randomUUID(),
-        });
-        assert.deepEqual(
-          queue.messages.map((message) => message.text),
-          ["Then open the pull request."],
-        );
-        assert.equal(eve.sent.length, sentBefore, "nothing goes while the agent starts");
-
-        // The first turn opens, takes the Start's line, and ends.
-        const turnId = randomUUID();
-        yield* writer.enqueueTurn(target, {
-          turnId,
-          origin: TURN_ORIGIN.TYPED,
-          eveTurnId: "turn_0",
-        });
-        yield* writer.consume(target, {
-          kind: RUN_EVENT.TURN_STARTED,
-          conversationId: sessionKey(target.conversationId),
-          turnId,
-          sequence: 1,
-          origin: RUN_TURN_ORIGIN.TYPED,
-          trigger: TURN_TRIGGER.ASK,
-          at: 0,
-        });
-        yield* writer.takeAwaitingLine(target, { text: SNAPSHOT, turnId });
-        yield* writer.consume(target, {
-          kind: RUN_EVENT.TURN_ENDED,
-          conversationId: sessionKey(target.conversationId),
-          turnId,
-          sequence: 2,
-          status: RUN_STATUS.SUCCEEDED,
-          responseIds: [],
-          at: 0,
-        });
-        const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
-        const eveFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
-        yield* queueAtTurnEnd(eveFor, stored).pipe(
-          Effect.provide(Layer.mergeAll(github.layer, noNetwork)),
-        );
-
-        assert.equal(handedCount(eve, "Then open the pull request."), 1);
-      }),
-  );
-
-  it.effect(
-    "Resume answers before its hand-off runs, and the answer already leaves out the message it is sending",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const kept = keptAfterResponse();
-        const { agent, ask, owner } = yield* startedAgent(
-          eve,
-          { running: true },
-          undefined,
-          kept.layer,
-        );
-        yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.ADD,
-          text: "Open the pull request.",
-          clientKey: randomUUID(),
-        });
-        yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
-        yield* kept.run;
-        const sentBefore = eve.sent.length;
-
-        const resumed = yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.RESUME,
-        });
-
-        assert.deepEqual(resumed.messages, [], "the message about to go is not listed");
-        assert.equal(resumed.paused, undefined);
-        assert.equal(eve.sent.length, sentBefore, "the answer is out before the send");
-        yield* kept.run;
-        assert.equal(handedCount(eve, "Open the pull request."), 1);
-      }),
-  );
-
-  it.effect(
-    "a Resume between the Stop and the stopped turn's end stands: the turn's end pauses nothing again",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { agent, ask, owner, target, writer, turnId, github } = yield* startedAgent(eve, {
-          running: true,
-        });
-        const [queued] = (yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.ADD,
-          text: "Open the pull request.",
-          clientKey: randomUUID(),
-        })).messages;
-        assert.ok(queued !== undefined);
-        // Held by an edit, so the Resume hands nothing on and the queue's pause alone is at stake.
-        yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.HOLD,
-          messageId: queued.id,
-          held: true,
-        });
-        yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
-        yield* queueChanged(ask, owner, agent.id, { change: QUEUE_CHANGE.RESUME });
-
-        yield* writer.consume(target, {
-          kind: RUN_EVENT.TURN_ENDED,
-          conversationId: sessionKey(target.conversationId),
-          turnId,
-          sequence: 2,
-          status: RUN_STATUS.CANCELLED,
-          responseIds: [],
-          at: 0,
-        });
-        const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
-        const eveFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
-        yield* queueAtTurnEnd(eveFor, stored).pipe(
-          Effect.provide(Layer.mergeAll(github.layer, noNetwork)),
-        );
-
-        const page = readAnswer(
-          agentMessagesAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
-        );
-        assert.equal(page.queue?.paused, undefined);
-      }),
-  );
-
-  it.effect("a message being sent is no member's to delete, and deleting it says so", () =>
-    Effect.gen(function* () {
-      const eve = fakeEve();
-      const { agent, ask, owner } = yield* startedAgent(eve, { running: true });
-      const [queued] = (yield* queueChanged(ask, owner, agent.id, {
-        change: QUEUE_CHANGE.ADD,
-        text: "Open the pull request.",
-        clientKey: randomUUID(),
-      })).messages;
-      assert.ok(queued !== undefined);
-      yield* claimQueueHead(agent.id);
-
-      const deleted = yield* ask(
-        request(AGENT_QUEUE, owner, {
-          method: "POST",
-          id: agent.id,
-          body: { change: QUEUE_CHANGE.DELETE, messageId: queued.id },
-        }),
-      );
-
-      assert.equal(deleted.status, HOSTED_HTTP_STATUS.NOT_FOUND);
-    }),
-  );
-
-  it.effect(
-    "a message queued after the turn's end found nothing to hand on still goes at once",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { agent, ask, owner, turnEnded, queued } = yield* queuedBehindEndedTurn(eve, []);
-        yield* turnEnded;
-
-        yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.ADD,
-          text: "Late",
-          clientKey: randomUUID(),
-        });
-
-        assert.equal(handedCount(eve, "Late"), 1);
-        assert.deepEqual((yield* queued)?.messages ?? [], []);
-      }),
-  );
-
-  it.effect(
-    "a Stop pauses what is queued behind the turn, and Resume lets the queue go again",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { agent, ask, owner } = yield* startedAgent(eve, { running: true });
-        yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.ADD,
-          text: "Then open a pull request.",
-          clientKey: randomUUID(),
-        });
-        yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
-        const page = readAnswer(
-          agentMessagesAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
-        );
-        assert.deepEqual(page.queue?.paused, { because: QUEUE_PAUSE.STOPPED });
-
-        const resumed = yield* queueChanged(ask, owner, agent.id, { change: QUEUE_CHANGE.RESUME });
-        assert.equal(resumed.paused, undefined);
-      }),
-  );
-
-  it.effect(
-    "only the agent's starter changes its queue: a teammate who may message the agent reads its queue and changes none of it",
-    () =>
-      Effect.gen(function* () {
-        const opened = yield* startedAgent(fakeEve(), { running: true });
-        yield* joinWorkspace(opened.task.workspaceId, opened.other);
-        const { agent, ask, owner, other } = opened;
-        yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.ADD,
-          text: "Open the pull request.",
-          clientKey: randomUUID(),
-        });
-
-        const changed = yield* ask(
-          request(AGENT_QUEUE, undefined, {
-            method: "POST",
-            id: agent.id,
-            cookie: sessionCookieOf(other),
-            body: { change: QUEUE_CHANGE.ADD, text: "Also the docs.", clientKey: randomUUID() },
-          }),
-        );
-
-        assert.equal(changed.status, HOSTED_HTTP_STATUS.FORBIDDEN);
-        const read = readAnswer(
-          agentMessagesAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* ask(
-            request(AGENT_MESSAGES, undefined, { id: agent.id, cookie: sessionCookieOf(other) }),
-          ),
-        );
-        assert.deepEqual(
-          read.queue?.messages.map((message) => message.text),
-          ["Open the pull request."],
-        );
-      }),
-  );
-
-  it.effect(
-    "a turn's end that lands while the Stop's cancel is out finds the queue already paused, and sends nothing",
-    () =>
-      Effect.gen(function* () {
-        let racing: Effect.Effect<void> = Effect.void;
-        const eve = fakeEve({ cancelling: Effect.suspend(() => racing) });
-        const { agent, ask, owner, target, writer, turnId, github } = yield* startedAgent(eve, {
-          running: true,
-        });
-        yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.ADD,
-          text: "Open the pull request.",
-          clientKey: randomUUID(),
-        });
-        const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
-        const eveFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
-        // The runner ends the turn as stopped, and its events hand on the queue, before eve answers the cancel.
-        const database = yield* Effect.context<DatabaseServices>();
-        racing = Effect.andThen(
-          writer.consume(target, {
-            kind: RUN_EVENT.TURN_ENDED,
-            conversationId: sessionKey(target.conversationId),
-            turnId,
-            sequence: 2,
-            status: RUN_STATUS.CANCELLED,
-            responseIds: [],
-            at: 0,
-          }),
-          queueAtTurnEnd(eveFor, stored).pipe(
-            Effect.provide(Layer.mergeAll(github.layer, noNetwork)),
-          ),
-        ).pipe(Effect.provideContext(database), Effect.orDie);
-
-        yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
-
-        assert.equal(handedCount(eve, "Open the pull request."), 0, "nothing went after the Stop");
-        const page = readAnswer(
-          agentMessagesAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
-        );
-        assert.equal(page.queue?.paused?.because, QUEUE_PAUSE.STOPPED);
-      }),
-  );
-
-  it.effect(
-    "a turn cancelled other than by the Stop route, as a Continue, another agent's stop_agent, or a rewind cancels it, pauses the queue before the cancel",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const { agent, ask, owner, github } = yield* startedAgent(eve, { running: true });
-        yield* queueChanged(ask, owner, agent.id, {
-          change: QUEUE_CHANGE.ADD,
-          text: "Open the pull request.",
-          clientKey: randomUUID(),
-        });
-        const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
-
-        yield* cancelledTurn(
-          Effect.succeed(eve.eve(`deployment:${owner}`)),
-          storeWriter({ tools: CODER_TOOL_SET }),
-          stored,
-        ).pipe(Effect.provide(Layer.mergeAll(github.layer, noNetwork)));
-
-        const page = readAnswer(
-          agentMessagesAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
-        );
-        assert.equal(page.queue?.paused?.because, QUEUE_PAUSE.STOPPED);
-        assert.equal(handedCount(eve, "Open the pull request."), 0);
-      }),
-  );
-
-  it.effect(
-    "a Stop pauses what is queued though the turn was already over, so no sweep sends it after the Stop",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        // The turn ended with a message still queued, which the turn's end has not handed on yet.
-        const { agent, ask, owner, queued, swept } = yield* queuedBehindEndedTurn(eve, [
-          "Open the pull request.",
-        ]);
-
-        yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
-        yield* swept;
-
-        assert.equal((yield* queued)?.paused?.because, QUEUE_PAUSE.STOPPED);
-        assert.equal(handedCount(eve, "Open the pull request."), 0);
-      }),
-  );
-
   it.effect(
     "a member of the plan's workspace lists, reads, and messages an agent a teammate started, named as its starter, the line landing in the starter's conversation",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, sessionId, ask, transcript } = yield* startedAgent(eve, {
-          running: false,
-        });
+        const { owner, other, task, agent, sessionId, ask, transcript } = yield* messagedAgent(
+          eve,
+          {
+            running: false,
+          },
+        );
         const asOther = (text: string) =>
           ask(messageAs(other, agent.id, { text, clientKey: randomUUID() }));
         assert.deepEqual(
@@ -6011,7 +4499,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "a line no turn ever took reads its agent running for the line's grace and failed past it, alike on its page, in its task's list, and on its transcript",
     () =>
       Effect.gen(function* () {
-        const { owner, task, agent, ask, transcript, sent } = yield* startedAgent(fakeEve(), {
+        const { owner, task, agent, ask, transcript, sent } = yield* messagedAgent(fakeEve(), {
           running: false,
         });
         // The session takes the line and then fails with the store's hooks, so no turn row is written for it.
@@ -6058,7 +4546,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "the plan list a teammate reads names the member who started each of the plan's agents, by the name their account holds now",
     () =>
       Effect.gen(function* () {
-        const { owner, other, task, agent, ask } = yield* startedAgent(fakeEve(), {
+        const { owner, other, task, agent, ask } = yield* messagedAgent(fakeEve(), {
           running: false,
         });
         yield* joinWorkspace(task.workspaceId, other);
@@ -6084,7 +4572,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "an agent an automation's run started names the automation on the plan's agent list and on the plan list's line, and one started by hand names none",
     () =>
       Effect.gen(function* () {
-        const { owner, task, agent, ask } = yield* startedAgent(fakeEve(), { running: false });
+        const { owner, task, agent, ask } = yield* messagedAgent(fakeEve(), { running: false });
         const automationIds = () =>
           Effect.gen(function* () {
             const agents = readAnswer(
@@ -6127,7 +4615,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, task, agent, sessionId, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, task, agent, sessionId, ask } = yield* messagedAgent(eve, {
+          running: false,
+        });
         // An automation's run leaves an agent so: in its workspace, on no task.
         yield* Database.use((db) =>
           db
@@ -6163,7 +4653,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: false });
         const page = () =>
           Effect.map(ask(request(AGENT, owner, { id: agent.id })), (answered) =>
             readAnswer(agentPageAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
@@ -6200,7 +4690,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, task, agent, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, task, agent, ask } = yield* messagedAgent(eve, { running: false });
         const ranAs = (firing: AutomationFiring) =>
           Effect.gen(function* () {
             yield* Database.use((db) =>
@@ -6248,7 +4738,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     "the plan list names the teammate who archived an agent with no plan, as its own page does",
     () =>
       Effect.gen(function* () {
-        const { owner, other, task, agent, ask } = yield* startedAgent(fakeEve(), {
+        const { owner, other, task, agent, ask } = yield* messagedAgent(fakeEve(), {
           running: false,
         });
         yield* joinWorkspace(task.workspaceId, other);
@@ -6279,7 +4769,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: false });
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -6324,7 +4814,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: false });
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -6366,7 +4856,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, task, agent, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, task, agent, ask } = yield* messagedAgent(eve, { running: false });
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -6397,7 +4887,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: false });
         yield* Database.use((db) =>
           db
             .update(agentTable)
@@ -6440,7 +4930,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
+        const { owner, other, task, agent, ask } = yield* messagedAgent(eve, { running: false });
         yield* joinWorkspace(task.workspaceId, other);
         // The task is seen on its starter's own token, which the teammate holds none of, while the agent is seen through the App.
         yield* Database.use((db) =>
@@ -6470,7 +4960,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, task, agent, ask } = yield* startedAgent(eve, { running: true });
+        const { owner, task, agent, ask } = yield* messagedAgent(eve, { running: true });
         yield* Database.use((db) =>
           db
             .delete(githubInstallation)
@@ -6529,7 +5019,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       Effect.gen(function* () {
         const eve = fakeEve();
         const { owner, other, task, agent, target, sessionId, ask, transcript } =
-          yield* startedAgent(eve, { running: true });
+          yield* messagedAgent(eve, { running: true });
         yield* joinWorkspace(task.workspaceId, other);
         const clientKey = randomUUID();
         const steer = () =>
@@ -6571,7 +5061,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, agent, ask, sent, writer, target } = yield* startedAgent(eve, {
+        const { owner, other, task, agent, ask, sent, writer, target } = yield* messagedAgent(eve, {
           running: true,
         });
         yield* joinWorkspace(task.workspaceId, other);
@@ -6662,7 +5152,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, sessionId, sent, transcript } = yield* startedAgent(eve, {
+        const { owner, sessionId, sent, transcript } = yield* messagedAgent(eve, {
           running: true,
         });
         const answered = yield* sent("  Use the helper.  ");
@@ -6693,7 +5183,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { task, transcript, sent } = yield* startedAgent(eve, { running: true });
+        const { task, transcript, sent } = yield* messagedAgent(eve, { running: true });
         const words = `Do what ${mentionMarkdown({ kind: MENTION_KIND.SECTION, taskId: task.id, anchor: "goal" }, "Goal", { workspace: "acme", repository: task.repository })} says.`;
 
         yield* sent(words);
@@ -6714,7 +5204,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, task, ask, sent } = yield* startedAgent(eve, { running: true });
+        const { owner, task, ask, sent } = yield* messagedAgent(eve, { running: true });
         const other = yield* startedAgentOf(owner, task.id, ask);
         yield* updateAgentBranch(owner, other.agent.id, "luke/store-invitations");
         const shown = yield* writePage(
@@ -6762,7 +5252,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, ask, sent } = yield* startedAgent(eve, { running: true });
+        const { owner, other, task, ask, sent } = yield* messagedAgent(eve, { running: true });
         const billing = yield* startTask(owner, { name: "Billing", repository: RELAY_FULL_NAME });
         const onBilling = yield* startedAgentOf(owner, billing.id, ask);
         const oneOff = yield* startedAgentOf(owner, task.id, ask);
@@ -6812,7 +5302,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, task, sent } = yield* startedAgent(eve, { running: true });
+        const { owner, other, task, sent } = yield* messagedAgent(eve, { running: true });
         // The sender and the other account share a second workspace, which is not the agent's.
         const elsewhere = yield* openWorkspace(other);
         yield* joinWorkspace(elsewhere, owner);
@@ -6841,7 +5331,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve({ sends: EVE_SEND_OUTCOME.NOT_READY });
-        const { owner, agent, ask, target } = yield* startedAgent(eve, { running: true });
+        const { owner, agent, ask, target } = yield* messagedAgent(eve, { running: true });
         const words = `Check ${mentionMarkdown({ kind: MENTION_KIND.SERVER, provider: INTEGRATION_PROVIDER.LINEAR }, "Linear", { workspace: "acme", repository: null })} first.`;
 
         const answered = yield* ask(
@@ -6891,7 +5381,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { target, sent } = yield* startedAgent(eve, { running: true });
+        const { target, sent } = yield* messagedAgent(eve, { running: true });
         const words = `Check ${mentionMarkdown({ kind: MENTION_KIND.SERVER, provider: INTEGRATION_PROVIDER.LINEAR }, "Linear", { workspace: "acme", repository: null })} first.`;
 
         yield* sent(words);
@@ -6914,7 +5404,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, agent, ask, transcript } = yield* startedAgent(eve, {
+        const { owner, other, agent, ask, transcript } = yield* messagedAgent(eve, {
           running: true,
         });
         const line = { text: "Rename the helper.", clientKey: randomUUID() };
@@ -6989,14 +5479,9 @@ const startedAgent = (
 /** The same, under a name a suite with a `startedAgent` of its own still reaches. */
 const startedAgentOf = startedAgent;
 
-function startAs(bearer: string | undefined, taskId: string, body: WireBoundaryInput): Request {
-  return request(TASK_AGENTS, bearer, { method: "POST", id: taskId, body });
-}
-
 const TASK_INBOX = "/api/plans/{id}/inbox";
 const INBOX_ITEM = "/api/inbox/{id}";
 const ACCOUNT_INBOX = "/api/inbox";
-const INBOX_ATTACHMENT = "/api/inbox/attachment";
 const INBOX_MESSAGES = "/api/inbox/{id}/messages";
 const INBOX_ITEM_READ = "/api/inbox/{id}/read";
 const INBOX_CLOSE = "/api/inbox/{id}/close";
