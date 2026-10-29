@@ -233,3 +233,6 @@ export function hostInstallCommand(installScriptUrl: string, installToken: strin
 export function hostUpgradeCommand(installScriptUrl: string): string {
   return `curl -fsSL ${installScriptUrl} | sudo sh`;
 }
+
+/** The command that takes Luke's host off a box the install command set up, with its agents' VMs and folders (`apps/host/scripts/luke-host.sh`). */
+export const HOST_UNINSTALL_COMMAND = "sudo luke-host uninstall";
