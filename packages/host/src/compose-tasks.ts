@@ -2098,7 +2098,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = yield* readParams(
           tasksSetStandingParamsSchema,
           params,
-          "setting where a task stands names it and its status, priority, or assignee",
+          "setting where a task stands names it and its status, priority, assignee, or merge policy",
         );
         if (!gate()) return { changed: false };
         const { taskId, assigneeName, ...standing } = read;
@@ -2118,6 +2118,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                         : null,
                 }),
             ...(standing.priority === undefined ? undefined : { priority: standing.priority }),
+            ...(standing.mergePolicy === undefined
+              ? undefined
+              : { mergePolicy: standing.mergePolicy }),
             ...(standing.assigneeId === undefined
               ? undefined
               : {

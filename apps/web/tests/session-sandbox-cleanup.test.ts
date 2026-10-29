@@ -65,9 +65,9 @@ it.layer(getTestDB())("the session sandbox queue", (it) => {
           kind: CONVERSATION_KIND.MAIN,
           sessionId: main,
         });
-        yield* openConversation(userId, { kind: CONVERSATION_KIND.CODING_AGENT, sessionId: agent });
+        yield* openConversation(userId, { kind: CONVERSATION_KIND.AGENT, sessionId: agent });
         yield* openConversation(userId, {
-          kind: CONVERSATION_KIND.CODING_AGENT,
+          kind: CONVERSATION_KIND.AGENT,
           sessionId: mintSession(),
           deletedAt: new Date(),
         });
@@ -79,7 +79,7 @@ it.layer(getTestDB())("the session sandbox queue", (it) => {
           [...all].sort((a, b) => a.sessionId.localeCompare(b.sessionId)),
           [
             { sessionId: main, kind: CONVERSATION_KIND.MAIN },
-            { sessionId: agent, kind: CONVERSATION_KIND.CODING_AGENT },
+            { sessionId: agent, kind: CONVERSATION_KIND.AGENT },
           ].sort((a, b) => a.sessionId.localeCompare(b.sessionId)),
         );
         assert.deepEqual(yield* standingSessionsOf(userId, [mainConversation]), [

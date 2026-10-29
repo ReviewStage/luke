@@ -1,9 +1,10 @@
 /**
  * pull-request-chapters.ts -- a pull request's chapters as its Pull request tab reads and generates them, as two procedures.
  *
- * Each names the agent by its id in the path and, where the tab shows a
- * pull request of the agent's repository other than the agent's own, that
- * pull request's number in the `number` query, which the service reads as
+ * Each names the agent by its id in the path and a pull request's number in
+ * the `number` query: the read always, the number the tab's own read of the
+ * pull request found; the Generate where the tab shows a pull request of the
+ * agent's repository other than the agent's own. The service reads it as
  * every other read of the tab does, so it travels as the query's own text
  * (`pull-request-chapters-wire.ts`). The read is a GET, compact. The
  * Generate is a POST with no body: it takes its input detailed, so the
@@ -17,6 +18,7 @@ import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {
   pullRequestChaptersAnswerSchema,
+  pullRequestChaptersReadRequestSchema,
   pullRequestChaptersRequestSchema,
 } from "../pull-request-chapters-wire.js";
 import { bodyCap, exactInput, hostedProcedure } from "./base.js";
@@ -47,10 +49,10 @@ const generateInput = exactInput(
 );
 
 export const pullRequestChaptersContract = {
-  /** The workspace's newest chapters for the pull request, with its head as GitHub holds it now. */
+  /** The workspace's newest chapters for the pull request the number names. */
   read: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: PULL_REQUEST_CHAPTERS_PATH }))
-    .input(pullRequestChaptersRequestSchema)
+    .input(pullRequestChaptersReadRequestSchema)
     .output(EffectSchema.flip(pullRequestChaptersAnswerSchema)),
   /** The pull request's chapters generated for its head now, or the generation already under way, answered as the read answers. */
   generate: hostedProcedure

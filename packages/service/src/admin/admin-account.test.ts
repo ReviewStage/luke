@@ -103,7 +103,7 @@ const startAgent = (
     const db = yield* Database;
     const [conversation] = yield* db
       .insert(conversations)
-      .values({ userId, kind: CONVERSATION_KIND.CODING_AGENT, createdAt: at(daysAgo) })
+      .values({ userId, kind: CONVERSATION_KIND.AGENT, createdAt: at(daysAgo) })
       .returning({ id: conversations.id });
     const conversationId = conversation?.id ?? "";
     const [agent] = yield* db

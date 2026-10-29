@@ -50,7 +50,7 @@ const openConversation = Effect.gen(function* () {
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const [row] = yield* db
     .insert(conversations)
-    .values({ userId, kind: CONVERSATION_KIND.CODING_AGENT })
+    .values({ userId, kind: CONVERSATION_KIND.AGENT })
     .returning({ id: conversations.id });
   assert.ok(row);
   const target: ConversationTarget = { userId, conversationId: row.id };
@@ -128,7 +128,7 @@ it.layer(getTestDB())("a conversation's pictures", (it) => {
         yield* db.insert(conversations).values({
           id: worker.conversationId,
           userId: agent.userId,
-          kind: CONVERSATION_KIND.CODING_AGENT,
+          kind: CONVERSATION_KIND.AGENT,
           parentConversationId: agent.conversationId,
         });
         const standing = yield* openConversation;

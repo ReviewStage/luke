@@ -378,15 +378,8 @@ export const GATEWAY_METHOD = {
   AGENTS_ACCOUNT_INBOX_FOLLOW: "agents.accountInboxFollow",
   /** The account inbox let go: no more `ACCOUNT_INBOX_CHANGED` events until it is followed again. */
   AGENTS_ACCOUNT_INBOX_UNFOLLOW: "agents.accountInboxUnfollow",
-  /**
-   * Every inbox item the account reaches, whole, followed from now until it
-   * is let go or the account signs out, on one held poll: heard as
-   * `ACCOUNT_ITEMS_CHANGED` events by the plans and agents that moved,
-   * never answered; following again starts over, told whole.
-   */
-  AGENTS_ACCOUNT_ITEMS_FOLLOW: "agents.accountItemsFollow",
-  /** The account's items let go: no more `ACCOUNT_ITEMS_CHANGED` events until they are followed again. */
-  AGENTS_ACCOUNT_ITEMS_UNFOLLOW: "agents.accountItemsUnfollow",
+  /** Every inbox item the account reaches, which the host holds for the session, read again at once, as Try again asks; never answered. */
+  AGENTS_INBOX_ITEMS_RETRY: "agents.inboxItemsRetry",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
   AGENTS_INBOX_ATTACHMENT: "agents.inboxAttachment",
   /** One picture a tool answered an agent or one of its workers, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
@@ -562,8 +555,8 @@ export const GATEWAY_EVENT = {
   INBOX_CHANGED: "inbox.changed",
   /** What waits across the followed account, whole or why there is none, each time it moves while it is followed. */
   ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
-  /** The followed account's items, whole as the follow starts and then by the plans and agents that moved, or why there are none, each time they move while followed. */
-  ACCOUNT_ITEMS_CHANGED: "accountItems.changed",
+  /** Every inbox item the account reaches, whole, as the host's read of them for the session stands, each time it moves. */
+  INBOX_ITEMS_CHANGED: "inboxItems.changed",
   /** The commands agents asked to run on this Mac that wait on the developer's answer, whole, each time one is asked or answered. */
   MAC_COMMAND_ASKS_CHANGED: "macCommandAsks.changed",
 } as const;

@@ -125,7 +125,7 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
         const owner = yield* openAccount();
         const main = yield* openConversation(owner, CONVERSATION_KIND.MAIN);
         const lukeWorker = yield* openConversation(owner, CONVERSATION_KIND.CHILD, main);
-        const agent = yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT);
+        const agent = yield* openConversation(owner, CONVERSATION_KIND.AGENT);
         const agentWorker = yield* openConversation(owner, CONVERSATION_KIND.CHILD, agent);
 
         // Luke's own turn ran on two models, which its breakdown names apart.
@@ -241,20 +241,20 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
         {
           ...agentRow,
           // Each agent on a conversation of its own, as every Start makes one.
-          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.AGENT),
           idempotencyKey: randomUUID(),
           published: { ...pullRequest, mergedAt: AT_YESTERDAY.getTime() },
         },
         {
           ...agentRow,
-          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.AGENT),
           idempotencyKey: randomUUID(),
           published: { ...pullRequest, mergedAt: AT_YESTERDAY.getTime() },
         },
         // Open, never merged.
         {
           ...agentRow,
-          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.AGENT),
           idempotencyKey: randomUUID(),
           published: { ...pullRequest, state: PULL_REQUEST_STATE.OPEN },
         },

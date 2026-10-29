@@ -136,4 +136,5 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.HOST_STILL_ENROLLED]: {},
   [HOSTED_API_ERROR.DEVICE_REMOVED]: {},
   [HOSTED_API_ERROR.RUNS_ON_LOCKED]: {},
+  [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: {},
 } as const satisfies Record<HostedApiError, ErrorMapItem>;

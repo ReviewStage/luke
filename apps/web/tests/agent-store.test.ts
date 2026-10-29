@@ -356,7 +356,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
       assert.equal(agent.prompt, null);
       assert.equal(agent.repository, asked.repository);
       assert.deepEqual(yield* conversationKind(agent.conversationId), {
-        kind: CONVERSATION_KIND.CODING_AGENT,
+        kind: CONVERSATION_KIND.AGENT,
         deletedAt: null,
       });
       assert.deepEqual(yield* readAgent(userId, agent.id), Option.some(agent));

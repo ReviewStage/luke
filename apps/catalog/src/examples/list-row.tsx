@@ -10,6 +10,7 @@ import {
   List,
   type ListDensity,
   ListRow,
+  ListRowCount,
   type MenuEntry,
   MoreButton,
   PencilIcon,
@@ -27,8 +28,9 @@ import { CatalogSection } from "../section";
  * one open now, unread rows, what a row belongs to on a line of its own,
  * rows that open nothing, rows in a card,
  * a row a finger's height on a coarse pointer, compact and dense, rows whose
- * acts show on hover, rows that go deeper, rows whose menu their ⋯, a
- * right-click, and the menu key open, and long words in a narrow column.
+ * acts show on hover, rows that go deeper, rows nested under a row that
+ * folds them, rows whose menu their ⋯, a right-click, and the menu key
+ * open, and long words in a narrow column.
  */
 
 const MEMBERS = [
@@ -115,6 +117,65 @@ function TaskRows({ density }: { density: ListDensity }): React.JSX.Element {
           menu={{ thing: "Task", groups: taskMenu(task.name) }}
         />
       ))}
+    </List>
+  );
+}
+
+/** A task and the child tasks nested under it, two levels deep, each level folded until opened. */
+const NESTED = [
+  { id: "launch", name: "Launch child tasks", parent: undefined, updated: "1h" },
+  { id: "schema", name: "Tasks gain a parent", parent: "launch", updated: "2h" },
+  { id: "store", name: "Read a task's children", parent: "schema", updated: "3h" },
+  { id: "sidebar", name: "Nest them in the sidebar", parent: "launch", updated: "4h" },
+] as const;
+
+/** Rows nested under the rows that fold them, opened and folded as their chevrons are pressed. */
+function NestedRows(): React.JSX.Element {
+  const [opened, setOpened] = useState<readonly string[]>(["launch"]);
+  const depthOf = (parent: string | undefined): number =>
+    parent === undefined ? 0 : 1 + depthOf(NESTED.find((task) => task.id === parent)?.parent);
+  const shown = (parent: string | undefined): boolean =>
+    parent === undefined ||
+    (opened.includes(parent) && shown(NESTED.find((task) => task.id === parent)?.parent));
+  return (
+    <List label="Tasks" density={LIST_DENSITY.DENSE}>
+      {NESTED.filter((task) => shown(task.parent)).map((task) => {
+        const folds = NESTED.some((child) => child.parent === task.id);
+        return (
+          <ListRow
+            key={task.id}
+            leading={<GLYPH.TIME />}
+            title={task.name}
+            meta={
+              <>
+                {folds ? (
+                  <ListRowCount
+                    settled={task.id === "launch" ? 1 : 0}
+                    total={NESTED.filter((child) => child.parent === task.id).length}
+                    label={`Child tasks of ${task.name}, partly finished`}
+                  />
+                ) : null}
+                {task.updated}
+              </>
+            }
+            ink={LIST_ROW_INK.SIDEBAR}
+            depth={depthOf(task.parent)}
+            fold={
+              folds
+                ? {
+                    open: opened.includes(task.id),
+                    onOpenChange: (open) =>
+                      setOpened((was) =>
+                        open ? [...was, task.id] : was.filter((each) => each !== task.id),
+                      ),
+                    label: `Child tasks of ${task.name}`,
+                  }
+                : undefined
+            }
+            onPress={ignore}
+          />
+        );
+      })}
     </List>
   );
 }
@@ -297,6 +358,11 @@ function ListRows(): React.JSX.Element {
             />
             <ListRow title="Deleting a plan" meta="3d" disabled onPress={() => undefined} />
           </List>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="list-row-nested" title="Rows nested under a row that folds them">
+        <div className="catalog-narrow">
+          <NestedRows />
         </div>
       </CatalogSection>
       <CatalogSection id="list-row-chevron" title="Rows that go deeper">

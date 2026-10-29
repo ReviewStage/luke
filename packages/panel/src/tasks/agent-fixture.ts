@@ -704,7 +704,6 @@ const CHANGES = {
 const CHAPTERS = {
   pullRequest: {
     number: PULL_REQUEST.number,
-    headSha: PULL_REQUEST.headSha,
     generatable: true,
     chapters: {
       status: PULL_REQUEST_CHAPTERS_STATE.READY,

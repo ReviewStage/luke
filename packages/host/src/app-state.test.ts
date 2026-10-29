@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@luke/features/inbox-wire";
+import { LIVE_READ } from "@luke/features/live-wire";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import type { WireValue } from "@luke/wire";
 import { RPCSerializer } from "@orpc/client";
 import { describe, test } from "vitest";
 import {
+  type AppInboxItems,
   type AppStateDelivery,
   type AppStateSnapshot,
   appStateDelivery,
@@ -108,5 +112,49 @@ describe("a delivery that crosses the wire", () => {
     const { settings: _settings, ...signedOut } = held;
     const delivered = acrossTheWire(appStateDelivery(held, { ...signedOut, version: 2 }));
     assert.equal("settings" in withAppStateDelivery(held, delivered), false);
+  });
+
+  test("crosses a change to the account's feed as the holders it moved alone, a holder emptied kept as empty, every other holder's list kept the very one the window held", () => {
+    const item = (id: string, title: string): InboxItem => ({
+      id,
+      agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+      key: id,
+      revision: 1,
+      version: INBOX_WIRE_VERSION,
+      title,
+      needsReply: true,
+      status: INBOX_STATUS.OPEN,
+      postedAt: 1,
+      updatedAt: 1,
+    });
+    const quiet = [item("quiet", "Rotate the key?")];
+    const fed = (plans: AppInboxItems["plan"]): AppStateSnapshot => ({
+      ...document,
+      [LIVE_READ.INBOX_ITEMS]: {
+        rows: { [INBOX_SCOPE_KIND.PLAN]: plans, [INBOX_SCOPE_KIND.AGENT]: {} },
+      },
+    });
+    const before = { quiet, moved: [item("moved", "Ship?")], emptied: [item("emptied", "Merge?")] };
+    const held = withAppStateDelivery(
+      fed({}),
+      acrossTheWire(appStateDelivery(undefined, fed(before))),
+    );
+    const sent = fed(before);
+    const next = {
+      ...fed({ quiet, moved: [item("moved", "Ship tonight?")], emptied: [] }),
+      version: 2,
+    };
+
+    const delivered = acrossTheWire(appStateDelivery(sent, next));
+    const adopted = withAppStateDelivery(held, delivered);
+
+    assert.deepEqual(Object.keys(delivered.entries), []);
+    assert.deepEqual(Object.keys(delivered.inboxHolders?.[INBOX_SCOPE_KIND.PLAN] ?? {}), [
+      "moved",
+      "emptied",
+    ]);
+    const plans = adopted[LIVE_READ.INBOX_ITEMS].rows?.[INBOX_SCOPE_KIND.PLAN];
+    assert.equal(plans?.quiet, held[LIVE_READ.INBOX_ITEMS].rows?.[INBOX_SCOPE_KIND.PLAN].quiet);
+    assert.deepEqual(plans, { quiet, moved: [item("moved", "Ship tonight?")], emptied: [] });
   });
 });

@@ -294,6 +294,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       if (account.signedIn()) {
         yield* settings.reconcileAccountPreferences();
         yield* account.refreshAccess;
+        yield* agents.open;
       }
       yield* settings.emitSettings();
     });

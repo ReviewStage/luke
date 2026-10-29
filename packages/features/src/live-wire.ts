@@ -725,6 +725,18 @@ export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
 }
 
 /**
+ * Each read moved onto the host's app state, by the one name that
+ * identifies it from the service's live query (`defineLiveQuery`) to the
+ * panel's `useHostRead`.
+ */
+export const LIVE_READ = {
+  /** Every inbox item the account reaches. */
+  INBOX_ITEMS: "inboxItems",
+} as const;
+
+export type LiveRead = (typeof LIVE_READ)[keyof typeof LIVE_READ];
+
+/**
  * The account's inbox items as one read follows them (`/api/live/inbox-items`):
  * the query naming the instant the reader holds every item changed since,
  * in epoch milliseconds (`SINCE`); the parts its poll is held on alone

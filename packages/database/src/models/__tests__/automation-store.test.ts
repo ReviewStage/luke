@@ -37,7 +37,6 @@ import {
   ownFailedAutomationRuns,
   queuedAutomationRuns,
   readAutomation,
-  readAutomationToRun,
   readWebhookAutomation,
   recordAutomationRun,
   settleAutomationRun,
@@ -240,35 +239,6 @@ it.layer(getTestDB())("the automation store", (it) => {
           ["hello"],
         );
         assert.ok(Option.isNone(departed), "a departed owner's webhook reads as none");
-      }),
-  );
-
-  it.effect(
-    "an automation whose stored action still says `coding-agent`, as the release serving beside the rename's migration writes it, reads to run",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* openAccount;
-        const workspaceId = yield* openWorkspace(owner);
-        const made = Option.getOrThrow(
-          yield* createAutomation(owner, { ...nightly(workspaceId), nextRunAt: null }),
-        );
-        const db = yield* Database;
-        yield* db
-          .update(automation)
-          .set({
-            action: {
-              kind: AUTOMATION_ACTION.CODING_AGENT,
-              prompt: "Find and fix one flaky test.",
-            },
-          })
-          .where(eq(automation.id, made.id));
-
-        const read = yield* readAutomationToRun(made.id);
-
-        assert.deepEqual(
-          Option.map(read, (row) => row.action.kind),
-          Option.some(AUTOMATION_ACTION.CODING_AGENT),
-        );
       }),
   );
 

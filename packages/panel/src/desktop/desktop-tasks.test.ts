@@ -962,11 +962,15 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
   await act(async () => inbox.row("Ship it?")?.click());
   assert.equal(inbox.title(), "Ship it?");
   assert.deepEqual(marked, [`read:${SHIP.id}`]);
-  const mark = inbox
-    .row("Roll back?")
-    ?.closest("li")
-    ?.querySelector<HTMLButtonElement>('.luke-list-row-actions button[aria-label="Mark as read"]');
-  assert.ok(mark, "an unread row offers Mark as read over its time");
+  act(() => {
+    inbox
+      .row("Roll back?")
+      ?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  });
+  const mark = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((each) =>
+    each.textContent?.startsWith("Mark as read"),
+  );
+  assert.ok(mark, "an unread row's menu offers Mark as read");
   await act(async () => mark.click());
   assert.deepEqual(marked, [`read:${SHIP.id}`, `read:${ROLL.id}`]);
   inbox.unmount();

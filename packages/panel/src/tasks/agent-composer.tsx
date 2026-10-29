@@ -93,7 +93,8 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * message sent while a turn runs steers it, so the agent sees it at its
  * next step; sent idle, it opens a new turn. The box reads the same
  * whatever the agent is doing: one size, the same chips, no hint under it,
- * and one placeholder naming who it writes to, because the tab's glyph and the transcript's "Working…"
+ * and one placeholder asking for a follow up, since a started agent's
+ * conversation opens on its plan or task, because the tab's glyph and the transcript's "Working…"
  * line already say where the agent stands. The one thing that follows the agent's state is
  * the button at the card's right, the way every chat draws it: Send while
  * there are words or files, disabled while there are neither and the agent
@@ -190,10 +191,10 @@ import { useModifierHeld } from "./use-modifier-held.js";
 /** What the box's note says while the editor bundle could not be loaded. */
 const EDITOR_LOAD_FAILED = "The message box could not be loaded.";
 
-/** What the box says it takes where its owner does not say, and who it writes to where it is known. */
+/** What the box says it takes: the first message of an empty conversation, then a follow up. */
 const PLACEHOLDER = {
-  UNNAMED: "Message the agent",
-  NAMED: (name: string) => `Message ${name}`,
+  FIRST: "Ask to make changes",
+  FOLLOW_UP: "Send a follow up",
 } as const;
 
 /** What a box other than an agent's own asks for, calls its field, and calls its round button, and the chord its button's hint names. */
@@ -434,7 +435,7 @@ export function AgentComposer({
   published,
   doors,
   onStop,
-  agentName,
+  followsUp,
   keywords = [],
   skills,
   replyDoor,
@@ -480,8 +481,8 @@ export function AgentComposer({
   doors: PublishedDoors;
   /** Stops the agent, answering whether the service took the Stop. */
   onStop: () => Promise<boolean>;
-  /** The name the agent goes by (`agentName` in `@luke/features`), which the placeholder writes to; none where it is not known. */
-  agentName?: string | undefined;
+  /** Whether the conversation already holds a message, so the box takes a follow up rather than the first. */
+  followsUp: boolean;
   /** The words a dictation is likely to say, read off the plan (`dictation-keywords.ts`). */
   keywords?: readonly string[] | undefined;
   /** Where the skills a `/` offers are read from (`skill-picker.tsx`); nothing where the box offers none. */
@@ -625,8 +626,7 @@ export function AgentComposer({
   // Note that a closed box asks for nothing, since it takes nothing.
   const placeholder = closed
     ? ""
-    : (wording?.placeholder ??
-      (agentName === undefined ? PLACEHOLDER.UNNAMED : PLACEHOLDER.NAMED(agentName)));
+    : (wording?.placeholder ?? (followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST));
   const sendLabel = wording?.send ?? BUTTON.SEND;
 
   // Note that a held box gives up the caret, because a field that takes no

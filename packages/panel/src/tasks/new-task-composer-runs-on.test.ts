@@ -24,7 +24,7 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NewTaskComposer } from "./new-task-composer.js";
 import { MODELS_READ, type ModelsRead } from "./use-agents.js";
-import type { NewTaskStart } from "./use-tasks-tab.js";
+import type { NewTaskParent, NewTaskStart } from "./use-tasks-tab.js";
 
 /**
  * new-task-composer-runs-on.test.ts -- New task's Runs on, with local agents
@@ -35,7 +35,9 @@ import type { NewTaskStart } from "./use-tasks-tab.js";
  * so, never Cloud; a card takes a device picked in another card; and nothing
  * starts before the card's own read of the devices lands, a read that failed
  * saying so with a Retry that reads them again, while a member with no
- * devices is held only until it lands. Note
+ * devices is held only until it lands. A child's card starts under its
+ * parent alone, naming neither a repository nor a device, which the service
+ * would refuse, since a child takes its parent's. Note
  * that it stands in a file of its own, because a window reads its document
  * once, and the gate reads the experiment off that document. Synthetic
  * throughout.
@@ -54,6 +56,14 @@ const STUDIO = "6f0c1d0e-6b1a-4d43-9a49-2b7b6f1f0a11";
 const BUILDER = "0b8e4c1a-2f6d-4f53-8a2e-9d1c7e5b3a40";
 
 const roots: Root[] = [];
+
+/** The task a child's card is opened under, in Acme. */
+const PARENT: NewTaskParent = {
+  taskId: "3c9f1e2a-5b7d-4e8f-9a0b-1c2d3e4f5a6b",
+  name: "Child tasks",
+  workspaceId: ACME.id,
+  repository: "acme/web",
+};
 
 /** The devices the service holds for the card now, which the presence read answers the beats of. */
 let offeredNow: readonly MacOffer[] = [];
@@ -132,7 +142,7 @@ interface Offered {
  * doors, as the tasks tab hands it, so a read listing the same devices
  * hands back the list already standing.
  */
-async function mount(offered: Offered = { devices: devicesWith() }) {
+async function mount(offered: Offered = { devices: devicesWith() }, parent?: NewTaskParent) {
   offeredNow = offered.devices ?? [];
   const control = tasksControl();
   let reads = offered.reads ?? READS.LAND;
@@ -142,6 +152,7 @@ async function mount(offered: Offered = { devices: devicesWith() }) {
       ? { state: MODELS_READ.UNREAD, generation: 0 }
       : { state: MODELS_READ.READ, generation: 1 };
   const starts: (TaskRunsOnRequest | undefined)[] = [];
+  const named: { repository: string | null; parentTaskId: string | undefined }[] = [];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -171,11 +182,12 @@ async function mount(offered: Offered = { devices: devicesWith() }) {
       readModels,
       start: (
         _name: string,
-        _repository: string | null,
+        repository: string | null,
         _workspaceId: string | undefined,
         from?: NewTaskStart,
       ) => {
         starts.push(from?.runsOn);
+        named.push({ repository, parentTaskId: from?.parentTaskId });
         return Promise.resolve(undefined);
       },
     });
@@ -184,6 +196,7 @@ async function mount(offered: Offered = { devices: devicesWith() }) {
       workspaceId: ACME.id,
       onLeave: () => undefined,
       listSide: MENTION_MENU_SIDE.ABOVE,
+      parent,
     });
   }
   const draw = () => root.render(onRegistry(registry, createElement(Card)));
@@ -192,7 +205,7 @@ async function mount(offered: Offered = { devices: devicesWith() }) {
   const letReadsLand = () => {
     reads = READS.LAND;
   };
-  return { container, starts, letReadsLand };
+  return { container, starts, named, letReadsLand };
 }
 
 /** The menu's row naming `name`. */
@@ -326,4 +339,14 @@ test("a member with no devices, opening the card again, is held only until its r
   await settle();
 
   assert.deepEqual(starts, [undefined]);
+});
+
+test("a child's card starts under its parent alone, naming no repository and no device", async () => {
+  const { container, starts, named } = await mount({ devices: devicesWith() }, PARENT);
+  // ⌘Return on the empty box: a bare child, which carries what any child's start does.
+  pressInComposer(container, "Enter", { metaKey: true });
+  await settle();
+
+  assert.deepEqual(starts, [undefined]);
+  assert.deepEqual(named, [{ repository: null, parentTaskId: PARENT.taskId }]);
 });

@@ -27,6 +27,7 @@ import {
   deviceAgentRequestAnswer,
   deviceAgentRequestsWaiting,
   lapsedDeviceAgentLaunches,
+  liveDeviceAgents,
   openDeviceAgentLaunches,
   queueDeviceAgentLine,
   queueDeviceAgentRequest,
@@ -49,7 +50,8 @@ import { beatDevice, registerDevice } from "../device-store.js";
  * takes one; the expiry withdraws old work but a runner still at work; and
  * a device whose lease lapsed has its open launches read, bounded, and
  * settled once, a waiting one never handed out after; and a device's open
- * launches, claimed or waiting, are read for its own account alone.
+ * launches, claimed or waiting, are read for its own account alone, as are
+ * its live agents, those pinned to it and not archived.
  * Synthetic accounts, agents, and Macs throughout.
  */
 
@@ -60,14 +62,10 @@ const FILE_ANSWER: DeviceAgentAnswer = {
   bytes: new TextEncoder().encode("line one\n"),
 };
 
-/** An account holding a Mac and an agent pinned to it, or running in a sandbox where asked. */
-const openAccount = (onMac = true) =>
+/** An agent of the account's on a task of its own, pinned to the Mac given, or running in a sandbox where none is; its id. */
+const startAgent = (userId: string, deviceId?: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
-    const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-    const deviceId = randomUUID();
-    yield* registerDevice(userId, { id: deviceId, name: "Studio", ...DEVICE_LAYOUT });
     const task = yield* startTask(userId, { name: "Invitations" });
     const started = yield* createAgent(userId, {
       taskId: task.id,
@@ -79,12 +77,31 @@ const openAccount = (onMac = true) =>
       repository: null,
     });
     const agentId = Option.getOrThrow(started).agent.id;
-    if (onMac) {
+    if (deviceId !== undefined) {
       yield* db
         .update(agentTable)
         .set({ machine: AGENT_MACHINE.DEVICE, deviceId })
         .where(eq(agentTable.id, agentId));
     }
+    return agentId;
+  });
+
+/** A Mac registered under the account; its id. */
+const registerMac = (userId: string) =>
+  Effect.gen(function* () {
+    const deviceId = randomUUID();
+    yield* registerDevice(userId, { id: deviceId, name: "Studio", ...DEVICE_LAYOUT });
+    return deviceId;
+  });
+
+/** An account holding a Mac and an agent pinned to it, or running in a sandbox where asked. */
+const openAccount = (onMac = true) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const userId = `user-${randomUUID()}`;
+    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+    const deviceId = yield* registerMac(userId);
+    const agentId = yield* startAgent(userId, onMac ? deviceId : undefined);
     return { userId, deviceId, agentId };
   });
 
@@ -599,5 +616,32 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
         ]);
         assert.deepEqual(yield* openDeviceAgentLaunches(other.userId, owner.deviceId), []);
       }),
+  );
+  it.effect(
+    "a device's live agents are those pinned to it and not archived, not another device's or a sandbox's",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const owner = yield* openAccount();
+        const archived = yield* startAgent(owner.userId, owner.deviceId);
+        yield* db
+          .update(agentTable)
+          .set({ archivedAt: new Date() })
+          .where(eq(agentTable.id, archived));
+        const otherMac = yield* registerMac(owner.userId);
+        const onOtherMac = yield* startAgent(owner.userId, otherMac);
+        yield* startAgent(owner.userId);
+
+        assert.deepEqual(yield* liveDeviceAgents(owner.userId, owner.deviceId), [owner.agentId]);
+        assert.deepEqual(yield* liveDeviceAgents(owner.userId, otherMac), [onOtherMac]);
+      }),
+  );
+  it.effect("another account reads none of a device's live agents", () =>
+    Effect.gen(function* () {
+      const owner = yield* openAccount();
+      const other = yield* openAccount();
+
+      assert.deepEqual(yield* liveDeviceAgents(other.userId, owner.deviceId), []);
+    }),
   );
 });

@@ -36,7 +36,7 @@
  * which the agent reads as it reads any tool's answer.
  */
 
-import { readAgentOfConversation } from "@luke/database/models/agent-store";
+import { readAgentOfConversation, readAgentUnderPilot } from "@luke/database/models/agent-store";
 import { AGENT_KIND, AGENT_MACHINE } from "@luke/features/agent-wire";
 import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { MAC_COMMAND_BOUNDS } from "@luke/features/mac-command-wire";
@@ -70,6 +70,7 @@ import {
 import type { McpToolSchema } from "../../integrations/mcp-tools.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
+import type { OfferedBeside } from "../coder-host/tool-set.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { memoryOnFor } from "../memory-tools.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
@@ -244,6 +245,9 @@ const NO_AGENT_OFFERED: LukeMcpOfferedTo = {
   machine: AGENT_MACHINE.VERCEL,
 };
 
+/** What beside its row an agent whose row is gone is offered by: no Memory, and under no pilot. */
+const NO_AGENT_BESIDE: OfferedBeside = { memoryOn: false, underPilot: false };
+
 /** The tool result where the door failed rather than refused. */
 const DOOR_FAILED_RESULT: McpToolCallResult = {
   content: [{ type: "text", text: DOOR_FAILED }],
@@ -320,7 +324,8 @@ function callLukeTool(
 
 /**
  * The tools listed to the admitted agent: those eve offers it, by its task,
- * its repository, its kind, and its starter's Memory (`offeredLukeMcpTool`),
+ * its repository, its kind, whether a pilot started it, and its starter's
+ * Memory (`offeredLukeMcpTool`),
  * each in the words it is shown them with (`describe`); those eve offers
  * every agent where its row is gone, since no narrowed tool's door would
  * carry out a call for an agent that no longer stands.
@@ -332,11 +337,16 @@ function listLukeTools(
   return readAgentOfConversation(userId, conversationId).pipe(
     Effect.flatMap((found) =>
       Effect.map(
-        Option.isSome(found) ? memoryOnFor(found.value.userId) : Effect.succeed(false),
-        (memoryOn) =>
+        Option.isSome(found)
+          ? Effect.all({
+              memoryOn: memoryOnFor(found.value.userId),
+              underPilot: readAgentUnderPilot(userId, found.value.id),
+            })
+          : Effect.succeed(NO_AGENT_BESIDE),
+        (beside) =>
           offeredLukeMcpTool(
             Option.getOrElse(found, () => NO_AGENT_OFFERED),
-            memoryOn,
+            beside,
           ),
       ),
     ),

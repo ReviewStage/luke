@@ -2,12 +2,17 @@ import { AGENT_BOUNDS, AGENT_STATUS, hasWordsOrFiles } from "@luke/features/agen
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { TASK_MODE, type TaskMode } from "@luke/features/task-wire";
 import { TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
 import {
   CHIP_WIDTH,
+  CHOICE_BAR_LOOK,
+  CHOICE_BAR_SIZE,
+  ChoiceBar,
+  type ChoiceItem,
   POPOVER_ALIGN,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -39,7 +44,7 @@ import type { SkillWithFile } from "./skill-ref.js";
 import { TaskMentions, tasklessMentions, useMentionAgentsReader } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
 import { MODELS_READ } from "./use-agents.js";
-import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.js";
+import type { NewTaskAgent, NewTaskParent, NewTaskStart, TasksControl } from "./use-tasks-tab.js";
 
 /**
  * new-task-composer.tsx -- New task's composer card: the words a coding agent starts on, and the chips that say where and how the task starts.
@@ -65,6 +70,13 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * where a task runs because the chip said Cloud. The repository chip starts on the one the press chose
  * (a repository group's +), else the one the newest task in the workspace
  * was about, either only where the workspace's GitHub reaches it.
+ *
+ * While the Pilot experiment is on, a task's card offers Pilot or Agent at
+ * the head row's end, set to Pilot: how the task is worked, kept on the task
+ * as it starts (`TASK_MODE`). A pick holds for this card alone, and a refused
+ * card opened again holds the one it was pressed with. A bare task takes
+ * the mode picked too, so one started as a pilot task stands as one before
+ * any agent is started on it. An automation's card offers none.
  *
  * The words are a coding agent's prompt. Start stands once there are
  * words or files, and a repository, without which it is held and
@@ -113,6 +125,13 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * mounts it afresh to start those over; the workspace it starts in is the
  * owner's.
  *
+ * New child task, from a task's menu or ⌘K, opens this same card for a
+ * child of that task (`parent`): its head row says "New child task" and
+ * names the parent where the repository chip stands, and it draws no Runs
+ * on, because a child works in its parent's workspace and repository and
+ * runs where its parent runs, which the service holds it to. Its start names
+ * the parent and leaves the repository and the place to run to the service.
+ *
  * The Automations page's Create with an agent opens this same card for the
  * agent that makes an automation (`NEW_TASK_PURPOSE.AUTOMATION`), so making
  * one looks and works as starting any agent does. Its title and placeholder
@@ -154,13 +173,31 @@ const BARE_WORDS: ComposerWords = {
   chord: BARE_CHORD,
 };
 
+/** New task's ways of working a task, while the Pilot experiment is on: Pilot first, the one the card starts on. */
+const MODE_CHOICES: readonly ChoiceItem<TaskMode>[] = [
+  {
+    value: TASK_MODE.PILOT,
+    label: "Pilot",
+    hint: `One pilot plans the ${TERM.TASK.one}, splits it into child ${TERM.TASK.many}, and runs ${TERM.AGENT.many} on them`,
+  },
+  {
+    value: TASK_MODE.AGENT,
+    label: "Agent",
+    hint: `One ${TERM.AGENT.one} works on the ${TERM.TASK.one}`,
+  },
+];
+
 /** Why an automation's agent did not start where the brief and the words pass an agent's first message's bound. */
 const TOO_LONG = "That request is too long.";
 
-/** Why Start is held without a repository. */
+/** Why Start is held without a repository, which a child's card cannot choose, since a child takes its parent's. */
 const COMPOSER_WORDS = {
   NEEDS_REPOSITORY: "Choose a repository",
+  PARENT_HAS_NO_REPOSITORY: "Its parent task has no repository",
 } as const;
+
+/** A child's head row title, drawn before the parent it is made under. */
+const CHILD_HEADING = "New child task";
 
 /** What the card says where the member's devices could not be read, with Retry, rather than starting the task in the cloud. */
 const DEVICES_UNREAD: Failure = {
@@ -174,6 +211,8 @@ interface AgentAsk {
   readonly workspaceId: string | undefined;
   /** The device the task's agents run on, by its id; none for the cloud. */
   readonly deviceId?: string | undefined;
+  /** How the task is worked, where the card offered the choice; none while the Pilot experiment is off. */
+  readonly mode?: TaskMode | undefined;
   readonly agent: Omit<NewTaskAgent, "idempotencyKey">;
 }
 
@@ -183,12 +222,13 @@ export interface NewTaskPress {
   readonly key: string;
 }
 
-/** Whether two presses ask the same: the same task, device, words, files in the same order, and model. */
+/** Whether two presses ask the same: the same task, device, mode, words, files in the same order, and model. */
 function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
   return (
     a.repository === b.repository &&
     a.workspaceId === b.workspaceId &&
     a.deviceId === b.deviceId &&
+    a.mode === b.mode &&
     a.agent.prompt === b.agent.prompt &&
     a.agent.attachments.length === b.agent.attachments.length &&
     a.agent.attachments.every((file, index) => file === b.agent.attachments[index]) &&
@@ -245,6 +285,7 @@ export function NewTaskComposer({
   titleId,
   listSide,
   purpose = NEW_TASK_PURPOSE.TASK,
+  parent,
 }: {
   newTask: TasksControl["newTask"];
   /** The workspace the task starts in, the owner's to choose; none before the workspaces are read. */
@@ -261,6 +302,8 @@ export function NewTaskComposer({
   listSide: MentionMenuSide;
   /** What the card starts; a task's agent where none is named. */
   purpose?: NewTaskPurpose | undefined;
+  /** The task the card makes its task a child of, whose workspace `workspaceId` names; none for a task at the top. */
+  parent?: NewTaskParent | undefined;
 }): React.JSX.Element {
   const forAutomation = purpose === NEW_TASK_PURPOSE.AUTOMATION;
   const draft = useDraft(newTaskPlace(workspaceId, purpose));
@@ -282,6 +325,10 @@ export function NewTaskComposer({
   const [choice, choose] = useDefaultChoice(newTask, refused?.card.choice);
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(refused?.note);
+  // Pilot or Agent stands on a task's card while the Pilot experiment is on, set to Pilot.
+  const offersPilot = useExperiment(EXPERIMENT.PILOT) && !forAutomation;
+  const [mode, setMode] = useState<TaskMode>(refused?.card.press.ask.mode ?? TASK_MODE.PILOT);
+  const asked = offersPilot ? mode : undefined;
   // A refused card opened again holds the words it was pressed with, where the box holds nothing since.
   useLayoutEffect(() => {
     if (refused === undefined) return;
@@ -296,9 +343,9 @@ export function NewTaskComposer({
   const pressed = useRef<NewTaskPress | undefined>(refused?.card.press);
   const repositories = newTask.repositoriesIn(workspaceId);
   const workspace = newTask.workspaces.find((each) => each.id === workspaceId);
-  // Runs on stands while local agents are on and the member has a device, never for an automation's agent.
+  // Runs on stands while local agents are on and the member has a device, never for an automation's agent or a child, which runs where its parent runs.
   const localAgents = useExperiment(EXPERIMENT.LOCAL_AGENTS);
-  const asksDevices = localAgents && !forAutomation;
+  const asksDevices = localAgents && !forAutomation && parent === undefined;
   // Note that the devices are read as the card opens rather than when the
   // model chip first draws, which waits on the default's read, so Start is held for as short as can be.
   const readModels = useRef(newTask.readModels);
@@ -346,12 +393,14 @@ export function NewTaskComposer({
   if (candidate !== null && !isListed(candidate) && judged) setChosen(null);
   // Note that a repository is not started on before the read lands unless
   // the workspace's GitHub reaches it, because the service would refuse it.
-  const repository =
+  const picked =
     candidate !== null &&
     (!isListed(candidate) ||
       (listed === undefined && workspace !== undefined && !workspaceReaches(workspace, candidate)))
       ? null
       : candidate;
+  // A child works in its parent's repository, which no chip offers to change.
+  const repository = parent === undefined ? picked : parent.repository;
   const said = words.trim();
   // Note that an automation's agent starts on words alone, since the brief fences them as the request.
   const filled = forAutomation ? said !== "" : hasWordsOrFiles(said, attachments);
@@ -394,7 +443,7 @@ export function NewTaskComposer({
     );
   };
 
-  const begin = (handing: Pick<NewTaskStart, "handed" | "card"> = {}) => {
+  const begin = (handing: Pick<NewTaskStart, "handed" | "mode" | "card"> = {}) => {
     if (starting || devicesUnread) return;
     setStarting(true);
     onStarting?.(true);
@@ -404,10 +453,12 @@ export function NewTaskComposer({
     // opened again brings its own words back (`refused.card.words`).
     const agentStart = handing.handed !== undefined;
     if (agentStart) draft.update(() => EMPTY_DRAFT);
+    // Note that a child's start names its parent and no repository, because the service gives a child its parent's.
     newTask
-      .start("", repository, workspaceId, {
+      .start("", parent === undefined ? repository : null, workspaceId, {
         ...(runsOn === undefined ? undefined : { runsOn }),
         ...(device === undefined ? undefined : { device }),
+        ...(parent === undefined ? undefined : { parentTaskId: parent.taskId }),
         ...handing,
       })
       .then((refused) => {
@@ -434,6 +485,7 @@ export function NewTaskComposer({
       repository,
       workspaceId,
       deviceId: device?.deviceId,
+      mode: asked,
       agent: { prompt, attachments, choice },
     };
     const held = pressed.current;
@@ -442,11 +494,19 @@ export function NewTaskComposer({
     pressed.current = press;
     begin({
       handed: { idempotencyKey: key, ...ask.agent },
-      card: { ...(forAutomation ? { purpose } : undefined), repository, choice, press, words },
+      ...(asked === undefined ? undefined : { mode: asked }),
+      card: {
+        ...(forAutomation ? { purpose } : undefined),
+        ...(parent === undefined ? undefined : { parent }),
+        repository,
+        choice,
+        press,
+        words,
+      },
     });
   };
-  // ⌘Return on a box with nothing in it starts a bare task: no call and no agent.
-  const bare = () => begin();
+  // ⌘Return on a box with nothing in it starts a bare task: no call and no agent, in the mode picked.
+  const bare = () => begin(asked === undefined ? {} : { mode: asked });
   const startsBare = !forAutomation && !filled;
 
   const onKey = (event: KeyboardEvent): boolean => {
@@ -493,20 +553,39 @@ export function NewTaskComposer({
     <div className="new-task-composer flex min-w-0 flex-col gap-control-gap">
       <div className="new-task-head flex min-w-0 items-center gap-block-gap">
         <div className="new-task-title flex min-w-0 items-center gap-item-gap">
-          {forAutomation ? (
+          {forAutomation || parent !== undefined ? (
             <Text
               variant={TEXT_VARIANT.DIALOG}
               as={TEXT_ELEMENT.H2}
               id={titleId}
               className="max-w-new-task-title shrink-0"
             >
-              {PURPOSE_HEADING[purpose]}
+              {parent === undefined ? PURPOSE_HEADING[purpose] : CHILD_HEADING}
             </Text>
           ) : (
             <VisuallyHidden id={titleId}>{PURPOSE_HEADING[purpose]}</VisuallyHidden>
           )}
-          {repositoryChip}
+          {parent === undefined ? (
+            repositoryChip
+          ) : (
+            <Text tone={TEXT_TONE.MUTED} truncate>
+              {parent.name}
+            </Text>
+          )}
         </div>
+        {offersPilot ? (
+          <div className="new-task-mode ml-auto shrink-0">
+            <ChoiceBar<TaskMode>
+              label={`How the ${TERM.TASK.one} is worked`}
+              items={MODE_CHOICES}
+              value={mode}
+              look={CHOICE_BAR_LOOK.SEGMENTED}
+              size={CHOICE_BAR_SIZE.COMPACT}
+              disabled={starting}
+              onChange={setMode}
+            />
+          </div>
+        ) : null}
       </div>
       <AgentComposer
         status={AGENT_STATUS.STARTING}
@@ -524,6 +603,7 @@ export function NewTaskComposer({
         published={undefined}
         doors={{ openGitHub: () => undefined, copy: () => undefined }}
         onStop={() => Promise.resolve(false)}
+        followsUp={false}
         onKey={onKey}
         onLeave={onLeave}
         focusedByOwner={focusedByOwner}
@@ -541,7 +621,9 @@ export function NewTaskComposer({
       />
       {blocked ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {COMPOSER_WORDS.NEEDS_REPOSITORY}
+          {parent === undefined
+            ? COMPOSER_WORDS.NEEDS_REPOSITORY
+            : COMPOSER_WORDS.PARENT_HAS_NO_REPOSITORY}
         </Text>
       ) : null}
     </div>

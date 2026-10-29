@@ -2,16 +2,20 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { readAgent } from "@luke/database/models/agent-store";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
+import { listAgents, readAgent } from "@luke/database/models/agent-store";
 import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
 import { createTask, readTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { messages } from "@luke/database/schemas/storage";
+import { task } from "@luke/database/schemas/task";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import { AUTOMATION_FIRING, type AutomationFiring } from "@luke/features/automation-wire";
 import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
+import { TASK_MODE, TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { Effect, Layer, Option, Result } from "effect";
 import { MESSAGE_ROLE } from "../../core.js";
@@ -46,7 +50,8 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * starts one as well, an account outside it starts nothing, and a
  * repository the workspace's installation does not reach is refused before
  * eve is asked. An agent started on a task moves it into progress from the
- * backlog or to do. eve is a fake at the client's boundary, GitHub a script,
+ * backlog or to do, and on a task worked in pilot mode the first is its pilot,
+ * refused to an account with Pilot off. eve is a fake at the client's boundary, GitHub a script,
  * the catalog fixed, and the store PGlite. Synthetic accounts and words
  * throughout.
  */
@@ -342,5 +347,54 @@ it.layer(getTestDB())("an agent started on a task", (it) => {
         assert.equal(yield* assigneeOf(byHand.id), owner);
         assert.equal(yield* assigneeOf(byAutomation.id), undefined);
       }),
+  );
+
+  /** A task of the workspace worked in pilot mode, as the composer's Pilot starts one. */
+  const pilotTask = (owner: string, workspaceId: string) =>
+    Effect.gen(function* () {
+      const made = yield* createTask(owner, {
+        organizationId: workspaceId,
+        name: "Invites",
+        repository: RELAY_REPOSITORY,
+      });
+      const db = yield* Database;
+      yield* db.update(task).set({ mode: TASK_MODE.PILOT }).where(eq(task.id, made.id));
+      return made;
+    });
+
+  it.effect(
+    "on a task worked in pilot mode, the first Start makes its pilot and the next a coder",
+    () =>
+      Effect.gen(function* () {
+        const { owner, workspaceId } = yield* openConnectedWorkspace;
+        yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.PILOT]: true } });
+        const piloted = yield* pilotTask(owner, workspaceId);
+        const { eve } = fakeEve();
+
+        const first = yield* startAgent(eve, owner, taskAsk(piloted.id)).pipe(
+          Effect.provide(services),
+        );
+        const next = yield* startAgent(eve, owner, taskAsk(piloted.id)).pipe(
+          Effect.provide(services),
+        );
+
+        assert.deepEqual([first.agent.kind, next.agent.kind], [AGENT_KIND.PILOT, AGENT_KIND.CODER]);
+      }),
+  );
+
+  it.effect("refuses a pilot task's pilot to an account with Pilot off, and makes no agent", () =>
+    Effect.gen(function* () {
+      const { owner, workspaceId } = yield* openConnectedWorkspace;
+      const piloted = yield* pilotTask(owner, workspaceId);
+      const { eve } = fakeEve();
+
+      const refused = yield* Effect.result(
+        startAgent(eve, owner, taskAsk(piloted.id)).pipe(Effect.provide(services)),
+      );
+
+      assert.ok(Result.isFailure(refused));
+      assert.deepEqual(refused.failure, HOSTED_REFUSAL.NOT_PERMITTED);
+      assert.deepEqual(yield* listAgents(owner, piloted.id), []);
+    }),
   );
 });

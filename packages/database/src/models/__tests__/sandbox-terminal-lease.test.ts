@@ -46,7 +46,7 @@ const openAgent = (turn?: TurnStatus) =>
     const sessionId = `wrun_${randomUUID()}`;
     const [row] = yield* db
       .insert(conversations)
-      .values({ userId, kind: CONVERSATION_KIND.CODING_AGENT, runtimeSessionId: sessionId })
+      .values({ userId, kind: CONVERSATION_KIND.AGENT, runtimeSessionId: sessionId })
       .returning({ id: conversations.id });
     assert.ok(row);
     if (turn !== undefined) {

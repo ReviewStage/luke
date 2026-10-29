@@ -1,5 +1,7 @@
 import type { MacOffer } from "@luke/features/models-wire";
 import {
+  MERGE_POLICY,
+  type MergePolicy,
   TASK_PRIORITY,
   TASK_PRIORITY_ORDER,
   TASK_STATUS,
@@ -17,6 +19,10 @@ import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CHIP_WIDTH,
+  CHOICE_BAR_LOOK,
+  CHOICE_BAR_SIZE,
+  ChoiceBar,
+  type ChoiceItem,
   ErrorState,
   FailureNote,
   GAP,
@@ -40,6 +46,7 @@ import { memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
 import { Picker } from "../settings/picker-row.js";
 import { useExperiment } from "../use-app-state.js";
+import { MERGE_POLICY_CHOICES, mergePolicySwitchOf } from "./merge-policy-switch.js";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip.js";
 import { TaskRunsOnChip } from "./runs-on.js";
 
@@ -57,7 +64,9 @@ import { TaskRunsOnChip } from "./runs-on.js";
  * `owner/name`, or Choose a repository while the task has none, which drops
  * the search over every repository the workspace reaches, and which ⌘K's
  * Change repository opens the same way; and, while local agents are on, a
- * fifth for where its agents run (`runs-on.tsx`). A pick is handed back for the page to send;
+ * fifth for where its agents run (`runs-on.tsx`); and, on a pilot tree's
+ * top task, a two-way switch for its merge policy, merge on green or hold
+ * every PR (`merge-policy-switch.ts`). A pick is handed back for the page to send;
  * without a door to send it, as on an archived task, the chips only say.
  * S, pressed while not typing, opens the status chip's menu, as Linear's S
  * does, and a task row's menu lists what each chip lists
@@ -108,6 +117,12 @@ export const PRIORITY_ROWS: readonly MenuRow[] = TASK_PRIORITY_ORDER.map((priori
 function statusOf(id: string): TaskStatus | undefined {
   return TASK_STATUS_ORDER.find((status) => status === id);
 }
+
+/** The merge-policy switch's two options, merge on green first, as every task starts. */
+const MERGE_POLICY_ITEMS: readonly ChoiceItem<MergePolicy>[] = [
+  MERGE_POLICY.MERGE_ON_GREEN,
+  MERGE_POLICY.HOLD,
+].map((policy) => ({ value: policy, ...MERGE_POLICY_CHOICES[policy] }));
 
 /** The priority a picked row names; none for a row that names no priority. */
 function priorityOf(id: string): TaskPriority | undefined {
@@ -339,7 +354,8 @@ function TaskStatusPicker({
  * repository's where the page hands the chip's doors, with the service's
  * refusal of the last pick beside it, and where its agents run while the
  * Local agents experiment is on and the member has a device or the task
- * runs on one. A task from a service before statuses draws none of the
+ * runs on one, and the merge-policy switch on a pilot tree's top task. A
+ * task from a service before statuses draws none of the
  * standing chips, and still its repository's, which does not wait on them,
  * since the plan's menu leaves Change repository to the chip.
  */
@@ -369,6 +385,7 @@ export function TaskStandingChips({
       : undefined,
   );
   if (!standing && repository === undefined) return null;
+  const mergePolicy = standing ? mergePolicySwitchOf(task) : undefined;
   const runsOnDrawn =
     standing &&
     localAgents &&
@@ -420,6 +437,19 @@ export function TaskStandingChips({
         )}
         {repository?.note === undefined ? null : <FailureNote>{repository.note}</FailureNote>}
         {runsOnDrawn ? <TaskRunsOnChip runsOn={task.runsOn} /> : null}
+        {mergePolicy === undefined ? null : (
+          <ChoiceBar<MergePolicy>
+            label="Merge policy"
+            items={MERGE_POLICY_ITEMS}
+            value={mergePolicy}
+            look={CHOICE_BAR_LOOK.SEGMENTED}
+            size={CHOICE_BAR_SIZE.COMPACT}
+            disabled={onSet === undefined}
+            onChange={(picked) => {
+              if (picked !== mergePolicy) onSet?.({ mergePolicy: picked });
+            }}
+          />
+        )}
       </Inline>
     </div>
   );

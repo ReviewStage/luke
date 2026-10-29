@@ -1,6 +1,9 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { AgentKind } from "@luke/features/agent-wire";
+import type { InboxItem } from "@luke/features/inbox-wire";
+import { LIVE_READ } from "@luke/features/live-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
@@ -239,6 +242,39 @@ export interface AppInboxSlice {
 }
 
 /**
+ * One read the host holds for the panel (`live-collection.ts`), as every
+ * window draws it: its rows as it last answered, absent until it first
+ * does, and whether it said it could not answer before it ever had. A read
+ * that stops answering once it has keeps its rows, since its next answer
+ * brings them up to date. What the panel reads through `useHostRead`.
+ */
+export interface AppHostRead<Rows> {
+  rows?: Rows;
+  failed?: true;
+}
+
+/** A read that has not answered yet, as every read stands as a session opens. */
+export const UNREAD: AppHostRead<never> = {};
+
+/**
+ * Every inbox item the account reaches, settled ones of the read's window
+ * among them, by the plan each is on, or its agent where that has no task,
+ * each holder's in the order its own read answers them. A holder it holds
+ * nothing of holds nothing now.
+ */
+export type AppInboxItems = {
+  readonly [Kind in InboxHolderKind]: Readonly<Record<string, readonly InboxItem[]>>;
+};
+
+/** The kind of holder an inbox item is on: a plan, or an agent with no task. */
+type InboxHolderKind = (typeof INBOX_SCOPE_KIND)[keyof typeof INBOX_SCOPE_KIND];
+
+/** The rows of each read the host holds for the panel, by its name. */
+export interface AppHostReads {
+  [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
+}
+
+/**
  * The commands agents asked to run on this Mac that wait on the developer's
  * answer, the earliest first, as the host holds them while Settings › This
  * Mac asks every time (`compose-mac-commands.ts`): what the panel's prompt
@@ -314,6 +350,8 @@ export interface AppState {
   tasks: TasksView;
   agents: AppAgentsSlice;
   inbox: AppInboxSlice;
+  /** Every inbox item the account reaches, held for the signed-in session: what the window's Inbox, its search, and a person's page list. */
+  [LIVE_READ.INBOX_ITEMS]: AppHostRead<AppInboxItems>;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;
   network: AppNetworkSlice;
@@ -383,6 +421,66 @@ export interface AppStateDelivery {
   readonly version: number;
   readonly entries: { readonly [Entry in AppStateEntry]?: AppStateSnapshot[Entry] };
   readonly gone?: readonly AppStateEntry[];
+  /** Each holder of the account's feed that moved since the window's last delivery, whole, one gone as null, in place of the feed's entry, where the window held its rows and still does. */
+  readonly inboxHolders?: AppInboxHolders;
+}
+
+/** The holders of the account's feed that moved, by kind: each whole, or null where it is gone, which an empty list is not. */
+type AppInboxHolders = {
+  readonly [Kind in InboxHolderKind]: Readonly<Record<string, readonly InboxItem[] | null>>;
+};
+
+/**
+ * Each holder of the account's feed that moved from `sent` to `next`, one
+ * gone as null; none where either holds no rows, which crosses whole, or
+ * where none moved. Note that a change crosses as the holders it moved,
+ * since the largest workspace's feed is megabytes and a change moves one
+ * task's list.
+ */
+function inboxHoldersPatch(
+  sent: AppHostRead<AppInboxItems> | undefined,
+  next: AppHostRead<AppInboxItems> | undefined,
+): AppInboxHolders | undefined {
+  const [before, after] = [sent?.rows, next?.rows];
+  if (before === undefined || after === undefined) return undefined;
+  const ofKind = (kind: InboxHolderKind) =>
+    Object.fromEntries([
+      ...Object.entries(after[kind]).filter(
+        ([id, items]) => !Equal.equals(before[kind][id], items),
+      ),
+      ...Object.keys(before[kind])
+        .filter((id) => !Object.hasOwn(after[kind], id))
+        .map((id) => [id, null]),
+    ]);
+  const patch = {
+    [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN),
+    [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT),
+  };
+  return Object.values(patch).some((holders) => Object.keys(holders).length > 0)
+    ? patch
+    : undefined;
+}
+
+/** The account's feed once `patch` lands on `held`: each holder moved laid in, keeping what of it did not move, each gone dropped, and every other the very list held. */
+function withInboxHolders(
+  held: AppHostRead<AppInboxItems> | undefined,
+  patch: AppInboxHolders,
+): AppHostRead<AppInboxItems> {
+  const ofKind = (kind: InboxHolderKind) => {
+    const next: Record<string, readonly InboxItem[]> = { ...held?.rows?.[kind] };
+    for (const [id, items] of Object.entries(patch[kind])) {
+      const was = next[id];
+      if (items === null) Reflect.deleteProperty(next, id);
+      else next[id] = was === undefined ? items : keepIdentity(was, items);
+    }
+    return next;
+  };
+  return {
+    rows: {
+      [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN),
+      [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT),
+    },
+  };
 }
 
 /**
@@ -399,15 +497,22 @@ export function appStateDelivery(
   const names = [...new Set([...Object.keys(sent ?? {}), ...Object.keys(next)])].filter(
     (name) => name !== "version",
   ) as AppStateEntry[];
-  const moved = names.filter((name) => sent === undefined || !Equal.equals(sent[name], next[name]));
+  const holders = inboxHoldersPatch(sent?.[LIVE_READ.INBOX_ITEMS], next[LIVE_READ.INBOX_ITEMS]);
+  // Note that the feed's entry is compared by its holders alone where it crosses as them, so its whole is never walked twice.
+  const moved = names.filter(
+    (name) =>
+      (holders === undefined || name !== LIVE_READ.INBOX_ITEMS) &&
+      (sent === undefined || !Equal.equals(sent[name], next[name])),
+  );
   const gone = moved.filter((name) => next[name] === undefined);
-  if (sent !== undefined && moved.length === 0) return undefined;
+  if (sent !== undefined && moved.length === 0 && holders === undefined) return undefined;
   return {
     version: next.version,
     entries: Object.fromEntries(
       moved.filter((name) => next[name] !== undefined).map((name) => [name, next[name]]),
     ),
     ...(gone.length === 0 ? undefined : { gone }),
+    ...(holders === undefined ? undefined : { inboxHolders: holders }),
   };
 }
 
@@ -428,7 +533,16 @@ export function withAppStateDelivery(
       keepIdentity(held[name as AppStateEntry], value),
     ]),
   );
-  const next: AppStateSnapshot = { ...held, ...entries, version: delivery.version };
+  const holders =
+    delivery.inboxHolders === undefined
+      ? undefined
+      : {
+          [LIVE_READ.INBOX_ITEMS]: withInboxHolders(
+            held[LIVE_READ.INBOX_ITEMS],
+            delivery.inboxHolders,
+          ),
+        };
+  const next: AppStateSnapshot = { ...held, ...entries, ...holders, version: delivery.version };
   // Note that an entry gone is held as no key at all, as the document holds it.
   for (const name of delivery.gone ?? []) Reflect.deleteProperty(next, name);
   return next;

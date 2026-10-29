@@ -198,13 +198,8 @@ export const AGENT_INBOX_ACT_KIND = {
    * is none.
    */
   AGENTS_INBOX_FOLLOW: "agents.inboxFollow",
-  /**
-   * Every inbox item the account reaches, followed while the window holds
-   * the stream open: by the plans and agents with no task they are on,
-   * whole as the stream opens and then those that moved, or why there are
-   * none.
-   */
-  AGENTS_ACCOUNT_ITEMS_FOLLOW: "agents.accountItemsFollow",
+  /** Every inbox item the account reaches, which the panel reads on app state, read again at once, as Try again asks. */
+  AGENTS_INBOX_ITEMS_RETRY: "agents.inboxItemsRetry",
   AGENTS_INBOX_ANSWER: "agents.inboxAnswer",
   /** One open item closed without an answer against the revision the panel drew, under the panel's own key. */
   AGENTS_INBOX_CLOSE: "agents.inboxClose",

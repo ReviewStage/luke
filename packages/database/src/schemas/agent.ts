@@ -310,7 +310,7 @@ export const agentTable = pgTable(
      * conversation's lock (`steer.ts`), from another function's connection where the eve apps relay.
      */
     runnerTokenHash: text("runner_token_hash"),
-    /** What the agent is: a coder, or its member's operator; a coder for every row from before the column. */
+    /** What the agent is (`AGENT_KIND`): a coder, a task's pilot, or its member's operator; a coder for every row from before the column. */
     kind: text("kind").$type<AgentKind>().notNull().default(AGENT_KIND.CODER),
     /** Where the agent's runner and checkout live; a Vercel Sandbox for every row from before the column. */
     machine: text("machine").$type<AgentMachineKind>().notNull().default(AGENT_MACHINE.VERCEL),
@@ -341,6 +341,11 @@ export const agentTable = pgTable(
     uniqueIndex("agent_runner_token_hash")
       .on(table.runnerTokenHash)
       .where(sql`${table.runnerTokenHash} is not null`),
+    // A device reads the agents that should still stand on it, those pinned to it and not archived;
+    // a sandbox agent names no device, so it is left out, and no read without a device takes this.
+    index("agent_device_live")
+      .on(table.deviceId)
+      .where(sql`${table.deviceId} is not null and ${table.archivedAt} is null`),
     // A member holds one standing operator per workspace, so two ensures that race make one row.
     uniqueIndex("agent_member_operator")
       .on(table.organizationId, table.userId)

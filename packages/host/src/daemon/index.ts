@@ -7,7 +7,6 @@ export { hostDaemon } from "./host-daemon.js";
 export { enrollHostDevice } from "./host-device.js";
 export {
   DARWIN_HOST,
-  darwinStandaloneLaunchAgentFile,
   type HostRuntime,
   hostArch,
   hostRuntime,

@@ -243,11 +243,7 @@ export function SideInboxTab({
         onClose={closeItem}
       />
       {chosen === undefined ? (
-        <section
-          className={INBOX_VIEW_ITEMS}
-          aria-label="Inbox"
-          hidden={columns.shown !== INBOX_COLUMNS.BOTH}
-        >
+        <section className={INBOX_VIEW_ITEMS} hidden={columns.shown !== INBOX_COLUMNS.BOTH}>
           {/* The empty pane keeps a bar the list's head's height, as the window's Inbox does. */}
           <Toolbar />
           {/* Note that the list says what its tab or its search left out, so the pane beside it stands bare. */}

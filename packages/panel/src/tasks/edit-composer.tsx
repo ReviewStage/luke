@@ -229,6 +229,7 @@ export function EditComposer({
         published={undefined}
         doors={edit.doors}
         onStop={() => Promise.resolve(false)}
+        followsUp
         keywords={edit.keywords}
         skills={edit.skills}
         sendable={!line.reading}

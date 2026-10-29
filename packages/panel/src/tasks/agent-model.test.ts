@@ -14,6 +14,7 @@ import {
 import { FAILURE_REASON, remedyLabel } from "@luke/features/failure-remedy";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
+import { TASK_MODE } from "@luke/features/task-wire";
 import { dayAndTimeText } from "@luke/features/time-format";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
@@ -37,7 +38,9 @@ import {
   messageWords,
   modelLabel,
   offeredModels,
+  offersContinue,
   openingLineOf,
+  pilotTarget,
   placedMessages,
   planPayerOf,
   publishedUrl,
@@ -50,10 +53,12 @@ import {
   sidebarCallIds,
   startedAgentOf,
   startFailureNote,
+  startsOwnAgents,
   transcriptRowKey,
   unreadOpeningLine,
   unreadSentLines,
 } from "./agent-model.js";
+import { TOOL_TARGET } from "./tool-call-model.js";
 
 test("a model is named by the catalog where it has been read, else by its own id made readable, either way without Claude before its name", () => {
   const models = [
@@ -753,6 +758,16 @@ test("a message to an agent whose device is away says it is offline, in the word
   );
 });
 
+test("a message Luke heard nothing back on says to try again in the Inbox, which draws no Retry, and its words alone beside the composer's Retry", () => {
+  assert.deepEqual(
+    [
+      messageFailureWords(AGENT_CALL_FAILURE.UNANSWERED),
+      messageFailureNote({ failure: AGENT_CALL_FAILURE.UNANSWERED }, null).text,
+    ],
+    ["Luke didn't hear back. Try again.", "Luke didn't hear back."],
+  );
+});
+
 test("a Start another member's device refused names the device and its owner and offers no way out the reader cannot take, and says the same, unnamed, where the service named neither", () => {
   const refused = (refusedDevice?: { name: string; owner?: string }) =>
     startFailureNote(
@@ -861,4 +876,41 @@ test("a message to a teammate's agent its starter's own key refused names the st
       },
     ],
   );
+});
+
+test("a pilot task offers no agent of the developer's own and Continue on its pilot alone, where any other task offers both", () => {
+  const pilot = { pilot: true } as const;
+  const coder = {};
+
+  assert.deepEqual(
+    [TASK_MODE.PILOT, TASK_MODE.AGENT, undefined].map((mode) => ({
+      newAgent: startsOwnAgents(mode),
+      continuesPilot: offersContinue(mode, pilot),
+      continuesCoder: offersContinue(mode, coder),
+    })),
+    [
+      { newAgent: false, continuesPilot: true, continuesCoder: false },
+      { newAgent: true, continuesPilot: true, continuesCoder: true },
+      { newAgent: true, continuesPilot: true, continuesCoder: true },
+    ],
+  );
+});
+
+test("only an agent no pilot started keeps its composer, and the note on one a pilot started opens the pilot's tab on its own task, else its tab on the pilot's task", () => {
+  const pilot = {
+    agentId: "pilot",
+    taskId: "invitations",
+    title: "Invitations pilot",
+    model: "anthropic/claude-opus-5.5",
+  };
+  const topPilot = { planId: "invitations" };
+  const coderUnderPilot = { planId: "invitations", startedByPilot: pilot };
+  const subPilot = { planId: "invitation-emails", startedByPilot: pilot };
+  const coderOnPlainTask = { planId: "billing" };
+  assert.deepEqual([topPilot, coderUnderPilot, subPilot, coderOnPlainTask].map(pilotTarget), [
+    undefined,
+    { kind: TOOL_TARGET.AGENT, agent: "pilot" },
+    { kind: TOOL_TARGET.TASK, task: "invitations", agent: "pilot" },
+    undefined,
+  ]);
 });

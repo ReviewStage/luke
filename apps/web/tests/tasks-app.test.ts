@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { PLAN_REVISION } from "@luke/database/models/plan-revisions";
 import { createTask, readTask } from "@luke/database/models/task-store";
@@ -26,6 +27,7 @@ import {
   planRevisionsAnswerSchema,
   TASK_BOUNDS,
   TASK_FILE_REFUSAL,
+  TASK_MODE,
   TASK_PRIORITY,
   TASK_STATUS,
   taskAnswerSchema,
@@ -70,6 +72,7 @@ import {
 } from "@luke/service/testing/plan-documents";
 import { keepAwakeDetached } from "@luke/service/testing/session-sandboxes-fake";
 import { added } from "@luke/service/testing/task-contents";
+import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq, sql } from "drizzle-orm";
@@ -490,6 +493,33 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual(
           overlong,
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
+  );
+
+  it.effect(
+    "a pilot task is refused to an account without the Pilot experiment, and kept as one with it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const startPilot = () =>
+          ask(request(TASKS, owner, { method: "POST", body: { ...RELAY, mode: TASK_MODE.PILOT } }));
+
+        const refused = yield* startPilot();
+        yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.PILOT]: true } });
+        const started = yield* startPilot();
+
+        assert.deepEqual(
+          refused,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        const listed = yield* ask(request(TASKS, owner));
+        assert.deepEqual(
+          readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((task) => [
+            task.id,
+            task.mode,
+          ]),
+          [[startedId(started), TASK_MODE.PILOT]],
         );
       }),
   );

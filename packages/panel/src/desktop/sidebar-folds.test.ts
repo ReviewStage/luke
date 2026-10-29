@@ -234,3 +234,43 @@ test("the Inbox row counts what waits on a plan and what waits from an agent wit
   );
   assert.match(inbox?.textContent ?? "", /^Inbox2 /u);
 });
+
+test("a child task stands under its parent, folded until the parent's chevron opens it, to any depth, and stays opened across launches", () => {
+  const listed = (id: string, updatedAt: number, parentTaskId?: string): TaskSummary => ({
+    ...task(id, id, "acme/relay"),
+    updatedAt,
+    ...(parentTaskId === undefined ? undefined : { parentTaskId }),
+  });
+  const tasks = tasksControl({
+    tasks: [
+      listed("Parent", 40),
+      listed("Other", 30),
+      listed("Child", 20, "Parent"),
+      listed("Grandchild", 10, "Child"),
+    ],
+  });
+  const names = (within: HTMLElement) =>
+    [...within.querySelectorAll('nav[aria-label="Tasks"] .luke-list-row-title')].map(
+      (title) => title.firstChild?.textContent,
+    );
+  const chevron = (within: HTMLElement, name: string) => {
+    const found = within.querySelector<HTMLButtonElement>(
+      `button[aria-label="Child tasks of ${name}"]`,
+    );
+    assert.ok(found, `${name}'s fold is drawn`);
+    return found;
+  };
+  const sidebar = mountSidebar(tasks);
+  assert.deepEqual(names(sidebar), ["Parent", "Other"]);
+  assert.equal(chevron(sidebar, "Parent").getAttribute("aria-expanded"), "false");
+
+  act(() => chevron(sidebar, "Parent").click());
+  assert.deepEqual(names(sidebar), ["Parent", "Child", "Other"]);
+  act(() => chevron(sidebar, "Child").click());
+  assert.deepEqual(names(sidebar), ["Parent", "Child", "Grandchild", "Other"]);
+
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  assert.deepEqual(names(mountSidebar(tasks)), ["Parent", "Child", "Grandchild", "Other"]);
+});

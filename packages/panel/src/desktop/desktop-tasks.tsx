@@ -35,7 +35,7 @@ import { FindScope } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { agentActor, agentName, type SentLine } from "../tasks/agent-model.js";
+import { agentActor, agentName, type SentLine, startsOwnAgents } from "../tasks/agent-model.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
@@ -68,6 +68,7 @@ import { DesktopWelcome } from "./desktop-welcome.js";
 import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
 import { PhoneBack, PhoneHead, PlaceMore, phoneBar } from "./phone-head.js";
 import { PlanAgents } from "./plan-agents.js";
+import { PlanBreakdown } from "./plan-breakdown.js";
 import { type InboxItemAsk, SideInboxTab } from "./side-inbox-tab.js";
 import {
   COLUMN,
@@ -574,7 +575,9 @@ function PlanDocument({
       case TOOL_TARGET.PAGE:
         return sidePanel.onPreview({ page: target.page });
       case TOOL_TARGET.TASK:
-        return tasks.onShowTask(target.task);
+        return target.agent === undefined
+          ? tasks.onShowTask(target.task)
+          : tasks.onShowAgent(target.task, target.agent);
     }
   };
   // A delegation's row in an agent's transcript opens its worker in the side
@@ -779,17 +782,43 @@ function PlanDocument({
       pullRequestCardDoor,
     ],
   );
-  // The task's agents head its plan, a row opening its agent in this column as its tab does.
+  // The task's agents head its plan, a row opening its agent in this column
+  // as its tab does, under a pilot's breakdown where one waits for the go.
+  const { tasks: allTasks } = tasks;
+  const openTask = useSteadyDoor(tasks.onSelect);
   const planAgents = useMemo(
     () => (
-      <PlanAgents
-        agents={agents}
-        held={views.held}
-        main={{ tab, onChoose: openAgentTab }}
-        onOpenPullRequest={openPullRequestDoor}
-      />
+      <>
+        {opened === undefined || workspace === undefined ? null : (
+          <PlanBreakdown
+            task={opened}
+            tasks={allTasks}
+            agents={agents}
+            place={{ workspace, repository: opened.repository }}
+            workspaceName={workspaceName}
+            onOpenTask={openTask}
+          />
+        )}
+        <PlanAgents
+          agents={agents}
+          held={views.held}
+          main={{ tab, onChoose: openAgentTab }}
+          onOpenPullRequest={openPullRequestDoor}
+        />
+      </>
     ),
-    [agents, views.held, tab, openAgentTab, openPullRequestDoor],
+    [
+      opened,
+      workspace,
+      allTasks,
+      workspaceName,
+      openTask,
+      agents,
+      views.held,
+      tab,
+      openAgentTab,
+      openPullRequestDoor,
+    ],
   );
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
@@ -917,8 +946,10 @@ function PlanDocument({
   }
   const { task } = region;
   const listed = listedOpen ?? task;
-  // The column has a tab on its way: the agents are still read, or, read, a draft opens in the task's empty column.
-  const columnComing = agents.agents === undefined ? !agents.listFailed : true;
+  // The column has a tab on its way: the agents are still read, or, read, a draft opens in the task's
+  // empty column, which a pilot task's never does (`startsOwnAgents`).
+  const columnComing =
+    agents.agents === undefined ? !agents.listFailed : startsOwnAgents(agents.mode);
   // The panel holds the keys while the focus went into it last, or while it
   // fills the window over this column; shut, it hands them back.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);

@@ -10,7 +10,6 @@ import {
 import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
-  type AgentAccountItems,
   type AgentAgentAnswer,
   type AgentArchiveParams,
   type AgentChangesAnswerView,
@@ -71,7 +70,6 @@ import {
   type AgentTranscriptOlderParams,
   type AgentWorkspaceListParams,
   agentAccountInboxAnswerViewSchema,
-  agentAccountItemsSchema,
   agentAgentAnswerSchema,
   agentChangesAnswerViewSchema,
   agentDefaultAnswerViewSchema,
@@ -233,6 +231,7 @@ import {
   chaptersModelAnswerViewSchema,
   type PullRequestChaptersAnswerView,
   type PullRequestChaptersParams,
+  type PullRequestChaptersReadParams,
   pullRequestChaptersAnswerViewSchema,
 } from "@luke/features/pull-request-chapters-view";
 import {
@@ -396,7 +395,7 @@ import {
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
 import { Base64 } from "effect/encoding";
-import type { AppAccessSlice } from "./app-state.js";
+import type { AppAccessSlice, AppHostRead, AppInboxItems } from "./app-state.js";
 import { type ThisMacHostStanding, thisMacHostStandingSchema } from "./contract/this-mac-host.js";
 import {
   type MacCommandAnswer,
@@ -744,9 +743,9 @@ export interface HostOperator {
   onAutomationsChanged(listener: (followed: AutomationFollowed) => void): () => void;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
-  /** The workspace's newest chapters of one agent's pull request, with its head as GitHub holds it; or why there are none. */
+  /** The workspace's newest chapters of one agent's pull request by its number; or why there are none. */
   pullRequestChapters(
-    params: PullRequestChaptersParams,
+    params: PullRequestChaptersReadParams,
   ): Effect.Effect<PullRequestChaptersAnswerView>;
   /** One agent's pull request's chapters generated for its head, or the generation already under way; the chapters as they then stand, or why there are none. */
   pullRequestChaptersGenerate(
@@ -864,12 +863,10 @@ export interface HostOperator {
   agentAccountInboxUnfollow(): Effect.Effect<void>;
   /** What waits across the followed account, or why there is none, each time it moves. */
   onAccountInboxChanged(listener: (answer: AgentAccountInboxAnswerView) => void): () => void;
-  /** Every inbox item the account reaches, followed from now until let go or signed out, heard through `onAccountItemsChanged`; following again starts over, told whole. */
-  agentAccountItemsFollow(): Effect.Effect<void>;
-  /** The account's items let go: nothing more is heard of them until they are followed again. */
-  agentAccountItemsUnfollow(): Effect.Effect<void>;
-  /** The followed account's items, whole as the follow starts and then by the plans and agents that moved, or why there are none, each time they move. */
-  onAccountItemsChanged(listener: (told: AgentAccountItems) => void): () => void;
+  /** Every inbox item the account reaches read again at once, as Try again asks. */
+  agentInboxItemsRetry(): Effect.Effect<void>;
+  /** Every inbox item the account reaches, whole, each time the host's read of them for the session moves. */
+  onInboxItemsChanged(listener: (read: AppHostRead<AppInboxItems>) => void): () => void;
   /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
   /** One agent's, worker's, or planning worker's transcript, followed from now until let go or signed out, its pages heard through `onTranscriptChanged`; following again starts over. */
   transcriptFollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
@@ -1947,7 +1944,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     pullRequestChapters: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS, pullRequestChaptersRead(params)),
+        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS, {
+          agentId: params.agentId,
+          number: params.number,
+        }),
         answerOf(pullRequestChaptersAnswerViewSchema, AGENT_UNANSWERED),
       ),
     pullRequestChaptersGenerate: (params) =>
@@ -2226,17 +2226,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ),
         listener,
       ),
-    agentAccountItemsFollow: () =>
-      fire(client.call(GATEWAY_METHOD.AGENTS_ACCOUNT_ITEMS_FOLLOW, {})),
-    agentAccountItemsUnfollow: () =>
-      fire(client.call(GATEWAY_METHOD.AGENTS_ACCOUNT_ITEMS_UNFOLLOW, {})),
-    onAccountItemsChanged: (listener) =>
+    agentInboxItemsRetry: () => fire(client.call(GATEWAY_METHOD.AGENTS_INBOX_ITEMS_RETRY, {})),
+    onInboxItemsChanged: (listener) =>
       on(
-        GATEWAY_EVENT.ACCOUNT_ITEMS_CHANGED,
+        GATEWAY_EVENT.INBOX_ITEMS_CHANGED,
+        // Note that the read is the host's own, handed over in this process, so it is passed on as built, as the tasks are.
         (payload) =>
-          Result.getOrUndefined(
-            readEither(agentAccountItemsSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
+          isRecord(payload) ? answered<AppHostRead<AppInboxItems>>(payload) : undefined,
         listener,
       ),
     transcriptFollow: (transcript) =>

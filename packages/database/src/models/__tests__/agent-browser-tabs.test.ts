@@ -425,7 +425,7 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
       const [loose] = yield* Database.use((db) =>
         db
           .insert(conversations)
-          .values({ userId: starter, kind: CONVERSATION_KIND.CODING_AGENT })
+          .values({ userId: starter, kind: CONVERSATION_KIND.AGENT })
           .returning({ id: conversations.id }),
       );
       assert.ok(loose);

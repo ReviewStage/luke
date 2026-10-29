@@ -166,8 +166,12 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import {
+  MERGE_POLICY,
+  type MergePolicy,
   TASK_LIST_ARCHIVED,
+  TASK_MODE,
   TASK_STATUS,
+  taskAnswerSchema,
   taskDeleteAnswerSchema,
   taskListAnswerSchema,
   taskStartAnswerSchema,
@@ -228,6 +232,7 @@ import { answerInboxAsk, closeInboxItem, postInboxThread } from "../inbox/inbox-
 import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import type { WebServices } from "../runtime.js";
+import { MERGE_POLICY_NOTICE } from "../tasks/merge-policy-notice.js";
 import { tasksProcedures } from "../tasks/tasks-procedures.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
@@ -4634,6 +4639,43 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         assert.equal(archived.status, HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(yield* Queue.poll(sandboxes.stops), Option.none());
+      }),
+  );
+
+  it.effect(
+    "a merge-policy switch is refused on a task that is no pilot tree's top, and on a top pilot task is written and told to its pilot in the member's words, once per move",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, task, agent, sessionId, ask } = yield* startedAgent(eve, {
+          running: false,
+        });
+        const switched = (mergePolicy: MergePolicy) =>
+          ask(request(TASK(task.id), owner, { method: "PATCH", body: { mergePolicy } }));
+        assert.equal((yield* switched(MERGE_POLICY.HOLD)).status, HOSTED_HTTP_STATUS.BAD_REQUEST);
+        yield* Database.use((db) =>
+          db.update(taskTable).set({ mode: TASK_MODE.PILOT }).where(eq(taskTable.id, task.id)),
+        );
+        yield* Database.use((db) =>
+          db.update(agentTable).set({ kind: AGENT_KIND.PILOT }).where(eq(agentTable.id, agent.id)),
+        );
+        const sends = eve.sent.length;
+
+        const held = yield* switched(MERGE_POLICY.HOLD);
+        assert.equal(held.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(held.body));
+        assert.equal(
+          readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.OK, held).plan.mergePolicy,
+          MERGE_POLICY.HOLD,
+        );
+        assert.deepEqual(
+          eve.sent
+            .slice(sends)
+            .map((each) => [each.authorization, each.sessionId, each.message.message]),
+          [[`Bearer ${owner}`, sessionId, MERGE_POLICY_NOTICE[MERGE_POLICY.HOLD]]],
+        );
+        // The same switch again moves nothing, so the pilot hears nothing more.
+        yield* switched(MERGE_POLICY.HOLD);
+        assert.equal(eve.sent.length, sends + 1);
       }),
   );
 
@@ -9050,29 +9092,83 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       }),
   );
 
-  it.effect("a source eve refuses to stop still has its continue started, and runs on", () =>
-    Effect.gen(function* () {
-      const eve = fakeEve({ cancels: false });
-      const { owner, task, ask, source, stored } = yield* sourceAgentOn(undefined, eve);
-      const sessionId = yield* sourceRunning(stored, eve);
+  it.effect(
+    "a continue of a pilot is a pilot that the agents its source started now report to, its source archived, and a fork of it takes over nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, source, stored, firstTurn } = yield* sourceAgent;
+        // Note that no Start makes a pilot yet, so the source is made one in place.
+        yield* Database.use((db) =>
+          db.update(agentTable).set({ kind: AGENT_KIND.PILOT }).where(eq(agentTable.id, source.id)),
+        );
+        const coder = Option.getOrThrow(
+          yield* createAgent(owner, {
+            taskId: task.id,
+            planSnapshot: "# Invite by link",
+            prompt: null,
+            idempotencyKey: randomUUID(),
+            model: SOL,
+            effort: "low",
+            repository: stored.repository,
+            startedByAgentId: source.id,
+          }),
+        ).agent;
+        const startFrom = (from: { agentId: string; messageId?: string }) =>
+          Effect.map(
+            ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from })),
+            (answered) => readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+          );
+        const stands = (agentId: string) =>
+          Effect.map(readAgent(owner, agentId), (read) => Option.getOrThrow(read));
 
-      const started = readAnswer(
-        agentAnswerSchema,
-        HOSTED_HTTP_STATUS.CREATED,
-        yield* ask(
-          startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
-        ),
-      ).agent;
+        yield* startFrom({ agentId: source.id, messageId: firstTurn });
+        assert.equal(
+          (yield* stands(coder.id)).startedByAgentId,
+          source.id,
+          "a fork takes over nothing",
+        );
 
-      assert.deepEqual(started.from?.agentId, source.id);
-      assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
-      const page = readAnswer(
-        agentPageAnswerSchema,
-        HOSTED_HTTP_STATUS.OK,
-        yield* ask(request(AGENT, owner, { id: source.id })),
-      ).agent;
-      assert.equal(page.status, AGENT_STATUS.RUNNING);
-    }),
+        const continued = yield* startFrom({ agentId: source.id });
+        assert.deepEqual(
+          [
+            (yield* stands(continued.id)).kind,
+            (yield* stands(coder.id)).startedByAgentId,
+            (yield* stands(source.id)).archivedAt !== null,
+          ],
+          [AGENT_KIND.PILOT, continued.id, true],
+        );
+      }),
+  );
+
+  it.effect(
+    "a source eve refuses to stop still has its continue started, and runs on, a pilot unarchived",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve({ cancels: false });
+        const { owner, task, ask, source, stored } = yield* sourceAgentOn(undefined, eve);
+        const sessionId = yield* sourceRunning(stored, eve);
+        yield* Database.use((db) =>
+          db.update(agentTable).set({ kind: AGENT_KIND.PILOT }).where(eq(agentTable.id, source.id)),
+        );
+
+        const started = readAnswer(
+          agentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+          ),
+        ).agent;
+
+        assert.deepEqual(started.from?.agentId, source.id);
+        assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+        const page = readAnswer(
+          agentPageAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT, owner, { id: source.id })),
+        ).agent;
+        assert.equal(page.status, AGENT_STATUS.RUNNING);
+        assert.equal(Option.getOrThrow(yield* readAgent(owner, source.id)).archivedAt, null);
+      }),
   );
 
   it.effect(

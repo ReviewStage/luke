@@ -65,6 +65,8 @@ import { releaseFollowerLock, renewFollowerLock, takeFollowerLock } from "./foll
 import type { HostKernel } from "./host-kernel.js";
 import { answeredLocalAgentRequest } from "./local-agent-requests.js";
 import {
+  forgetOwnedAgent,
+  keepOwnedAgent,
   type LocalAgentState,
   localAgentDeviceOf,
   readLocalAgentState,
@@ -117,7 +119,11 @@ import type { RunMode } from "./run-mode.js";
  * unless the platform's check of the worktree finds work there that is
  * nowhere else (a Mac's does, a host's names none); a line of a kind it
  * does not know is settled untouched. A launch whose repository or VM could
- * not be made is settled as not started, and the runner never starts.
+ * not be made is settled as not started, and the runner never starts. A
+ * launch or files line keeps the agent as one whose folder and VM this
+ * machine made (`keepOwnedAgent`), and a discard that removes the folder
+ * forgets it, so an uninstall removes this machine's agents and no other
+ * Luke install's beside it.
  *
  * The VM (`LocalAgentPlatformSeam.sandbox`) is made and started before the
  * runner starts in it; the runner is signalled in it before its command is
@@ -793,6 +799,8 @@ export function composeLocalAgents(
             if (platform.formerlyDirect && Option.isNone(ran)) {
               yield* keepMode(agentId, DEVICE_ISOLATION.SANDBOX);
             }
+            // Note that the agent is kept as this machine's before its folder or VM is made, so an uninstall finds whatever a launch cut off left.
+            yield* keepOwnedAgent(kernel.stateRoot, agentId);
             // Note that the token is had before the repository is made, since the device's git reads it too, through the sandbox's helper.
             const hadToken = withRepository && (yield* gaveGithubToken(agentId));
             const made = yield* madeWorktree(
@@ -998,20 +1006,22 @@ export function composeLocalAgents(
             const vm = yield* vmOf(agentId, layout.checkoutPath);
             const unsaved = yield* unsavedWork(agentId, layout, vm);
             // Note that the VM goes before the folder, so nothing in it is still writing there as it is removed, and a command's hold outlasting it stops nothing.
-            if (vm !== undefined) {
-              yield* vmLockOf(agentId).withPermit(
+            const vmGone =
+              vm === undefined ||
+              (yield* vmLockOf(agentId).withPermit(
                 Effect.andThen(
                   Effect.sync(() => vmHolds.delete(agentId)),
                   vm.deleted(agentId),
                 ),
-              );
-            }
+              ));
             if (Option.isSome(unsaved)) {
               return yield* Effect.sync(() =>
                 report(`a local agent's folder was kept, since ${unsaved.value}`),
               );
             }
             yield* fileSystem.remove(layout.folder, { recursive: true, force: true });
+            // Note that a VM left standing keeps the agent in the record, so an uninstall deletes it yet.
+            if (vmGone) yield* forgetOwnedAgent(kernel.stateRoot, agentId);
             // Note that a folder kept keeps its record too, so the agent, launched again, runs the way it ran.
             if ((yield* Ref.get(state)).modes?.[agentId] !== undefined) yield* forgetMode(agentId);
           }).pipe(
@@ -1025,6 +1035,7 @@ export function composeLocalAgents(
           Effect.gen(function* () {
             const files = decodeFiles(payload);
             if (Option.isNone(files)) return;
+            yield* keepOwnedAgent(kernel.stateRoot, agentId);
             const layout = deviceAgentLayout(folder, agentId);
             for (const file of files.value.files) {
               const target = path.normalize(file.path);

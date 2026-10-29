@@ -32,6 +32,7 @@ import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
 } from "@luke/features/pull-request-chapters-view";
+import type { TaskMode } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
 import { STATUS_TONE } from "@luke/ui";
@@ -216,6 +217,8 @@ export interface AgentsControl {
   readModels: () => void;
   /** Reads the account's default now, for a menu opening or the Settings page. */
   readDefault: () => Promise<AgentDefaultAnswer>;
+  /** How the open task is worked, which says what its members start of their own (`startsOwnAgents`); none where no task is open, or before the task list names it. */
+  mode: TaskMode | undefined;
   /** The open task's draft agent; nothing while it has none. */
   draft: AgentDraft | undefined;
   /** Opens a draft agent on the open task, or answers the one it has, by its key. */
@@ -364,13 +367,13 @@ export interface AgentsControl {
   /** One read of an agent's changes, its pull request's files, as its Changes tab asks it, or of the pull request of its repository by the number given (`pull-request-number.ts`); who its own names kept in `changesPeople`. */
   readChanges: (agentId: string, number?: number) => Promise<AgentChangesAnswerView>;
   /**
-   * One read of a pull request's chapters, as its Chapters tab asks it: the
-   * agent's own pull request, or the one of its repository by the number
-   * given (`pull-request-number.ts`). Answers its head now, whether chapters
-   * can be generated, and the workspace's newest chapters, whatever head they
-   * were made for; or why there are none, a port that refused included.
+   * One read of a pull request's chapters, as its Chapters tab asks it, by
+   * the number its own read of the pull request found. Answers whether
+   * chapters can be generated, and the workspace's newest chapters, whatever
+   * head they were made for; or why there are none, a port that refused
+   * included.
    */
-  readChapters: (agentId: string, number?: number) => Promise<PullRequestChaptersAnswerView>;
+  readChapters: (agentId: string, number: number) => Promise<PullRequestChaptersAnswerView>;
   /**
    * The same pull request's chapters generated for its head now, or the
    * generation already under way; answers once the generation lands, which
@@ -642,6 +645,8 @@ export function useAgents(input: {
   agentId?: string | undefined;
   /** The open task's repository, or null while it names none. */
   repository: string | null;
+  /** How the open task is worked; none where no task is open, or before the task list names it. */
+  mode?: TaskMode | undefined;
   /**
    * Every agent the task list followed live carries, on a task or with
    * none, the archived ones among them; none where it is not followed, or
@@ -1426,7 +1431,7 @@ export function useAgents(input: {
 
   const readChapters = useCallback<AgentsControl["readChapters"]>(
     (agentId, number) =>
-      act(ACT_KIND.CHAPTERS_READ, pullRequestAsked(agentId, number)).catch(
+      act(ACT_KIND.CHAPTERS_READ, { agentId, number }).catch(
         (): PullRequestChaptersAnswerView => CHAPTERS_UNANSWERED,
       ),
     [act],
@@ -1527,6 +1532,7 @@ export function useAgents(input: {
     origin: ours(list) ? list.origin : undefined,
     agentIds,
     heldIds: standing?.map((agent) => agent.id),
+    mode: taskId === undefined ? undefined : input.mode,
     draft,
     onNewDraft,
     onForkDraft,

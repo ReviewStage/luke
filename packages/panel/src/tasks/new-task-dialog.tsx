@@ -31,6 +31,10 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * composer, and Start can be pressed again; a task started closes the card
  * and opens as the host's open task.
  *
+ * A task's menu and ⌘K's New child task open this same card for a child of
+ * that task (New task's preset's `parent`), started in the parent's
+ * workspace rather than the one listed.
+ *
  * The Automations page's Create with an agent opens this same card for the
  * agent that makes an automation (New task's preset's `purpose`), so it is
  * asked as New task asks.
@@ -60,7 +64,10 @@ function NewTaskCard({
   const [starting, setStarting] = useState(false);
   // The Automations page's Create with an agent opens this card for an automation's agent, and a refusal opens it again for the same.
   const purpose = newTask.preset?.purpose ?? NEW_TASK_PURPOSE.TASK;
-  const holding = useNewTaskHolding(newTask.workspaceId, purpose);
+  // New child task opens it under a task, whose workspace the child starts in.
+  const parent = newTask.preset?.parent;
+  const workspaceId = parent?.workspaceId ?? newTask.workspaceId;
+  const holding = useNewTaskHolding(workspaceId, purpose);
   const dialog = useRef<DialogHandle>(null);
   const titleId = useId();
   const body = useRef<HTMLDivElement>(null);
@@ -96,7 +103,8 @@ function NewTaskCard({
       <div className="new-task ph-no-capture flex min-h-0 flex-col gap-block-gap" ref={body}>
         <NewTaskComposer
           newTask={newTask}
-          workspaceId={newTask.workspaceId}
+          workspaceId={workspaceId}
+          parent={parent}
           onStarting={setStarting}
           // Note that the field's Escape goes through the dialog, so a draft holds it back as it holds the card's own.
           onLeave={() => dialog.current?.dismiss()}

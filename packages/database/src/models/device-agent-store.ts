@@ -628,6 +628,25 @@ const findOpenLaunches = SqlSchema.findAll({
     ),
 });
 
+const findLiveAgents = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, deviceId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, deviceId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: agentTable.id })
+        .from(agentTable)
+        .where(
+          and(
+            eq(agentTable.userId, userId),
+            eq(agentTable.deviceId, deviceId),
+            isNull(agentTable.archivedAt),
+          ),
+        )
+        .orderBy(asc(agentTable.createdAt), asc(agentTable.id)),
+    ),
+});
+
 /** A launch line whose device's lease lapsed, with the device's name for the words its turn ends with. */
 const LapsedLaunchSchema = Schema.Struct({
   id: Schema.String,
@@ -860,6 +879,19 @@ export function openDeviceAgentLaunches(
   deviceId: string,
 ): DeviceAgentEffect<readonly string[]> {
   return Effect.map(findOpenLaunches({ userId, deviceId }), (rows) => rows.map((row) => row.id));
+}
+
+/**
+ * The ids of the account's agents pinned to its device given and not
+ * archived, oldest first: what should still stand on that device, whatever
+ * its task's status. A deleted task's agents are gone with it, so none is
+ * named; none for another account's device.
+ */
+export function liveDeviceAgents(
+  userId: string,
+  deviceId: string,
+): DeviceAgentEffect<readonly string[]> {
+  return Effect.map(findLiveAgents({ userId, deviceId }), (rows) => rows.map((row) => row.id));
 }
 
 /**

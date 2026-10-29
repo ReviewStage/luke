@@ -3,21 +3,24 @@
  *
  * Both procedures resolve the caller first, then the agent its path names,
  * one of a workspace the caller's account is a member of: an agent of any
- * other workspace answers exactly as one that names nothing. Each is about
- * the pull request a Files changed read of the same tab is about: the one
- * the agent published, from the instance's kept answers, or the one of its
- * repository the `number` query names (`askedPullRequest`). GitHub is then
- * read on a token minted for the agent's repository on its workspace's
- * installation, which confirms the workspace still reaches it, and the
- * chapters are those its workspace keeps for that repository and number
- * (`pull-request-chapters-store.ts`), which checks the workspace alone:
- * these two reads are what hold a reader to a pull request they may see.
+ * other workspace answers exactly as one that names nothing. A token minted
+ * for the agent's repository on its workspace's installation confirms the
+ * workspace still reaches it, and the chapters are those its workspace keeps
+ * for that repository and number (`pull-request-chapters-store.ts`), which
+ * checks the workspace alone: these two are what hold a reader to a pull
+ * request they may see.
  *
- * The read (`GET /api/agents/{id}/chapters`) answers the pull request's head
- * as GitHub holds it now beside the workspace's newest chapters for it,
- * whatever head they were made for, so the panel draws chapters of an older
- * head as stale. The Generate (`POST /api/agents/{id}/chapters`) reads the
- * pull request's files, title, description, and commit messages, claims the
+ * The read (`GET /api/agents/{id}/chapters`) names the number the tab's own
+ * read of the pull request found and answers the workspace's newest chapters
+ * for it, whatever head they were made for, asking GitHub for nothing but
+ * that token, which the instance keeps; the panel holds their head against
+ * its own to draw them stale. A number the repository holds no pull request
+ * at answers as one with no chapters. The Generate
+ * (`POST /api/agents/{id}/chapters`) is about the pull request a Files
+ * changed read of the same tab is about: the one the agent published, from
+ * the instance's kept answers, or the one of its repository the `number`
+ * query names (`askedPullRequest`). It reads the pull request's files,
+ * title, description, and commit messages, claims the
  * generation for its head, and tells the chapters in one model call on
  * the API key the member who pressed it saved, never Luke's
  * (`chapters-generator.ts`), on the Claude model they chose in Settings
@@ -136,6 +139,12 @@ interface ChaptersSubject {
   readonly pullRequest: GitHubPullRequest;
 }
 
+/** What a pull request's chapters are kept under: the agent's repository, and its workspace. */
+interface ChaptersOf {
+  readonly agent: WithRepository<Agent>;
+  readonly organizationId: string;
+}
+
 /** The pull request the tab asks about, read afresh on the agent's repository token, with the workspace its chapters are kept under. */
 const subjectOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   published: Effect.Effect<PublishedCache>,
@@ -163,6 +172,20 @@ const subjectOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     token,
     pullRequest,
   }));
+});
+
+/** The workspace the agent's chapters are kept under, once a token minted for its repository confirms the workspace still reaches it; none for an agent with no repository. */
+const keptUnder = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  agent: Agent,
+): Effect.fn.Return<Option.Option<ChaptersOf>, HostedRefusal, ChaptersServices> {
+  if (!hasRepository(agent)) return Option.none();
+  const workspace = yield* githubReadRefusal(
+    Effect.andThen(agentPullRequestReach(userId, agent), agentWorkspace(userId, agent)),
+  );
+  // The token was just minted through this workspace, so none here is a workspace left between two reads.
+  if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+  return Option.some({ agent, organizationId: workspace.value });
 });
 
 /** The stored row as the wire's state of the chapters. */
@@ -199,19 +222,18 @@ const stateOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
 });
 
-/** The answer both procedures give: the pull request's head now, whether this deployment generates chapters, and the workspace's newest chapters for it. */
+/** The answer both procedures give: whether this deployment generates chapters, and the workspace's newest chapters for the pull request. */
 const answerOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  subject: ChaptersSubject,
+  of: ChaptersOf,
+  number: number,
   generatable: boolean,
 ): Effect.fn.Return<PullRequestChaptersAnswer, HostedRefusal, DatabaseServices> {
-  const { organizationId, agent, pullRequest } = subject;
   const row = yield* hostedStoreOrUnavailable(
-    latestPullRequestChapters(organizationId, agent.repository, pullRequest.number),
+    latestPullRequestChapters(of.organizationId, of.agent.repository, number),
   );
   return {
     pullRequest: {
-      number: pullRequest.number,
-      headSha: pullRequest.headSha,
+      number,
       generatable,
       chapters: yield* stateOf(row),
     },
@@ -371,11 +393,16 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
   return {
     read: signedIn.read.effect(function* ({ input, context }) {
       const agent = yield* reachedAgent(context.userId, input.id);
-      const subject = yield* subjectOf(published, context.userId, agent, input.number);
-      if (Option.isNone(subject)) return { pullRequest: null };
+      const number = yield* pullRequestNumberOf([input.number]);
+      // One number named always reads as one or is refused.
+      if (number === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       // Whether the reader can generate at all, on a key of their own, which their choice of model never changes.
-      const model = yield* modelOf(seams, context.userId, CHAPTERS_MODEL_DEFAULT);
-      return yield* answerOf(subject.value, model !== undefined);
+      const [kept, model] = yield* Effect.all(
+        [keptUnder(context.userId, agent), modelOf(seams, context.userId, CHAPTERS_MODEL_DEFAULT)],
+        { concurrency: "unbounded" },
+      );
+      if (Option.isNone(kept)) return { pullRequest: null };
+      return yield* answerOf(kept.value, number, model !== undefined);
     }),
 
     generate: signedIn.generate.effect(function* ({ input, context }) {
@@ -391,7 +418,9 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
         return yield* Effect.fail(HOSTED_REFUSAL.GITHUB_UNANSWERED);
       }
       // A generation another request holds for this head answers as it stands, before GitHub is asked for a diff this request will not use.
-      if (yield* generatingNow(subject.value)) return yield* answerOf(subject.value, true);
+      if (yield* generatingNow(subject.value)) {
+        return yield* answerOf(subject.value, pullRequest.number, true);
+      }
       const read = yield* generationInput(subject.value);
       // The files are read by the pull request's number, so a push between the two reads would tell another head's diff under this one: the head is read again, and a moved one is answered as it now stands, to be generated on its own.
       const after = yield* githubReadRefusal(
@@ -399,7 +428,7 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
       );
       if (Option.isNone(after)) return { pullRequest: null };
       if (after.value.headSha !== pullRequest.headSha) {
-        return yield* answerOf({ ...subject.value, pullRequest: after.value }, true);
+        return yield* answerOf(subject.value, pullRequest.number, true);
       }
       const now = yield* Clock.currentTimeMillis;
       const claimed = yield* hostedStoreOrUnavailable(
@@ -416,7 +445,7 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
       if (claimed.outcome === CHAPTER_CLAIM_OUTCOME.CLAIMED) {
         yield* generated(claimed.claim, model, context.userId, read);
       }
-      return yield* answerOf(subject.value, true);
+      return yield* answerOf(subject.value, pullRequest.number, true);
     }),
   };
 }

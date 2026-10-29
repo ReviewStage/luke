@@ -14,6 +14,7 @@ import {
   renameAgentCommitted,
 } from "@luke/database/models/agent-store";
 import { devicesNamed, registerDevice } from "@luke/database/models/device-store";
+import { addTaskBlock } from "@luke/database/models/task-block-store";
 import {
   assignUnassignedTaskCommitted,
   beginTaskWorkCommitted,
@@ -26,6 +27,7 @@ import { readAccountNames } from "@luke/database/models/workspace-store";
 import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
 import { messages, turns } from "@luke/database/schemas/storage";
+import { task } from "@luke/database/schemas/task";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import {
   DEVICE_LAYOUT,
@@ -365,7 +367,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
   );
 
   it.effect(
-    "deliver the rows the held list is built from, every status, pin, archive, and pull request alike, to every member and to no one else",
+    "deliver the rows the held list is built from, every status, pin, archive, parent, and pull request alike, to every member and to no one else",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
@@ -440,6 +442,9 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           name: "Audit log export",
           origin: { actor: PLAN_ACTOR.NOTETAKER },
         });
+        // A child task, written as a row since no start names a parent yet.
+        const db = yield* Database;
+        yield* db.update(task).set({ parentTaskId: plan.id }).where(eq(task.id, followUp.id));
 
         for (const reader of [owner, teammate, outsider]) {
           assert.deepEqual(yield* liveListOf(reader, NOW), yield* heldListOf(reader, NOW));
@@ -478,6 +483,9 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
             { actor: PLAN_ACTOR.NOTETAKER },
           ],
         );
+        const parentOf = (taskId: string) =>
+          read.plans.find((each) => each.id === taskId)?.parentTaskId;
+        assert.deepEqual([parentOf(plan.id), parentOf(followUp.id)], [undefined, plan.id]);
         const agents = read.plans.find((each) => each.id === plan.id)?.agents;
         assert.deepEqual(
           [agents?.total, agents?.working, agents?.failed, agents?.pullRequestTotal],
@@ -501,6 +509,34 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           ],
         );
         assert.deepEqual((yield* liveListOf(outsider, NOW)).plans, []);
+      }),
+  );
+
+  it.effect(
+    "a plan waiting on an open task is marked blocked until every blocker is done or canceled, live as the held read reads it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const shipped = yield* startTask(owner, { name: "Invitation emails" });
+        const cut = yield* startTask(owner, { name: "Invitation links" });
+        const waiting = yield* startTask(owner, { name: "Teammate invitations" });
+        for (const blocker of [shipped, cut]) {
+          yield* addTaskBlock(owner, { blockerTaskId: blocker.id, blockedTaskId: waiting.id });
+        }
+        const blocked = Effect.gen(function* () {
+          const live = yield* liveListOf(owner, NOW);
+          const held = yield* heldListOf(owner, NOW);
+          const marked = (plans: readonly { id: string; blocked?: true }[]) =>
+            plans.filter((plan) => plan.blocked === true).map((plan) => plan.id);
+          assert.deepEqual(marked(live.plans), marked(held.plans), "live as held");
+          return marked(live.plans);
+        });
+
+        assert.deepEqual(yield* blocked, [waiting.id], "both blockers open");
+        yield* updateTask(owner, shipped.id, { status: TASK_STATUS.DONE });
+        assert.deepEqual(yield* blocked, [waiting.id], "one blocker still open");
+        yield* updateTask(owner, cut.id, { status: TASK_STATUS.CANCELED });
+        assert.deepEqual(yield* blocked, [], "every blocker done or canceled");
       }),
   );
 
@@ -539,7 +575,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
   );
 
   it.effect(
-    "a member's operator, with no repository, is delivered and says its kind, as the held read reads it, while a coder says none",
+    "a member's operator, with no repository, says its kind and a task's pilot that it is one, as the held read reads them, while a coder says neither",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
@@ -566,6 +602,63 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         assert.equal(listed.get(operator.id)?.kind, AGENT_KIND.OPERATOR);
         assert.equal(listed.get(operator.id)?.repository, null);
         assert.equal(listed.get(coder.id)?.kind, undefined);
+
+        const plan = yield* startTask(owner, { name: "Teammate invitations" });
+        const { agent: pilot } = Option.getOrThrow(
+          yield* createAgent(owner, {
+            taskId: plan.id,
+            planSnapshot: "# Invitations\n",
+            prompt: null,
+            kind: AGENT_KIND.PILOT,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "acme/relay",
+          }),
+        );
+        const taskAgents = taskAgentsOfLiveRows(yield* liveRowsOf(owner), NOW);
+        assert.deepEqual(
+          taskAgents.filter((agent) => agent.planId === plan.id),
+          yield* heldTaskAgentsOf(owner, plan.id, NOW),
+        );
+        const listedPilot = taskAgents.find((agent) => agent.id === pilot.id);
+        assert.deepEqual([listedPilot?.pilot, listedPilot?.kind], [true, undefined]);
+      }),
+  );
+
+  it.effect(
+    "a task's pilot is delivered as a coder, so a desktop from before pilots still decodes the list",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const plan = yield* startTask(owner, { name: "Teammate invitations" });
+        Option.getOrThrow(
+          yield* createAgent(owner, {
+            taskId: plan.id,
+            planSnapshot: "# Invitations\n",
+            prompt: null,
+            kind: AGENT_KIND.PILOT,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "acme/relay",
+          }),
+        );
+        // The kinds a desktop from before pilots decodes; any other fails its whole agent list.
+        const beforePilots = Schema.Array(
+          Schema.Struct({
+            kind: Schema.optionalKey(Schema.Literals([AGENT_KIND.CODER, AGENT_KIND.OPERATOR])),
+          }),
+        );
+
+        const statements = Option.getOrThrow(taskListLiveStatements(owner));
+        const rows = yield* runLive(statements.agents);
+
+        const decoded = yield* Schema.decodeUnknownEffect(beforePilots)(rows);
+        assert.deepEqual(
+          decoded.map((row) => row.kind),
+          [AGENT_KIND.CODER],
+        );
       }),
   );
 
@@ -695,6 +788,54 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         assert.ok(
           !(seen?.agents?.agents ?? []).some((line) => line.id === hidden.id),
           "the teammate's list leaves out the agent they do not see",
+        );
+      }),
+  );
+
+  it.effect(
+    "name the pilot that started an agent, on its task or another, and no other starter",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const plan = yield* startTask(owner, { name: "Teammate invitations" });
+        const child = yield* startTask(owner, { name: "Invitation emails" });
+        /** An agent of the kind given on the task, started by the agent named, or by the member where none is. */
+        const started = (
+          taskId: string,
+          kind: typeof AGENT_KIND.CODER | typeof AGENT_KIND.PILOT,
+          startedByAgentId?: string,
+        ) =>
+          Effect.map(
+            createAgent(owner, {
+              taskId,
+              planSnapshot: "# Invitations\n",
+              prompt: null,
+              kind,
+              ...(startedByAgentId === undefined ? undefined : { startedByAgentId }),
+              idempotencyKey: randomUUID(),
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              repository: "acme/relay",
+            }),
+            (made) => Option.getOrThrow(made).agent,
+          );
+        const pilot = yield* started(plan.id, AGENT_KIND.PILOT);
+        yield* renameAgentCommitted(owner, pilot.id, "Invitations pilot");
+        const coder = yield* started(plan.id, AGENT_KIND.CODER, pilot.id);
+        const subPilot = yield* started(child.id, AGENT_KIND.PILOT, pilot.id);
+        const helper = yield* started(plan.id, AGENT_KIND.CODER, coder.id);
+
+        const agents = taskAgentsOfLiveRows(yield* liveRowsOf(owner), NOW);
+        const pilotOf = (id: string) => agents.find((agent) => agent.id === id)?.startedByPilot;
+        const named = {
+          agentId: pilot.id,
+          taskId: plan.id,
+          title: "Invitations pilot",
+          model: "anthropic/claude-opus-5.5",
+        };
+        assert.deepEqual(
+          [pilot, coder, subPilot, helper].map((agent) => pilotOf(agent.id)),
+          [undefined, named, named, undefined],
         );
       }),
   );

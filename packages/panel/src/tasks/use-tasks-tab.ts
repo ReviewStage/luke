@@ -21,6 +21,7 @@ import {
   type RepositoryPin,
   type Task,
   type TaskAgentPin,
+  type TaskMode,
   type TaskRunsOnRequest,
   type TaskStanding,
   type TaskStatus,
@@ -113,6 +114,7 @@ import {
   localAgentRefusalWords,
   openingLineOf,
   type SentLine,
+  startsOwnAgents,
 } from "./agent-model.js";
 import {
   CLOSED_TAB_STRIP,
@@ -465,9 +467,24 @@ function startingStanding(standing: TaskStanding | undefined) {
   return assigneeId === undefined || assigneeId === null ? rest : { ...rest, assigneeId };
 }
 
-/** What the press that opened New task chose: a repository (a repository group's +), the card's purpose (the Automations page's Create with an agent), or the card a start refused after it closed opens again on. */
+/**
+ * The task New child task makes its task under, as the task's menu or ⌘K
+ * asked: its id, its name, which the card says, and the workspace and
+ * repository the child takes from it, since a child always works where its
+ * parent does.
+ */
+export interface NewTaskParent {
+  readonly taskId: string;
+  readonly name: string;
+  readonly workspaceId: string;
+  readonly repository: string | null;
+}
+
+/** What the press that opened New task chose: a repository (a repository group's +), the card's purpose (the Automations page's Create with an agent), the task it makes a child of (New child task), or the card a start refused after it closed opens again on. */
 export interface NewTaskPreset {
   readonly repository?: string;
+  /** The task the card makes its task a child of; none for a task at the top. */
+  readonly parent?: NewTaskParent;
   /** What the card starts; a task's agent where none is named. */
   readonly purpose?: NewTaskPurpose;
   /** The card as it pressed Start, and why the start was refused, where the card is opened again on a refusal. */
@@ -483,6 +500,8 @@ export interface NewTaskPreset {
 interface NewTaskCardKept {
   /** What the card started, which it opens again for; a task's agent where none is named. */
   readonly purpose?: NewTaskPurpose;
+  /** The task the card made its task a child of, which it opens again under; none for a task at the top. */
+  readonly parent?: NewTaskParent;
   readonly repository: string | null;
   readonly choice: ModelChoice | undefined;
   readonly press: NewTaskPress;
@@ -500,7 +519,11 @@ export interface NewTaskStart {
   readonly runsOn?: TaskRunsOnRequest;
   /** The device Runs on chose, which a refusal names; none for the cloud. */
   readonly device?: MacOffer;
+  /** The task the start makes its task a child of, whose repository and place to run the child takes; none for a task at the top. */
+  readonly parentTaskId?: string;
   readonly handed?: NewTaskAgent;
+  /** How the task is worked, where the card's choice named it while the Pilot experiment is on; by its agents otherwise. */
+  readonly mode?: TaskMode;
   /** What the card held as it pressed Start, which it opens again on where an agent's start is refused after the card closed. */
   readonly card?: NewTaskCardKept;
 }
@@ -709,6 +732,8 @@ export interface TasksControl {
   onNewTask: () => void;
   /** New task with a repository already chosen in the dialog: what a repository group's + asks. */
   onNewTaskIn: (repository: string) => void;
+  /** New task as a child of the task given, in its workspace and repository: what the task's menu and ⌘K's New child task ask. */
+  onNewChildTask: (parentTaskId: string) => void;
   /**
    * Adds a task named `name` to a Tasks page group with no agent, in the
    * listed workspace, and opens nothing: what a group's quick add asks.
@@ -1285,6 +1310,7 @@ export function useTasksTab(input: {
     listedAgents: tasks.tasks.some((task) => task.id === viewed.activeTaskId)
       ? liveAgents
       : undefined,
+    mode: tasks.tasks.find((task) => task.id === viewed.activeTaskId)?.mode,
     onOpenIntegrations: input.onOpenIntegrations,
     onOpenApiKeys: input.onOpenApiKeys,
     me: input.accountId,
@@ -1356,7 +1382,8 @@ export function useTasksTab(input: {
   // that nothing reaches the service until the draft is sent or called.
   const openDraftNow = useRef(agents.onNewDraft);
   openDraftNow.current = agents.onNewDraft;
-  // Note that an archive still out wants none, since the agent it took comes back if refused, and
+  // Note that an archive still out wants none, since the agent it took comes back if refused, nor
+  // does a pilot task, whose agents its pilot starts (`startsOwnAgents`), and
   // neither does New task's start of an agent, since main opens its task before the start answers,
   // whose agent no list holds yet, and its answer opens the agent's tab, or its draft if refused.
   const draftWanted =
@@ -1364,7 +1391,8 @@ export function useTasksTab(input: {
     startingTask === undefined &&
     agents.agentIds !== undefined &&
     agents.onUnarchive === undefined &&
-    !agents.archiving;
+    !agents.archiving &&
+    startsOwnAgents(agents.mode);
   const draftTask = viewed.activeTaskId;
   useEffect(() => {
     if (draftWanted && draftTask !== undefined) openDraftNow.current();
@@ -2404,6 +2432,7 @@ export function useTasksTab(input: {
               ? undefined
               : {
                   ...(card.purpose === undefined ? undefined : { purpose: card.purpose }),
+                  ...(card.parent === undefined ? undefined : { parent: card.parent }),
                   refused: { card, note },
                 },
         });
@@ -2415,6 +2444,8 @@ export function useTasksTab(input: {
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
       ...(from.runsOn === undefined ? undefined : { runsOn: from.runsOn }),
+      ...(from.mode === undefined ? undefined : { mode: from.mode }),
+      ...(from.parentTaskId === undefined ? undefined : { parentTaskId: from.parentTaskId }),
       planning: false,
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
       ...(stays ? { quiet: true } : undefined),
@@ -3410,6 +3441,23 @@ export function useTasksTab(input: {
     },
     onNewTask: () => newTaskWith(undefined),
     onNewTaskIn: (repository) => newTaskWith({ repository }),
+    onNewChildTask: (parentTaskId) => {
+      // The open document stands for its task where the list read did not land, as its menu reads it.
+      const parent =
+        tasks.tasks.find((task) => task.id === parentTaskId) ??
+        (region.kind === DOCUMENT_REGION.READY && region.task.id === parentTaskId
+          ? region.task
+          : undefined);
+      if (parent === undefined) return;
+      newTaskWith({
+        parent: {
+          taskId: parent.id,
+          name: parent.name,
+          workspaceId: parent.workspaceId,
+          repository: parent.repository,
+        },
+      });
+    },
     onQuickAdd: quickAdd,
     onNewAutomationAgent: () => newTaskWith({ purpose: NEW_TASK_PURPOSE.AUTOMATION }),
     newTask: {

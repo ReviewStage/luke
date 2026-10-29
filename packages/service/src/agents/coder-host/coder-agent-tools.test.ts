@@ -80,7 +80,13 @@ import {
   PROVIDER_KEY_PROVIDER,
 } from "@luke/features/provider-key-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
-import { PLAN_ACTOR, TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
+import {
+  PLAN_ACTOR,
+  TASK_BOUNDS,
+  TASK_MODE,
+  TASK_PRIORITY,
+  TASK_STATUS,
+} from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { MESSAGE_CHANNEL, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { settleJsonSchemaGolden } from "@luke/wire/testing";
@@ -998,6 +1004,34 @@ test("start_agent with a title names the agent by it from the start, and a title
       reason: START_AGENT_REFUSAL.UNREADABLE,
     });
   }
+});
+
+test("start_agent on a pilot task with no pilot starts its pilot, held to Pilot as the caller's starter has it rather than the task's owner, and refused saying why where it is off", async () => {
+  const { workspaceId, agents, plans } = await openWorkspaces();
+  const { caller, teammates } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  await database.run(
+    Effect.flatMap(Database, (db) =>
+      db.update(task).set({ mode: TASK_MODE.PILOT }).where(eq(task.id, plans.billing)),
+    ),
+  );
+  const pilotOn = { experiments: { [EXPERIMENT.PILOT]: true } };
+  await database.run(writeAccountPreferences(teammates.userId, pilotOn));
+  const start = { taskId: plans.billing, prompt: "Bill by seat." };
+
+  assert.deepEqual(await call(CODER_TOOL.START_AGENT, start, "call-pilot-off"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: START_AGENT_REFUSAL.PILOT_OFF,
+  });
+  assert.equal(eve.sent.length, 0, "a refused pilot starts nothing");
+  await database.run(writeAccountPreferences(caller.userId, pilotOn));
+  const started = await call(CODER_TOOL.START_AGENT, start, "call-pilot-on");
+
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
+  const pilot = Option.getOrThrow(await database.run(readAgent(caller.userId, started.agent.id)));
+  assert.equal(pilot.kind, AGENT_KIND.PILOT);
 });
 
 test("start_agent with a branch starts an agent whose checkout is cloned at that branch and who is told to cut its own from it, and a branch GitHub does not hold is refused before anything starts", async () => {

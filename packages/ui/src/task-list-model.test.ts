@@ -11,9 +11,11 @@ import {
   agentRow,
   assigneeGroups,
   type CreatorGroup,
+  childTaskCounts,
   createdByOnly,
   creatorGroups,
   drawnGrouping,
+  drawnTaskRows,
   hiddenStatuses,
   type RepositoryGroup,
   repositoryGroups,
@@ -448,4 +450,76 @@ test("a grouping by person kept for a workspace nobody shares is drawn by reposi
   expect(drawnGrouping(TASK_GROUPING.CREATOR, false)).toBe(TASK_GROUPING.REPOSITORY);
   expect(drawnGrouping(TASK_GROUPING.NONE, false)).toBe(TASK_GROUPING.NONE);
   expect(drawnGrouping(TASK_GROUPING.ASSIGNEE, true)).toBe(TASK_GROUPING.ASSIGNEE);
+});
+
+/** A task on acme/relay under `parent`, where one is named, updated at `updatedAt`. */
+function childTask(name: string, updatedAt: number, parent?: string): TaskSummary {
+  return {
+    ...task(name, "acme/relay", updatedAt, updatedAt),
+    ...(parent === undefined ? undefined : { parentTaskId: parent }),
+  };
+}
+
+/** The rows drawn, each as its name indented two spaces for each level it stands at. */
+function drawnNames(
+  tasks: readonly TaskSummary[],
+  opened: readonly string[],
+  standing?: string,
+): string[] {
+  return drawnTaskRows(
+    tasks.map(taskRow),
+    (taskId) => opened.includes(taskId),
+    (row) => taskRowName(row) === standing,
+  ).map(({ row, depth }) => `${"  ".repeat(depth)}${taskRowName(row)}`);
+}
+
+const TREE = [
+  childTask("grandchild", 50, "child"),
+  childTask("parent", 40),
+  childTask("child", 30, "parent"),
+  childTask("sibling", 20, "parent"),
+  childTask("other", 10),
+] as const;
+
+test("a grandchild stands under its child, and that child under its parent, never at the top, each level in the list's order", () => {
+  expect(drawnNames(TREE, ["parent", "child"])).toEqual([
+    "parent",
+    "  child",
+    "    grandchild",
+    "  sibling",
+    "other",
+  ]);
+});
+
+test("a parent folded shut draws none of its child tasks but the open one and the rows above it", () => {
+  expect(drawnNames(TREE, [])).toEqual(["parent", "other"]);
+  expect(drawnNames(TREE, [], "grandchild")).toEqual([
+    "parent",
+    "  child",
+    "    grandchild",
+    "other",
+  ]);
+});
+
+test("a child task whose parent the list leaves out stands at the top", () => {
+  const filtered = TREE.filter((each) => each.name !== "parent");
+  expect(drawnNames(filtered, ["child"])).toEqual(["child", "  grandchild", "sibling", "other"]);
+});
+
+test("a parent counts its direct child tasks that are done or canceled, of all its children, and not theirs", () => {
+  const withStatus = (name: string, parent: string | undefined, status: TaskStatus) => ({
+    ...childTask(name, 1, parent),
+    status,
+  });
+  const counts = childTaskCounts([
+    withStatus("parent", undefined, TASK_STATUS.IN_PROGRESS),
+    withStatus("shipped", "parent", TASK_STATUS.DONE),
+    withStatus("cut", "parent", TASK_STATUS.CANCELED),
+    withStatus("working", "parent", TASK_STATUS.IN_PROGRESS),
+    withStatus("waiting", "parent", TASK_STATUS.TODO),
+    withStatus("grandchild", "working", TASK_STATUS.DONE),
+  ]);
+  expect(counts.get("parent")).toEqual({ finished: 2, total: 4 });
+  expect(counts.get("working")).toEqual({ finished: 1, total: 1 });
+  expect(counts.has("shipped")).toBe(false);
 });

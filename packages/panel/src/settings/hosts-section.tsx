@@ -1,11 +1,10 @@
 import { DEVICE_STANDING } from "@luke/features/agent-wire";
-import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
+import { DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import {
+  HOST_UNINSTALL_COMMAND,
   HOST_WIRE,
   type Host,
   hostInstallCommand,
-  hostInstallLoopCommand,
-  hostSetupPrompt,
   hostUpgradeCommand,
 } from "@luke/features/host-wire";
 import { agoText, momentText } from "@luke/features/time-format";
@@ -46,7 +45,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Base64Url, Hex } from "effect/encoding";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
-import { copyThroughShell, useCopyToast } from "../copy-feedback.js";
+import { copyThroughShell } from "../copy-feedback.js";
 import { DEVICE_PLATFORM_NAME } from "../device-platform.js";
 import {
   type PresenceBook,
@@ -68,14 +67,16 @@ import {
  * hosts-section.tsx -- Settings › Hosts: the member's own machines that run their local agents, Linux servers and Macs alike, and Add hosts, which shows the install command once.
  *
  * A machine is any device of the member's enrolled with a secret of its own
- * (`@luke/features/host-wire`): a Linux server that ran the install command
- * as root, or a Mac its desktop enrolled. The list names each, what it is by
+ * (`@luke/features/host-wire`): a Linux server or a Mac that ran the install
+ * command, or a Mac its desktop enrolled. The list names each, what it is by
  * its platform (`DEVICE_PLATFORM_NAME`), whether it is online, held against
  * the window's own clock as a Mac's label is (`macOnline`), when it was last
  * seen otherwise, and, where its host program is below the service's floor,
  * Upgrade needed with how to upgrade it: a server's command, or a Mac's app
  * updated. Remove, behind the row's ⋯, refuses that machine at once, after
- * asking. Adding stays Linux-only and says so, since a Mac joins from its app.
+ * asking with the command that takes Luke off the machine itself where the
+ * install command may have set it up. Adding takes a Linux server and a Mac
+ * alike, through one command.
  *
  * In the desktop app this Mac stands first, with where its `luke-host`
  * stands under it (`this-mac-host-row.tsx`) and Retry where it failed: on
@@ -88,9 +89,8 @@ import {
  * Add hosts mints an install token here, in the window, and hands the
  * service its SHA-256 alone, so the token never leaves the window that
  * shows it: it stands in this section's state while the dialog is open,
- * inside the install command, its loop for many servers, and the setup prompt
- * a coding agent follows to install them, and is gone once the dialog closes.
- * Revoke this command stops new servers enrolling with it, and none it
+ * inside the install command the member runs on each host, and is gone once
+ * the dialog closes. Revoke this command stops new servers enrolling with it, and none it
  * already enrolled. The section stands nowhere while the local agents
  * experiment is off, which hosts sit behind as This Mac does, and neither
  * does its page (`settings-rows.ts`'s `PAGE_EXPERIMENT`).
@@ -122,10 +122,7 @@ const WORDS = {
   UPGRADE_NEEDED: "Upgrade needed",
   UPGRADE_TITLE: "Run this on the host to upgrade it",
   MAC_UPGRADE: "Update the Luke app on this Mac to upgrade it.",
-  INSTALL_TITLE: "Run this as root on each host",
-  LOOP_TITLE: "Or on many servers at once",
-  COPY_PROMPT: "Copy agent prompt",
-  PROMPT_COPIED: "Agent prompt copied",
+  INSTALL_TITLE: "Run this on each host",
   REVOKE: "Revoke this command",
 } as const;
 
@@ -172,13 +169,27 @@ function seenWords(host: Host, book: PresenceBook, now: number): string {
   return `${standing === DEVICE_STANDING.OFFLINE ? "Offline" : WORDS.UNKNOWN}${lastSeen}`;
 }
 
-/** What Remove says goes, by the machine's platform: a server is cleaned on the box itself, and a Mac joins again only from its app. */
-const REMOVE_BODY = {
-  [DEVICE_PLATFORM.LINUX]:
-    "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke. To clean the server itself, run sudo luke-host uninstall on it.",
-  [DEVICE_PLATFORM.DARWIN]:
-    "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke. To use it again, choose Turn on again under This Mac in the Luke app on it.",
-} as const satisfies Record<DevicePlatform, string>;
+/** What Remove says goes, whatever the machine. */
+const REMOVED =
+  "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke.";
+
+/**
+ * What Remove says, and the title of the uninstall command it shows, by what
+ * the machine is: a server the install command set up is cleaned on the box
+ * itself, this Mac's own This Mac joins again only from its app, and another
+ * Mac may be either, since the service lists no word of how a Mac joined.
+ */
+const REMOVE_WORDS = {
+  SERVER: { body: REMOVED, uninstall: "Run this on the host to remove Luke from it" },
+  THIS_MAC: {
+    body: `${REMOVED} To use it again, choose Turn on again under This Mac.`,
+    uninstall: undefined,
+  },
+  MAC: {
+    body: `${REMOVED} If you added it from the Luke app on it, choose Turn on again under This Mac there to use it again.`,
+    uninstall: "If you used the install command, run this on it",
+  },
+} as const;
 
 /** One machine's row: its name, what it is and whether it is online, Upgrade needed with how to upgrade it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
 function HostRow({
@@ -201,6 +212,12 @@ function HostRow({
   // Note that a service older than platforms listed only Linux servers.
   const platform = host.platform ?? DEVICE_PLATFORM.LINUX;
   const seen = `${DEVICE_PLATFORM_NAME[platform]} · ${seenWords(host, book, now)}`;
+  const removeWords =
+    thisMac !== undefined
+      ? REMOVE_WORDS.THIS_MAC
+      : platform === DEVICE_PLATFORM.DARWIN
+        ? REMOVE_WORDS.MAC
+        : REMOVE_WORDS.SERVER;
   const line = thisMac?.line ?? null;
   return (
     <>
@@ -247,17 +264,26 @@ function HostRow({
         confirm={removing}
         question={{
           title: `Remove ${host.name}?`,
-          body: REMOVE_BODY[platform],
+          body: removeWords.body,
           verb: "Remove",
           running: "Removing",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
-      />
+      >
+        {removeWords.uninstall === undefined ? null : (
+          <CodeCard
+            title={removeWords.uninstall}
+            titleIs={CODE_CARD_TITLE.WORDS}
+            code={HOST_UNINSTALL_COMMAND}
+            copy={copyThroughShell}
+          />
+        )}
+      </ConfirmDialog>
     </>
   );
 }
 
-/** The dialog Add hosts opens: the install command and its loop, each with the token in it, shown this once, and Revoke. */
+/** The dialog Add hosts opens: the install command with the token in it, shown this once, and Revoke. */
 function AddHostsDialog({
   shown,
   onRevoke,
@@ -268,7 +294,6 @@ function AddHostsDialog({
   onClose: () => void;
 }): React.JSX.Element {
   const revoking = useConfirmDialog({ subject: true, surfaceOpen: true }, onRevoke);
-  const copyPrompt = useCopyToast();
   return (
     <Dialog
       open
@@ -291,23 +316,6 @@ function AddHostsDialog({
             code={hostInstallCommand(shown.installScriptUrl, shown.installToken)}
             copy={copyThroughShell}
           />
-          <CodeCard
-            title={WORDS.LOOP_TITLE}
-            titleIs={CODE_CARD_TITLE.WORDS}
-            code={hostInstallLoopCommand(shown.installScriptUrl, shown.installToken)}
-            copy={copyThroughShell}
-          />
-          <Button
-            variant={BUTTON_VARIANT.PRIMARY}
-            onClick={() =>
-              copyPrompt(
-                hostSetupPrompt(shown.installScriptUrl, shown.installToken, shown.expiresAt),
-                WORDS.PROMPT_COPIED,
-              )
-            }
-          >
-            {WORDS.COPY_PROMPT}
-          </Button>
         </Stack>
       </div>
       <ConfirmDialog

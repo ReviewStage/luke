@@ -27,17 +27,17 @@
 #
 # On an Apple silicon Mac it installs for the user who ran the command under
 # sudo, as GitHub's runner does on macOS, and refuses where there is none, as
-# when root itself is logged in, or where the Luke app already runs agents for
-# that user. It refuses a macOS older than MAC_MIN_VERSION, and checks no
-# /dev/kvm, since smolvm runs on Hypervisor.framework there. It unpacks the
+# when root itself is logged in. It refuses a macOS older than
+# MAC_MIN_VERSION, and checks no /dev/kvm, since smolvm runs on
+# Hypervisor.framework there. It unpacks the
 # release under that user's Application Support, owned by them, enrolls the
 # Mac as that user, and installs a LaunchAgent in their ~/Library/LaunchAgents
 # that runs the daemon at login, on a state folder of its own, and again after
 # a crash but not after a clean exit, logging under their ~/Library/Logs. It
 # starts the agent at once where that user is logged in, and otherwise at their
 # next login: it runs only while they are. The daemon fetches its own smolvm
-# (SMOLVM_MAC_PIN) and the sandbox image as it starts. The desktop app refuses
-# to turn This Mac on beside this agent.
+# (SMOLVM_MAC_PIN) and the sandbox image as it starts. It runs beside the
+# desktop app's This Mac, whichever account each runs agents for.
 #
 # smolvm's own install script is never run: its release is fetched and checked
 # here, as the daemon's is.
@@ -86,19 +86,17 @@ EXIT_REFUSED=78
 # How long the script waits for the service's first word with Luke: its first
 # start fetches the pinned Claude Code before it registers.
 CONNECT_WAIT_SECONDS=300
+# How long a Mac's install waits for its running LaunchAgent to stop before it
+# swaps the release; a test points it at none.
+MAC_STOP_WAIT_SECONDS="${LUKE_HOST_MAC_STOP_WAIT_SECONDS:-30}"
 # How long fetching the sandbox image may take.
 IMAGE_WAIT_SECONDS=1800
-# A Mac's install, under the home of the user it is for: its LaunchAgent, by the
-# label the desktop app refuses to turn This Mac on beside
-# (DARWIN_STANDALONE_LAUNCH_AGENT in packages/host/src/daemon/host-os.ts), the
-# folder holding the release and its state, and its logs. The desktop app's own
-# state folder holds its luke-host's device record once that is enrolled, which
-# means the app runs agents for that user already. `luke-host uninstall` names
-# the first three too.
+# A Mac's install, under the home of the user it is for: its LaunchAgent, by its
+# label, the folder holding the release and its state, and its logs.
+# `luke-host uninstall` names the three too.
 MAC_LABEL="dev.reviewstage.luke.host.standalone"
 MAC_APP_FOLDER="Library/Application Support/Luke Host"
 MAC_LOG_FOLDER="Library/Logs/Luke Host"
-MAC_APP_STATE_FOLDER="Library/Application Support/Luke"
 # The oldest macOS it installs on: the release's launcher reads its own path
 # with readlink -f, which macOS has had since 12.3, and smolvm needs macOS 11.
 MAC_MIN_VERSION="12.3"
@@ -425,13 +423,6 @@ require_mac_user() {
   fi
 }
 
-# Refuses where the Luke app already runs agents for the user whose home is $1:
-# its luke-host enrolled, so its device record stands in the app's state folder.
-require_no_app_host() {
-  [ ! -e "$1/$MAC_APP_STATE_FOLDER/device.json" ] ||
-    fail "The Luke app already runs agents on this Mac for this account, so nothing was installed."
-}
-
 # Writes the LaunchAgent to $1: the release in $2 run as the user it is
 # installed for, on the state folder $3, which a release build would otherwise
 # take to be the desktop app's, logging to $4. It runs at login, and again after
@@ -472,6 +463,21 @@ cat >"$1" <<PLIST_EOF
 PLIST_EOF
 }
 
+# Stops the LaunchAgent of the user whose uid is $1 and waits until launchd
+# lists it no more, so no daemon of it is left writing under the files about to
+# be swapped; refuses, having changed nothing, where it does not stop.
+stop_launch_agent() {
+  agent="gui/$1/$MAC_LABEL"
+  launchctl bootout "$agent" >/dev/null 2>&1 || true
+  stopping=0
+  while launchctl print "$agent" >/dev/null 2>&1; do
+    [ "$stopping" -lt "$MAC_STOP_WAIT_SECONDS" ] ||
+      fail "Could not stop Luke host for this account, so nothing was changed. Stop it with launchctl bootout $agent, then run this again."
+    sleep 1
+    stopping=$((stopping + 1))
+  done
+}
+
 # Starts the LaunchAgent written to $2 in the login session of the user whose
 # uid is $1, where they are logged in; where they are not, says it starts at
 # their next login. Answers whether it started.
@@ -491,7 +497,6 @@ install_darwin() {
   require_mac_user
   home="$(dscl . -read "/Users/$mac_user" NFSHomeDirectory 2>/dev/null | sed -n 's/^NFSHomeDirectory: //p')"
   [ -n "$home" ] && [ -d "$home" ] || fail "Could not find $mac_user's home folder."
-  require_no_app_host "$home"
   uid="$(id -u "$mac_user")"
   group="$(id -gn "$mac_user")"
   app="$home/$MAC_APP_FOLDER"
@@ -517,8 +522,8 @@ install_darwin() {
   tar -xzf "$work/$tarball" -C "$work/unpacked" || fail "Could not unpack $tarball"
   [ -x "$work/unpacked/luke-host/bin/luke-host" ] || fail "$tarball holds no luke-host."
 
-  # Note that a running daemon is stopped before its files are swapped, which stops every agent it runs, as on Linux.
-  launchctl bootout "gui/$uid/$MAC_LABEL" >/dev/null 2>&1 || true
+  # Note that a running daemon is stopped, and gone, before its files are swapped, which stops every agent it runs, as on Linux.
+  stop_launch_agent "$uid"
   mkdir -p "$app" "$logs" "$agents"
   chown "$mac_user:$group" "$agents"
   rm -rf "$install.new" "$install.old"
@@ -528,7 +533,9 @@ install_darwin() {
   fi
   mv "$install.new" "$install"
   rm -rf "$install.old"
-  chown -R "$mac_user:$group" "$app" "$logs"
+  # Note that the state is left as it stands, the user's since its enroll ran as them, so no walk of it meets a file a daemon takes away.
+  chown "$mac_user:$group" "$app"
+  chown -R "$mac_user:$group" "$install" "$logs"
   chmod 700 "$app"
   mkdir -p "$(dirname "$LINK")"
   ln -sf "$install/bin/luke-host" "$LINK"

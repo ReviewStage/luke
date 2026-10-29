@@ -62,6 +62,7 @@ import {
   openViewOptions,
   pagerOf,
   pressKey,
+  pushAgain,
   QUARANTINE,
   READER,
   RETRY,
@@ -930,12 +931,13 @@ test("on a phone, an Inbox with nothing chosen shows its list and says nothing n
   assert.equal(emptyStateIn(page, ".inbox-tasks"), "Nothing needs you");
 });
 
-test("while its plans are first read, the list stands placeholder rows in its items' place, saying to a reader that the inbox is being read, with no row to press and no ring; once the reads land, the items stand where they stood", async () => {
+test("while the account's feed is first read, the list stands placeholder rows in its items' place, saying to a reader that the inbox is being read, with no row to press and no ring; once it lands, the items stand where they stood", async () => {
   const reads = new Map([
     [BILLING.id, pending()],
     [INVITES.id, pending()],
   ]);
   world.startRead = (taskId) => reads.get(taskId)?.promise;
+  world.feedUnread = true;
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const list = page.querySelector<HTMLElement>(".inbox-tasks");
@@ -951,6 +953,8 @@ test("while its plans are first read, the list stands placeholder rows in its it
 
   reads.get(BILLING.id)?.settle({ items: [THRESHOLD, RETRY], cursor: "1" });
   reads.get(INVITES.id)?.settle({ items: [EXPIRY], cursor: "1" });
+  world.feedUnread = false;
+  act(() => pushAgain());
   await settle();
   assert.equal(list.querySelector('[aria-busy="true"]'), null);
   assert.deepEqual(listed(page), [
@@ -1071,7 +1075,7 @@ test("one column wide, an answered item that To do draws no row for shows no cou
   layOut(page, 800);
   assert.equal(readTitle(page), "How is a failed email retried?");
   assert.equal(pagerOf(page), null, "no row, so no count");
-  assert.equal(arrowNamed(page, "Previous item").disabled, true);
+  assert.equal(arrowNamed(page, "Previous item").getAttribute("aria-disabled"), "true");
   act(() => arrowNamed(page, "Next item").click());
   assert.deepEqual([readTitle(page), pagerOf(page)], ["Alert at 80%?", "2 of 2"]);
 });
@@ -1332,13 +1336,6 @@ function unreadOf(page: HTMLElement, title: string): boolean | "?" {
 }
 
 /** The mark a row's hover offers over its time. */
-function hoverMark(page: HTMLElement, title: string): HTMLButtonElement {
-  const li = rowNamed(page, title).closest("li");
-  const press = li?.querySelector<HTMLButtonElement>(".luke-list-row-actions button");
-  assert.ok(press, `${title}'s row offers a mark over its time`);
-  return press;
-}
-
 test("an unread item wears the blue dot in its row's gutter, its title in the unread weight, and says Unread to a reader; opening it marks it read at once, and the Inbox opening, choosing nothing, marks none", async () => {
   world.inboxes.set(BILLING.id, [
     { ...THRESHOLD, unread: true },
@@ -1359,24 +1356,23 @@ test("an unread item wears the blue dot in its row's gutter, its title in the un
   assert.equal(unreadOf(page, "Alert at 80%?"), true);
 });
 
-test("a row's mark over its time, the first item of its menu, and U each mark an item read or unread: Mark as unread on a read item, Mark as read on an unread one, U the chosen item, and only the chosen item's menu names U, after Copy link", async () => {
+test("a row's menu and U each mark an item read or unread: Mark as unread on a read item, Mark as read on an unread one, U the chosen item, and only the chosen item's menu names U, after Copy link", async () => {
   world.listedWorkspace = ACME;
   const keys = standKeymap();
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const retry = "How is a failed email retried?";
-  assert.equal(hoverMark(page, retry).getAttribute("aria-label"), "Mark as unread");
-  act(() => hoverMark(page, retry).click());
+  // Note that U acts only on the chosen item, so another row's menu does not name it.
+  assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Mark as unread"]);
+  act(() => menuItem("Mark as unread").click());
   await settle();
   assert.equal(unreadOf(page, retry), true);
-  assert.equal(hoverMark(page, retry).getAttribute("aria-label"), "Mark as read");
   assert.equal(
     page.querySelector('[aria-current="page"] .luke-list-row-title')?.textContent,
     "Alert at 80%?",
     "a press on the mark opens nothing",
   );
 
-  // Note that U acts only on the chosen item, so another row's menu does not name it.
   assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Mark as read"]);
   act(() => menuItem("Mark as read").click());
   await settle();
@@ -1425,7 +1421,8 @@ test("a mark the service refuses is let go, and the dot stands as the reads hold
   world.readMarkRefused = true;
   const { page } = mount();
   await settle();
-  act(() => hoverMark(page, "How is a failed email retried?").click());
+  rowMenu(page, "How is a failed email retried?");
+  act(() => menuItem("Mark as unread").click());
   await settle();
   assert.deepEqual(world.readMarks, [`unread:${RETRY.id}`]);
   assert.equal(unreadOf(page, "How is a failed email retried?"), false);

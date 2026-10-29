@@ -84,15 +84,9 @@ export const GITHUB_TRIGGER_EVENT = {
 
 export type GitHubTriggerEvent = (typeof GITHUB_TRIGGER_EVENT)[keyof typeof GITHUB_TRIGGER_EVENT];
 
-/**
- * What an automation starts when it fires. Note that both spellings name the
- * one action, an agent on the task's repository handed the prompt as its
- * task: writers write `agent`, and `coding-agent` is still read, because the
- * release serving beside the migration that rewrote the rows wrote the old
- * one while it drained.
- */
+/** What an automation starts when it fires. */
 export const AUTOMATION_ACTION = {
-  CODING_AGENT: "coding-agent",
+  /** An agent on the task's repository, handed the prompt as its task. */
   AGENT: "agent",
 } as const;
 
@@ -233,7 +227,7 @@ export type IntegrationTriggerFilters = NonNullable<IntegrationTrigger["filters"
 
 /** An agent handed the prompt as its task, on the model and effort named, or the account's default, with the MCP servers named switched off. */
 const agentActionSchema = EffectSchema.Struct({
-  kind: EffectSchema.Literals([AUTOMATION_ACTION.AGENT, AUTOMATION_ACTION.CODING_AGENT]),
+  kind: EffectSchema.Literal(AUTOMATION_ACTION.AGENT),
   prompt: EffectSchema.Trim.check(
     EffectSchema.isNonEmpty(),
     EffectSchema.isMaxLength(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS),

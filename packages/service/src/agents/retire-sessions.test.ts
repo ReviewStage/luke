@@ -19,7 +19,7 @@ import { type EveAt, retireSessions } from "./retire-sessions.js";
 function sessionsNamed(count: number, prefix: string): StandingSession[] {
   return Array.from({ length: count }, (_, index) => ({
     sessionId: `${prefix}-${index}`,
-    kind: CONVERSATION_KIND.CODING_AGENT,
+    kind: CONVERSATION_KIND.AGENT,
   }));
 }
 
