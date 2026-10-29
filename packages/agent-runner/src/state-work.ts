@@ -48,12 +48,18 @@ const STASH_REF = "refs/stash";
 const GITLINK_MODE = "160000";
 
 /**
- * A harness's credential file and the `gh` sign-in's, by the folder and
- * name they stand under, which no pack carries in the work either: a pack
- * whose work holds one, tracked, staged or untracked, is refused, since
- * taking it out would restore a repository other than the agent's.
+ * A harness's credential file and the `gh` sign-in's, which no pack carries
+ * in the work either: a pack whose work holds one, tracked, staged or
+ * untracked, is refused, since taking it out would restore a repository
+ * other than the agent's. Claude Code's is known by its name alone,
+ * wherever it stands, since no other file is named so; Codex's and `gh`'s
+ * names are common in repositories, so they are known by the folder they
+ * stand under too.
  */
-const CREDENTIAL_FILES = [".claude/.credentials.json", ".codex/auth.json", "gh/hosts.yml"] as const;
+const CREDENTIAL_FILES = {
+  NAMES: [".credentials.json"],
+  PATHS: [".codex/auth.json", "gh/hosts.yml"],
+} as const;
 
 /** A git config key the state sets on a restore: a local branch's upstream, and nothing else. */
 const UPSTREAM_KEY = /^branch\..+\.(remote|merge)$/u;
@@ -368,7 +374,9 @@ const stagedCommit = (place: GitPlace, worktree: string, head: Option.Option<str
 
 /** Whether a path in the work names a harness's credential file or the `gh` sign-in's. */
 function credentialPath(path: string): boolean {
-  return CREDENTIAL_FILES.some((file) => path === file || path.endsWith(`/${file}`));
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  if (CREDENTIAL_FILES.NAMES.some((file) => name === file)) return true;
+  return CREDENTIAL_FILES.PATHS.some((file) => path === file || path.endsWith(`/${file}`));
 }
 
 /**

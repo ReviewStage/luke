@@ -266,7 +266,7 @@ it.effect(
         write(join(repository, "notes.md"), "notes\n");
         const stale = yield* Effect.flip(verifyState(agent, pack));
         assert.equal(stale._tag, "StateFailed");
-        write(join(repository, ".codex/auth.json"), SECRET);
+        write(join(repository, "home/.claude/projects/session/.credentials.json"), SECRET);
         const again = join(agent, "again.tar.zst");
         const refused = yield* Effect.flip(packState(agent, again));
         assert.equal(refused._tag, "StateFailed");
