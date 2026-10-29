@@ -30,8 +30,9 @@ import { VersionView } from "./version-view.js";
 /**
  * plain-links.test.ts -- a link the window has no chip for is one plain
  * link wherever words are drawn: a transcript, the plan read and edited, and
- * a version. A bare address says its host and path with a ↗, a labelled one
- * its label, and a plain link pressed in the plan or a version opens in the
+ * a version. A bare address says its host and path with a ↗, but in a
+ * transcript, which draws it as its website chip, and a labelled one its
+ * label, and a plain link pressed in the plan or a version opens in the
  * browser without opening the section's editor. Synthetic plan and
  * repository.
  */
@@ -141,9 +142,8 @@ function Version(): ReactNode {
   });
 }
 
-test("a transcript, the plan, and a version draw a link they have no chip for as one plain link, a bare address cut short", () => {
+test("the plan and a version draw a link they have no chip for as one plain link, a bare address cut short", () => {
   const surfaces = [
-    drawn(createElement(TranscriptWords, { text: WORDS })),
     drawn(createElement(PlanBody, { task: TASK, sectionLinks: SECTION_LINKS })),
     drawn(createElement(Version)),
   ];
@@ -152,6 +152,18 @@ test("a transcript, the plan, and a version draw a link they have no chip for as
     assert.deepEqual(plainLinks(surface), PLAIN);
     assert.equal(surface.querySelectorAll("[data-mention-ref]").length, 2);
   }
+});
+
+test("a transcript draws a bare address as its website chip, called by its site, which opens in the browser", async () => {
+  const transcript = drawn(createElement(TranscriptWords, { text: WORDS }));
+  const site = transcript.querySelector<HTMLElement>("[data-site-chip]");
+
+  assert.deepEqual(plainLinks(transcript), [["the docs", false]]);
+  assert.equal(transcript.querySelectorAll("[data-mention-ref]").length, 2);
+  assert.equal(site?.textContent, "postgresql.org");
+  act(() => site?.click());
+  await act(async () => undefined);
+  assert.deepEqual(sent, [{ kind: ACT_KIND.WEB_OPEN, payload: { url: BARE } }]);
 });
 
 test("the plan's editor draws a plain link as every place does, whole", async () => {

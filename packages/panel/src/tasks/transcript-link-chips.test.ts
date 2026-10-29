@@ -2,11 +2,13 @@
 
 import assert from "node:assert/strict";
 import { MENTION_KIND, type Mention, type MentionLines } from "@luke/features/mention-link";
+import { CALL_KIND, type CallKind } from "@luke/features/turn-rows";
 import { ACT_KIND } from "@luke/host/acts";
 import { Effect } from "effect";
-import { act, createElement } from "react";
+import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
 import {
   type AnyAct,
   fakeActPort,
@@ -17,7 +19,7 @@ import {
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
-import { TranscriptWords } from "./transcript-blocks.js";
+import { TranscriptTool, TranscriptWords } from "./transcript-blocks.js";
 
 /**
  * transcript-link-chips.test.ts -- a link an agent or Luke writes in its
@@ -25,7 +27,9 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * names wherever a transcript's words are drawn: an agent's reply, a
  * subagent's, and an Inbox item's Markdown, which all draw
  * through `TranscriptWords`. A link that names nothing stays a link, and
- * code stays code. Synthetic task and repository.
+ * code stays code. A call's row names the file it read or edited by the
+ * same chip, and the page it fetched by its website chip. Synthetic task
+ * and repository.
  */
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
@@ -81,11 +85,15 @@ function taskPage(
 
 /** The words drawn as a transcript draws them, on the task's page given or off any. */
 function drawn(page: TaskMentionsValue | undefined, text: string = WORDS): HTMLElement {
+  return drawnElement(page, createElement(TranscriptWords, { text }));
+}
+
+/** An element drawn on the task's page given, or off any. */
+function drawnElement(page: TaskMentionsValue | undefined, words: ReactElement): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const words = createElement(TranscriptWords, { text });
   act(() =>
     root.render(
       page === undefined ? words : createElement(TaskMentions, { value: page, children: words }),
@@ -180,4 +188,44 @@ test("a reference link is read through its definition, and a file's page far lon
     files.map((file) => file.path),
     ["apps/web/store.ts", longPath],
   );
+});
+
+/** A finished call of `kind` naming the files or the page given, as a transcript's row draws it. */
+function fileCall(kind: CallKind, subject: string, named: { files?: string[]; page?: string }) {
+  return createElement(TranscriptTool, {
+    kind,
+    state: TOOL_STATE.OUTPUT_AVAILABLE,
+    subject,
+    ...named,
+    input: { kind: TOOL_BLOCK.TEXT, text: subject },
+    output: { kind: TOOL_BLOCK.TEXT, text: "done" },
+    errorText: undefined,
+  });
+}
+
+test("a call's row names the first file it edited by the file's chip and how many more, the page it fetched by its site's chip, and off a repository its path", () => {
+  const page = taskPage([], []);
+  const edited = drawnElement(
+    page,
+    fileCall(CALL_KIND.EDIT, "src/members/list.ts +1", {
+      files: ["src/members/list.ts", "src/members/invite.ts"],
+    }),
+  );
+  const fetched = drawnElement(
+    page,
+    fileCall(CALL_KIND.WEB_PAGE, "www.rfc-editor.org/rfc/rfc9110", {
+      page: "https://www.rfc-editor.org/rfc/rfc9110",
+    }),
+  );
+  const elsewhere = drawnElement(
+    undefined,
+    fileCall(CALL_KIND.READ_FILE, "src/members/list.ts", { files: ["src/members/list.ts"] }),
+  );
+
+  assert.deepEqual(chips(edited), [[MENTION_KIND.FILE, "list.ts"]]);
+  // Note that the chip says what it names to a reader who hears it, "file".
+  assert.equal(edited.querySelector("summary")?.textContent, "Edited file list.ts +1");
+  assert.equal(fetched.querySelector("[data-site-chip]")?.textContent, "rfc-editor.org");
+  assert.deepEqual(chips(elsewhere), []);
+  assert.equal(elsewhere.querySelector("summary")?.textContent, "Read src/members/list.ts");
 });

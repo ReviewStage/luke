@@ -203,10 +203,11 @@ test("a skill load says the skill it loaded, and answers with the skill's instru
   assert.equal(loading.output, undefined);
 });
 
-test("a patch names the first file it touches and how many more, carries the patch to draw as a diff, and answers with the files it changed", () => {
+test("a patch names the first file it touches and how many more, a moved file by where it moved to, carries the patch to draw as a diff, and answers with the files it changed", () => {
   const patchText = [
     "*** Begin Patch",
     "*** Update File: apps/web/a.ts",
+    "*** Move to: apps/web/moved.ts",
     "@@",
     "-old",
     "+new",
@@ -226,7 +227,16 @@ test("a patch names the first file it touches and how many more, carries the pat
     },
   });
   assert.equal(view.kind, CALL_KIND.EDIT);
-  assert.equal(view.subject, "apps/web/a.ts +1");
+  assert.equal(view.subject, "apps/web/moved.ts +1");
+  assert.deepEqual(
+    view.files,
+    [],
+    "a patch of a checkout its root names names no file of the task's",
+  );
+  assert.deepEqual(
+    toolCallView({ tool: "apply_patch", input: { patchText }, output: undefined }).files,
+    ["apps/web/moved.ts", "apps/web/b.ts"],
+  );
   assert.deepEqual(view.input, { kind: TOOL_BLOCK.PATCH, text: patchText });
   assert.deepEqual(view.output, {
     kind: TOOL_BLOCK.TEXT,
