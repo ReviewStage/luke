@@ -18,8 +18,10 @@
  * runs on, one of a fixed set (`@luke/features/chapters-model-choice`), and the experiments the account turned on in
  * Settings › Experimental. A write carries any of them, a coding-agent
  * choice is accepted only as the catalog accepts it
- * (`packages/service/src/providers/model-catalog.ts`), so what is stored is
- * always a choice a Start could run, and the experiments are a patch read
+ * (`packages/service/src/providers/model-catalog.ts`), and moved only to a
+ * model a credential of the account's pays for, so what is stored is a
+ * choice a Start could run unless its credential has since gone, and the
+ * experiments are a patch read
  * as tolerantly as they are answered: a key this deployment does not list
  * is passed over rather than refused, because it is an older or newer
  * build's experiment and refusing it would refuse the build's every other
@@ -58,6 +60,7 @@ import { readEither } from "@luke/wire/effect";
 import { Effect, Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { isAdminRole } from "../admin/admin-access.js";
+import { unconnectedProviders } from "../agents/coder-host/agent-runtime-choice.js";
 import type { EveReach } from "../agents/coder-host/stop.js";
 import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
 import { HostedEnvironment } from "../environment.js";
@@ -74,6 +77,7 @@ import {
   type AccountFastOffer,
   acceptedModelChoice,
   type ModelCatalog,
+  providerModelOf,
 } from "../providers/model-catalog.js";
 import { forgetPosthogPersonEffect } from "../providers/posthog.js";
 import { memoriesProcedures } from "./memories-procedures.js";
@@ -151,8 +155,14 @@ const forgetAnalytics = /* @__PURE__ */ Effect.fn("web/forgetAnalytics")(functio
 
 /**
  * The write's coding-agent part, as the catalog accepts it for the
- * account (`offeredToAccount`): a choice it does not offer is a bad request, and a catalog the instance
- * cannot read is an outage the caller may retry.
+ * account (`offeredToAccount`): a choice it does not offer is a bad request,
+ * as is one that moves the default to a model of a provider no credential
+ * of the account's pays for (`unconnectedProviders`), and a catalog the
+ * instance cannot read is an outage the caller may retry. A write that keeps
+ * the model the default names now, as an Effort or a Context does, is taken
+ * whatever pays for it, because the default it changes was already that
+ * model: the fallback a new account reads, or a default whose credential
+ * has since gone. A Fast flip names another model, so it is checked.
  */
 const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: AccountProcedureSeams,
@@ -162,7 +172,7 @@ const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   const read = readModelChoice(value);
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const fastOffer = yield* hostedStoreOrUnavailable(seams.accountFastOffer(userId));
-  return yield* acceptedModelChoice(read.success, fastOffer).pipe(
+  const accepted = yield* acceptedModelChoice(read.success, fastOffer).pipe(
     Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
     Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
       Effect.logWarning(
@@ -170,6 +180,15 @@ const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
       ).pipe(Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE))),
     ),
   );
+  const standing = snapshotAnswer(yield* hostedStoreOrUnavailable(seams.readPreferences(userId)));
+  if (accepted.model === standing.agent.model) return accepted;
+  // Note that the default never moves to a model nothing pays for, because every Start on it would be refused.
+  const unconnected = yield* hostedStoreOrUnavailable(unconnectedProviders(userId));
+  const provider = providerModelOf(accepted.model)?.provider;
+  if (provider !== undefined && unconnected.has(provider)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return accepted;
 });
 
 /** The account resource: every procedure but the provider keys' own, which are `provider-keys-procedures.ts`'s. */
@@ -227,7 +246,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
      * Writes each part the body carries — `preferences`, a validated
      * settings snapshot that replaces the stored one whole, `linkOpen`,
      * where the account's links open, `agent`, a choice the catalog
-     * accepts, `chaptersModel`, one of the chapters' fixed set, and `experiments`, each experiment's on or off merged over
+     * accepts, moved only to a model the account pays for, `chaptersModel`, one of the chapters' fixed set, and `experiments`, each experiment's on or off merged over
      * what stood — and answers the snapshot as it then stands. A body
      * carrying none of them asks for nothing and is refused.
      */

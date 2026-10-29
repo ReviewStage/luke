@@ -82,6 +82,9 @@ const MODELS: readonly CatalogModel[] = [
   },
 ];
 
+/** The models the chip offers in this test, `MODELS` unless it says otherwise. */
+let models: readonly CatalogModel[] = MODELS;
+
 /** The account's default model, as the composer's chip reads it. */
 const DEFAULT_CHOICE: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" };
 
@@ -89,6 +92,7 @@ const DEFAULT_CHOICE: ModelChoice = { model: "anthropic/claude-opus-5.5", effort
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
+  models = MODELS;
   installScrollIntoView();
   installEditorLayout();
   fakeAppBridge({});
@@ -145,7 +149,7 @@ async function mount(
         open,
         preset: reopened ?? preset,
         repositoriesIn: () => repositories,
-        models: MODELS,
+        models,
         readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
         start: (
           name: string,
@@ -327,6 +331,23 @@ test("a model picked on the chip runs this agent alone, and the account's defaul
   await card.key("Enter");
 
   assert.equal(card.agents[0]?.choice?.model, "anthropic/claude-opus-5.5-fast");
+});
+
+test("Fast on a model nothing pays for lands on its harness's row in Settings, as picking it does, and the chip stays off Fast", async () => {
+  models = MODELS.map((model) => ({ ...model, credentialMissing: true }));
+  const card = await mount();
+  const chip =
+    document.querySelector<HTMLButtonElement>(".agent-model-chip button") ??
+    assert.fail("the model chip stands");
+  act(() => chip.click());
+  const fast =
+    document.querySelector<HTMLButtonElement>('[role="switch"]') ??
+    assert.fail("the menu offers Fast");
+  act(() => fast.click());
+  await settle();
+
+  assert.deepEqual(card.links, [agentKeyLink(MODEL_PROVIDER.ANTHROPIC)]);
+  assert.equal(chip.textContent?.includes("Fast"), false);
 });
 
 test("a server whose sign-in expired is offered nowhere in the card, which hands an agent no servers", async () => {

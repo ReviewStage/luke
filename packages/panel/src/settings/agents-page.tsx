@@ -93,7 +93,8 @@ import { SwitchRow } from "./switch-row.js";
  * switch runs the model's fast version, resting where the model has none
  * or the service withholds it because Anthropic never granted the key's
  * organization fast mode, saying which, and on the account's own key with
- * a link to ask Anthropic for it;
+ * a link to ask Anthropic for it; for a model nothing pays for, its press
+ * lands on that harness's row as the pick's does, and writes nothing;
  * the stored id is the catalog's own, the fast version's where the switch
  * is on. The effort row is a segmented control over the efforts the chosen
  * model lists, and for a model that offers two context windows a context
@@ -315,11 +316,13 @@ function DefaultRows({
           checked={read.fast}
           anchor={SETTINGS_SEARCH_ROW.AGENT_FAST}
           disabled={busy || base?.fast === undefined}
-          onChange={(fast) =>
-            base === undefined
-              ? Promise.resolve(WRITE_ACCEPTED)
-              : onChange(choiceAt(choiceModelId(base, fast)))
-          }
+          onChange={(fast) => {
+            if (base === undefined) return Promise.resolve(WRITE_ACCEPTED);
+            // A model nothing pays for runs no faster: the press goes to connect it, as its pick does, and the switch stands.
+            const missing = modelConnectFailure(base.model);
+            if (missing !== undefined) return remedy(missing)?.();
+            return onChange(choiceAt(choiceModelId(base, fast)));
+          }}
         />
       )}
       <SettingsRow
