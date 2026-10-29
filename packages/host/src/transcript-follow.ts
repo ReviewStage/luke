@@ -78,7 +78,7 @@ const RESEALS = 30;
 /** The service did not answer the transcript's live read, asked `RESEALS` times over: the last failure it answered, and what failed beneath it where the client said. */
 class SealUnanswered extends Data.TaggedError("SealUnanswered")<{
   readonly failure: string;
-  readonly cause?: unknown;
+  readonly cause?: FailureFacts;
 }> {}
 
 /** Which transcript: an agent's own, or one of its workers' by the delegation call that started it. A task's planning workers are keyed by their composer's own key, on the same terms. */
@@ -113,7 +113,7 @@ type Standing =
 /** A failure as the service answered one, with what failed beneath it where the client said. */
 interface Failed {
   readonly failure: string;
-  readonly cause?: unknown;
+  readonly cause?: FailureFacts;
 }
 
 export interface TranscriptFollowDependencies<Key = TranscriptKey> {

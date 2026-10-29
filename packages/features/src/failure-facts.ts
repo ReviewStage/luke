@@ -20,6 +20,8 @@
  * reads them back to branch on.
  */
 
+import { Schema } from "effect";
+
 /** Which failure the facts are of: each named as the error the host caught names itself (`_tag`). */
 export const FAILURE_FACT = {
   /** The service refused, with a refusal the caller names no failure for. */
@@ -48,11 +50,11 @@ export interface FailureFacts {
   readonly _tag: FailureFact;
   /** The service's refusal slug, where it refused. */
   readonly refusal?: string;
-  /** Where a call ended before any answer could be read (`CALL_FAULT`, `HOSTED_FAULT`). */
+  /** Where a call ended before any status was read (`CALL_FAULT`). */
   readonly fault?: string;
   /** The HTTP status the service answered, where one was read. */
   readonly status?: number;
-  /** A code the failure names: an oRPC error's, a failed read's, or why a gate stood closed. */
+  /** A code the failure names: an oRPC error's, what of an answer went unread, a failed read's, or why a gate stood closed. */
   readonly code?: string;
   /** The kind of error a call ended with, never its words. */
   readonly errorName?: string;
@@ -60,6 +62,19 @@ export interface FailureFacts {
   readonly reason?: string;
   /** The trace the call travelled under, which the service's log lines for it carry. */
   readonly traceId?: string;
-  /** The failure beneath, as the answer it was flattened from carried it. */
-  readonly cause?: unknown;
+  /** The failure beneath, read as these facts are. */
+  readonly cause?: FailureFacts;
 }
+
+/** The facts as they cross the act port to a window, the failure beneath read as the facts are. */
+export const failureFactsSchema: Schema.Codec<FailureFacts> = Schema.Struct({
+  _tag: Schema.Literals(Object.values(FAILURE_FACT)),
+  refusal: Schema.optionalKey(Schema.String),
+  fault: Schema.optionalKey(Schema.String),
+  status: Schema.optionalKey(Schema.Number),
+  code: Schema.optionalKey(Schema.String),
+  errorName: Schema.optionalKey(Schema.String),
+  reason: Schema.optionalKey(Schema.String),
+  traceId: Schema.optionalKey(Schema.String),
+  cause: Schema.optionalKey(Schema.suspend((): Schema.Codec<FailureFacts> => failureFactsSchema)),
+});

@@ -1,6 +1,5 @@
 import {
   AGENT_CALL_FAILURE,
-  type AgentAgentAnswer,
   type AgentChangesAnswerView,
   type AgentDefaultAnswer,
   type AgentListAnswer,
@@ -39,7 +38,7 @@ import type { PortActPayload } from "@luke/host/contract";
 import { STATUS_TONE } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type ActedResult, type ActHandle, unreachedAs } from "../act.js";
+import { type ActedResult, type ActHandle, type AgentActAnswer, unreachedAs } from "../act.js";
 import {
   DRAFT_PLACE,
   type Draft,
@@ -330,7 +329,7 @@ export interface AgentsControl {
   /** Stops one agent, answering whether the service took the Stop, which the task list then carries; a refusal is said in a toast. */
   onStop: (agentId: string) => Promise<boolean>;
   /** Takes one agent back to just before one of the developer's lines, stopping it first. */
-  onRewind: (agentId: string, messageId: string) => Promise<AgentAgentAnswer>;
+  onRewind: (agentId: string, messageId: string) => Promise<AgentActAnswer>;
   /** Sends one agent a message under the key the composer made. */
   onMessage: MessageSender;
   /** Changes one agent's model and effort for its next step, drawn at once by the host. */
@@ -877,7 +876,7 @@ export function useAgents(input: {
   const askStart = (
     on: string,
     asked: Omit<PortActPayload<typeof ACT_KIND.AGENTS_START>, "taskId">,
-  ): Promise<AgentAgentAnswer> => {
+  ): Promise<AgentActAnswer> => {
     setStarting(true);
     // Note that a Start from the page's agent names no task, so the service puts it where that agent is.
     const where = on === taskId ? { taskId: on } : undefined;
@@ -1259,7 +1258,7 @@ export function useAgents(input: {
   };
 
   const onRewind = useCallback(
-    (agentId: string, messageId: string): Promise<AgentAgentAnswer> =>
+    (agentId: string, messageId: string): Promise<AgentActAnswer> =>
       act(ACT_KIND.AGENTS_REWIND, { agentId, messageId }).catch(agentUnreached),
     [act],
   );
@@ -1268,7 +1267,7 @@ export function useAgents(input: {
     async (agentId, text, clientKey, attachments) => {
       // Note that a message that opens the agent's sandbox anew while its image is prepared is
       // taken at once, its relaunch waiting on the image in the service, so it is asked once.
-      const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_MESSAGE, {
+      const answer: AgentActAnswer = await act(ACT_KIND.AGENTS_MESSAGE, {
         agentId,
         text,
         clientKey,
@@ -1295,7 +1294,7 @@ export function useAgents(input: {
     async (agentId, disabledServers) => {
       const change = (switches.current.get(agentId) ?? 0) + 1;
       switches.current.set(agentId, change);
-      const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_SERVERS, {
+      const answer: AgentActAnswer = await act(ACT_KIND.AGENTS_SERVERS, {
         agentId,
         disabledServers,
       }).catch(agentUnreached);
@@ -1318,7 +1317,7 @@ export function useAgents(input: {
   const onRename = async (agentId: string, title: string): Promise<boolean> => {
     const rename = (renames.current.get(agentId) ?? 0) + 1;
     renames.current.set(agentId, rename);
-    const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_RENAME, {
+    const answer: AgentActAnswer = await act(ACT_KIND.AGENTS_RENAME, {
       agentId,
       title,
     }).catch(agentUnreached);
@@ -1343,7 +1342,7 @@ export function useAgents(input: {
     drawn: ArchiveDrawn = ARCHIVE_DRAWN.AT_ONCE,
   ): Promise<ActedResult> => {
     setArchivesOut((count) => count + 1);
-    const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_ARCHIVE, {
+    const answer: AgentActAnswer = await act(ACT_KIND.AGENTS_ARCHIVE, {
       agentId,
       archived,
       ...(drawn === ARCHIVE_DRAWN.ON_ANSWER ? { drawn } : undefined),

@@ -136,27 +136,27 @@ export class HostedRefused extends Data.TaggedError("HostedRefused")<{
   readonly traceId?: string;
 }> {}
 
-/** Where the link ended a call whose answer arrived but could not be read. */
-export const HOSTED_FAULT = {
+/** What of an answer that arrived the link could not read. */
+const HOSTED_UNREAD = {
   /** The answer's body did not end within its deadline, or could not be read. */
-  BODY_UNREAD: "body-unread",
+  BODY: "body-unread",
   /** The answer was not the procedure's output as its wire schema reads it. */
-  OUTPUT_UNREAD: "output-unread",
+  OUTPUT: "output-unread",
 } as const;
 
 /**
  * The procedure reached no answer the link could read: the call ended before
  * any status (no credential, the holder changed, the network, the deadline),
  * its answer could not be read, or the service answered an error it declares
- * no refusal for, such as a server error. A fault names which where the call
- * or the link ended it, and an undeclared error keeps its HTTP status and
- * oRPC code; the error's kind is a name, never its words, which could carry
- * a credential.
+ * no refusal for, such as a server error. A fault names where a call ended
+ * before any status, so a caller can tell a call that never reached the
+ * service from one it answered; an answer that arrived names what of it went
+ * unread, and an undeclared error keeps its HTTP status and oRPC code. The
+ * error's kind is a name, never its words, which could carry a credential.
  */
 export class HostedUnanswered extends Data.TaggedError("HostedUnanswered")<{
-  readonly fault?:
-    | (typeof CALL_FAULT)[keyof typeof CALL_FAULT]
-    | (typeof HOSTED_FAULT)[keyof typeof HOSTED_FAULT];
+  readonly fault?: (typeof CALL_FAULT)[keyof typeof CALL_FAULT];
+  readonly unread?: (typeof HOSTED_UNREAD)[keyof typeof HOSTED_UNREAD];
   readonly errorName?: string;
   readonly status?: number;
   readonly code?: string;
@@ -178,7 +178,9 @@ export function hostedFailureFacts(failed: HostedFailure): FailureFacts {
   if (failed._tag === "HostedRefused") {
     return { _tag: FAILURE_FACT.HOSTED_REFUSED, refusal: failed.refusal, ...trace };
   }
-  const { fault, errorName, status, code } = failed;
+  const { fault, unread, errorName, status } = failed;
+  // Note that what went unread is sent as the code, which an answer the link could not read has no other of.
+  const code = failed.code ?? unread;
   return {
     _tag: FAILURE_FACT.HOSTED_UNANSWERED,
     ...(fault === undefined ? undefined : { fault }),
@@ -353,7 +355,7 @@ async function sent(
     init.signal ? { signal: init.signal } : undefined,
   );
   if (text === undefined) {
-    throw new HostedUnanswered({ fault: HOSTED_FAULT.BODY_UNREAD, status: response.status });
+    throw new HostedUnanswered({ unread: HOSTED_UNREAD.BODY, status: response.status });
   }
   return new Response(text, {
     status: response.status,
@@ -385,8 +387,7 @@ export function hostedClient(options: HostedClientOptions): HostedClient {
         if (wire === undefined) return output;
         // SAFETY: the link's serializer read the output out of the response's JSON text.
         const read = readServiceAnswer(wire)(output as UnparsedWireValue);
-        if (Result.isFailure(read))
-          throw new HostedUnanswered({ fault: HOSTED_FAULT.OUTPUT_UNREAD });
+        if (Result.isFailure(read)) throw new HostedUnanswered({ unread: HOSTED_UNREAD.OUTPUT });
         return read.success;
       },
     ],
@@ -411,9 +412,10 @@ function traced(failed: HostedFailure, traceId: string): HostedFailure {
     const { refusal, data } = failed;
     return new HostedRefused({ refusal, ...(data === undefined ? undefined : { data }), traceId });
   }
-  const { fault, errorName, status, code } = failed;
+  const { fault, unread, errorName, status, code } = failed;
   return new HostedUnanswered({
     ...(fault === undefined ? undefined : { fault }),
+    ...(unread === undefined ? undefined : { unread }),
     ...(errorName === undefined ? undefined : { errorName }),
     ...(status === undefined ? undefined : { status }),
     ...(code === undefined ? undefined : { code }),

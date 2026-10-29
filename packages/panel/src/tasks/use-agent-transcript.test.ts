@@ -28,6 +28,7 @@ import {
 import { fakeActPort } from "../testing/app-bridge.js";
 import {
   type AgentTranscriptControl,
+  type HeardTranscriptPage,
   type TranscriptFollower,
   type TranscriptOlderReader,
   useAgentTranscript,
@@ -247,7 +248,7 @@ test("a page a read already out hands over after the tab let go of its stream is
   fakeActPort({
     [ACT_KIND.AGENTS_TRANSCRIPT]: () => Promise.resolve(stream),
   } as unknown as Parameters<typeof fakeActPort>[0]);
-  const heard: AgentTranscriptPage[] = [];
+  const heard: HeardTranscriptPage[] = [];
 
   const stop = windowTranscriptFollower(AGENT, (page) => heard.push(page));
   for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -269,7 +270,7 @@ test("a stream that breaks while it is read is heard as a page that could not be
   fakeActPort({
     [ACT_KIND.AGENTS_TRANSCRIPT]: () => Promise.resolve(stream),
   } as unknown as Parameters<typeof fakeActPort>[0]);
-  const heard: AgentTranscriptPage[] = [];
+  const heard: HeardTranscriptPage[] = [];
 
   const stop = windowTranscriptFollower(AGENT, (page) => heard.push(page));
   for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();

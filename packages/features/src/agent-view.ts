@@ -32,6 +32,7 @@ import {
 } from "./agent-wire.js";
 import { CONVERSATION_MEDIA_TYPE } from "./conversation-picture-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
+import { failureFactsSchema } from "./failure-facts.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
 import { githubTokenAnswerSchema, githubTokenSaveRequestSchema } from "./github-token-wire.js";
@@ -148,16 +149,10 @@ export type AgentCallFailure = (typeof AGENT_CALL_FAILURE)[keyof typeof AGENT_CA
 
 const failureSchema = EffectSchema.Literals(Object.values(AGENT_CALL_FAILURE));
 
-/**
- * A failed call, as every answer below spells one, with what failed beneath
- * it where it was caught: the host's facts of a call that never answered
- * (`failure-facts.ts`), or, past the act port, the error a window's own act
- * failed with. The window reports it and never draws or reads it, so it is
- * carried as it is.
- */
+/** A failed call, as every answer below spells one, with the facts of what failed beneath it where the host caught it (`failure-facts.ts`), which the window reports and never draws. */
 const failed = EffectSchema.Struct({
   failure: failureSchema,
-  cause: EffectSchema.optionalKey(EffectSchema.Unknown),
+  cause: EffectSchema.optionalKey(failureFactsSchema),
 });
 
 /** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`), when a plan's reached limit resets where it is that, the provider whose credential is missing where it is that, and why the task's device would not take the agent, with the device and its owner where it is another member's, where it is that. */

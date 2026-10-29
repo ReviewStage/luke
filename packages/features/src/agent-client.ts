@@ -87,6 +87,7 @@ import {
 } from "./contract/errors.js";
 import { conversationMediaTypeSchema } from "./conversation-picture-wire.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
+import type { FailureFacts } from "./failure-facts.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
   askHosted,
@@ -185,8 +186,7 @@ const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 type Failed = {
   readonly failure: AgentCallFailure;
-  /** What failed beneath, as the view carries it: the hosted failure's facts (`hostedFailureFacts`). */
-  readonly cause?: unknown;
+  readonly cause?: FailureFacts;
   readonly unreached?: RepositoryUnreached;
   readonly resetsAt?: number;
   readonly provider?: ModelProvider;

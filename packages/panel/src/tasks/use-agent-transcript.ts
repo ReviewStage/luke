@@ -19,7 +19,7 @@ import {
 } from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
-import { askAct } from "../act.js";
+import { askAct, type Unreached } from "../act.js";
 import { jsonBytes, PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
 import { type AgentRun, agentStillWriting } from "./agent-model.js";
 
@@ -52,6 +52,11 @@ import { type AgentRun, agentStillWriting } from "./agent-model.js";
 /** How one read is asked at once: the agent, the cursor to read past, and the worker's call where it is a worker's, answered as the view hears it. Copy transcript reads this way. */
 export type TranscriptReader = (params: AgentMessagesParams) => Promise<AgentMessagesAnswerView>;
 
+/** A page as the window hears it: one the host pushed, or one saying the stream itself could not open or broke, with the error it broke with, which never crosses the act port. */
+export type HeardTranscriptPage =
+  | AgentTranscriptPage
+  | Unreached<typeof AGENT_CALL_FAILURE.UNANSWERED>;
+
 /**
  * How the window follows a transcript: each page is handed to `hear` as it
  * is pushed, a stream that could not open or broke as a page that could not
@@ -59,7 +64,7 @@ export type TranscriptReader = (params: AgentMessagesParams) => Promise<AgentMes
  */
 export type TranscriptFollower = (
   transcript: AgentTranscriptKey,
-  hear: (page: AgentTranscriptPage) => void,
+  hear: (page: HeardTranscriptPage) => void,
 ) => () => void;
 
 /** How the page below the oldest message held is read: the transcript and where to read below, answered as the view hears it. */
@@ -245,7 +250,7 @@ function meets(held: readonly AgentTranscriptMessage[], page: AgentTranscriptPag
 }
 
 /** A page pushed, joined to what is held: its messages by id, and where the agent stands as it says. */
-function joined(was: Held, page: AgentTranscriptPage): Held {
+function joined(was: Held, page: HeardTranscriptPage): Held {
   // Note that a transcript the account does not reach draws nothing it held of it, as one the host drew from what it held before access was checked.
   if ("failure" in page) {
     return page.failure === AGENT_CALL_FAILURE.NOT_FOUND

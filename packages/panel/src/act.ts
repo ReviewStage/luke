@@ -19,6 +19,7 @@
  * pressed anything.
  */
 
+import type { AGENT_CALL_FAILURE, AgentAgentAnswer } from "@luke/features/agent-view";
 import { FAILURE_CONDITION, FAILURE_SURFACE, failureAboutOf } from "@luke/features/shown-failure";
 import { ACT_UNREACHED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -234,14 +235,23 @@ export function firstRefusal(answers: readonly Kept[]): unknown {
 }
 
 /**
- * The answer a caller settles an act that never answered into: the failure
- * its words draw, with the error beneath, which a shown failure reports.
+ * An answer a caller settled an act that never answered into: the failure
+ * its words draw, with the error beneath, which a shown failure reports. It
+ * is the window's own and never crosses the act port, so it holds the error
+ * itself, where an answer the host sends holds the facts of one
+ * (`@luke/features/failure-facts`).
  */
+export interface Unreached<Failure extends string> {
+  readonly failure: Failure;
+  readonly cause: unknown;
+}
+
+/** An agent's act as the window hears it: the host's answer, or one that never arrived. */
+export type AgentActAnswer = AgentAgentAnswer | Unreached<typeof AGENT_CALL_FAILURE.UNANSWERED>;
+
+/** Settles an act that never answered into the failure given, with the error beneath. */
 export function unreachedAs<const Failure extends string>(failure: Failure) {
-  return (cause: unknown): { readonly failure: Failure; readonly cause: unknown } => ({
-    failure,
-    cause,
-  });
+  return (cause: unknown): Unreached<Failure> => ({ failure, cause });
 }
 
 /**
