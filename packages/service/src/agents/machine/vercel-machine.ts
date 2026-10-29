@@ -388,7 +388,9 @@ const diedAtStart = (
     const exit = yield* api
       .commandExit(sandboxSessionId, commandId)
       .pipe(Effect.orElseSucceed(() => undefined));
-    const stderr = yield* api.commandStderrTail(sandboxSessionId, commandId, secrets);
+    const stderr = yield* api
+      .commandStderrTail(sandboxSessionId, commandId, secrets)
+      .pipe(Effect.orElseSucceed(() => undefined));
     yield* Effect.logWarning(
       `A runner's launch took no stdin: exit ${exit === null || exit === undefined ? "unknown" : String(exit)}, stderr: ${stderr ?? "none"}`,
     );
