@@ -27,17 +27,17 @@
 #
 # On an Apple silicon Mac it installs for the user who ran the command under
 # sudo, as GitHub's runner does on macOS, and refuses where there is none, as
-# when root itself is logged in, or where the Luke app already runs agents for
-# that user. It refuses a macOS older than MAC_MIN_VERSION, and checks no
-# /dev/kvm, since smolvm runs on Hypervisor.framework there. It unpacks the
+# when root itself is logged in. It refuses a macOS older than
+# MAC_MIN_VERSION, and checks no /dev/kvm, since smolvm runs on
+# Hypervisor.framework there. It unpacks the
 # release under that user's Application Support, owned by them, enrolls the
 # Mac as that user, and installs a LaunchAgent in their ~/Library/LaunchAgents
 # that runs the daemon at login, on a state folder of its own, and again after
 # a crash but not after a clean exit, logging under their ~/Library/Logs. It
 # starts the agent at once where that user is logged in, and otherwise at their
 # next login: it runs only while they are. The daemon fetches its own smolvm
-# (SMOLVM_MAC_PIN) and the sandbox image as it starts. The desktop app refuses
-# to turn This Mac on beside this agent.
+# (SMOLVM_MAC_PIN) and the sandbox image as it starts. It runs beside the
+# desktop app's This Mac, whichever account each runs agents for.
 #
 # smolvm's own install script is never run: its release is fetched and checked
 # here, as the daemon's is.
@@ -88,17 +88,12 @@ EXIT_REFUSED=78
 CONNECT_WAIT_SECONDS=300
 # How long fetching the sandbox image may take.
 IMAGE_WAIT_SECONDS=1800
-# A Mac's install, under the home of the user it is for: its LaunchAgent, by the
-# label the desktop app refuses to turn This Mac on beside
-# (DARWIN_STANDALONE_LAUNCH_AGENT in packages/host/src/daemon/host-os.ts), the
-# folder holding the release and its state, and its logs. The desktop app's own
-# state folder holds its luke-host's device record once that is enrolled, which
-# means the app runs agents for that user already. `luke-host uninstall` names
-# the first three too.
+# A Mac's install, under the home of the user it is for: its LaunchAgent, by its
+# label, the folder holding the release and its state, and its logs.
+# `luke-host uninstall` names the three too.
 MAC_LABEL="dev.reviewstage.luke.host.standalone"
 MAC_APP_FOLDER="Library/Application Support/Luke Host"
 MAC_LOG_FOLDER="Library/Logs/Luke Host"
-MAC_APP_STATE_FOLDER="Library/Application Support/Luke"
 # The oldest macOS it installs on: the release's launcher reads its own path
 # with readlink -f, which macOS has had since 12.3, and smolvm needs macOS 11.
 MAC_MIN_VERSION="12.3"
@@ -425,13 +420,6 @@ require_mac_user() {
   fi
 }
 
-# Refuses where the Luke app already runs agents for the user whose home is $1:
-# its luke-host enrolled, so its device record stands in the app's state folder.
-require_no_app_host() {
-  [ ! -e "$1/$MAC_APP_STATE_FOLDER/device.json" ] ||
-    fail "The Luke app already runs agents on this Mac for this account, so nothing was installed."
-}
-
 # Writes the LaunchAgent to $1: the release in $2 run as the user it is
 # installed for, on the state folder $3, which a release build would otherwise
 # take to be the desktop app's, logging to $4. It runs at login, and again after
@@ -491,7 +479,6 @@ install_darwin() {
   require_mac_user
   home="$(dscl . -read "/Users/$mac_user" NFSHomeDirectory 2>/dev/null | sed -n 's/^NFSHomeDirectory: //p')"
   [ -n "$home" ] && [ -d "$home" ] || fail "Could not find $mac_user's home folder."
-  require_no_app_host "$home"
   uid="$(id -u "$mac_user")"
   group="$(id -gn "$mac_user")"
   app="$home/$MAC_APP_FOLDER"

@@ -1,5 +1,5 @@
 #!/bin/sh
-# luke-host -- the host's one command: `uninstall` removes Luke's host as root, from a Linux box with the smolvm the install script put beside it and, with the luke-host user's home, smolvm's state and every machine left behind, or from a Mac for the user who runs it under sudo, with its LaunchAgent, its folder, its logs, its agents' machines, and its agents' folders under ~/.luke/agents; every other command is the daemon's own (lib/luke-host.mjs), run on the Node the release carries.
+# luke-host -- the host's one command: `uninstall` removes Luke's host as root, from a Linux box with the smolvm the install script put beside it and, with the luke-host user's home, smolvm's state and every machine left behind, or from a Mac for the user who runs it under sudo, with its LaunchAgent, its folder, its logs, and, where no Luke app profile runs agents for that user, its agents' machines and their folders under ~/.luke/agents; every other command is the daemon's own (lib/luke-host.mjs), run on the Node the release carries.
 #
 # Shipped as bin/luke-host in every release tarball, a Mac's among them
 # (scripts/package.ts), and linked from /usr/local/bin by the install script.
@@ -14,8 +14,8 @@ SMOLVM_DIR="/opt/luke-smolvm"
 MAC_LABEL="dev.reviewstage.luke.host.standalone"
 MAC_APP_FOLDER="Library/Application Support/Luke Host"
 MAC_LOG_FOLDER="Library/Logs/Luke Host"
-# The Luke app's own state, whose device.json means its This Mac runs agents for the user, in the ~/.luke/agents folder that both share.
-MAC_APP_STATE_FOLDER="Library/Application Support/Luke"
+# Where each Luke app profile keeps its own state, in a folder named for it (Luke, Luke Dev, Luke Dev <instance>, Luke Test): a device.json in one means its This Mac runs agents for the user, in the ~/.luke/agents folder and smolvm store they all share with this install.
+MAC_APP_STATE_PREFIX="Library/Application Support/Luke"
 
 # Removes a Mac's install for the user who ran the command under sudo: its
 # LaunchAgent booted out, which stops the daemon and every agent's VM with it,
@@ -27,8 +27,10 @@ MAC_APP_STATE_FOLDER="Library/Application Support/Luke"
 # Note that the machines are smolvm's, kept in the user's own smolvm store rather than the
 # state, so each is deleted by name, with the smolvm the daemon fetched, before
 # the state goes; smolvm's cache of the sandbox image stays with that store.
-# Note that the agents' folders are the Luke app's too, so they are left where
-# its own state stands for this user, which the install refuses beside this one.
+# Note that the store and the agents' folders are a Luke app's too, where its
+# This Mac runs beside this install, so both are left where any app profile's
+# state stands for this user, since nothing kept here tells this install's
+# agents from an app's.
 uninstall_darwin() {
   if [ "$(id -u)" -ne 0 ]; then
     printf 'Run it as root: sudo luke-host uninstall\n' >&2
@@ -53,21 +55,29 @@ uninstall_darwin() {
     exit 1
   fi
   rm -f "$home/Library/LaunchAgents/$MAC_LABEL.plist"
-  for smolvm in "$app"/state/agent-tools/smolvm/*/smolvm; do
-    [ -x "$smolvm" ] || continue
-    sudo -u "$user" -H "$smolvm" machine ls -q 2>/dev/null | while IFS= read -r machine; do
-      case "$machine" in
-        luke-*) sudo -u "$user" -H "$smolvm" machine delete --name "$machine" -f >/dev/null 2>&1 || true ;;
-      esac
-    done
+  app_runs_agents=false
+  for state in "$home/$MAC_APP_STATE_PREFIX"*; do
+    if [ "$state" != "$app" ] && [ -e "$state/device.json" ]; then
+      app_runs_agents=true
+    fi
   done
+  if [ "$app_runs_agents" = false ]; then
+    for smolvm in "$app"/state/agent-tools/smolvm/*/smolvm; do
+      [ -x "$smolvm" ] || continue
+      sudo -u "$user" -H "$smolvm" machine ls -q 2>/dev/null | while IFS= read -r machine; do
+        case "$machine" in
+          luke-*) sudo -u "$user" -H "$smolvm" machine delete --name "$machine" -f >/dev/null 2>&1 || true ;;
+        esac
+      done
+    done
+  fi
   # Note that the link is read as the install wrote it, before its target goes, since a link to nothing resolves to nothing.
   if [ "$(readlink /usr/local/bin/luke-host 2>/dev/null)" = "$app/luke-host/bin/luke-host" ]; then
     rm -f /usr/local/bin/luke-host
   fi
   rm -rf "$app" "$home/$MAC_LOG_FOLDER"
-  if [ -e "$home/$MAC_APP_STATE_FOLDER/device.json" ]; then
-    printf 'The Luke app runs agents on this Mac for %s too, so ~/.luke/agents was left in place.\n' "$user"
+  if [ "$app_runs_agents" = true ]; then
+    printf 'A Luke app runs agents on this Mac for %s too, so every agent machine and ~/.luke/agents were left in place.\n' "$user"
   else
     rm -rf "${home:?}/.luke/agents"
     rmdir "$home/.luke" 2>/dev/null || true
