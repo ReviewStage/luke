@@ -1480,7 +1480,7 @@ test("a GitHub event's run names its pull request beside the automation, which o
   await settle();
 
   const { sender } = origin(page);
-  assert.equal(words(sender), "Flaky-test sweep · pull request #2905 View commands · Run by you");
+  assert.equal(words(sender), "Flaky-test sweep · pull request #2905 · Run by you");
   act(() => sender?.querySelector<HTMLElement>("[data-mention-ref]")?.click());
   await settle();
   assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
@@ -1516,7 +1516,7 @@ test("a GitHub event's pull request is its chip, saying where it stands and wear
       chip?.querySelector(".luke-inline-ref-state")?.textContent,
       chip?.querySelector<SVGElement>("[data-pull-request-mark]")?.dataset.pullRequestState,
     ],
-    ["#2905 View commands", "Open", PULL_REQUEST_STATE.OPEN],
+    ["#2905", "Open", PULL_REQUEST_STATE.OPEN],
   );
 });
 
