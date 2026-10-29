@@ -108,6 +108,30 @@ it.layer(getTestDB())("one task blocking another", (it) => {
       }),
   );
 
+  it.effect(
+    "no block closes a cycle, one through a task the writer does not reach among them",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, workspace, schema, sidebar } = yield* openSharedWorkspace;
+        // Dean's own token reached this repository, which Charles's never read.
+        const { id: hidden } = yield* createTask(dean, {
+          name: "Hidden",
+          organizationId: workspace,
+          repository: "dean/side",
+          githubAccess: GITHUB_ACCESS.TOKEN,
+        });
+        yield* addTaskBlock(dean, { blockerTaskId: schema, blockedTaskId: hidden });
+        yield* addTaskBlock(dean, { blockerTaskId: hidden, blockedTaskId: sidebar });
+
+        const closing = yield* Effect.flip(
+          addTaskBlock(charles, { blockerTaskId: sidebar, blockedTaskId: schema }),
+        );
+
+        assert.equal(closing._tag, "TaskBlockCycle");
+        assert.deepEqual(yield* blocksOf(dean, schema), { blockedBy: [], blocks: [hidden] });
+      }),
+  );
+
   it.effect("no task blocks itself or a task of another workspace", () =>
     Effect.gen(function* () {
       const { dean, schema } = yield* openSharedWorkspace;

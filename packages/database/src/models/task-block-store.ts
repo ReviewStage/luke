@@ -21,8 +21,9 @@ import { reachableTask, taskReachableBy } from "./workspace-store.js";
  * gates on its reach of each task it names (`taskReachableBy`), so a task
  * the account does not reach reads as no task and is never named in what
  * another task's blocks answer. A block is advice, as Linear's is: nothing
- * here refuses work on a blocked task. Every function is an effect over the
- * ambient `SqlClient` and names no database of its own.
+ * here refuses work on a blocked task, but no block may close a cycle, in
+ * which a task would wait, through others, on itself. Every function is an
+ * effect over the ambient `SqlClient` and names no database of its own.
  */
 
 /** What a block store operation answers: an effect over the ambient client, failing as every store does or as `E` names. */
@@ -52,6 +53,9 @@ export class TaskBlockSelf extends Data.TaggedError("TaskBlockSelf") {}
 
 /** The blocker and the blocked task stand in two workspaces; nothing was written. */
 export class TaskBlockAcrossWorkspaces extends Data.TaggedError("TaskBlockAcrossWorkspaces") {}
+
+/** The blocked task already blocks the blocker, itself or through others, so the block would close a cycle; nothing was written. */
+export class TaskBlockCycle extends Data.TaggedError("TaskBlockCycle") {}
 
 /**
  * The id of the transaction a write committed in, read in the write's own
@@ -141,6 +145,29 @@ const insertBlock = SqlSchema.findOneOption({
     ),
 });
 
+/**
+ * The blocker, where the blocked task already blocks it, itself or through
+ * the tasks it blocks. Note that the walk follows every block, a task the
+ * account does not reach among them, because a cycle through a hidden task
+ * is a cycle still; `union` drops a task already walked, so a walk ends.
+ */
+const findCycle = SqlSchema.findOneOption({
+  Request: PairSchema,
+  Result: IdRowSchema,
+  execute: ({ blockerTaskId, blockedTaskId }) =>
+    Effect.flatMap(
+      SqlClient.SqlClient,
+      (client) => client`
+        with recursive downstream(id) as (
+          select blocked_task_id from task_block where blocker_task_id = ${blockedTaskId}
+          union
+          select block.blocked_task_id from task_block block
+            join downstream on block.blocker_task_id = downstream.id
+        )
+        select id::text as id from downstream where id = ${blockerTaskId} limit 1`,
+    ),
+});
+
 const deleteBlock = SqlSchema.findOneOption({
   Request: PairSchema,
   Result: TxidRowSchema,
@@ -175,24 +202,24 @@ function writtenOf(row: Option.Option<typeof TxidRowSchema.Type>): TaskBlockWrit
 }
 
 /**
- * The pair's two tasks, locked, in the one workspace they share, for a
+ * The pair's two tasks, locked, and the one workspace they share, for a
  * write to run under; nothing where the account reaches either not, and a
  * failure where they are one task or stand in two workspaces.
  */
 function lockedPair(
   userId: string,
   pair: TaskBlockPair,
-): TaskBlockEffect<Option.Option<void>, TaskBlockSelf | TaskBlockAcrossWorkspaces> {
+): TaskBlockEffect<Option.Option<string>, TaskBlockSelf | TaskBlockAcrossWorkspaces> {
   return Effect.gen(function* () {
     if (pair.blockerTaskId === pair.blockedTaskId) return yield* new TaskBlockSelf();
     const taskIds = [pair.blockerTaskId, pair.blockedTaskId];
     const reached = yield* lockReachableTasks({ userId, taskIds });
     if (reached.length !== taskIds.length) return Option.none();
     const [first, second] = reached;
-    if (first?.organizationId !== second?.organizationId) {
+    if (first === undefined || first.organizationId !== second?.organizationId) {
       return yield* new TaskBlockAcrossWorkspaces();
     }
-    return Option.some(undefined);
+    return Option.some(first.organizationId);
   });
 }
 
@@ -241,18 +268,24 @@ export function readTaskBlocks(
 
 /**
  * Adds the block: the blocker blocks the blocked task. A block that stands
- * already stands as it was, and answers no transaction. Nothing where the
- * account reaches either task not.
+ * already stands as it was, and answers no transaction; one that would
+ * close a cycle fails. Nothing where the account reaches either task not.
  */
 export function addTaskBlock(
   userId: string,
   pair: TaskBlockPair,
-): TaskBlockEffect<Option.Option<TaskBlockWritten>, TaskBlockSelf | TaskBlockAcrossWorkspaces> {
+): TaskBlockEffect<
+  Option.Option<TaskBlockWritten>,
+  TaskBlockSelf | TaskBlockAcrossWorkspaces | TaskBlockCycle
+> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        const locked = yield* lockedPair(userId, pair);
-        if (Option.isNone(locked)) return Option.none();
+        const workspace = yield* lockedPair(userId, pair);
+        if (Option.isNone(workspace)) return Option.none();
+        // Note that the workspace's adds take turns, because two adds that each close half a cycle would each walk past the other's unwritten row.
+        yield* client`select pg_advisory_xact_lock(hashtextextended(${workspace.value}, 0))`;
+        if (Option.isSome(yield* findCycle(pair))) return yield* new TaskBlockCycle();
         const now = yield* DateTime.nowAsDate;
         return Option.some(writtenOf(yield* insertBlock({ ...pair, now })));
       }),
