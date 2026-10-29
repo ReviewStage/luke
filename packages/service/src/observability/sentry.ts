@@ -3,7 +3,10 @@
  *
  * Sentry's Effect guide (docs.sentry.io/platforms/javascript/guides/effect)
  * composes `Sentry.effectLayer`, which starts the SDK and registers its
- * `ErrorReporter`, with the tracer, the logger, and the metrics layer. The web
+ * `ErrorReporter`, with the tracer, the logger, and the metrics layer. This
+ * module does the same but for the reporter and the logger, which are its own
+ * (`sentryErrorReporter`, `sentryLogger`), so a report's ids land as tags its
+ * issue is searched by and a log line keeps its annotations. The web
  * functions take all of it, with the process's uncaught-exception and
  * unhandled-rejection handlers the Effect SDK leaves out, and send what they
  * queued after each answer (`sentryReportedFetch`), because Vercel may freeze
@@ -37,7 +40,7 @@ import {
 } from "@luke/features/sentry-addresses";
 import * as Sentry from "@sentry/effect";
 import { addBreadcrumb, type ErrorEvent, type EventHint } from "@sentry/effect/server";
-import { Effect, ErrorReporter, Exit, Layer, type Logger, Tracer } from "effect";
+import { Effect, ErrorReporter, Exit, Layer, Logger, Predicate, References, Tracer } from "effect";
 
 export const SENTRY_ENVIRONMENT = {
   /** The `luke-web` project's DSN; absent means nothing is sent. */
@@ -302,14 +305,121 @@ const sentryTelemetry = Layer.mergeAll(
   Sentry.SentryEffectMetricsLayer,
 );
 
-/** Every Effect log line as a Sentry log, for the runtime's logger set beside the JSON one. */
-export const sentryLogger: Logger.Logger<unknown, void> = Sentry.SentryEffectLogger;
+/** What every log line this logger sends is marked with, as Sentry's own Effect logger marks its lines. */
+const LOG_ORIGIN = { "sentry.origin": "auto.log.effect" } as const;
+
+/** Sentry's logger method for each Effect level a line is written at. */
+const SENTRY_LOG_METHOD = {
+  Fatal: Sentry.logger.fatal,
+  Error: Sentry.logger.error,
+  Warn: Sentry.logger.warn,
+  Info: Sentry.logger.info,
+  Debug: Sentry.logger.debug,
+  Trace: Sentry.logger.trace,
+} as const;
+
+/** A line's message as one string, folded as Sentry's own Effect logger folds it, so a search for its words still matches. */
+function foldedLogMessage(message: unknown): string {
+  if (Predicate.isString(message)) return message;
+  if (Array.isArray(message) && message.length === 1) {
+    const [only] = message;
+    return Predicate.isString(only) ? only : JSON.stringify(only);
+  }
+  return JSON.stringify(message);
+}
+
+/**
+ * Every Effect log line as a Sentry log, for the runtime's logger set beside
+ * the JSON one: at its level, with the fiber's log annotations as its
+ * attributes, so a line can be found in Sentry by the ids it was logged with.
+ * `beforeSendLog` scrubs them as it scrubs every log's.
+ *
+ * Note that this replaces `Sentry.SentryEffectLogger`, because that one sends
+ * the message alone and drops the annotations. The line still reaches its
+ * trace as Sentry links any log: the tracer (`SentryEffectTracer`) makes the
+ * fiber's span the active one while the fiber runs, and Sentry's logger reads
+ * the trace and span ids from it.
+ */
+export const sentryLogger: Logger.Logger<unknown, void> = Logger.make(
+  ({ fiber, logLevel, message }) => {
+    if (logLevel === "All" || logLevel === "None") return;
+    const annotations = fiber.getRef(References.CurrentLogAnnotations);
+    SENTRY_LOG_METHOD[logLevel](foldedLogMessage(message), { ...annotations, ...LOG_ORIGIN });
+  },
+);
+
+/** The attributes a report is searched by, which land as tags on its issue; every other attribute stays its extra data. */
+const REPORT_TAG_ATTRIBUTES: ReadonlySet<string> = new Set([
+  "agentId",
+  "conversationId",
+  "turnId",
+  "taskId",
+  "sessionId",
+  "sandboxSessionId",
+  "failure",
+  "reason",
+]);
+
+/** The longest value Sentry keeps on a tag; a longer one is dropped from the event. */
+const TAG_VALUE_MAX_LENGTH = 200;
+
+/**
+ * A report's attributes as an issue carries them: those it is searched by as
+ * tags where they are a string, a number, or a boolean, the rest as extra data. Note that a tag's value is cut to Sentry's
+ * limit, because a longer one is dropped whole, and the whole value then stays
+ * in the extra data.
+ */
+function reportContext(attributes: Readonly<Record<string, unknown>>): {
+  tags: Record<string, string>;
+  extra: Record<string, unknown>;
+} {
+  const tags: Record<string, string> = {};
+  const extra: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(attributes)) {
+    // Note that only a primitive becomes a tag, and nothing is serialized here, because a
+    // cyclic or BigInt value would throw and lose the report; Sentry normalizes extra data.
+    const text =
+      Predicate.isString(value) || Predicate.isNumber(value) || Predicate.isBoolean(value)
+        ? String(value)
+        : undefined;
+    if (!REPORT_TAG_ATTRIBUTES.has(name) || text === undefined) extra[name] = value;
+    else {
+      tags[name] = text.slice(0, TAG_VALUE_MAX_LENGTH);
+      if (text.length > TAG_VALUE_MAX_LENGTH) extra[name] = value;
+    }
+  }
+  return { tags, extra };
+}
+
+/**
+ * Each failure a cause carries, captured as `effectLayer`'s own reporter
+ * captures it, through Effect's `ErrorReporter.make`, but with the
+ * attributes the failure is annotated with (`ErrorReporter.attributes`) split
+ * by `reportContext`: Sentry's own reporter sends all of them as extra data,
+ * which an issue cannot be searched by.
+ */
+const sentryErrorReporter = ErrorReporter.make(({ error, severity, attributes }) => {
+  Sentry.captureException(error, {
+    mechanism: { type: "auto.function.effect.error_reporter", handled: false },
+    captureContext: {
+      level: severity === "Fatal" || severity === "Warn" ? SEVERITY_LEVEL[severity] : "error",
+      ...reportContext(attributes),
+    },
+  });
+});
+
+/** The reporter registered beside whatever reporters stand, as the guide asks of a reporter of one's own. */
+const sentryReporting = ErrorReporter.layer([sentryErrorReporter], { mergeWithExisting: true });
 
 /**
  * Sentry started on `options`, with its `ErrorReporter` registered: a route
  * that fails, a cause handed to `ErrorReporter.report`, and an effect under
  * `Effect.withErrorReporting` are each captured, and so is an exception or a
  * rejection nothing in the process caught.
+ *
+ * Note that this is `effectLayer`'s start, `Sentry.init`, beside this
+ * module's own reporter rather than `effectLayer` itself, because that would
+ * register Sentry's reporter too and capture each failure twice.
  *
  * Note that the two process handlers are added here rather than in
  * `sentryOptions`, because the Effect SDK's server `init` starts only its
@@ -318,14 +428,18 @@ export const sentryLogger: Logger.Logger<unknown, void> = Sentry.SentryEffectLog
  * both handlers.
  */
 export function sentryLayer(options: SentryOptions = sentryOptions()): Layer.Layer<never> {
-  const started = Sentry.effectLayer({
-    ...options,
-    integrations: [
-      Sentry.onUncaughtExceptionIntegration(),
-      Sentry.onUnhandledRejectionIntegration(),
-    ],
-  });
-  return Layer.merge(started, sentryTelemetry);
+  const started = Layer.effectDiscard(
+    Effect.sync(() =>
+      Sentry.init({
+        ...options,
+        integrations: [
+          Sentry.onUncaughtExceptionIntegration(),
+          Sentry.onUnhandledRejectionIntegration(),
+        ],
+      }),
+    ),
+  );
+  return Layer.mergeAll(started, sentryReporting, sentryTelemetry);
 }
 
 /** How long an instance is kept awake after an answer for Sentry to send what it queued. */
@@ -362,26 +476,11 @@ export function sentryReportedFetch(
 
 /**
  * The same reporting for a process eve's instrumentation already started
- * Sentry in, without a second start. It captures each failure as
- * `effectLayer`'s own reporter does, through Effect's `ErrorReporter.make`,
- * and is merged with whatever reporters stand, as the guide asks of a
- * reporter of one's own.
+ * Sentry in, without a second start: a second `init` would replace the
+ * client eve's integration hangs off.
  */
 export const sentryReportingLayer: Layer.Layer<never> = Layer.merge(
-  ErrorReporter.layer(
-    [
-      ErrorReporter.make(({ error, severity, attributes }) => {
-        Sentry.captureException(error, {
-          mechanism: { type: "auto.function.effect.error_reporter", handled: false },
-          captureContext: {
-            level: severity === "Fatal" || severity === "Warn" ? SEVERITY_LEVEL[severity] : "error",
-            extra: { ...attributes },
-          },
-        });
-      }),
-    ],
-    { mergeWithExisting: true },
-  ),
+  sentryReporting,
   sentryTelemetry,
 );
 
