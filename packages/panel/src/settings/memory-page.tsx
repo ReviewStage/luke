@@ -488,9 +488,7 @@ function NothingShown({
         icon={<SearchIcon />}
         title={PAGE_LINE.NO_MATCH}
         action={{ label: PAGE_LINE.CLEAR, onClick: onClear }}
-      >
-        Nothing kept here fits this search and filter.
-      </EmptyState>
+      />
     );
   }
   if (total === 0) return <SettingsLine>{PAGE_LINE.EMPTY}</SettingsLine>;

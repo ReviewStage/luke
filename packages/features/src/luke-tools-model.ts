@@ -85,7 +85,7 @@ const LUKE_TOOL_WORDS = {
   },
   [AGENT_TOOL.LIST_AGENTS]: {
     group: LUKE_TOOL_GROUP.AGENTS,
-    summary: "Lists the workspace's coding agents",
+    summary: "Lists the workspace's agents",
   },
   [AGENT_TOOL.READ_AGENT]: {
     group: LUKE_TOOL_GROUP.AGENTS,
@@ -97,7 +97,7 @@ const LUKE_TOOL_WORDS = {
   },
   [AGENT_TOOL.START_AGENT]: {
     group: LUKE_TOOL_GROUP.AGENTS,
-    summary: "Starts a new coding agent on a task",
+    summary: "Starts a new agent on a task",
   },
   [AGENT_TOOL.STOP_AGENT]: {
     group: LUKE_TOOL_GROUP.AGENTS,
@@ -299,23 +299,26 @@ export const RUN_ON_MAC_REASON = {
 
 export type RunOnMacReason = (typeof RUN_ON_MAC_REASON)[keyof typeof RUN_ON_MAC_REASON];
 
-/** What Luke says of each reason: a short line for a row, and a sentence of detail for the tool's page. */
+/** What Luke says of one reason: a short line for a row, and a sentence of detail for the tool's page where the short line leaves something unsaid. */
+interface RunOnMacReasonWords {
+  readonly short: string;
+  readonly detail?: string;
+}
+
+/** What Luke says of each reason. Settings off has no detail, since the Open settings beside its short line says the rest. */
 export const RUN_ON_MAC_REASON_WORDS = {
-  [RUN_ON_MAC_REASON.SETTINGS_OFF]: {
-    short: "Off in Settings",
-    detail: "This Mac's Settings let no agent run commands on it.",
-  },
+  [RUN_ON_MAC_REASON.SETTINGS_OFF]: { short: "Off in Settings" },
   [RUN_ON_MAC_REASON.MAC_AWAY]: {
     short: "No Mac listening",
     detail:
-      "No Mac of the developer who started this agent is listening for commands: Luke isn't open on one, or it stopped listening.",
+      "Luke isn't open on any Mac of the developer who started this agent, or it stopped listening.",
   },
   [RUN_ON_MAC_REASON.OUTSIDE_WORDS]: {
     short: "Someone else's words",
     detail:
       "Someone other than the developer who started this agent put words into it, such as a teammate's message, a webhook's body, or a review on its pull request, so it never runs commands on their Mac again.",
   },
-} as const satisfies Record<RunOnMacReason, { readonly short: string; readonly detail: string }>;
+} as const satisfies Record<RunOnMacReason, RunOnMacReasonWords>;
 
 /** What `run_on_mac`'s own page says it does, above why it is off where it is. */
 export const RUN_ON_MAC_DESCRIPTION =
@@ -333,13 +336,14 @@ const OUTSIDE_WORDS_FROM = {
 /**
  * The sentence of detail `run_on_mac`'s page says under its reason: for
  * outside words, who put the first of them in and when, where the service
- * could say; the reason's own sentence otherwise.
+ * could say; the reason's own sentence otherwise, where it has one.
  */
 export function runOnMacDetail(
   reason: RunOnMacReason,
   standing: RunOnMacStanding | undefined,
-): string {
-  const general = RUN_ON_MAC_REASON_WORDS[reason].detail;
+): string | undefined {
+  const words: RunOnMacReasonWords = RUN_ON_MAC_REASON_WORDS[reason];
+  const general = words.detail;
   if (reason !== RUN_ON_MAC_REASON.OUTSIDE_WORDS || standing === undefined || standing.on) {
     return general;
   }
