@@ -460,6 +460,6 @@ test("on the plan's page an @ typed in the plan offers the pull requests its age
     [...plan.container.querySelectorAll(".plan-document-text [data-mention-ref]")].map(
       (chip) => chip.querySelector(".luke-inline-ref-label")?.textContent,
     ),
-    ["#3059 feat(billing): bill by seat"],
+    ["#3059"],
   );
 });

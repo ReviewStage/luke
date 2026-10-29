@@ -559,6 +559,10 @@ function MentionChip({
     (keyed
       ? written
       : chipName(mention, written, bare, known, standing, heading, doors.place.repository));
+  // Note that a pull request's chip names its number alone, its state mark beside it, since its title fades mid-word in a chip; its card keeps the title.
+  const pull = mention.kind === MENTION_KIND.LINK ? pullRequestAddressOf(mention.url) : undefined;
+  // Note that a key off another repository (`relay#42`) keeps its repository, which says which one it is.
+  const label = pull === undefined ? name : (/^\S*#\d+(?=\s)/u.exec(name)?.[0] ?? name);
   const state = mentionState(mention, doors);
   const press = pressOf(mention, target, state, doors, openLink);
   const card = (
@@ -585,8 +589,8 @@ function MentionChip({
           standing={standing}
         />
       }
-      kind={thingWordHeard(thingOfMention(mention).kind, name)}
-      label={name}
+      kind={thingWordHeard(thingOfMention(mention).kind, label)}
+      label={label}
       state={standing?.state}
       gone={state === MENTION_STATE.GONE}
       onPress={
