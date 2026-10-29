@@ -315,7 +315,10 @@ test("a chosen item whose plan leaves the account's list, deleted on another Mac
   await settle();
   assert.deepEqual(listed(page), ["# Invites", "*Expire after 7 days?"]);
   assert.equal(page.querySelector(".inbox-view-items [data-inbox-title]"), null);
-  assert.equal(page.querySelector(".inbox-view-items")?.textContent, "1 thread");
+  assert.equal(
+    page.querySelector(".inbox-view-items")?.textContent,
+    "Choose an item, or step with J K",
+  );
 });
 
 test("an item of an agent with no plan stands under the automation that started it, and opens on its agent's own read under the automation's crumb", async () => {

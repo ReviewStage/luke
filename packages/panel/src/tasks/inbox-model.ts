@@ -1135,7 +1135,7 @@ export function needsYouWords(count: number): string {
   return `${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`;
 }
 
-/** A count of threads with its words, as a channel's card or the Inbox's empty pane says it: "1 thread", "3 threads". */
+/** A count of threads with its words, as a channel's card says it: "1 thread", "3 threads". */
 export function threadsWords(count: number): string {
   return `${count} ${count === 1 ? "thread" : "threads"}`;
 }

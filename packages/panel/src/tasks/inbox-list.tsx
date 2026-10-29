@@ -1,6 +1,7 @@
 import { type InboxPerson, inboxAddressedTo } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { readFailedWords, TERM } from "@luke/features/words";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   AttentionMark,
   BUTTON_SIZE,
@@ -48,6 +49,7 @@ import {
   ScrollArea,
   SearchField,
   SelectionRegion,
+  Shortcut,
   Skeleton,
   SkeletonRegion,
   Stack,
@@ -166,7 +168,6 @@ import {
   listedItems,
   NEEDS_YOU,
   needsYou as needsYouOf,
-  threadsWords,
 } from "./inbox-model.js";
 import {
   RowMedia,
@@ -1305,19 +1306,25 @@ export function newTaskAction(onNewTask: (() => void) | undefined): EmptyStateAc
       };
 }
 
+/** What the pane beside a list with items in it says while none is chosen. */
+const CHOOSE_AN_ITEM = "Choose an item";
+
 /**
  * The pane beside the list while nothing is chosen, as a mail app's stands
- * empty: how many threads the list holds, or, holding none, that nothing
- * needs the reader, over New task where one can start.
+ * empty: how to choose an item, by a press or by stepping with the keys that
+ * step through the list (J and K), or, holding none, that nothing needs the
+ * reader, over New task where one can start. Under a finger there is no
+ * keyboard to step with, so it names the press alone.
  */
 export function InboxPaneEmpty({
   listed,
   newTask,
 }: {
-  /** How many threads the list holds. */
+  /** How many items the list holds. */
   listed: number;
   newTask?: (() => void) | undefined;
 }): React.JSX.Element {
+  const coarse = useCoarsePointer();
   if (listed === 0) {
     return (
       <EmptyState icon={<InboxIcon />} action={newTaskAction(newTask)}>
@@ -1325,7 +1332,19 @@ export function InboxPaneEmpty({
       </EmptyState>
     );
   }
-  return <EmptyState icon={<InboxIcon />}>{threadsWords(listed)}</EmptyState>;
+  return (
+    <EmptyState icon={<InboxIcon />}>
+      {coarse ? (
+        CHOOSE_AN_ITEM
+      ) : (
+        <>
+          {CHOOSE_AN_ITEM}, or step with{" "}
+          <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEXT_INBOX_ITEM].chord} spoken />{" "}
+          <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.PREVIOUS_INBOX_ITEM].chord} spoken />
+        </>
+      )}
+    </EmptyState>
+  );
 }
 
 /** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, the scope's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */

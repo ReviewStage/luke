@@ -30,7 +30,7 @@ test("with a session, the panel rests on the Inbox beside the tasks the service 
   assert.ok(app !== undefined, "the host stands");
   await vi.waitFor(() => {
     assert.ok(
-      root.querySelector('main [aria-label="Inbox"]') !== null,
+      root.querySelector('main nav[aria-label="Inbox items"]') !== null,
       "the panel rests on the Inbox",
     );
     assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u"));
