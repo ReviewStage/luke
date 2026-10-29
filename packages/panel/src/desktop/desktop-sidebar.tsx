@@ -2311,15 +2311,6 @@ function SidebarColumn({
   const sectionRows = sectioned.sections.flatMap((drawn) => drawn.rows);
   const hidden = hiddenStatuses([...sectionRows, ...rows], statuses);
   const statusRows = taskRowsInStatuses(rows, statuses);
-  // The tasks are chosen together across Pinned, the sections, and Tasks, only those the view draws staying chosen.
-  const selection = useTasksSelection(
-    tasks,
-    new Set(
-      [...pinnedSection, ...shownSections.flatMap((drawn) => drawn.rows), ...statusRows].flatMap(
-        (row) => (row.kind === TASK_ROW.TASK ? [row.task.id] : []),
-      ),
-    ),
-  );
   const { grouping, order } = taskView.view;
   const orderView: TaskOrderView = {
     workspaceId: tasks.workspace?.id,
@@ -2368,6 +2359,18 @@ function SidebarColumn({
   const homedSections = shownSections.map((drawn, at) => homedSection(drawn, homed[at + 1] ?? []));
   const homedTasks = withTaskLists(sections, homed.slice(shownSections.length + 1));
   const pinnedDrawnRows = pinnedDrawn(pinnedSection, pinnedAdopted, folds.taskOpened, currentRow);
+  // The tasks are chosen together across Pinned, the sections, and Tasks, only those the view draws staying chosen, a child task homed nowhere among those it does not.
+  const selection = useTasksSelection(
+    tasks,
+    new Set(
+      [
+        ...pinnedSection,
+        ...pinnedAdopted,
+        ...homedSections.flatMap((drawn) => drawn.rows),
+        ...taskSectionLists(homedTasks).flat(),
+      ].flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task.id] : [])),
+    ),
+  );
   // A row names its repository as its group's header would, owner and all where two share a name.
   const named = repositoryGroups(unpinned);
   const repositoryOf = (row: TaskRow) => {
