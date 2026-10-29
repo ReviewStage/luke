@@ -1,9 +1,11 @@
-import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
+import { TASK_STATUS } from "@luke/features/task-wire";
+import { and, asc, eq, exists, inArray, notInArray, or, type SQL, sql } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import {
   Database,
   type DatabaseServices,
+  queryBuilder,
   readConcurrency,
   type StoreFailure,
 } from "../core/query.js";
@@ -59,6 +61,9 @@ export class TaskBlockAcrossWorkspaces extends Data.TaggedError("TaskBlockAcross
 const TXID = { txid: sql<string>`pg_current_xact_id()::text` };
 
 const TxidRowSchema = Schema.Struct({ txid: Schema.String });
+
+/** The statuses a blocker no longer holds work up in: its work is finished, or it was cut. */
+const SETTLED = [TASK_STATUS.DONE, TASK_STATUS.CANCELED];
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
@@ -189,6 +194,26 @@ function lockedPair(
     }
     return Option.some(undefined);
   });
+}
+
+/**
+ * The condition that the task row a statement reads waits on a task still
+ * open, neither done nor canceled, that the account reaches, as a blocked
+ * task's sidebar row is marked. Note that the open tasks are read in a
+ * subquery of their own over `task`, which shadows the row the statement
+ * reads, so the block alone names that row.
+ */
+export function taskBlockedFor(userId: string): SQL {
+  const open = queryBuilder
+    .select({ id: task.id })
+    .from(task)
+    .where(and(notInArray(task.status, SETTLED), taskReachableBy(userId)));
+  return exists(
+    queryBuilder
+      .select({ one: sql`1` })
+      .from(taskBlock)
+      .where(and(eq(taskBlock.blockedTaskId, task.id), inArray(taskBlock.blockerTaskId, open))),
+  );
 }
 
 /**

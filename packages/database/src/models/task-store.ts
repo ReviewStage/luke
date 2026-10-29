@@ -67,7 +67,7 @@ import { reopenTaskInboxItems, settleTaskInboxItems } from "./inbox-settle.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
 import { stampConversationsDeleted } from "./soft-delete.js";
-import { leaveTaskBlocks, readTaskBlocks } from "./task-block-store.js";
+import { leaveTaskBlocks, readTaskBlocks, taskBlockedFor } from "./task-block-store.js";
 import {
   isWorkspaceMember,
   reachableTask,
@@ -321,6 +321,7 @@ const TaskListRowSchema = Schema.Struct({
   ...TaskSummaryRowSchema.fields,
   pinnedAt: Schema.NullOr(InstantColumnSchema),
   pinPosition: Schema.NullOr(Schema.String),
+  blocked: Schema.Boolean,
 });
 
 const TaskRowSchema = Schema.Struct({
@@ -789,6 +790,7 @@ const findTasks = SqlSchema.findAll({
           ...TASK_SUMMARY_COLUMNS,
           pinnedAt: taskPin.pinnedAt,
           pinPosition: taskPin.position,
+          blocked: taskBlockedFor(userId),
         })
         .from(task)
         .leftJoin(taskPin, readersPin(userId))
@@ -1069,21 +1071,24 @@ export function createTaskOnce(
  * Every task of every workspace the account is a member of, newest started first, without their documents.
  * Nothing but starting a task moves the order: opening, reading, saving,
  * pinning, and settling one leave every row where it stood, and the order a
- * pin draws is the window's to draw from `pinPosition` and `pinnedAt`.
+ * pin draws is the window's to draw from `pinPosition` and `pinnedAt`. A
+ * task waiting on an open task the account reaches is marked blocked
+ * (`taskBlockedFor`).
  */
 export function listTasks(userId: string): TaskStoreEffect<readonly TaskSummary[]> {
   return Effect.gen(function* () {
     const rows = yield* findTasks({ userId });
     const devices = yield* devicesOf(rows);
     const names = yield* readAccountNames(namedAccountsOf(rows, devices));
-    return rows.map((row) =>
-      summaryOf(
+    return rows.map((row) => ({
+      ...summaryOf(
         row,
         row.pinnedAt === null ? null : { pinnedAt: row.pinnedAt, pinPosition: row.pinPosition },
         names,
         devices,
       ),
-    );
+      ...(row.blocked ? { blocked: true } : undefined),
+    }));
   });
 }
 

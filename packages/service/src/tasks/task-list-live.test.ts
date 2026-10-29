@@ -14,6 +14,7 @@ import {
   renameAgentCommitted,
 } from "@luke/database/models/agent-store";
 import { devicesNamed, registerDevice } from "@luke/database/models/device-store";
+import { addTaskBlock } from "@luke/database/models/task-block-store";
 import {
   assignUnassignedTaskCommitted,
   beginTaskWorkCommitted,
@@ -508,6 +509,34 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           ],
         );
         assert.deepEqual((yield* liveListOf(outsider, NOW)).plans, []);
+      }),
+  );
+
+  it.effect(
+    "a plan waiting on an open task is marked blocked until every blocker is done or canceled, live as the held read reads it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const shipped = yield* startTask(owner, { name: "Invitation emails" });
+        const cut = yield* startTask(owner, { name: "Invitation links" });
+        const waiting = yield* startTask(owner, { name: "Teammate invitations" });
+        for (const blocker of [shipped, cut]) {
+          yield* addTaskBlock(owner, { blockerTaskId: blocker.id, blockedTaskId: waiting.id });
+        }
+        const blocked = Effect.gen(function* () {
+          const live = yield* liveListOf(owner, NOW);
+          const held = yield* heldListOf(owner, NOW);
+          const marked = (plans: readonly { id: string; blocked?: true }[]) =>
+            plans.filter((plan) => plan.blocked === true).map((plan) => plan.id);
+          assert.deepEqual(marked(live.plans), marked(held.plans), "live as held");
+          return marked(live.plans);
+        });
+
+        assert.deepEqual(yield* blocked, [waiting.id], "both blockers open");
+        yield* updateTask(owner, shipped.id, { status: TASK_STATUS.DONE });
+        assert.deepEqual(yield* blocked, [waiting.id], "one blocker still open");
+        yield* updateTask(owner, cut.id, { status: TASK_STATUS.CANCELED });
+        assert.deepEqual(yield* blocked, [], "every blocker done or canceled");
       }),
   );
 

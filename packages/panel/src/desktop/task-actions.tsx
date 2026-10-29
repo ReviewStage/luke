@@ -9,6 +9,8 @@ import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
   ANNOUNCE,
+  BLOCKED_WORDS,
+  BlockedMark,
   BUTTON_SIZE,
   CONFIRM_LOSS,
   ConfirmDialog,
@@ -747,7 +749,9 @@ function SidebarTaskCard({
  * body's weight unless the task is unread, and at the row's end how long ago
  * it was last updated, led by one mark for a repository that belongs to
  * another workspace, an agent at work, or a pull request (`task-card.tsx`),
- * the first named in the row's card, before that a pencil while a draft
+ * the first named in the row's card, before that a stop sign while a task
+ * it waits on is still open (`BlockedMark`), which the press says after
+ * the status, before that a pencil while a draft
  * waits in one of its boxes and it is not the plan open, whose boxes show
  * their own words (`draft-mark.tsx`), and before that the face of who
  * is on it (`rowFaceOf`, drawn as `AssigneeFaceMark`): its assignee's,
@@ -867,6 +871,7 @@ export function SidebarTask({
                 {task.status === undefined ? null : (
                   <VisuallyHidden>, {TASK_STATUS_WORDS[task.status]}</VisuallyHidden>
                 )}
+                {task.blocked === true ? <VisuallyHidden>, {BLOCKED_WORDS}</VisuallyHidden> : null}
                 {unread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
                 {worn === undefined ? null : <AssigneeFaceHeard face={worn} />}
               </>
@@ -883,6 +888,7 @@ export function SidebarTask({
                 )}
                 {worn === undefined ? null : <AssigneeFaceMark face={worn} heard={false} />}
                 {drafted ? <DraftMark /> : null}
+                {task.blocked === true ? <BlockedMark /> : null}
                 <TaskRowStatus task={task} />
                 <Time at={at} now={now} hint={false} />
               </span>
