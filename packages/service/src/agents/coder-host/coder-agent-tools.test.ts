@@ -3666,7 +3666,7 @@ test("read_task names a grandchild's merge policy and running switch as its top 
 
   const read = await call(CODER_TOOL.READ_TASK, { taskId: grandchild.id });
   assert.deepEqual(
-    isRecord(read.task) && [read.task.topTaskMergePolicy, read.task.topTaskRunning],
+    isRecord(read.task) && [read.task.topTaskMergePolicy, read.task.topTaskStarted],
     [MERGE_POLICY.HOLD, true],
     JSON.stringify(read),
   );

@@ -77,8 +77,8 @@ export const MESSAGE_AGENT_REFUSAL = {
   ARCHIVED:
     "Not sent: that agent is archived, so it takes no message and is not woken until a member unarchives it.",
   TREE_STOPPED:
-    "Not sent: that agent works on a task of a pilot tree whose Running switch is off, so no " +
-    "agent's message reaches it until a member switches Running on, on the top task.",
+    "Not sent: that agent works on a task of a stopped pilot tree, so no agent's message " +
+    "reaches it until someone presses Start on the top task.",
   STARTER_LEFT:
     "Not sent: the member who started that agent has left your workspace, so nothing reaches it.",
   NO_SERVICE: "Not sent: this deployment cannot reach the agents' service.",
@@ -198,7 +198,7 @@ export function runMessageAgent(
       const receiving = yield* receivingAgent(userId, workspace.value, found.value, sender.id);
       if (Option.isNone(receiving)) return agentToolRejected(MESSAGE_AGENT_REFUSAL.ARCHIVED);
       const target = receiving.value;
-      // A stopped tree's agents, its top task's pilot among them, hear no agent until Running is on.
+      // A stopped tree's agents, its top task's pilot among them, hear no agent until Start is pressed.
       if (target.taskId !== null && (yield* readTreeHeld(target.userId, target.taskId))) {
         return agentToolRejected(MESSAGE_AGENT_REFUSAL.TREE_STOPPED);
       }

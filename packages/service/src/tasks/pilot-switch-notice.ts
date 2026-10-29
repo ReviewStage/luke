@@ -3,14 +3,14 @@
  *
  * A pilot task's top task carries two switches for its whole tree: one merge
  * policy (`MERGE_POLICY`), merge on green or hold every pull request for a
- * go, and whether its agents may work (`running`). A member switches either
+ * go, and whether its agents may work (`running`, which a member presses as Start and Stop). A member switches either
  * from the task's head, and the pilot is told as a member's words reach it,
  * through `steerAgentWritten`, so it wakes and acts. On hold it has its
  * coding agents cancel any auto-merge they armed, and on merge on green it
  * gives the held pull requests their go; the words open with
- * `MERGE_POLICY_NOTICE_LEAD`, which the pilot's instructions key on. Running
- * switched on is told in one line, `RUNNING_ON_NOTICE`, which the pilot's
- * instructions key on word for word; switched off is told nothing, since the
+ * `MERGE_POLICY_NOTICE_LEAD`, which the pilot's instructions key on. Start
+ * is told in one line, `WORK_STARTED_NOTICE`, which the pilot's
+ * instructions key on word for word; Stop is told nothing, since the
  * switch stops the pilot with its tree (`running-tree.ts`) and a note would
  * only wake it again.
  *
@@ -50,8 +50,8 @@ export const MERGE_POLICY_NOTICE = {
     "irreversible changes, open product questions, and UI changes the plan didn't spell out.",
 } as const satisfies Record<MergePolicy, string>;
 
-/** What the pilot is told when its tree's running switch is switched on, word for word. */
-const RUNNING_ON_NOTICE = "Running is now on.";
+/** What the pilot is told when a member presses Start on its tree's top task, word for word. */
+const WORK_STARTED_NOTICE = "Work started.";
 
 /** A top task's pilot, of the agents standing on it: its newest standing pilot; none where it has none. */
 export function pilotOf(agents: readonly Agent[]): Agent | undefined {
@@ -156,7 +156,7 @@ export function tellPilotOfRunning(
     writer,
     userId,
     taskId,
-    (task) => (task.running ? RUNNING_ON_NOTICE : undefined),
+    (task) => (task.running ? WORK_STARTED_NOTICE : undefined),
     true,
   );
 }
