@@ -150,9 +150,9 @@ function NestedRows(): React.JSX.Element {
               <>
                 {folds ? (
                   <ListRowCount
-                    settled={1}
+                    settled={task.id === "launch" ? 1 : 0}
                     total={NESTED.filter((child) => child.parent === task.id).length}
-                    label="1 child task finished"
+                    label={`Child tasks of ${task.name}, partly finished`}
                   />
                 ) : null}
                 {task.updated}
