@@ -1,16 +1,16 @@
 import {
+  type AgentPullRequest,
   CHECK_SUMMARY,
-  type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   PULL_REQUEST_GLYPH,
   PULL_REQUEST_MARK_QUEUED,
   STATUS_TONE,
   type StatusTone,
 } from "@luke/ui";
-import { pullRequestNumberLabel, pullRequestPillLabel } from "./coding-agent-model.js";
+import { pullRequestNumberLabel, pullRequestPillLabel } from "./agent-model.js";
 
 /**
  * pull-request-mark.tsx -- a pull request's mark wherever the window draws one: GitHub's glyph for where it stands, in GitHub's colour for it, whatever its checks say.
@@ -41,7 +41,7 @@ export const PULL_REQUEST_TONE = {
 
 /** Where a pull request's mark says it stands: queued where it is open and the merge queue holds it, else where it stands. */
 export function pullRequestMarkState(
-  pullRequest: Pick<CodingAgentPullRequest, "state" | "queued">,
+  pullRequest: Pick<AgentPullRequest, "state" | "queued">,
 ): PullRequestState | typeof PULL_REQUEST_MARK_QUEUED {
   return pullRequest.queued === true && pullRequest.state === PULL_REQUEST_STATE.OPEN
     ? PULL_REQUEST_MARK_QUEUED
@@ -52,10 +52,7 @@ export function pullRequestMarkState(
 const CHECKS_FAILING_WORDS = ", checks failing";
 
 /** What a pull request's mark is drawn from: its number, where it stands, whether the merge queue holds it, and how its checks went. */
-export type PullRequestMarked = Pick<
-  CodingAgentPullRequest,
-  "number" | "state" | "checks" | "queued"
->;
+export type PullRequestMarked = Pick<AgentPullRequest, "number" | "state" | "checks" | "queued">;
 
 /** A pull request's words for a reader who cannot see its mark: its number, where it stands, and that its checks failed where they did. */
 function pullRequestMarkLabel(pullRequest: PullRequestMarked): string {

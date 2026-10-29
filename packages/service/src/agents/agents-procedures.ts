@@ -6,7 +6,7 @@
  * of: a task or an agent of any other workspace answers exactly as one
  * that names nothing, and an id that is no UUID names nothing too
  * (`agent-reach.ts`). What each answers is said of it in
- * `coding-agents-app.ts`'s header, the group these moved from, and of the
+ * `agents-app.ts`'s header, the group these moved from, and of the
  * shells below.
  *
  * A Start (`POST /api/plans/{id}/agents`) takes the one path a start takes
@@ -39,21 +39,22 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  archiveCodingAgentCommitted,
-  type CodingAgent,
-  type CodingAgentCommitted,
-  type CodingAgentLine,
-  deleteCodingAgent,
+  type Agent,
+  type AgentCommitted,
+  type AgentLine,
+  archiveAgentCommitted,
+  deleteAgent,
   hasRepository,
-  listCodingAgentLines,
-  listWorkspaceCodingAgentLines,
+  listAgentLines,
+  listWorkspaceAgentLines,
   nativeRuntimesOfReached,
   operatorReplaced,
-  pinCodingAgentCommitted,
-  renameCodingAgentCommitted,
-  updateCodingAgentChoice,
-  updateCodingAgentServers,
-} from "@luke/database/models/coding-agent-store";
+  pinAgentCommitted,
+  readVisibleAgentWorkspace,
+  renameAgentCommitted,
+  updateAgentChoiceCommitted,
+  updateAgentServersCommitted,
+} from "@luke/database/models/agent-store";
 import { devicesNamed } from "@luke/database/models/device-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
@@ -61,11 +62,7 @@ import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { runtimeChoiceRefusal } from "@luke/features/agent-runtime-models";
-import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_LIST_ARCHIVED,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, AGENT_LIST_ARCHIVED, type AgentSummary } from "@luke/features/agent-wire";
 import { AGENT_START_STATUS } from "@luke/features/contract";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { Clock, Duration, Effect, type Layer, Option, Result } from "effect";
@@ -107,8 +104,8 @@ import {
   startRequestedAgent,
 } from "./coder-host/start.js";
 import {
-  codingAgentPage,
-  codingAgentSummary,
+  agentPage,
+  agentSummary,
   pageAccounts,
   startedBlank,
   summaryAccounts,
@@ -126,6 +123,8 @@ import {
 } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
+import { offeredLukeTools, runOnMacStanding } from "./luke-tools.js";
+import { memoryOnFor } from "./memory-tools.js";
 import { retiredBeforeDelete, retiringReach } from "./retire-sessions.js";
 import { type SandboxStopReach, stoppedInBackground } from "./session-sandboxes.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
@@ -159,14 +158,14 @@ const choiceOrInvalid = <A, E, R>(
 
 /** Whether a list read asks for the archived agents too; a build from before archiving never does. */
 function listsArchived(archived: string | undefined): boolean {
-  return archived === CODING_AGENT_LIST_ARCHIVED.INCLUDE;
+  return archived === AGENT_LIST_ARCHIVED.INCLUDE;
 }
 
 /** The agents listed, each read as its line, with its status, who it names, and what continued it, as the lists answer them. */
 const listedSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  agents: readonly CodingAgentLine[],
-): Effect.fn.Return<{ agents: CodingAgentSummary[] }, HostedRefusal, DatabaseServices> {
+  agents: readonly AgentLine[],
+): Effect.fn.Return<{ agents: AgentSummary[] }, HostedRefusal, DatabaseServices> {
   const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
   const names = yield* hostedStoreOrUnavailable(readAccountNames(agents.flatMap(summaryAccounts)));
   const continuedBy = yield* continuedByOf(
@@ -177,25 +176,9 @@ const listedSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
   const now = yield* Clock.currentTimeMillis;
   return {
     agents: agents.map((agent) =>
-      codingAgentSummary(
-        agent,
-        standing(agent.conversationId),
-        now,
-        names,
-        continuedBy(agent.id),
-        macs,
-      ),
+      agentSummary(agent, standing(agent.conversationId), now, names, continuedBy(agent.id), macs),
     ),
   };
-});
-
-/** The agent as it then stands, or not found where the row went between the read and the write. */
-const changedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  changed: Option.Option<Parameters<typeof summaryOf>[1]>,
-): Effect.fn.Return<{ agent: CodingAgentSummary }, HostedRefusal, DatabaseServices> {
-  if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return { agent: yield* summaryOf(userId, changed.value) };
 });
 
 /**
@@ -206,8 +189,8 @@ const changedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 const committedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  changed: Option.Option<CodingAgentCommitted>,
-): Effect.fn.Return<{ agent: CodingAgentSummary; txid?: string }, HostedRefusal, DatabaseServices> {
+  changed: Option.Option<AgentCommitted>,
+): Effect.fn.Return<{ agent: AgentSummary; txid?: string }, HostedRefusal, DatabaseServices> {
   if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const agent = yield* summaryOf(userId, changed.value.agent);
   const { txid } = changed.value;
@@ -276,7 +259,7 @@ const listedShells = /* @__PURE__ */ Effect.fnUntraced(function* (sessionId: str
 });
 
 /** Whether the agent, read again under its conversation's lock, still stands as a Stop left it, as a task's archive reads each of its own. */
-function agentStandsStopped(agent: CodingAgent) {
+function agentStandsStopped(agent: Agent) {
   return standsStopped([
     {
       id: agent.id,
@@ -306,7 +289,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
   );
   // A Start answers 201 for the agent it made, 200 for the one a retry under its key made before.
   const startAnswer = (started: {
-    readonly agent: CodingAgentSummary;
+    readonly agent: AgentSummary;
     readonly created: boolean;
     readonly txid?: string;
   }) => ({
@@ -333,7 +316,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         workspaceId === "" ||
         repository === "" ||
         words === "" ||
-        (words?.length ?? 0) > CODING_AGENT_BOUNDS.MAX_SEARCH_CHARS
+        (words?.length ?? 0) > AGENT_BOUNDS.MAX_SEARCH_CHARS
       ) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
@@ -342,7 +325,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       );
       if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const agents = yield* hostedStoreOrUnavailable(
-        listWorkspaceCodingAgentLines(context.userId, workspaceId, {
+        listWorkspaceAgentLines(context.userId, workspaceId, {
           ...(repository === undefined ? undefined : { repository }),
           ...(words === undefined ? undefined : { words }),
           includeArchived: listsArchived(input.archived),
@@ -357,7 +340,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const workspace = yield* hostedStoreOrUnavailable(readTaskWorkspace(context.userId, taskId));
       if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const agents = yield* hostedStoreOrUnavailable(
-        listCodingAgentLines(context.userId, taskId, {
+        listAgentLines(context.userId, taskId, {
           includeArchived: listsArchived(input.archived),
         }),
       );
@@ -475,7 +458,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const macs = yield* hostedStoreOrUnavailable(devicesNamed(summaryDevices([agent])));
       const now = yield* Clock.currentTimeMillis;
       return {
-        agent: codingAgentPage(
+        agent: agentPage(
           agent,
           standing(agent.conversationId),
           now,
@@ -509,7 +492,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         return yield* committedAgent(
           userId,
           yield* hostedStoreOrUnavailable(
-            renameCodingAgentCommitted(userId, agent.id, title.length === 0 ? null : title),
+            renameAgentCommitted(userId, agent.id, title.length === 0 ? null : title),
           ),
         );
       }
@@ -522,7 +505,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
         }
         const archived = yield* hostedStoreOrUnavailable(
-          archiveCodingAgentCommitted(userId, agent.id, body.archived),
+          archiveAgentCommitted(userId, agent.id, body.archived),
         );
         // The sandbox is stopped, not deleted, once the archive stands, so an unarchive resumes it from its snapshot.
         if (body.archived && Option.isSome(archived)) {
@@ -534,15 +517,15 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         return yield* committedAgent(
           userId,
           yield* hostedStoreOrUnavailable(
-            pinCodingAgentCommitted(userId, agent.id, body.pinned, body.position),
+            pinAgentCommitted(userId, agent.id, body.pinned, body.position),
           ),
         );
       }
       if ("disabledServers" in body) {
-        return yield* changedAgent(
+        return yield* committedAgent(
           userId,
           yield* hostedStoreOrUnavailable(
-            updateCodingAgentServers(userId, agent.id, body.disabledServers),
+            updateAgentServersCommitted(userId, agent.id, body.disabledServers),
           ),
         );
       }
@@ -554,10 +537,10 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       }
       const choice = yield* choiceOrInvalid(acceptedAgentChoice(userId, body));
       const changed = yield* hostedStoreOrUnavailable(
-        updateCodingAgentChoice(userId, agent.id, choice),
+        updateAgentChoiceCommitted(userId, agent.id, choice),
       );
-      if (Option.isSome(changed)) yield* runnerChoiceApplied(changed.value);
-      return yield* changedAgent(userId, changed);
+      if (Option.isSome(changed)) yield* runnerChoiceApplied(changed.value.agent);
+      return yield* committedAgent(userId, changed);
     }),
     /**
      * The agent deleted for good, by the steps a task's delete takes for
@@ -575,7 +558,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const eveAt = yield* retiringReach(seams, context.request, userId);
       yield* stoppedForGood(seams, writer, context.request, userId, agent);
       const deleted = yield* hostedStoreOrUnavailable(
-        deleteCodingAgent(userId, agent.id, {
+        deleteAgent(userId, agent.id, {
           standsStopped: agentStandsStopped,
           beforeDelete: retiredBeforeDelete(eveAt),
         }).pipe(Effect.catchTag("TaskAgentUnstopped", () => Effect.succeed(undefined))),
@@ -655,6 +638,30 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           );
         }),
       );
+    }),
+    /**
+     * Which of Luke's own tools the agent is offered, by the rules its
+     * runtime narrows them by, and whether its `run_on_mac` would run now.
+     */
+    lukeTools: signedIn.lukeTools.effect(function* ({ input, context }) {
+      const { agent, target } = yield* reachedAgentById(context.userId, input.id);
+      // A member who reaches the agent but not its task reads it as not found, since its transcript is the task's to show.
+      const visible = yield* hostedStoreOrUnavailable(
+        readVisibleAgentWorkspace(context.userId, agent.id),
+      );
+      if (Option.isNone(visible)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const runtimes = yield* hostedStoreOrUnavailable(
+        nativeRuntimesOfReached([agent.conversationId]),
+      );
+      const memoryOn = yield* memoryOnFor(agent.userId);
+      return {
+        tools: offeredLukeTools({
+          agent,
+          native: runtimes.has(agent.conversationId),
+          memoryOn,
+        }),
+        runOnMac: yield* hostedStoreOrUnavailable(runOnMacStanding(target)),
+      };
     }),
     /** The agent's sandbox resumed from its snapshot, the developer's click and nothing else, answering where it stands after. */
     sandboxResume: signedIn.sandboxResume.effect(function* ({ input, context }) {

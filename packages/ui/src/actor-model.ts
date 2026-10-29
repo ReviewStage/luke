@@ -1,6 +1,6 @@
 import { githubUserAvatarUrl } from "@luke/features/account-picture";
+import type { GitHubPerson } from "@luke/features/agent-wire";
 import type { AutomationFiring, AutomationTrigger } from "@luke/features/automation-wire";
-import type { GitHubPerson } from "@luke/features/coding-agent-wire";
 import { OPERATOR_NAME } from "@luke/features/model-label";
 import type { ModelProvider } from "@luke/features/models-wire";
 import {
@@ -407,7 +407,7 @@ export function originActor(
     kind: ACTOR_KIND.AGENT,
     ...(origin.agentId === undefined ? undefined : { agentId: origin.agentId }),
     ...(agent?.taskId === undefined ? undefined : { taskId: agent.taskId }),
-    name: agent?.name ?? TAB_WORDS.CODING_AGENT,
+    name: agent?.name ?? TAB_WORDS.AGENT,
     provider: agent?.provider,
     state: agent?.state ?? ACTOR_STATE.REST,
   };
@@ -456,7 +456,7 @@ export function editActor(
       return {
         kind: ACTOR_KIND.AGENT,
         ...(edit.agentId === undefined ? undefined : { agentId: edit.agentId }),
-        name: edit.label ?? TAB_WORDS.CODING_AGENT,
+        name: edit.label ?? TAB_WORDS.AGENT,
         provider: agent?.provider,
         state: agent?.state ?? ACTOR_STATE.REST,
       };

@@ -1,9 +1,9 @@
 import {
-  CODING_AGENT_MACHINE,
-  type CodingAgentSummary,
+  AGENT_MACHINE,
+  type AgentSummary,
   DEVICE_STANDING,
   type DeviceStanding,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { Badge, STATUS_TONE, useSecond, VISUALLY_HIDDEN_UNDER, VisuallyHidden } from "@luke/ui";
 import { GLYPH, LaptopIcon } from "@luke/ui/icons";
@@ -50,11 +50,11 @@ function macWords(name: string, standing: DeviceStanding | undefined): string {
 export function AgentPlace({
   agent,
 }: {
-  agent: Pick<CodingAgentSummary, "mac" | "machine">;
+  agent: Pick<AgentSummary, "mac" | "machine">;
 }): React.JSX.Element | null {
   const on = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   if (!on) return null;
-  if (agent.machine !== CODING_AGENT_MACHINE.DEVICE) return <CloudBadge />;
+  if (agent.machine !== AGENT_MACHINE.DEVICE) return <CloudBadge />;
   if (agent.mac === undefined) return null;
   return <MacBadge mac={agent.mac} />;
 }
@@ -74,7 +74,7 @@ function CloudBadge(): React.JSX.Element {
 }
 
 /** The label itself, held against the window's clock, so a Mac that goes quiet reads offline without another read. */
-function MacBadge({ mac }: { mac: NonNullable<CodingAgentSummary["mac"]> }): React.JSX.Element {
+function MacBadge({ mac }: { mac: NonNullable<AgentSummary["mac"]> }): React.JSX.Element {
   const presence = useDevicePresence(true);
   // Note that the clock only redraws the label as a beat ages, since the standing is read off the book's own monotonic clock.
   useSecond();

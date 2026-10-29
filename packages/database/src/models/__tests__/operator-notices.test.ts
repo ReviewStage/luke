@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import {
   RUN_EVENT,
   RUN_STATUS,
@@ -18,11 +18,7 @@ import { user } from "../../schemas/auth.js";
 import { OPERATOR_NOTICE_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, openWorkspace, plansOf } from "../../testing/index.js";
 import { sweepAbandonedTurns, TURN_ABANDON } from "../abandoned-turns.js";
-import {
-  type CodingAgent,
-  createCodingAgent,
-  latestTurnsOfReached,
-} from "../coding-agent-store.js";
+import { type Agent, createAgent, latestTurnsOfReached } from "../agent-store.js";
 import {
   dueOperatorWakes,
   markOperatorNoticesRead,
@@ -56,7 +52,7 @@ const openAccount = Effect.gen(function* () {
 
 const started = (userId: string, organizationId: string, operator: boolean) =>
   Effect.map(
-    createCodingAgent(
+    createAgent(
       userId,
       operator
         ? {
@@ -64,7 +60,7 @@ const started = (userId: string, organizationId: string, operator: boolean) =>
             organizationId,
             planSnapshot: null,
             prompt: null,
-            kind: CODING_AGENT_KIND.OPERATOR,
+            kind: AGENT_KIND.OPERATOR,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
             effort: "high",
@@ -100,7 +96,7 @@ const openMember = Effect.gen(function* () {
 });
 
 /** One turn of the agent's, begun and ended at `at` as the status given; answers what the end's write came to. */
-const turnEnding = (writer: StoreWriter, agent: CodingAgent, status: RunStatus, at: number) =>
+const turnEnding = (writer: StoreWriter, agent: Agent, status: RunStatus, at: number) =>
   Effect.gen(function* () {
     const target = { userId: agent.userId, conversationId: agent.conversationId };
     const turnId = randomUUID();
@@ -125,7 +121,7 @@ const turnEnding = (writer: StoreWriter, agent: CodingAgent, status: RunStatus, 
   });
 
 /** The operator's unread notices as kind, agent, and when, newest first. */
-const unreadOf = (operator: CodingAgent) =>
+const unreadOf = (operator: Agent) =>
   Effect.map(unreadOperatorNotices(operator.id, EVERY), (notices) =>
     notices.map(({ kind, agentId, at }) => ({ kind, agentId, at: at.getTime() })),
   );
@@ -170,7 +166,7 @@ it.layer(getTestDB())("the notices an operator reads of its member's agents", (i
           trigger: TURN_TRIGGER.ASK,
           at: T0,
         });
-        const swept = T0 + TURN_ABANDON.CODING_AGENT_AFTER_MS + 1;
+        const swept = T0 + TURN_ABANDON.AGENT_AFTER_MS + 1;
         yield* sweepAbandonedTurns({ writer }, { now: swept });
 
         assert.deepEqual(yield* unreadOf(standing), [

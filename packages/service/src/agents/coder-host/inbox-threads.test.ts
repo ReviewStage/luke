@@ -2,15 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import { user } from "@luke/database/schemas/auth";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxMessage } from "@luke/database/schemas/inbox-message";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
-import {
-  CODING_AGENT_ATTACHMENT_TYPE,
-  type CodingAgentAttachment,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@luke/features/agent-wire";
 import { inboxAttachmentOf } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_APPROVAL_OPTION,
@@ -74,7 +71,7 @@ const openUser = Effect.gen(function* () {
 const openAgentIn = Effect.gen(function* () {
   const userId = yield* openUser;
   const task = yield* startTask(userId, { name: "Preview deploys" });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
@@ -94,7 +91,7 @@ const openAgent = Effect.map(openAgentIn, ({ agent }) => agent);
 const openTasklessAgent = Effect.gen(function* () {
   const userId = yield* openUser;
   const workspaceId = yield* openWorkspace(userId);
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: null,
     organizationId: workspaceId,
     idempotencyKey: randomUUID(),
@@ -147,9 +144,9 @@ function picturesIn(text: string | undefined) {
   });
 }
 
-const attached = (name: string, bytes: Uint8Array): CodingAgentAttachment => ({
+const attached = (name: string, bytes: Uint8Array): AgentAttachment => ({
   name,
-  mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+  mediaType: AGENT_ATTACHMENT_TYPE.TEXT,
   data: Buffer.from(bytes).toString("base64"),
 });
 
@@ -573,7 +570,7 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
   );
 
   it.effect(
-    "a post's pictures are kept as files of its message, its words drawing each by its address under the item, its task's or its agent's, and served as they were posted",
+    "a post's pictures are kept as files of its message, its words drawing each by its address under the item, under its agent whether it works on a task or none, and served as they were posted",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
@@ -600,7 +597,7 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
           {
             itemId: onTask.id,
             attachmentId: ruleFile.attachmentId,
-            holder: `plan/${agent.taskId}`,
+            holder: `agent/${agent.agentId}`,
           },
         ]);
         assert.ok(posting?.text.startsWith("The rule as it stands:\n\n![The branch rule]("));

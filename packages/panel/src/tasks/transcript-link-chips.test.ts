@@ -64,13 +64,13 @@ function taskPage(
   files: { path: string; lines: MentionLines | undefined }[],
 ): TaskMentionsValue {
   return {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     taskName: "Invitations",
     workspace: "acme",
     repository: REPOSITORY,
     text: () => "## Rollout\n\nStore first.\n",
     doors: {
-      taskId: TASK_ID,
+      holder: { taskId: TASK_ID },
       place: { workspace: "acme", repository: REPOSITORY },
       anchors: new Set(["rollout"]),
       onOpenTask: (mention) => opened.push(mention),

@@ -7,6 +7,7 @@ import type { ModelProvider } from "@luke/features/models-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  type AppInboxAgentHolding,
   type AppInboxTask,
   type AppInboxTaskHolding,
   type AppInboxTasklessItem,
@@ -55,7 +56,6 @@ import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./se
 import { ShellRoomContext, useStageRoom } from "./stage-room.js";
 import { useSteadyDoor, useSteadyDoors } from "./steady-door.js";
 import { HeldInboxesProvider } from "./tasks/held-inboxes.js";
-import { useInboxSettlingOwner } from "./tasks/inbox-settling.js";
 import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
 import { loadedTasksFixture, useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
@@ -91,6 +91,8 @@ const NOTHING_WAITING: readonly AppInboxTask[] = [];
 const NO_TASKS_HOLDING: readonly AppInboxTaskHolding[] = [];
 /** Nothing waiting from agents with no task, as one value across renders. */
 const NOTHING_TASKLESS: readonly AppInboxTasklessItem[] = [];
+/** No agent with no task holds an inbox item, as one value across renders. */
+const NO_AGENTS_HOLDING: readonly AppInboxAgentHolding[] = [];
 /** No automation's run failed, as one value across renders. */
 const NO_FAILED_RUNS: readonly AccountFailedRun[] = [];
 
@@ -108,8 +110,8 @@ const FIXTURE_MODE: Atom.Atom<boolean> = Atom.map(
 
 /** The agents main says ended unseen. */
 const UNSEEN_AGENTS: Atom.Atom<readonly string[]> = Atom.map(
-  APP_SLICE.CODING_AGENTS,
-  (codingAgents) => codingAgents?.unseen ?? NO_UNSEEN_AGENTS,
+  APP_SLICE.AGENTS,
+  (agents) => agents?.unseen ?? NO_UNSEEN_AGENTS,
 );
 
 /** Whether this window stands in full screen. */
@@ -215,7 +217,6 @@ function AppWindow(): React.JSX.Element {
   }, [accountKey]);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
-  useInboxSettlingOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
   // A fixture run's profile may open the window on a page of Settings at launch (`tasks-fixture.ts`).
   const [launched] = useState(() => {
     const place = loadedTasksFixture()?.fixturePlace(run ?? IDLE_RUN);
@@ -350,6 +351,7 @@ function AppWindow(): React.JSX.Element {
     inboxWaiting: inbox?.waiting ?? NOTHING_WAITING,
     inboxTasks: inbox?.tasks ?? NO_TASKS_HOLDING,
     inboxTaskless: inbox?.taskless ?? NOTHING_TASKLESS,
+    inboxAgents: inbox?.agents ?? NO_AGENTS_HOLDING,
     failedRuns: inbox?.failedRuns ?? NO_FAILED_RUNS,
     onOpenSettings: openSettings,
     onOpenIntegrations: openIntegrations,
@@ -386,8 +388,9 @@ function AppWindow(): React.JSX.Element {
     room,
   );
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
-  // A pull request a listed task's agent opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
+  // A pull request a listed task's agent, or a listed agent on no task, opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
   const listedTasks = tasks.tasks;
+  const listedAgents = planning?.tasklessAgents;
   // An Admin link opens while the account's access is still being read, the
   // place waiting on it, and never for an account that is no admin
   // (`link-route.ts`).
@@ -622,7 +625,7 @@ function AppWindow(): React.JSX.Element {
   return (
     <OpenSettingsProvider value={openSettings}>
       <OpenLinkProvider value={openLukeLink}>
-        <ListedPullRequests tasks={listedTasks}>
+        <ListedPullRequests tasks={listedTasks} agents={listedAgents}>
           <PageWorkspaceProvider value={copyLink.onPageWorkspace}>
             <OpenPersonProvider value={openPerson}>
               <OpenFeedbackProvider value={openFeedbackAbout}>

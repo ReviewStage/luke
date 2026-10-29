@@ -3,15 +3,15 @@ import { createHash, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import {
-  createCodingAgent,
-  recordCodingAgentPublished,
-  updateCodingAgentBranch,
-} from "@luke/database/models/coding-agent-store";
+  createAgent,
+  recordAgentPublished,
+  updateAgentBranch,
+} from "@luke/database/models/agent-store";
 import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { turns } from "@luke/database/schemas/storage";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { Effect, Option, Result } from "effect";
@@ -156,7 +156,7 @@ const openTokenAgent = (
       name: "Invitations",
       ...(repository === null ? undefined : { repository }),
     });
-    const started = yield* createCodingAgent(owner, {
+    const started = yield* createAgent(owner, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -169,8 +169,8 @@ const openTokenAgent = (
     const { agent } = Option.getOrThrow(started);
     const ref = `luke/invitations-${randomUUID()}`;
     const number = ++pullRequestsOpened;
-    yield* updateCodingAgentBranch(owner, agent.id, ref);
-    yield* recordCodingAgentPublished(owner, agent.id, {
+    yield* updateAgentBranch(owner, agent.id, ref);
+    yield* recordAgentPublished(owner, agent.id, {
       number,
       title: "Expire invitations",
       url: `https://github.com/${RELAY_FULL_NAME}/pull/${number}`,

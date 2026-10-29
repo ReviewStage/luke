@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
+import { readAgent, readVisibleAgent } from "@luke/database/models/agent-store";
 import {
   AUTOMATION_ACCESS,
   type Automation,
@@ -13,10 +14,11 @@ import {
   recordAutomationRun,
   updateAutomationCommitted,
 } from "@luke/database/models/automation-store";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/workspace-store";
+import { AGENT_KIND, AGENT_STATUS } from "@luke/features/agent-wire";
 import { nextScheduledRun, readSchedule } from "@luke/features/automation-schedule";
 import {
+  AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
   AUTOMATION_SCOPE,
@@ -31,14 +33,13 @@ import {
   type automationChangeRequestSchema,
   type automationCreateRequestSchema,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_KIND, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { Clock, DateTime, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { acceptedAgentChoice } from "../agents/coder-host/start.js";
 import {
   type AgentTurnStanding,
-  codingAgentFailureOf,
-  codingAgentStatusOf,
+  agentFailureOf,
+  agentStatusOf,
 } from "../agents/coder-host/status.js";
 import { standingsOf } from "../agents/coder-host/stop.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
@@ -96,11 +97,18 @@ const firstDue = /* @__PURE__ */ Effect.fnUntraced(function* (
   return nextScheduledRun(trigger, new Date(now)) ?? null;
 });
 
-/** The action as the catalog takes it: a named model must be one offered the account, refused as an invalid request otherwise. */
+/**
+ * The action as the catalog takes it and the store keeps it: a named model
+ * must be one offered the account, refused as an invalid request otherwise.
+ * Note that the kind is stored as `coding-agent` whichever spelling the
+ * request sent, because the release still serving through a deploy reads
+ * that one alone until the rename's migration has run.
+ */
 const checkedAction = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  action: AutomationAction,
+  asked: AutomationAction,
 ): Effect.fn.Return<AutomationAction, HostedRefusal, DatabaseServices | ModelCatalog> {
+  const action = { ...asked, kind: AUTOMATION_ACTION.CODING_AGENT };
   if (action.choice === undefined) return action;
   yield* acceptedAgentChoice(userId, action.choice).pipe(
     Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
@@ -117,13 +125,12 @@ function agentOf(
   standing: AgentTurnStanding,
   now: number,
 ): NonNullable<AutomationRunSummary["agent"]> {
-  const status = codingAgentStatusOf(standing.turn, {
+  const status = agentStatusOf(standing.turn, {
     createdAt,
     now,
     awaitingLineAt: standing.awaitingLineAt,
   });
-  const failureReason =
-    status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(standing.turn) : undefined;
+  const failureReason = status === AGENT_STATUS.FAILED ? agentFailureOf(standing.turn) : undefined;
   return {
     id,
     title,
@@ -217,8 +224,9 @@ interface TargetColumns {
 
 /**
  * A target the account may aim runs at: a new agent each run, or an agent
- * the account reads; an agent it cannot read is refused as no request at
- * all, the same as a malformed one.
+ * the account may read (`readVisibleAgent`), its task included; an
+ * agent it cannot read is refused as no request at all, the same as a
+ * malformed one.
  */
 const checkedTarget = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -227,7 +235,7 @@ const checkedTarget = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (target.kind === AUTOMATION_TARGET.NEW_AGENT) {
     return { targetKind: AUTOMATION_TARGET.NEW_AGENT, targetAgentId: null };
   }
-  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, target.agentId));
+  const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(userId, target.agentId));
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return { targetKind: AUTOMATION_TARGET.SAME_AGENT, targetAgentId: agent.value.id };
 });
@@ -278,10 +286,10 @@ const aimedAtOwnOperator = /* @__PURE__ */ Effect.fnUntraced(function* (
   target: AutomationTarget | undefined,
 ): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices> {
   if (target?.kind !== AUTOMATION_TARGET.SAME_AGENT) return false;
-  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, target.agentId));
+  const agent = yield* hostedStoreOrUnavailable(readAgent(userId, target.agentId));
   return (
     Option.isSome(agent) &&
-    agent.value.kind === CODING_AGENT_KIND.OPERATOR &&
+    agent.value.kind === AGENT_KIND.OPERATOR &&
     agent.value.userId === userId &&
     agent.value.organizationId === organizationId
   );

@@ -1,8 +1,4 @@
-import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_STATUS,
-  hasWordsOrFiles,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, AGENT_STATUS, hasWordsOrFiles } from "@luke/features/agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
@@ -42,7 +38,7 @@ import { SkillFiles } from "./skill-chip.js";
 import type { SkillWithFile } from "./skill-ref.js";
 import { TaskMentions, tasklessMentions, useMentionAgentsReader } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
-import { MODELS_READ } from "./use-coding-agents.js";
+import { MODELS_READ } from "./use-agents.js";
 import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.js";
 
 /**
@@ -413,7 +409,7 @@ export function NewTaskComposer({
   const start = () => {
     if (!canStart) return;
     const prompt = forAutomation ? automationAgentBrief(said) : said;
-    if (forAutomation && prompt.length > CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS) {
+    if (forAutomation && prompt.length > AGENT_BOUNDS.MAX_MESSAGE_CHARS) {
       setNote({ reason: FAILURE_REASON.OTHER, text: TOO_LONG });
       return;
     }
@@ -494,7 +490,7 @@ export function NewTaskComposer({
         </div>
       </div>
       <AgentComposer
-        status={CODING_AGENT_STATUS.STARTING}
+        status={AGENT_STATUS.STARTING}
         composer={composer}
         wording={startsBare ? BARE_WORDS : PURPOSE_WORDS[purpose]}
         // Note that an automation's agent is held without words, since its brief fences them as the request, files alone saying none.
@@ -508,7 +504,7 @@ export function NewTaskComposer({
         skills={skills}
         published={undefined}
         doors={{ openGitHub: () => undefined, copy: () => undefined }}
-        onStop={() => Promise.resolve()}
+        onStop={() => Promise.resolve(false)}
         onKey={onKey}
         onLeave={onLeave}
         focusedByOwner={focusedByOwner}

@@ -1,26 +1,26 @@
 import { Schema as EffectSchema } from "effect";
 import {
-  codingAgentStatusAt,
+  agentStatusAt,
   lineAwaitsTurn,
   type StatusTurn,
   statusClockEdge,
   turnStoppable,
-} from "./coding-agent-status.js";
+} from "./agent-status.js";
 import {
-  CODING_AGENT_ARCHIVER,
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_KIND,
-  CODING_AGENT_STATUS,
+  AGENT_ARCHIVER,
+  AGENT_BRIEF,
+  AGENT_KIND,
+  AGENT_STATUS,
+  type AgentArchivedBy,
+  type AgentStatus,
+  type AgentSummary,
+  agentPullRequestSchema,
+  agentSummarySchema,
   CONTEXT_WINDOW,
-  type CodingAgentArchivedBy,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
-  codingAgentPullRequestSchema,
-  codingAgentSummarySchema,
   PULL_REQUEST_STATE,
   pullRequestAuthorOf,
   type TasklessAgent,
-} from "./coding-agent-wire.js";
+} from "./agent-wire.js";
 import { integrationConnectionOf } from "./integration-wire.js";
 import { sealedLiveQuerySchema } from "./live-wire.js";
 import { countedNumber } from "./service-wire.js";
@@ -28,6 +28,7 @@ import {
   PLAN_ACTOR,
   TASK_AGENTS_BOUNDS,
   type TaskAgentLine,
+  type TaskAgentPin,
   type TaskAgentsSummary,
   type TaskListAnswer,
   type TaskOrigin,
@@ -51,7 +52,7 @@ import {
  * now that a plan links none, and stands because a released desktop
  * requires it. Everything the held read derives from them is derived here, at
  * the instant the reader reads at, since an agent's status turns on the
- * clock (`coding-agent-status.ts`): `taskListGraceEdge` is the next instant
+ * clock (`agent-status.ts`): `taskListGraceEdge` is the next instant
  * the clock alone moves the list, which the reader builds it again at.
  * Realtime keeps no order, so the list is ordered here as the held read
  * orders it.
@@ -102,7 +103,7 @@ const taskLiveRowSchema = EffectSchema.Struct({
 
 /** Who archived an agent as its row holds it. */
 const archiveLiveSchema = EffectSchema.Struct({
-  by: EffectSchema.Literals(Object.values(CODING_AGENT_ARCHIVER)),
+  by: EffectSchema.Literals(Object.values(AGENT_ARCHIVER)),
   userId: EffectSchema.String,
   agentId: EffectSchema.optionalKey(EffectSchema.String),
   agentName: EffectSchema.optionalKey(EffectSchema.String),
@@ -120,10 +121,10 @@ const agentLiveRowSchema = EffectSchema.Struct({
   contextWindow: EffectSchema.NullOr(EffectSchema.String),
   title: EffectSchema.NullOr(EffectSchema.String),
   /** What kind of agent it is, a coder or a member's operator; absent from a statement before operators. */
-  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_KIND))),
+  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_KIND))),
   /** Whether the agent was handed a prompt rather than its plan. */
   /** What the agent was handed as its first message: the plan, the developer's prompt, or nothing, for one started blank. */
-  brief: EffectSchema.Literals(Object.values(CODING_AGENT_BRIEF)),
+  brief: EffectSchema.Literals(Object.values(AGENT_BRIEF)),
   /** The repository the agent works in; null for a member's operator, which works in none. */
   repository: EffectSchema.NullOr(EffectSchema.String),
   starterId: EffectSchema.String,
@@ -134,9 +135,9 @@ const agentLiveRowSchema = EffectSchema.Struct({
   archivedBy: EffectSchema.NullOr(archiveLiveSchema),
   archiverName: EffectSchema.NullOr(EffectSchema.String),
   disabledServers: EffectSchema.NullOr(EffectSchema.Array(EffectSchema.String)),
-  published: EffectSchema.NullOr(codingAgentPullRequestSchema),
+  published: EffectSchema.NullOr(agentPullRequestSchema),
   /** The agent this one continues or forks, as its summary's `from` says it. */
-  startedFrom: EffectSchema.NullOr(codingAgentSummarySchema.fields.from.schema),
+  startedFrom: EffectSchema.NullOr(agentSummarySchema.fields.from.schema),
   pinnedAt: EffectSchema.NullOr(countedNumber),
   pinPosition: EffectSchema.NullOr(EffectSchema.String),
   createdAt: countedNumber,
@@ -168,9 +169,9 @@ type TaskLiveRow = typeof taskLiveRowSchema.Type;
 type AgentLiveRow = typeof agentLiveRowSchema.Type;
 
 /** The statuses under which an agent is at work. */
-const WORKING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
-  CODING_AGENT_STATUS.STARTING,
-  CODING_AGENT_STATUS.RUNNING,
+const WORKING_STATUSES: ReadonlySet<AgentStatus> = new Set([
+  AGENT_STATUS.STARTING,
+  AGENT_STATUS.RUNNING,
 ]);
 
 /** The order the pull requests a row names stand in: those still to act on first, then merged, then closed. */
@@ -210,12 +211,12 @@ function standingOf(row: AgentLiveRow, now: number) {
     createdAt: row.createdAt,
     now,
     awaitingLineAt: row.awaitingLineAt ?? undefined,
-    blank: row.brief === CODING_AGENT_BRIEF.BLANK,
+    blank: row.brief === AGENT_BRIEF.BLANK,
   };
 }
 
-function statusOf(row: AgentLiveRow, now: number): CodingAgentStatus {
-  return codingAgentStatusAt(turnOf(row), standingOf(row, now));
+function statusOf(row: AgentLiveRow, now: number): AgentStatus {
+  return agentStatusAt(turnOf(row), standingOf(row, now));
 }
 
 /** When the run the status is read from began: the newest turn's start, or its queueing, the agent's own before any turn, and none while a line awaits its turn. */
@@ -224,7 +225,7 @@ function runStartedAt(row: AgentLiveRow, now: number): number | undefined {
   return turnOf(row) === undefined ? row.createdAt : (row.startedAt ?? row.queuedAt ?? undefined);
 }
 
-/** When the agent last did something settled, as the service's `codingAgentActivityAt` reads it: its start, or its newest turn to end's end, whichever is later; a turn's start is none. A statement from before that end was carried names the newest turn's own. */
+/** When the agent last did something settled, as the service's `agentActivityAt` reads it: its start, or its newest turn to end's end, whichever is later; a turn's start is none. A statement from before that end was carried names the newest turn's own. */
 function activityAt(row: AgentLiveRow): number {
   return Math.max(row.createdAt, row.lastSettledAt ?? row.settledAt ?? 0);
 }
@@ -305,7 +306,7 @@ function agentsSummaryOf(rows: readonly AgentLiveRow[], now: number): TaskAgents
   return {
     total: newest.length,
     working: working.length,
-    failed: newest.filter(({ line }) => line.status === CODING_AGENT_STATUS.FAILED).length,
+    failed: newest.filter(({ line }) => line.status === AGENT_STATUS.FAILED).length,
     ...(rows.length === 0 ? undefined : { activityAt: Math.max(...rows.map(activityAt)) }),
     agents: [...working, ...resting]
       .slice(0, TASK_AGENTS_BOUNDS.MAX_AGENTS)
@@ -362,7 +363,7 @@ function taskSummaryOf(
 }
 
 /** Who archived an agent as its banner says it: the member where their account stands, the agent acting for them, and why. */
-function archivedByOf(row: AgentLiveRow): CodingAgentArchivedBy | undefined {
+function archivedByOf(row: AgentLiveRow): AgentArchivedBy | undefined {
   const archive = row.archivedBy;
   if (row.archivedAt === null || archive === null) return undefined;
   return {
@@ -379,14 +380,14 @@ function archivedByOf(row: AgentLiveRow): CodingAgentArchivedBy | undefined {
 }
 
 /** One agent as the tabs draw it, on a plan or with none, its status read at `now`, as the service's summary of it says it. */
-function agentSummaryOf(row: AgentLiveRow, now: number): CodingAgentSummary {
+function agentSummaryOf(row: AgentLiveRow, now: number): AgentSummary {
   const servers = (row.disabledServers ?? []).filter(
     (name) => integrationConnectionOf(name) !== undefined,
   );
   const archivedBy = archivedByOf(row);
   const started = runStartedAt(row, now);
   const status = statusOf(row, now);
-  const stoppable = status !== CODING_AGENT_STATUS.RUNNING || turnStoppable(turnOf(row));
+  const stoppable = status !== AGENT_STATUS.RUNNING || turnStoppable(turnOf(row));
   return {
     id: row.id,
     planId: row.planId,
@@ -396,7 +397,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number): CodingAgentSummary {
       ? { contextWindow: CONTEXT_WINDOW.STANDARD }
       : undefined),
     title: row.title,
-    ...(row.kind === CODING_AGENT_KIND.OPERATOR ? { kind: row.kind } : undefined),
+    ...(row.kind === AGENT_KIND.OPERATOR ? { kind: row.kind } : undefined),
     createdAt: row.createdAt,
     status,
     ...(row.quietTurn === true ? { quietTurn: true } : undefined),
@@ -456,19 +457,31 @@ function firstStarted(a: AgentLiveRow, b: AgentLiveRow): number {
 }
 
 /**
- * Every agent on a plan, the archived ones left out, each as the plan's own
- * list of agents names it with its status read at `now`, the first started
- * first: what the desktop's ledger of agents reads where it once listed
- * each plan's agents again on a clock.
+ * Every agent on a plan, the archived ones among them, each as the plan's
+ * own list of agents names it with its status read at `now`, the first
+ * started first: what the open plan's tabs draw, and what the desktop's
+ * ledger of agents reads, the archived left out, where it once listed each
+ * plan's agents again on a clock.
  */
-export function taskAgentsOfLiveRows(
-  rows: TaskListLiveRows,
-  now: number,
-): readonly CodingAgentSummary[] {
+export function taskAgentsOfLiveRows(rows: TaskListLiveRows, now: number): readonly AgentSummary[] {
   return rows.agents
-    .filter((row) => row.planId !== null && row.archivedAt === null)
+    .filter((row) => row.planId !== null)
     .toSorted(firstStarted)
     .map((row) => agentSummaryOf(row, now));
+}
+
+/**
+ * The reader's pins of agents on a plan, the archived ones left out, since
+ * an archived agent stands in no list a pin is drawn in: what the sidebar's
+ * Pinned section draws beside the pinned plans.
+ */
+export function taskAgentPinsOfLiveRows(rows: TaskListLiveRows): readonly TaskAgentPin[] {
+  return rows.agents.flatMap((row): TaskAgentPin[] => {
+    const { planId, pinnedAt, pinPosition } = row;
+    if (planId === null || pinnedAt === null || row.archivedAt !== null) return [];
+    const at = { agentId: row.id, taskId: planId, pinnedAt };
+    return [pinPosition === null ? at : { ...at, pinPosition }];
+  });
 }
 
 /**

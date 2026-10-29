@@ -18,22 +18,19 @@
  * profile stages.
  */
 
+import { AGENT_CALL_FAILURE, type AgentTranscriptPage } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentTranscriptPage,
-} from "@luke/features/coding-agent-view";
-import {
+  AGENT_AUTHOR,
+  AGENT_BRIEF,
+  AGENT_SENDER,
+  AGENT_STATUS,
+  type AgentChangedFile,
+  type AgentSummary,
+  type AgentTranscriptMessage,
   CHANGED_FILE_STATUS,
   CHECK_STATE,
   CHECK_SUMMARY,
-  CODING_AGENT_AUTHOR,
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_SENDER,
-  CODING_AGENT_STATUS,
   CONVERSATION_ENTRY,
-  type CodingAgentChangedFile,
-  type CodingAgentMessage,
-  type CodingAgentSummary,
   DEPLOYMENT_STATE,
   DIFF_SIDE,
   type GitHubPerson,
@@ -41,7 +38,7 @@ import {
   PULL_REQUEST_STATE,
   REVIEW_DECISION,
   REVIEW_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { CHAPTER_KIND, CHAPTER_RISK, LINE_REF_SIDE } from "@luke/features/pull-request-chapters";
 import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
 import {
@@ -199,9 +196,9 @@ function addedPatch(lines: readonly string[]): string {
 /** A changed file with the counts its patch holds. */
 function changedFile(
   path: string,
-  status: CodingAgentChangedFile["status"],
+  status: AgentChangedFile["status"],
   patch: string,
-): CodingAgentChangedFile {
+): AgentChangedFile {
   const lines = patch.split("\n").slice(1);
   return {
     path,
@@ -215,7 +212,7 @@ function changedFile(
 }
 
 /** The pull request's files: the schema's pending state, the invite module and its test, and the removal that now covers invites. */
-const CHANGED_FILES: readonly CodingAgentChangedFile[] = [
+const CHANGED_FILES: readonly AgentChangedFile[] = [
   changedFile(
     "src/db/schema/memberships.ts",
     CHANGED_FILE_STATUS.MODIFIED,
@@ -258,7 +255,7 @@ const ADDITIONS = CHANGED_FILES.reduce((sum, file) => sum + file.additions, 0);
 const DELETIONS = CHANGED_FILES.reduce((sum, file) => sum + file.deletions, 0);
 
 /** The agent as the task's list and its tab hold it. */
-function agentSummary(taskId: string, running = false): CodingAgentSummary {
+function agentSummary(taskId: string, running = false): AgentSummary {
   return {
     id: FIXTURE_AGENT_ID,
     planId: taskId,
@@ -266,10 +263,10 @@ function agentSummary(taskId: string, running = false): CodingAgentSummary {
     effort: "high",
     title: "Add teammate invitations",
     createdAt: STARTED_AT,
-    status: running ? CODING_AGENT_STATUS.RUNNING : CODING_AGENT_STATUS.COMPLETED,
+    status: running ? AGENT_STATUS.RUNNING : AGENT_STATUS.COMPLETED,
     turnId: TURN_ID,
     runStartedAt: STARTED_AT,
-    brief: CODING_AGENT_BRIEF.PROMPT,
+    brief: AGENT_BRIEF.PROMPT,
   };
 }
 
@@ -279,7 +276,7 @@ function toolPart(tool: string, callId: string, input: WireRecord, output: WireR
 }
 
 /** The developer's ask that began the agent's one turn. */
-const ASK: CodingAgentMessage = {
+const ASK: AgentTranscriptMessage = {
   id: "fixture-agent-ask",
   role: MESSAGE_ROLE.USER,
   parts: [
@@ -292,7 +289,7 @@ const ASK: CodingAgentMessage = {
 };
 
 /** The agent's reads, its edit, its tests, and the pull request it opened, answering the ask. */
-const WORK: CodingAgentMessage = {
+const WORK: AgentTranscriptMessage = {
   id: "fixture-agent-work",
   role: MESSAGE_ROLE.ASSISTANT,
   parts: [
@@ -382,16 +379,16 @@ const FAILED_SHA = "c0ffee5a7d3b9e1f2a4c6e8b0d2f4a6c8e0b2d4f";
 const FAILED_CHECKS_URL = `https://github.com/${REPOSITORY}/commit/${FAILED_SHA}/checks`;
 
 /** The agent's one turn: the developer's ask, then its work. */
-const MESSAGES: readonly CodingAgentMessage[] = [ASK, WORK];
+const MESSAGES: readonly AgentTranscriptMessage[] = [ASK, WORK];
 
 /** One follow-up turn: the developer's ask at `at`, or the line `steered` says carried it, then the agent's work on it, `parts`, done two minutes later. */
 function followUp(input: {
   readonly id: string;
   readonly at: number;
   readonly ask: string;
-  readonly steered?: Pick<CodingAgentMessage, "metadata" | "sentBy"> | undefined;
-  readonly parts: CodingAgentMessage["parts"];
-}): readonly CodingAgentMessage[] {
+  readonly steered?: Pick<AgentTranscriptMessage, "metadata" | "sentBy"> | undefined;
+  readonly parts: AgentTranscriptMessage["parts"];
+}): readonly AgentTranscriptMessage[] {
   return [
     {
       id: `${input.id}-ask`,
@@ -415,7 +412,7 @@ function followUp(input: {
  * kept at a pull request reads: more than the window holds, so its
  * transcript scrolls. The newest is the summary's turn.
  */
-const LONG_MESSAGES: readonly CodingAgentMessage[] = [
+const LONG_MESSAGES: readonly AgentTranscriptMessage[] = [
   ASK,
   WORK,
   ...followUp({
@@ -438,7 +435,7 @@ const LONG_MESSAGES: readonly CodingAgentMessage[] = [
         words: REVIEW_WORDS,
         comments: REVIEW_COMMENTS,
       },
-      sentBy: { kind: CODING_AGENT_SENDER.GITHUB, name: GRACE.login },
+      sentBy: { kind: AGENT_SENDER.GITHUB, name: GRACE.login },
     },
     parts: [
       toolPart(
@@ -472,7 +469,7 @@ const LONG_MESSAGES: readonly CodingAgentMessage[] = [
         event: "message",
         item_id: THREAD_ITEM_ID,
       },
-      sentBy: { kind: CODING_AGENT_SENDER.MEMBER, userId: GRACE_USER_ID, name: "Grace Hopper" },
+      sentBy: { kind: AGENT_SENDER.MEMBER, userId: GRACE_USER_ID, name: "Grace Hopper" },
     },
     parts: [
       {
@@ -515,7 +512,7 @@ const LONG_MESSAGES: readonly CodingAgentMessage[] = [
         by: "github-actions[bot]",
         sha: FAILED_SHA,
       },
-      sentBy: { kind: CODING_AGENT_SENDER.GITHUB, name: "github-actions[bot]" },
+      sentBy: { kind: AGENT_SENDER.GITHUB, name: "github-actions[bot]" },
     },
     parts: [
       toolPart(
@@ -539,10 +536,10 @@ const LONG_MESSAGES: readonly CodingAgentMessage[] = [
 ];
 
 /** The agent's transcript, as its stream opens on it: the whole turn, caught up. */
-const TRANSCRIPT_PAGE: CodingAgentTranscriptPage = {
+const TRANSCRIPT_PAGE: AgentTranscriptPage = {
   messages: MESSAGES,
   cursor: "1:0",
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   runStartedAt: STARTED_AT,
   title: "Add teammate invitations",
   newest: true,
@@ -616,7 +613,7 @@ const OVERVIEW_PULL_REQUEST = {
     mergedAt: null,
     merge: MERGE_STATE.CLEAN,
     author: ADA,
-    writtenAs: CODING_AGENT_AUTHOR.DEVELOPER,
+    writtenAs: AGENT_AUTHOR.DEVELOPER,
     requested: [],
     merging: {
       methods: [MERGE_METHOD.SQUASH],
@@ -698,7 +695,7 @@ const CHANGES = {
     files: CHANGED_FILES,
     truncated: false,
     author: ADA,
-    writtenAs: CODING_AGENT_AUTHOR.DEVELOPER,
+    writtenAs: AGENT_AUTHOR.DEVELOPER,
     reviewers: OVERVIEW_CONVERSATION.pullRequest.reviewers,
   },
 };
@@ -921,14 +918,14 @@ function postShellPort(stage: Extract<TerminalStage, { kind: typeof TERMINAL_STA
 }
 
 /** The transcript's stream, as main opens one: its one page, as long as the stage says, then its end, as a finished agent's stands. */
-function transcriptStream(stage: AgentStage): AsyncIteratorClass<CodingAgentTranscriptPage, void> {
+function transcriptStream(stage: AgentStage): AsyncIteratorClass<AgentTranscriptPage, void> {
   if (longRun(stage)) return longRunStream();
   const page =
     "view" in stage && stage.transcript === TRANSCRIPT_LENGTH.LONG
       ? { ...TRANSCRIPT_PAGE, messages: LONG_MESSAGES }
       : TRANSCRIPT_PAGE;
   let told = false;
-  return new AsyncIteratorClass<CodingAgentTranscriptPage, void>(
+  return new AsyncIteratorClass<AgentTranscriptPage, void>(
     async () => {
       if (told) return { done: true, value: undefined };
       told = true;
@@ -956,15 +953,15 @@ type StagedAnswer<Kind extends PortActKind> = (
 
 /** Every read the agent's tabs ask, answered as the service would answer it for this agent. */
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
-  [ACT_KIND.CODING_AGENTS_LIST]: ({ taskId }, stage) => ({
+  [ACT_KIND.AGENTS_LIST]: ({ taskId }, stage) => ({
     agents: [agentSummary(taskId, longRun(stage))],
   }),
-  [ACT_KIND.CODING_AGENTS_TRANSCRIPT]: (_payload, stage) => transcriptStream(stage),
-  [ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER]: () => ({
-    failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
+  [ACT_KIND.AGENTS_TRANSCRIPT]: (_payload, stage) => transcriptStream(stage),
+  [ACT_KIND.AGENTS_TRANSCRIPT_OLDER]: () => ({
+    failure: AGENT_CALL_FAILURE.NOT_FOUND,
   }),
-  [ACT_KIND.CODING_AGENTS_PICTURE]: () => longRunPicture(),
-  [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: () => ({
+  [ACT_KIND.AGENTS_PICTURE]: () => longRunPicture(),
+  [ACT_KIND.AGENTS_PULL_REQUEST]: () => ({
     repository: REPOSITORY,
     branch: PULL_REQUEST.head,
     pullRequest: {
@@ -979,16 +976,16 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
       queued: true,
     },
   }),
-  [ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: () => OVERVIEW_PULL_REQUEST,
-  [ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS]: () => OVERVIEW_CHECKS,
-  [ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION]: () => OVERVIEW_CONVERSATION,
-  [ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS]: () => ({
+  [ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST]: () => OVERVIEW_PULL_REQUEST,
+  [ACT_KIND.AGENTS_OVERVIEW_CHECKS]: () => OVERVIEW_CHECKS,
+  [ACT_KIND.AGENTS_OVERVIEW_CONVERSATION]: () => OVERVIEW_CONVERSATION,
+  [ACT_KIND.AGENTS_REVIEW_OPTIONS]: () => ({
     labels: OVERVIEW_PULL_REQUEST.pullRequest.labels,
     users: [ADA, GRACE],
     teams: [],
   }),
-  [ACT_KIND.CODING_AGENTS_CHANGES]: () => CHANGES,
-  [ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED]: () => ({
+  [ACT_KIND.AGENTS_CHANGES]: () => CHANGES,
+  [ACT_KIND.AGENTS_PULL_REQUEST_VIEWED]: () => ({
     outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
     files: [{ path: "src/db/schema/memberships.ts", state: FILE_VIEWED_STATE.VIEWED }],
   }),

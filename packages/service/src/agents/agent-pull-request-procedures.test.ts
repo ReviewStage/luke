@@ -7,7 +7,7 @@
  * else its request carries; an agent the path names that the account
  * cannot reach is not found; and a change's body is held to its cap and its
  * shape before any agent is read. The reads and changes themselves, over a
- * faked GitHub, are `coding-agents-app.test.ts`'s.
+ * faked GitHub, are `agents-app.test.ts`'s.
  *
  * Synthetic accounts and bearers throughout.
  */

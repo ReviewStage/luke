@@ -50,17 +50,24 @@ interface ListedTask {
     | undefined;
 }
 
+/** A listed agent on no task as the window holds it: its id, and the pull request it opened, where it opened one. */
+interface ListedAgent {
+  readonly id: string;
+  readonly pullRequest?: { readonly url: string } | undefined;
+}
+
 /**
- * The task and the agent whose Pull request tab a link to a pull request
- * opens, among the tasks the window lists, wherever the link is pressed:
- * a thread, a task's card, or another task. Note that a task's row
- * names only its few newest pull requests, so an older one is not found here
- * and opens on GitHub.
+ * The agent whose Pull request tab a link to a pull request opens, and its
+ * task, none for an agent on none, among the tasks and the agents on no
+ * task the window lists, wherever the link is pressed: a thread, a task's
+ * card, or another task. Note that a task's row names only its few newest
+ * pull requests, so an older one is not found here and opens on GitHub.
  */
 export function listedPullRequestOf(
   href: string,
   tasks: Iterable<ListedTask>,
-): { readonly taskId: string; readonly agentId: string } | undefined {
+  agents: Iterable<ListedAgent> = [],
+): { readonly taskId: string | undefined; readonly agentId: string } | undefined {
   for (const task of tasks) {
     const opened = (task.agents?.pullRequests ?? []).flatMap(({ url, agentId }) =>
       url === undefined || agentId === undefined ? [] : [{ agentId, url }],
@@ -68,7 +75,11 @@ export function listedPullRequestOf(
     const agentId = pullRequestAgentOf(href, opened);
     if (agentId !== undefined) return { taskId: task.id, agentId };
   }
-  return undefined;
+  const taskless = [...agents].flatMap(({ id, pullRequest }) =>
+    pullRequest === undefined ? [] : [{ agentId: id, url: pullRequest.url }],
+  );
+  const agentId = pullRequestAgentOf(href, taskless);
+  return agentId === undefined ? undefined : { taskId: undefined, agentId };
 }
 
 /**

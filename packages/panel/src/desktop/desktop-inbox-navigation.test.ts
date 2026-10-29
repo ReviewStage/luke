@@ -2,6 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_CALL_FAILURE,
+  type AgentInboxStartParams,
+  INBOX_SCOPE_KIND,
+} from "@luke/features/agent-view";
+import { AGENT_KIND } from "@luke/features/agent-wire";
+import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_SCOPE,
@@ -9,12 +15,6 @@ import {
   type AutomationSummary,
 } from "@luke/features/automation-wire";
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxStartParams,
-  INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { INBOX_MESSAGE_AUTHOR, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { pageFrameUrl } from "@luke/features/page-frame";
@@ -105,7 +105,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 test("the Inbox left and come back to under the window's root draws the rows it held at once, before any follow pushes again", async () => {
-  const { page } = mount([], { windowRoot: true });
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
   await settle();
   const rows = listed(page);
   assert.ok(
@@ -119,25 +119,78 @@ test("the Inbox left and come back to under the window's root draws the rows it 
   assert.deepEqual(listed(page), rows, "drawn from what the window held, nothing pushed anew");
 });
 
-test("a task whose follow failed before the Inbox was left is followed again once the Inbox is come back to", async () => {
-  const { page } = mount([], { windowRoot: true });
+test("the Inbox under the window's root draws each task held whole by the account's feed from it, following none on its own", async () => {
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
   await settle();
-  world.main.push(
-    { kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id },
-    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+  const rows = listed(page);
+  assert.ok(
+    rows.some((row) => row.endsWith(THRESHOLD.title)),
+    "the billing task's items are drawn",
   );
-  act(() => world.setInboxOpen(false));
+  assert.ok(
+    rows.some((row) => row.endsWith(EXPIRY.title)),
+    "the invites task's items are drawn",
+  );
+  for (const task of [BILLING, INVITES]) {
+    assert.equal(
+      world.main.isFollowed({ kind: INBOX_SCOPE_KIND.PLAN, id: task.id }),
+      false,
+      `${task.name} is drawn from the feed alone`,
+    );
+  }
+});
+
+test("an Inbox under the window's root whose feed holds nothing of its tasks says so rather than reading for good", async () => {
+  // The feed answers with no task, as it leaves out one whose items all settled past its bound.
+  world.inboxes = new Map();
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  await settle();
+  const list = page.querySelector(".inbox-tasks");
+  assert.ok(list, "the list is drawn");
+  assert.equal(list.querySelector('[aria-busy="true"]'), null, "nothing is still being read");
+});
+
+test("a link to an item the account's feed leaves out waits for its task's own read, saying no Not found, and then shows it", async () => {
+  // The feed leaves the invites task out, as it does one whose items all settled past its bound.
+  world.inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
+  let land: () => void = () => undefined;
+  world.startRead = (taskId) =>
+    taskId === INVITES.id
+      ? new Promise((resolve) => {
+          land = () =>
+            resolve({ status: FAKE_ANSWER.DONE, value: { items: [EXPIRY], cursor: "1" } });
+        })
+      : undefined;
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  await settle();
+  act(() => world.chooseFromOutside({ taskId: INVITES.id, itemId: EXPIRY.id, opened: true }));
+  await settle();
+  const waiting = page.querySelector(".inbox-view-items")?.textContent ?? "";
+  land();
   await settle();
 
-  act(() => world.setInboxOpen(true));
+  assert.doesNotMatch(waiting, /Not found/u);
+  assert.match(
+    page.querySelector(".inbox-view-items")?.textContent ?? "",
+    /Expire after 7 days\?/u,
+  );
+});
+
+test("an Inbox whose account feed refused before it ever answered reads it again on Retry", async () => {
+  world.feedRefused = true;
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  await settle();
+  const retry = [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks button")].find(
+    (each) => each.textContent === "Retry",
+  );
+  assert.ok(retry, "the list offers to read again");
+
+  world.feedRefused = false;
+  act(() => retry.click());
   await settle();
   assert.ok(
-    world.main.isFollowed({ kind: INBOX_SCOPE_KIND.PLAN, id: INVITES.id }),
-    "the failed task is followed anew",
-  );
-  assert.ok(
-    listed(page).some((row) => row.endsWith(EXPIRY.title)),
-    "its items are drawn again",
+    listed(page).some((row) => row.endsWith(THRESHOLD.title)),
+    "the feed is read again and its items drawn",
   );
 });
 
@@ -337,9 +390,12 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
   const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the agent's page hangs the page's own card");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Flake ledger");
-  assert.equal(
-    card.querySelector(".luke-hover-card-sub")?.textContent,
-    "Version 3 · Shown by Sweep the flaky tests",
+  assert.deepEqual(
+    [
+      card.querySelector(".luke-hover-card-sub")?.textContent,
+      card.querySelector(".luke-hover-card-row")?.textContent,
+    ],
+    ["Version 3", "Shown by Sweep the flaky tests"],
   );
   assert.equal(
     card.querySelector(".luke-page-thumb-frame")?.getAttribute("src"),
@@ -357,7 +413,7 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
       refused?.querySelector(".luke-hover-card-name")?.textContent,
       refused?.querySelector(".luke-hover-card-note")?.textContent,
     ],
-    ["Their ledger", "Luke cannot read this page."],
+    ["Their ledger", "Luke can't read this page."],
   );
 });
 
@@ -400,7 +456,7 @@ function lukeTaskless(asked: InboxItem): AppInboxTasklessItem {
   return {
     id: asked.id,
     agentId: asked.agentId,
-    agentKind: CODING_AGENT_KIND.OPERATOR,
+    agentKind: AGENT_KIND.OPERATOR,
     title: asked.title,
     postedAt: asked.postedAt,
     updatedAt: asked.updatedAt,
@@ -464,7 +520,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   );
   assert.match(
     hoveredCard(mark, "[data-inbox-row-card]") ?? "",
-    /^Nightly flake sweep.*Sweep the flaky tests$/su,
+    /^Quarantine the flaky test\?.*Nightly flake sweep.*Sweep the flaky tests$/su,
   );
 
   act(() => rowNamed(page, "Quarantine the flaky test?").click());
@@ -597,6 +653,25 @@ test("an agent with no plan whose waiting items move, one answered on another Ma
   assert.ok(listed(page).includes("Skip the slow suite?"), listed(page).join(" | "));
 });
 
+test("an agent with no plan whose items are all settled stays listed under the automation that started it, as main lists it holding them", async () => {
+  const settled = { ...SECOND_ASK, status: INBOX_STATUS.ANSWERED };
+  world.agentInboxes = new Map([[SECOND_AGENT, [settled]]]);
+  const { id: _id, title: _title, postedAt: _postedAt, ...agent } = waitingTaskless(settled);
+  const { page } = mount([], {
+    windowRoot: true,
+    accountFeed: true,
+    agents: [{ ...agent, items: 1, toDo: 0 }],
+  });
+  await settle();
+
+  const rows = listed(page);
+  assert.equal(
+    rows[rows.indexOf("# Nightly flake sweep") + 1],
+    "Skip the slow suite?",
+    rows.join(" | "),
+  );
+});
+
 test("a read of an agent with no plan that fails is said with Retry, which reads it again though it was read before", async () => {
   world.agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
   const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless));
@@ -660,7 +735,7 @@ test("an untitled agent an automation started goes by its automation's name in t
   assert.match(hoveredCard(row, "[data-inbox-row-card]") ?? "", /Nightly flake sweep$/u);
 });
 
-test("an item's row offers Copy link on a right-click, copying the item's link under the task that holds it", async () => {
+test("an item's row offers Copy link on a right-click, copying the item's link under the agent that posted it, whichever task holds it", async () => {
   world.listedWorkspace = {
     id: "workspace-acme",
     name: "Acme",
@@ -682,7 +757,7 @@ test("an item's row offers Copy link on a right-click, copying the item's link u
   await act(async () => item.click());
 
   assert.deepEqual(world.copied, [
-    `https://tryluke.dev/acme/plan/${BILLING.id}/inbox/${THRESHOLD.id}`,
+    `https://tryluke.dev/acme/agent/${THRESHOLD.agentId}/inbox/${THRESHOLD.id}`,
   ]);
 });
 
@@ -728,7 +803,7 @@ test("an item a link names is not found though another task's read failed, and i
     taskId === BILLING.id
       ? Promise.resolve({
           status: FAKE_ANSWER.DONE,
-          value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+          value: { failure: AGENT_CALL_FAILURE.UNANSWERED },
         })
       : undefined;
   const { page } = mount();
@@ -870,7 +945,7 @@ test("an item a link names under a task whose own read fails is kept asked for, 
     taskId === quiet.id
       ? Promise.resolve({
           status: FAKE_ANSWER.DONE,
-          value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+          value: { failure: AGENT_CALL_FAILURE.UNANSWERED },
         })
       : undefined;
   const { page } = mount();
@@ -1046,14 +1121,14 @@ const STARTED: InboxItem = {
 };
 
 /** Every thread the box starts, written down and answered as the service starts it, the task's inbox then holding it. */
-function heldStarts(): CodingAgentInboxStartParams[] {
-  const sent: CodingAgentInboxStartParams[] = [];
+function heldStarts(): AgentInboxStartParams[] {
+  const sent: AgentInboxStartParams[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_START) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_START) return previous(request);
       sent.push(request.payload);
       world.inboxes.set(BILLING.id, [STARTED, ...(world.inboxes.get(BILLING.id) ?? [])]);
       pushAgain();
@@ -1414,7 +1489,7 @@ test("words written in the box while its new thread starts stay in it once the t
   fakeActs({
     ...appBridge(),
     act: (request: AnyAct): Promise<FakeActAnswer> =>
-      request.kind === ACT_KIND.CODING_AGENTS_INBOX_START ? answer.promise : previous(request),
+      request.kind === ACT_KIND.AGENTS_INBOX_START ? answer.promise : previous(request),
   });
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
@@ -1527,7 +1602,7 @@ test("the sidebar lists the channels under the Inbox's row, each with what waits
   const { page } = mount([], { withSidebar: true, waiting });
   await settle();
 
-  assert.deepEqual(sidebarChannels(page), ["general2 need you", "app", "launch", "Add channel"]);
+  assert.deepEqual(sidebarChannels(page), ["general2 for you", "app", "launch", "Add channel"]);
   act(() =>
     (
       [...page.querySelectorAll<HTMLButtonElement>('[aria-label="Channels"] .luke-nav-item')].find(

@@ -1,9 +1,5 @@
 import { runtimeModelRule, runtimeModels } from "@luke/features/agent-runtime-models";
-import {
-  CODING_AGENT_PAYER,
-  type CodingAgentPayer,
-  type CodingAgentUsage,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_PAYER, type AgentPayer, type AgentUsage } from "@luke/features/agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
   CHIP_LOOK,
@@ -19,7 +15,7 @@ import {
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { HarnessMark } from "../harness-marks.js";
-import { agentUsageLine, choiceLabel, planPayerOf, providerOf } from "./coding-agent-model.js";
+import { agentUsageLine, choiceLabel, planPayerOf, providerOf } from "./agent-model.js";
 import { ModelLabel } from "./model-label.js";
 import { ModelMenu, settledChoice } from "./model-menu.js";
 import type { AgentModelControl } from "./use-agent-model.js";
@@ -109,9 +105,9 @@ export function AgentModelChip({
   /** Reads the catalog now, for the chip's name, for a menu opening, and for the menu's Retry. */
   readModels: () => void;
   /** What the agent has cost, as its transcript's last page said; nothing before a turn settled. */
-  usage: CodingAgentUsage | undefined;
+  usage: AgentUsage | undefined;
   /** Who pays for the agent, as its transcript's last page said, before a turn settled too; nothing where it said none. */
-  payer?: CodingAgentPayer | undefined;
+  payer?: AgentPayer | undefined;
   /** The chip's look: the agent box's toolbar chip, or a form row's field (`@luke/ui`'s `Chip`). */
   look?: ChipLook;
   /** How wide the chip stands; its words' own width where none is named. */
@@ -182,8 +178,8 @@ export function AgentModelChip({
           onChoose={model.choose}
           footNote={agentUsageLine(usage)}
           planNote={
-            planPayerOf(model.runtime) === CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION &&
-            (payer ?? usage?.payer) !== CODING_AGENT_PAYER.API_KEY ? (
+            planPayerOf(model.runtime) === AGENT_PAYER.CHATGPT_SUBSCRIPTION &&
+            (payer ?? usage?.payer) !== AGENT_PAYER.API_KEY ? (
               <ChatGptPlanNote />
             ) : undefined
           }

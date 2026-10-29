@@ -32,6 +32,7 @@ import { user } from "@luke/database/schemas/auth";
 import { conversations, messages } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB } from "@luke/database/testing";
+import { RUN_ON_MAC_OFF } from "@luke/features/luke-tools-wire";
 import {
   MAC_COMMAND_KIND,
   type MacCommand,
@@ -45,6 +46,7 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { wokenOnHub } from "../testing/sync-woken.js";
+import { runOnMacStanding } from "./luke-tools.js";
 import { askMac, MAC_COMMAND_STATUS, macCommandsFor, runOnMacTool } from "./mac-command.js";
 import { macCommandsProcedures } from "./mac-commands-procedures.js";
 
@@ -411,6 +413,10 @@ it.layer(getTestDB())("a command run on the developer's Mac", (it) => {
           false,
           "nothing was queued for the starter's Mac",
         );
+        const standing = yield* runOnMacStanding({ userId: starter, conversationId });
+        assert.ok(!standing.on, "the popover reads run_on_mac off");
+        assert.equal(standing.reason, RUN_ON_MAC_OFF.OUTSIDE_WORDS);
+        assert.equal(standing.from, MESSAGE_SENDER.MEMBER, "a teammate's message put the words in");
       }),
   );
 

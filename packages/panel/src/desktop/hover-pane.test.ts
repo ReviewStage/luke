@@ -5,6 +5,7 @@ import { act, createElement, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { pointerCross } from "../testing/pointer-cross.js";
 import { PANE_FLOAT, type PaneFloat, useFloatDismiss, useHoverPane } from "./hover-pane.js";
 
 /**
@@ -84,14 +85,6 @@ function standing(page: HTMLElement): string | undefined {
 function pressDown(target: Element): void {
   act(() => {
     target.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
-  });
-}
-
-/** The pointer crossing from `from` onto `to`, as React hears an enter and a leave. */
-function pointerCross(from: Element, to: Element): void {
-  act(() => {
-    from.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: to }));
-    to.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, relatedTarget: from }));
   });
 }
 

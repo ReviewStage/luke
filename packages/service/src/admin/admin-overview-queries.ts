@@ -14,9 +14,9 @@ import { Database, type DatabaseServices, queryBuilder } from "@luke/database/co
 import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
 import { agentAutomationRunSql } from "@luke/database/models/agent-name";
 import { InstantColumnSchema } from "@luke/database/models/columns";
+import { agentTable } from "@luke/database/schemas/agent";
 import { member, session, user } from "@luke/database/schemas/auth";
 import { automationRun } from "@luke/database/schemas/automation";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { integrationConnection } from "@luke/database/schemas/integration";
@@ -31,8 +31,8 @@ import {
   type ReachFeature,
 } from "@luke/features/admin-overview-vocabulary";
 import type { AdminMetricsScope, AdminMetricsWindow } from "@luke/features/admin-wire";
+import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { AUTOMATION_RUN_STATUS } from "@luke/features/automation-wire";
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
@@ -112,16 +112,16 @@ function atOf(column: AnyColumn | SQL): SQL.Aliased<Date> {
 }
 
 /** When an agent's pull request merged, as an instant; null where it has not. */
-const MERGED_AT = sql`to_timestamp((${codingAgent.published} ->> 'mergedAt')::numeric / 1000)`;
+const MERGED_AT = sql`to_timestamp((${agentTable.published} ->> 'mergedAt')::numeric / 1000)`;
 
 /** Whether an agent's pull request is merged, by its stamp or its state. */
 const PR_MERGED = or(
-  isNotNull(sql`${codingAgent.published} ->> 'mergedAt'`),
-  eq(sql`${codingAgent.published} ->> 'state'`, PULL_REQUEST_STATE.MERGED),
+  isNotNull(sql`${agentTable.published} ->> 'mergedAt'`),
+  eq(sql`${agentTable.published} ->> 'state'`, PULL_REQUEST_STATE.MERGED),
 );
 
 /** Whether an automation started the agent, as every query asks it. */
-const STARTED_BY_AUTOMATION = agentAutomationRunSql(codingAgent);
+const STARTED_BY_AUTOMATION = agentAutomationRunSql(agentTable);
 
 /**
  * Every meaningful action since `since`, one row per action: the account that
@@ -148,9 +148,9 @@ function meaningfulActions(since: Date) {
         ),
       ),
     queryBuilder
-      .select({ userId: userIdOf(codingAgent.userId), at: atOf(codingAgent.createdAt) })
-      .from(codingAgent)
-      .where(gte(codingAgent.createdAt, since)),
+      .select({ userId: userIdOf(agentTable.userId), at: atOf(agentTable.createdAt) })
+      .from(agentTable)
+      .where(gte(agentTable.createdAt, since)),
   ).as("meaningful_action");
 }
 
@@ -173,27 +173,27 @@ function dailyCountRows(since: Date) {
     queryBuilder
       .select({
         tag: tag(DAILY_COUNT.AGENTS_STARTED),
-        userId: userIdOf(codingAgent.userId),
-        at: atOf(codingAgent.createdAt),
+        userId: userIdOf(agentTable.userId),
+        at: atOf(agentTable.createdAt),
       })
-      .from(codingAgent)
-      .where(gte(codingAgent.createdAt, since)),
+      .from(agentTable)
+      .where(gte(agentTable.createdAt, since)),
     queryBuilder
       .select({
         tag: tag(DAILY_COUNT.AGENTS_FROM_AUTOMATIONS),
-        userId: userIdOf(codingAgent.userId),
-        at: atOf(codingAgent.createdAt),
+        userId: userIdOf(agentTable.userId),
+        at: atOf(agentTable.createdAt),
       })
-      .from(codingAgent)
-      .where(and(gte(codingAgent.createdAt, since), STARTED_BY_AUTOMATION)),
+      .from(agentTable)
+      .where(and(gte(agentTable.createdAt, since), STARTED_BY_AUTOMATION)),
     queryBuilder
       .select({
         tag: tag(DAILY_COUNT.PRS_MERGED),
-        userId: userIdOf(codingAgent.userId),
+        userId: userIdOf(agentTable.userId),
         at: atOf(MERGED_AT),
       })
-      .from(codingAgent)
-      .where(gte(sql`(${codingAgent.published} ->> 'mergedAt')::numeric`, since.getTime())),
+      .from(agentTable)
+      .where(gte(sql`(${agentTable.published} ->> 'mergedAt')::numeric`, since.getTime())),
     queryBuilder
       .select({
         tag: tag(DAILY_COUNT.PLAN_REVISIONS),
@@ -261,9 +261,9 @@ function reachRows(since: Date) {
         ),
       ),
     queryBuilder
-      .select({ tag: tag(REACH_FEATURE.CODING_AGENTS), userId: userIdOf(codingAgent.userId) })
-      .from(codingAgent)
-      .where(gte(codingAgent.createdAt, since)),
+      .select({ tag: tag(REACH_FEATURE.AGENTS), userId: userIdOf(agentTable.userId) })
+      .from(agentTable)
+      .where(gte(agentTable.createdAt, since)),
     queryBuilder
       .select({ tag: tag(REACH_FEATURE.INBOX), userId: userIdOf(inboxItem.answeredBy) })
       .from(inboxItem)
@@ -350,12 +350,12 @@ const findPrsOpened = SqlSchema.findOneOption({
           opened: count(),
           merged: sql<number>`count(*) filter (where ${PR_MERGED})`,
         })
-        .from(codingAgent)
-        .innerJoin(user, eq(user.id, codingAgent.userId))
+        .from(agentTable)
+        .innerJoin(user, eq(user.id, agentTable.userId))
         .where(
           and(
-            gte(codingAgent.createdAt, request.since),
-            isNotNull(codingAgent.published),
+            gte(agentTable.createdAt, request.since),
+            isNotNull(agentTable.published),
             keptByScope(request.scope),
           ),
         ),
@@ -385,7 +385,7 @@ const findFunnel = SqlSchema.findOneOption({
     [FUNNEL_STEP.MERGED_PR]: AggregateColumnSchema,
   }),
   execute: (request) => {
-    const agentOf = eq(codingAgent.userId, user.id);
+    const agentOf = eq(agentTable.userId, user.id);
     return Database.use((db) =>
       db
         .select({
@@ -409,19 +409,19 @@ const findFunnel = SqlSchema.findOneOption({
             queryBuilder.select({ one }).from(task).where(eq(task.userId, user.id)),
           ),
           [FUNNEL_STEP.STARTED_AGENT]: everDid(
-            queryBuilder.select({ one }).from(codingAgent).where(agentOf),
+            queryBuilder.select({ one }).from(agentTable).where(agentOf),
           ),
           [FUNNEL_STEP.OPENED_PR]: everDid(
             queryBuilder
               .select({ one })
-              .from(codingAgent)
-              .where(and(agentOf, isNotNull(codingAgent.published))),
+              .from(agentTable)
+              .where(and(agentOf, isNotNull(agentTable.published))),
           ),
           [FUNNEL_STEP.MERGED_PR]: everDid(
             queryBuilder
               .select({ one })
-              .from(codingAgent)
-              .where(and(agentOf, isNotNull(codingAgent.published), PR_MERGED)),
+              .from(agentTable)
+              .where(and(agentOf, isNotNull(agentTable.published), PR_MERGED)),
           ),
         })
         .from(user)
@@ -513,15 +513,15 @@ const findAgentsBy = SqlSchema.findAll({
   execute: (request) =>
     Database.use((db) =>
       db
-        .select({ userId: codingAgent.userId, value: count() })
-        .from(codingAgent)
+        .select({ userId: agentTable.userId, value: count() })
+        .from(agentTable)
         .where(
           and(
-            inArray(codingAgent.userId, request.userIds),
-            gte(codingAgent.createdAt, request.since),
+            inArray(agentTable.userId, request.userIds),
+            gte(agentTable.createdAt, request.since),
           ),
         )
-        .groupBy(codingAgent.userId),
+        .groupBy(agentTable.userId),
     ),
 });
 
@@ -531,15 +531,15 @@ const findPrsMergedBy = SqlSchema.findAll({
   execute: (request) =>
     Database.use((db) =>
       db
-        .select({ userId: codingAgent.userId, value: count() })
-        .from(codingAgent)
+        .select({ userId: agentTable.userId, value: count() })
+        .from(agentTable)
         .where(
           and(
-            inArray(codingAgent.userId, request.userIds),
-            gte(sql`(${codingAgent.published} ->> 'mergedAt')::numeric`, request.since.getTime()),
+            inArray(agentTable.userId, request.userIds),
+            gte(sql`(${agentTable.published} ->> 'mergedAt')::numeric`, request.since.getTime()),
           ),
         )
-        .groupBy(codingAgent.userId),
+        .groupBy(agentTable.userId),
     ),
 });
 

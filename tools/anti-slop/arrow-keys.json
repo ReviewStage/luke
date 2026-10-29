@@ -27,7 +27,7 @@
     "packages/panel/src/desktop/section-icon-picker.tsx": 5,
     "packages/panel/src/desktop/tab-switcher.tsx": 2,
     "packages/panel/src/settings/integrations-page.tsx": 2,
-    "packages/panel/src/tasks/agent-servers.tsx": 11,
+    "packages/panel/src/tasks/agent-servers.tsx": 10,
     "packages/panel/src/tasks/attachment-viewer.tsx": 3,
     "packages/panel/src/tasks/pull-request-reactions.tsx": 4,
     "packages/panel/src/tasks/skill-picker.tsx": 3

@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
+  type AgentPullRequest,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@luke/features/inbox-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { TASK_STATUS, type Task } from "@luke/features/task-wire";
@@ -25,7 +25,7 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platfo
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
-import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import type { HeldTranscripts } from "./strip-tabs.js";
 import { taskCardOf } from "./task-card.js";
 import {
@@ -51,19 +51,19 @@ import {
 
 const RUN_STARTED = 5_000;
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Expiry job",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.RUNNING,
+  status: AGENT_STATUS.RUNNING,
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c99",
   runStartedAt: RUN_STARTED,
 };
 
-const PULL_REQUEST: CodingAgentPullRequest = {
+const PULL_REQUEST: AgentPullRequest = {
   number: 42,
   title: "Expire invitations",
   url: "https://github.com/acme/relay/pull/42",
@@ -87,7 +87,7 @@ const HELD: HeldTranscripts = {
             parts: [{ type: "text", text: "Writing the expiry tests." }],
           },
         ],
-        status: CODING_AGENT_STATUS.RUNNING,
+        status: AGENT_STATUS.RUNNING,
         runStartedAt: RUN_STARTED,
         title: undefined,
         subagentTitles: new Map(),
@@ -127,7 +127,7 @@ function mount(
   const opened: string[] = [];
   const base = tasksControl();
   const tasks = tasksControl({
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: [AGENT],
       agentIds: [AGENT.id],
       models: [],
@@ -177,9 +177,9 @@ function cardAgent(page: HTMLElement): HTMLButtonElement {
   assert.ok(row, "the pull request has a row");
   hover(row);
   const named = document.querySelector<HTMLButtonElement>(
-    '.luke-tooltip-card .luke-hover-card-sub button[data-actor-ref][data-kind="agent"]',
+    '.luke-tooltip-card .luke-hover-card-row button[data-actor-ref][data-kind="agent"]',
   );
-  assert.ok(named, "the Changes card names the agent");
+  assert.ok(named, "the pull request's card names the agent");
   return named;
 }
 
@@ -310,7 +310,7 @@ test("the agent's card hung from a Changes card previews its running step while 
   assert.doesNotMatch(latestStep("plan"), /Writing the expiry tests\./u);
 });
 
-test("an agent's row in the summary draws the agent's one menu, Copy link copying the agent's link under its task, Show details before the delete", async () => {
+test("an agent's row in the summary draws the agent's one menu, Copy link copying the agent's own link, Show details before the delete", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount("plan", "acme");
@@ -334,7 +334,7 @@ test("an agent's row in the summary draws the agent's one menu, Copy link copyin
     "Show details⌥↓",
     "Permanently delete",
   ]);
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${AGENT.planId}/agent/${AGENT.id}`]);
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${AGENT.id}`]);
 });
 
 test("a heading folds its rows away, counting them, and stands folded as the summary is drawn again", () => {

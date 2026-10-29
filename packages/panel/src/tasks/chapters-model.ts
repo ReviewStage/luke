@@ -1,5 +1,5 @@
+import type { AgentChangedFile, ReviewThread } from "@luke/features/agent-wire";
 import { CHAPTERS_MODEL_LABEL } from "@luke/features/chapters-model-choice";
-import type { CodingAgentChangedFile, ReviewThread } from "@luke/features/coding-agent-wire";
 import { patchHunks } from "@luke/features/diff-hunks";
 import {
   CHAPTER_KIND,
@@ -152,7 +152,7 @@ export function chaptersShown(
 /** The paths of the files a chapter draws, in the order it first names each. */
 export function chapterPaths(
   chapter: Chapter,
-  files: readonly CodingAgentChangedFile[],
+  files: readonly AgentChangedFile[],
 ): readonly string[] {
   return chapterPatches(chapter, files).map((file) => file.path);
 }
@@ -230,7 +230,7 @@ export function firstLineRef(
  * them, so a run may start on one.
  */
 export function drawnLines(
-  file: CodingAgentChangedFile | undefined,
+  file: AgentChangedFile | undefined,
   ref: LineRef,
 ): DiffLineSpan | undefined {
   if (file === undefined || file.path !== ref.path) return undefined;

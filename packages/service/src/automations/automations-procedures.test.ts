@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { createCodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent, readAgent } from "@luke/database/models/agent-store";
 import { member as memberTable } from "@luke/database/schemas/auth";
 import { automation as automationTable } from "@luke/database/schemas/automation";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
@@ -15,6 +15,7 @@ import {
   startTask,
 } from "@luke/database/testing";
 import { automationPath, HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@luke/features";
+import { AGENT_FAILURE, AGENT_KIND, AGENT_STATUS } from "@luke/features/agent-wire";
 import {
   automationRunsLiveRowsSchema,
   automationRunsOfLiveRows,
@@ -38,13 +39,8 @@ import {
   automationRunsAnswerSchema,
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
-import {
-  CODING_AGENT_FAILURE,
-  CODING_AGENT_KIND,
-  CODING_AGENT_STATUS,
-} from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import {
   MESSAGE_ROLE,
@@ -122,7 +118,7 @@ let installationsConnected = 0;
 
 const CATALOG: readonly OfferedModel[] = [
   {
-    id: CODING_AGENT_DEFAULT_CHOICE.model,
+    id: AGENT_DEFAULT_CHOICE.model,
     name: "Claude Opus 5.5",
     provider: MODEL_PROVIDER.ANTHROPIC,
     efforts: ["low", "medium", "high", "max"],
@@ -508,7 +504,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
         const { owner, task, ask } = yield* openAccounts;
         const agentOf = (kind: "operator" | "coder") =>
           Effect.map(
-            createCodingAgent(
+            createAgent(
               owner,
               kind === "operator"
                 ? {
@@ -516,10 +512,10 @@ it.layer(getTestDB())("the automation routes", (it) => {
                     organizationId: task.workspaceId,
                     planSnapshot: null,
                     prompt: null,
-                    kind: CODING_AGENT_KIND.OPERATOR,
+                    kind: AGENT_KIND.OPERATOR,
                     idempotencyKey: randomUUID(),
-                    model: CODING_AGENT_DEFAULT_CHOICE.model,
-                    effort: CODING_AGENT_DEFAULT_CHOICE.effort,
+                    model: AGENT_DEFAULT_CHOICE.model,
+                    effort: AGENT_DEFAULT_CHOICE.effort,
                     repository: null,
                   }
                 : {
@@ -528,8 +524,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
                     planSnapshot: null,
                     prompt: PROMPT,
                     idempotencyKey: randomUUID(),
-                    model: CODING_AGENT_DEFAULT_CHOICE.model,
-                    effort: CODING_AGENT_DEFAULT_CHOICE.effort,
+                    model: AGENT_DEFAULT_CHOICE.model,
+                    effort: AGENT_DEFAULT_CHOICE.effort,
                     repository: `${RELAY.owner}/${RELAY.name}`,
                   },
             ),
@@ -748,6 +744,39 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
+    "an automation made or edited with the action kind `agent` is stored as `coding-agent`, the one spelling the release still serving reads",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openAccounts;
+        const made = weekdays(task.workspaceId);
+        const { automation } = readAnswer(
+          automationAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
+            method: "POST",
+            body: { ...made, action: { ...made.action, kind: AUTOMATION_ACTION.AGENT } },
+          }),
+        );
+        const storedKind = Database.use((db) =>
+          db
+            .select({ action: automationTable.action })
+            .from(automationTable)
+            .where(eq(automationTable.id, automation.id)),
+        ).pipe(Effect.map((rows) => rows.map((row) => row.action.kind)));
+        const afterCreate = yield* storedKind;
+
+        yield* ask(automationPath(automation.id), owner, {
+          method: "PATCH",
+          body: { action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Triage, then fix one." } },
+        });
+        const afterEdit = yield* storedKind;
+
+        assert.deepEqual(afterCreate, [AUTOMATION_ACTION.CODING_AGENT]);
+        assert.deepEqual(afterEdit, [AUTOMATION_ACTION.CODING_AGENT]);
+      }),
+  );
+
+  it.effect(
     "the live statements of a workspace's automations and of one's runs deliver what the held list and history answer, each run's agent and why it failed alike, and nothing to another account",
     () =>
       Effect.gen(function* () {
@@ -773,7 +802,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
               readAnswer(automationRunAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer).run,
           );
         const refused = yield* runOnce();
-        const agent = Option.getOrThrow(yield* readCodingAgent(owner, refused.agent?.id ?? ""));
+        const agent = Option.getOrThrow(yield* readAgent(owner, refused.agent?.id ?? ""));
         // Its turn failed on the model call, GitHub's refusal in its detail.
         yield* Database.use((db) =>
           db.insert(turns).values({
@@ -792,7 +821,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           Effect.gen(function* () {
             const automation = yield* made(name);
             const started = yield* runOnce(automation.id);
-            const each = Option.getOrThrow(yield* readCodingAgent(owner, started.agent?.id ?? ""));
+            const each = Option.getOrThrow(yield* readAgent(owner, started.agent?.id ?? ""));
             yield* Database.use((db) =>
               db.insert(turns).values({
                 userId: owner,
@@ -860,15 +889,15 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.deepEqual(
           runs.map((each) => `${each.agent?.status}:${each.agent?.failureReason ?? ""}`).toSorted(),
           [
-            `${CODING_AGENT_STATUS.FAILED}:${CODING_AGENT_FAILURE.GITHUB}`,
+            `${AGENT_STATUS.FAILED}:${AGENT_FAILURE.GITHUB}`,
             // A run with no turn yet reads running, its prompt awaiting the turn eve opens on it.
-            `${CODING_AGENT_STATUS.RUNNING}:`,
+            `${AGENT_STATUS.RUNNING}:`,
           ],
         );
         // A line after a session that ended for good awaits nothing; one after a settled turn awaits it.
         for (const [automationId, said] of [
-          [ended, `${CODING_AGENT_STATUS.FAILED}:${CODING_AGENT_FAILURE.SESSION_ENDED}`],
-          [awaiting, `${CODING_AGENT_STATUS.RUNNING}:`],
+          [ended, `${AGENT_STATUS.FAILED}:${AGENT_FAILURE.SESSION_ENDED}`],
+          [awaiting, `${AGENT_STATUS.RUNNING}:`],
         ] as const) {
           const read = Option.getOrThrow(automationRunsLiveStatements(owner, automationId));
           const [only] = automationRunsOfLiveRows(
@@ -911,7 +940,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
             body: { idempotencyKey: randomUUID() },
           }),
         );
-        const agent = Option.getOrThrow(yield* readCodingAgent(owner, run.agent?.id ?? ""));
+        const agent = Option.getOrThrow(yield* readAgent(owner, run.agent?.id ?? ""));
         // Its one turn ran past its bound, and the sweep settled it.
         yield* Database.use((db) =>
           db.insert(turns).values({
@@ -932,9 +961,9 @@ it.layer(getTestDB())("the automation routes", (it) => {
           id: agent.id,
           // The run names its agent as the agent goes by: its title.
           title: agent.title,
-          status: CODING_AGENT_STATUS.FAILED,
+          status: AGENT_STATUS.FAILED,
           ownKey: true,
-          failureReason: CODING_AGENT_FAILURE.ABANDONED,
+          failureReason: AGENT_FAILURE.ABANDONED,
         });
       }),
   );
@@ -979,7 +1008,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.equal(first.run.status, AUTOMATION_RUN_STATUS.STARTED);
         assert.deepEqual(first.run.firing, { kind: AUTOMATION_FIRING.MANUAL, userId: owner });
         // The run's prompt, which its Start wrote, awaits the first turn eve opens on it.
-        assert.equal(first.run.agent?.status, CODING_AGENT_STATUS.RUNNING);
+        assert.equal(first.run.agent?.status, AGENT_STATUS.RUNNING);
         assert.deepEqual(again.run, first.run, "the same key answers the run it made");
         assert.equal(opened.length, 1, "and starts nothing again");
         assert.deepEqual(

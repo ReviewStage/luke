@@ -1,19 +1,19 @@
 import { AGENT_TOOL } from "@luke/features/agent-tools";
-import { TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
+import { TRANSCRIPT_KIND } from "@luke/features/agent-view";
 import {
+  AGENT_BRIEF,
+  AGENT_KIND,
+  AGENT_STATUS,
+  type AgentBrief,
+  type AgentOrigin,
+  type AgentPullRequestAnswer,
+  type AgentStatus,
+  type AgentSubagentStanding,
+  type AgentSummary,
+  type AgentTodos,
+  type AgentTranscriptMessage,
   agentMessageWords,
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_KIND,
-  CODING_AGENT_STATUS,
-  type CodingAgentBrief,
-  type CodingAgentMessage,
-  type CodingAgentOrigin,
-  type CodingAgentPullRequestAnswer,
-  type CodingAgentStatus,
-  type CodingAgentSubagentStanding,
-  type CodingAgentSummary,
-  type CodingAgentTodos,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/failure-remedy";
 import { threadLineWords } from "@luke/features/inbox-wire";
 import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/models-wire";
@@ -92,22 +92,6 @@ import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import {
-  AgentPicturesProvider,
-  CallPictures,
-  MessageFileChips,
-  ShownPictures,
-  useAgentPictureDoor,
-} from "./agent-pictures.js";
-import { AgentPlace } from "./agent-place.js";
-import { type PublishedDoors, PublishedRow } from "./agent-published.js";
-import { SendingAgent } from "./agent-ref.js";
-import type { AgentServersControl } from "./agent-servers.js";
-import type { HeldTranscript } from "./agent-tab-card.js";
-import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
-import { AgentTabSkeleton, ComposerSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
-import { dockedTodos, newestTodos, taskTodos, todosOfPart } from "./agent-todos.js";
-import { ArchivedComposerNote } from "./archived-note.js";
-import {
   AGENT_PART,
   type AgentPart,
   type AgentPartCut,
@@ -157,14 +141,30 @@ import {
   workerLines,
   workerStatusOf,
   workerToolState,
-} from "./coding-agent-model.js";
+} from "./agent-model.js";
+import {
+  AgentPicturesProvider,
+  CallPictures,
+  MessageFileChips,
+  ShownPictures,
+  useAgentPictureDoor,
+} from "./agent-pictures.js";
+import { AgentPlace } from "./agent-place.js";
+import { type PublishedDoors, PublishedRow } from "./agent-published.js";
+import { SendingAgent } from "./agent-ref.js";
+import type { AgentServersControl } from "./agent-servers.js";
+import type { HeldTranscript } from "./agent-tab-card.js";
+import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
+import { AgentTabSkeleton, ComposerSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
+import { dockedTodos, newestTodos, taskTodos, todosOfPart } from "./agent-todos.js";
+import { ArchivedComposerNote } from "./archived-note.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
 import { ContinueAgent, ContinuedComposerNote, ContinuedTrail } from "./continue-agent.js";
 import { CopyMessageAction } from "./copy-message.js";
 import { EditComposer } from "./edit-composer.js";
 import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
-import { GitHubLineCard, ThreadLineHead } from "./line-cards.js";
+import { GitHubLineCard, ThreadLineHead, TranscriptAgent } from "./line-cards.js";
 import { linkChip } from "./mention-chip.js";
 import {
   agentMessagePlace,
@@ -226,7 +226,7 @@ import { type AgentModelControl, useAgentModel } from "./use-agent-model.js";
 import { useAgentPullRequest } from "./use-agent-pull-request.js";
 import { useAgentServers } from "./use-agent-servers.js";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import { useKnownNames, useTaskStatus } from "./use-known-names.js";
 import { useOpenLink } from "./use-open-link.js";
 import { type CutBody, useWholePart, useWholePartDoor, WholePartsProvider } from "./whole-parts.js";
@@ -375,7 +375,7 @@ export interface BriefTask {
 interface DelegatedWorker {
   readonly callId: string;
   readonly task: string;
-  readonly status: CodingAgentStatus;
+  readonly status: AgentStatus;
 }
 
 /**
@@ -401,13 +401,13 @@ export interface DelegationDoors {
   /** When each running worker began, by the call that started it, which its row counts from; none while the tab is off screen, so nothing counts unseen. */
   starts?: ReadonlyMap<string, number> | undefined;
   /** Opens the worker's tab, by the call that started it, with the task and where the worker stands as the row knows it; none where the row stands in a tab that opens no tab. */
-  onOpen?: ((callId: string, task: string, status: CodingAgentStatus) => void) | undefined;
+  onOpen?: ((callId: string, task: string, status: AgentStatus) => void) | undefined;
   /** Opens what a call is about in the tab that draws it (`toolTarget`), which the row of such a call asks for; none where nothing opens one, when every such call folds open in place. */
   onOpenTarget?: ((target: ToolTarget) => void) | undefined;
   /** The cards the rows that open a tab hang, as those tabs hang them; none where the rows hang their hints. */
   cards?: TranscriptCards | undefined;
   /** Where each worker stands as its own session reads, by the call that started it, which its row says over the call's own state; none from a service older than it. */
-  standings?: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined;
+  standings?: ReadonlyMap<string, AgentSubagentStanding> | undefined;
   /** The job of each worker by its task, which a stop's row names in the task's place; none where the transcript knows no task's job. */
   jobs?: WorkerJobs | undefined;
 }
@@ -434,7 +434,7 @@ function useLiveDoors(
  * the sender by its own chip, which opens it, or by the name its row kept
  * where the sender is gone, when it arrived, and Copy and Copy link.
  */
-function AgentMessageRow({ message }: { message: CodingAgentMessage }): ReactNode {
+function AgentMessageRow({ message }: { message: AgentTranscriptMessage }): ReactNode {
   const sent = agentMessageOf(message);
   if (sent === undefined) return null;
   const text = messageWords(message);
@@ -480,7 +480,7 @@ function GitHubLineRow({
   line,
   sender,
 }: {
-  message: CodingAgentMessage;
+  message: AgentTranscriptMessage;
   line: GitHubLineMetadata;
   sender: ReactNode;
 }): React.JSX.Element {
@@ -590,8 +590,8 @@ function AgentCallView({
 
 /** The workers their own session says still run. */
 function runningStandings(
-  standings: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined,
-): readonly CodingAgentSubagentStanding[] {
+  standings: ReadonlyMap<string, AgentSubagentStanding> | undefined,
+): readonly AgentSubagentStanding[] {
   return [...(standings?.values() ?? [])].filter(
     (standing) => workerToolState(standing.status) === TOOL_STATE.INPUT_AVAILABLE,
   );
@@ -600,7 +600,7 @@ function runningStandings(
 /** When each running worker began: the newest turn's waits, and every worker its own session says still runs. */
 function workerStarts(
   waits: ReadonlyMap<string, number>,
-  standings: ReadonlyMap<string, CodingAgentSubagentStanding>,
+  standings: ReadonlyMap<string, AgentSubagentStanding>,
 ): ReadonlyMap<string, number> {
   return new Map([
     ...waits,
@@ -672,7 +672,7 @@ function TodosRow({
   live,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
-  todos: CodingAgentTodos["todos"] | undefined;
+  todos: AgentTodos["todos"] | undefined;
   open: boolean;
   live: boolean;
 }): ReactNode {
@@ -696,7 +696,7 @@ interface TodosPlace {
   readonly kept: string | undefined;
   readonly open: string | undefined;
   readonly live: string | undefined;
-  readonly lists: ReadonlyMap<string, CodingAgentTodos["todos"]>;
+  readonly lists: ReadonlyMap<string, AgentTodos["todos"]>;
 }
 
 /** A transcript that holds no to-do list, as the brain's does not. */
@@ -716,7 +716,7 @@ function sameTodosPlace(a: TodosPlace | undefined, b: TodosPlace | undefined): b
 }
 
 /** Where the to-do lists are drawn for the transcript given: the newest kept and open, unless it is docked while the agent works on it, and live while the agent works. */
-function todosPlace(messages: readonly CodingAgentMessage[], working: boolean): TodosPlace {
+function todosPlace(messages: readonly AgentTranscriptMessage[], working: boolean): TodosPlace {
   const lists = taskTodos(messages);
   const standing = newestTodos(messages, lists);
   const docked = dockedTodos(standing, working);
@@ -733,7 +733,7 @@ function TodosDock({
   messages,
   working,
 }: {
-  messages: readonly CodingAgentMessage[];
+  messages: readonly AgentTranscriptMessage[];
   working: boolean;
 }): ReactNode {
   const docked = dockedTodos(newestTodos(messages, taskTodos(messages)), working);
@@ -750,7 +750,7 @@ function PublishedDock({
   published,
   doors,
 }: {
-  published: CodingAgentPullRequestAnswer | undefined;
+  published: AgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
 }): ReactNode {
   if (published === undefined || published.pullRequest === null) return null;
@@ -1115,7 +1115,7 @@ function OriginSubject({
   subject,
   openGitHub,
 }: {
-  subject: NonNullable<CodingAgentOrigin["subject"]>;
+  subject: NonNullable<AgentOrigin["subject"]>;
   openGitHub: (url: string) => void;
 }): React.JSX.Element {
   const doors = useMentionDoors();
@@ -1166,7 +1166,7 @@ function AutomationSender({
   automationId: string | undefined;
   /** The automation's name as the run started it, which a deleted one is still named by. */
   name: string | undefined;
-  run: CodingAgentOrigin | undefined;
+  run: AgentOrigin | undefined;
   openGitHub: (url: string) => void;
 }): React.JSX.Element {
   const known = useAutomation(automationId);
@@ -1213,8 +1213,8 @@ function AutomationSender({
  * developer's message as any other.
  */
 function agentOrigin(input: {
-  agent: CodingAgentSummary;
-  run: CodingAgentOrigin | undefined;
+  agent: AgentSummary;
+  run: AgentOrigin | undefined;
   task: BriefTask | undefined;
   onOpenTask: (() => void) | undefined;
   starter: Actor | undefined;
@@ -1236,7 +1236,7 @@ function agentOrigin(input: {
       body: run?.body,
     };
   }
-  if (agent.brief === CODING_AGENT_BRIEF.PROMPT || agent.brief === CODING_AGENT_BRIEF.BLANK) {
+  if (agent.brief === AGENT_BRIEF.PROMPT || agent.brief === AGENT_BRIEF.BLANK) {
     return undefined;
   }
   return {
@@ -1258,7 +1258,7 @@ function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
 
 /** One of the developer's lines that reached a turn while it ran, with who sent it, named over it as any line of theirs is. */
 export interface ArrivedLine {
-  readonly message: CodingAgentMessage;
+  readonly message: AgentTranscriptMessage;
   readonly sender: Actor | undefined;
 }
 
@@ -1298,13 +1298,13 @@ function TurnFoot({ workedFor, copy }: { workedFor: ReactNode; copy: ReactNode }
 /** Where a turn's stretches are read from beside the message: its to-do lists, its workers' standings, and the lines that reached it. */
 interface StretchPlace {
   readonly todos: TodosPlace;
-  readonly standings: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined;
+  readonly standings: ReadonlyMap<string, AgentSubagentStanding> | undefined;
   readonly arrived: readonly ArrivedLine[];
 }
 
 /** A turn's rows as its message draws them, cut at every line that reached it (`turnStretches`). */
 function turnStretchesOf(
-  message: CodingAgentMessage,
+  message: AgentTranscriptMessage,
   moving: boolean,
   { todos, standings, arrived }: StretchPlace,
 ): readonly TurnStretch[] {
@@ -1338,7 +1338,7 @@ export function AgentMessage({
   forkCut,
   piece,
 }: {
-  message: CodingAgentMessage;
+  message: AgentTranscriptMessage;
   /** The piece of a long turn this draws (`turn-pieces.ts`), its stretches read for it; the whole message where none. */
   piece?: TurnPiece | undefined;
   /** Whether its tab may offer to fork at it. */
@@ -1781,10 +1781,10 @@ function drawsMessage(row: PlacedRow, messageId: string): boolean {
 }
 
 /** Each message's words as a find counts them, kept by the message, so a page that leaves it reads them once. */
-const wordsFound = new WeakMap<CodingAgentMessage, string>();
+const wordsFound = new WeakMap<AgentTranscriptMessage, string>();
 
 /** The words a message draws that a find counts before its row is drawn: its text, its reasoning, and each call's line, input, answer and error, as its rows draw them (`drawnMessageWords`). */
-function findWordsOf(message: CodingAgentMessage): string {
+function findWordsOf(message: AgentTranscriptMessage): string {
   const kept = wordsFound.get(message);
   if (kept !== undefined) return kept;
   const words = drawnMessageWords(message);
@@ -1846,7 +1846,7 @@ function findEntryOf(entry: LogEntry): FindRow {
 
 /** What a long turn's pieces are read from, so a draw that changed none of it reads none of it again. */
 interface PiecesRead {
-  readonly message: CodingAgentMessage;
+  readonly message: AgentTranscriptMessage;
   readonly moving: boolean;
   readonly place: StretchPlace;
   readonly pieces: readonly TurnPiece[];
@@ -1855,7 +1855,7 @@ interface PiecesRead {
 /** Whether two reads of a turn's pieces were made from the same things. */
 function sameRead(
   read: PiecesRead,
-  message: CodingAgentMessage,
+  message: AgentTranscriptMessage,
   moving: boolean,
   place: StretchPlace,
 ): boolean {
@@ -1877,7 +1877,7 @@ function sameRead(
 function useLogEntries(
   placing: ReturnType<typeof transcriptPlacing>,
   working: boolean,
-  standings: ReadonlyMap<string, CodingAgentSubagentStanding> | undefined,
+  standings: ReadonlyMap<string, AgentSubagentStanding> | undefined,
   arrivals: ReadonlyMap<string, readonly ArrivedLine[]>,
 ): readonly LogEntry[] {
   const reads = useRef(new Map<string, PiecesRead>());
@@ -1918,7 +1918,10 @@ function useLogEntries(
 }
 
 /** Whether two runs of lines are the same lines in the same order. */
-function sameLines(a: readonly CodingAgentMessage[], b: readonly CodingAgentMessage[]): boolean {
+function sameLines(
+  a: readonly AgentTranscriptMessage[],
+  b: readonly AgentTranscriptMessage[],
+): boolean {
   return a === b || (a.length === b.length && a.every((line, index) => line === b[index]));
 }
 
@@ -1937,8 +1940,11 @@ function useArrivals(
   const kept = useRef<{
     readonly by: readonly unknown[];
     readonly named: WeakMap<
-      CodingAgentMessage,
-      { readonly lines: readonly CodingAgentMessage[]; readonly arrived: readonly ArrivedLine[] }
+      AgentTranscriptMessage,
+      {
+        readonly lines: readonly AgentTranscriptMessage[];
+        readonly arrived: readonly ArrivedLine[];
+      }
     >;
   }>(undefined);
   return useMemo(() => {
@@ -1982,9 +1988,9 @@ function useReplySaid({
   quiet,
   tab,
 }: {
-  messages: readonly CodingAgentMessage[];
+  messages: readonly AgentTranscriptMessage[];
   /** Where the agent stood as the page holding `messages` said; none before a page landed. */
-  status: CodingAgentStatus | undefined;
+  status: AgentStatus | undefined;
   name: string;
   /** Whether a quiet reply leaves the reader nothing to hear, as an operator's does. */
   quiet: boolean;
@@ -1996,7 +2002,7 @@ function useReplySaid({
     if (status === undefined) return;
     const was = writing.current;
     writing.current = agentStillWriting(status);
-    if (was !== true || status !== CODING_AGENT_STATUS.COMPLETED) return;
+    if (was !== true || status !== AGENT_STATUS.COMPLETED) return;
     const reply = finishedReplyLead(messages, quiet);
     if (reply === undefined || reply.messageId === said.current) return;
     said.current = reply.messageId;
@@ -2013,7 +2019,7 @@ function useReplySaid({
  * reached it, and the reply a running turn is still writing.
  */
 function transcriptPlacing(
-  messages: readonly CodingAgentMessage[],
+  messages: readonly AgentTranscriptMessage[],
   working: boolean,
   undelivered: ReadonlySet<string>,
   replayed: boolean,
@@ -2061,6 +2067,7 @@ function AgentTranscriptView({
   briefSender,
   origin,
   readerId,
+  agentId,
   taskId,
   replay,
   endPress,
@@ -2068,13 +2075,13 @@ function AgentTranscriptView({
   bringIn,
   holding = false,
 }: {
-  messages: readonly CodingAgentMessage[];
+  messages: readonly AgentTranscriptMessage[];
   /** Whether the log waits to draw for what stands around it, saying it is loading meanwhile. */
   holding?: boolean;
   /** Where the transcript hands the door that brings a message whose row is not drawn into view, which a link to the message asks through; none where nothing asks. */
   bringIn?: RefObject<MessageBringer | undefined> | undefined;
   /** What the agent was handed first: the plan, drawn as the plan's card, a prompt, drawn as the developer's message, or nothing, for one started blank, whose first line is drawn as any other; unsaid reads as the plan. */
-  brief?: CodingAgentBrief | undefined;
+  brief?: AgentBrief | undefined;
   /** Whether this is a member's operator's transcript, which draws no reply of a heartbeat that found nothing (`placedMessages`). */
   quietReplies?: boolean;
   /** Whose transcript this is: an agent's, with its plan, unless said otherwise. */
@@ -2118,6 +2125,8 @@ function AgentTranscriptView({
   origin?: TranscriptOrigin | undefined;
   /** The reader's own account id, whose messages are drawn with no name over them (`lineSender`). */
   readerId?: string | undefined;
+  /** The agent whose transcript this is, whose threads its thread lines are on; none on a worker's, or before the agent stands. */
+  agentId?: string | undefined;
   /** The task the agent works on, whose plan's pictures its plan's card draws; none where it works on none. */
   taskId?: string | undefined;
   /** Where a replay its first message holds is drawn as its own card, between the brief and the note (`replay-card.tsx`); none where no replay is read, as on a worker's tab. */
@@ -2198,123 +2207,127 @@ function AgentTranscriptView({
     // that sender's card; the rest the developer sent since. An agent
     // started blank was handed nothing, so its first line, typed or spoken,
     // is a line as any other is, under whoever sent it.
-    const blank = brief === CODING_AGENT_BRIEF.BLANK && origin === undefined;
-    const carded = !blank && (brief !== CODING_AGENT_BRIEF.PROMPT || origin !== undefined);
+    const blank = brief === AGENT_BRIEF.BLANK && origin === undefined;
+    const carded = !blank && (brief !== AGENT_BRIEF.PROMPT || origin !== undefined);
     const plan = carded ? first : undefined;
     const task = carded || blank ? undefined : first;
     return (
-      <LiveDoors value={live}>
-        <ConnectionNames needed={callsServer}>
-          <Conversation list={log} onNearTop={onOlder}>
-            {/* Note that it floats in a fixed slot over the log's top rather than standing in its flow, so its coming and going moves no row, measured or not. */}
-            {olderFailed && onOlder !== undefined ? (
-              <div
-                className={`${FLOATING_OVER_LOG_CLASS} top-luke-8 z-1 max-w-conversation-older bg-well px-list-inset py-tight-gap`}
-              >
-                <ErrorState onRetry={onOlder}>{OLDER_FAILED_LINE}</ErrorState>
-              </div>
-            ) : null}
-            {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
-            <ConversationContent
-              className={overComposer ? LOG_OVER_COMPOSER_CLASS : undefined}
-              streams
-            >
-              <ConversationRows
-                keys={rowKeys}
-                estimate={ROW_ESTIMATE_PX}
-                gap={0}
-                rowClassName={rowClassOf}
-                handle={rowsHandle}
-              >
-                {(at) => {
-                  const entry = entries[at];
-                  if (entry === undefined) return null;
-                  const { row, index, piece } = entry;
-                  const { message } = row;
-                  const tails = piece === undefined || piece.last;
-                  return (
-                    <>
-                      <SteadyAgentMessage
-                        message={
-                          message === first && opening !== undefined ? opening.brief : message
-                        }
-                        plan={message === plan}
-                        taskId={message === plan ? taskId : undefined}
-                        lead={lead}
-                        moving={working && index === placed.length - 1}
-                        forkCut={forkCutOf(message, open)}
-                        delegation={delegation}
-                        todos={todos}
-                        briefTitle={briefTitle}
-                        origin={message === plan ? origin : undefined}
-                        sender={
-                          message === task
-                            ? briefSender
-                            : lineSender(message.sentBy, readerId, members, former)
-                        }
-                        arrived={arrivals.get(message.id) ?? NO_ARRIVED}
-                        piece={piece}
-                      />
-                      {!tails ? null : message === first &&
-                        opening !== undefined &&
-                        replay !== undefined ? (
-                        <>
-                          <ReplayCard
-                            replay={opening.replay}
-                            sentAt={first.sentAt}
-                            place={replay}
-                            taskId={taskId}
-                          />
-                          {opening.note === undefined ? null : (
-                            <SteadyAgentMessage
-                              message={opening.note}
-                              plan={false}
-                              lead={lead}
-                              moving={false}
-                              delegation={delegation}
-                              sender={briefSender}
-                            />
-                          )}
-                        </>
-                      ) : null}
-                      {earlierOmitted && message === plan ? (
-                        <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
-                      ) : null}
-                    </>
-                  );
-                }}
-              </ConversationRows>
-              {working ? (
-                <WorkingLine
-                  startedAt={startedAt}
-                  words={
-                    WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting, rewindOut)]
-                  }
-                />
-              ) : null}
-              {ended === undefined && endTrail === undefined ? null : (
+      <TranscriptAgent value={agentId}>
+        <LiveDoors value={live}>
+          <ConnectionNames needed={callsServer}>
+            <Conversation list={log} onNearTop={onOlder}>
+              {/* Note that it floats in a fixed slot over the log's top rather than standing in its flow, so its coming and going moves no row, measured or not. */}
+              {olderFailed && onOlder !== undefined ? (
                 <div
-                  className="agent-end flex flex-col items-start gap-control-gap"
-                  data-ended={ended === undefined ? undefined : ""}
+                  className={`${FLOATING_OVER_LOG_CLASS} top-luke-8 z-1 max-w-conversation-older bg-well px-list-inset py-tight-gap`}
                 >
-                  {ended === undefined ? null : (
-                    <AgentEndRow
-                      ended={ended}
-                      endReason={endReason}
-                      keyProvider={keyProvider}
-                      onOpenApiKeys={onOpenApiKeys}
-                      press={endPress}
-                    />
-                  )}
-                  {endTrail}
+                  <ErrorState onRetry={onOlder}>{OLDER_FAILED_LINE}</ErrorState>
                 </div>
-              )}
-              {failed ? <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState> : null}
-            </ConversationContent>
-            <ConversationScrollButton />
-          </Conversation>
-        </ConnectionNames>
-      </LiveDoors>
+              ) : null}
+              {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
+              <ConversationContent
+                className={overComposer ? LOG_OVER_COMPOSER_CLASS : undefined}
+                streams
+              >
+                <ConversationRows
+                  keys={rowKeys}
+                  estimate={ROW_ESTIMATE_PX}
+                  gap={0}
+                  rowClassName={rowClassOf}
+                  handle={rowsHandle}
+                >
+                  {(at) => {
+                    const entry = entries[at];
+                    if (entry === undefined) return null;
+                    const { row, index, piece } = entry;
+                    const { message } = row;
+                    const tails = piece === undefined || piece.last;
+                    return (
+                      <>
+                        <SteadyAgentMessage
+                          message={
+                            message === first && opening !== undefined ? opening.brief : message
+                          }
+                          plan={message === plan}
+                          taskId={message === plan ? taskId : undefined}
+                          lead={lead}
+                          moving={working && index === placed.length - 1}
+                          forkCut={forkCutOf(message, open)}
+                          delegation={delegation}
+                          todos={todos}
+                          briefTitle={briefTitle}
+                          origin={message === plan ? origin : undefined}
+                          sender={
+                            message === task
+                              ? briefSender
+                              : lineSender(message.sentBy, readerId, members, former)
+                          }
+                          arrived={arrivals.get(message.id) ?? NO_ARRIVED}
+                          piece={piece}
+                        />
+                        {!tails ? null : message === first &&
+                          opening !== undefined &&
+                          replay !== undefined ? (
+                          <>
+                            <ReplayCard
+                              replay={opening.replay}
+                              sentAt={first.sentAt}
+                              place={replay}
+                              taskId={taskId}
+                            />
+                            {opening.note === undefined ? null : (
+                              <SteadyAgentMessage
+                                message={opening.note}
+                                plan={false}
+                                lead={lead}
+                                moving={false}
+                                delegation={delegation}
+                                sender={briefSender}
+                              />
+                            )}
+                          </>
+                        ) : null}
+                        {earlierOmitted && message === plan ? (
+                          <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
+                        ) : null}
+                      </>
+                    );
+                  }}
+                </ConversationRows>
+                {working ? (
+                  <WorkingLine
+                    startedAt={startedAt}
+                    words={
+                      WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting, rewindOut)]
+                    }
+                  />
+                ) : null}
+                {ended === undefined && endTrail === undefined ? null : (
+                  <div
+                    className="agent-end flex flex-col items-start gap-control-gap"
+                    data-ended={ended === undefined ? undefined : ""}
+                  >
+                    {ended === undefined ? null : (
+                      <AgentEndRow
+                        ended={ended}
+                        endReason={endReason}
+                        keyProvider={keyProvider}
+                        onOpenApiKeys={onOpenApiKeys}
+                        press={endPress}
+                      />
+                    )}
+                    {endTrail}
+                  </div>
+                )}
+                {failed ? (
+                  <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState>
+                ) : null}
+              </ConversationContent>
+              <ConversationScrollButton />
+            </Conversation>
+          </ConnectionNames>
+        </LiveDoors>
+      </TranscriptAgent>
     );
   }
   if (failed) {
@@ -2390,7 +2403,7 @@ function AgentTabView({
   bringIn,
   holding = false,
 }: {
-  agent: CodingAgentSummary;
+  agent: AgentSummary;
   /** Whether the log waits to draw for what stands around it, while it says it is loading. */
   holding?: boolean;
   /** Where the transcript hands the door that brings a message whose row is not drawn into view. */
@@ -2398,7 +2411,7 @@ function AgentTabView({
   /** Where a replay the agent opens on is drawn (`replay-card.tsx`); none where none is read. */
   replay?: ReplayPlace | undefined;
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab, and for an agent started by hand. */
-  run?: CodingAgentOrigin | undefined;
+  run?: AgentOrigin | undefined;
   models: readonly CatalogModel[] | undefined;
   modelsFailed: boolean;
   readModels: () => void;
@@ -2407,13 +2420,13 @@ function AgentTabView({
   model: AgentModelControl;
   servers: AgentServersControl;
   /** What the agent published, once the service has said; nothing before. */
-  published: CodingAgentPullRequestAnswer | undefined;
+  published: AgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
   /** When the agent's run began, as the working line counts from it; none while the tab is off screen, so nothing counts unseen. */
   startedAt: number | undefined;
   /** When each of its running workers began, as their rows count from it; none while the tab is off screen. */
   delegationStarts: ReadonlyMap<string, number> | undefined;
-  onStop: () => Promise<void>;
+  onStop: () => Promise<boolean>;
   /** Brings the agent back from the archive; present exactly while it is archived, when no message is sent. */
   onUnarchive?: (() => void | Promise<void>) | undefined;
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
@@ -2507,7 +2520,7 @@ function AgentTabView({
     messages: transcript.messages,
     status: transcript.pageStatus,
     name,
-    quiet: agent.kind === CODING_AGENT_KIND.OPERATOR,
+    quiet: agent.kind === AGENT_KIND.OPERATOR,
     tab,
   });
   const steering = useKept(
@@ -2586,11 +2599,12 @@ function AgentTabView({
                 <RewindProvider value={rewind}>
                   <AgentTranscriptView
                     messages={lines}
-                    quietReplies={agent.kind === CODING_AGENT_KIND.OPERATOR}
+                    quietReplies={agent.kind === AGENT_KIND.OPERATOR}
                     brief={agent.brief}
                     briefSender={starter === undefined ? undefined : starterActor}
                     origin={origin}
                     readerId={readerId}
+                    agentId={agent.id}
                     taskId={agent.planId ?? undefined}
                     replay={replay}
                     delegation={{
@@ -2613,7 +2627,7 @@ function AgentTabView({
                       agentStillWriting(transcript.pageStatus)
                     }
                     rewindOut={composer.rewindOut}
-                    sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
+                    sessionStarting={agent.status === AGENT_STATUS.STARTING}
                     // Note that while a rewind goes the line counts from its press, never from the run before it, which is the agent's start until a new turn begins.
                     startedAt={
                       composer.rewinding && startedAt !== undefined ? composer.rewoundAt : startedAt
@@ -2705,12 +2719,12 @@ function AgentTabView({
 /** What an agent's tab is handed beside the agent. */
 interface AgentTabDoors {
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab. */
-  run?: CodingAgentOrigin | undefined;
-  control: CodingAgentsControl;
+  run?: AgentOrigin | undefined;
+  control: AgentsControl;
   /** Whether the tab is on screen: the task's column showing it, on the Tasks tab. */
   shown: boolean;
   /** Opens one of the agent's workers in a tab of the side panel's own, by the call that started it. */
-  onOpenSubagent: (callId: string, task: string, status: CodingAgentStatus) => void;
+  onOpenSubagent: (callId: string, task: string, status: AgentStatus) => void;
   /** Opens what one of its calls is about in the tab that draws it. */
   onOpenTarget?: DelegationDoors["onOpenTarget"];
   /** The cards its rows that open a tab hang, as those tabs hang them. */
@@ -2727,8 +2741,8 @@ interface AgentTabDoors {
  */
 type AgentTabProps = AgentTabDoors &
   (
-    | { agent: CodingAgentSummary; agentId?: undefined }
-    | { agent: CodingAgentSummary | undefined; agentId: string }
+    | { agent: AgentSummary; agentId?: undefined }
+    | { agent: AgentSummary | undefined; agentId: string }
   );
 
 /** Nothing to retry on a tab whose agent is not made yet. */
@@ -2748,7 +2762,7 @@ export function StartingAgentTab({ line }: { line?: SentLine | undefined }): Rea
     <AgentTabFrame>
       <AgentTranscriptView
         messages={messages}
-        brief={line === undefined ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.PROMPT}
+        brief={line === undefined ? AGENT_BRIEF.PLAN : AGENT_BRIEF.PROMPT}
         reading={false}
         failed={false}
         working
@@ -2781,8 +2795,6 @@ export function AgentTab(props: AgentTabProps): React.JSX.Element {
     transcript: { kind: TRANSCRIPT_KIND.AGENT, agentId },
     shown,
     follower: control.transcripts,
-    onStatus: control.onStatus,
-    onTitle: control.onTitle,
   });
   const { messages, pageStatus, runStartedAt, subagentTitles } = transcript;
   // Note that what is held is dated by the page it was read from, never by
@@ -2841,7 +2853,7 @@ function AgentTabBody({
   cards,
   run,
 }: Omit<AgentTabDoors, "onHeld"> & {
-  agent: CodingAgentSummary;
+  agent: AgentSummary;
   transcript: AgentTranscriptControl;
 }): React.JSX.Element {
   const { messages } = transcript;
@@ -2850,18 +2862,18 @@ function AgentTabBody({
     agentId: agent.id,
     taskId: agent.planId,
     messages: transcript.messages,
-    running: agent.status === CODING_AGENT_STATUS.RUNNING,
+    running: agent.status === AGENT_STATUS.RUNNING,
     send: control.onMessage,
     rewind: control.onRewind,
     payer: planPayerOf(agent.runtime),
     starter,
-    onStatus: control.onStatus,
   });
   const model = useAgentModel({ agent, choose: control.onChoose });
   const servers = useAgentServers({
     agent,
     write: control.onSwitchServers,
     onOpenSettings: control.onOpenIntegrations,
+    me: control.me,
   });
   const { published } = useAgentPullRequest({
     agentId: agent.id,
@@ -2937,14 +2949,13 @@ function AgentTabBody({
     messages.map((message) => message.id),
     sameIds,
   );
-  const planId = agent.planId;
   const messagePlace = useMemo(
     () =>
       agentMessagePlace(
-        { id: agent.id, planId },
+        agent.id,
         readIds.map((id) => ({ id })),
       ),
-    [agent.id, planId, readIds],
+    [agent.id, readIds],
   );
   return (
     <MessagePlaceProvider value={messagePlace}>
@@ -3056,11 +3067,11 @@ export function AgentSubagentTab({
   cards?: TranscriptCards | undefined;
   /** Who handed the worker its task, named under its card: the agent that delegated it, which opens its tab; none where the panel names nobody. */
   sender?: ReactNode;
-  status: CodingAgentStatus;
-  control: CodingAgentsControl;
+  status: AgentStatus;
+  control: AgentsControl;
   shown: boolean;
   /** A page said where the worker stands now. */
-  onStatus: (status: CodingAgentStatus) => void;
+  onStatus: (status: AgentStatus) => void;
   /** Hears the transcript the tab holds each time it moves, by the call that started the worker, as an agent's tab says its own. */
   onHeld: (callId: string, held: HeldTranscript) => void;
 }): React.JSX.Element {
@@ -3069,8 +3080,6 @@ export function AgentSubagentTab({
     shown,
     follower: control.transcripts,
     onStatus: (_agentId, next) => onStatus(next.status),
-    // A worker's page names the worker's conversation, which is no title of the agent's.
-    onTitle: () => undefined,
   });
   const { messages, pageStatus, runStartedAt, pageTitle } = transcript;
   // A worker runs as its agent does, so a command it ran on a Mac ran on its agent's starter's.
@@ -3117,7 +3126,7 @@ export function AgentSubagentTab({
               pageRuns={
                 transcript.pageStatus !== undefined && agentStillWriting(transcript.pageStatus)
               }
-              sessionStarting={status === CODING_AGENT_STATUS.STARTING}
+              sessionStarting={status === AGENT_STATUS.STARTING}
               startedAt={shown ? transcript.runStartedAt : undefined}
               ended={transcript.pages === 0 ? undefined : endLineParts(status, transcript.failure)}
               onRetry={transcript.onRetry}

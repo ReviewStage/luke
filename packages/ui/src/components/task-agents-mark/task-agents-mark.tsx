@@ -1,4 +1,4 @@
-import { PULL_REQUEST_STATE, type PullRequestState } from "@luke/features/coding-agent-wire";
+import { PULL_REQUEST_STATE, type PullRequestState } from "@luke/features/agent-wire";
 import { TASK_AGENTS_STATUS, taskAgentsStatus } from "@luke/features/task-agents-model";
 import type { TaskAgentsSummary } from "@luke/features/task-wire";
 import { PULL_REQUEST_GLYPH } from "../../marks/pull-request-glyph.js";

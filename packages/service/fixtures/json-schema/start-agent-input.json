@@ -85,7 +85,7 @@
         "agentId"
       ],
       "additionalProperties": false,
-      "description": "Another coding agent of your workspace to take over from, on its own task, or on no task where it has none: the new agent is handed its brief and its transcript (with Luke's summary of the steps that do not fit) and a copy of its work, runs on its model unless you name one, and hears the note after them; it takes no prompt and no branch. Without messageId it continues the agent, which is stopped; with one it forks the agent at that message, which goes on."
+      "description": "Another agent of your workspace to take over from, on its own task, or on no task where it has none: the new agent is handed its brief and its transcript (with Luke's summary of the steps that do not fit) and a copy of its work, runs on its model unless you name one, and hears the note after them; it takes no prompt and no branch. Without messageId it continues the agent, which is stopped; with one it forks the agent at that message, which goes on."
     }
   },
   "required": [],

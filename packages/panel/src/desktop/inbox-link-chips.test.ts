@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import {
   INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
@@ -165,7 +165,7 @@ async function inbox(options: {
                 : { ...pullRequest, state: PULL_REQUEST_STATE.MERGED },
           });
         }
-        case ACT_KIND.CODING_AGENTS_LIST:
+        case ACT_KIND.AGENTS_LIST:
           return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: [] } });
         default:
           return Promise.resolve({

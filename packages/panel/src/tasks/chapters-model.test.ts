@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import {
+  type AgentChangedFile,
   CHANGED_FILE_STATUS,
-  type CodingAgentChangedFile,
   DIFF_SIDE,
   type ReviewThread,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   CHAPTER_KIND,
   CHAPTER_RISK,
@@ -53,7 +53,7 @@ const OLDER = "a".repeat(40);
 const BASE = "c".repeat(40);
 
 /** A modified file of two hunks, two lines apart. */
-const STORE: CodingAgentChangedFile = {
+const STORE: AgentChangedFile = {
   path: "src/store.ts",
   previousPath: null,
   status: CHANGED_FILE_STATUS.MODIFIED,
@@ -63,7 +63,7 @@ const STORE: CodingAgentChangedFile = {
   patch: ["@@ -1,2 +1,2 @@", " a", "-b", "+B", "@@ -10,1 +10,2 @@", " j", "+k"].join("\n"),
 };
 
-const LOCK: CodingAgentChangedFile = {
+const LOCK: AgentChangedFile = {
   path: "pnpm-lock.yaml",
   previousPath: null,
   status: CHANGED_FILE_STATUS.MODIFIED,

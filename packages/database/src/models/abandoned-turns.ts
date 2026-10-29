@@ -49,7 +49,7 @@ export const TURN_ABANDON = {
    * Stop with nothing to stop; a day and an hour's grace past it is a run
    * whose end is not coming.
    */
-  CODING_AGENT_AFTER_MS: 25 * 60 * 60 * 1000,
+  AGENT_AFTER_MS: 25 * 60 * 60 * 1000,
   /**
    * How long a turn may stand running after a Stop was asked of it before
    * the sweep settles it as cancelled. eve's own cancel ends the turn within
@@ -248,7 +248,7 @@ export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("web/sweepAbandoned
 ): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
   const turns = yield* abandonedTurns({
     startedBefore: new Date(options.now - TURN_ABANDON.AFTER_MS),
-    codingAgentStartedBefore: new Date(options.now - TURN_ABANDON.CODING_AGENT_AFTER_MS),
+    codingAgentStartedBefore: new Date(options.now - TURN_ABANDON.AGENT_AFTER_MS),
     cancelRequestedBefore: new Date(options.now - TURN_ABANDON.CANCEL_AFTER_MS),
     limit: options.limit ?? TURN_ABANDON.LIMIT,
   });
@@ -433,7 +433,7 @@ export function purgeWithdrawnLines(
 ): Effect.Effect<number, QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.map(
     deleteStaleWithdrawnLines({
-      before: new Date(now - TURN_ABANDON.CODING_AGENT_AFTER_MS),
+      before: new Date(now - TURN_ABANDON.AGENT_AFTER_MS),
       limit: TURN_ABANDON.WITHDRAWN_LINE_LIMIT,
     }),
     (rows) => rows.length,

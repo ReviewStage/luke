@@ -1,16 +1,16 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import { sandboxRead } from "@luke/features/terminal-store";
 import { noMatchWords, readingWords, TERM } from "@luke/features/words";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import { PlusIcon, Shortcut } from "@luke/ui";
 import { CommandDialog, type CommandGroup, type CommandItem } from "@luke/ui/command";
 import { useEffect, useState } from "react";
+import { agentName } from "./agent-model.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
-import { agentName } from "./coding-agent-model.js";
 import { AgentGlyph, agentEndMark } from "./tab-look.js";
 import { TerminalStanding } from "./terminal-shells.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 
 /**
  * terminal-picker.tsx -- the palette asking which coding agent's sandbox a terminal is for, when the rules leave it to the developer.
@@ -30,10 +30,10 @@ import type { CodingAgentsControl } from "./use-coding-agents.js";
 const START_ROW = "start-agent";
 
 /** The start row's words, and the key of the group that holds it. */
-const START_WORDS = "Start a coding agent";
+const START_WORDS = "Start an agent";
 
 /** The key of the group of agents. */
-const AGENTS_GROUP = "coding-agents";
+const AGENTS_GROUP = "agents";
 
 /** What the picker's field asks. */
 const PICKER_QUESTION = "New terminal in which agent’s sandbox?";
@@ -43,7 +43,7 @@ function RowDetail({
   agent,
   last,
 }: {
-  agent: CodingAgentSummary;
+  agent: AgentSummary;
   last: boolean;
 }): React.JSX.Element | null {
   const listed = useAtomValue(sandboxRead(agent.id));
@@ -59,8 +59,8 @@ function RowDetail({
 
 /** One agent's row: its look, its failed mark, and the card its hover hangs, with its standing read from what the window last read of its sandbox. */
 function agentItem(
-  agent: CodingAgentSummary,
-  agents: CodingAgentsControl,
+  agent: AgentSummary,
+  agents: AgentsControl,
   last: boolean,
   onPick: () => void,
 ): CommandItem {
@@ -113,7 +113,7 @@ export function TerminalPicker({
 }: {
   /** What the picker stands open for, or nothing while it is shut. */
   pick: TerminalPick | undefined;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   lastUsed: string | undefined;
   /** Reads how one agent's sandbox stands, into what the window last read of it. */
   readSandbox: (agentId: string) => void;
@@ -167,7 +167,7 @@ export function TerminalPicker({
       : [
           {
             id: AGENTS_GROUP,
-            label: "Coding agents",
+            label: "Agents",
             items: listed.map((agent) =>
               agentItem(agent, agents, agent.id === lastUsed, () => choose(() => onPick(agent.id))),
             ),

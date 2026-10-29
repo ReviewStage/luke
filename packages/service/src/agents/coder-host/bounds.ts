@@ -1,4 +1,4 @@
-import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/coding-agent-status";
+import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/agent-status";
 import { GITHUB_TOKEN_REFRESH } from "@luke/features/host-wire";
 import { Duration } from "effect";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
@@ -273,7 +273,7 @@ export const CODER_MODEL_FIXTURE = {
 
 /** Why the host refused a session's standing or a step, in words a log or a failed turn can carry. */
 export const CODER_REFUSAL = {
-  NO_AGENT: "Not run: this conversation is no coding agent's.",
+  NO_AGENT: "Not run: this conversation is no agent's.",
   NO_REPOSITORY: "Not run: the agent works in no repository.",
   UNKNOWN_PROVIDER: "Not run: the agent's model is outside the providers Luke runs agents on.",
   NO_PROVIDER_KEY: "Not run: the account saved no API key for the agent's model provider.",
@@ -294,8 +294,8 @@ export const CODER_REFUSAL = {
   NOT_REACHABLE:
     "Not run: the agent's repository is not reachable through the GitHub installation connected to its task's workspace.",
   GITHUB_UNAVAILABLE: "Not run: GitHub could not be asked for the repository's credential.",
-  NO_DELEGATION: "Not run: this session is no worker of a coding agent's.",
-  NO_DELEGATION_PINNED: "Not run: the worker's session was started by no call of a coding agent's.",
+  NO_DELEGATION: "Not run: this session is no worker of an agent's.",
+  NO_DELEGATION_PINNED: "Not run: the worker's session was started by no call of an agent's.",
   CATALOG_UNAVAILABLE: "Not run: the model catalog could not be read; delegate again in a moment.",
 } as const;
 

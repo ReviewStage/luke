@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
+  type AgentOverviewPullRequest,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentOverviewPullRequest,
-  type CodingAgentSummary,
   MERGE_STATE,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_REFUSAL,
@@ -33,7 +33,7 @@ import { installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { AgentPullRequestTab } from "./agent-pull-request-tab.js";
 import { PULL_REQUEST_VIEW } from "./use-side-panel.js";
 
@@ -49,14 +49,14 @@ import { PULL_REQUEST_VIEW } from "./use-side-panel.js";
  * its bundle; GitHub is the act port's answer. Synthetic pull request.
  */
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Expiry job",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 
@@ -79,7 +79,7 @@ function htmlOf(body: string): string {
 }
 
 /** The pull request itself, as its overview's first read answers it, its description as GitHub holds it now. */
-function pullRequestOf(body: string, canEditDescription: boolean): CodingAgentOverviewPullRequest {
+function pullRequestOf(body: string, canEditDescription: boolean): AgentOverviewPullRequest {
   return {
     number: 42,
     title: "Expire invitations",
@@ -129,7 +129,7 @@ beforeEach(() => {
   fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
-    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
+    [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
       changes.push(request);
       if (
         changeAnswer.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE &&
@@ -160,7 +160,7 @@ async function settle(): Promise<void> {
 
 /** The agent's Pull request tab, its reads answering the description as GitHub holds it, which the member may edit or not. */
 async function drawTab(canEditDescription = true): Promise<HTMLElement> {
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
     models: [],

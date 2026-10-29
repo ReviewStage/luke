@@ -27,7 +27,7 @@ import {
   sweepAbandonedTurns,
   TURN_ABANDON,
 } from "../abandoned-turns.js";
-import { latestTurnsOfReached } from "../coding-agent-store.js";
+import { latestTurnsOfReached } from "../agent-store.js";
 import { type ConversationTarget, type StoreWriter, storeWriter } from "../writer.js";
 
 /**
@@ -283,7 +283,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         assert.deepEqual(yield* newestTurnOf(target), [TURN_STATUS.RUNNING, null]);
         yield* sweepAbandonedTurns(
           { writer },
-          { now: STARTED_AT + TURN_ABANDON.CODING_AGENT_AFTER_MS + 1 },
+          { now: STARTED_AT + TURN_ABANDON.AGENT_AFTER_MS + 1 },
         );
         assert.deepEqual(yield* newestTurnOf(target), [TURN_STATUS.FAILED, TURN_FAILURE.ABANDONED]);
       }),
@@ -373,9 +373,9 @@ it.layer(getTestDB())("the sweep over withdrawn lines", (it) => {
           (rows) => rows.map((row) => row.clientId).sort(),
         );
         // Note that the lines were withdrawn at the test clock's start, the epoch.
-        yield* purgeWithdrawnLines(TURN_ABANDON.CODING_AGENT_AFTER_MS);
+        yield* purgeWithdrawnLines(TURN_ABANDON.AGENT_AFTER_MS);
         const withinBound = yield* standing;
-        yield* purgeWithdrawnLines(TURN_ABANDON.CODING_AGENT_AFTER_MS + 1);
+        yield* purgeWithdrawnLines(TURN_ABANDON.AGENT_AFTER_MS + 1);
 
         assert.deepEqual(withinBound, [
           sentLineId("Push the branch."),

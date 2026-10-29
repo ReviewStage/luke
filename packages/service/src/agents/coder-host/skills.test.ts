@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import {
   type InstalledSkillFileInput,
   type InstalledSkillOwner,
@@ -101,7 +101,7 @@ const startAgent = (repository: string | null) =>
       name: "Teammate invitations",
       ...(repository === null ? {} : { repository }),
     });
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: `start-${task.id}`,
       model: "anthropic/claude-opus-5.5",

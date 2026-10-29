@@ -18,7 +18,8 @@ import {
   ADMIN_REFUSED,
   type AdminReadAnswer,
 } from "@luke/features/admin-wire";
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { browserTabsPlaceId } from "@luke/features/agent-browser-tab-wire";
+import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { pagePlaceId } from "@luke/features/page-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
@@ -166,10 +167,10 @@ const ISSUE_NONE = 8;
 /** A task whose service answers no Browser tabs list. */
 const TASK_UNANSWERED = "0c9e2f4a-5b6d-4e7f-8a9b-1c2d3e4f5a6b";
 
-/** One Browser tab in the task's Luke's browser. */
+/** One Browser tab in a coding agent's browser on the task. */
 const BROWSER_TAB = {
   id: "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b",
-  agentId: null,
+  agentId: "1e2d3c4b-5a6f-4e7d-8c9b-0a1f2e3d4c5b",
   address: "https://example.com/sign-in",
   title: "Sign in",
   openedBy: { kind: "agent" },
@@ -178,12 +179,14 @@ const BROWSER_TAB = {
   lastActedAt: 2_000,
 } as const;
 
-/** A tab a member opens in a coding agent's browser on the task. */
+/** A tab a member opens in a coding agent's browser. */
 const BROWSER_TAB_OPEN = {
-  taskId: TASK_ID,
   agentId: "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a",
   address: "https://example.com/sign-in",
 };
+
+/** A coding agent whose browser the service could not reach. */
+const AGENT_UNREACHABLE = "7b6a5f4e-3d2c-4b1a-9f8e-7d6c5b4a3f2e";
 
 /** One admin read, of the roster at a week, admins counted. */
 const ADMIN_READ_PARAMS = {
@@ -380,14 +383,14 @@ function windowPort(
         return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
       }),
     tasksBrowserTabs: (params) =>
-      ask(`browserTabs:${params.taskId}`, () =>
-        params.taskId === TASK_UNANSWERED
+      ask(`browserTabs:${browserTabsPlaceId(params)}`, () =>
+        browserTabsPlaceId(params) === TASK_UNANSWERED
           ? ({ failure: TASK_CALL_FAILURE.UNANSWERED } as const)
           : { tabs: [BROWSER_TAB] },
       ),
     tasksBrowserTabOpen: (params) =>
-      ask(`browserTabOpen:${params.taskId}:${params.agentId}`, () =>
-        params.taskId === TASK_UNANSWERED
+      ask(`browserTabOpen:${params.agentId}`, () =>
+        params.agentId === AGENT_UNREACHABLE
           ? ({ failure: BROWSER_TAB_OPEN_FAILURE.UNREACHABLE } as const)
           : {
               tab: {
@@ -433,8 +436,10 @@ function windowPort(
       pagesListeners.add(listener);
       return () => pagesListeners.delete(listener);
     },
-    tasksBrowserTabsFollow: (scope) => ask(`tabs-follow:${scope.taskId}`, () => undefined),
-    tasksBrowserTabsUnfollow: (scope) => ask(`tabs-unfollow:${scope.taskId}`, () => undefined),
+    tasksBrowserTabsFollow: (scope) =>
+      ask(`tabs-follow:${browserTabsPlaceId(scope)}`, () => undefined),
+    tasksBrowserTabsUnfollow: (scope) =>
+      ask(`tabs-unfollow:${browserTabsPlaceId(scope)}`, () => undefined),
     onTaskBrowserTabsChanged: (listener) => {
       browserTabsListeners.add(listener);
       return () => browserTabsListeners.delete(listener);
@@ -929,10 +934,10 @@ it("a task's Browser tabs are answered to a panel as the host read them, and a s
 
 it("a tab opened in an agent's browser is answered to a panel as the host read it, why none opened among it, for the panel's words", async () => {
   const { client, asked } = windowPort(PANEL);
-  const open = (taskId: string) =>
-    settled(client, TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN, { ...BROWSER_TAB_OPEN, taskId });
+  const open = (agentId: string) =>
+    settled(client, TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN, { ...BROWSER_TAB_OPEN, agentId });
 
-  assert.deepEqual(await open(TASK_ID), {
+  assert.deepEqual(await open(BROWSER_TAB_OPEN.agentId), {
     answer: {
       tab: {
         ...BROWSER_TAB,
@@ -942,12 +947,12 @@ it("a tab opened in an agent's browser is answered to a panel as the host read i
       },
     },
   });
-  assert.deepEqual(await open(TASK_UNANSWERED), {
+  assert.deepEqual(await open(AGENT_UNREACHABLE), {
     answer: { failure: BROWSER_TAB_OPEN_FAILURE.UNREACHABLE },
   });
   assert.deepEqual(asked, [
-    `browserTabOpen:${TASK_ID}:${BROWSER_TAB_OPEN.agentId}`,
-    `browserTabOpen:${TASK_UNANSWERED}:${BROWSER_TAB_OPEN.agentId}`,
+    `browserTabOpen:${BROWSER_TAB_OPEN.agentId}`,
+    `browserTabOpen:${AGENT_UNREACHABLE}`,
   ]);
 });
 

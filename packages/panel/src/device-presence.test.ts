@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { DEVICE_STANDING } from "@luke/features/coding-agent-wire";
+import { DEVICE_STANDING } from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";

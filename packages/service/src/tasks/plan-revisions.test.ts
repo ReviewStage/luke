@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import {
   listRevisions,
   PLAN_REVISION,
@@ -61,7 +61,7 @@ const AGENT_TITLE = "Invite emails";
 
 const startAgent = (userId: string, taskId: string) =>
   Effect.map(
-    createCodingAgent(userId, {
+    createAgent(userId, {
       taskId,
       idempotencyKey: randomUUID(),
       model: AGENT_MODEL,

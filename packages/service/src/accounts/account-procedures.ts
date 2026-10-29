@@ -41,10 +41,10 @@ import type {
 } from "@luke/database/models/account-store";
 import type { StandingSession } from "@luke/database/models/recorded-session";
 import type { TaskStoreFailure } from "@luke/database/models/task-store";
+import { contextWindowSchema } from "@luke/features/agent-wire";
 import { CHAPTERS_MODEL_DEFAULT, isChaptersModel } from "@luke/features/chapters-model-choice";
-import { contextWindowSchema } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
+import { AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import { failureKind } from "@luke/runtime/effect";
 import {
   accountPreferencesFromWire,
@@ -117,7 +117,7 @@ function snapshotAnswer(row: AccountPreferencesRow | undefined) {
   const updatedAt = row?.updatedAt;
   return {
     ...accountPreferencesParts(row?.preferences ?? {}),
-    codingAgent: row?.codingAgent ?? CODING_AGENT_DEFAULT_CHOICE,
+    agent: row?.agent ?? AGENT_DEFAULT_CHOICE,
     chaptersModel: row?.chaptersModel ?? CHAPTERS_MODEL_DEFAULT,
     experiments: row?.experiments ?? NO_EXPERIMENTS,
     ...(updatedAt === undefined ? undefined : { updatedAt: updatedAt.getTime() }),
@@ -154,7 +154,7 @@ const forgetAnalytics = /* @__PURE__ */ Effect.fn("web/forgetAnalytics")(functio
  * account (`offeredToAccount`): a choice it does not offer is a bad request, and a catalog the instance
  * cannot read is an outage the caller may retry.
  */
-const acceptedCodingAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
+const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: AccountProcedureSeams,
   userId: string,
   value: UnparsedWireValue,
@@ -226,7 +226,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
     /**
      * Writes each part the body carries — `preferences`, a validated
      * settings snapshot that replaces the stored one whole, `linkOpen`,
-     * where the account's links open, `codingAgent`, a choice the catalog
+     * where the account's links open, `agent`, a choice the catalog
      * accepts, `chaptersModel`, one of the chapters' fixed set, and `experiments`, each experiment's on or off merged over
      * what stood — and answers the snapshot as it then stands. A body
      * carrying none of them asks for nothing and is refused.
@@ -237,7 +237,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       if (
         body.preferences === undefined &&
         body.linkOpen === undefined &&
-        body.codingAgent === undefined &&
+        body.agent === undefined &&
         body.chaptersModel === undefined &&
         body.experiments === undefined
       ) {
@@ -255,8 +255,8 @@ export function accountProcedures(seams: AccountProcedureSeams) {
         if (linkOpen === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
         write.linkOpen = linkOpen;
       }
-      if (body.codingAgent !== undefined) {
-        write.codingAgent = yield* acceptedCodingAgent(seams, context.userId, body.codingAgent);
+      if (body.agent !== undefined) {
+        write.agent = yield* acceptedAgentChoice(seams, context.userId, body.agent);
       }
       if (body.chaptersModel !== undefined) {
         if (!isChaptersModel(body.chaptersModel)) {

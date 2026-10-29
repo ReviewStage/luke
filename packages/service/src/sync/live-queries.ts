@@ -6,7 +6,7 @@
  * (`liveQueryParts`). Each view's own change defines its read, and a read
  * with no definition is looked at on its clock.
  */
-import { taskBrowserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
+import { browserTabsLiveStatement } from "@luke/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
 import { messageStandingNow } from "@luke/database/models/message-reads";
@@ -19,14 +19,14 @@ import {
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import {
   agentBrowserTabSync,
+  agentDelegationSync,
   agentPinSync,
   agentSectionEntrySync,
+  agentSync,
   attachmentSync,
   automationRunSync,
   automationSync,
   channelSync,
-  codingAgentDelegationSync,
-  codingAgentSync,
   conversationsSync,
   githubInstallationSync,
   githubPersonalTokenSync,
@@ -115,7 +115,7 @@ export const sidebarLive = defineLiveQuery({
     agentSectionEntrySync,
     repositoryPinSync,
     taskSync,
-    codingAgentSync,
+    agentSync,
     memberSync,
     githubPersonalTokenSync,
     githubRepositoryReadSync,
@@ -148,7 +148,7 @@ export const tasksLive = defineLiveQuery({
   reads: [
     taskSync,
     taskPinSync,
-    codingAgentSync,
+    agentSync,
     agentPinSync,
     userSync,
     turnsSync,
@@ -219,7 +219,7 @@ export const inboxLive = defineLiveQuery({
     inboxItemSync,
     inboxItemReadSync,
     taskSync,
-    codingAgentSync,
+    agentSync,
     automationSync,
     automationRunSync,
     ...ITEM_GATES,
@@ -242,7 +242,7 @@ const SCOPE_INBOX_READS = [
   inboxItemReadSync,
   attachmentSync,
   taskSync,
-  codingAgentSync,
+  agentSync,
   userSync,
   ...ITEM_GATES,
 ] as const;
@@ -306,14 +306,15 @@ export const agentInboxLive = defineLiveQuery({
  * One workspace's channels and where each one's threads stand, woken by a
  * channel or an item written in any of the account's workspaces, both of
  * which name every member (`channelSync`, `inboxItemSync`), and by what
- * admits the account to a workspace or a repository. Note that an agent
- * written itself wakes none, because the read only asks whether the reader
- * sees each thread's agent, which the agent's GitHub reach decides.
+ * admits the account to a workspace or a repository. Note that an agent or
+ * a task written itself wakes none, because the read only asks whether the
+ * reader sees each thread's agent and its task (`itemVisibleTo`), which
+ * their GitHub reach decides.
  */
 export const channelsLive = defineLiveQuery({
   name: "channels",
   params: ["userId", "workspaceId"],
-  reads: [channelSync, inboxItemSync, codingAgentSync, ...ITEM_GATES],
+  reads: [channelSync, inboxItemSync, agentSync, taskSync, ...ITEM_GATES],
   topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
   statements: ({ userId, workspaceId }) => channelsLiveStatements(userId, workspaceId),
   mode: LIVE_MODE.SNAPSHOT,
@@ -335,7 +336,7 @@ export const workspaceMembersLive = defineLiveQuery({
     memberSync,
     userSync,
     taskSync,
-    codingAgentSync,
+    agentSync,
     automationSync,
     planRevisionSync,
     inboxItemSync,
@@ -367,7 +368,7 @@ export const workspaceInvitationsLive = defineLiveQuery({
 const AUTOMATION_READS = [
   automationSync,
   automationRunSync,
-  codingAgentSync,
+  agentSync,
   turnsSync,
   messagesSync,
   conversationsSync,
@@ -467,7 +468,8 @@ export const agentPagesLive = defineLiveQuery({
   name: "agentPages",
   params: ["userId", "agentId"],
   reads: [
-    codingAgentSync,
+    agentSync,
+    taskSync,
     planPageVersionSync,
     memberSync,
     githubPersonalTokenSync,
@@ -495,7 +497,7 @@ export const taskHistoryLive = defineLiveQuery({
   reads: [
     planRevisionSync,
     taskSync,
-    codingAgentSync,
+    agentSync,
     userSync,
     memberSync,
     githubPersonalTokenSync,
@@ -510,17 +512,18 @@ export const taskHistoryLive = defineLiveQuery({
 });
 
 /**
- * One task's Browser tabs, the agent's pointer on each among them, woken by
- * a tab opened, moved, pointed at, taken over, or closed, and by the agents
- * on the task, all of which name the task.
+ * One task's Browser tabs, every one of its agents', the agent's pointer on
+ * each among them, woken by a tab opened, moved, pointed at, taken over, or
+ * closed under the task, and by the agents on the task, all of which name
+ * the task.
  */
 export const taskBrowserTabsLive = defineLiveQuery({
   name: "taskBrowserTabs",
   params: ["userId", "taskId"],
   reads: [
     agentBrowserTabSync,
+    agentSync,
     taskSync,
-    codingAgentSync,
     memberSync,
     githubPersonalTokenSync,
     githubRepositoryReadSync,
@@ -530,7 +533,33 @@ export const taskBrowserTabsLive = defineLiveQuery({
     [TOPIC.ACCOUNT, userId],
   ],
   statements: ({ userId, taskId }) =>
-    Option.map(taskBrowserTabsLiveStatement(userId, taskId), (tabs) => ({ tabs })),
+    Option.map(browserTabsLiveStatement(userId, { taskId }), (tabs) => ({ tabs })),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * One coding agent's Browser tabs, on a task or on none, its task read
+ * too where it is on one, woken by the agent's own row. Note that a tab names no agent's topic, its own row
+ * holding only its agent's conversation, so a tab's move reaches a reader
+ * on the watched look rather than by a wake.
+ */
+export const agentBrowserTabsLive = defineLiveQuery({
+  name: "agentBrowserTabs",
+  params: ["userId", "agentId"],
+  reads: [
+    agentBrowserTabSync,
+    agentSync,
+    taskSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, agentId }) => [
+    [TOPIC.AGENT, agentId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, agentId }) =>
+    Option.map(browserTabsLiveStatement(userId, { agentId }), (tabs) => ({ tabs })),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -541,7 +570,9 @@ export const taskBrowserTabsLive = defineLiveQuery({
  * (`transcript-live.ts`). It is woken by a write to the transcript's
  * messages, turns, or conversation, to a worker's conversation or
  * delegation under the agent's, to the agent itself, and to what admits the
- * reader to its workspace or repository.
+ * reader to its workspace or repository; the agent's task is read for the
+ * reader's reach of it (`agentVisibleTo`) and wakes nothing, as a task's
+ * reach moves with what admits the reader.
  *
  * Its newest messages (`window`, `windowParts`) are followed by cursor:
  * where the reader holds them, the highest sequence it has and the journal
@@ -567,9 +598,10 @@ export const agentTranscriptLive = defineLiveQuery({
     messagesSync,
     conversationsSync,
     turnsSync,
-    codingAgentDelegationSync,
+    agentDelegationSync,
     userSync,
-    codingAgentSync,
+    agentSync,
+    taskSync,
     memberSync,
     githubPersonalTokenSync,
     githubRepositoryReadSync,
@@ -626,5 +658,6 @@ export const LIVE_QUERIES = liveQueryRegistry([
   agentPagesLive,
   taskHistoryLive,
   taskBrowserTabsLive,
+  agentBrowserTabsLive,
   agentTranscriptLive,
 ]);

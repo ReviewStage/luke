@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { TerminalIcon } from "lucide-react";
 import { createElement, type ReactNode } from "react";
@@ -37,7 +37,7 @@ const WORKED_ON: TaskSummary = {
         title: "Alerts",
         model: MODEL,
         effort: "high",
-        status: CODING_AGENT_STATUS.RUNNING,
+        status: AGENT_STATUS.RUNNING,
       },
     ],
     pullRequestTotal: 0,
@@ -68,7 +68,7 @@ test("a sidebar plan's row, an agent's tab, and a running call draw one working 
   const surfaces = {
     sidebar: drawn(createElement(TaskRowStatus, { task: WORKED_ON })),
     tab: drawn(
-      createElement(AgentGlyph, { agent: { model: MODEL, status: CODING_AGENT_STATUS.RUNNING } }),
+      createElement(AgentGlyph, { agent: { model: MODEL, status: AGENT_STATUS.RUNNING } }),
     ),
     toolRow: toolRow(TOOL_STATE.INPUT_AVAILABLE),
   };

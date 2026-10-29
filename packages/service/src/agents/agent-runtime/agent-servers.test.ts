@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import {
-  createCodingAgent,
+  createAgent,
   dispatchMentioningServers,
-  updateCodingAgentServers,
-} from "@luke/database/models/coding-agent-store";
+  updateAgentServers,
+} from "@luke/database/models/agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { getTestDB, startTask } from "@luke/database/testing";
 import {
@@ -92,7 +92,7 @@ const codingSession = (host: CoderHost) =>
       name: "Teammate invitations",
       repository: "acme/relay",
     });
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: `start-${mintSession()}`,
       model: "anthropic/claude-opus-5.5",
@@ -150,7 +150,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR, GITHUB_APP))(
           const host = yield* codingHost;
           const agent = yield* codingSession(host);
           const theirs = yield* codingSession(host);
-          yield* updateCodingAgentServers(agent.userId, agent.agentId, [LINEAR]);
+          yield* updateAgentServers(agent.userId, agent.agentId, [LINEAR]);
 
           assert.deepEqual(
             yield* turnServers(host.admit(agent.auth, agent.sessionId), ALWAYS_ON),
@@ -174,7 +174,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR, GITHUB_APP))(
         Effect.gen(function* () {
           const host = yield* codingHost;
           const agent = yield* codingSession(host);
-          yield* updateCodingAgentServers(agent.userId, agent.agentId, [LINEAR]);
+          yield* updateAgentServers(agent.userId, agent.agentId, [LINEAR]);
           const deployment = (allowed: string) =>
             integrationConnectOver({
               LINEAR_CONNECTOR_UID: "oauth/linear",
@@ -210,7 +210,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR, GITHUB_APP))(
         Effect.gen(function* () {
           const host = yield* codingHost;
           const agent = yield* codingSession(host);
-          yield* updateCodingAgentServers(agent.userId, agent.agentId, [LINEAR, SLACK]);
+          yield* updateAgentServers(agent.userId, agent.agentId, [LINEAR, SLACK]);
           yield* dispatchMentioningServers(
             agent.userId,
             agent.agentId,
@@ -385,7 +385,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, EVERY_CONNECTOR, GITHUB_APP))(
                 'This connection is the developer\'s "Personal" Notion account. They also connected "Acme". If the developer hasn\'t said which account, ask before writing. Say which account you read from or wrote to.',
             },
           ]);
-          yield* updateCodingAgentServers(agent.userId, agent.agentId, ["notion-2"]);
+          yield* updateAgentServers(agent.userId, agent.agentId, ["notion-2"]);
           assert.deepEqual(
             notions(yield* handed(AGENT_SWITCHES)).map(({ connectionName }) => connectionName),
             [NOTION],

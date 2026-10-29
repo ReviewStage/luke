@@ -3,7 +3,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { agentTable } from "../schemas/agent.js";
 import { conversations } from "../schemas/storage.js";
 import type { ConversationTarget } from "./writer.js";
 
@@ -47,12 +47,12 @@ const lockProjectionRow = SqlSchema.findOneOption({
           projection: conversations.nativeProjection,
         })
         .from(conversations)
-        .innerJoin(codingAgent, eq(codingAgent.conversationId, conversations.id))
+        .innerJoin(agentTable, eq(agentTable.conversationId, conversations.id))
         .where(
           and(
             eq(conversations.id, conversationId),
             eq(conversations.userId, userId),
-            eq(codingAgent.runnerTokenHash, runnerTokenHash),
+            eq(agentTable.runnerTokenHash, runnerTokenHash),
             isNull(conversations.deletedAt),
           ),
         )

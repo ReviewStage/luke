@@ -23,14 +23,14 @@
 import { isRecord, MESSAGE_CHANNEL, MESSAGE_ROLE } from "@luke/wire";
 import { Schema } from "effect";
 import {
-  CODING_AGENT_SENDER,
-  type CodingAgentMessage,
-  type CodingAgentPartCut,
-  type CodingAgentSender,
+  AGENT_SENDER,
+  type AgentSender,
+  type AgentTranscriptMessage,
   MESSAGE_SENDER,
   PART_CUT_FIELD,
+  type PartCut,
   storedObjectSchema,
-} from "./coding-agent-wire.js";
+} from "./agent-wire.js";
 import { countedNumber } from "./service-wire.js";
 import { turnRecordOf } from "./turn-record.js";
 
@@ -66,6 +66,7 @@ export const transcriptWindowRowSchema = Schema.Struct({
   memberName: NullableString,
   /** The coding agent that sent the line, while it stands. */
   agentId: NullableString,
+  /** That agent's task, which the window reads no more, since a link names the agent; still selected while desktops that decode it as required stand. */
   agentTaskId: NullableString,
   /** Where a line a turn under way took in arrived: that turn's journal and the steps begun before it. */
   journalId: NullableString,
@@ -101,22 +102,22 @@ export const transcriptWindowPartRowSchema = Schema.Struct({
 export type TranscriptWindowPartRow = typeof transcriptWindowPartRowSchema.Type;
 
 /** What sent a line, as the page names it; none where the row kept no sender, or one it names nothing of. */
-function senderOf(row: TranscriptWindowRow): CodingAgentSender | undefined {
+function senderOf(row: TranscriptWindowRow): AgentSender | undefined {
   switch (row.sender) {
     case MESSAGE_SENDER.MEMBER:
       return row.memberId === null || row.memberName === null
-        ? { name: SENDER_NAME.FORMER_MEMBER, kind: CODING_AGENT_SENDER.FORMER }
-        : { userId: row.memberId, name: row.memberName, kind: CODING_AGENT_SENDER.MEMBER };
+        ? { name: SENDER_NAME.FORMER_MEMBER, kind: AGENT_SENDER.FORMER }
+        : { userId: row.memberId, name: row.memberName, kind: AGENT_SENDER.MEMBER };
     case MESSAGE_SENDER.LUKE:
-      return { name: SENDER_NAME.LUKE, kind: CODING_AGENT_SENDER.LUKE };
+      return { name: SENDER_NAME.LUKE, kind: AGENT_SENDER.LUKE };
     case MESSAGE_SENDER.AUTOMATION:
       return row.senderName === null
         ? undefined
-        : { name: row.senderName, kind: CODING_AGENT_SENDER.AUTOMATION };
+        : { name: row.senderName, kind: AGENT_SENDER.AUTOMATION };
     case MESSAGE_SENDER.GITHUB:
       return row.senderName === null
         ? undefined
-        : { name: row.senderName, kind: CODING_AGENT_SENDER.GITHUB };
+        : { name: row.senderName, kind: AGENT_SENDER.GITHUB };
     case MESSAGE_SENDER.AGENT:
       return row.senderName === null
         ? undefined
@@ -125,9 +126,6 @@ function senderOf(row: TranscriptWindowRow): CodingAgentSender | undefined {
             agent: true,
             ...(row.senderModel === null ? undefined : { model: row.senderModel }),
             ...(row.agentId === null ? undefined : { agentId: row.agentId }),
-            ...(row.agentId === null || row.agentTaskId === null
-              ? undefined
-              : { taskId: row.agentTaskId }),
           };
     default:
       return undefined;
@@ -153,9 +151,9 @@ function spokenOnCall(row: TranscriptWindowRow): boolean {
 function windowMessageOf(
   row: TranscriptWindowRow,
   partRows: readonly TranscriptWindowPartRow[],
-): CodingAgentMessage {
+): AgentTranscriptMessage {
   const ordered = partRows.toSorted((a, b) => a.index - b.index);
-  const cutParts = ordered.flatMap((each): CodingAgentPartCut[] =>
+  const cutParts = ordered.flatMap((each): PartCut[] =>
     each.cutField === null || each.bytes === null || each.head === null || each.tail === null
       ? []
       : [
@@ -214,7 +212,7 @@ function windowMessageOf(
 export function windowMessagesOf(
   rows: readonly TranscriptWindowRow[],
   partRows: readonly TranscriptWindowPartRow[],
-): readonly CodingAgentMessage[] {
+): readonly AgentTranscriptMessage[] {
   const partsOf = new Map<string, TranscriptWindowPartRow[]>();
   for (const each of partRows) {
     const held = partsOf.get(each.messageId);

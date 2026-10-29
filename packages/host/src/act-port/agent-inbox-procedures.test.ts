@@ -15,11 +15,11 @@ import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, it } from "@effect/vitest";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxChanged,
-  type CodingAgentInboxScope,
+  AGENT_CALL_FAILURE,
+  type AgentInboxChanged,
+  type AgentInboxScope,
   INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
+} from "@luke/features/agent-view";
 import {
   INBOX_ASK_STATUS,
   INBOX_IMAGE_TYPE,
@@ -65,23 +65,19 @@ const ITEM: InboxItem = {
 
 const PICTURE = { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
 
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER]:
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ANSWER]:
     "Could not acknowledge the inbox item on this system.",
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_CLOSE]:
-    "Could not close the inbox item on this system.",
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE]: "Could not send the message on this system.",
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]:
-    "Could not mark the inbox item on this system.",
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]:
-    "Could not mark the inbox read on this system.",
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]:
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE]: "Could not close the inbox item on this system.",
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE]: "Could not send the message on this system.",
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE]: "Could not mark the inbox item on this system.",
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL]: "Could not mark the inbox read on this system.",
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ATTACHMENT]:
     "Could not read the inbox item's image on this system.",
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_PICTURE]:
-    "Could not read the agent's picture on this system.",
+  [AGENT_INBOX_ACT_KIND.AGENTS_PICTURE]: "Could not read the agent's picture on this system.",
 } as const;
 
 type HostAsk = AgentInboxProceduresDependencies["host"];
@@ -93,39 +89,39 @@ const ACTS: readonly {
   ask: keyof HostAsk;
 }[] = [
   {
-    kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER,
+    kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ANSWER,
     payload: { itemId: ITEM.id, revision: 2, reply: INBOX_REPLY.ACKNOWLEDGED, clientKey: "nod-1" },
-    ask: "codingAgentInboxAnswer",
+    ask: "agentInboxAnswer",
   },
   {
-    kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_CLOSE,
+    kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE,
     payload: { itemId: ITEM.id, revision: 2, clientKey: "close-1" },
-    ask: "codingAgentInboxClose",
+    ask: "agentInboxClose",
   },
   {
-    kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE,
+    kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE,
     payload: { itemId: ITEM.id, text: "Also page on-call.", clientKey: "message-1" },
-    ask: "codingAgentInboxMessage",
+    ask: "agentInboxMessage",
   },
   {
-    kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE,
+    kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE,
     payload: { itemId: ITEM.id, unread: true },
-    ask: "codingAgentInboxReadState",
+    ask: "agentInboxReadState",
   },
   {
-    kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL,
-    payload: { workspaceId: WORKSPACE_ID },
-    ask: "codingAgentInboxReadAll",
+    kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL,
+    payload: { workspaceId: WORKSPACE_ID, itemIds: [ITEM.id] },
+    ask: "agentInboxReadAll",
   },
   {
-    kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT,
+    kind: AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ATTACHMENT,
     payload: { itemId: ITEM.id, attachmentId: "attachment-1" },
-    ask: "codingAgentInboxAttachment",
+    ask: "agentInboxAttachment",
   },
   {
-    kind: AGENT_INBOX_ACT_KIND.CODING_AGENTS_PICTURE,
+    kind: AGENT_INBOX_ACT_KIND.AGENTS_PICTURE,
     payload: { agentId: AGENT_ID, pictureId: PICTURE_ID },
-    ask: "codingAgentPicture",
+    ask: "agentPicture",
   },
 ];
 
@@ -198,11 +194,11 @@ it("a panel's ask reaches the host once with its payload, and the host's answer 
 it("a panel answers, closes, and messages on an item, and hears the item as it then stands", async () => {
   const { call, asked } = windowPort(PANEL, {
     answers: {
-      codingAgentInboxAnswer: () =>
+      agentInboxAnswer: () =>
         Effect.succeed({ item: { ...ITEM, status: INBOX_STATUS.ANSWERED }, taken: true }),
-      codingAgentInboxClose: () =>
+      agentInboxClose: () =>
         Effect.succeed({ item: { ...ITEM, status: INBOX_STATUS.CLOSED }, taken: true }),
-      codingAgentInboxMessage: () => Effect.succeed({ item: ITEM }),
+      agentInboxMessage: () => Effect.succeed({ item: ITEM }),
     },
   });
   const message = {
@@ -219,25 +215,25 @@ it("a panel answers, closes, and messages on an item, and hears the item as it t
   };
   const close = { itemId: ITEM.id, revision: 2, clientKey: "close-1" };
 
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER, answer), {
+  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ANSWER, answer), {
     answer: { item: { ...ITEM, status: INBOX_STATUS.ANSWERED }, taken: true },
   });
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_CLOSE, close), {
+  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE, close), {
     answer: { item: { ...ITEM, status: INBOX_STATUS.CLOSED }, taken: true },
   });
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, message), {
+  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE, message), {
     answer: { item: ITEM },
   });
   assert.deepEqual(asked, [
-    ["codingAgentInboxAnswer", answer],
-    ["codingAgentInboxClose", close],
-    ["codingAgentInboxMessage", message],
+    ["agentInboxAnswer", answer],
+    ["agentInboxClose", close],
+    ["agentInboxMessage", message],
   ]);
 });
 
 it("a panel's reply that answers the open ask reaches the host with the answer, words or none; an answer naming no message is refused in the kind's own words, and the host is not asked", async () => {
   const { call, asked } = windowPort(PANEL, {
-    answers: { codingAgentInboxMessage: () => Effect.succeed({ item: ITEM }) },
+    answers: { agentInboxMessage: () => Effect.succeed({ item: ITEM }) },
   });
   const answers = {
     ask: "7f4d0b2a-3c5e-4a81-9d9f-4e6a8c0d2f3b",
@@ -246,45 +242,48 @@ it("a panel's reply that answers the open ask reaches the host with the answer, 
   };
   const answering = { itemId: ITEM.id, text: "", clientKey: "answer-1", answers };
 
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, answering), {
+  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE, answering), {
     answer: { item: ITEM },
   });
   assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, {
+    await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE, {
       ...answering,
       answers: { ...answers, ask: "the deploy question" },
     }),
-    { refused: REFUSAL[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE] },
+    { refused: REFUSAL[AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE] },
   );
-  assert.deepEqual(asked, [["codingAgentInboxMessage", answering]]);
+  assert.deepEqual(asked, [["agentInboxMessage", answering]]);
 });
 
 it("a panel marks an inbox item read or unread, or its whole Inbox read in one workspace or all, and hears the read state", async () => {
   const { call, asked } = windowPort(PANEL, {
     answers: {
-      codingAgentInboxReadState: () => Effect.succeed({ id: ITEM.id, unread: true }),
-      codingAgentInboxReadAll: () => Effect.succeed({ marked: 3 }),
+      agentInboxReadState: () => Effect.succeed({ id: ITEM.id, unread: true }),
+      agentInboxReadAll: () => Effect.succeed({ marked: 3 }),
     },
   });
 
   assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE, {
+    await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE, {
       itemId: ITEM.id,
       unread: true,
     }),
     { answer: { id: ITEM.id, unread: true } },
   );
   assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, { workspaceId: WORKSPACE_ID }),
+    await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL, {
+      workspaceId: WORKSPACE_ID,
+      itemIds: [ITEM.id],
+    }),
     { answer: { marked: 3 } },
   );
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, {}), {
+  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL, { itemIds: [] }), {
     answer: { marked: 3 },
   });
   assert.deepEqual(asked, [
-    ["codingAgentInboxReadState", { itemId: ITEM.id, unread: true }],
-    ["codingAgentInboxReadAll", { workspaceId: WORKSPACE_ID }],
-    ["codingAgentInboxReadAll", {}],
+    ["agentInboxReadState", { itemId: ITEM.id, unread: true }],
+    ["agentInboxReadAll", { workspaceId: WORKSPACE_ID, itemIds: [ITEM.id] }],
+    ["agentInboxReadAll", { itemIds: [] }],
   ]);
 });
 
@@ -292,18 +291,18 @@ it("a panel's read of an inbox image, or an agent's or a worker's picture, reach
   const picture = () => Effect.succeed(PICTURE);
   const { call, asked } = windowPort(PANEL, {
     answers: {
-      codingAgentInboxAttachment: picture,
-      codingAgentPicture: picture,
+      agentInboxAttachment: picture,
+      agentPicture: picture,
     },
   });
   const reads = [
     [
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT,
+      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ATTACHMENT,
       { itemId: ITEM.id, attachmentId: "attachment-1" },
     ],
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_PICTURE, { agentId: AGENT_ID, pictureId: PICTURE_ID }],
+    [AGENT_INBOX_ACT_KIND.AGENTS_PICTURE, { agentId: AGENT_ID, pictureId: PICTURE_ID }],
     [
-      AGENT_INBOX_ACT_KIND.CODING_AGENTS_PICTURE,
+      AGENT_INBOX_ACT_KIND.AGENTS_PICTURE,
       { agentId: AGENT_ID, pictureId: PICTURE_ID, callId: "call-worker" },
     ],
   ] as const;
@@ -312,9 +311,9 @@ it("a panel's read of an inbox image, or an agent's or a worker's picture, reach
     assert.deepEqual(await call(kind, payload), { answer: PICTURE });
   }
   assert.deepEqual(asked, [
-    ["codingAgentInboxAttachment", reads[0][1]],
-    ["codingAgentPicture", reads[1][1]],
-    ["codingAgentPicture", reads[2][1]],
+    ["agentInboxAttachment", reads[0][1]],
+    ["agentPicture", reads[1][1]],
+    ["agentPicture", reads[2][1]],
   ]);
 });
 
@@ -331,17 +330,16 @@ it("a host that dies, or answers what the kind cannot carry, is refused in the k
 it("an answer's key its kind's view schema does not name is left out of what the panel hears", async () => {
   const { call } = windowPort(PANEL, {
     answers: {
-      codingAgentInboxReadAll: () => Effect.succeed({ marked: 3, stray: true }),
-      codingAgentInboxMessage: () =>
-        Effect.succeed({ item: { ...ITEM, stray: true }, stray: true }),
+      agentInboxReadAll: () => Effect.succeed({ marked: 3, stray: true }),
+      agentInboxMessage: () => Effect.succeed({ item: { ...ITEM, stray: true }, stray: true }),
     },
   });
 
-  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, {}), {
+  assert.deepEqual(await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL, { itemIds: [] }), {
     answer: { marked: 3 },
   });
   assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, {
+    await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE, {
       itemId: ITEM.id,
       text: "Also page on-call.",
       clientKey: "message-2",
@@ -363,11 +361,11 @@ it("a payload carrying a key its kind's schema does not name is refused in the k
 it("a payload its kind's schema refuses, or none where the kind takes one, is refused in the kind's own words, and the host is not asked", async () => {
   const { call, asked } = windowPort(PANEL);
   assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE, {
+    await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE, {
       itemId: ITEM.id,
       unread: "yes",
     }),
-    { refused: REFUSAL[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE] },
+    { refused: REFUSAL[AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE] },
   );
   for (const act of ACTS) {
     assert.deepEqual(await call(act.kind, undefined), { refused: REFUSAL[act.kind] });
@@ -389,11 +387,11 @@ it("an item whose thread carries an ask of a type this build does not know reach
     ],
   };
   const { call } = windowPort(PANEL, {
-    answers: { codingAgentInboxMessage: () => Effect.succeed({ item: newer }) },
+    answers: { agentInboxMessage: () => Effect.succeed({ item: newer }) },
   });
 
   assert.deepEqual(
-    await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, {
+    await call(AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE, {
       itemId: ITEM.id,
       text: "Ship it.",
       clientKey: "message-3",
@@ -409,13 +407,10 @@ async function until(ready: () => boolean): Promise<void> {
 
 it("a panel's inbox stream follows the inbox at the host, hears each change told of it alone, and lets it go once its last stream closes", async () => {
   const asked: string[] = [];
-  const listeners = new Set<(changed: CodingAgentInboxChanged) => void>();
-  const follows: Pick<
-    HostAsk,
-    "codingAgentInboxFollow" | "codingAgentInboxUnfollow" | "onInboxChanged"
-  > = {
-    codingAgentInboxFollow: () => Effect.sync(() => void asked.push("follow")),
-    codingAgentInboxUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
+  const listeners = new Set<(changed: AgentInboxChanged) => void>();
+  const follows: Pick<HostAsk, "agentInboxFollow" | "agentInboxUnfollow" | "onInboxChanged"> = {
+    agentInboxFollow: () => Effect.sync(() => void asked.push("follow")),
+    agentInboxUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
     onInboxChanged: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -426,10 +421,10 @@ it("a panel's inbox stream follows the inbox at the host, hears each change told
   const port = testActPort(agentInboxProcedures({ host }));
   ports.push(port);
   const client = port.as(PANEL);
-  const scope: CodingAgentInboxScope = { kind: INBOX_SCOPE_KIND.PLAN, id: TASK_ID };
+  const scope: AgentInboxScope = { kind: INBOX_SCOPE_KIND.PLAN, id: TASK_ID };
 
-  const one = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW](scope);
-  const two = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW](scope);
+  const one = await client[AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW](scope);
+  const two = await client[AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW](scope);
   const first = one.next();
   const second = two.next();
   await until(() => asked.length === 1);
@@ -452,14 +447,14 @@ it("a window that is not a panel is refused an inbox stream, and the host follow
   const asked: string[] = [];
   // SAFETY: the stream reaches the follow asks alone.
   const host = {
-    codingAgentInboxFollow: () => Effect.sync(() => void asked.push("follow")),
-    codingAgentInboxUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
+    agentInboxFollow: () => Effect.sync(() => void asked.push("follow")),
+    agentInboxUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
     onInboxChanged: () => () => undefined,
   } as unknown as HostAsk;
   const port = testActPort(agentInboxProcedures({ host }));
   ports.push(port);
   await assert.rejects(
-    port.as(OTHER_WINDOW)[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]({
+    port.as(OTHER_WINDOW)[AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]({
       kind: INBOX_SCOPE_KIND.PLAN,
       id: TASK_ID,
     }),

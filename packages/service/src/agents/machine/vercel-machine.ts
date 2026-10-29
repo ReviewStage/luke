@@ -18,8 +18,10 @@
  * checkout with the `agent` user, and drops to that user with every
  * capability gone (`../sandbox-capabilities.ts`). The harness's credential
  * and the bearer are in that command's environment and nowhere else: never
- * in its argv, its config line, a file, or a tag. Its first lines are
- * written to its stdin.
+ * in its argv, its config line, a file, or a tag. Its config line is
+ * written to its stdin, which carries nothing more: the runner reads every
+ * later line from Luke (`../coder-host/runner-sessions.ts`), so this machine
+ * writes no line to it.
  *
  * The doors read the sandbox carrying the agent's session id as its tag, as
  * every agent's sandbox does, and only its running session: nothing is
@@ -46,13 +48,9 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { AGENT_USER, RUNNER_DIRECTORY, SHARED_FILES_DIRECTORY } from "@luke/agent-runner/pins";
-import {
-  type CodingAgent,
-  hasRepository,
-  type WithRepository,
-} from "@luke/database/models/coding-agent-store";
+import { type Agent, hasRepository, type WithRepository } from "@luke/database/models/agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { Brand, Duration, Effect, Layer, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
@@ -133,10 +131,11 @@ export const RUNNER_TAG = {
   /**
    * The launch's first event number, then `LAUNCH_FINGERPRINT_MARK` and what
    * the launch was started with that a warm runner cannot take up later
-   * (`launchFingerprint`), then, for a launch that reads its lines from Luke,
-   * the mark again and `LINES_READ_MARK`. Note that a deployment from before
-   * the read reads the first two parts alone, so it takes such a launch for
-   * one whose stdin it writes, which its runner still reads.
+   * (`launchFingerprint`), then the mark again and `LINES_READ_MARK`, since
+   * every launch reads its lines from Luke. Note that the read mark is
+   * written for a deployment from before this one, which reads a launch
+   * without it as one whose stdin it writes, and is read here by no one:
+   * no launch from before the read still ran as this deployment went out.
    */
   LAUNCH: "lukeRunnerLaunch",
 } as const;
@@ -267,7 +266,7 @@ const nameOfSandbox = Brand.nominal<MachineName>();
 /** The place a sandbox's running session stands for, under Luke's session given. */
 function vercelPlace(session: string, sandboxSessionId: string): MachinePlace {
   return {
-    machine: CODING_AGENT_MACHINE.VERCEL,
+    machine: AGENT_MACHINE.VERCEL,
     session,
     running: runningOfSession(sandboxSessionId),
   };
@@ -282,18 +281,14 @@ export interface TaggedRunner {
   readonly fingerprint?: string;
 }
 
-/** The launch tag read: its first event number, its fingerprint where it has one, and whether it reads its lines; none where the tag is missing or unreadable. */
+/** The launch tag read: its first event number, and its fingerprint where it has one, of a launch that reads its lines, as every sandbox's does; none where the tag is missing or unreadable. */
 function taggedLaunch(tags: Readonly<Record<string, string>>): RunnerMark | undefined {
-  const [sequence = "", fingerprint, read] = (tags[RUNNER_TAG.LAUNCH] ?? "").split(
+  const [sequence = "", fingerprint] = (tags[RUNNER_TAG.LAUNCH] ?? "").split(
     LAUNCH_FINGERPRINT_MARK,
   );
   const firstSequence = Number(sequence);
   if (sequence === "" || !Number.isSafeInteger(firstSequence)) return undefined;
-  return {
-    firstSequence,
-    ...(fingerprint === undefined ? {} : { fingerprint }),
-    ...(read === LINES_READ_MARK ? { linesRead: true } : {}),
-  };
+  return { firstSequence, ...(fingerprint === undefined ? {} : { fingerprint }), linesRead: true };
 }
 
 /** The runner a sandbox's tags name, whatever the sandbox runs now; none where a tag is missing. */
@@ -357,7 +352,7 @@ function foundOf(session: string, sandbox: ListedSandbox): FoundPlace {
       ? vercelPlace(session, sandbox.currentSessionId)
       : undefined;
   return {
-    machine: CODING_AGENT_MACHINE.VERCEL,
+    machine: AGENT_MACHINE.VERCEL,
     session,
     agentId: tags[RUNNER_TAG.AGENT],
     name: nameOfSandbox(sandbox.name),
@@ -507,7 +502,9 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
 
     writeFiles: (place, files) => api.writeFiles(place.running, files),
 
-    writeLine: (handle, text) => api.writeStdin(handle.running, handle.command, text),
+    // Note that a sandbox's runner reads every line past its config from Luke, so a line written
+    // here is a caller's mistake, refused loudly rather than written where nothing reads it.
+    writeLine: () => Effect.die(new Error("a sandbox's runner reads its lines from Luke")),
 
     runnerExit: (handle, within) => api.commandExit(handle.running, handle.command, within),
 
@@ -525,7 +522,7 @@ export function vercelLifecycle(api: VercelSandboxApi): MachineLifecycle {
 /** The machine over the API given, its checkout run through the edge's runner. */
 export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentMachineService {
   /** A new sandbox of the agent's, under the session given, opened from the snapshot named at the size its repository asks for. */
-  const createdFrom = (agent: CodingAgent, sessionId: string, snapshotId: string) =>
+  const createdFrom = (agent: Agent, sessionId: string, snapshotId: string) =>
     api.create({
       name: `${SANDBOX_NAME}${randomUUID()}`,
       snapshotId,
@@ -556,7 +553,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    * starter's own token, whose access is not the workspace's.
    */
   const repositorySnapshotOf = (
-    agent: WithRepository<CodingAgent>,
+    agent: WithRepository<Agent>,
     read: AgentRepositoryRead,
     imageSnapshotId: string,
   ): Option.Option<RepositorySnapshotOf> =>
@@ -595,7 +592,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    * forgets nothing, so the launch goes on as without a snapshot.
    */
   const openedFromRepositorySnapshot = (
-    agent: WithRepository<CodingAgent>,
+    agent: WithRepository<Agent>,
     sessionId: string,
     harness: string,
     of: RepositorySnapshotOf,
@@ -634,7 +631,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    */
   const openedFromImage = (
     image: AgentSandboxImageService,
-    agent: CodingAgent,
+    agent: Agent,
     sessionId: string,
     snapshotId: string,
   ) =>
@@ -659,7 +656,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    */
   const checkedOutSandbox = (
     image: AgentSandboxImageService,
-    agent: WithRepository<CodingAgent>,
+    agent: WithRepository<Agent>,
     read: AgentRepositoryRead,
     sessionId: string,
     harness: string,
@@ -701,7 +698,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    */
   const openedCheckout = (
     target: ConversationTarget,
-    agent: CodingAgent,
+    agent: Agent,
     sessionId: string,
     harness: string,
   ) =>

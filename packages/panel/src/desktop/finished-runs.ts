@@ -1,8 +1,4 @@
-import {
-  CODING_AGENT_STATUS,
-  PULL_REQUEST_STATE,
-  type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, PULL_REQUEST_STATE, type TasklessAgent } from "@luke/features/agent-wire";
 import { automationRun } from "@luke/features/model-label";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { waitsOnReader } from "../tasks/inbox-model.js";
@@ -46,7 +42,7 @@ export function withoutFinishedRuns(
   return agents.filter(
     (agent) =>
       automationRun(agent) === undefined ||
-      agent.status !== CODING_AGENT_STATUS.COMPLETED ||
+      agent.status !== AGENT_STATUS.COMPLETED ||
       agent.id === held.shown ||
       held.unseen(agent.id) ||
       waiting.has(agent.id) ||

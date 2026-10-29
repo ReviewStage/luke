@@ -11,7 +11,7 @@ import type { AdminTrend } from "./admin-answer-wire.js";
 /** Where a dollar went: the two kinds of model turns, and dictation's metered seconds. */
 export const COST_SOURCE = {
   /** A coding agent's turns and its workers'. */
-  CODING_AGENTS: "coding-agents",
+  AGENTS: "agents",
   /** Luke's own turns: every other conversation kind, the brain and its workers. */
   LUKE: "luke",
   DICTATION: "dictation",
@@ -19,7 +19,7 @@ export const COST_SOURCE = {
 
 export type CostSource = (typeof COST_SOURCE)[keyof typeof COST_SOURCE];
 
-export type TokenCostSource = typeof COST_SOURCE.CODING_AGENTS | typeof COST_SOURCE.LUKE;
+export type TokenCostSource = typeof COST_SOURCE.AGENTS | typeof COST_SOURCE.LUKE;
 
 export type SecondsCostSource = typeof COST_SOURCE.DICTATION;
 
@@ -60,7 +60,7 @@ export interface AdminCostAccount extends AdminCostAccountInfo {
 /** One UTC day's priced dollars by source; unpriced tokens are in none of them. */
 export interface AdminCostDay {
   day: string;
-  [COST_SOURCE.CODING_AGENTS]: number;
+  [COST_SOURCE.AGENTS]: number;
   [COST_SOURCE.LUKE]: number;
   [COST_SOURCE.DICTATION]: number;
 }

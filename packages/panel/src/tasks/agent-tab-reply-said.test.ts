@@ -1,16 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type {
-  CodingAgentMessagesAnswerView,
-  CodingAgentTranscriptPage,
-} from "@luke/features/coding-agent-view";
+import type { AgentMessagesAnswerView, AgentTranscriptPage } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_STATUS,
+  type AgentStatus,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -19,7 +16,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { codingAgentsControl, pushedPage } from "../testing/tasks-control.js";
+import { agentsControl, pushedPage } from "../testing/tasks-control.js";
 import { AgentSubagentTab, AgentTab } from "./agent-tab.js";
 import type { TranscriptFollower } from "./use-agent-transcript.js";
 
@@ -47,25 +44,25 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: "plan-1",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Retry audit",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.RUNNING,
+  status: AGENT_STATUS.RUNNING,
   turnId: null,
 };
 
-const PLAN: CodingAgentMessage = {
+const PLAN: AgentTranscriptMessage = {
   id: "plan",
   role: MESSAGE_ROLE.USER,
   parts: [{ type: "text", text: "Audit the retry paths." }],
 };
 
 /** The reply as a page reads it: its words so far, or its parts where it called a tool. */
-function reply(words: string | readonly WireRecord[]): CodingAgentMessage {
+function reply(words: string | readonly WireRecord[]): AgentTranscriptMessage {
   return {
     id: "reply",
     role: MESSAGE_ROLE.ASSISTANT,
@@ -79,9 +76,9 @@ function reply(words: string | readonly WireRecord[]): CodingAgentMessage {
 
 function page(
   words: string | readonly WireRecord[],
-  status: CodingAgentStatus,
+  status: AgentStatus,
   cursor: string,
-): CodingAgentMessagesAnswerView {
+): AgentMessagesAnswerView {
   return { messages: [PLAN, reply(words)], cursor, status, title: null, subagents: [] };
 }
 
@@ -98,10 +95,10 @@ const READ_TESTS: WireRecord = {
 const WORKER_TASK = "Check the CSV writers";
 
 /** A running agent's tab, or its worker's, its first page answered at once and each later one when the test hands it. */
-async function runningTab(first: CodingAgentMessagesAnswerView, worker = false, opened = AGENT) {
+async function runningTab(first: AgentMessagesAnswerView, worker = false, opened = AGENT) {
   fakeAppBridge({});
   mountAnnouncer();
-  let hear: ((page: CodingAgentTranscriptPage) => void) | undefined;
+  let hear: ((page: AgentTranscriptPage) => void) | undefined;
   const transcripts: TranscriptFollower = (_transcript, heard) => {
     hear = heard;
     heard(pushedPage(first));
@@ -109,14 +106,14 @@ async function runningTab(first: CodingAgentMessagesAnswerView, worker = false, 
       hear = undefined;
     };
   };
-  const control = codingAgentsControl({ agents: [AGENT], transcripts });
+  const control = agentsControl({ agents: [AGENT], transcripts });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   const registry = AtomRegistry.make();
   const settle = async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   };
-  const draw = (agent: CodingAgentSummary) =>
+  const draw = (agent: AgentSummary) =>
     root?.render(
       onRegistry(
         registry,
@@ -125,7 +122,7 @@ async function runningTab(first: CodingAgentMessagesAnswerView, worker = false, 
               agentId: AGENT.id,
               callId: "delegation-call",
               task: WORKER_TASK,
-              status: CODING_AGENT_STATUS.RUNNING,
+              status: AGENT_STATUS.RUNNING,
               control,
               shown: true,
               onStatus: () => undefined,
@@ -148,13 +145,13 @@ async function runningTab(first: CodingAgentMessagesAnswerView, worker = false, 
   return {
     container,
     /** The agent's row as the list next reads it, as its status moves. */
-    async row(agent: CodingAgentSummary) {
+    async row(agent: AgentSummary) {
       await act(async () => {
         draw(agent);
         await settle();
       });
     },
-    async answer(next: CodingAgentMessagesAnswerView) {
+    async answer(next: AgentMessagesAnswerView) {
       await act(async () => {
         hear?.(pushedPage(next));
         await settle();
@@ -164,33 +161,25 @@ async function runningTab(first: CodingAgentMessagesAnswerView, worker = false, 
 }
 
 test("a reply that streams in three chunks is said once, after the last, by who sent it and its first sentence", async () => {
-  const tab = await runningTab(page("The retry", CODING_AGENT_STATUS.RUNNING, "1:1"));
+  const tab = await runningTab(page("The retry", AGENT_STATUS.RUNNING, "1:1"));
   const log = tab.container.querySelector('[role="log"]');
   assert.equal(log?.getAttribute("aria-live"), "off", "the log is no live region");
 
-  await tab.answer(page("The retry paths are", CODING_AGENT_STATUS.RUNNING, "1:2"));
+  await tab.answer(page("The retry paths are", AGENT_STATUS.RUNNING, "1:2"));
   await tab.answer(
-    page("The retry paths are safe. Two callers retry twice.", CODING_AGENT_STATUS.RUNNING, "1:3"),
+    page("The retry paths are safe. Two callers retry twice.", AGENT_STATUS.RUNNING, "1:3"),
   );
   assert.equal(announcedPolitely(), "", "nothing is said while the reply streams");
 
   await tab.answer(
-    page(
-      "The retry paths are safe. Two callers retry twice.",
-      CODING_AGENT_STATUS.COMPLETED,
-      "1:4",
-    ),
+    page("The retry paths are safe. Two callers retry twice.", AGENT_STATUS.COMPLETED, "1:4"),
   );
   assert.equal(announcedPolitely(), "Reply from Retry audit: The retry paths are safe.");
   const said = document.querySelector('[role="status"][aria-live="polite"] span');
 
   // A later page of the same finished turn says nothing again.
   await tab.answer(
-    page(
-      "The retry paths are safe. Two callers retry twice.",
-      CODING_AGENT_STATUS.COMPLETED,
-      "1:5",
-    ),
+    page("The retry paths are safe. Two callers retry twice.", AGENT_STATUS.COMPLETED, "1:5"),
   );
   assert.equal(
     document.querySelector('[role="status"][aria-live="polite"] span'),
@@ -200,45 +189,45 @@ test("a reply that streams in three chunks is said once, after the last, by who 
 });
 
 test("a turn that fails while the tab is open says its end line once, politely, as it lands", async () => {
-  const tab = await runningTab(page("The retry", CODING_AGENT_STATUS.RUNNING, "1:1"));
+  const tab = await runningTab(page("The retry", AGENT_STATUS.RUNNING, "1:1"));
 
-  await tab.answer(page("The retry", CODING_AGENT_STATUS.FAILED, "1:2"));
-  await tab.row({ ...AGENT, status: CODING_AGENT_STATUS.FAILED });
+  await tab.answer(page("The retry", AGENT_STATUS.FAILED, "1:2"));
+  await tab.row({ ...AGENT, status: AGENT_STATUS.FAILED });
 
   assert.equal(announcedPolitely(), "Failed");
 });
 
 test("a turn that fails before writing a word says its end line as it lands", async () => {
-  const blank = (status: CodingAgentStatus, cursor: string): CodingAgentMessagesAnswerView => ({
+  const blank = (status: AgentStatus, cursor: string): AgentMessagesAnswerView => ({
     messages: [],
     cursor,
     status,
     title: null,
     subagents: [],
   });
-  const tab = await runningTab(blank(CODING_AGENT_STATUS.RUNNING, "1:1"));
+  const tab = await runningTab(blank(AGENT_STATUS.RUNNING, "1:1"));
 
-  await tab.row({ ...AGENT, status: CODING_AGENT_STATUS.FAILED });
-  await tab.answer(blank(CODING_AGENT_STATUS.FAILED, "1:2"));
+  await tab.row({ ...AGENT, status: AGENT_STATUS.FAILED });
+  await tab.answer(blank(AGENT_STATUS.FAILED, "1:2"));
 
   assert.equal(announcedPolitely(), "Failed");
 });
 
 test("a tab opened on a turn already finished, or already failed, says nothing", async () => {
-  await runningTab(page("The retry paths are safe.", CODING_AGENT_STATUS.COMPLETED, "1:1"));
+  await runningTab(page("The retry paths are safe.", AGENT_STATUS.COMPLETED, "1:1"));
   assert.equal(announcedPolitely(), "");
   act(() => root?.unmount());
 
-  await runningTab(page("The retry", CODING_AGENT_STATUS.FAILED, "1:1"), false, {
+  await runningTab(page("The retry", AGENT_STATUS.FAILED, "1:1"), false, {
     ...AGENT,
-    status: CODING_AGENT_STATUS.FAILED,
+    status: AGENT_STATUS.FAILED,
   });
   assert.equal(announcedPolitely(), "", "a failure the transcript opens on is history");
   act(() => root?.unmount());
 
   // A row still saying the turn runs, as a list read before it failed does, is no sign the turn was seen running.
-  const stale = await runningTab(page("The retry", CODING_AGENT_STATUS.FAILED, "1:1"));
-  await stale.row({ ...AGENT, status: CODING_AGENT_STATUS.FAILED });
+  const stale = await runningTab(page("The retry", AGENT_STATUS.FAILED, "1:1"));
+  await stale.row({ ...AGENT, status: AGENT_STATUS.FAILED });
   assert.equal(
     announcedPolitely(),
     "",
@@ -247,21 +236,21 @@ test("a tab opened on a turn already finished, or already failed, says nothing",
 });
 
 test("a reader whose focus stands in the transcript hears only who the reply is from", async () => {
-  const tab = await runningTab(page("The retry", CODING_AGENT_STATUS.RUNNING, "1:1"));
+  const tab = await runningTab(page("The retry", AGENT_STATUS.RUNNING, "1:1"));
   const log = tab.container.querySelector<HTMLElement>('[role="log"]');
   assert.ok(log);
   log.tabIndex = -1;
   act(() => log.focus());
-  await tab.answer(page("The retry paths are safe.", CODING_AGENT_STATUS.COMPLETED, "1:2"));
+  await tab.answer(page("The retry paths are safe.", AGENT_STATUS.COMPLETED, "1:2"));
   assert.equal(announcedPolitely(), "Reply from Retry audit");
 });
 
 test("a turn that ended on a call says no words written before the call as its reply", async () => {
-  const tab = await runningTab(page("I'll check the tests.", CODING_AGENT_STATUS.RUNNING, "1:1"));
+  const tab = await runningTab(page("I'll check the tests.", AGENT_STATUS.RUNNING, "1:1"));
   await tab.answer(
     page(
       [{ type: "text", text: "I'll check the tests." }, READ_TESTS],
-      CODING_AGENT_STATUS.COMPLETED,
+      AGENT_STATUS.COMPLETED,
       "1:2",
     ),
   );
@@ -269,7 +258,7 @@ test("a turn that ended on a call says no words written before the call as its r
 });
 
 test("the reply is the words after the turn's last call", async () => {
-  const tab = await runningTab(page("I'll check the tests.", CODING_AGENT_STATUS.RUNNING, "1:1"));
+  const tab = await runningTab(page("I'll check the tests.", AGENT_STATUS.RUNNING, "1:1"));
   await tab.answer(
     page(
       [
@@ -277,7 +266,7 @@ test("the reply is the words after the turn's last call", async () => {
         READ_TESTS,
         { type: "text", text: "They pass. Nothing to change." },
       ],
-      CODING_AGENT_STATUS.COMPLETED,
+      AGENT_STATUS.COMPLETED,
       "1:2",
     ),
   );
@@ -285,7 +274,7 @@ test("the reply is the words after the turn's last call", async () => {
 });
 
 test("a worker's reply is said once whole, under the worker's name", async () => {
-  const tab = await runningTab(page("The writers", CODING_AGENT_STATUS.RUNNING, "1:1"), true);
-  await tab.answer(page("The writers quote every field.", CODING_AGENT_STATUS.COMPLETED, "1:2"));
+  const tab = await runningTab(page("The writers", AGENT_STATUS.RUNNING, "1:1"), true);
+  await tab.answer(page("The writers quote every field.", AGENT_STATUS.COMPLETED, "1:2"));
   assert.equal(announcedPolitely(), `Reply from ${WORKER_TASK}: The writers quote every field.`);
 });

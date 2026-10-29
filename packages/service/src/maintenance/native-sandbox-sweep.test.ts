@@ -3,9 +3,11 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { INPUT_LINE } from "@luke/agent-runner/protocol";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { claimAgentRunnerLease } from "@luke/database/models/agent-runner-lease";
+import { createAgent } from "@luke/database/models/agent-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { user } from "@luke/database/schemas/auth";
+import { runnerLine } from "@luke/database/schemas/runner-line";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
@@ -70,8 +72,6 @@ function vercel(
   const commands = new Map<string, ReadCommand>();
   const stopped: string[] = [];
   const policies: string[] = [];
-  /** What was written to each command's stdin, by its id. */
-  const stdin = new Map<string, string>();
   const pagesListed: { status: string | null; sortBy: string | null; order: string | null }[] = [];
   const respond = async (url: string, init: RequestInit): Promise<Response> => {
     const parsed = new URL(url);
@@ -119,16 +119,6 @@ function vercel(
       }
       return Response.json({ session: { id: sessionId } });
     }
-    const written = /^cmd\/([^/]+)\/stdin$/u.exec(rest);
-    if (written !== null) {
-      const { data } = JSON.parse(String(init.body));
-      const id = written[1] ?? "";
-      // A write with no data is the one that says how far the data went, which adds nothing.
-      if (typeof data === "string") {
-        stdin.set(id, `${stdin.get(id) ?? ""}${Buffer.from(data, "base64").toString()}`);
-      }
-      return Response.json({});
-    }
     const command = /^cmd\/([^/]+)$/u.exec(rest);
     if (command !== null) {
       const found = commands.get(command[1] ?? "");
@@ -146,7 +136,6 @@ function vercel(
     commands,
     stopped,
     policies,
-    stdin,
     pagesListed,
   };
 }
@@ -158,7 +147,7 @@ const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
     const task = yield* startTask(userId, { name: "Teammate invitations" });
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: "start-1",
       model: "anthropic/claude-opus-5.5",
@@ -556,6 +545,30 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
   );
 
   it.effect(
+    "a sandbox a message resumed and is relaunching into, its runner lease held, keeps running",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = vercel();
+        const agent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+          status: TURN_STATUS.SETTLED,
+          at: minutesBefore(10),
+        });
+        // Resumed with no runner tagged yet, as a send's relaunch stands before its launch is recorded.
+        const resumed = nativeSandbox(agent.id);
+        api.sandboxes.push(resumed);
+        const heldUntil = new Date(NOW.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+        assert.ok(yield* claimAgentRunnerLease(agent.id, randomUUID(), NOW, heldUntil));
+
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+
+        assert.equal(outcome.stopped, 0);
+        assert.deepEqual([api.stopped, api.policies], [[], []]);
+        assert.equal(resumed.status, "running");
+      }),
+  );
+
+  it.effect(
     "a runner still up past its warm window and the grace is asked to retire, its sandbox left for its END to stop, and one whose run ended within them stays up",
     () =>
       Effect.gen(function* () {
@@ -588,14 +601,19 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
           deferred: 0,
           lost: 0,
         });
-        assert.deepEqual(
-          (api.stdin.get("cmd_idle") ?? "")
-            .split("\n")
-            .filter((each) => each !== "")
-            .map((each) => JSON.parse(each)),
-          [{ type: INPUT_LINE.RETIRE }],
-        );
-        assert.equal(api.stdin.get("cmd_recent"), undefined);
+        // The retire is queued for the runner to read, as every line of a sandbox's runner is.
+        const queuedFor = (agentId: string) =>
+          Effect.map(
+            Effect.flatMap(Database, (db) =>
+              db
+                .select({ text: runnerLine.text })
+                .from(runnerLine)
+                .where(eq(runnerLine.agentId, agentId)),
+            ),
+            (rows) => rows.map((row): unknown => JSON.parse(row.text)),
+          );
+        assert.deepEqual(yield* queuedFor(idle.id), [{ type: INPUT_LINE.RETIRE }]);
+        assert.deepEqual(yield* queuedFor(recent.id), []);
         assert.deepEqual([retiring.status, warm.status], ["running", "running"]);
         // The retired runner is no longer told of, so a message sent while it ends relaunches it.
         assert.equal(retiring.tags[RUNNER_TAG.COMMAND], undefined);

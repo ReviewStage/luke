@@ -17,7 +17,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
 import { accountExperimentOn } from "@luke/database/models/account-store";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readAgent } from "@luke/database/models/agent-store";
 import {
   claimDeviceAgentLine,
   deviceAgentLineStanding,
@@ -222,7 +222,7 @@ export function settledDeviceAgentLine(
     if (kind !== DEVICE_AGENT_LINE_KIND.LAUNCH) return true;
     const newest = yield* latestDeviceAgentLaunch(userId, agentId);
     if (Option.isNone(newest) || newest.value.id !== id) return true;
-    const agent = yield* readCodingAgent(userId, agentId);
+    const agent = yield* readAgent(userId, agentId);
     if (Option.isNone(agent)) return true;
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const now = yield* Clock.currentTimeMillis;

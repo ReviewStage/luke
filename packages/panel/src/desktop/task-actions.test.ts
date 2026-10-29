@@ -523,7 +523,7 @@ test("a sidebar task Luke or a coding agent made wears who is on it rather than 
   const { asked } = openTab();
   const listed = tasksControl({ me: DEAN.userId, tasks: [byAgent] });
   rightClick(mountSidebarTask(listed, byAgent, asked), 40, 60);
-  assert.equal(menuFooter()[0], "Created by Coding agent for you");
+  assert.equal(menuFooter()[0], "Created by Agent for you");
   unmountAll();
 });
 
@@ -613,7 +613,7 @@ test("a sidebar plan whose repository belongs to another of the account's worksp
   );
   assert.deepEqual(
     [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(heard),
-    ["acme-corp/relay", "Repository belongs to Stage"],
+    ["Repository belongs to Stage"],
   );
 });
 
@@ -711,7 +711,7 @@ test("a task's card says who created it where others share its workspace, the re
     createdBy: DEAN,
     origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" },
   } as const;
-  assert.deepEqual(details(byAgent, PERSONAL), ["Created by Coding agent for you"]);
+  assert.deepEqual(details(byAgent, PERSONAL), ["Created by Agent for you"]);
 });
 
 test("a task's card's creator line opens the creator's page in the window, and is words outside it", () => {

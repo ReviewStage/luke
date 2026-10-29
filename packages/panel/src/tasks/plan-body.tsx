@@ -583,7 +583,7 @@ function useMentionChips(
   return useMemo(() => {
     if (taskId === undefined) return { link: undefined, doors: undefined };
     const doors: MentionDoors = {
-      taskId,
+      holder: { taskId },
       place: { workspace, repository },
       anchors: new Set(anchorKey.split("\n").filter((anchor) => anchor !== "")),
       onOpenTask: (mention) => latest.current?.onOpen(mention),

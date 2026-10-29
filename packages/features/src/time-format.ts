@@ -8,7 +8,7 @@
  * task's "Edited by you · 3d ago" and its sidebar row's "3d" never part.
  * Every word is set in US English whatever the Mac's own region, since the
  * words around it are English, and in the Mac's own zone: a call's "Today,
- * 3:42 PM" and the "2:32 PM → 3:42 PM" its card hangs read one clock.
+ * 3:42 PM" and the "Today, 2:32 – 3:42 PM" its card hangs read one clock.
  *
  * Note that every clock is a 12-hour one, a schedule's included, because
  * Chromium's `Intl` takes its hour cycle from the language alone and gives no
@@ -76,8 +76,8 @@ const UTC_INSTANT = new Intl.DateTimeFormat(LOCALE, {
   timeZone: "UTC",
 });
 
-/** What parts a span's start from its end. */
-const SPAN_ARROW = " → ";
+/** What parts a run's start from its end where each names its own day, as a clock's range parts its two times. */
+const SPAN_DASH = " – ";
 
 /** What a row says inside a minute, and a line too, since "just now" would be a second word for it. */
 const NOW_WORD = "now";
@@ -136,6 +136,16 @@ export function agoText(at: number, now: number): string {
   return count === undefined ? sinceText(at, now) : `${count}${AGO_WORD}`;
 }
 
+/**
+ * When someone made, started, showed, or opened a thing, as its provenance
+ * row says it after their name: the line's words inside a week, "3d ago",
+ * and the day past it, "Oct 12", since a count of weeks reads as vague
+ * beside a name where a day reads as a fact.
+ */
+export function provenanceText(at: number, now: number): string {
+  return now - at < WEEK_MS ? agoText(at, now) : dateOfText(at, now);
+}
+
 /** The moment `at` in full, for the hover over a row's few letters. */
 export function momentText(at: number): string {
   return MOMENT.format(at);
@@ -152,13 +162,6 @@ export function distanceText(deltaMs: number): string {
   if (unit === undefined) return NOW_WORD;
   const count = `${Math.floor(size / unit[0])}${unit[1]}`;
   return deltaMs > 0 ? `${AHEAD_WORD}${count}` : `${count}${AGO_WORD}`;
-}
-
-/** A span from one moment to another, each in full, the end's day left unsaid where it is the start's: "Oct 12, 2026, 2:32 PM → 2:41 PM". */
-export function spanText(startedAt: number, endedAt: number): string {
-  const sameDay = new Date(startedAt).toDateString() === new Date(endedAt).toDateString();
-  const ended = sameDay ? TIME_OF_DAY.format(endedAt) : MOMENT.format(endedAt);
-  return `${MOMENT.format(startedAt)}${SPAN_ARROW}${ended}`;
 }
 
 /** A day and a time in the fewest words, as a version is named: "Oct 11, 2:14 PM". */
@@ -187,18 +190,20 @@ export function dayText(at: number): string {
   return DAY_WITH_YEAR.format(at);
 }
 
+/** A day as a call's header names it: "Today", "Yesterday", a weekday this week, or a date, with its year only where it is not `now`'s. */
+function dayWord(at: number, now: number): string {
+  const daysAgo = Math.round((midnightOf(now) - midnightOf(at)) / DAY_MS);
+  if (daysAgo === 0) return "Today";
+  if (daysAgo === 1) return "Yesterday";
+  return daysAgo > 1 && daysAgo < 7 ? WEEKDAY.format(at) : dateText(at, now, true);
+}
+
 /**
  * A call's header: the day, as today, yesterday, a weekday this week, or a
  * date, then the time on the clock its card reads: "Today, 3:42 PM".
  */
 export function callHeading(startedAt: number, now: number): string {
-  const daysAgo = Math.round((midnightOf(now) - midnightOf(startedAt)) / DAY_MS);
-  const time = TIME_OF_DAY.format(startedAt);
-  if (daysAgo === 0) return `Today, ${time}`;
-  if (daysAgo === 1) return `Yesterday, ${time}`;
-  const day =
-    daysAgo > 1 && daysAgo < 7 ? WEEKDAY.format(startedAt) : dateText(startedAt, now, true);
-  return `${day}, ${time}`;
+  return `${dayWord(startedAt, now)}, ${TIME_OF_DAY.format(startedAt)}`;
 }
 
 /** What separates how long a turn worked from when it ended, and a call's heading from its length. */
@@ -211,6 +216,24 @@ export function workingTime(elapsedMs: number): string {
   const minutes = Math.floor(seconds / MINUTE_SECONDS);
   if (minutes < HOUR_MINUTES) return `${minutes}m ${seconds % MINUTE_SECONDS}s`;
   return `${Math.floor(minutes / HOUR_MINUTES)}h ${minutes % HOUR_MINUTES}m`;
+}
+
+/**
+ * When a run went and for how long, in the fewest words a card's line has
+ * room for: its day as a call's header names it, the clock from its start to
+ * its end sharing what they share, and how long it ran, "Today, 2:32 – 3:42
+ * PM · 1h 10m". A run inside one minute names that minute once ("Today,
+ * 9:34 PM · 42s"), since a range from a time to itself says nothing its
+ * length does not. A run that crossed midnight names both days.
+ */
+export function runSpanText(startedAt: number, endedAt: number, now: number): string {
+  const sameDay = midnightOf(startedAt) === midnightOf(endedAt);
+  // Note that ICU sets a range's dash between thin spaces and its AM or PM behind a narrow one, which no other clock here wears, so both read as plain spaces.
+  const clock = TIME_OF_DAY.formatRange(startedAt, endedAt).replace(/[\u2009\u202f]/gu, " ");
+  const span = sameDay
+    ? `${dayWord(startedAt, now)}, ${clock}`
+    : `${callHeading(startedAt, now)}${SPAN_DASH}${callHeading(endedAt, now)}`;
+  return `${span}${WORKED_SEPARATOR}${workingTime(endedAt - startedAt)}`;
 }
 
 /** How far a recording or a video has run, as a player says it: minutes and two-digit seconds, "1:12". */

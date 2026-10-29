@@ -1,12 +1,12 @@
 import {
+  type AgentOverviewPullRequest,
   CHECK_SUMMARY,
-  type CodingAgentOverviewPullRequest,
   MERGE_STATE,
   type MergeState,
   PULL_REQUEST_STATE,
   type PullRequestMerging,
   REVIEW_DECISION,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   MERGE_METHOD,
   type MergeMethod,
@@ -38,7 +38,7 @@ import { CircleXIcon, GitMergeIcon, TriangleAlertIcon, UserRoundIcon } from "luc
 import { type ReactNode, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { keptKey, useKept } from "../use-kept.js";
-import { queuedLabel } from "./coding-agent-model.js";
+import { queuedLabel } from "./agent-model.js";
 import { type PullRequestWrites, QUEUE_WARNING } from "./pull-request-writes.js";
 
 /**
@@ -189,7 +189,7 @@ function mergeWords(merge: MergeState, base: string): string {
  * have it: what it waits on, or where the queue or auto-merge has it,
  * then the mergeability beside it where that says something else.
  */
-function sentenceOf(pullRequest: CodingAgentOverviewPullRequest): string {
+function sentenceOf(pullRequest: AgentOverviewPullRequest): string {
   const { merge, merging } = pullRequest;
   const line = mergeWords(merge, pullRequest.base);
   const standing = (merge === MERGE_STATE.BLOCKED ? blockedWords(merging) : undefined) ?? line;
@@ -269,7 +269,7 @@ function blockedChip(merging: PullRequestMerging | undefined): ChipFace | undefi
  * still says what holds the merge up.
  */
 function chipOf(
-  pullRequest: CodingAgentOverviewPullRequest,
+  pullRequest: AgentOverviewPullRequest,
   action: MergeAction | undefined,
 ): ChipFace | undefined {
   const { merge, merging } = pullRequest;
@@ -413,7 +413,7 @@ export function MergeControl({
   shown,
   writes,
 }: {
-  pullRequest: CodingAgentOverviewPullRequest;
+  pullRequest: AgentOverviewPullRequest;
   /** The agent's repository, which the method chosen is kept by. */
   repository: string | null;
   /** Whether the panel the control stands in is on screen; a question asked goes with it. */

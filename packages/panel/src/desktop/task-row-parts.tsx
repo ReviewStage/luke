@@ -86,7 +86,7 @@ export function taskSubject(
 type ChipTask = Pick<TaskSummary, "status" | "priority" | "assignee">;
 
 /** A task's priority, No priority for one from a service before priorities. */
-function priorityOf(task: ChipTask): TaskPriority {
+export function priorityOf(task: ChipTask): TaskPriority {
   return task.priority ?? TASK_PRIORITY.NONE;
 }
 

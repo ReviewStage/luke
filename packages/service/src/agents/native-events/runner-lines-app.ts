@@ -26,7 +26,7 @@
 
 import { RUNNER_LINES, type RunnerLinesAnswer } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readCodingAgentOfConversation } from "@luke/database/models/coding-agent-store";
+import { readAgentOfConversation } from "@luke/database/models/agent-store";
 import { type RunnerLine, runnerLinesPast } from "@luke/database/models/runner-line-store";
 import { TOPIC } from "@luke/database/sync/notification";
 import { HTTP_METHOD } from "@luke/wire";
@@ -102,7 +102,7 @@ const runnerLinesEndpoint = /* @__PURE__ */ Effect.fn("web/runnerLinesEndpoint")
     if (Option.isNone(admitted)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     const { target } = admitted.value;
     const agent = yield* hostedStoreOrUnavailable(
-      readCodingAgentOfConversation(target.userId, target.conversationId),
+      readAgentOfConversation(target.userId, target.conversationId),
     );
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     const now = yield* DateTime.nowAsDate;

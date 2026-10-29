@@ -36,11 +36,14 @@
  * stands.
  */
 
-/** The heading a start's note stands under, after the brief and any replay: the developer's, or that of the coding agent that started the agent. */
+/** The heading a start's note stands under, after the brief and any replay: the developer's, or that of the agent that started it. */
 export const START_NOTE_HEADING = {
   DEVELOPER: "## Note from the developer",
-  AGENT: "## Note from the coding agent that started you",
+  AGENT: "## Note from the agent that started you",
 } as const;
+
+/** The agent's note heading as first messages written before it was reworded spell it, which stored transcripts still hold. */
+const RETIRED_AGENT_NOTE_HEADING = "## Note from the coding agent that started you";
 
 export type StartNoteHeading = (typeof START_NOTE_HEADING)[keyof typeof START_NOTE_HEADING];
 
@@ -215,7 +218,11 @@ const VALUE_FORMS: ReadonlySet<string> = new Set(Object.values(REPLAY_VALUE_FORM
 const SUMMARY_OPEN = /^<!-- luke:summary by=luke steps=(\d+) chars=(\d+) -->\n/u;
 
 const STEP_KINDS: ReadonlySet<string> = new Set(Object.values(REPLAY_STEP_KIND));
-const NOTE_HEADINGS: readonly StartNoteHeading[] = Object.values(START_NOTE_HEADING);
+/** Each heading a note may stand under, as it is spelled and as it is read: today's, then the retired spelling. */
+const NOTE_HEADINGS: readonly (readonly [string, StartNoteHeading])[] = [
+  ...Object.values(START_NOTE_HEADING).map((heading) => [heading, heading] as const),
+  [RETIRED_AGENT_NOTE_HEADING, START_NOTE_HEADING.AGENT],
+];
 
 /** A summary held to one line, since a step's first line is its summary. */
 function oneLine(text: string): string {
@@ -448,8 +455,8 @@ function stepsFrom(
 
 /** The marked note whose heading starts at `at` and that ends the message exactly; nothing where its marker does not add up. */
 function markedNoteAt(text: string, at: number): FirstMessageNote | undefined {
-  for (const heading of NOTE_HEADINGS) {
-    const lead = `${SECTION_GAP}${heading}${SECTION_GAP}`;
+  for (const [spelled, heading] of NOTE_HEADINGS) {
+    const lead = `${SECTION_GAP}${spelled}${SECTION_GAP}`;
     if (!text.startsWith(lead, at)) continue;
     const start = at + lead.length;
     const open = NOTE_OPEN.exec(text.slice(start, start + 96));
@@ -472,8 +479,8 @@ function noteFrom(text: string, at: number): FirstMessageNote | null | undefined
   if (at === text.length) return null;
   const marked = markedNoteAt(text, at);
   if (marked !== undefined) return marked;
-  for (const heading of NOTE_HEADINGS) {
-    const lead = `${SECTION_GAP}${heading}${SECTION_GAP}`;
+  for (const [spelled, heading] of NOTE_HEADINGS) {
+    const lead = `${SECTION_GAP}${spelled}${SECTION_GAP}`;
     if (!text.startsWith(lead, at)) continue;
     // A whole marker that does not add up is a note damaged, never one from before the marker,
     // whose words may still open with the marker's first words.
@@ -489,8 +496,8 @@ function markedNoteIn(text: string): FirstMessage | undefined {
   let at = text.indexOf(NOTE_OPEN_START);
   while (at >= 0) {
     // The marker stands after its heading, so the note starts at the gap before that heading.
-    for (const heading of NOTE_HEADINGS) {
-      const lead = `${SECTION_GAP}${heading}${SECTION_GAP}`;
+    for (const [spelled] of NOTE_HEADINGS) {
+      const lead = `${SECTION_GAP}${spelled}${SECTION_GAP}`;
       const from = at - lead.length;
       if (from < 0 || !text.startsWith(lead, from)) continue;
       const note = markedNoteAt(text, from);

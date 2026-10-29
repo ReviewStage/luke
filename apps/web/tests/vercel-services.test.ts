@@ -227,7 +227,7 @@ test("a link to any place in Luke, a plan's, a section's and a picture's among t
     "/acme/plan/p1/inbox/i1/",
     "/acme/automations",
     "/acme/automation/x1/run/r1",
-    "/acme/settings/coding-agents",
+    "/acme/settings/agents",
     "/acme/person/user_9Fq2-x",
     "/acme/admin",
     "/acme/admin/cost",
@@ -289,7 +289,7 @@ test("every path the web app is served at sends its own Content Security Policy 
     "/App",
     "/acme/plan/p1",
     "/acme/inbox",
-    "/acme/settings/coding-agents",
+    "/acme/settings/agents",
   ]) {
     const answer = answeredHeaders(path);
     const { headers } = answer;

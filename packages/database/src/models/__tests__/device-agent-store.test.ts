@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import {
   DEVICE_AGENT_BOUNDS,
   DEVICE_AGENT_LINE_KIND,
@@ -13,11 +13,11 @@ import { eq } from "drizzle-orm";
 import { Clock, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
+import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
-import { codingAgent } from "../../schemas/coding-agent.js";
 import { deviceAgentLine, deviceAgentRequest } from "../../schemas/device-agent.js";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "../../testing/index.js";
-import { createCodingAgent } from "../coding-agent-store.js";
+import { createAgent } from "../agent-store.js";
 import {
   answerDeviceAgentRequest,
   claimDeviceAgentLine,
@@ -69,7 +69,7 @@ const openAccount = (onMac = true) =>
     const deviceId = randomUUID();
     yield* registerDevice(userId, { id: deviceId, name: "Studio", ...DEVICE_LAYOUT });
     const task = yield* startTask(userId, { name: "Invitations" });
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -81,9 +81,9 @@ const openAccount = (onMac = true) =>
     const agentId = Option.getOrThrow(started).agent.id;
     if (onMac) {
       yield* db
-        .update(codingAgent)
-        .set({ machine: CODING_AGENT_MACHINE.DEVICE, deviceId })
-        .where(eq(codingAgent.id, agentId));
+        .update(agentTable)
+        .set({ machine: AGENT_MACHINE.DEVICE, deviceId })
+        .where(eq(agentTable.id, agentId));
     }
     return { userId, deviceId, agentId };
   });

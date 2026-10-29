@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { DEVICE_KIND, DEVICE_SETUP } from "@luke/features/device-agent-wire";
 import { type MacOffer, MODEL_PROVIDER } from "@luke/features/models-wire";
 import type { TaskRunsOnRequest } from "@luke/features/task-wire";
@@ -23,7 +23,7 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NewTaskComposer } from "./new-task-composer.js";
-import { MODELS_READ, type ModelsRead } from "./use-coding-agents.js";
+import { MODELS_READ, type ModelsRead } from "./use-agents.js";
 import type { NewTaskStart } from "./use-tasks-tab.js";
 
 /**
@@ -220,7 +220,7 @@ test("a task starts on the device Runs on picked, by its id, and an offline devi
   await settle();
 
   assert.equal(chip().getAttribute("aria-label"), "Runs on: Studio");
-  assert.deepEqual(starts, [{ machine: CODING_AGENT_MACHINE.DEVICE, deviceId: STUDIO }]);
+  assert.deepEqual(starts, [{ machine: AGENT_MACHINE.DEVICE, deviceId: STUDIO }]);
 });
 
 test("a device online but still getting ready, or that couldn't set up, is listed saying so and not picked", async () => {
@@ -242,12 +242,11 @@ test("a device online but still getting ready, or that couldn't set up, is liste
   assert.deepEqual(
     [row("Studio"), row("Build host")].map((each) => [
       each.getAttribute("aria-disabled"),
-      each.textContent?.includes("Getting ready…"),
-      each.textContent?.includes("Couldn't set up"),
+      each.querySelector('[role="img"]')?.getAttribute("aria-label"),
     ]),
     [
-      ["true", true, false],
-      ["true", false, true],
+      ["true", "Getting ready…"],
+      ["true", "Couldn't set up"],
     ],
   );
 });
@@ -274,7 +273,7 @@ test.each([
     pressInComposer(container, "Enter", { metaKey: true });
     await settle();
 
-    assert.deepEqual(starts, [{ machine: CODING_AGENT_MACHINE.DEVICE, deviceId: STUDIO }]);
+    assert.deepEqual(starts, [{ machine: AGENT_MACHINE.DEVICE, deviceId: STUDIO }]);
   },
 );
 
@@ -292,7 +291,7 @@ test("a device picked in another card reaches this one", async () => {
   pressInComposer(welcome.container, "Enter", { metaKey: true });
   await settle();
 
-  assert.deepEqual(welcome.starts, [{ machine: CODING_AGENT_MACHINE.DEVICE, deviceId: BUILDER }]);
+  assert.deepEqual(welcome.starts, [{ machine: AGENT_MACHINE.DEVICE, deviceId: BUILDER }]);
 });
 
 test("nothing starts before the card's own read of the devices lands, and one that failed says so, with a Retry that reads them again", async () => {
@@ -318,7 +317,7 @@ test("nothing starts before the card's own read of the devices lands, and one th
   pressInComposer(failed.container, "Enter", { metaKey: true });
   await settle();
 
-  assert.deepEqual(failed.starts, [{ machine: CODING_AGENT_MACHINE.DEVICE, deviceId: STUDIO }]);
+  assert.deepEqual(failed.starts, [{ machine: AGENT_MACHINE.DEVICE, deviceId: STUDIO }]);
 });
 
 test("a member with no devices, opening the card again, is held only until its read lands, though it lists the same empty list", async () => {

@@ -108,7 +108,7 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * `newTab`.
  *
  * A labelled button is named by its words, unless it is given a `label`
- * that says more of what it does than they have room for ("Start a coding
+ * that says more of what it does than they have room for ("Start an
  * agent" over "Start"). The label holds the words it is drawn with, so a
  * reader who says what they see still reaches it (WCAG's label in name).
  *
@@ -554,7 +554,7 @@ export function Button({
   trailing?: ReactNode;
   /** A short word after its words, inside its fill, the agent's "Recommended". */
   badge?: string | undefined;
-  /** Its accessible name where its words say less, which holds its words ("Start a coding agent" over "Start"). */
+  /** Its accessible name where its words say less, which holds its words ("Start an agent" over "Start"). */
   label?: string | undefined;
   size?: ButtonSize | undefined;
   /** Whether a toggle stands on, or a press recorded was the one given, which it is drawn and announced as. */

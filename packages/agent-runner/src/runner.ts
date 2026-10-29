@@ -119,7 +119,7 @@ const WORKER: AgentDefinition = {
   description:
     "A read-only worker for one scoped job, such as a broad search, a comparison of approaches, or an investigation: it reads the checkout and the web and answers, and never edits, commits, or pushes.",
   prompt:
-    "You are a read-only worker for a coding agent. Do the one job you were handed and answer with what it asks for. You are read-only in the checkout: never write, edit, move, or delete a file, never commit or push, and never change anything elsewhere, such as on GitHub; run only commands that read.",
+    "You are a read-only worker for an agent. Do the one job you were handed and answer with what it asks for. You are read-only in the checkout: never write, edit, move, or delete a file, never commit or push, and never change anything elsewhere, such as on GitHub; run only commands that read.",
   model: "inherit",
   disallowedTools: ["Edit", "Write", "NotebookEdit", "Agent", `mcp__${MCP_SERVER}`],
 };

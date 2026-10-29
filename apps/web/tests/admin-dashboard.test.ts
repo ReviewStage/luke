@@ -80,7 +80,7 @@ function overview(overrides: Partial<AdminOverview> = {}): AdminOverview {
       activeDevelopers: 12,
       features: [
         { feature: REACH_FEATURE.TASKS, developers: 12, share: 1 },
-        { feature: REACH_FEATURE.CODING_AGENTS, developers: 9, share: 0.75 },
+        { feature: REACH_FEATURE.AGENTS, developers: 9, share: 0.75 },
         { feature: REACH_FEATURE.INBOX, developers: 6, share: 0.5 },
         { feature: REACH_FEATURE.INTEGRATIONS, developers: 4, share: 1 / 3 },
         { feature: REACH_FEATURE.AUTOMATIONS, developers: 1, share: 1 / 12 },
@@ -282,7 +282,7 @@ test("the funnel and reach read each row's count and its share of the base", () 
   ]);
   expect(listRows(page, "Feature reach")).toEqual([
     "Tasks & plans | 12 | 100%",
-    "Coding agents | 9 | 75%",
+    "Agents | 9 | 75%",
     "Inbox | 6 | 50%",
     "Integration connected | 4 | 33%",
     "Automations | 1 | 8%",

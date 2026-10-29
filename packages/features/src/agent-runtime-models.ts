@@ -14,7 +14,7 @@
  * decides the runtime (`agent-runtime-choice.ts`).
  */
 
-import type { CodingAgentRuntime } from "./coding-agent-wire.js";
+import type { AgentRuntime } from "./agent-wire.js";
 import { MODEL_PROVIDER, type ModelProvider } from "./models-wire.js";
 
 /** What a runtime lets an agent move to. */
@@ -38,7 +38,7 @@ const ANY_MODEL: RuntimeModelRule = {
 };
 
 /** The native harnesses' rules. */
-const NATIVE_MODEL_RULE: Partial<Record<CodingAgentRuntime, RuntimeModelRule>> = {
+const NATIVE_MODEL_RULE: Partial<Record<AgentRuntime, RuntimeModelRule>> = {
   claude_code: {
     provider: MODEL_PROVIDER.ANTHROPIC,
     fast: true,
@@ -77,7 +77,7 @@ export type RuntimeChoiceRefusal =
   (typeof RUNTIME_CHOICE_REFUSAL)[keyof typeof RUNTIME_CHOICE_REFUSAL];
 
 /** The rule of the runtime given; eve's for none, an agent from before the column. */
-export function runtimeModelRule(runtime: CodingAgentRuntime | undefined): RuntimeModelRule {
+export function runtimeModelRule(runtime: AgentRuntime | undefined): RuntimeModelRule {
   return (runtime === undefined ? undefined : NATIVE_MODEL_RULE[runtime]) ?? ANY_MODEL;
 }
 
@@ -105,7 +105,7 @@ export function runtimeModels<
     readonly contextWindows?: unknown;
     readonly fastNotEnabled?: boolean;
   },
->(models: readonly M[], runtime: CodingAgentRuntime | undefined): readonly M[] {
+>(models: readonly M[], runtime: AgentRuntime | undefined): readonly M[] {
   const rule = runtimeModelRule(runtime);
   if (rule === ANY_MODEL) return models;
   return models
@@ -133,7 +133,7 @@ export function runtimeModels<
  * named at all, the long one included, since the harness takes no choice.
  */
 export function runtimeChoiceRefusal(
-  runtime: CodingAgentRuntime | undefined,
+  runtime: AgentRuntime | undefined,
   choice: { readonly model: string; readonly contextWindow?: string | undefined },
 ): RuntimeChoiceRefusal | undefined {
   const rule = runtimeModelRule(runtime);
@@ -149,7 +149,7 @@ export function runtimeChoiceRefusal(
 
 /** A runtime's refusal in words a model or a member acts on. */
 export function runtimeChoiceRefusalWords(
-  runtime: CodingAgentRuntime | undefined,
+  runtime: AgentRuntime | undefined,
   refusal: RuntimeChoiceRefusal,
 ): string {
   const rule = runtimeModelRule(runtime);

@@ -1,4 +1,4 @@
-import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import type { TasklessAgent } from "@luke/features/agent-wire";
 import { OPERATOR_NAME } from "@luke/features/model-label";
 import {
   LIST_DENSITY,
@@ -14,7 +14,7 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { RotateCcwIcon, RotateCwIcon } from "lucide-react";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
-import { agentGlyphState } from "../tasks/coding-agent-model.js";
+import { agentGlyphState } from "../tasks/agent-model.js";
 import { agentEndMark } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { TOAST_HOLD, type ToastNotice, undoToast, useToast, useWorkingToast } from "../toast.js";
@@ -111,8 +111,7 @@ export function SidebarLuke({
       );
   };
   const copyLink = useCopyLinkItem();
-  const linkItem =
-    agentId === undefined ? undefined : copyLink(agentPlace({ id: agentId, planId: null }));
+  const linkItem = agentId === undefined ? undefined : copyLink(agentPlace(agentId));
   const groups: MenuEntry[][] = [
     linkItem === undefined ? [] : [linkItem],
     agent === undefined

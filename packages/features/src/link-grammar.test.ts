@@ -113,7 +113,7 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
     `${HOME}/automation/${OTHER}/run/${AGENT}`,
   ],
   [{ kind: LINK_PLACE.SETTINGS }, `${HOME}/settings`],
-  [{ kind: LINK_PLACE.SETTINGS, page: "coding-agents" }, `${HOME}/settings/coding-agents`],
+  [{ kind: LINK_PLACE.SETTINGS, page: "agents" }, `${HOME}/settings/agents`],
   [{ kind: LINK_PLACE.PERSON, userId: "user_9Fq2-x" }, `${HOME}/person/user_9Fq2-x`],
   [{ kind: LINK_PLACE.ADMIN }, `${HOME}/admin`],
   [{ kind: LINK_PLACE.ADMIN, section: ADMIN_LINK_SECTION.COST }, `${HOME}/admin/cost`],

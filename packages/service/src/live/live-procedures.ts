@@ -89,7 +89,7 @@
  *
  * `GET /api/live/inbox-items?since=` answers every inbox item the account
  * reaches as four statements: where each item stands, every open one and
- * every settled one changed in the last week, and those changed since the
+ * every settled one changed in the last thirty days, and those changed since the
  * reader's `since` whole, with their threads and files, as a plan's inbox
  * carries them (`inbox-store.ts`'s `accountItemsLiveStatements`). Its poll
  * is held on where the items stand alone (`ACCOUNT_INBOX_ITEMS.HELD_ON`),
@@ -99,8 +99,8 @@
  */
 
 import type { LiveStatement } from "@luke/database/core/live-statement";
+import { readVisibleAgent } from "@luke/database/models/agent-store";
 import { readAutomation } from "@luke/database/models/automation-store";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { readTaskHeader } from "@luke/database/models/task-store";
 import {
@@ -109,7 +109,7 @@ import {
 } from "@luke/database/models/workspace-store";
 import type { SyncTopic } from "@luke/database/sync/notification";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
-import { codingAgentCallIdSchema, codingAgentCursorSchema } from "@luke/features/coding-agent-wire";
+import { agentCallIdSchema, agentCursorSchema } from "@luke/features/agent-wire";
 import {
   ACCOUNT_INBOX_ITEMS,
   LIVE_POLL,
@@ -134,6 +134,7 @@ import {
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
+  agentBrowserTabsLive,
   agentInboxLive,
   agentPagesLive,
   agentTranscriptLive,
@@ -463,7 +464,7 @@ const sinceOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   call: string,
 ): Effect.fn.Return<string, HostedRefusal> {
-  const read = readEither(codingAgentCallIdSchema)(unparsedWire(call));
+  const read = readEither(agentCallIdSchema)(unparsedWire(call));
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return read.success;
 });
@@ -564,7 +565,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     agentPages: signedIn.agentPages.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const agentId = yield* pathUuid(input.id);
-      const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
+      const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(context.userId, agentId));
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return yield* liveQueryParts(agentPagesLive, { userId: context.userId, agentId }, input);
     }),
@@ -587,6 +588,18 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         LIVE_POLL_HOLD.WATCHED_LOOK,
       );
     }),
+    agentBrowserTabs: signedIn.agentBrowserTabs.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const agentId = yield* pathUuid(input.id);
+      const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(context.userId, agentId));
+      if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return yield* liveQueryParts(
+        agentBrowserTabsLive,
+        { userId: context.userId, agentId },
+        input,
+        LIVE_POLL_HOLD.WATCHED_LOOK,
+      );
+    }),
     macCommands: signedIn.macCommands.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       return yield* liveQueryParts(
@@ -602,7 +615,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const cursor = input[LIVE_POLL.CURSOR];
       if (
         cursor !== undefined &&
-        Result.isFailure(readEither(codingAgentCursorSchema)(unparsedWire(cursor)))
+        Result.isFailure(readEither(agentCursorSchema)(unparsedWire(cursor)))
       ) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
@@ -637,7 +650,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     agentInbox: signedIn.agentInbox.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       const agentId = yield* pathUuid(input.id);
-      const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
+      const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(context.userId, agentId));
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return yield* liveQueryParts(
         agentInboxLive,

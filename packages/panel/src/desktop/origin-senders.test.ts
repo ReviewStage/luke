@@ -2,10 +2,10 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_STATUS,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import type { Task } from "@luke/features/task-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -20,7 +20,7 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platfo
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import {
-  codingAgentsControl,
+  agentsControl,
   pushedTranscripts,
   tasksControl,
   UNPINNED_SUMMARY,
@@ -49,14 +49,14 @@ const TASK: Task = {
   document: { body: "", assumptions: [] },
 };
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Invite expiry job",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
   startedBy: CHARLES,
 };
@@ -64,7 +64,7 @@ const AGENT: CodingAgentSummary = {
 /** When the plan was handed to the agent. */
 const BRIEF_SENT_AT = Date.UTC(2026, 9, 14, 16, 5);
 
-const BRIEF: CodingAgentMessage = {
+const BRIEF: AgentTranscriptMessage = {
   id: "brief",
   role: MESSAGE_ROLE.USER,
   parts: [{ type: "text", text: "# Teammate invitations\n\nExpire invites after seven days." }],
@@ -106,7 +106,7 @@ async function mount(input: {
       tab: input.side,
       onChoose: (tab) => chosen.push(tab),
     },
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: [AGENT],
       agentIds: [AGENT.id],
       me: input.reader,
@@ -114,7 +114,7 @@ async function mount(input: {
         {
           messages: transcript.callId === undefined ? [BRIEF] : [],
           cursor: "1:0",
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           title: null,
         },
       ]),

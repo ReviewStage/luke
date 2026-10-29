@@ -1,9 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import {
-  CODING_AGENT_KIND,
-  type CodingAgentSummary,
-  type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_KIND, type AgentSummary, type TasklessAgent } from "@luke/features/agent-wire";
 import { readerZone } from "@luke/features/date-mention";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -108,7 +104,7 @@ type EnsureAsk = Record<string, never> | { readonly reset: true } | { readonly r
 /** The operator's id an ensure answered, or none for a failure or a refusal. */
 function ensuredId(workspaceId: string, ask: EnsureAsk): Promise<string | undefined> {
   return askAct(
-    ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR,
+    ACT_KIND.AGENTS_ENSURE_OPERATOR,
     // The zone this window reads in, which the heartbeat an ensure that makes Luke aims at him is read in.
     { workspaceId, ...ask, timeZone: readerZone() },
   ).then(
@@ -195,8 +191,8 @@ export function useLukeOperator(asking: {
 }
 
 /** Whether an agent is the account's operator, by its kind alone. */
-export function isLuke(agent: Pick<CodingAgentSummary, "kind">): boolean {
-  return agent.kind === CODING_AGENT_KIND.OPERATOR;
+export function isLuke(agent: Pick<AgentSummary, "kind">): boolean {
+  return agent.kind === AGENT_KIND.OPERATOR;
 }
 
 /**

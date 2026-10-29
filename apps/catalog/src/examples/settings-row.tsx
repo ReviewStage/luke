@@ -88,7 +88,7 @@ function Rows(): React.JSX.Element {
         {(control) => <HeldSwitch label="Show captions" control={control} />}
       </SettingsRow>
       <SettingsRow
-        label="Archive a coding agent's run once its pull request merges into the default branch"
+        label="Archive an agent's run once its pull request merges into the default branch"
         description="Runs whose branch acme/a-repository-whose-name-runs-long-and-longer merged stop showing in the sidebar."
       >
         {(control) => (

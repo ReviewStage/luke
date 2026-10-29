@@ -43,7 +43,7 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.LOCAL_AGENTS,
     name: "Local agents",
     detail:
-      "Run a coding agent on this Mac, in a worktree, with your own tools. " +
+      "Run an agent on this Mac, in a worktree, with your own tools. " +
       "Its transcript and the files its tools read still reach Luke.",
     owner: "Charles",
     since: "2026-10-25",
@@ -61,7 +61,7 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.MEMORY,
     name: "Memory",
     detail:
-      "Your coding agents keep settled facts about how your team works and recall them in later work, " +
+      "Your agents keep settled facts about how your team works and recall them in later work, " +
       "shared across your workspace and reviewed in Settings › Memory.",
     owner: "Dean",
     since: "2026-10-23",

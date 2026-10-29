@@ -6,8 +6,8 @@ import { PAGE_OWNER, PAGE_SHOWER, type PageOwner, type PageShower } from "@luke/
 import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
+import { agentTable } from "../../schemas/agent.js";
 import { organization, user } from "../../schemas/auth.js";
-import { codingAgent } from "../../schemas/coding-agent.js";
 import { planPageVersion } from "../../schemas/plan-page.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
@@ -55,7 +55,7 @@ const openAgent = (
     yield* db
       .insert(conversations)
       .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
-    yield* db.insert(codingAgent).values({
+    yield* db.insert(agentTable).values({
       id,
       organizationId,
       userId,
@@ -353,8 +353,8 @@ it.layer(getTestDB())("a page read by its id", (it) => {
         );
         const db = yield* Database;
 
-        yield* db.delete(codingAgent).where(eq(codingAgent.id, onIt));
-        yield* db.delete(codingAgent).where(eq(codingAgent.id, apart));
+        yield* db.delete(agentTable).where(eq(agentTable.id, onIt));
+        yield* db.delete(agentTable).where(eq(agentTable.id, apart));
 
         assert.deepEqual(yield* ownerColumnsOf(shown.id), [
           { version: 1, taskId: task.id, agentId: null },

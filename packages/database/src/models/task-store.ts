@@ -1,9 +1,9 @@
 import {
-  CODING_AGENT_KIND,
-  CODING_AGENT_MACHINE,
-  type CodingAgentMachine,
+  AGENT_KIND,
+  AGENT_MACHINE,
+  type AgentMachineKind,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { agentName } from "@luke/features/model-label";
@@ -48,8 +48,8 @@ import {
   readConcurrency,
   type StoreFailure,
 } from "../core/query.js";
+import { agentTable } from "../schemas/agent.js";
 import { attachment } from "../schemas/attachment.js";
-import { codingAgent } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { conversations } from "../schemas/storage.js";
 import { task, taskNumberCounter } from "../schemas/task.js";
@@ -169,13 +169,13 @@ export interface StoredTask {
  * reads as none.
  */
 export interface TaskRunsOnWrite {
-  readonly machine: CodingAgentMachine;
+  readonly machine: AgentMachineKind;
   readonly deviceId: string | null;
 }
 
 /** Where a task's agents run where nothing named it: a sandbox. */
 export const TASK_RUNS_IN_CLOUD: TaskRunsOnWrite = {
-  machine: CODING_AGENT_MACHINE.VERCEL,
+  machine: AGENT_MACHINE.VERCEL,
   deviceId: null,
 };
 
@@ -229,7 +229,7 @@ export interface TaskChanges {
 const GitHubAccessSchema = Schema.Literals(Object.values(GITHUB_ACCESS));
 
 /** Where a task's agents run, as its row holds it. */
-const MachineSchema = Schema.Literals(Object.values(CODING_AGENT_MACHINE));
+const MachineSchema = Schema.Literals(Object.values(AGENT_MACHINE));
 
 /** Who made a task, as its row holds it. */
 const TaskCreatorActorSchema = Schema.Literals([
@@ -405,7 +405,7 @@ const findAgentLabels = SqlSchema.findAll({
   Request: Schema.Struct({ taskId: Schema.String, agentIds: Schema.Array(Schema.String) }),
   Result: Schema.Struct({
     id: Schema.String,
-    kind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
+    kind: Schema.Literals(Object.values(AGENT_KIND)),
     model: Schema.String,
     title: Schema.NullOr(Schema.String),
     automationName: Schema.NullOr(Schema.String),
@@ -414,14 +414,14 @@ const findAgentLabels = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          id: codingAgent.id,
-          kind: codingAgent.kind,
-          model: codingAgent.model,
-          title: codingAgent.title,
-          automationName: agentAutomationNameSql(codingAgent),
+          id: agentTable.id,
+          kind: agentTable.kind,
+          model: agentTable.model,
+          title: agentTable.title,
+          automationName: agentAutomationNameSql(agentTable),
         })
-        .from(codingAgent)
-        .where(and(eq(codingAgent.taskId, taskId), inArray(codingAgent.id, agentIds))),
+        .from(agentTable)
+        .where(and(eq(agentTable.taskId, taskId), inArray(agentTable.id, agentIds))),
     ),
 });
 
@@ -560,7 +560,7 @@ function namedAccountsOf(
 function devicesOf(rows: readonly TaskSummaryRow[]): TaskStoreEffect<ReadonlyMap<string, Device>> {
   return devicesNamed(
     rows.flatMap((row) =>
-      row.machine === CODING_AGENT_MACHINE.VERCEL || row.deviceId === null ? [] : [row.deviceId],
+      row.machine === AGENT_MACHINE.VERCEL || row.deviceId === null ? [] : [row.deviceId],
     ),
   );
 }
@@ -575,12 +575,12 @@ function runsOnOf(
   names: ReadonlyMap<string, string>,
   devices: ReadonlyMap<string, Device>,
 ): { readonly runsOn?: TaskRunsOn } {
-  if (row.machine === CODING_AGENT_MACHINE.VERCEL) return {};
+  if (row.machine === AGENT_MACHINE.VERCEL) return {};
   const found = row.deviceId === null ? undefined : devices.get(row.deviceId);
   const owner = found === undefined ? undefined : names.get(found.userId);
   return {
     runsOn: {
-      machine: CODING_AGENT_MACHINE.DEVICE,
+      machine: AGENT_MACHINE.DEVICE,
       ...(found === undefined ? undefined : { deviceId: found.id }),
       ...(found === undefined || owner === undefined
         ? undefined
@@ -911,9 +911,9 @@ const findAgentConversations = SqlSchema.findAll({
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
-        .select({ id: codingAgent.id, conversationId: codingAgent.conversationId })
-        .from(codingAgent)
-        .innerJoin(task, eq(task.id, codingAgent.taskId))
+        .select({ id: agentTable.id, conversationId: agentTable.conversationId })
+        .from(agentTable)
+        .innerJoin(task, eq(task.id, agentTable.taskId))
         .where(reachableTask(userId, taskId)),
     ),
 });
@@ -1257,7 +1257,7 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
   now: Date,
 ) {
   yield* Database.use((db) =>
-    db.update(codingAgent).set({ organizationId }).where(eq(codingAgent.taskId, taskId)),
+    db.update(agentTable).set({ organizationId }).where(eq(agentTable.taskId, taskId)),
   );
   // A change naming the workspace the task stands in leaves its threads in their channels.
   const channel = moved ? { channelId: yield* ensureGeneralChannel(organizationId, now) } : {};
@@ -1291,14 +1291,14 @@ const lockStandingAgents = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          id: codingAgent.id,
-          conversationId: codingAgent.conversationId,
-          createdAt: codingAgent.createdAt,
-          blank: sql<boolean>`${codingAgent.planSnapshot} is null and ${codingAgent.prompt} is null`,
+          id: agentTable.id,
+          conversationId: agentTable.conversationId,
+          createdAt: agentTable.createdAt,
+          blank: sql<boolean>`${agentTable.planSnapshot} is null and ${agentTable.prompt} is null`,
         })
-        .from(codingAgent)
-        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
-        .where(and(eq(codingAgent.taskId, taskId), isNull(codingAgent.archivedAt)))
+        .from(agentTable)
+        .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))
+        .where(and(eq(agentTable.taskId, taskId), isNull(agentTable.archivedAt)))
         .orderBy(conversations.id)
         .for("update", { of: conversations }),
     ),
@@ -1523,13 +1523,13 @@ const findStandingPullRequestStates = SqlSchema.findAll({
   execute: ({ taskId }) =>
     Database.use((db) =>
       db
-        .select({ state: sql<string>`${codingAgent.published} ->> 'state'` })
-        .from(codingAgent)
+        .select({ state: sql<string>`${agentTable.published} ->> 'state'` })
+        .from(agentTable)
         .where(
           and(
-            eq(codingAgent.taskId, taskId),
-            isNull(codingAgent.archivedAt),
-            isNotNull(codingAgent.published),
+            eq(agentTable.taskId, taskId),
+            isNull(agentTable.archivedAt),
+            isNotNull(agentTable.published),
           ),
         ),
     ),

@@ -2,7 +2,7 @@
  * client-notices.ts -- the agent notices as a client links them: read from the document and the host, written back into the document, and shown through the doors and the presenter the platform hands in.
  */
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import type { CodingAgentAccountInboxAnswerView } from "@luke/features/coding-agent-view";
+import type { AgentAccountInboxAnswerView } from "@luke/features/agent-view";
 import { Effect, FiberSet, Queue, type Scope, Stream } from "effect";
 import {
   AgentNoticeDoors,
@@ -29,10 +29,10 @@ const MAC_COMMAND_ASK_NOTICE = {
 /** The host's methods the notices read and refresh through. */
 type NoticeHost = Pick<
   HostOperator,
-  | "codingAgentList"
-  | "codingAgentPage"
-  | "codingAgentAccountInboxFollow"
-  | "codingAgentAccountInboxUnfollow"
+  | "agentList"
+  | "agentPage"
+  | "agentAccountInboxFollow"
+  | "agentAccountInboxUnfollow"
   | "onAccountInboxChanged"
   | "onAccountChanged"
   | "tasksRefresh"
@@ -59,15 +59,15 @@ function accountKey(account: AccountSnapshot): string | undefined {
  * stream runs: heard from before the follow is asked, so its first answer is
  * never missed, and let go as the stream ends.
  */
-function accountInboxOf(host: NoticeHost): Stream.Stream<CodingAgentAccountInboxAnswerView> {
-  return Stream.callback<CodingAgentAccountInboxAnswerView>((queue) =>
+function accountInboxOf(host: NoticeHost): Stream.Stream<AgentAccountInboxAnswerView> {
+  return Stream.callback<AgentAccountInboxAnswerView>((queue) =>
     Effect.gen(function* () {
       yield* Effect.acquireRelease(
         Effect.sync(() => host.onAccountInboxChanged((answer) => Queue.offerUnsafe(queue, answer))),
         (unsubscribe) => Effect.sync(unsubscribe),
       );
-      yield* Effect.acquireRelease(host.codingAgentAccountInboxFollow(), () =>
-        host.codingAgentAccountInboxUnfollow(),
+      yield* Effect.acquireRelease(host.agentAccountInboxFollow(), () =>
+        host.agentAccountInboxUnfollow(),
       );
     }),
   );
@@ -105,7 +105,7 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     );
   };
   const notices = yield* createAgentNotices({
-    onUnseenChanged: (unseen) => state.update({ codingAgents: { unseen } }),
+    onUnseenChanged: (unseen) => state.update({ agents: { unseen } }),
     onPanelFocusChanged,
     signedInAs: () => accountKey(state.snapshot().account),
     accountId: () => {
@@ -138,9 +138,9 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
         ),
     ),
   );
-  // Every agent on a task, while the list is followed live, is the notices'
-  // to hold in place of the watch's own reads, and a task the list no longer
-  // holds takes its agents with it.
+  // Every agent on a task, the archived left out, while the list is followed
+  // live, is the notices' to hold in place of the watch's own reads, and a
+  // task the list no longer holds takes its agents with it.
   yield* Effect.forkScoped(
     Stream.runForEach(
       Stream.changes(Stream.map(state.changes, (document) => document.tasks.taskAgents)),
@@ -149,7 +149,10 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
           Effect.sync(() => {
             if (agents === undefined) return;
             const taskIds = state.snapshot().tasks.tasks.map((each) => each.id);
-            notices.observeFollowed(agents, taskIds);
+            notices.observeFollowed(
+              agents.filter((agent) => agent.archivedAt === undefined),
+              taskIds,
+            );
           }),
           (defect) =>
             Effect.sync(() =>

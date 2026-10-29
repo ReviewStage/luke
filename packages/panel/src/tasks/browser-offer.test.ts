@@ -1,11 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  CODING_AGENT_MACHINE,
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE, AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { BROWSER_TAB_OPEN_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
@@ -20,7 +16,7 @@ import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel.js";
 import { NO_LOOKS } from "./use-task-looks.js";
 
@@ -53,18 +49,18 @@ const SUMMARY: TaskSummary = {
 };
 
 /** A coding agent on the task, and a second beside it. */
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40",
   planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Invite expiry",
   createdAt: 3,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
 };
 
-const OTHER_AGENT: CodingAgentSummary = {
+const OTHER_AGENT: AgentSummary = {
   ...AGENT,
   id: "1c6a9d2f-5e4b-4f7c-9a3d-0b2e8f4c6d51",
   title: "Invite emails",
@@ -93,7 +89,7 @@ async function settle(): Promise<void> {
 
 /** The plan drawn with its side panel open on its Comments, answering the tabs it was asked to show. */
 async function mount(
-  agents: readonly CodingAgentSummary[] = [],
+  agents: readonly AgentSummary[] = [],
   viewed?: string,
   strip?: readonly SidePanelTab[],
 ): Promise<{ readonly chosen: readonly SidePanelTab[] }> {
@@ -122,7 +118,7 @@ async function mount(
       },
       ...(strip === undefined ? undefined : { strip }),
     },
-    agents: codingAgentsControl({ agents, agentIds: agents.map((agent) => agent.id) }),
+    agents: agentsControl({ agents, agentIds: agents.map((agent) => agent.id) }),
   });
   act(() =>
     root.render(
@@ -154,7 +150,7 @@ test("on a task with no coding agent, or only one on a Mac, the panel's + offers
   assert.deepEqual(await browserRows(), []);
 
   for (const root of roots.splice(0)) act(() => root.unmount());
-  await mount([{ ...AGENT, machine: CODING_AGENT_MACHINE.DEVICE }]);
+  await mount([{ ...AGENT, machine: AGENT_MACHINE.DEVICE }]);
   assert.deepEqual(await browserRows(), []);
 });
 

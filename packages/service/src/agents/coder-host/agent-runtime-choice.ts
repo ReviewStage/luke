@@ -57,14 +57,14 @@ import { readRunsOnPick } from "@luke/database/models/runs-on-pick";
 import type { TaskRunsOnWrite } from "@luke/database/models/task-store";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import {
-  CODING_AGENT_MACHINE,
-  CODING_AGENT_PAYER,
-  type CodingAgentMachine,
-  type CodingAgentPayer,
+  AGENT_MACHINE,
+  AGENT_PAYER,
+  type AgentMachineKind,
+  type AgentPayer,
   LOCAL_AGENT_REFUSAL,
   type LocalAgentRefusal,
   MAC_PRESENCE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { DEVICE_SETUP, type DeviceSetup } from "@luke/features/device-agent-wire";
 import { type MacOffer, MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import {
@@ -100,58 +100,58 @@ export const THIS_MAC = {
 
 /** Where a new agent runs: its machine, and the Mac a local agent is pinned to. */
 export interface AgentMachineChoice {
-  readonly machine: CodingAgentMachine;
+  readonly machine: AgentMachineKind;
   readonly deviceId: string | undefined;
 }
 
 const IN_A_SANDBOX: AgentMachineChoice = {
-  machine: CODING_AGENT_MACHINE.VERCEL,
+  machine: AGENT_MACHINE.VERCEL,
   deviceId: undefined,
 };
 
 /** What a new agent runs on, and who pays for it. The type keeps no payer readable for a row from before payers were recorded; a new agent always names one. */
 export interface AgentRuntimeChoice {
   readonly runtime: ConversationRuntime;
-  readonly payer: CodingAgentPayer | undefined;
+  readonly payer: AgentPayer | undefined;
 }
 
 const ON_API_KEY: AgentRuntimeChoice = {
   runtime: CONVERSATION_RUNTIME.EVE,
-  payer: CODING_AGENT_PAYER.API_KEY,
+  payer: AGENT_PAYER.API_KEY,
 };
 
 const ON_CLAUDE_CODE: AgentRuntimeChoice = {
   runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-  payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+  payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
 };
 
 /** Claude Code on the account's own Anthropic API key, the CLI's documented `ANTHROPIC_API_KEY`. */
 const ON_CLAUDE_CODE_API_KEY: AgentRuntimeChoice = {
   runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-  payer: CODING_AGENT_PAYER.API_KEY,
+  payer: AGENT_PAYER.API_KEY,
 };
 
 /** Codex on the account's own OpenAI API key, through its provider's documented `env_key`. */
 const ON_CODEX_API_KEY: AgentRuntimeChoice = {
   runtime: CONVERSATION_RUNTIME.CODEX,
-  payer: CODING_AGENT_PAYER.API_KEY,
+  payer: AGENT_PAYER.API_KEY,
 };
 
 /** Codex on a local agent's own Mac, by Codex's own sign-in there, which needs no credential of the account's. */
 const ON_MAC_CODEX: AgentRuntimeChoice = {
   runtime: CONVERSATION_RUNTIME.CODEX,
-  payer: CODING_AGENT_PAYER.MAC_SIGN_IN,
+  payer: AGENT_PAYER.MAC_SIGN_IN,
 };
 
 /** Claude Code on a local agent's own Mac, by Claude Code's login there, which needs no credential of the account's. */
 const ON_MAC_CLAUDE_CODE: AgentRuntimeChoice = {
   runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-  payer: CODING_AGENT_PAYER.MAC_SIGN_IN,
+  payer: AGENT_PAYER.MAC_SIGN_IN,
 };
 
 const ON_CODEX: AgentRuntimeChoice = {
   runtime: CONVERSATION_RUNTIME.CODEX,
-  payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+  payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
 };
 
 /** The statuses of a ChatGPT sign-in an agent cannot launch on: OpenAI signed it out or said the account is not eligible, or the deployment cannot open it. */
@@ -423,12 +423,12 @@ export const freshOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
 export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   asked: {
-    readonly machine?: CodingAgentMachine | undefined;
+    readonly machine?: AgentMachineKind | undefined;
     readonly deviceId?: string | undefined;
   },
   runtime: ConversationRuntime,
 ): Effect.fn.Return<AgentMachineChoice, StoreFailure | LocalAgentRefused, DatabaseServices> {
-  if (asked.machine !== CODING_AGENT_MACHINE.DEVICE) return IN_A_SANDBOX;
+  if (asked.machine !== AGENT_MACHINE.DEVICE) return IN_A_SANDBOX;
   if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.OFF });
   }
@@ -446,7 +446,7 @@ export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (!offer.providers.includes(RUNTIME_PROVIDER[runtime])) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.CODEX });
   }
-  return { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: offer.deviceId };
+  return { machine: AGENT_MACHINE.DEVICE, deviceId: offer.deviceId };
 });
 
 /**
@@ -462,7 +462,7 @@ export const taskRunsOnChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   asked: TaskRunsOnRequest,
 ): Effect.fn.Return<AgentMachineChoice, StoreFailure | LocalAgentRefused, DatabaseServices> {
-  if (asked.machine === CODING_AGENT_MACHINE.VERCEL) return IN_A_SANDBOX;
+  if (asked.machine === AGENT_MACHINE.VERCEL) return IN_A_SANDBOX;
   if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.OFF });
   }
@@ -476,7 +476,7 @@ export const taskRunsOnChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (offer.providers.length === 0) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.NO_HARNESS });
   }
-  return { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: offer.deviceId };
+  return { machine: AGENT_MACHINE.DEVICE, deviceId: offer.deviceId };
 });
 
 /**
@@ -500,14 +500,14 @@ export const agentMadeRunsOn = /* @__PURE__ */ Effect.fnUntraced(function* (
   DatabaseServices
 > {
   const pick = yield* readRunsOnPick(userId);
-  if (Option.isNone(pick) || pick.value.machine === CODING_AGENT_MACHINE.VERCEL) return undefined;
+  if (Option.isNone(pick) || pick.value.machine === AGENT_MACHINE.VERCEL) return undefined;
   const kept = pick.value.deviceId;
   if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) return undefined;
   const offers = yield* macOffers(userId);
   if (offers.length === 0) return undefined;
   const offered = offers.find((each) => each.deviceId === kept);
   if (offered === undefined) return yield* new RunsOnPickRemoved();
-  return { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: offered.deviceId };
+  return { machine: AGENT_MACHINE.DEVICE, deviceId: offered.deviceId };
 });
 
 /**
@@ -522,12 +522,12 @@ export const agentMadeRunsOn = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 export const messageCredentialMissing = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: { readonly userId: string; readonly model: string },
-  routing: { readonly runtime: ConversationRuntime; readonly payer: CodingAgentPayer | null },
+  routing: { readonly runtime: ConversationRuntime; readonly payer: AgentPayer | null },
 ): Effect.fn.Return<ModelProvider | undefined, StoreFailure, DatabaseServices> {
-  const onKey = routing.payer === CODING_AGENT_PAYER.API_KEY;
+  const onKey = routing.payer === AGENT_PAYER.API_KEY;
   if (routing.runtime !== CONVERSATION_RUNTIME.EVE && !onKey) return undefined;
   const provider = yield* providerOfModel(agent.model);
-  if (routing.payer === CODING_AGENT_PAYER.LUKE) return provider;
+  if (routing.payer === AGENT_PAYER.LUKE) return provider;
   const rows = yield* keyRowsOf(agent.userId, undefined);
   return keepsApiKey(provider, rows) ? undefined : provider;
 });

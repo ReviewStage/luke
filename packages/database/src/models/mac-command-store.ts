@@ -1,9 +1,9 @@
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import {
   AUTOMATION_FIRING,
   AUTOMATION_RUN_STATUS,
   FIRING_HANDS_OUTSIDE_WORDS,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import {
   MAC_COMMAND_KIND,
   type MacCommand,
@@ -33,11 +33,12 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, queryBuilder } from "../core/query.js";
+import { agentTable } from "../schemas/agent.js";
 import { automationRun } from "../schemas/automation.js";
-import { codingAgent } from "../schemas/coding-agent.js";
 import { macCommand, macCommandListener } from "../schemas/mac-command.js";
-import { conversations, messages } from "../schemas/storage.js";
+import { conversations, messages, standingLine } from "../schemas/storage.js";
 import { MESSAGE_SENDER } from "../storage-vocabulary.js";
+import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
 import type { ConversationTarget } from "./writer.js";
 
@@ -229,13 +230,13 @@ const findResult = SqlSchema.findOneOption({
 const parent = alias(conversations, "parent");
 
 /** The agent that sent a line, read for whose it is. */
-const sendingAgent = alias(codingAgent, "sending_agent");
+const sendingAgent = alias(agentTable, "sending_agent");
 
 /** The root's developer lines before one of them, read for whether it is the first, the prompt the agent was started on. */
 const earlierLine = alias(messages, "earlier_line");
 
 /** The agent the root conversation is of, read for whether it is an operator, whether it was started on a prompt or a plan at all, and what fired the automation's run that started it. */
-const startedAgent = alias(codingAgent, "started_agent");
+const startedAgent = alias(agentTable, "started_agent");
 
 /** The firings whose run hands its agent words its owner did not write beside the automation's prompt. */
 const OUTSIDE_FIRINGS = Object.values(AUTOMATION_FIRING).filter(
@@ -287,8 +288,17 @@ const GITHUB_LINE_HAS_PERSONS_WORDS = and(
   notLike(sql<string>`${messages.metadata} ->> 'by'`, APP_LOGINS),
 );
 
+/** A line another account put into a conversation: what kind of sender put it there, none for a line kept before senders were, when, and whether the transcript shows it, which a line its hand-over withdrew it does not. */
+const ForeignLineSchema = Schema.Struct({
+  sender: Schema.NullOr(Schema.Literals(Object.values(MESSAGE_SENDER))),
+  createdAt: InstantColumnSchema,
+  shown: Schema.Boolean,
+});
+
+export type ForeignLine = typeof ForeignLineSchema.Type;
+
 /**
- * One line of the conversation's root, or the root's own where it is one,
+ * The first line of the conversation's root, or the root's own where it is one,
  * that another account put there: a member other than the owner, a former
  * member, or an agent that is not the owner's own or is gone. An
  * automation's line counts where what fired its run put words its owner did
@@ -323,11 +333,15 @@ const GITHUB_LINE_HAS_PERSONS_WORDS = and(
  */
 const findForeignLine = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: ForeignLineSchema,
   execute: ({ userId, conversationId }) =>
     Database.use((db) =>
       db
-        .select({ id: messages.id })
+        .select({
+          sender: messages.sender,
+          createdAt: messages.createdAt,
+          shown: sql<boolean>`${standingLine(messages)}`,
+        })
         .from(conversations)
         .leftJoin(parent, eq(parent.id, conversations.parentConversationId))
         .innerJoin(
@@ -369,7 +383,7 @@ const findForeignLine = SqlSchema.findOneOption({
               and(
                 eq(messages.role, MESSAGE_ROLE.USER),
                 isNull(messages.sender),
-                or(isNull(startedAgent.kind), ne(startedAgent.kind, CODING_AGENT_KIND.OPERATOR)),
+                or(isNull(startedAgent.kind), ne(startedAgent.kind, AGENT_KIND.OPERATOR)),
                 or(
                   and(isNull(startedAgent.prompt), isNull(startedAgent.planSnapshot)),
                   STARTED_ON_OUTSIDE_WORDS,
@@ -390,6 +404,7 @@ const findForeignLine = SqlSchema.findOneOption({
             ),
           ),
         )
+        .orderBy(asc(messages.seq))
         .limit(1),
     ),
 });
@@ -425,6 +440,13 @@ export function macListeningSince(userId: string, since: Date): TaskStoreEffect<
  */
 export function heardFromAnotherAccount(target: ConversationTarget): TaskStoreEffect<boolean> {
   return Effect.map(findForeignLine(target), Option.isSome);
+}
+
+/** The first line another account put into the conversation, as `heardFromAnotherAccount` counts one; none where no one has. */
+export function firstForeignLine(
+  target: ConversationTarget,
+): TaskStoreEffect<Option.Option<ForeignLine>> {
+  return findForeignLine(target);
 }
 
 /** Queues one command for the account's Mac, under the id its caller minted. */

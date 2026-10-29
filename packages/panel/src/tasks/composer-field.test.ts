@@ -51,7 +51,6 @@ function Box(): ReactNode {
     taskId: "plan-1",
     messages: [],
     send: () => new Promise(() => undefined),
-    onStatus: () => undefined,
   });
   return createElement(AgentComposer, { ...QUIET_COMPOSER, agentName: "Ada", composer });
 }

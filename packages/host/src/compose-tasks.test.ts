@@ -10,13 +10,9 @@ import {
   type TaskWritten,
   WORKSPACE_CALL_FAILURE,
 } from "@luke/features";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_STATUS,
-  PULL_REQUEST_STATE,
-  type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+import { browserTabsPlaceId } from "@luke/features/agent-browser-tab-wire";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { AGENT_STATUS, PULL_REQUEST_STATE, type TasklessAgent } from "@luke/features/agent-wire";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
@@ -91,6 +87,7 @@ import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient } from "./compose-tasks.js";
 import { FIXTURE_IDS, FIXTURE_PAGE } from "./fixture-stage.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
+import { agentListRow } from "./testing/task-list-rows.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SECTION_ID = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
@@ -869,9 +866,9 @@ function fakeService(tasks: Task[]): FakeService {
           ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const)
           : called(asked(read, poll, after));
       }),
-    browserTabsLive: (taskId, _userId, poll, after) =>
+    browserTabsLive: (place, _userId, poll, after) =>
       Effect.suspend((): ReturnType<TasksClient["browserTabsLive"]> => {
-        const read = service.browserTabLives[taskId];
+        const read = service.browserTabLives[browserTabsPlaceId(place)];
         return read === undefined
           ? Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const)
           : called(asked(read, poll, after));
@@ -1294,23 +1291,31 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
   }),
 );
 
-it.effect("a quiet start opens nothing and answers its task", () =>
-  Effect.gen(function* () {
-    const service = fakeService([task(BILLING, "Billing export", "# Billing", 20)]);
-    const { call, listed, last } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-    yield* listed();
-    service.createAnswer = {
-      ok: true,
-      answer: { task: task(INVITES, "Invitation expiry", "", 10) },
-    };
+it.effect(
+  "a quiet start opens nothing and answers its task, and its agent's start where it named one",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(BILLING, "Billing export", "# Billing", 20)]);
+      const { call, listed, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      const made = task(INVITES, "Invitation expiry", "", 10);
+      const refusal = { failure: AGENT_CALL_FAILURE.INVALID_CHOICE };
+      service.createAnswer = { ok: true, answer: { task: made } };
+      const started = yield* call(GATEWAY_METHOD.TASKS_START, {
+        name: "Invitation expiry",
+        quiet: true,
+      });
+      service.createAnswer = { ok: true, answer: { task: made, agent: refusal } };
+      const withAgent = yield* call(GATEWAY_METHOD.TASKS_START, {
+        agent: { idempotencyKey: "start-1", prompt: "Expire invitations." },
+        quiet: true,
+      });
 
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.TASKS_START, { name: "Invitation expiry", quiet: true }),
-      { planId: INVITES },
-    );
-    assert.equal(last()?.activeTaskId, undefined, "the task is not opened");
-  }),
+      assert.deepEqual(started, { planId: INVITES });
+      assert.deepEqual(withAgent, { planId: INVITES, agentStart: refusal });
+      assert.equal(last()?.activeTaskId, undefined, "the task is not opened");
+    }),
 );
 
 it.effect(
@@ -1658,7 +1663,7 @@ it.effect(
         effort: "high",
         title: null,
         createdAt: 11,
-        status: CODING_AGENT_STATUS.STARTING,
+        status: AGENT_STATUS.STARTING,
         turnId: null,
       };
       const params = {
@@ -1670,14 +1675,14 @@ it.effect(
       const started = yield* call(GATEWAY_METHOD.TASKS_START, params);
       service.createAnswer = {
         ok: true,
-        answer: { task: made, agent: { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE } },
+        answer: { task: made, agent: { failure: AGENT_CALL_FAILURE.INVALID_CHOICE } },
       };
       const refused = yield* call(GATEWAY_METHOD.TASKS_START, params);
 
       assert.deepEqual(started, { planId: INVITES, agentStart: { agent } });
       assert.deepEqual(refused, {
         planId: INVITES,
-        agentStart: { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE },
+        agentStart: { failure: AGENT_CALL_FAILURE.INVALID_CHOICE },
       });
       assert.equal(last()?.activeTaskId, INVITES);
     }),
@@ -3683,38 +3688,7 @@ function rowOfTask(each: Task) {
 
 /** One agent of the plan, or of none, as the agents statement delivers its row, started `ago` before the list is read, with no turn yet. */
 function agentRow(planId: string | null, ago: number) {
-  return {
-    id: "3f1d2c4b-5a6e-4f70-8a91-b2c3d4e5f607",
-    planId,
-    workspaceId: "workspace-personal",
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    contextWindow: null,
-    title: "Invite flow",
-    brief: CODING_AGENT_BRIEF.PLAN,
-    repository: "acme/relay",
-    starterId: "user-dana",
-    starterName: "Dana",
-    automationId: null,
-    automationName: null,
-    archivedAt: null,
-    archivedBy: null,
-    archiverName: null,
-    disabledServers: null,
-    published: null,
-    startedFrom: null,
-    pinnedAt: null,
-    pinPosition: null,
-    createdAt: LIVE_NOW - ago,
-    turnId: null,
-    turnStatus: null,
-    cancelRequested: null,
-    queuedAt: null,
-    startedAt: null,
-    settledAt: null,
-    turnSessionEnded: null,
-    awaitingLineAt: null,
-  };
+  return agentListRow(planId, LIVE_NOW - ago);
 }
 
 it.effect(
@@ -3777,11 +3751,11 @@ it.effect(
       assert.equal(drawn?.name, "Teammate invitations, live");
       assert.deepEqual(
         [drawn?.agents?.working, drawn?.agents?.agents.map((line) => line.status)],
-        [1, [CODING_AGENT_STATUS.STARTING]],
+        [1, [AGENT_STATUS.STARTING]],
       );
       assert.deepEqual(
         last()?.taskAgents?.map((each) => [each.planId, each.status, each.turnId]),
-        [[INVITES, CODING_AGENT_STATUS.STARTING, null]],
+        [[INVITES, AGENT_STATUS.STARTING, null]],
       );
 
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
@@ -3792,7 +3766,7 @@ it.effect(
       const ended = last()?.tasks[0]?.agents;
       assert.deepEqual(
         [ended?.working, ended?.agents.map((line) => line.status)],
-        [0, [CODING_AGENT_STATUS.FAILED]],
+        [0, [AGENT_STATUS.FAILED]],
       );
     }),
 );
@@ -3827,20 +3801,20 @@ it.effect(
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live", "the list is drawn live");
       assert.deepEqual(
         last()?.tasks[0]?.agents?.agents.map((line) => line.status),
-        [CODING_AGENT_STATUS.RUNNING],
+        [AGENT_STATUS.RUNNING],
       );
       yield* TestClock.adjust(Duration.minutes(3));
       yield* settled;
       assert.deepEqual(
         last()?.tasks[0]?.agents?.agents.map((line) => line.status),
-        [CODING_AGENT_STATUS.RUNNING],
+        [AGENT_STATUS.RUNNING],
         "inside the line's grace",
       );
       yield* TestClock.adjust(Duration.minutes(2));
       yield* settled;
       assert.deepEqual(
         last()?.tasks[0]?.agents?.agents.map((line) => line.status),
-        [CODING_AGENT_STATUS.FAILED],
+        [AGENT_STATUS.FAILED],
         "the line's grace ran out with no row moving",
       );
     }),

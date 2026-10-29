@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { Deferred, Effect, Exit, Layer, Scope } from "effect";
 import { type AgentNotice, AgentNoticeDoors, NOTICE_KIND } from "../agent-notices.js";
 import { runModeFor } from "../run-mode.js";
@@ -36,7 +36,7 @@ const SILENT_DOORS = Layer.succeed(AgentNoticeDoors, {
   badge: () => undefined,
 });
 
-const UNANSWERED = Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+const UNANSWERED = Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED });
 
 /**
  * The notices linked into `scope` over a host whose workspaces read is
@@ -55,10 +55,10 @@ function linked(
     yield* linkClientNotices({
       state,
       host: {
-        codingAgentList: () => UNANSWERED,
-        codingAgentPage: () => UNANSWERED,
-        codingAgentAccountInboxFollow: () => Effect.void,
-        codingAgentAccountInboxUnfollow: () => Effect.void,
+        agentList: () => UNANSWERED,
+        agentPage: () => UNANSWERED,
+        agentAccountInboxFollow: () => Effect.void,
+        agentAccountInboxUnfollow: () => Effect.void,
         onAccountInboxChanged: () => () => undefined,
         onAccountChanged: () => () => undefined,
         tasksRefresh: () => Effect.void,

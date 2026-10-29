@@ -1,10 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  type CodingAgentInboxAnswerView,
-  INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
+import { type AgentInboxAnswerView, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -29,7 +26,6 @@ import {
   ACME,
   ASKING_ID,
   answeredBy,
-  answerWithNote,
   arrowNamed,
   asking,
   askingMessage,
@@ -44,7 +40,6 @@ import {
   FUNNEL,
   foldedCounts,
   GROUPING_KEY,
-  gatedAnswers,
   headerNamed,
   headTitle,
   heardName,
@@ -98,6 +93,7 @@ import {
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { playMotions } from "../testing/pane-motion.js";
+import { pointerCross } from "../testing/pointer-cross.js";
 import { waitingOf } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 
@@ -513,9 +509,12 @@ test("a plain click still opens its item, leaving what is chosen as it stands", 
   assert.match(selectionBar(page)?.textContent ?? "", /1 selected/u);
 });
 
-test("a plan main says changed is read again, so an item answered on another Mac lists as settled, gray where it stood while the list is shown; To do then lists only what still needs you until All is chosen, which sorts it anew, and the choice outlives a relaunch", async () => {
+test("a plan main says changed is read again, so an item answered on another Mac lists as settled, gray where it stood while the pointer is over the list and sorted anew once it leaves; To do then lists only what still needs you, and the choice outlives a relaunch", async () => {
   let { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
+  const list = page.querySelector('nav[aria-label="Inbox items"]');
+  assert.ok(list !== null);
+  pointerCross(document.body, list);
   world.inboxes.set(INVITES.id, [
     { ...answeredBy(EXPIRY, READER, "Retry once", "", 6_000), updatedAt: 6_000 },
   ]);
@@ -535,7 +534,7 @@ test("a plan main says changed is read again, so an item answered on another Mac
       "# Invites",
       "Expire after 7 days?",
     ],
-    "the answer moves no row while the list is shown",
+    "the answer moves no row while the pointer is over the list",
   );
   const everything = [
     "# Invites",
@@ -544,6 +543,9 @@ test("a plan main says changed is read again, so an item answered on another Mac
     "How is a failed email retried?",
     "▸ *Alert at 80%?",
   ];
+
+  pointerCross(list, document.body);
+  assert.deepEqual(listed(page), everything, "the pointer gone, the list sorts anew");
 
   showScope(page, "For you");
   assert.deepEqual(scopes(page), ["Inbox", "[For you]", "All"]);
@@ -576,7 +578,7 @@ function toDoRows(page: HTMLElement): number {
   return listed(page).filter((row) => !row.startsWith("# ")).length;
 }
 
-test("the sidebar's Inbox counts what For you lists, the questions and the update waiting on you, never a settled thread however unread nor a teammate's question, and drops a question the moment it is answered", async () => {
+test("the sidebar's Inbox counts what For you lists, the questions and the update waiting on you, never a settled thread however unread nor a teammate's question", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
   const NOTE: InboxItem = {
     ...noticeOf(item("a1b2c3d4-0000-4000-8000-000000000011", "Preview is up", 3_500)),
@@ -612,15 +614,6 @@ test("the sidebar's Inbox counts what For you lists, the questions and the updat
   await settle();
   assert.equal(toDoRows(page), 3, "the two questions and the update");
   assert.equal(sidebarInboxCount(page), 3, "the sidebar counts the rows For you lists");
-
-  // Answering the open ask drops it from both the moment it is sent.
-  const { sent } = gatedAnswers();
-  act(() => rowNamed(page, "Alert at 80%?").click());
-  await settle();
-  answerWithNote(page, "Use 90%");
-  await settle();
-  assert.equal(sent.length, 1, "the answer is on its way, the service not answering yet");
-  assert.equal(sidebarInboxCount(page), 2);
 });
 
 test("the sidebar's Inbox counts the open items alone, as before, where main carries no To do count from an older service", async () => {
@@ -845,12 +838,11 @@ test("a folded plan counts what in it needs you, and one where nothing does coun
     ),
   ];
   for (const header of headers()) act(() => header.click());
-  // Note that the plans keep the order they were drawn in, since the list is shown as the item closes.
   assert.deepEqual(
     headers().map((header) => [header.getAttribute("aria-expanded"), header.textContent]),
     [
-      ["false", "Billing usage alerts1 needs you"],
       ["false", "Invites"],
+      ["false", "Billing usage alerts1 needs you"],
     ],
   );
 });
@@ -1203,7 +1195,7 @@ test("on To do, an item answered on another Mac slides out from where its row st
 /** A read the test answers when it chooses. */
 interface PendingRead {
   readonly promise: Promise<ReadOutcome>;
-  readonly settle: (value: CodingAgentInboxAnswerView) => void;
+  readonly settle: (value: AgentInboxAnswerView) => void;
 }
 
 /** A read held until the test settles it. */

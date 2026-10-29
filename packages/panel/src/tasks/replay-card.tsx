@@ -1,11 +1,7 @@
 import { REPLAY_STEP_KIND, type Replay, type ReplayStep } from "@luke/features/agent-replay";
-import type { CodingAgentPullRequestAnswerView } from "@luke/features/coding-agent-view";
-import type {
-  CodingAgentPullRequest,
-  CodingAgentSummary,
-  CodingAgentTodos,
-} from "@luke/features/coding-agent-wire";
-import { CODING_AGENT_SENDER } from "@luke/features/coding-agent-wire";
+import type { AgentPullRequestAnswerView } from "@luke/features/agent-view";
+import type { AgentPullRequest, AgentSummary, AgentTodos } from "@luke/features/agent-wire";
+import { AGENT_SENDER } from "@luke/features/agent-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import {
   BUTTON_VARIANT,
@@ -35,7 +31,7 @@ import { Message, MessageContent, RECEIVED_MESSAGE_CLASS } from "../ai-elements/
 import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/plan.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { lineSender, providerOf, receivedLine } from "./coding-agent-model.js";
+import { lineSender, providerOf, receivedLine } from "./agent-model.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
 import { CopyMessageAction } from "./copy-message.js";
 import { linkChip } from "./mention-chip.js";
@@ -58,7 +54,7 @@ import {
 import { useMentionDoors } from "./task-mentions.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 import { TranscriptTool, TranscriptWords } from "./transcript-blocks.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import { useOpenPlace } from "./use-open-link.js";
 
 /**
@@ -93,9 +89,9 @@ export const ORIGIN_CHIP = "agent-origin-chip inline-flex min-w-0 max-w-full";
  * its chip's tile and card, its tab, a message of it, and what it published.
  */
 export interface ReplayPlace {
-  readonly agents: readonly CodingAgentSummary[];
+  readonly agents: readonly AgentSummary[];
   /** Who started the agent, named under the card unless it is the reader. */
-  readonly startedBy: CodingAgentSummary["startedBy"];
+  readonly startedBy: AgentSummary["startedBy"];
   /** The reader's own account id, whose start is named by its time alone (`lineSender`). */
   readonly readerId: string | undefined;
   /** The tile an agent's tab wears; none where the place does not list it. */
@@ -105,18 +101,16 @@ export interface ReplayPlace {
   /** Opens an agent's tab; none where nothing opens one. */
   readonly onOpen: ((agentId: string) => void) | undefined;
   /** Each agent's pull request, of those that have one. */
-  readonly pullRequests: ReadonlyMap<string, CodingAgentPullRequest>;
+  readonly pullRequests: ReadonlyMap<string, AgentPullRequest>;
   /** Reads one agent by its id, as a page that lists only its own agent names the source; none where nothing reads one. */
-  readonly readAgent: ((agentId: string) => Promise<CodingAgentSummary | undefined>) | undefined;
+  readonly readAgent: ((agentId: string) => Promise<AgentSummary | undefined>) | undefined;
   /** Reads what an agent published, its branch among it; none where nothing reads it. */
-  readonly readPublished:
-    | ((agentId: string) => Promise<CodingAgentPullRequestAnswerView>)
-    | undefined;
+  readonly readPublished: ((agentId: string) => Promise<AgentPullRequestAnswerView>) | undefined;
   readonly openGitHub: (url: string) => void;
 }
 
 /** No agents listed yet, one array so a render before the first read hands down the same one. */
-const NO_AGENTS: readonly CodingAgentSummary[] = [];
+const NO_AGENTS: readonly AgentSummary[] = [];
 
 /**
  * Where an agent's tab stands its replay card: the task's agents, archived
@@ -125,9 +119,9 @@ const NO_AGENTS: readonly CodingAgentSummary[] = [];
  * its tab.
  */
 export function replayPlace(input: {
-  agent: CodingAgentSummary;
+  agent: AgentSummary;
   control: Pick<
-    CodingAgentsControl,
+    AgentsControl,
     "agents" | "archived" | "pullRequests" | "readPullRequest" | "readAgent" | "me"
   >;
   tile: ((agentId: string) => Actor | undefined) | undefined;
@@ -157,15 +151,15 @@ export function replayPlace(input: {
 /** The branch and pull request an agent published, as one read answered them. */
 interface Published {
   readonly branch: string | null;
-  readonly pullRequest: CodingAgentPullRequest | null;
+  readonly pullRequest: AgentPullRequest | null;
 }
 
 /** The source agent named on a card, as its chip wears it, when the place does not list it: by its title and its harness's mark where a read found it, the mark of no known harness until then. */
-function unlistedActor(agentId: string, read: CodingAgentSummary | undefined): Actor {
+function unlistedActor(agentId: string, read: AgentSummary | undefined): Actor {
   return {
     kind: ACTOR_KIND.AGENT,
     agentId,
-    name: read?.title ?? TAB_WORDS.CODING_AGENT,
+    name: read?.title ?? TAB_WORDS.AGENT,
     provider: read === undefined ? undefined : providerOf(read.model),
     state: ACTOR_STATE.REST,
   };
@@ -176,9 +170,9 @@ function unlistedActor(agentId: string, read: CodingAgentSummary | undefined): A
  * might be read on an agent's own page, which lists that agent alone, read
  * once; nothing until it answers, or where it cannot be read.
  */
-function useSource(agentId: string, place: ReplayPlace): CodingAgentSummary | undefined {
+function useSource(agentId: string, place: ReplayPlace): AgentSummary | undefined {
   const listed = place.agents.find((each) => each.id === agentId);
-  const [read, setRead] = useState<CodingAgentSummary | undefined>(undefined);
+  const [read, setRead] = useState<AgentSummary | undefined>(undefined);
   const reader = place.readAgent;
   const unlisted = listed === undefined;
   useEffect(() => {
@@ -338,7 +332,7 @@ function StepRow({
 }: {
   step: ReplayStep;
   /** The to-do list as it stood after the step, where it is one of Claude Code's task calls (`replayTaskTodos`). */
-  todos: CodingAgentTodos["todos"] | undefined;
+  todos: AgentTodos["todos"] | undefined;
   place: ReplayPlace;
 }): React.JSX.Element {
   const view = stepView(step, todos);
@@ -509,7 +503,7 @@ export function ReplayCard({
     place.startedBy === undefined
       ? undefined
       : lineSender(
-          { kind: CODING_AGENT_SENDER.MEMBER, ...place.startedBy },
+          { kind: AGENT_SENDER.MEMBER, ...place.startedBy },
           place.readerId,
           members,
           former,

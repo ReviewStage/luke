@@ -1,4 +1,4 @@
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import {
   TASK_PRIORITY,
   TASK_STATUS,
@@ -265,7 +265,7 @@ function oneOff(
     effort: "high",
     title,
     createdAt,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     startedBy: { userId: starter, name: NAMES[starter] },
     automationId: "automation-1",

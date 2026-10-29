@@ -39,11 +39,7 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readAccountPreferences } from "@luke/database/models/account-store";
-import {
-  type CodingAgent,
-  hasRepository,
-  type WithRepository,
-} from "@luke/database/models/coding-agent-store";
+import { type Agent, hasRepository, type WithRepository } from "@luke/database/models/agent-store";
 import {
   CHAPTER_CLAIM_OUTCOME,
   CHAPTER_GENERATION_STALE_MS,
@@ -137,7 +133,7 @@ const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string
 
 /** What both procedures stand on: the pull request as GitHub holds it now, the token it was read on, and the workspace its chapters are kept under; none where there is no pull request. */
 interface ChaptersSubject {
-  readonly agent: WithRepository<CodingAgent>;
+  readonly agent: WithRepository<Agent>;
   readonly organizationId: string;
   readonly token: Redacted.Redacted;
   readonly pullRequest: GitHubPullRequest;
@@ -145,7 +141,7 @@ interface ChaptersSubject {
 
 /** What a pull request's chapters are kept under: the agent's repository, and its workspace. */
 interface ChaptersOf {
-  readonly agent: WithRepository<CodingAgent>;
+  readonly agent: WithRepository<Agent>;
   readonly organizationId: string;
 }
 
@@ -153,7 +149,7 @@ interface ChaptersOf {
 const subjectOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   published: Effect.Effect<PublishedCache>,
   userId: string,
-  agent: CodingAgent,
+  agent: Agent,
   named: string | undefined,
 ): Effect.fn.Return<Option.Option<ChaptersSubject>, HostedRefusal, ChaptersServices> {
   // The number as the query spelled it, read by the rule every read of the tab reads it by.
@@ -181,7 +177,7 @@ const subjectOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** The workspace the agent's chapters are kept under, once a token minted for its repository confirms the workspace still reaches it; none for an agent with no repository. */
 const keptUnder = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  agent: CodingAgent,
+  agent: Agent,
 ): Effect.fn.Return<Option.Option<ChaptersOf>, HostedRefusal, ChaptersServices> {
   if (!hasRepository(agent)) return Option.none();
   const workspace = yield* githubReadRefusal(

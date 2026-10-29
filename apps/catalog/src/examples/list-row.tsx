@@ -324,7 +324,7 @@ function ListRows(): React.JSX.Element {
             <ListRow
               leading={<UserIcon />}
               title="Draw the summary panel's tabs with a fade at their end"
-              description="Coding agent"
+              description="Agent"
               meta="2h"
               onPress={() => undefined}
             />

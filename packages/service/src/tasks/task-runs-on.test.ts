@@ -13,7 +13,7 @@ import {
   openWorkspace,
 } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import type { TaskRunsOnRequest } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { Clock, type Context, Effect, Layer, Option } from "effect";
@@ -98,7 +98,7 @@ it.layer(getTestDB())("where a task runs its agents", (it) => {
         yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.LOCAL_AGENTS]: true } });
         const studio = yield* deviceOf(owner, "Studio");
         const laptop = yield* deviceOf(owner, "Laptop");
-        const onStudio = { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: studio } as const;
+        const onStudio = { machine: AGENT_MACHINE.DEVICE, deviceId: studio } as const;
         const task = yield* createTask(owner, {
           organizationId: workspace,
           name: "Relay",
@@ -125,19 +125,19 @@ it.layer(getTestDB())("where a task runs its agents", (it) => {
         assert.equal(same.status, 200);
         assert.equal(same.body.plan.runsOn.deviceId, studio);
         const stays = yield* patch(inCloud.id, "Bearer owner", {
-          machine: CODING_AGENT_MACHINE.VERCEL,
+          machine: AGENT_MACHINE.VERCEL,
         });
         assert.equal(stays.status, 200);
         assert.equal(stays.body.plan.runsOn, undefined);
 
         // Another device, or the cloud, is refused, even a device of the member's own.
         const another = yield* patch(task.id, "Bearer owner", {
-          machine: CODING_AGENT_MACHINE.DEVICE,
+          machine: AGENT_MACHINE.DEVICE,
           deviceId: laptop,
         });
         assert.deepEqual(another, locked);
         const toCloud = yield* patch(task.id, "Bearer owner", {
-          machine: CODING_AGENT_MACHINE.VERCEL,
+          machine: AGENT_MACHINE.VERCEL,
         });
         assert.deepEqual(toCloud, locked);
         const toDevice = yield* patch(inCloud.id, "Bearer owner", onStudio);
@@ -147,7 +147,7 @@ it.layer(getTestDB())("where a task runs its agents", (it) => {
 
         // An account outside the workspace reaches no such task.
         const byStranger = yield* patch(task.id, "Bearer stranger", {
-          machine: CODING_AGENT_MACHINE.VERCEL,
+          machine: AGENT_MACHINE.VERCEL,
         });
         assert.deepEqual(byStranger, { status: 404, body: { error: HOSTED_API_ERROR.NOT_FOUND } });
       }),
@@ -159,7 +159,7 @@ it.layer(getTestDB())("where a task runs its agents", (it) => {
       const workspace = yield* openWorkspace(owner);
       yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.LOCAL_AGENTS]: true } });
       const studio = yield* deviceOf(owner, "Studio");
-      const onStudio = { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: studio } as const;
+      const onStudio = { machine: AGENT_MACHINE.DEVICE, deviceId: studio } as const;
       const send = yield* standing(new Map([["Bearer owner", owner]]));
 
       const made = yield* send("POST", "/api/plans", "Bearer owner", {

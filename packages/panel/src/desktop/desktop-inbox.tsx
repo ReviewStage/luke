@@ -1,12 +1,8 @@
+import { AGENT_CALL_FAILURE, type AgentInboxMessagedView } from "@luke/features/agent-view";
 import type { Channel } from "@luke/features/channel-wire";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxMessagedView,
-} from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND, type MentionLines } from "@luke/features/mention-link";
 import type { CodeRef } from "@luke/features/task-wire";
-import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { backToWords, readFailedWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
@@ -25,6 +21,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { agentName, messageFailureWords } from "../tasks/agent-model.js";
 import {
   ChannelMissing,
   ChannelsNotRead,
@@ -32,8 +29,7 @@ import {
   useChannelHead,
 } from "../tasks/channel-head.js";
 import { CHANNEL_SHOWN, channelShown, generalChannel } from "../tasks/channels-model.js";
-import { agentName, messageFailureWords } from "../tasks/coding-agent-model.js";
-import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
+import { type InboxCodeDoors, UNREAD_FILE } from "../tasks/inbox-code-card.js";
 import {
   INBOX_COLUMNS,
   INBOX_VIEW,
@@ -62,6 +58,7 @@ import {
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import {
   openChannelThread,
   useArchivedChannels,
@@ -70,7 +67,6 @@ import {
   useInboxNarrowed,
   useThreadChannel,
 } from "../tasks/use-channels.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { type OpenHere, OpenHereProvider } from "../tasks/use-open-link.js";
@@ -161,10 +157,6 @@ const ITEM_NOT_READ = readFailedWords("this item");
 /** What leads back to the list from a missing item's notice, where the Inbox shows one column. */
 const BACK_TO_INBOX = backToWords("inbox");
 
-/** The code of an item whose agent's repository is not known yet reads no file, there being no repository to read it through. */
-const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
-  Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
-
 const _nothing = (): void => undefined;
 
 /** No tab of the Inbox's panel is drawn in semibold: what arrives on a task arrives on its page. */
@@ -241,6 +233,7 @@ export function DesktopInbox({
     counts,
     list,
     steps,
+    onPointing,
     chosen,
     filteredOut,
     search,
@@ -352,8 +345,8 @@ export function DesktopInbox({
             clientKey: start.clientKey,
           })
             .catch(
-              (): CodingAgentInboxMessagedView => ({
-                failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+              (): AgentInboxMessagedView => ({
+                failure: AGENT_CALL_FAILURE.UNANSWERED,
               }),
             )
             .then((answer) => {
@@ -454,6 +447,7 @@ export function DesktopInbox({
         taskId === undefined ? (place?.repository ?? null) : (chosenTask?.repository ?? null),
       pullRequests,
       agentIds: named.agentIds,
+      heldIds,
     });
     if (target === undefined || panelFor === undefined) return false;
     // A link pressed with ⌘ goes to its task, opening what it names there as a tab of its own, as against a
@@ -614,6 +608,7 @@ export function DesktopInbox({
                     onMark={(listed, unread, saying) => markItem(listed.item, unread, saying)}
                     onClose={closeItem}
                     onAskMove={askMove}
+                    onPointing={onPointing}
                   />
                 )}
                 {chosen === undefined ? (
@@ -707,7 +702,7 @@ function fileRef(path: string, lines: MentionLines | undefined): CodeRef {
  */
 function answerPlace(
   chosen: InboxListed,
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   tasks: TasksControl,
 ): TasklessPlace | undefined {
   const { holder } = chosen;
@@ -758,7 +753,7 @@ function InboxSidePanel({
   /** The workspace and repository the panel reads a file through where the item's agent is on no task. */
   repositoryPlace: PanelRepositoryPlace | undefined;
   pages: TasksControl["inboxView"]["pages"];
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   views: TabViews;
   /** What the item's box offers an `@`, which the composer of an agent's transcript beside it offers too. */
   mentions: TaskMentionsValue | undefined;

@@ -57,13 +57,13 @@ afterEach(() => {
 
 /** What a task's page hands its places. */
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: "Invitations",
   workspace: "acme",
   repository: REPOSITORY,
   text: () => TASK.document.body,
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: { workspace: "acme", repository: REPOSITORY },
     anchors: new Set(["rollout"]),
     onOpenTask: () => undefined,

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readAgent } from "@luke/database/models/agent-store";
 import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
 import { createTask, readTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
@@ -10,7 +10,7 @@ import { messages } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { AUTOMATION_FIRING, type AutomationFiring } from "@luke/features/automation-wire";
-import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { Effect, Layer, Option, Result } from "effect";
@@ -34,7 +34,7 @@ import {
   type EveMessage,
 } from "../eve-host/eve-sessions.js";
 import { memoryRelayState, StreamRelay } from "../eve-host/relay.js";
-import { type StartAsk, startCodingAgent } from "./start.js";
+import { type StartAsk, startAgent } from "./start.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -85,7 +85,7 @@ const services = Layer.mergeAll(
   githubReaching(INSTALLATIONS).layer,
   modelCatalogOf([
     {
-      id: CODING_AGENT_DEFAULT_CHOICE.model,
+      id: AGENT_DEFAULT_CHOICE.model,
       name: "Claude Opus 5.5",
       provider: MODEL_PROVIDER.ANTHROPIC,
       efforts: ["low", "medium", "high", "max"],
@@ -169,12 +169,12 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
         const { opened, eve } = fakeEve();
         const ask = workspaceAsk(workspaceId);
 
-        const first = yield* startCodingAgent(eve, owner, ask).pipe(Effect.provide(services));
-        const again = yield* startCodingAgent(eve, owner, ask).pipe(Effect.provide(services));
+        const first = yield* startAgent(eve, owner, ask).pipe(Effect.provide(services));
+        const again = yield* startAgent(eve, owner, ask).pipe(Effect.provide(services));
 
         assert.equal(first.created, true);
         assert.deepEqual([again.created, again.agent.id], [false, first.agent.id]);
-        const agent = Option.getOrThrow(yield* readCodingAgent(owner, first.agent.id));
+        const agent = Option.getOrThrow(yield* readAgent(owner, first.agent.id));
         assert.deepEqual(
           [agent.taskId, agent.organizationId, agent.repository, agent.prompt, agent.planSnapshot],
           [null, workspaceId, RELAY_REPOSITORY, TASK, null],
@@ -199,11 +199,11 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
         yield* openWorkspace(outsider);
         const { opened, eve } = fakeEve();
 
-        const theirs = yield* startCodingAgent(eve, teammate, workspaceAsk(workspaceId)).pipe(
+        const theirs = yield* startAgent(eve, teammate, workspaceAsk(workspaceId)).pipe(
           Effect.provide(services),
         );
         const refused = yield* Effect.result(
-          startCodingAgent(eve, outsider, workspaceAsk(workspaceId)).pipe(Effect.provide(services)),
+          startAgent(eve, outsider, workspaceAsk(workspaceId)).pipe(Effect.provide(services)),
         );
 
         assert.equal(theirs.agent.organizationId, workspaceId);
@@ -221,7 +221,7 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
         const { opened, eve } = fakeEve();
 
         const refused = yield* Effect.result(
-          startCodingAgent(eve, owner, workspaceAsk(workspaceId, "Acme/Elsewhere")).pipe(
+          startAgent(eve, owner, workspaceAsk(workspaceId, "Acme/Elsewhere")).pipe(
             Effect.provide(services),
           ),
         );
@@ -239,9 +239,7 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
         const openedOnEve = (ask: StartAsk) =>
           Effect.gen(function* () {
             const { opened, eve } = fakeEve();
-            const { agent } = yield* startCodingAgent(eve, owner, ask).pipe(
-              Effect.provide(services),
-            );
+            const { agent } = yield* startAgent(eve, owner, ask).pipe(Effect.provide(services));
             return yield* openedThroughRelay(owner, agent.conversationId, opened);
           });
         const ranFor = (firing: AutomationFiring): StartAsk => ({
@@ -300,7 +298,7 @@ it.layer(getTestDB())("an agent started on a task", (it) => {
         const { eve } = fakeEve();
 
         for (const task of [filed, todo, done]) {
-          yield* startCodingAgent(eve, owner, taskAsk(task.id)).pipe(Effect.provide(services));
+          yield* startAgent(eve, owner, taskAsk(task.id)).pipe(Effect.provide(services));
         }
 
         const statusOf = (taskId: string) =>
@@ -326,8 +324,8 @@ it.layer(getTestDB())("an agent started on a task", (it) => {
         const byAutomation = yield* made();
         const { eve } = fakeEve();
 
-        yield* startCodingAgent(eve, owner, taskAsk(byHand.id)).pipe(Effect.provide(services));
-        yield* startCodingAgent(eve, owner, {
+        yield* startAgent(eve, owner, taskAsk(byHand.id)).pipe(Effect.provide(services));
+        yield* startAgent(eve, owner, {
           ...taskAsk(byAutomation.id),
           automationOrigin: {
             name: "Nightly",

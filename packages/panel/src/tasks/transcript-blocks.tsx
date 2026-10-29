@@ -1,8 +1,8 @@
 import {
-  CODING_AGENT_TODO_STATUS,
-  type CodingAgentTodoStatus,
-  type CodingAgentTodos,
-} from "@luke/features/coding-agent-wire";
+  AGENT_TODO_STATUS,
+  type AgentTodoStatus,
+  type AgentTodos,
+} from "@luke/features/agent-wire";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { readLink } from "@luke/features/link-grammar";
 import { mayNameMention } from "@luke/features/mention-link";
@@ -173,7 +173,7 @@ import { WorkingTime } from "./working-time.js";
  * transcript-blocks.tsx -- the one way a transcript's blocks are drawn, on a coding agent's tab and a subagent's alike.
  *
  * Each tab decides what its rows say from its own wire
- * (`coding-agent-model.ts` with `tool-call-model.ts`); how a block of each kind looks is decided here
+ * (`agent-model.ts` with `tool-call-model.ts`); how a block of each kind looks is decided here
  * once, over the AI Elements components (`../ai-elements/`): words as
  * markdown at the panel's scale with a web link opening in the browser, reasoning folded under one quiet line
  * previewing its words, a tool call as one collapsible row wearing its kind's icon and verb
@@ -1269,7 +1269,7 @@ const SENT_WORDS = {
 /** The agent a call that sent words names where the place knows it by no name yet, as a start the place has not listed: a coding agent, as its card names it. */
 const UNNAMED_AGENT: Actor = {
   kind: ACTOR_KIND.AGENT,
-  name: TAB_WORDS.CODING_AGENT,
+  name: TAB_WORDS.AGENT,
   provider: undefined,
   state: ACTOR_STATE.REST,
 };
@@ -1344,14 +1344,14 @@ function SentCall({
  * wrapped lines reads as noise over words the muted ink already quiets.
  */
 const TODO_LOOK = {
-  [CODING_AGENT_TODO_STATUS.PENDING]: { Icon: CircleIcon, label: "Pending" },
-  [CODING_AGENT_TODO_STATUS.IN_PROGRESS]: { Icon: CircleDotDashedIcon, label: "In progress" },
-  [CODING_AGENT_TODO_STATUS.DONE]: { Icon: CircleCheckIcon, label: "Done" },
-} as const satisfies Record<CodingAgentTodoStatus, { Icon: LucideIcon; label: string }>;
+  [AGENT_TODO_STATUS.PENDING]: { Icon: CircleIcon, label: "Pending" },
+  [AGENT_TODO_STATUS.IN_PROGRESS]: { Icon: CircleDotDashedIcon, label: "In progress" },
+  [AGENT_TODO_STATUS.DONE]: { Icon: CircleCheckIcon, label: "Done" },
+} as const satisfies Record<AgentTodoStatus, { Icon: LucideIcon; label: string }>;
 
 export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children"> &
   Pick<ToolHeaderProps, "state" | "subject"> & {
-    todos: CodingAgentTodos["todos"];
+    todos: AgentTodos["todos"];
     errorText: string | undefined;
     /** Whether this is the list the agent is at now: its newest while it works. */
     live: boolean;
@@ -1373,7 +1373,7 @@ function TodoItems({
   live,
   docked = false,
 }: {
-  todos: CodingAgentTodos["todos"];
+  todos: AgentTodos["todos"];
   live: boolean;
   /** Whether it stands in the dock over the composer, where it keeps to under a third of what is seen and scrolls past it, so a long list leaves the transcript its room in a short window. */
   docked?: boolean;
@@ -1400,27 +1400,19 @@ function TodoItems({
  * taken up; its words ease to their ink alike (tasks.css). An item drawn as it
  * stands is still, so a list opened or read back does not play its history.
  */
-function TodoItem({
-  todo,
-  live,
-}: {
-  todo: CodingAgentTodos["todos"][number];
-  live: boolean;
-}): ReactNode {
+function TodoItem({ todo, live }: { todo: AgentTodos["todos"][number]; live: boolean }): ReactNode {
   const [first] = useState(todo.status);
   const look = TODO_LOOK[todo.status];
-  const working = live && todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS;
+  const working = live && todo.status === AGENT_TODO_STATUS.IN_PROGRESS;
   const arrived = todo.status !== first;
-  const done = todo.status === CODING_AGENT_TODO_STATUS.DONE;
+  const done = todo.status === AGENT_TODO_STATUS.DONE;
   return (
     <li className="todo-item flex items-start gap-icon-gap" data-todo-status={todo.status}>
       {/* Keyed by where it stands, so each change mounts the glyph anew and its arrival runs. */}
       <GlyphSlot
         key={todo.status}
         line
-        ink={
-          todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS ? GLYPH_INK.TEXT : GLYPH_INK.MUTED
-        }
+        ink={todo.status === AGENT_TODO_STATUS.IN_PROGRESS ? GLYPH_INK.TEXT : GLYPH_INK.MUTED}
         label={look.label}
         arrival={arrived ? (done ? GLYPH_ARRIVAL.CHECK : GLYPH_ARRIVAL.STEP) : undefined}
       >
@@ -1493,7 +1485,7 @@ export function TranscriptTodosDock({
   todos,
   focus,
 }: {
-  todos: CodingAgentTodos["todos"];
+  todos: AgentTodos["todos"];
   /** The item the list is at; none once every item is done. */
   focus: string | undefined;
 }): ReactNode {

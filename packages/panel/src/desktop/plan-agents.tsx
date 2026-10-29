@@ -1,4 +1,5 @@
-import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
+import type { AgentChangesPeople, AgentPullRequest } from "@luke/features/agent-wire";
+import type { CatalogModel } from "@luke/features/models-wire";
 import {
   CHIP_LOOK,
   CHIP_SIZE,
@@ -11,13 +12,16 @@ import {
   RowHintOptions,
   Tooltip,
 } from "@luke/ui";
-import { agentStillWriting, pullRequestNumberLabel } from "../tasks/coding-agent-model.js";
+import { sameTab } from "@luke/ui/tab-strip-model";
+import { agentStillWriting, pullRequestNumberLabel } from "../tasks/agent-model.js";
+import { type AgentSubject, agentSubject } from "../tasks/agent-ref.js";
+import { PullRequestCard, peopleOf } from "../tasks/pull-request-card.js";
 import { PullRequestMark, pullRequestMarkState } from "../tasks/pull-request-mark.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
+import { openerOf } from "../tasks/use-link-standing.js";
 import type { MainTabsControl } from "../tasks/use-main-tabs.js";
 import { SUMMARY_GLYPH } from "./agent-archive.js";
 import { agentEntries } from "./main-tabs.js";
-import { PullRequestCard } from "./pull-request-card.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
 
 /**
@@ -29,7 +33,9 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * failed, and the card its tab hangs. Its pull request, where it opened
  * one, stands after it as a chip of GitHub's mark in GitHub's colour for
  * where it stands and its number (`pull-request-mark.tsx`), hanging the
- * pull request's card. A row opens its agent as its tab's own press does,
+ * pull request's one card as its Pull request tab does, the agent whose it
+ * is and who it names among what the card says (`pull-request-card.tsx`).
+ * A row opens its agent as its tab's own press does,
  * and the chip opens the pull request as the agent's own pull request chip
  * does, in its Pull request tab; it is still a link to its page, so a
  * right-click offers its address. Those at work come first, then the
@@ -53,13 +59,29 @@ function listedOrder(entries: readonly AddEntry[]): readonly AddEntry[] {
 /** An agent's pull request as a chip: its mark in GitHub's colour for where it stands and its number, hanging its card, opening its Pull request tab. */
 function PullRequestChip({
   pullRequest,
+  agent,
+  people,
   onOpen,
 }: {
-  pullRequest: CodingAgentPullRequest;
+  pullRequest: AgentPullRequest;
+  /** The agent whose pull request it is, as the list names it, and how its tab opens. */
+  agent: { subject: AgentSubject; models: readonly CatalogModel[] | undefined; onOpen: () => void };
+  /** Who the pull request names, as its Pull request tab last read them; none before it has. */
+  people: AgentChangesPeople | undefined;
   onOpen: () => void;
 }): React.JSX.Element {
+  const card = (
+    <PullRequestCard
+      pullRequest={pullRequest}
+      lines={pullRequest}
+      files={pullRequest.changedFiles}
+      opener={people?.author ?? openerOf(pullRequest)}
+      agent={agent}
+      reviewers={people?.reviewers}
+    />
+  );
   return (
-    <Tooltip label={pullRequest.title} card={<PullRequestCard pullRequest={pullRequest} />}>
+    <Tooltip label={pullRequest.title} card={card}>
       <Chip
         look={CHIP_LOOK.PILL}
         size={CHIP_SIZE.COMPACT}
@@ -82,15 +104,23 @@ function PullRequestChip({
 function PlanAgentRow({
   entry,
   pullRequest,
+  agents,
+  held,
+  main,
   onOpenPullRequest,
 }: {
   entry: AddEntry;
-  pullRequest: CodingAgentPullRequest | undefined;
+  pullRequest: AgentPullRequest | undefined;
+  agents: AgentsControl;
+  held: HeldTranscripts;
+  main: Pick<MainTabsControl, "tab" | "onChoose">;
   onOpenPullRequest: () => void;
 }): React.JSX.Element {
   const { row, endMark, card } = entry;
+  const agentId = row.id;
+  const chosen = main.tab !== undefined && sameTab({ agent: agentId }, main.tab);
   return (
-    <RowHintOptions card={card} cardBeside>
+    <RowHintOptions card={card}>
       <ListRow
         motionKey={row.id}
         leading={<span className={SUMMARY_GLYPH}>{row.icon}</span>}
@@ -99,7 +129,16 @@ function PlanAgentRow({
         meta={endMark}
         actions={
           pullRequest === undefined ? undefined : (
-            <PullRequestChip pullRequest={pullRequest} onOpen={onOpenPullRequest} />
+            <PullRequestChip
+              pullRequest={pullRequest}
+              agent={{
+                subject: agentSubject(agents, agentId, held, chosen),
+                models: agents.models,
+                onOpen: entry.onPick,
+              }}
+              people={peopleOf(agents.changesPeople.get(agentId), pullRequest)}
+              onOpen={onOpenPullRequest}
+            />
           )
         }
         onPress={entry.onPick}
@@ -120,7 +159,7 @@ export function PlanAgents({
   main,
   onOpenPullRequest,
 }: {
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** What the tabs hold, which each row's card reads as its tab's does. */
   held: HeldTranscripts;
   /** The column's chosen tab, whose agent's card follows its run, and how a tab of the column is opened. */
@@ -137,6 +176,9 @@ export function PlanAgents({
             key={entry.row.id}
             entry={entry}
             pullRequest={agents.pullRequests.get(entry.row.id)}
+            agents={agents}
+            held={held}
+            main={main}
             onOpenPullRequest={() => onOpenPullRequest(entry.row.id)}
           />
         ))}

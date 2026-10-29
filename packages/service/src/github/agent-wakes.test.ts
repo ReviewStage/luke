@@ -3,25 +3,21 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import {
-  archiveCodingAgent,
-  type CodingAgentLatestTurn,
-  createCodingAgent,
+  type AgentLatestTurn,
+  archiveAgent,
+  createAgent,
   lineSendersOf,
-  recordCodingAgentPublished,
-  takeCodingAgentMentionedServers,
-  updateCodingAgentBranch,
-} from "@luke/database/models/coding-agent-store";
+  recordAgentPublished,
+  takeAgentMentionedServers,
+  updateAgentBranch,
+} from "@luke/database/models/agent-store";
 import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
 import { awaitingLinesOfReached, readMessageByClientId } from "@luke/database/models/message-reads";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { turns } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
-import {
-  CHECK_SUMMARY,
-  CODING_AGENT_BOUNDS,
-  PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import {
   type GitHubLineMetadata,
@@ -141,7 +137,7 @@ function sentText(message: EveMessage["message"] | undefined): string {
 }
 
 /** A turn of the agent's that ran and ended at the instant given, or one still running. */
-function turn(settledAt: number | undefined): CodingAgentLatestTurn {
+function turn(settledAt: number | undefined): AgentLatestTurn {
   return {
     conversationId: "conversation",
     id: "turn",
@@ -188,7 +184,7 @@ const openAgentOn = (githubAccess: GitHubAccess) =>
     const installation = INSTALLATIONS[installationsConnected++];
     assert.ok(installation);
     yield* connectWorkspaceGitHub(task.workspaceId, installation);
-    const started = yield* createCodingAgent(owner, {
+    const started = yield* createAgent(owner, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -200,7 +196,7 @@ const openAgentOn = (githubAccess: GitHubAccess) =>
     });
     const agent = Option.getOrThrow(started).agent;
     const ref = `luke/teammate-invitations-${randomUUID()}`;
-    yield* updateCodingAgentBranch(owner, agent.id, ref);
+    yield* updateAgentBranch(owner, agent.id, ref);
     yield* claimRuntimeSession(
       { userId: owner, conversationId: agent.conversationId },
       `wrun_${randomUUID()}`,
@@ -230,7 +226,7 @@ const runningTurn = (owner: string, conversationId: string) =>
 
 /** The agent's row keeping pull request 41 with its head at the commit given, as a read of it leaves the row. */
 const publishedAt = (owner: string, agentId: string, headSha: string) =>
-  recordCodingAgentPublished(owner, agentId, {
+  recordAgentPublished(owner, agentId, {
     number: 41,
     title: "Expire invitations",
     url: `https://github.com/${RELAY_FULL_NAME}/pull/41`,
@@ -473,7 +469,7 @@ test("a person's review reaches an agent at work or not, Luke's App's only an ag
   const idleBefore = turn(MADE_AT - 60_000);
   const endedSince = turn(MADE_AT + 2_000);
   const atWork = turn(undefined);
-  const woken = (wake: AgentWake, at: CodingAgentLatestTurn) =>
+  const woken = (wake: AgentWake, at: AgentLatestTurn) =>
     agentIsWoken(wake, agent, at, LUKE_BOT, now);
 
   assert.deepEqual(
@@ -557,7 +553,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
         const own = yield* wakeAgents(eve.eveFor, reply, randomUUID(), LUKE_BOT).pipe(
           Effect.provide(github),
         );
-        yield* archiveCodingAgent(owner, agent.id, true);
+        yield* archiveAgent(owner, agent.id, true);
         const archived = yield* wakeAgents(eve.eveFor, wake, randomUUID(), LUKE_BOT).pipe(
           Effect.provide(github),
         );
@@ -696,7 +692,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
         }
         assert.equal(text.split("</github-review>").length, 2, "only the message closes its fence");
         assert.deepEqual(
-          yield* takeCodingAgentMentionedServers(owner, agent.conversationId),
+          yield* takeAgentMentionedServers(owner, agent.conversationId),
           [],
           "a server a reviewer mentions is not handed to the agent",
         );
@@ -819,7 +815,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
             ? Response.json({ message: "Server Error" }, { status: 500 })
             : undefined,
         ).layer;
-        const long = "<".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS);
+        const long = "<".repeat(AGENT_BOUNDS.MAX_MESSAGE_CHARS);
 
         yield* wakeAgents(eve.eveFor, reviewWakeOf(ref, "octocat"), randomUUID(), LUKE_BOT).pipe(
           Effect.provide(refused),
@@ -836,7 +832,7 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
         assert.ok(
           unread?.includes("Its inline comments could not be read here, so read them with `gh`"),
         );
-        assert.ok(cut !== undefined && cut.length <= CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS);
+        assert.ok(cut !== undefined && cut.length <= AGENT_BOUNDS.MAX_MESSAGE_CHARS);
         assert.ok(
           cut.includes("&lt;&lt;\n… (cut to fit; read the rest with `gh`)\n</github-review>"),
         );

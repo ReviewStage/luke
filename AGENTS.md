@@ -95,7 +95,7 @@ component, factored out of the surface where it builds the box by hand.
   Chromium in that agent's own Vercel Sandbox, shows its pages, their live-view
   frames, address, title, screenshots, and text snapshots to that agent and its
   workers, the model, the agent's transcript, and the panels of the workspace
-  members who open the task; the service keeps the tab list, each tab's address
+  members who open the task or the agent's own page; the service keeps the tab list, each tab's address
   and title. The model is handed a small copy of each screenshot, whose base64
   is left out of the stored conversation, and the service keeps a full-size copy
   beside the transcript the call is written to, the agent's or its worker's, as

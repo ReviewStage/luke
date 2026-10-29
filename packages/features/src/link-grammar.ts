@@ -29,11 +29,11 @@ import { parsedUrl } from "./parsed-url.js";
  *   `/message/<messageId>`, and, on no task, a page it showed,
  *   `/page/<pageId>`; which task's panel it opens in is the reader's to
  *   find, by the agent;
- * - the Inbox, `/inbox`, and an item in it under the task or the agent with
- *   no task that holds it, `/plan/<id>/inbox/<itemId>` or
- *   `/agent/<agentId>/inbox/<itemId>`, since the Inbox is read by its holders;
+ * - the Inbox, `/inbox`, and an item in it under the agent that posted it,
+ *   `/agent/<agentId>/inbox/<itemId>`, whose task, where it has one, is the
+ *   reader's to find, by the agent, to open the item in that task's Inbox;
  * - a channel of the workspace, `/channel/<channelId>`, whose threads are
- *   those Inbox items, each still linked under its holder;
+ *   those Inbox items, each still linked under its agent;
  * - the Automations page, `/automations`, an automation,
  *   `/automation/<id>`, and one of its runs, `/automation/<id>/run/<runId>`;
  * - a page of Settings, `/settings[/<page>]`;
@@ -50,8 +50,9 @@ import { parsedUrl } from "./parsed-url.js";
  * gone, so an old link to either reads as a link it does not know.
  *
  * An agent's place was once written under its task too,
- * `/plan/<id>/agent/<agentId>/…`, which is still read, the task kept, and
- * still written while a writer names the task. A turn of Luke's own work,
+ * `/plan/<id>/agent/<agentId>/…`, and an Inbox item under its agent's task,
+ * `/plan/<id>/inbox/<itemId>`, each still read, the task kept, and still
+ * written while a writer names the task. A turn of Luke's own work,
  * `/plan/<id>/work/<at>`, and a worker of Luke's own,
  * `/plan/<id>/worker/<callId>`, are drawn nowhere now, so each is read as
  * its task and written no more.

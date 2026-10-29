@@ -331,13 +331,18 @@ test("while the @ list stands over a plan's text the text is a combobox naming t
   const { container, editor } = mounted("## Rollout\n\nIntro.\n", {
     mentions: {
       doors: {
-        taskId: "task-1",
+        holder: { taskId: "task-1" },
         place: { workspace: "acme", repository: null },
         anchors: new Set(),
         onOpenTask: () => undefined,
         onOpenFile: undefined,
       },
-      source: { taskId: "task-1", taskName: "Ship it", workspace: "acme", repository: null },
+      source: {
+        holder: { taskId: "task-1" },
+        taskName: "Ship it",
+        workspace: "acme",
+        repository: null,
+      },
     },
   });
   act(() => {

@@ -262,26 +262,26 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     // The coding agents' default, which is the account's on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {
-          id: SETTINGS_SEARCH_ROW.CODING_AGENT_MODEL,
+          id: SETTINGS_SEARCH_ROW.AGENT_MODEL,
           label: "Default model",
-          page: SETTINGS_VIEW.CODING_AGENTS,
-          haystack: ["Default model", "model coding agent claude gpt start"],
+          page: SETTINGS_VIEW.AGENTS,
+          haystack: ["Default model", "model agent claude gpt start"],
         }
       : undefined,
     input.accountDrawn
       ? {
-          id: SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT,
+          id: SETTINGS_SEARCH_ROW.AGENT_EFFORT,
           label: "Effort",
-          page: SETTINGS_VIEW.CODING_AGENTS,
-          haystack: ["Effort", "default effort coding agent reasoning low medium high max"],
+          page: SETTINGS_VIEW.AGENTS,
+          haystack: ["Effort", "default effort agent reasoning low medium high max"],
         }
       : undefined,
     input.accountDrawn
       ? {
-          id: SETTINGS_SEARCH_ROW.CODING_AGENT_FAST,
+          id: SETTINGS_SEARCH_ROW.AGENT_FAST,
           label: "Fast",
-          page: SETTINGS_VIEW.CODING_AGENTS,
-          haystack: ["Fast", "coding agent fast version speed quick model"],
+          page: SETTINGS_VIEW.AGENTS,
+          haystack: ["Fast", "agent fast version speed quick model"],
         }
       : undefined,
     // The chapters model, which is the account's on the service: drawn once an account is signed in.
@@ -289,7 +289,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       ? {
           id: SETTINGS_SEARCH_ROW.CHAPTERS_MODEL,
           label: "Chapters model",
-          page: SETTINGS_VIEW.CODING_AGENTS,
+          page: SETTINGS_VIEW.AGENTS,
           haystack: [
             "Chapters model",
             "pull request chapters generate claude haiku sonnet opus review",
@@ -301,7 +301,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       ? {
           id: SETTINGS_SEARCH_ROW.API_KEY_ANTHROPIC,
           label: "Claude",
-          page: SETTINGS_VIEW.CODING_AGENTS,
+          page: SETTINGS_VIEW.AGENTS,
           haystack: [
             "Claude",
             "claude code anthropic api key byok own key claude plan subscription setup-token max pro billing provider credential",
@@ -312,7 +312,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       ? {
           id: SETTINGS_SEARCH_ROW.API_KEY_OPENAI,
           label: "Codex",
-          page: SETTINGS_VIEW.CODING_AGENTS,
+          page: SETTINGS_VIEW.AGENTS,
           haystack: [
             "Codex",
             "openai api key byok own key gpt chatgpt plan subscription billing provider credential dictation dictate",
