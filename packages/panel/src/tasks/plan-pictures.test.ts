@@ -352,10 +352,10 @@ test("an agent's plan card draws the plan's pictures once opened, while the agen
   );
   assert.deepEqual(asked, [], "a closed card reads nothing");
 
-  act(() => view.querySelector<HTMLElement>("[data-task-card] > summary")?.click());
+  act(() => view.querySelector<HTMLElement>("[data-origin-plan] > summary")?.click());
   await settle();
 
-  const card = view.querySelector("[data-task-card]");
+  const card = view.querySelector("[data-origin-plan]");
   const images = [...(card?.querySelectorAll(".picture-block img") ?? [])];
   assert.equal(images[0]?.getAttribute("src"), `data:image/png;base64,${PNG_BASE64}`);
   assert.deepEqual(

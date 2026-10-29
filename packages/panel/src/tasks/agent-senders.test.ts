@@ -369,5 +369,5 @@ test("an agent started blank draws its first line as a line, no plan's card and 
   assert.deepEqual(await sendersFor(CHARLES.userId, blank, [spoken, typed]), [
     ["typed", ACTOR_KIND.PERSON, "Dean Stratakos"],
   ]);
-  assert.equal(document.querySelector("[data-task-card]"), null);
+  assert.equal(document.querySelector("[data-origin-plan]"), null);
 });
