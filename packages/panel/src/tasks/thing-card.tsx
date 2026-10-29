@@ -32,9 +32,10 @@ import { TAB_KIND } from "./tab-look.js";
  * it was written. The table is keyed by every `THING_KIND` and typed over
  * each kind's own `Thing`, so a kind added there fails to compile until it
  * says what card it hangs. A kind with no card of its own yet hangs the
- * chip's own, its glyph and name, and says so by name, `OWN_CARD`. A plan,
- * an agent, and a pull request hang the card their own tab hangs
- * (`tabCard`), wherever the chip stands. A card that reads what it shows
+ * chip's own, its glyph and name, and says so by name, `OWN_CARD`. A plan
+ * hangs the card its own tab hangs (`tabCard`), and an agent and a pull
+ * request the cards theirs hang, read as they are first hung
+ * (`mentioned-agent-card.tsx`), wherever the chip stands. A card that reads what it shows
  * as it is hung waits in one way whatever its kind (`HoverCardSkeleton`),
  * and stands in with the chip's own only where the read answers nothing.
  */

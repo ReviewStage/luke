@@ -615,7 +615,7 @@ function DateCard({ date }: { date: DateMention }): React.JSX.Element {
   const now = useMinute();
   const zone = readerZone();
   return (
-    <HoverCard data-mention-card="">
+    <HoverCard data-date-card="">
       <HoverCardHead glyph={<CalendarIcon aria-hidden="true" />} name={dateWhole(date, zone)} />
       <HoverCardNote>{dateDistance(date, now, zone)}</HoverCardNote>
     </HoverCard>

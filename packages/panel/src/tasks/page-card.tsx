@@ -97,7 +97,7 @@ export function PageCard({ place, page }: CardPage): React.JSX.Element {
   const shower = showerActor(page.shownBy, place, useKnownNames().agents);
   const openShower = useShowerDoor(shower);
   return (
-    <HoverCard data-page-card="" data-tab-card="">
+    <HoverCard data-page-card="">
       <HoverCardHead
         glyph={<AppWindowIcon aria-hidden="true" />}
         name={page.title}

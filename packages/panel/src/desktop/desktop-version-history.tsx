@@ -265,7 +265,7 @@ function RevisionRow({
       ? []
       : [{ label: "Restore this version", icon: <RotateCcwIcon />, onSelect: onRestore }],
   ].filter((group) => group.length > 0);
-  // Note that the author's card hangs beside the row as the pointer rests on it; an author with none, Luke or an agent, hangs nothing.
+  // Note that the author's card hangs beside the row as the pointer rests on it, Luke's his own; an agent or an automation the version names by name alone hangs nothing.
   const card = actorCard(author);
   return (
     <RowHintOptions card={card}>

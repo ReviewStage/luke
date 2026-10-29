@@ -573,7 +573,7 @@ test("a plan's chip on another plan's page hangs the card the plan's tab hangs, 
   const listedCard = await cardOf(listed);
   const unlistedCard = await cardOf(unlisted);
   assert.deepEqual([listedCard.card, listedCard.name], ["data-task-card", TASK.name]);
-  assert.deepEqual([unlistedCard.card, unlistedCard.name], ["data-tab-card", "Someone's plan"]);
+  assert.deepEqual([unlistedCard.card, unlistedCard.name], ["data-task-card", "Someone's plan"]);
 });
 
 test("a page's chip hangs its title, its version and who showed it, and when it moved, a page of a plan not open read as it is first hung; one neither the window nor the read holds says it can't be read", async () => {
@@ -719,13 +719,13 @@ test("an Inbox item's chip hangs its Inbox row's own card, whether the item wait
   const settled = await cardOf(answered);
   const sweep = await cardOf(swept);
 
-  assert.equal(asking.card, "data-inbox-row-card");
+  assert.equal(asking.card, "data-inbox-item-card");
   assert.equal(asking.name, "Keep expired links?");
   assert.equal(asking.sub, "Needs you");
-  assert.equal(settled.card, "data-inbox-row-card");
+  assert.equal(settled.card, "data-inbox-item-card");
   assert.equal(settled.name, "Rename the invite email?");
   assert.match(settled.sub ?? "", /^Answered/u);
-  assert.equal(sweep.card, "data-inbox-row-card");
+  assert.equal(sweep.card, "data-inbox-item-card");
   assert.equal(sweep.name, "Quarantine the flaky test?");
 });
 

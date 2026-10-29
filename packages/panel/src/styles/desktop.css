@@ -619,7 +619,7 @@ body,
    its own: the measure is the sent message's (`Message`'s `is-user`), and a
    card folded or open spans all of it, the frame around a card whose head
    holds a control beside it among them. */
-.agent-origin > :is([data-task-card], [data-replay-card], :has(> [data-replay-card])) {
+.agent-origin > :is([data-origin-plan], [data-replay-card], :has(> [data-replay-card])) {
   width: 100%;
 }
 

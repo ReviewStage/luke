@@ -151,7 +151,7 @@ test("a working agent's card says only how long its run has gone at its corner, 
     assert.equal(card.querySelector(".luke-hover-card-corner")?.textContent, "1m 5s"),
   );
   assert.equal(
-    card.querySelector("[data-tab-card] > .luke-visually-hidden")?.textContent,
+    card.querySelector("[data-agent-card] > .luke-visually-hidden")?.textContent,
     "Working",
     "a reader, whom the tile's mark is hidden from, hears that it works",
   );

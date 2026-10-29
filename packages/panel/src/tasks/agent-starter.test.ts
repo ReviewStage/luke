@@ -148,7 +148,7 @@ async function agentNamed(
   const ref = view.querySelector("[data-agent-ref]") ?? assert.fail("the agent is named");
   hover(ref);
   const card = cards()[0] ?? assert.fail("a card hangs");
-  assert.ok(card.querySelector("[data-tab-card]"), "the agent's card hangs");
+  assert.ok(card.querySelector("[data-agent-card]"), "the agent's card hangs");
   return { card, opened };
 }
 
@@ -193,7 +193,7 @@ test("the starter's name on an agent's card hangs their own card over it, read o
   hover(starter);
   const standing = cards();
   assert.equal(standing.length, 2, "the person's card hangs over the agent's");
-  assert.ok(standing[0]?.querySelector("[data-tab-card]"), "the agent's card still stands");
+  assert.ok(standing[0]?.querySelector("[data-agent-card]"), "the agent's card still stands");
   const person = standing[1]?.querySelector("[data-actor-card='person']");
   assert.ok(person, "the starter's own card hangs");
   assert.match(person.textContent ?? "", /Charles Pan.*charles@example\.com.*Member/u);
@@ -243,7 +243,7 @@ test("the pointer resting on a starter's card keeps both it and the agent's card
     pass(PAST_ANY_WAIT);
     const standing = cards();
     assert.equal(standing.length, 2, "both cards stand while the pointer rests on the upper");
-    assert.ok(standing[0]?.querySelector("[data-tab-card]"), "the agent's card");
+    assert.ok(standing[0]?.querySelector("[data-agent-card]"), "the agent's card");
     assert.ok(standing[1]?.querySelector("[data-actor-card='person']"), "the starter's card");
   } finally {
     vi.useRealTimers();
@@ -271,7 +271,7 @@ test("the pointer going back from a starter's card to the agent's keeps the agen
     pass(PAST_ANY_WAIT);
     const standing = cards();
     assert.equal(standing.length, 1);
-    assert.ok(standing[0]?.querySelector("[data-tab-card]"), "the agent's card stands");
+    assert.ok(standing[0]?.querySelector("[data-agent-card]"), "the agent's card stands");
     const outside = document.body.appendChild(document.createElement("div"));
     move(card, outside);
     pass(PAST_ANY_WAIT);
@@ -289,7 +289,7 @@ test("the pointer going from a starter's card back onto the agent's own name kee
     pass(PAST_ANY_WAIT);
     const standing = cards();
     assert.equal(standing.length, 1);
-    assert.ok(standing[0]?.querySelector("[data-tab-card]"), "the agent's card stands");
+    assert.ok(standing[0]?.querySelector("[data-agent-card]"), "the agent's card stands");
   } finally {
     vi.useRealTimers();
   }

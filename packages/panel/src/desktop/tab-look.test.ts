@@ -306,7 +306,7 @@ test("the side panel's Inbox tab hangs what waits on the developer, as the plan'
   );
   assert.ok(tab, "the strip has the Inbox tab");
   restOn(tab);
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-inbox-card]");
   assert.ok(card, "the Inbox's card is hung");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Inbox");
   assert.ok(card.querySelector(".luke-hover-card-corner")?.textContent, "it says how many wait");
@@ -355,7 +355,7 @@ test("a Terminal tab wears its agent's glyph, says Terminal with the agent's nam
   assert.equal(tab.querySelector(".luke-tab-detail")?.textContent, WORKING.title);
   assert.match(tab.querySelector(".luke-tab-icon")?.innerHTML ?? "", /data-state="working"/u);
   restOn(tab);
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.ok(card, "the agent's card is hung");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, WORKING.title);
   assert.equal(

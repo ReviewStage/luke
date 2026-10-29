@@ -193,7 +193,7 @@ test("in a worker's transcript, a call about an agent opens its tab, and an agen
   assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: TEAMMATE.id }]);
   const chip = container.querySelector('[data-call-id="message-call"] [data-tool-agent-ref]');
   restOn(chip ?? assert.fail("the message's agent chip"));
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Invoice export");
 });
 

@@ -631,7 +631,7 @@ function HolderHeader({
   if (holder.kind === INBOX_HOLDER.TASK) {
     const glyph = <PlanGlyph status={holder.task.status} />;
     const fallback = (
-      <HoverCard>
+      <HoverCard data-task-card="">
         <HoverCardHead glyph={glyph} name={holder.task.name} />
       </HoverCard>
     );

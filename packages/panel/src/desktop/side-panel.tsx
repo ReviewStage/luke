@@ -1124,7 +1124,7 @@ interface PanelWiring {
  * waits as the plan's summary row does, while a subagent's hangs a card naming
  * it whole with when it last moved and its latest step
  * (`agent-tab-card.tsx`), and a Changes tab its pull request's, naming the
- * agent whose it is (`ChangesCard`), and a page's a preview of the page
+ * agent whose it is (`PullRequestCard`), and a page's a preview of the page
  * (`PageCard`), each drawn by `tabCard` as every other place naming what
  * the tab shows draws it; no tab has a chord. A tab something arrived on
  * while another was shown reads in semibold until shown. Every tab, of

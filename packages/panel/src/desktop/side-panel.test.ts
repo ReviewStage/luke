@@ -216,7 +216,7 @@ test("a pull request's card names the coding agent whose it is on a row by its t
   await act(async () => {
     await Promise.resolve();
   });
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card] .luke-hover-card-name");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card] .luke-hover-card-name");
   assert.equal(card?.textContent, "Expiry job", "the agent's own card hangs from its name");
   act(() => named.click());
   assert.deepEqual(opened, [THIRD.id]);
@@ -235,7 +235,7 @@ test("the phone's Activity list hangs each tab's card on its row, as the tab han
         icon: createElement("svg"),
         label: "#42 Expire invitations",
         selected: false,
-        card: createElement("div", { "data-tab-card": "" }, "Expire invitations"),
+        card: createElement("div", { "data-pull-request-card": "" }, "Expire invitations"),
         onSelect: () => undefined,
       },
       close: () => undefined,
@@ -254,7 +254,7 @@ test("the phone's Activity list hangs each tab's card on its row, as the tab han
     assert.fail("the tab's row is drawn");
   restOn(row);
   assert.equal(
-    document.querySelector(".luke-tooltip-card [data-tab-card]")?.textContent,
+    document.querySelector(".luke-tooltip-card [data-pull-request-card]")?.textContent,
     "Expire invitations",
   );
   act(() => root.unmount());

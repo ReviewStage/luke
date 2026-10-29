@@ -252,7 +252,7 @@ test("a cloud Browser tab wears its agent's glyph in the strip and hangs a card 
   assert.ok(drawn, "the cloud tab stands in the strip, named by its page");
   assert.ok(!drawn.textContent?.includes("Invite emails"), "the strip names no agent in words");
   restOn(drawn);
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-browser-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Sign in");
   assert.equal(
     card?.querySelector(".luke-hover-card-sub")?.textContent,

@@ -59,7 +59,8 @@ import { WorkspaceRef } from "./workspace-ref.js";
  * stands, its tab's label, and a failure's mark at its end, with no word for where it stands, since no
  * agent anywhere else in the window says one. Then a row for each of its
  * pull requests, its mark, and its size, and at its foot, in a workspace
- * others share, who created it.
+ * others share, who created it, and where its repository belongs to
+ * another of the reader's workspaces, that workspace.
  * Each list names every one, scrolling past a few rows' height rather than
  * counting the rest. Everything is read from the task list and what the
  * window holds beside it (`use-task-work.ts`), so the card fetches nothing.
@@ -129,7 +130,7 @@ export function RepositoryDetail({
 }
 
 /**
- * Who created the task, under its repository: their face and "Created by
+ * Who created the task, at the card's foot: their face and "Created by
  * Charles Pan · 3d ago", "Created by you", or a member who left saying so;
  * or, for a task Luke or an agent made, its square with the member's face on
  * its corner and "Created by Invite emails for you · from Teammate
@@ -237,7 +238,9 @@ export function PullRequestLine({
  * the name, and its priority and assignee as marks at the head's right
  * (`TaskSub`, `TaskMarks`); then every one of its agents and its pull
  * requests, each list scrolling past a few rows' height, and, where others
- * share its workspace and the list names its creator, who created it. A card hung
+ * share its workspace and the list names its creator, who created it, and
+ * the workspace its repository belongs to where the reader may move it
+ * there, at its foot. A card hung
  * from a place within the task, a section or a version a chip names
  * (`../tasks/chip-cards.tsx`), says that place on its own line in their
  * stead.

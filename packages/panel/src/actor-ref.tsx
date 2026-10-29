@@ -669,12 +669,12 @@ export function PersonCard({
   );
 }
 
-/** Luke's card: his face, whose call he wrote on and when, then what he wrote here where the place knows. Read, never followed. */
+/** Luke's card: his face, how long ago he wrote where the place knows, then what he wrote here. Read, never followed. */
 export function LukeCard({
   sub,
   latest,
 }: {
-  /** When he wrote, and on whose call: "During Charles Pan’s call · 2h ago". */
+  /** How long ago he wrote: "2h ago". */
   sub?: ReactNode;
   /** What he last wrote in this plan, in a line: "Edited Rollout and Risks". */
   latest?: ReactNode;
@@ -721,7 +721,7 @@ const GITHUB_WORDS = {
   OUTSIDE: "Not in this workspace",
 } as const;
 
-/** Someone on GitHub's card: their face, a person's login or an App's bot's name and badge, whether they are a person or an App's bot, and that a person is no member here. A press on their name opens their page on GitHub. */
+/** Someone on GitHub's card: their face, a person's login or an App's bot's name and badge, whether they are a person or an App's bot, and that a person is no member here. Read, never followed: the name is text. */
 function GitHubCard({ actor }: { actor: GitHubActor }): React.JSX.Element {
   return (
     <HoverCard data-actor-card={actor.kind}>

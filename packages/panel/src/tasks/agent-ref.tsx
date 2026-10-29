@@ -410,7 +410,7 @@ export function AgentHoverCard({
   const { workspaceId } = useMemberDirectory();
   const mark = <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />;
   const fallback = (
-    <HoverCard>
+    <HoverCard data-agent-card="">
       <HoverCardHead mark={mark} name={actor.name} />
     </HoverCard>
   );
@@ -420,7 +420,7 @@ export function AgentHoverCard({
       taskId={actor.taskId}
       name={actor.name}
       workspaceId={workspaceId}
-      reading={<HoverCardSkeleton mark={mark} name={actor.name} sub />}
+      reading={<HoverCardSkeleton mark={mark} name={actor.name} sub data-agent-card="" />}
       fallback={fallback}
     />
   );
