@@ -202,6 +202,8 @@ export interface NewTask {
   readonly origin?: TaskOrigin;
   /** Where its agents run; a sandbox where none is named. */
   readonly runsOn?: TaskRunsOnWrite;
+  /** The task it is a child of, which the caller confirmed it reaches in the same workspace, and whose repository and machine it took; none for a task at the top. */
+  readonly parentTaskId?: string;
 }
 
 /**
@@ -668,6 +670,7 @@ const TaskInsertSchema = Schema.Struct({
   githubAccess: GitHubAccessSchema,
   machine: MachineSchema,
   deviceId: Schema.NullOr(Schema.String),
+  parentTaskId: Schema.NullOr(Schema.String),
   document: Schema.String,
   brief: Schema.NullOr(Schema.String),
   now: Schema.Date,
@@ -696,6 +699,7 @@ function taskValues(write: typeof TaskInsertSchema.Type) {
     githubAccess: write.githubAccess,
     machine: write.machine,
     deviceId: write.deviceId,
+    parentTaskId: write.parentTaskId,
     document: write.document,
     brief: write.brief,
     createdAt: write.now,
@@ -960,6 +964,7 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
       machine: (started.runsOn ?? TASK_RUNS_IN_CLOUD).machine,
       deviceId: (started.runsOn ?? TASK_RUNS_IN_CLOUD).deviceId,
+      parentTaskId: started.parentTaskId ?? null,
       document: "",
       brief: brief.length > 0 ? brief : null,
       status: started.status ?? TASK_STATUS.TODO,

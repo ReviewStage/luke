@@ -237,6 +237,12 @@ function agentStartsUnplanned(request: { agent?: TaskAgentStart; planning?: bool
  * unless `assigneeId` names a member of its workspace. Its agents run in the
  * cloud unless `runsOn` names one of the starter's devices, kept on the task
  * before the agent the start asks for starts, so that agent runs there too.
+ * A `parentTaskId` makes it the child of a task the starter reaches in the
+ * same workspace, to any depth: the child takes its parent's repository and
+ * where its agents run, so a start naming another repository is refused
+ * (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), as one naming another place
+ * to run is (`HOSTED_API_ERROR.RUNS_ON_LOCKED`), and a parent the starter
+ * cannot reach is not found.
  * A released desktop may still send `linearIssueId` or `issues`, from when a
  * task could link issues, which are accepted and ignored.
  */
@@ -257,6 +263,7 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(taskAssigneeIdSchema),
+  parentTaskId: EffectSchema.optionalKey(wireUuidSchema),
 }).check(EffectSchema.makeFilter(agentStartsUnplanned));
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
