@@ -62,15 +62,16 @@ it.effect(
     Effect.gen(function* () {
       const sentry = recordingSentry();
       const failure = Object.assign(new TypeError("refused"), {
-        [ErrorReporter.attributes]: { agentId: "a", turnId: "t", route: "/api/agents" },
+        // Note that a BigInt is among them, which no JSON serializes, as a report's attributes may hold anything.
+        [ErrorReporter.attributes]: { agentId: "a", turnId: "t", route: "/api/agents", rows: 2n },
       });
       yield* Effect.exit(Effect.withErrorReporting(Effect.fail(failure))).pipe(
         Effect.provide(sentry.layer),
       );
       const [event] = sentOfType(sentry.sent, "event").map((item) => JSON.parse(item.text));
       assert.deepEqual(
-        { tags: [event.tags.agentId, event.tags.turnId], extra: event.extra },
-        { tags: ["a", "t"], extra: { route: "/api/agents" } },
+        { tags: [event.tags.agentId, event.tags.turnId], route: event.extra.route },
+        { tags: ["a", "t"], route: "/api/agents" },
       );
     }),
 );

@@ -363,7 +363,7 @@ const TAG_VALUE_MAX_LENGTH = 200;
 
 /**
  * A report's attributes as an issue carries them: those it is searched by as
- * tags, the rest as extra data. Note that a tag's value is cut to Sentry's
+ * tags where they are a string, a number, or a boolean, the rest as extra data. Note that a tag's value is cut to Sentry's
  * limit, because a longer one is dropped whole, and the whole value then stays
  * in the extra data.
  */
@@ -374,7 +374,12 @@ function reportContext(attributes: Readonly<Record<string, unknown>>): {
   const tags: Record<string, string> = {};
   const extra: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(attributes)) {
-    const text = Predicate.isString(value) ? value : JSON.stringify(value);
+    // Note that only a primitive becomes a tag, and nothing is serialized here, because a
+    // cyclic or BigInt value would throw and lose the report; Sentry normalizes extra data.
+    const text =
+      Predicate.isString(value) || Predicate.isNumber(value) || Predicate.isBoolean(value)
+        ? String(value)
+        : undefined;
     if (!REPORT_TAG_ATTRIBUTES.has(name) || text === undefined) extra[name] = value;
     else {
       tags[name] = text.slice(0, TAG_VALUE_MAX_LENGTH);
