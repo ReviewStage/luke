@@ -37,7 +37,7 @@ import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
-import { LAUNCH_NOTE, unsavedNote } from "./local-agent-first-lines.js";
+import { LAUNCH_NOTE, unrestoredNote, unsavedNote } from "./local-agent-first-lines.js";
 import { type AgentSave, readLocalAgentState } from "./local-agent-state.js";
 import { openAgentState, sealAgentState } from "./node/agent-state-seal.js";
 import { fakeSandbox, VM_EXEC } from "./testing/fake-sandbox.js";
@@ -326,7 +326,9 @@ function opened(bundle: Uint8Array): string {
  * its record leaves one. Where `restore` says, the launch names generation
  * 1 of the agent's saved state, a repository's at `BASE`, whose bundle the
  * store answers, into a folder the device holds none of, and the VM's
- * restore answers as the script given, or reads the pack and succeeds.
+ * restore answers as the script given, or reads the pack and succeeds;
+ * where `halfRestored` says, the agent's folder holds the checkout a restore
+ * that never finished made.
  * With what happened in order (the bundle's download, the VM's state
  * commands, its delete, the uploads and the commits), the bodies the
  * service took, the settles, the bytes the store took, the packs the VM's
@@ -343,6 +345,7 @@ const saving = (
     readonly record?: AgentSave;
     readonly strayBundle?: true;
     readonly restore?: { readonly run?: Script };
+    readonly halfRestored?: true;
     /** The launch's first lines; `{}` where not given. */
     readonly stdin?: string;
   } = {},
@@ -362,6 +365,10 @@ const saving = (
       yield* fileSystem.writeFileString(path.join(stateRoot, "local-agents.json"), state);
     }
     if (options.strayBundle === true) yield* fileSystem.writeFileString(bundle, "sealed");
+    if (options.halfRestored === true) {
+      yield* fileSystem.makeDirectory(path.join(layout.checkoutPath, ".git"), { recursive: true });
+      yield* fileSystem.writeFileString(path.join(layout.checkoutPath, "notes.md"), "restored\n");
+    }
     const happened: string[] = [];
     const saves: unknown[] = [];
     const commits: unknown[] = [];
@@ -806,6 +813,33 @@ it.effect(
         assert.ok(message.content[0].text.includes(unsavedNote(OVER_CAP)));
         assert.deepEqual(message.content[1], { type: "text", text: "Go on with the relay." });
         assert.ok(!happened.includes("download"));
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a launch whose saved state expired after a restore that never finished sets what the restore made aside, untouched, and starts on a fresh checkout, told where it is",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { happened, spawned, layout, saveRecord, launchSettled } = yield* saving({
+          stdin: RESUMING_LINES,
+          record: { userId: DEVICE_ID, generation: 1, restoring: 1 },
+          halfRestored: true,
+        });
+        yield* launchSettled;
+
+        const aside = path.join(layout.folder, "unrestored", "1");
+        const fileSystem = yield* FileSystem.FileSystem;
+        assert.equal(yield* fileSystem.readFileString(path.join(aside, "notes.md")), "restored\n");
+        assert.equal(yield* fileSystem.exists(path.join(layout.checkoutPath, "notes.md")), false);
+        const [config, message] = yield* firstLinesOf(spawned);
+        assert.equal(config.resume, undefined);
+        assert.ok(message.content[0].text.includes(LAUNCH_NOTE.EXPIRED));
+        assert.ok(message.content[0].text.includes(unrestoredNote(aside)));
+        // Note that the fresh checkout is the agent's own from here, so its turn's end saves it.
+        assert.ok(happened.includes("pack"));
+        assert.equal((yield* saveRecord)?.restoring, undefined);
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );

@@ -68,6 +68,7 @@ import {
   LAUNCH_NOTE,
   notedFirstLines,
   sessionResumed,
+  unrestoredNote,
   unsavedNote,
 } from "./local-agent-first-lines.js";
 import { answeredLocalAgentRequest } from "./local-agent-requests.js";
@@ -157,7 +158,8 @@ import type { RunMode } from "./run-mode.js";
  * (`DEVICE_LAUNCH_REFUSAL.STATE_NOT_RESTORED`) and deletes nothing, so
  * the next message restores again, never starting the agent afresh. One
  * that names none, its saved state expired, starts the agent afresh with no
- * harness session. Either is told the agent ahead of its first message, as
+ * harness session, what a restore left unfinished there set aside in its
+ * folder rather than gone on from or removed. Either is told the agent ahead of its first message, as
  * is why its last turn's work could not be saved
  * (`local-agent-first-lines.ts`). A discard that removes the folder lets go
  * of the agent's record. A discard deletes any VM still standing before it
@@ -229,6 +231,8 @@ const SETUP_RETRY = {
 } as const;
 /** How often a device following its agents beats, which the service's and the window's presence reads are derived from (`DEVICE_BEAT`). */
 const BEAT_EVERY = Duration.millis(DEVICE_BEAT.EVERY_MS);
+/** The folder in an agent's folder that a restore left unfinished, whose saved state then expired, has its checkout set aside in, under the generation it restored. */
+const UNRESTORED_FOLDER = "unrestored";
 /** How long a discard waits on the platform's check of the worktree before it keeps the folder. */
 const UNSAVED_CHECK = Duration.seconds(30);
 /** Why a folder is kept where its check could not say what it holds. */
@@ -889,34 +893,60 @@ export function composeLocalAgents(
             }
           });
 
+        /** Whether the agent's work stands in its folder: its repository, or its checkout folder for an agent with none. */
+        const workExists = (layout: DeviceAgentLayout, withRepository: boolean) =>
+          Effect.orElseSucceed(
+            fileSystem.exists(
+              withRepository ? path.join(layout.checkoutPath, ".git") : layout.checkoutPath,
+            ),
+            () => false,
+          );
+
         /**
-         * Whether the agent's work stands on the device, for a launch to go on
-         * from: its repository, or its folder for an agent with none, with no
-         * restore into it left unfinished.
+         * What a restore left unfinished made of the agent's checkout, set
+         * aside in its folder under the generation it restored
+         * (`UNRESTORED_FOLDER`), and the restore let go of, once Luke no
+         * longer holds that generation, so it can never finish: the path it
+         * stands at now, none where the restore made no checkout. Note that it
+         * is moved rather than gone on from, since it may be incomplete, and
+         * never removed, since it may hold the last of the agent's work.
          */
-        const workStands = (agentId: string, layout: DeviceAgentLayout, withRepository: boolean) =>
+        const unrestoredSetAside = (
+          agentId: string,
+          layout: DeviceAgentLayout,
+          generation: number,
+        ) =>
           Effect.gen(function* () {
-            if (yield* saves.restoring(agentId)) return false;
-            const work = withRepository
-              ? path.join(layout.checkoutPath, ".git")
-              : layout.checkoutPath;
-            return yield* Effect.orElseSucceed(fileSystem.exists(work), () => false);
+            const aside = path.join(layout.folder, UNRESTORED_FOLDER, String(generation));
+            const made = yield* fileSystem.exists(layout.checkoutPath);
+            if (made) {
+              yield* fileSystem.makeDirectory(path.dirname(aside), { recursive: true });
+              yield* fileSystem.rename(layout.checkoutPath, aside);
+            }
+            yield* saves.restoreLetGo(userId, agentId);
+            report(
+              `a local agent's restore of generation ${generation} never finished before its saved state expired, so it starts afresh`,
+            );
+            return made ? Option.some(aside) : Option.none<string>();
           });
 
         /**
          * The runner started for a launch line, its first lines written, and
          * its exit settling the line; the line settled as not started where it
          * cannot be. On a device that saves, a launch that finds none of the
-         * agent's work on it (`workStands`) and names a generation of its saved
-         * state restores it first: the folder made, the bundle downloaded,
+         * agent's work on it (`workExists`), or a restore into it left
+         * unfinished, and names a generation of its saved state restores it
+         * first: the folder made, the bundle downloaded,
          * checked and opened into the pack (`saves.fetched`), the repository
          * made at the pack's base, the VM started, and the pack restored in it
          * (`saves.restored`); a restore that fails at any step settles the
          * launch unstarted with the refusal that says so, deleting nothing, so
          * the agent's next message restores again. One that names none but
          * still continues a harness's session found its saved state expired,
-         * so the session is let go of and the agent starts afresh. The agent
-         * is told so ahead of its first message (`local-agent-first-lines.ts`),
+         * so the session is let go of and the agent starts afresh; one that
+         * names none where a restore was left unfinished has what that restore
+         * made set aside (`unrestoredSetAside`) and starts afresh too. The
+         * agent is told so ahead of its first message (`local-agent-first-lines.ts`),
          * and why its last turn's work could not be saved, where its record
          * says, which is let go of once told.
          */
@@ -964,7 +994,10 @@ export function composeLocalAgents(
             // Note that the agent is kept as this machine's before its folder or VM is made, so an uninstall finds whatever a launch cut off left.
             yield* keepOwnedAgent(kernel.stateRoot, agentId);
             const generation = payload.value.stateGeneration;
-            const cold = savesState && !(yield* workStands(agentId, layout, withRepository));
+            const unfinished = savesState ? yield* saves.restoring(agentId) : undefined;
+            const cold =
+              savesState &&
+              (unfinished !== undefined || !(yield* workExists(layout, withRepository)));
             const restore =
               cold && generation !== undefined
                 ? { userId, agentId, layout, shellVariables, generation }
@@ -972,6 +1005,16 @@ export function composeLocalAgents(
             const expired = cold && generation === undefined && sessionResumed(secrets.stdin);
             if (expired) {
               report("a local agent's saved state expired, so it starts afresh with no session");
+            }
+            const setAside =
+              cold && generation === undefined && unfinished !== undefined
+                ? yield* Effect.result(unrestoredSetAside(agentId, layout, unfinished))
+                : Result.succeed(Option.none<string>());
+            if (Result.isFailure(setAside)) {
+              report(
+                "a local agent's unfinished restore could not be set aside, so it was not started",
+              );
+              return yield* notStarted(agentId, line.id);
             }
             const notRestored = () =>
               notStarted(agentId, line.id, DEVICE_LAUNCH_REFUSAL.STATE_NOT_RESTORED);
@@ -1088,6 +1131,7 @@ export function composeLocalAgents(
               [
                 ...(restore === undefined ? [] : [LAUNCH_NOTE.RESTORED]),
                 ...(expired ? [LAUNCH_NOTE.EXPIRED] : []),
+                ...Option.toArray(Option.map(setAside.success, unrestoredNote)),
                 ...(why === undefined ? [] : [unsavedNote(why)]),
               ],
               expired,

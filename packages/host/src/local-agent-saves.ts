@@ -616,11 +616,10 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
      * newer one, a save of this device's that landed after the launch was
      * queued; or none, where Luke holds none of the agent's, its last save
      * having expired, which lets the record's go, so the next save starts
-     * afresh, and any restore of it the record names with it, since there is
-     * nothing left to restore. A save this device committed since the claim,
-     * as the runner the launch replaces saved, is newer than whatever the
-     * launch says, so the record stands. And the agent's state key, held for
-     * its next seal.
+     * afresh. A save this device committed since the claim, as the runner the
+     * launch replaces saved, is newer than whatever the launch says, so the
+     * record stands. And the agent's state key, held for its next seal. A
+     * restore the record names stays for the launch to act on (`restoring`).
      */
     const launched = (
       userId: string,
@@ -632,14 +631,13 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
       Effect.gen(function* () {
         if (key !== undefined) keys.set(agentId, key);
         if ((committedAs.get(agentId) ?? 0) > claimedAt) return;
-        const record = yield* saveOf(agentId);
-        const kept = record?.generation;
+        const kept = (yield* saveOf(agentId))?.generation;
         if (generation === undefined) {
-          if (kept === undefined && record?.restoring === undefined) return;
+          if (kept === undefined) return;
           return yield* saveChanged(
             userId,
             agentId,
-            ({ generation: _generation, restoring: _restoring, ...rest }) => rest,
+            ({ generation: _generation, ...save }) => save,
           );
         }
         if (kept !== undefined && kept >= generation) return;
@@ -672,13 +670,16 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
         }
       });
 
-    /** Whether the agent's folder holds a restore that did not finish, which its next launch restores again. */
-    const restoring = (agentId: string) =>
-      Effect.map(saveOf(agentId), (save) => save?.restoring !== undefined);
+    /** The generation a restore into the agent's folder began from and did not finish, which its next launch restores again; none where no restore is left unfinished. */
+    const restoring = (agentId: string) => Effect.map(saveOf(agentId), (save) => save?.restoring);
 
     /** The agent recorded as restoring the generation given into its folder, before anything of the restore is made. */
     const restoreBegun = (userId: string, agentId: string, generation: number) =>
       saveChanged(userId, agentId, (save) => ({ ...save, restoring: generation }));
+
+    /** The agent's unfinished restore let go of, once what it made is set aside, since Luke no longer holds the generation it restored. */
+    const restoreLetGo = (userId: string, agentId: string) =>
+      saveChanged(userId, agentId, ({ restoring: _restoring, ...save }) => save);
 
     /** A restore refused, and why said with its generation: false. Nothing of the agent's is deleted and its record still names the restore, so its next launch tries again. */
     const notRestored = (generation: number, said: string) =>
@@ -854,6 +855,7 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
       launched,
       restoring,
       restoreBegun,
+      restoreLetGo,
       notRestored,
       fetched,
       restored,

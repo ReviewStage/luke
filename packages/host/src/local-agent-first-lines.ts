@@ -13,8 +13,8 @@ import { Option, Schema } from "effect";
  * config and then the first message (`@luke/agent-runner/protocol`), which
  * the device writes to the runner's stdin. What only the device knows, that
  * the agent's folder was restored onto a machine that held none of it, that
- * its saved state expired, or that its last turn's work could not be saved,
- * it says here, as a text block ahead of that message's own, so both
+ * its saved state expired, and where an unfinished restore was set aside, or
+ * that its last turn's work could not be saved, it says here, as a text block ahead of that message's own, so both
  * harnesses read it as the agent's turn opens and neither runner's handling
  * of its lines changes. A launch whose saved state expired still names the
  * session it continued, which no longer stands anywhere, so its config is
@@ -58,6 +58,11 @@ const isMessage = Schema.is(
 /** The paragraph telling the agent why its last turn's work could not be saved, in the words its record kept. */
 export function unsavedNote(why: string): string {
   return `Your last turn's work couldn't be saved off this machine: ${why.trim().replace(/\.$/u, "")}. Fix it so it saves.`;
+}
+
+/** The paragraph telling the agent where what a restore that never finished brought back was set aside, its checkout being fresh. */
+export function unrestoredNote(folder: string): string {
+  return `A restore of your saved work never finished before it expired. What it brought back is set aside, and may be incomplete, in ${folder}; your checkout is fresh.`;
 }
 
 /** Whether the first lines' config continues a harness's session. */
