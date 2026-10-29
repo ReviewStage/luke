@@ -137,8 +137,8 @@ interface HandedConnection {
 /** What a call of a connection's tool answered: the provider's own MCP result, as it sent it, or why there is none. */
 type ConnectionCall = Result.Result<WireRecord, ConnectionRefusal>;
 
-/** What a read of a connection's tool's MCP App answered: its HTML and what its resource asks of the host, or why there is none. */
-type ConnectionApp = Result.Result<McpAppResource, ConnectionRefusal>;
+/** What a read of a connection's tool's MCP App answered: its HTML and what its resource asks of the host, none where the tool's listing names no app, or why it could not be read. */
+type ConnectionApp = Result.Result<Option.Option<McpAppResource>, ConnectionRefusal>;
 
 function refused(error: string, extra: Partial<ConnectionRefusal> = {}): ConnectionRefusal {
   return { status: ACTION_RESULT_STATUS.REJECTED, error, ...extra };
@@ -481,10 +481,12 @@ export function callConnectionTool(
  * the connection's server lists it (`listConnectionTools`: the grant's kept
  * list while it is fresh, which every native call keeps current, else the
  * provider's own, kept, as a grant only an eve agent called keeps none),
- * read from the provider's server in one session. A connection the agent is
- * not handed, one the member has not connected, a tool whose listing names
- * no app, and a session that failed are each refused. The HTML is read for
- * the window that draws it and kept nowhere.
+ * read from the provider's server in one session; none where the listing
+ * names the tool's app nowhere. A connection the agent is not handed, one
+ * the member has not connected, a listing that came back empty, which a
+ * listing that failed does too, and a session that failed are each refused,
+ * so a reader may ask again. The HTML is read for the window that draws it
+ * and kept nowhere.
  */
 export function readConnectionToolApp(
   admitted: AdmittedConversation,
@@ -499,10 +501,11 @@ export function readConnectionToolApp(
     const grant = yield* connectionGrant(admitted, connection.value);
     if (Result.isFailure(grant)) return Result.fail(grant.failure);
     const listed = yield* listConnectionTools(admitted, name);
-    const uri = listed.find((each) => each.name === tool)?.ui?.resourceUri;
-    if (uri === undefined) {
-      return Result.fail(refused(`The tool "${tool}" of "${name}" ships no app.`));
+    if (listed.length === 0) {
+      return Result.fail(refused(`Failed to load tools for "${name}".`, { connection: name }));
     }
+    const uri = listed.find((each) => each.name === tool)?.ui?.resourceUri;
+    if (uri === undefined) return Result.succeed(Option.none());
     const url = INTEGRATION[connection.value.provider].MCP_URL;
     const read = yield* onGrantToken(connection.value, grant.success, (token) =>
       readMcpAppResource(url, token, uri),
@@ -510,7 +513,7 @@ export function readConnectionToolApp(
     if (Result.isFailure(read)) return Result.fail(read.failure);
     const app = read.success;
     return Result.isSuccess(app)
-      ? Result.succeed(app.success)
+      ? Result.succeed(Option.some(app.success))
       : Result.fail(refused(sessionFailed(name, "read an app of", app.failure)));
   }).pipe(
     Effect.catchCause((cause) =>

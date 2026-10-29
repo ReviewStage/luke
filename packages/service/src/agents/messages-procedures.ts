@@ -469,8 +469,10 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
     agentToolApp: signedIn.agentToolApp.effect(function* ({ input, context }) {
       const admitted = yield* startersAgent(context.userId, input.id);
       const app = yield* readConnectionToolApp(admitted, input.connection, input.tool);
-      if (Result.isFailure(app)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return app.success;
+      // Note that a read that failed is unavailable rather than not found, because a window holds not found as the tool shipping no app.
+      if (Result.isFailure(app)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      if (Option.isNone(app.success)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return app.success.value;
     }),
 
     agentToolAppCall: signedIn.agentToolAppCall.effect(function* ({ input, context }) {

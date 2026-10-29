@@ -520,17 +520,17 @@ function appMayCall(tool: McpToolSchema): boolean {
 
 /**
  * Whether the app drawn from the tool named `app` may call a tool of its
- * server, of the tools the server lists, without asking the member: not one
- * only the model may call (`appMayCall`), and of the rest, only a tool of
- * the same app, naming its resource, or one its server marks read-only. Any
- * other would need the member's approval, which nothing asks yet.
+ * server, of the tools the server lists, without asking the member: nothing
+ * where `app` names no tool that ships one; never one only the model may
+ * call (`appMayCall`); and of the rest, only a tool of the same app, naming
+ * its resource, or one its server marks read-only. Any other would need the
+ * member's approval, which nothing asks yet.
  */
 export function appMayCallFor(app: string) {
   return (tool: McpToolSchema, tools: readonly McpToolSchema[]): boolean => {
-    if (!appMayCall(tool)) return false;
     const resource = tools.find((each) => each.name === app)?.ui?.resourceUri;
-    const sameApp = resource !== undefined && tool.ui?.resourceUri === resource;
-    return sameApp || tool.annotations?.readOnlyHint === true;
+    if (resource === undefined || !appMayCall(tool)) return false;
+    return tool.ui?.resourceUri === resource || tool.annotations?.readOnlyHint === true;
   };
 }
 

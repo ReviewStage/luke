@@ -344,7 +344,7 @@ it.layer(getTestDB())("the integrations' door", (it) => {
         const elsewhere = yield* call("archive_team", appMayCallFor("show_board"));
 
         assert.ok(Result.isSuccess(app));
-        assert.deepEqual(app.success, { html: LINEAR_BOARD_APP.html });
+        assert.deepEqual(app.success, Option.some({ html: LINEAR_BOARD_APP.html }));
         assert.ok(Result.isFailure(byModel));
         assert.ok(Result.isSuccess(byApp));
         assert.ok(Result.isFailure(elsewhere));
