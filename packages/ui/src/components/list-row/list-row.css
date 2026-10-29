@@ -185,9 +185,11 @@
     font-weight: var(--luke-type-emphasis-weight);
   }
 
-  /* A sidebar's row rests its title in the sidebar's quieter ink, lifted to
-     the text's own while it is reached for, open, unread, or its menu is. */
-  .luke-list-row[data-ink="sidebar"] .luke-list-row-title {
+  /* A sidebar's row rests its title, and a lead line over it, in the
+     sidebar's quieter ink, lifted to the text's own while it is reached for,
+     open, unread, or its menu is. */
+  .luke-list-row[data-ink="sidebar"] .luke-list-row-title,
+  .luke-list-row[data-ink="sidebar"] .luke-list-row-lead[data-at="above"] {
     color: var(--luke-color-sidebar-ink);
     transition: color var(--luke-duration-hover) var(--luke-motion-exit);
   }
@@ -198,7 +200,14 @@
       [data-unread="true"],
       [data-menu-open="true"]
     )
-    .luke-list-row-title {
+    .luke-list-row-title,
+  .luke-list-row[data-ink="sidebar"]:is(
+      :hover,
+      [data-current="true"],
+      [data-unread="true"],
+      [data-menu-open="true"]
+    )
+    .luke-list-row-lead[data-at="above"] {
     color: var(--luke-color-text);
   }
 
@@ -240,6 +249,23 @@
     font-weight: var(--luke-type-label-weight);
   }
 
+  /* A lead on a line of its own over the title reads as a mail app's
+     sender line: the row's largest and boldest words, a step over a
+     label's at the top bar's size, in the text's own ink, while the title
+     under it steps down to the body's weight, still the text's ink, and
+     an unread row lifts it again (below). The title keeps a label's size
+     rather than the body's, which is a label's on the desktop but larger
+     on the web, so it stays under the lead line in every profile. */
+  .luke-list-row-lead[data-at="above"] {
+    font-size: var(--luke-type-toolbar-title-size);
+    line-height: var(--luke-type-toolbar-title-leading);
+    font-weight: var(--luke-type-emphasis-weight);
+  }
+
+  .luke-list-row:has(.luke-list-row-lead[data-at="above"]) .luke-list-row-title {
+    font-weight: var(--luke-type-body-weight);
+  }
+
   /* A title fades rather than ending in an ellipsis, as a browser's tab
      does, out over its last few pixels only while it is measured cut short,
      so a short one ends on its last letter; a row whose acts come in on
@@ -255,7 +281,9 @@
 
   /* What has not been seen reads in a heavier weight, and its description
      in the body's ink, until it is, as a mail app's unread threads do. */
-  .luke-list-row[data-unread="true"] .luke-list-row-title {
+  .luke-list-row[data-unread="true"] .luke-list-row-title,
+  .luke-list-row[data-unread="true"]:has(.luke-list-row-lead[data-at="above"])
+    .luke-list-row-title {
     font-weight: var(--luke-type-emphasis-weight);
   }
 
@@ -265,12 +293,14 @@
 
   /* A row whose thing is done with stands back in the palette's quieter
      inks rather than by fading its words, which still name what it opens
-     and so read at AA (`docs/DESIGN.md`): its title takes the muted ink
-     its description and metadata already wear. Only its mark,
+     and so read at AA (`docs/DESIGN.md`): its title, and a lead line over
+     it, take the muted ink its description and metadata already wear.
+     Only its mark,
      the leading glyph its words already say, fades.
      Its fill, which says it is open or in hand, and its acts stay as they
      are. */
-  .luke-list-row[data-muted="true"] .luke-list-row-title {
+  .luke-list-row[data-muted="true"] .luke-list-row-title,
+  .luke-list-row[data-muted="true"] .luke-list-row-lead[data-at="above"] {
     color: var(--luke-color-text-muted);
   }
 
@@ -304,18 +334,26 @@
      the description runs the words' and the end's tracks
      whole under both; the row's marks stand level with the title's line
      rather than the row's middle. A lead on a line of its own over the title
-     takes the title's place on that first line, as tall as the title's so
-     the marks still stand level with it, and the title runs whole under it.
-     The words and the first line lend their parts to the press's tracks, so
-     each lands in its own. */
+     takes the title's place on that first line, as tall as its own larger
+     words, the marks standing level with it, and the title runs whole under
+     it. The words and the first line lend their parts to the press's tracks,
+     so each lands in its own. */
   /* Note that a swiped row holds its press inside its slide, so the press is
      matched wherever it stands in the row. */
+  .luke-list-row[data-meta="title"] {
+    --luke-list-row-head-leading: var(--luke-type-label-leading);
+  }
+
+  .luke-list-row[data-meta="title"]:has(.luke-list-row-lead[data-at="above"]) {
+    --luke-list-row-head-leading: var(--luke-type-toolbar-title-leading);
+  }
+
   .luke-list-row[data-meta="title"] :is(.luke-list-row-text, .luke-list-row-head) {
     display: contents;
   }
 
   .luke-list-row[data-meta="title"] .luke-list-row-leading {
-    height: var(--luke-type-label-leading);
+    height: var(--luke-list-row-head-leading);
     align-items: center;
     align-self: start;
   }
@@ -326,7 +364,7 @@
   }
 
   .luke-list-row[data-meta="title"] .luke-list-row-lead[data-at="above"] {
-    height: var(--luke-type-label-leading);
+    height: var(--luke-list-row-head-leading);
   }
 
   .luke-list-row[data-meta="title"] .luke-list-row-description {
@@ -367,7 +405,7 @@
      ⋯ on that line too, level with the metadata and the acts beside it. */
   .luke-list-row[data-meta="title"] .luke-list-row-more {
     align-self: start;
-    height: var(--luke-type-label-leading);
+    height: var(--luke-list-row-head-leading);
     margin-block-start: var(--luke-list-row-inset-block);
   }
 
@@ -463,7 +501,7 @@
 
   .luke-list-row[data-actions="hover"][data-meta="title"] .luke-list-row-actions {
     align-self: start;
-    height: var(--luke-type-label-leading);
+    height: var(--luke-list-row-head-leading);
     margin-block-start: var(--luke-list-row-inset-block);
   }
 
@@ -742,7 +780,7 @@
 
   .luke-list-row[data-meta="title"] .luke-list-row-fold {
     align-self: start;
-    height: var(--luke-type-label-leading);
+    height: var(--luke-list-row-head-leading);
     margin-block-start: var(--luke-list-row-inset-block);
   }
 
