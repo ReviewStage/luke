@@ -28,6 +28,7 @@ import {
   automationSync,
   channelSync,
   conversationsSync,
+  deviceSync,
   githubInstallationSync,
   githubPersonalTokenSync,
   githubRepositoryReadSync,
@@ -134,13 +135,14 @@ export const sidebarLive = defineLiveQuery({
  * The account's task list: the tasks it reaches and every agent of them and
  * with no task, each with the account's pin, the names it shows, and what
  * its status is read from, woken on the account's topic and on each of its
- * workspaces'. A task, an agent, a member's name, or a turn starting or
- * settling names the workspace; the account's pins, its memberships, and
- * what admits it to a repository name the account. Note that a message
- * wakes no task list, because a streamed step rewrites one every moment and
- * names only its conversation: an awaiting line or an operator's quiet reply
- * that moves with no turn starting or settling shows at the hold's end, as
- * does the rename of someone the list names who has left every workspace.
+ * workspaces'. A task, an agent, a member's name, a Mac's name, or a turn
+ * starting or settling names the workspace; the account's pins, its
+ * memberships, and what admits it to a repository name the account. Note
+ * that a message wakes no task list, because a streamed step rewrites one
+ * every moment and names only its conversation: an awaiting line or an
+ * operator's quiet reply that moves with no turn starting or settling shows
+ * at the hold's end, as do the rename of someone the list names who has left
+ * every workspace and a Mac's last beat, which wakes nothing.
  */
 export const tasksLive = defineLiveQuery({
   name: "tasks",
@@ -154,6 +156,7 @@ export const tasksLive = defineLiveQuery({
     turnsSync,
     messagesSync,
     conversationsSync,
+    deviceSync,
     memberSync,
     githubPersonalTokenSync,
     githubRepositoryReadSync,

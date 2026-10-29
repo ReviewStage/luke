@@ -587,10 +587,7 @@ async function settle(): Promise<void> {
 }
 
 test("⇧⌘T opens the tabs closed again, the latest first, each in its strip at its place and a file's on the lines it showed, until none is left", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
   const panel = () => tab.control().sidePanel;
   const column = () => tab.control().mainTabs;
@@ -631,10 +628,8 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
 });
 
 test("a task none of whose tabs was viewed shows its strip's last, keeps the tab chosen across a launch, and opens a new agent's draft once its last tab closes", async () => {
-  const listed = {
-    [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
-  };
-  const tab = mount({ shown: true, tasks: OPEN }, listed);
+  const listed = withAgents([RUNNING_AGENT]);
+  const tab = mount({ shown: true, tasks: listed });
   await settle();
   const column = () => tab.control().mainTabs;
   const agent = { agent: AGENT_ID };
@@ -646,7 +641,7 @@ test("a task none of whose tabs was viewed shows its strip's last, keeps the tab
   act(() => column().onChoose(agent));
   assert.deepEqual(column().tab, agent);
 
-  const launched = mount({ shown: true, tasks: OPEN }, listed);
+  const launched = mount({ shown: true, tasks: listed });
   await settle();
   const again = () => launched.control().mainTabs;
   assert.deepEqual(again().tab, agent, "a launch opens the task on the agent it last showed");
@@ -681,8 +676,7 @@ function namingRow(lines: readonly string[], total: number) {
 test("a task whose row settles its tab shows that agent's before its agents are read, and one whose row cannot say shows none until they are", async () => {
   const OLDER = "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9";
   const UNNAMED = "2c3d4e5f-6071-4829-93a4-b5c6d7e8f9a0";
-  // The list of agents never answers, so whatever the column shows, the row chose.
-  const unread = { [ACT_KIND.AGENTS_LIST]: () => new Promise<never>(() => undefined) };
+  // The list carries none of the task's agents yet, so whatever the column shows, the row chose.
   const shownOn = async (
     lines: readonly string[],
     total: number,
@@ -696,10 +690,7 @@ test("a task whose row settles its tab shows that agent's before its agents are 
           recent === undefined ? {} : { [TASK.id]: { recent: recent.map((agent) => ({ agent })) } },
       }),
     );
-    const tab = mount(
-      { shown: true, tasks: { ...OPEN, tasks: [namingRow(lines, total)] } },
-      unread,
-    );
+    const tab = mount({ shown: true, tasks: { ...OPEN, tasks: [namingRow(lines, total)] } });
     await settle();
     assert.equal(tab.control().agents.agents, undefined, "the agents are still being read");
     return tab.control().mainTabs.tab;
@@ -749,10 +740,7 @@ test("a column kept while the plan, the Inbox, and the Call stood in it reads wi
       },
     }),
   );
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
   const column = () => tab.control().mainTabs;
   assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
@@ -763,10 +751,7 @@ test("a column whose last agent is archived shows a new agent's draft standing a
   const archived = { ...RUNNING_AGENT, archivedAt: 5 };
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
-    {
-      [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
-      [ACT_KIND.AGENTS_ARCHIVE]: () => Promise.resolve({ agent: archived }),
-    },
+    { [ACT_KIND.AGENTS_ARCHIVE]: () => Promise.resolve({ agent: archived }) },
   );
   await settle();
   const column = () => tab.control().mainTabs;
@@ -849,7 +834,6 @@ test("in a narrow room a Luke link to another task's panel item opens that item,
     { shown: true, tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID }, room: SHELL_ROOM.NARROW },
     {
       [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
-      [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
     },
   );
   act(() =>
@@ -935,9 +919,8 @@ test("a Luke link keyed by the agent alone opens on the agent's task where it ha
     },
   });
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: withAgents([RUNNING_AGENT]) },
     {
-      [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
       [ACT_KIND.AGENTS_PAGE]: (payload) => {
         const { agentId } = payload as { agentId: string };
         if (agentId === SLOW) {
@@ -1002,10 +985,7 @@ test("a Luke link to a page an agent on no task showed opens that agent's page, 
       return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { pages: [page] } });
     },
   });
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
 
   act(() =>
@@ -1023,10 +1003,7 @@ test("a Luke link to a page an agent on no task showed opens that agent's page, 
 });
 
 test("a Luke link to an agent's worker opens the worker's own tab in the task's side panel beside its agent's, and one to its Changes their tab", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
 
   act(() =>
@@ -1076,7 +1053,6 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
   const tab = mount(
     { shown: true, tasks: withAgents([EARLIER, RUNNING_AGENT]) },
     {
-      [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [EARLIER, RUNNING_AGENT] }),
       [ACT_KIND.AGENTS_PULL_REQUEST]: () => Promise.resolve(shared),
       [ACT_KIND.AGENTS_ARCHIVE]: () => Promise.resolve({ agent: archived }),
     },
@@ -1105,10 +1081,7 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
 });
 
 test("a Luke link to an agent's message opens the agent and asks its tab to bring the message into view, each ask its own, let go once answered", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
   const link = {
     workspace: "acme",
@@ -1126,10 +1099,7 @@ test("a Luke link to an agent's message opens the agent and asks its tab to brin
 });
 
 test("a Luke link to a review thread opens its agent's Pull request tab on the view it names and asks the tab to bring the thread into view, each ask its own, let go once taken", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
   const link = (view: PullRequestThreadView) =>
     ({
@@ -2346,7 +2316,7 @@ test("an agent profile opens its task on the agent it stages, beside the agent's
   const terminal = mount({ ...run, profile: RUN_PROFILE.AGENT_TERMINAL });
   const page = mount({ ...run, profile: RUN_PROFILE.AGENT_PAGE });
 
-  assert.equal(tasks.control().agents.agents, undefined);
+  assert.deepEqual(tasks.control().agents.agents, []);
   assert.deepEqual(
     checks.control().agents.agents?.map((agent) => agent.title),
     ["Add teammate invitations"],
@@ -2876,11 +2846,10 @@ test("a group's quick add sends one quiet start with the group's standing and no
 test("New task's Agent mode sends one start carrying the agent, its words and model, and opens the task on the agent it started", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: withAgents([started]) },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
-      [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [started] }),
     },
   );
   const { choice, prompt, note, starts } = await startAgentTask(tab);
@@ -2910,7 +2879,6 @@ test("archiving a task's last agent opens no draft while the archive is out, so 
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
     {
-      [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
       [ACT_KIND.AGENTS_ARCHIVE]: () => archived.promise,
     },
   );
@@ -2936,11 +2904,10 @@ test("archiving a task's last agent opens no draft while the archive is out, so 
 test("a task started, with an agent or without, leaves a hidden side panel hidden", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: withAgents([started]) },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
-      [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [started] }),
     },
   );
   act(() => tab.control().sidePanel.onToggle());
@@ -2959,11 +2926,10 @@ test("a task started, with an agent or without, leaves a hidden side panel hidde
 test("New task's agent opens alone, no plan beside it, and the side panel stands open as it was on the task left", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: withAgents([started]) },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
-      [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [started] }),
     },
   );
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.PLAN });
@@ -2988,8 +2954,6 @@ test("New task's agent stands on its task with the words it started on as its fi
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
-      // The task's agents are still being read.
-      [ACT_KIND.AGENTS_LIST]: () => new Promise(() => undefined),
     },
   );
   const { prompt } = await startAgentTask(tab);
@@ -3009,10 +2973,9 @@ test("New task's agent start opens its page at once on the words as its agent's 
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: withAgents([started]) },
     {
       [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)),
-      [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [started] }),
     },
   );
   const prompt = "Make the sidebar keep its folds.";
@@ -3045,8 +3008,6 @@ test("New task's agent start opens no draft beside its agent while the task stan
     { shown: true, tasks: OPEN },
     {
       [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)),
-      // The task's agents are still being read.
-      [ACT_KIND.AGENTS_LIST]: () => new Promise(() => undefined),
     },
   );
   act(() => tab.control().onNewTask());
@@ -3165,8 +3126,6 @@ test("Create with an agent opens New task's card for an automation's agent over 
 
 test("an agent refused as New task's Agent mode started its task opens the task on a draft holding the words, model, and why, whose Retry starts the agent on that task under the start's key", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
-  // The service holds the agent once its own Start made it.
-  let agents: AgentSummary[] = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
     {
@@ -3175,9 +3134,15 @@ test("an agent refused as New task's Agent mode started its task opens the task 
           planId: OTHER_TASK_ID,
           agentStart: { failure: AGENT_CALL_FAILURE.UNANSWERED },
         }),
-      [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents }),
+      // The host answers a Start once the list carries the agent its own Start made.
       [ACT_KIND.AGENTS_START]: () => {
-        agents = [started];
+        tab.stand({
+          tasks: {
+            ...AGENT_TASK,
+            tasks: [{ ...listed(), id: OTHER_TASK_ID }],
+            taskAgents: [started],
+          },
+        });
         return Promise.resolve({ agent: started });
       },
     },
@@ -3227,8 +3192,7 @@ test("an agent's title first landing on a task still Untitled reads the tasks ag
   });
   const refreshes = (tab: ReturnType<typeof mount>) =>
     tab.told.filter((kind) => kind === ACT_KIND.TASKS_REFRESH).length;
-  const answers = { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) };
-  const tab = mount({ shown: true, tasks: viewOf("Untitled", null) }, answers);
+  const tab = mount({ shown: true, tasks: viewOf("Untitled", null) });
   await settle();
   const before = refreshes(tab);
   tab.stand({ tasks: viewOf("Untitled", "Fix token refresh") });
@@ -3236,7 +3200,7 @@ test("an agent's title first landing on a task still Untitled reads the tasks ag
   const landed = refreshes(tab) - before;
   closeWindow();
 
-  const named = mount({ shown: true, tasks: viewOf(TASK.name, null) }, answers);
+  const named = mount({ shown: true, tasks: viewOf(TASK.name, null) });
   await settle();
   const namedBefore = refreshes(named);
   named.stand({ tasks: viewOf(TASK.name, "Fix token refresh") });
@@ -3252,10 +3216,7 @@ function payloadsOf(tab: ReturnType<typeof mount>, kind: PortActKind): unknown[]
 }
 
 test("a task with no agent opens on a new agent's draft once its agents are read, asking the service nothing, and closing it opens a fresh one", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([]) });
   await vi.waitFor(async () => {
     await settle();
     assert.ok(tab.control().agents.draft, "the task holds a draft");
@@ -3278,10 +3239,7 @@ test("a task with no agent opens on a new agent's draft once its agents are read
 });
 
 test("closing a draft holding words lets it go at once, and its toast's Undo opens its tab again with the same words, files, and chips", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([]) });
   await vi.waitFor(async () => {
     await settle();
     assert.ok(tab.control().agents.draft, "the task holds a draft");
@@ -3316,10 +3274,7 @@ test("closing a draft holding words lets it go at once, and its toast's Undo ope
 });
 
 test("a draft closed with words whose place a fork has taken since is laid into that fork by Undo, the fork kept", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([]) });
   await vi.waitFor(async () => {
     await settle();
     assert.ok(tab.control().agents.draft, "the task holds a draft");
@@ -3347,10 +3302,7 @@ test("a draft closed with words whose place a fork has taken since is laid into 
 });
 
 test("a closed draft's Undo is withdrawn as its task is left", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([]) });
   await vi.waitFor(async () => {
     await settle();
     assert.ok(tab.control().agents.draft, "the task holds a draft");
@@ -3368,10 +3320,7 @@ test("a closed draft's Undo is withdrawn as its task is left", async () => {
 });
 
 test("a task with no agent opens its new agent's draft with a hidden side panel left hidden", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([]) });
   if (tab.control().sidePanel.open) act(() => tab.control().sidePanel.onToggle());
   await vi.waitFor(async () => {
     await settle();
@@ -3514,8 +3463,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const tab = mount(
-        { shown: true, tasks: OPEN },
-        { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+        { shown: true, tasks: withAgents([RUNNING_AGENT]) },
+        {},
         registryOn(yield* Clock.Clock),
       );
       yield* landed;
@@ -3552,8 +3501,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const tab = mount(
-        { shown: true, tasks: OPEN, unseenAgents: [UNSEEN_ID] },
-        { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: IDLE_AGENTS }) },
+        { shown: true, tasks: withAgents(IDLE_AGENTS), unseenAgents: [UNSEEN_ID] },
+        {},
         registryOn(yield* Clock.Clock),
       );
       yield* landed;
@@ -3592,9 +3541,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const clock = yield* Clock.Clock;
-      const listed = {
-        [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
-      };
+      const listed = {};
       const pulls = { changes: AGENT_ID };
       const first = mount({ shown: true, tasks: OPEN }, listed, registryOn(clock));
       yield* landed;
@@ -3625,8 +3572,8 @@ it.effect(
         }),
       );
       const tab = mount(
-        { shown: true, tasks: OPEN, unseenAgents: [UNSEEN_ID] },
-        { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: IDLE_AGENTS }) },
+        { shown: true, tasks: withAgents(IDLE_AGENTS), unseenAgents: [UNSEEN_ID] },
+        {},
         registryOn(yield* Clock.Clock),
       );
       yield* landed;
@@ -3651,8 +3598,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const tab = mount(
-        { shown: true, tasks: OPEN, unseenAgents: [UNSEEN_ID] },
-        { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: IDLE_AGENTS }) },
+        { shown: true, tasks: withAgents(IDLE_AGENTS), unseenAgents: [UNSEEN_ID] },
+        {},
         registryOn(yield* Clock.Clock),
       );
       yield* landed;
@@ -3671,29 +3618,22 @@ it.effect(
   "a tab shown as its task is left for one whose agents are still unread is stamped as it was left, not when it was last stamped",
   () =>
     Effect.gen(function* () {
-      const unread = Promise.withResolvers<never>();
       const tab = mount(
-        { shown: true, tasks: OPEN, unseenAgents: [UNSEEN_ID] },
-        {
-          [ACT_KIND.AGENTS_LIST]: (params) =>
-            Option.getOrUndefined(readListed(params))?.taskId === TASK.id
-              ? Promise.resolve({ agents: IDLE_AGENTS })
-              : unread.promise,
-          [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
-        },
+        { shown: true, tasks: withAgents(IDLE_AGENTS), unseenAgents: [UNSEEN_ID] },
+        { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
         registryOn(yield* Clock.Clock),
       );
       yield* landed;
       const column = () => tab.control().mainTabs;
       act(() => column().onChoose({ agent: FINISHED_ID }));
       yield* passing(Duration.minutes(50));
-      tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
+      tab.stand({ tasks: { ...withAgents(IDLE_AGENTS), activeTaskId: OTHER_TASK_ID } });
       yield* landed;
       // The panel filling the window over the column keeps the tab from being viewed again on return.
       act(() => tab.control().sidePanel.onToggleFullScreen());
 
       yield* passing(Duration.hours(23));
-      tab.stand({ tasks: OPEN });
+      tab.stand({ tasks: withAgents(IDLE_AGENTS) });
       yield* passing(Duration.minutes(30));
       assert.deepEqual(
         column().tabs,
@@ -3705,6 +3645,3 @@ it.effect(
       assert.deepEqual(column().tabs, [{ agent: AGENT_ID }, { agent: UNSEEN_ID }]);
     }),
 );
-
-/** A list's payload, read back as the act's own schema admits it. */
-const readListed = Schema.decodeUnknownOption(Schema.Struct({ taskId: Schema.String }));

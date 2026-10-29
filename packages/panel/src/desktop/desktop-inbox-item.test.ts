@@ -1366,7 +1366,7 @@ test("a skill named by a settled item of an agent with no plan that a link reach
   assert.deepEqual(opened, [], "nothing leaves for GitHub");
 });
 
-test("Got it on a notice whose agent waits to hear back reaches the agent, so the window reads its agents again, as it does for no nod on a notice that needs none", async () => {
+test("Got it on a notice answers it with a nod, whether its agent waits to hear back or not", async () => {
   const notice = (id: string, title: string, needsReply: boolean): InboxItem => ({
     ...noticeOf(item(id, title, 6_000)),
     startedBy: TEAMMATE,
@@ -1380,17 +1380,12 @@ test("Got it on a notice whose agent waits to hear back reaches the agent, so th
   ]);
   const { page } = mount();
   await settle();
-  const listReads: AnyAct[] = [];
   const nods: AgentInboxAnswerParams[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      // Note that only the answered items' task's agents are counted, because the item chosen next reads its own task's for its card.
-      if (request.kind === ACT_KIND.AGENTS_LIST && request.payload.taskId === BILLING.id) {
-        listReads.push(request);
-      }
       if (request.kind === ACT_KIND.AGENTS_INBOX_ANSWER) {
         nods.push(request.payload);
         const asked = request.payload.itemId === heard.id ? heard : quiet;
@@ -1410,17 +1405,12 @@ test("Got it on a notice whose agent waits to hear back reaches the agent, so th
 
   act(() => rowNamed(page, "Add the secret").click());
   await settle();
-  const beforeQuiet = listReads.length;
   await gotIt();
   await settle();
-  assert.equal(listReads.length, beforeQuiet, "a nod nobody hears moves nothing about the agent");
-
   act(() => rowNamed(page, "Turn on the flag").click());
   await settle();
-  const beforeHeard = listReads.length;
   await gotIt();
   await settle();
-  assert.ok(listReads.length > beforeHeard, "the agent heard the nod, so its list is read again");
   assert.deepEqual(
     nods.map(({ clientKey: _key, ...nod }) => nod),
     [

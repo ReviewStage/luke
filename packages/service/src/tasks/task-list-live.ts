@@ -9,7 +9,7 @@ import {
   agentVisibleTo,
   taskReachableBy,
 } from "@luke/database/models/workspace-store";
-import { agentPin, taskPin } from "@luke/database/schemas";
+import { agentPin, conversations, device, taskPin } from "@luke/database/schemas";
 import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
 import { task } from "@luke/database/schemas/task";
@@ -35,7 +35,8 @@ import {
  * reader's own pin and the owner's name, and the agents with their newest
  * turn, when the newest line of the developer's awaiting its turn was
  * written and whether that turn's session ended, when the newest turn to end
- * ended, what each last published, and the names of the members each names. A third, the issues
+ * ended, what each last published, the harness its conversation runs on, the
+ * Mac a local one runs on, and the names of the members each names. A third, the issues
  * the plans linked, answers no rows now that a plan links none, and stands
  * because a released desktop follows it. Every column stands
  * under the key `@luke/features/task-list-live` reads it by and every
@@ -114,7 +115,11 @@ function issuesStatement() {
 /**
  * Every agent of a plan the account reaches, and every agent with no plan
  * in its workspaces, archived ones among them, each with its newest turn by
- * the order turns were queued, as `findLatestTurns` reads it.
+ * the order turns were queued, as `findLatestTurns` reads it, the harness
+ * its conversation runs on, and the Mac it runs on by its name, as
+ * `devicesNamed` reads them. Note that the Mac's last beat is not read,
+ * because a beat wakes nothing (`deviceSync`) and a window judges a Mac by
+ * its own presence read.
  */
 function agentsStatement(userId: string) {
   const latest = latestTurnOf(agentTable.conversationId, "latest_turn");
@@ -141,6 +146,10 @@ function agentsStatement(userId: string) {
           disabledServers: agentTable.disabledServers,
           published: agentTable.published,
           startedFrom: agentTable.startedFrom,
+          runtime: conversations.runtime,
+          machine: agentTable.machine,
+          deviceId: agentTable.deviceId,
+          deviceName: device.name,
           pinPosition: agentPin.position,
           turnId: latest.id,
           turnStatus: latest.status,
@@ -165,6 +174,8 @@ function agentsStatement(userId: string) {
     .leftJoin(agentPin, and(eq(agentPin.codingAgentId, agentTable.id), eq(agentPin.userId, userId)))
     .leftJoin(starter, eq(starter.id, agentTable.userId))
     .leftJoin(archiver, eq(archiver.id, sql`${agentTable.archivedBy} ->> 'userId'`))
+    .leftJoin(conversations, eq(conversations.id, agentTable.conversationId))
+    .leftJoin(device, eq(device.id, agentTable.deviceId))
     .leftJoinLateral(latest, sql`true`)
     .where(
       // An agent on a task is listed only where the account reaches the task too, as a read of it by its id is.

@@ -2,13 +2,16 @@ import {
   type AgentLatestTurn,
   type AgentStoreEffect,
   awaitingLinesOfReached,
+  continuationsOf,
   lastSettledTurnsOfReached,
   latestTurnsOfReached,
   listPublishedAgents,
   listPublishedAgentsById,
   listTasklessAgentRows,
+  nativeRuntimesOfReached,
   type PublishedAgentLine,
 } from "@luke/database/models/agent-store";
+import { devicesNamed } from "@luke/database/models/device-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import {
   AGENT_KIND,
@@ -34,6 +37,7 @@ import {
   agentSummary,
   startedBlank,
   summaryAccounts,
+  summaryDevices,
 } from "./coder-host/status.js";
 
 /**
@@ -243,14 +247,29 @@ export function listTasklessAgents(
     const turns = yield* latestTurnsOfReached(conversationIds);
     const awaiting = yield* awaitingLinesOfReached(conversationIds);
     const settled = yield* lastSettledTurnsOfReached(conversationIds);
-    // The member each was archived by or for is named too, as the agent's own page names them.
+    const runtimes = yield* nativeRuntimesOfReached(conversationIds);
+    // The member each was archived by or for is named too, as the agent's own page names them,
+    // and so are the agents continued from each, and the Mac a local one runs on.
     const names = yield* readAccountNames(agents.flatMap(summaryAccounts));
+    const continued = yield* continuationsOf(
+      userId,
+      agents.map((agent) => agent.id),
+    );
+    const macs = yield* devicesNamed(summaryDevices(agents));
     const now = yield* Clock.currentTimeMillis;
     return agents.map((agent) => {
       const turn = turns.get(agent.conversationId);
       const awaitingLineAt = awaiting.get(agent.conversationId);
+      const runtime = runtimes.get(agent.conversationId);
       return {
-        ...agentSummary(agent, { turn, awaitingLineAt }, now, names),
+        ...agentSummary(
+          agent,
+          { turn, awaitingLineAt, runtime },
+          now,
+          names,
+          continued.get(agent.id),
+          macs,
+        ),
         // The fields its own page names beside the summary; the run that started it is that page's alone.
         automationId: agent.automationId,
         workspaceId: agent.organizationId,

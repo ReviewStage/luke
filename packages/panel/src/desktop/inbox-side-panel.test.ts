@@ -169,11 +169,6 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
         status: FAKE_ANSWER.DONE,
         value: { id: request.payload.itemId, unread: request.payload.unread },
       });
-    case ACT_KIND.AGENTS_LIST:
-      return Promise.resolve({
-        status: FAKE_ANSWER.DONE,
-        value: { agents: [ARCHIVED, AGENT] },
-      });
     case ACT_KIND.AGENTS_PULL_REQUEST:
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
@@ -243,6 +238,7 @@ async function inbox(
         tasks: tasksControl({
           workspace: ACME,
           tasks: [TASK],
+          liveAgents: [ARCHIVED, AGENT],
           inbox: [{ taskId: TASK.id, items: [waitingOf(ITEM)] }],
           inboxTasks: [{ taskId: TASK.id, items: 1, updatedAt: 2_000 }],
           inboxView: {

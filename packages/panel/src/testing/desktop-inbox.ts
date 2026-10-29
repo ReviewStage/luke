@@ -734,6 +734,8 @@ export function mount(
       ...(readerKnown ? { me: READER.userId } : {}),
       workspace: world.listedWorkspace,
       tasks: listed,
+      // The agents the task list followed live carries, none while it has carried none yet.
+      liveAgents: world.agentListHeld ? undefined : world.listedAgents,
       listRead,
       sidePanel: sidePanel ?? {
         ...tasksControl().sidePanel,

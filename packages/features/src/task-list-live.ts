@@ -10,6 +10,7 @@ import {
   AGENT_ARCHIVER,
   AGENT_BRIEF,
   AGENT_KIND,
+  AGENT_MACHINE,
   AGENT_STATUS,
   type AgentArchivedBy,
   type AgentStatus,
@@ -17,6 +18,7 @@ import {
   agentPullRequestSchema,
   agentSummarySchema,
   CONTEXT_WINDOW,
+  NATIVE_AGENT_RUNTIMES,
   PULL_REQUEST_STATE,
   pullRequestAuthorOf,
   type TasklessAgent,
@@ -155,6 +157,13 @@ const agentLiveRowSchema = EffectSchema.Struct({
   lastSettledAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
   /** Whether the newest turn's reply is a member's operator's quiet reply alone; absent from a statement before heartbeats. */
   quietTurn: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.Boolean)),
+  /** The harness the agent's conversation runs on, as it was started; absent from a statement before it was carried, as is each below. */
+  runtime: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  /** Where the agent's runner lives (`AGENT_MACHINE`). */
+  machine: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  /** The Mac a local agent runs on, by its id and its name; null for an agent in a sandbox, or whose Mac is gone. */
+  deviceId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  deviceName: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
 });
 
 /** The plan list's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
@@ -379,8 +388,37 @@ function archivedByOf(row: AgentLiveRow): AgentArchivedBy | undefined {
   };
 }
 
-/** One agent as the tabs draw it, on a plan or with none, its status read at `now`, as the service's summary of it says it. */
-function agentSummaryOf(row: AgentLiveRow, now: number): AgentSummary {
+/** The agents started from each agent, by its id, first started first, as its summary's `continuedBy` names them. */
+type Continuations = ReadonlyMap<string, NonNullable<AgentSummary["continuedBy"]>>;
+
+/** Every agent's continues and forks, read off the rows started from it. */
+function continuationsOf(rows: readonly AgentLiveRow[]): Continuations {
+  const bySource = new Map<string, NonNullable<AgentSummary["continuedBy"]>[number][]>();
+  for (const row of rows.toSorted(firstStarted)) {
+    const from = row.startedFrom;
+    if (from === null) continue;
+    const { messageId } = from;
+    bySource.set(from.agentId, [
+      ...(bySource.get(from.agentId) ?? []),
+      messageId === undefined
+        ? { agentId: row.id, title: row.title, forked: false }
+        : { agentId: row.id, title: row.title, forked: true, messageId },
+    ]);
+  }
+  return bySource;
+}
+
+/** The Mac a local agent runs on as its summary names it, with no beat; none for one in a sandbox, or whose Mac is gone. */
+function macOf(row: AgentLiveRow): AgentSummary["mac"] {
+  const { deviceId, deviceName } = row;
+  if (row.machine !== AGENT_MACHINE.DEVICE || deviceId == null || deviceName == null) {
+    return undefined;
+  }
+  return { name: deviceName, deviceId };
+}
+
+/** One agent as the tabs draw it, on a plan or with none, its status read at `now`, as the service's summary of it says it, with the agents `continued` from it. */
+function agentSummaryOf(row: AgentLiveRow, now: number, continued: Continuations): AgentSummary {
   const servers = (row.disabledServers ?? []).filter(
     (name) => integrationConnectionOf(name) !== undefined,
   );
@@ -388,6 +426,9 @@ function agentSummaryOf(row: AgentLiveRow, now: number): AgentSummary {
   const started = runStartedAt(row, now);
   const status = statusOf(row, now);
   const stoppable = status !== AGENT_STATUS.RUNNING || turnStoppable(turnOf(row));
+  const runtime = NATIVE_AGENT_RUNTIMES.find((each) => each === row.runtime);
+  const mac = macOf(row);
+  const continuedBy = continued.get(row.id);
   return {
     id: row.id,
     planId: row.planId,
@@ -396,8 +437,11 @@ function agentSummaryOf(row: AgentLiveRow, now: number): AgentSummary {
     ...(row.contextWindow === CONTEXT_WINDOW.STANDARD
       ? { contextWindow: CONTEXT_WINDOW.STANDARD }
       : undefined),
+    ...(runtime === undefined ? undefined : { runtime }),
     title: row.title,
     ...(row.kind === AGENT_KIND.OPERATOR ? { kind: row.kind } : undefined),
+    ...(row.machine === AGENT_MACHINE.DEVICE ? { machine: AGENT_MACHINE.DEVICE } : undefined),
+    ...(mac === undefined ? undefined : { mac }),
     createdAt: row.createdAt,
     status,
     ...(row.quietTurn === true ? { quietTurn: true } : undefined),
@@ -412,15 +456,16 @@ function agentSummaryOf(row: AgentLiveRow, now: number): AgentSummary {
     ...(row.automationId === null ? undefined : { automationId: row.automationId }),
     ...(row.automationName === null ? undefined : { automationName: row.automationName }),
     ...(row.startedFrom === null ? undefined : { from: row.startedFrom }),
+    ...(continuedBy === undefined ? undefined : { continuedBy }),
     ...(started === undefined ? undefined : { runStartedAt: started }),
     ...(stoppable ? undefined : { stoppable: false }),
   };
 }
 
 /** An agent with no plan as the list carries it, as its own page reads it, its status read at `now`. */
-function tasklessAgentOf(row: AgentLiveRow, now: number): TasklessAgent {
+function tasklessAgentOf(row: AgentLiveRow, now: number, continued: Continuations): TasklessAgent {
   return {
-    ...agentSummaryOf(row, now),
+    ...agentSummaryOf(row, now, continued),
     planId: null,
     automationId: row.automationId,
     workspaceId: row.workspaceId,
@@ -464,10 +509,11 @@ function firstStarted(a: AgentLiveRow, b: AgentLiveRow): number {
  * plan's agents again on a clock.
  */
 export function taskAgentsOfLiveRows(rows: TaskListLiveRows, now: number): readonly AgentSummary[] {
+  const continued = continuationsOf(rows.agents);
   return rows.agents
     .filter((row) => row.planId !== null)
     .toSorted(firstStarted)
-    .map((row) => agentSummaryOf(row, now));
+    .map((row) => agentSummaryOf(row, now, continued));
 }
 
 /**
@@ -508,6 +554,7 @@ export function taskPullRequestsOfLiveRows(rows: TaskListLiveRows): readonly Tas
  * started first.
  */
 export function taskListOfLiveRows(rows: TaskListLiveRows, now: number): TaskListAnswer {
+  const continued = continuationsOf(rows.agents);
   const byTask = new Map<string, AgentLiveRow[]>();
   for (const agent of rows.agents) {
     if (agent.planId === null) continue;
@@ -520,7 +567,7 @@ export function taskListOfLiveRows(rows: TaskListLiveRows, now: number): TaskLis
     planlessAgents: rows.agents
       .filter((agent) => agent.planId === null)
       .toSorted(newestFirst)
-      .map((agent) => tasklessAgentOf(agent, now)),
+      .map((agent) => tasklessAgentOf(agent, now, continued)),
   };
 }
 
