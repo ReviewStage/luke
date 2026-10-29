@@ -48,9 +48,9 @@ export interface ChaptersRead {
  * head settles (`useAgentRead`), and again after a Generate. A read names the
  * number the tab's own read of the pull request found, so the service
  * answers from what it keeps rather than asking GitHub for the pull request
- * again, and answers as failed where that read found none to name; a
- * Generate that tells the chapters for a head other than the tab's reads the
- * tab again, so its files catch up. A Generate's own
+ * again, and is asked only once that read has found one; a Generate reads
+ * the whole tab again once it lands, so its files catch up with the head
+ * the chapters were told for. A Generate's own
  * answer is drawn as soon as it lands and stands until the read asked after
  * it does, so the chapters made never give way to what was there before.
  */
@@ -59,8 +59,8 @@ export function useChaptersRead(
   control: AgentsControl,
   shown: boolean,
   held: ChaptersHeld | undefined,
-  /** Reads the tab again, its files among them, where a Generate found a head the tab's reads have not seen. */
-  onMoved: () => void,
+  /** Reads the tab again, the chapters and their files among them, which a Generate does once it lands, since it tells them for the head GitHub holds then. */
+  refresh: () => void,
 ): ChaptersRead {
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? AGENT_STATUS.RUNNING);
@@ -77,8 +77,8 @@ export function useChaptersRead(
     { readonly of: unknown; readonly answer: PullRequestChaptersAnswerView } | undefined
   >(undefined);
   const [generating, setGenerating] = useState<number | undefined>(undefined);
-  const latest = useRef({ control, number, read, held, onMoved });
-  latest.current = { control, number, read, held, onMoved };
+  const latest = useRef({ control, number, read, refresh });
+  latest.current = { control, number, read, refresh };
   // Note that whether a Generate is out is a ref too, because two presses in one frame would both read the state as none.
   const out = useRef(false);
   const generate = useCallback(() => {
@@ -93,16 +93,7 @@ export function useChaptersRead(
         out.current = false;
         setGenerating(undefined);
         setGenerated({ of: latest.current.read.answer, answer });
-        latest.current.read.ask();
-        // Note that a Generate tells the chapters for the head GitHub holds now, so one other than the tab's means a push its reads have not seen.
-        const { held, onMoved } = latest.current;
-        const made = "pullRequest" in answer ? answer.pullRequest?.chapters : undefined;
-        const moved =
-          held?.head !== undefined &&
-          made !== undefined &&
-          made.status !== PULL_REQUEST_CHAPTERS_STATE.NONE &&
-          made.headSha !== held.head;
-        if (moved) onMoved();
+        latest.current.refresh();
       });
   }, [agentId]);
   const answer =

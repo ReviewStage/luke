@@ -1096,10 +1096,10 @@ export function AgentChaptersTab({
   lineComments: LineComments | undefined;
 }): React.JSX.Element {
   // Note that the files' head counts as well as the pull request's, because a chapter's hunks are found in the files drawn.
-  const state = chaptersShown(chapters.answer, chapters.out, chapters.generating, [
-    chapters.head,
-    changes.pullRequest?.headSha,
-  ]);
+  const state = chaptersShown(chapters.answer, chapters.out, chapters.generating, {
+    pullRequest: chapters.head,
+    files: changes.pullRequest?.headSha,
+  });
   if (state.kind !== CHAPTERS_SHOWN.READY) return <>{chaptersState(state, chapters, shown)}</>;
   // The chapters wait on the files as Files changed does: a failure gives way to the wait once asked again.
   const { answer, out, pullRequest } = changes;

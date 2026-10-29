@@ -174,10 +174,14 @@ test("this window's own Generate stands over whatever the read last said, timed 
 });
 
 test("chapters made for an older head than the tab holds are stale, those for the head now are not, and Other changes is read last wherever it was put", () => {
-  const current = chaptersShown(answering(ready(HEAD, [OTHER, FIRST, SECOND])), false, undefined, [
-    HEAD,
-  ]);
-  const older = chaptersShown(answering(ready(OLDER, [FIRST])), false, undefined, [HEAD]);
+  const now = { pullRequest: HEAD, files: HEAD };
+  const current = chaptersShown(
+    answering(ready(HEAD, [OTHER, FIRST, SECOND])),
+    false,
+    undefined,
+    now,
+  );
+  const older = chaptersShown(answering(ready(OLDER, [FIRST])), false, undefined, now);
 
   assert.equal(current.kind, CHAPTERS_SHOWN.READY);
   assert.equal(older.kind, CHAPTERS_SHOWN.READY);
@@ -190,11 +194,17 @@ test("chapters made for an older head than the tab holds are stale, those for th
   );
 });
 
-test("chapters are stale where the files drawn are of another push than the pull request's head they were made for", () => {
-  const filesHead = "c".repeat(40);
-  const shown = chaptersShown(answering(ready(HEAD, [FIRST])), false, undefined, [HEAD, filesHead]);
+test("chapters are stale where the files drawn are of another push than they were made for, or name no head, whatever the pull request's head", () => {
+  const stale = (files: string | undefined) => {
+    const shown = chaptersShown(answering(ready(HEAD, [FIRST])), false, undefined, {
+      pullRequest: undefined,
+      files,
+    });
+    return shown.kind === CHAPTERS_SHOWN.READY && shown.stale;
+  };
 
-  assert.equal(shown.kind === CHAPTERS_SHOWN.READY && shown.stale, true);
+  assert.equal(stale("c".repeat(40)), true);
+  assert.equal(stale(undefined), true);
 });
 
 test("a chapter is viewed once every file it holds is, so a file two chapters share is viewed in both; one holding no file is never viewed", () => {

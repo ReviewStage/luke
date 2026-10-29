@@ -2837,10 +2837,7 @@ function PullRequestTabBody({
   const chapters = useChaptersRead(
     agentId,
     control,
-    shown &&
-      !none &&
-      parts.pullRequest.kind !== PART.PENDING &&
-      view === PULL_REQUEST_VIEW.CHAPTERS,
+    shown && overview !== undefined && view === PULL_REQUEST_VIEW.CHAPTERS,
     overview === undefined
       ? undefined
       : { number: overview.number, head: overview.merging?.headSha },
