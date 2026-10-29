@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
-import { AGENT_CALL_FAILURE, TRANSCRIPT_KIND } from "@luke/features/agent-view";
+import { AGENT_CALL_FAILURE, ARCHIVE_DRAWN, TRANSCRIPT_KIND } from "@luke/features/agent-view";
 import {
   AGENT_BOUNDS,
   AGENT_CURSOR_START,
@@ -56,7 +56,10 @@ import { noNetwork } from "@luke/wire/testing";
 import { Deferred, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { type AgentClient, composeAgents } from "./compose-agents.js";
+import type { RowWrite } from "./live-collection.js";
+import { type AgentRow, taskListCollections } from "./task-list-collections.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
+import { agentListRow } from "./testing/task-list-rows.js";
 import { HELD_TRANSCRIPTS } from "./transcript-held.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -257,6 +260,8 @@ function fakeService() {
   let changedFirst: InboxItem | undefined;
   /** The transaction the service says wrote a sent message's row; none says none was written. */
   let sentTxid: string | undefined;
+  /** What a rename, an archive, a change of model, or a switch of servers waits on before the service answers it; nothing from the start. */
+  let changeGate: Effect.Effect<void> = Effect.void;
   /** A plan's or an agent's inbox as its live read answers it: polled from the one script, or the refusal standing. */
   const scopeLive = (poll: boolean | undefined, after: string | undefined) =>
     Effect.suspend((): ReturnType<AgentClient["taskInboxLive"]> => {
@@ -364,17 +369,17 @@ function fakeService() {
         return sentTxid === undefined ? { agent: AGENT } : { agent: AGENT, txid: sentTxid };
       }),
     choose: (agentId, choice) =>
-      Effect.sync(() => {
+      Effect.map(changeGate, () => {
         asked.push(`choose:${agentId}:${choice.model}:${choice.effort}`);
         return { agent: { ...AGENT, ...choice } };
       }),
     rename: (agentId, request) =>
-      Effect.sync(() => {
+      Effect.map(changeGate, () => {
         asked.push(`rename:${agentId}:${request.title}`);
         return { agent: { ...AGENT, title: request.title } };
       }),
     switchServers: (agentId, request) =>
-      Effect.sync(() => {
+      Effect.map(changeGate, () => {
         asked.push(`servers:${agentId}:${request.disabledServers.join(",")}`);
         return { agent: { ...AGENT, disabledServers: request.disabledServers } };
       }),
@@ -394,7 +399,7 @@ function fakeService() {
         return { deleted: true as const, txid: "9102" };
       }),
     archive: (agentId, request) =>
-      Effect.sync(() => {
+      Effect.map(changeGate, () => {
         asked.push(`archive:${agentId}:${String(request.archived)}`);
         return { agent: { ...AGENT, archivedAt: 1_800_000_120_000 } };
       }),
@@ -674,6 +679,10 @@ function fakeService() {
     sendTxid: (txid: string | undefined) => {
       sentTxid = txid;
     },
+    /** What a change to an agent waits on before the service answers it. */
+    holdChanges: (gate: Effect.Effect<void>) => {
+      changeGate = gate;
+    },
     /** Whether the service answers a plan's or an agent's inbox's live read, or that the account reaches none; none answers unanswered. */
     sealScope: (next: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined) => {
       scope = next;
@@ -757,6 +766,7 @@ function subject(
     sendsNetwork?: boolean;
     accountId?: () => string | undefined;
     listed?: (txid: string | undefined) => Effect.Effect<void>;
+    writeAgent?: RowWrite<AgentRow>;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -773,6 +783,7 @@ function subject(
       accountId: options.accountId ?? (() => "user-dana"),
       client: service.client,
       ...(options.listed === undefined ? undefined : { listed: options.listed }),
+      ...(options.writeAgent === undefined ? undefined : { writeAgent: options.writeAgent }),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
@@ -800,6 +811,7 @@ function subject(
       holdPages: service.holdPages,
       pageNewest: service.pageNewest,
       sendTxid: service.sendTxid,
+      holdChanges: service.holdChanges,
       sealScope: service.sealScope,
       sealAccount: service.sealAccount,
       sealItems: service.sealItems,
@@ -2641,22 +2653,92 @@ it.effect(
     }),
 );
 
-it.effect("a Start answers its agent before the task list carries the Start's transaction", () =>
-  Effect.gen(function* () {
-    const { call, startCommits } = yield* subject({ listed: () => Effect.never });
-    startCommits("9104");
+it.effect(
+  "a rename, an archive, a change of model, and a switch of MCP servers each stand on the agent's row of the task list from the press, and an archive a dialog waits on draws nothing until it is answered",
+  () =>
+    Effect.gen(function* () {
+      const drawn: (readonly AgentSummary[])[] = [];
+      const list = yield* taskListCollections({
+        draw: ({ taskAgents }) => void drawn.push(taskAgents),
+        txWait: () => undefined,
+      });
+      yield* list.answer({ plans: [], agents: [{ ...agentListRow(TASK_ID, NOW), id: AGENT_ID }] });
+      const answered = yield* Deferred.make<void>();
+      const { call, holdChanges } = yield* subject({ writeAgent: list.writeAgent });
+      holdChanges(Deferred.await(answered));
+      const standing = () => drawn.at(-1)?.[0];
 
-    const starting = yield* Effect.forkChild(
-      call(GATEWAY_METHOD.AGENTS_START, { taskId: TASK_ID, idempotencyKey: "press-1" }),
-    );
-    yield* settled;
+      const asked = yield* Effect.forkChild(
+        Effect.all(
+          [
+            call(GATEWAY_METHOD.AGENTS_RENAME, { agentId: AGENT_ID, title: "Sign-out button" }),
+            call(GATEWAY_METHOD.AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true }),
+            call(GATEWAY_METHOD.AGENTS_CHOOSE, {
+              agentId: AGENT_ID,
+              model: "openai/gpt-6.1-sol",
+              effort: "low",
+            }),
+            call(GATEWAY_METHOD.AGENTS_SERVERS, { agentId: AGENT_ID, disabledServers: ["linear"] }),
+          ],
+          { concurrency: "unbounded" },
+        ),
+      );
+      yield* settled;
+      const pressed = standing();
+      yield* Deferred.succeed(answered, undefined);
+      yield* Fiber.join(asked);
 
-    assert.notEqual(starting.pollUnsafe(), undefined, "answered with the list still behind");
-    assert.deepEqual(yield* Fiber.join(starting), {
-      agent: { ...AGENT, status: AGENT_STATUS.STARTING },
-      txid: "9104",
-    });
-  }),
+      const held = yield* Deferred.make<void>();
+      holdChanges(Deferred.await(held));
+      const asking = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.AGENTS_ARCHIVE, {
+          agentId: AGENT_ID,
+          archived: false,
+          drawn: ARCHIVE_DRAWN.ON_ANSWER,
+        }),
+      );
+      yield* settled;
+      const dialog = standing()?.archivedAt;
+      yield* Deferred.succeed(held, undefined);
+      yield* Fiber.join(asking);
+
+      assert.deepEqual(
+        [pressed?.title, pressed?.archivedAt, pressed?.model, pressed?.effort],
+        ["Sign-out button", NOW, "openai/gpt-6.1-sol", "low"],
+      );
+      assert.deepEqual(pressed?.disabledServers, ["linear"]);
+      assert.equal(dialog, NOW, "the dialog's unarchive is not drawn while it is out");
+    }),
+);
+
+it.effect(
+  "a Start answers its agent once the task list carries the Start's transaction, so its tab finds the agent the list draws",
+  () =>
+    Effect.gen(function* () {
+      const carried = yield* Deferred.make<void>();
+      const waited: (string | undefined)[] = [];
+      const { call, startCommits } = yield* subject({
+        listed: (txid) =>
+          Effect.andThen(
+            Effect.sync(() => waited.push(txid)),
+            Deferred.await(carried),
+          ),
+      });
+      startCommits("9104");
+
+      const starting = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.AGENTS_START, { taskId: TASK_ID, idempotencyKey: "press-1" }),
+      );
+      yield* settled;
+      assert.equal(starting.pollUnsafe(), undefined, "no answer while the list is behind");
+
+      yield* Deferred.succeed(carried, undefined);
+      assert.deepEqual(waited, ["9104"]);
+      assert.deepEqual(yield* Fiber.join(starting), {
+        agent: { ...AGENT, status: AGENT_STATUS.STARTING },
+        txid: "9104",
+      });
+    }),
 );
 
 it.effect(

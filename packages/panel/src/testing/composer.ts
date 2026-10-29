@@ -32,7 +32,7 @@ export const QUIET_COMPOSER = {
   servers: { disabled: [], onSwitch: ignore, onOpenSettings: ignore },
   published: undefined,
   doors: { openGitHub: ignore, copy: ignore },
-  onStop: () => Promise.resolve(),
+  onStop: () => Promise.resolve(false),
 } as const;
 
 /** Imports the editor bundle and settles once it has landed, as the panel lands it after its first paint. */

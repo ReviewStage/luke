@@ -449,8 +449,8 @@ export function AgentComposer({
   /** What the agent published, once the service has said; nothing before. */
   published: AgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
-  /** Stops the agent; the promise settles once the service has answered. */
-  onStop: () => Promise<void>;
+  /** Stops the agent, answering whether the service took the Stop. */
+  onStop: () => Promise<boolean>;
   /** The name the agent goes by (`agentName` in `@luke/features`), which the placeholder writes to; none where it is not known. */
   agentName?: string | undefined;
   /** The words a dictation is likely to say, read off the plan (`dictation-keywords.ts`). */
@@ -494,6 +494,9 @@ export function AgentComposer({
   const [serversOpen, setServersOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
+  // Note that a Stop the service took reads Stopping until the agent offers none, because the task
+  // list carries the stop a moment after the answer.
+  if (stopping && !stoppable) setStopping(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // Whether the last paste was cut to the room the box has left, until the words change again.
   const [cut, setCut] = useState(false);
@@ -651,7 +654,10 @@ export function AgentComposer({
 
   const stop = () => {
     setStopping(true);
-    onStop().finally(() => setStopping(false));
+    onStop().then(
+      (took) => setStopping(took),
+      () => setStopping(false),
+    );
   };
 
   // Note that a popover closed by key while the ⋯ stands hands focus to the

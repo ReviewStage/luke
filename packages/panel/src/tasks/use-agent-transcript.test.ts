@@ -118,8 +118,6 @@ function drawn(follower: TranscriptFollower, older?: TranscriptOlderReader) {
       shown: props.shown,
       follower,
       older,
-      onStatus: () => undefined,
-      onTitle: () => undefined,
     });
     return null;
   }

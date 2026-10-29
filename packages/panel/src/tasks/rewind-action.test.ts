@@ -114,7 +114,6 @@ async function box(rewound: AgentAgentAnswer, sent: AgentAgentAnswer = REWOUND) 
         calls.push(`rewind:${messageId}`);
         return Promise.resolve(rewound);
       },
-      onStatus: () => undefined,
     });
     return null;
   }

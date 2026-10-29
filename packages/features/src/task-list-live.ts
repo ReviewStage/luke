@@ -457,14 +457,15 @@ function firstStarted(a: AgentLiveRow, b: AgentLiveRow): number {
 }
 
 /**
- * Every agent on a plan, the archived ones left out, each as the plan's own
- * list of agents names it with its status read at `now`, the first started
- * first: what the desktop's ledger of agents reads where it once listed
- * each plan's agents again on a clock.
+ * Every agent on a plan, the archived ones among them, each as the plan's
+ * own list of agents names it with its status read at `now`, the first
+ * started first: what the open plan's tabs draw, and what the desktop's
+ * ledger of agents reads, the archived left out, where it once listed each
+ * plan's agents again on a clock.
  */
 export function taskAgentsOfLiveRows(rows: TaskListLiveRows, now: number): readonly AgentSummary[] {
   return rows.agents
-    .filter((row) => row.planId !== null && row.archivedAt === null)
+    .filter((row) => row.planId !== null)
     .toSorted(firstStarted)
     .map((row) => agentSummaryOf(row, now));
 }

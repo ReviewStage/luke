@@ -52,8 +52,8 @@ import {
   pinAgentCommitted,
   readVisibleAgentWorkspace,
   renameAgentCommitted,
-  updateAgentChoice,
-  updateAgentServers,
+  updateAgentChoiceCommitted,
+  updateAgentServersCommitted,
 } from "@luke/database/models/agent-store";
 import { devicesNamed } from "@luke/database/models/device-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
@@ -179,15 +179,6 @@ const listedSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
       agentSummary(agent, standing(agent.conversationId), now, names, continuedBy(agent.id), macs),
     ),
   };
-});
-
-/** The agent as it then stands, or not found where the row went between the read and the write. */
-const changedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  changed: Option.Option<Parameters<typeof summaryOf>[1]>,
-): Effect.fn.Return<{ agent: AgentSummary }, HostedRefusal, DatabaseServices> {
-  if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return { agent: yield* summaryOf(userId, changed.value) };
 });
 
 /**
@@ -531,10 +522,10 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         );
       }
       if ("disabledServers" in body) {
-        return yield* changedAgent(
+        return yield* committedAgent(
           userId,
           yield* hostedStoreOrUnavailable(
-            updateAgentServers(userId, agent.id, body.disabledServers),
+            updateAgentServersCommitted(userId, agent.id, body.disabledServers),
           ),
         );
       }
@@ -545,9 +536,11 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
       const choice = yield* choiceOrInvalid(acceptedAgentChoice(userId, body));
-      const changed = yield* hostedStoreOrUnavailable(updateAgentChoice(userId, agent.id, choice));
-      if (Option.isSome(changed)) yield* runnerChoiceApplied(changed.value);
-      return yield* changedAgent(userId, changed);
+      const changed = yield* hostedStoreOrUnavailable(
+        updateAgentChoiceCommitted(userId, agent.id, choice),
+      );
+      if (Option.isSome(changed)) yield* runnerChoiceApplied(changed.value.agent);
+      return yield* committedAgent(userId, changed);
     }),
     /**
      * The agent deleted for good, by the steps a task's delete takes for

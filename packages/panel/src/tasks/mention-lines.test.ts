@@ -118,7 +118,6 @@ function Box({ sender }: { sender: MessageSender }): ReactNode {
     taskId: TASK_ID,
     messages: [],
     send: sender,
-    onStatus: ignore,
   });
   return createElement(AgentComposer, {
     ...QUIET_COMPOSER,

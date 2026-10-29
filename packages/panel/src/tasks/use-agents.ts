@@ -10,6 +10,8 @@ import {
   type AgentOverviewPullRequestAnswerView,
   type AgentPullRequestViewedAnswerView,
   type AgentReviewOptionsAnswerView,
+  ARCHIVE_DRAWN,
+  type ArchiveDrawn,
 } from "@luke/features/agent-view";
 import {
   type AgentAttachment,
@@ -33,14 +35,6 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
 import { STATUS_TONE } from "@luke/ui";
-import {
-  type PendingValues,
-  pendingSettled,
-  pendingShown,
-  pendingValue,
-  pendingWithout,
-  type SameValue,
-} from "@luke/ui/pending-values";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
@@ -52,12 +46,10 @@ import {
   useDraftWriter,
   useNewAgentDraft,
 } from "../composer-drafts.js";
-import { usePendingNow } from "../pending-clock.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
 import {
-  type AgentRun,
   ARCHIVE_NOT_READY,
   archiveWords,
   choiceRequest,
@@ -72,8 +64,6 @@ import {
   START_NEEDS_REPOSITORY,
   STOP_FAILED,
   startFailureNote,
-  withAgent,
-  withAgentRun,
 } from "./agent-model.js";
 import { type AgentFork, continueFork, forkStart } from "./fork-model.js";
 import {
@@ -113,10 +103,17 @@ const MODELS_READ_BOUND_MS = 15_000;
 /**
  * use-agents.ts -- the open task's coding agents as one control: the agents and their status, a Start, a draft agent started on a prompt, the Stop, a message to one, a change of one's model, and the models the menus offer.
  *
- * The agents are read when a task opens, again after a Start or a Stop,
- * and as the task's column's "+" opens, and never on a clock; an agent's status moves between those reads only
- * as its own transcript page reports it, or as the service answers a
- * message to it, which is the agent running. A Start mints a key of its own
+ * The agents are the task list's, followed live in the host, which carries
+ * every agent of the task, archived ones among them, and draws a rename, an
+ * archive, a change of model, or a switch of MCP servers the moment it is
+ * asked, kept until the list carries it (`@luke/host`'s
+ * `task-list-collections.ts`), and a Start's agent before the Start answers.
+ * The task's agents are read too, as a task opens, after a Start, and as the
+ * task's column's "+" opens, for what only that read says of each: the
+ * runtime it runs on, the Mac a local one runs on, and the agents continued
+ * from it, laid under the list's (`withRead`). An agent the read holds that
+ * the list has not carried yet stands until it does, and the read's agents
+ * stand alone where the list does not carry the task. A Start mints a key of its own
  * for the press, so a service that did not answer is asked again under the
  * same key on the next press of the same choice and answers the agent the
  * first press made rather than a second one; a press of another choice is
@@ -125,11 +122,7 @@ const MODELS_READ_BOUND_MS = 15_000;
  * catalog as it stands and the default as Settings last wrote it; a model or
  * effort picked in the Start menu is what that button's next Start runs on,
  * never the account's default; one picked on an agent's chip is written
- * on that agent alone, for its next step, and the agent the service answers
- * takes its place in the list, as does the agent a rename answers. A page
- * of an agent's transcript carries its title too, which is how the title
- * generated as the agent started reaches a tab the list opened before it
- * landed.
+ * on that agent alone, for its next step.
  *
  * A draft is an agent the developer opened from the column's "+" and has
  * not yet sent anything: it exists only here, so a draft let go leaves
@@ -157,15 +150,10 @@ const MODELS_READ_BOUND_MS = 15_000;
  * task and answers the agent the first start made where it made one.
  *
  * An agent may be archived on its own, which the service does only once a
- * turn it still runs is stopped. The list is read with the archived agents
- * among the rest and split here: `agents` holds those standing, which is
- * every tab, row, and menu of the task, and `archived` the rest, which the
- * summary keeps folded away with an Unarchive on each. A rename, an archive,
- * and an unarchive are drawn at once, before the service answers, over
- * every list that names the agent (`pending`, `withPendingAgents`), and put
- * back if it refuses; each stands until a view carries it, carries a third
- * value, no longer holds the agent, or its time runs out
- * (`@luke/ui/pending-values`). Once an archive lands, a toast offers Undo.
+ * turn it still runs is stopped. The archived agents are split from the
+ * rest here: `agents` holds those standing, which is every tab, row, and
+ * menu of the task, and `archived` the rest, which the summary keeps folded
+ * away with an Unarchive on each. Once an archive lands, a toast offers Undo.
  *
  * An agent may be continued in a new one, which is a Start on the task
  * `from` that agent on its whole transcript, with the developer's words, where
@@ -331,30 +319,29 @@ export interface AgentsControl {
     /** The agent a Start on the open task is still making, its tab standing under the press's key until the service answers; none while none is out. */
     pending?: StartingAgent | undefined;
   };
-  /** Stops one agent; the list is read again once the service answers. */
-  onStop: (agentId: string) => Promise<void>;
-  /** Takes one agent back to just before one of the developer's lines, stopping it first, and takes the agent as the service answers it. */
+  /** Stops one agent, answering whether the service took the Stop, which the task list then carries; a refusal is said in a toast. */
+  onStop: (agentId: string) => Promise<boolean>;
+  /** Takes one agent back to just before one of the developer's lines, stopping it first. */
   onRewind: (agentId: string, messageId: string) => Promise<AgentAgentAnswer>;
-  /** Sends one agent a message under the key the composer made, and takes the agent's status from the answer. */
+  /** Sends one agent a message under the key the composer made. */
   onMessage: MessageSender;
-  /** Changes one agent's model and effort for its next step, and takes the agent as the service answers it. */
+  /** Changes one agent's model and effort for its next step, drawn at once by the host. */
   onChoose: ChoiceWriter;
-  /** Switches one agent's MCP servers for its next turn on, and takes the agent as the service answers it; a refusal is said in a toast. */
+  /** Switches one agent's MCP servers for its next turn on, drawn at once by the host; a refusal is said in a toast. */
   onSwitchServers: ServersWriter;
   /** Opens Settings on its Integrations page, where an MCP server is connected. */
   onOpenIntegrations: () => void;
   /** Opens Settings on its Agents page at the provider's harness row, where the developer's key for it is; at the page's top where none is known. */
   onOpenApiKeys: (provider: ModelProvider | undefined) => void;
-  /** The names and archives given here that no view carries yet, which every list naming an agent draws over its own (`withPendingAgents`). */
-  pending: PendingAgents;
-  /** Renames one agent, drawn at once and taking the agent as the service answers it; answers whether the rename took. */
+  /** Whether an archive asked here is still out, the agent it took coming back should the service refuse it. */
+  archiving: boolean;
+  /** Renames one agent, drawn at once by the host; answers whether the rename took. */
   onRename: (agentId: string, title: string) => Promise<boolean>;
   /**
    * Archives one agent, a turn it still runs stopped first, or brings it
-   * back, drawn at once unless `drawn` waits on the answer, taking the agent
-   * as the service answers it and offering Undo in a toast; a refusal puts
-   * it back and is answered rather than said, for the caller to say in its
-   * dialog or a toast of its own.
+   * back, drawn at once by the host unless `drawn` waits on the answer, and
+   * offering Undo in a toast; a refusal puts it back and is answered rather
+   * than said, for the caller to say in its dialog or a toast of its own.
    */
   onArchive: (agentId: string, archived: boolean, drawn?: ArchiveDrawn) => Promise<ActionResult>;
   /**
@@ -365,10 +352,6 @@ export interface AgentsControl {
   onDelete: (agentId: string) => Promise<ActionResult>;
   /** Reads the task's agents again now, answering the one named as it stands, or nothing where the read did not land or holds no such agent. */
   readAgent: (agentId: string) => Promise<AgentSummary | undefined>;
-  /** An agent's transcript page said where it stands now. */
-  onStatus: (agentId: string, run: AgentRun) => void;
-  /** An agent's transcript page said what it is titled now, which the list read before the title landed did not. */
-  onTitle: (agentId: string, title: string | null) => void;
   /** One read of an agent's transcript past a cursor at once, as Copy transcript asks it. */
   readTranscript: TranscriptReader;
   /** How a shown tab follows its transcript and hears its pages pushed. */
@@ -627,30 +610,21 @@ export function readAgentById(
   );
 }
 
-/** What one agent's transcript pages said of it before its task's list was read: its run, its title, or both. */
-interface HeardOfAgent {
-  readonly run?: AgentRun;
-  readonly title?: string | null;
-}
-
-/** Keeps what a page said of an agent beside what earlier pages said, the latest of each. */
-function heardOf(heard: Map<string, HeardOfAgent>, agentId: string, said: HeardOfAgent): void {
-  heard.set(agentId, { ...heard.get(agentId), ...said });
-}
-
-/** The list's agents with what their pages said before it was read laid over them. */
-function withHeard(
-  agents: readonly AgentSummary[],
-  heard: ReadonlyMap<string, HeardOfAgent>,
-): readonly AgentSummary[] {
-  let laid = agents;
-  for (const [agentId, { run, title }] of heard) {
-    if (run !== undefined) laid = withAgentRun(laid, agentId, run);
-    if (title !== undefined) {
-      laid = laid.map((agent) => (agent.id === agentId ? { ...agent, title } : agent));
-    }
-  }
-  return laid;
+/**
+ * The list's agent with what only the task's read says of it laid under
+ * it: the runtime it runs on, the Mac a local one runs on, and the agents
+ * continued from it, which the list's row does not carry.
+ */
+function withRead(agent: AgentSummary, read: AgentSummary | undefined): AgentSummary {
+  if (read === undefined) return agent;
+  const { runtime, machine, mac, continuedBy } = read;
+  return {
+    ...(runtime === undefined ? undefined : { runtime }),
+    ...(machine === undefined ? undefined : { machine }),
+    ...(mac === undefined ? undefined : { mac }),
+    ...(continuedBy === undefined ? undefined : { continuedBy }),
+    ...agent,
+  };
 }
 
 /** Whether two choices ask the same of a Start, read as `choiceRequest` sends them: only the standard window is a window apart. */
@@ -662,18 +636,6 @@ function sameChoice(a: ModelChoice | undefined, b: ModelChoice | undefined): boo
       (b?.contextWindow === CONTEXT_WINDOW.STANDARD)
   );
 }
-
-/**
- * When an archive is drawn: at once, before the service answers, or once
- * it has, as a dialog that asked does, since the agent leaving would take
- * the dialog, and the refusal it would say, with it.
- */
-export const ARCHIVE_DRAWN = {
-  AT_ONCE: "at-once",
-  ON_ANSWER: "on-answer",
-} as const;
-
-export type ArchiveDrawn = (typeof ARCHIVE_DRAWN)[keyof typeof ARCHIVE_DRAWN];
 
 /** Where the newest read of the models stands: none asked yet, under way, landed, or failed or out past its bound. */
 export const MODELS_READ = {
@@ -696,69 +658,6 @@ export interface ModelsRead {
   readonly generation: number;
 }
 
-/**
- * The names and archives given here that no view carries yet, by agent id:
- * a rename's title, and an archive's time or null for an unarchive.
- */
-export interface PendingAgents {
-  readonly titles: PendingValues<string, string | null>;
-  readonly archives: PendingValues<string, number | null>;
-}
-
-/** What a name or archive given here is laid over and waits on: an agent as any list holds it. */
-type NamedAgent = Pick<AgentSummary, "id" | "title" | "archivedAt">;
-
-/** No name given here and waiting on a view. */
-const NO_PENDING_TITLES: PendingValues<string, string | null> = new Map();
-
-/** No archive given here and waiting on a view. */
-const NO_PENDING_ARCHIVES: PendingValues<string, number | null> = new Map();
-
-/** Whether two titles are one. */
-const sameTitle: SameValue<string | null> = (a, b) => a === b;
-
-/** Whether two archive stamps say the same: archived, at whatever time, or not. */
-const sameArchive: SameValue<number | null> = (a, b) => (a === null) === (b === null);
-
-/** When an agent a view holds was archived, null while it stands; none where the view holds no such agent. */
-function archiveOf(agent: NamedAgent | undefined): number | null | undefined {
-  return agent === undefined ? undefined : (agent.archivedAt ?? null);
-}
-
-/** One agent with the name and archive given here laid over it, each where one stands. */
-function pendingAgent<A extends NamedAgent>(
-  agent: A,
-  title: string | null | undefined,
-  archive: number | null | undefined,
-): A {
-  const named = title === undefined ? agent : { ...agent, title };
-  if (archive === undefined) return named;
-  if (archive !== null) return { ...named, archivedAt: archive };
-  const { archivedAt: _archivedAt, ...standing } = named;
-  return standing as A;
-}
-
-/**
- * The agents a list holds with every name and archive given here that the
- * list does not yet carry laid over them, so each surface draws the press at
- * once from its own list: the task's, an agent's page, or the sidebar's.
- */
-export function withPendingAgents<A extends NamedAgent>(
-  list: readonly A[],
-  pending: PendingAgents,
-): readonly A[] {
-  if (pending.titles.size === 0 && pending.archives.size === 0) return list;
-  const byId = new Map(list.map((agent) => [agent.id, agent] as const));
-  const titles = pendingShown(
-    pendingSettled(pending.titles, (id) => byId.get(id)?.title, sameTitle, undefined),
-  );
-  const archives = pendingShown(
-    pendingSettled(pending.archives, (id) => archiveOf(byId.get(id)), sameArchive, undefined),
-  );
-  if (titles.size === 0 && archives.size === 0) return list;
-  return list.map((agent) => pendingAgent(agent, titles.get(agent.id), archives.get(agent.id)));
-}
-
 export function useAgents(input: {
   acts: Pick<ActHandle, "act">;
   /** The open task, or none. */
@@ -772,17 +671,11 @@ export function useAgents(input: {
   /** The open task's repository, or null while it names none. */
   repository: string | null;
   /**
-   * Every agent on a task, the archived ones left out, as the task list
-   * followed live carries them; none where it is not followed, or does not
-   * list the open task.
+   * Every agent the task list followed live carries, on a task or with
+   * none, the archived ones among them; none where it is not followed, or
+   * does not list the open task.
    */
   listedAgents?: readonly AgentSummary[] | undefined;
-  /**
-   * The agents another list draws from this control's presses, as the
-   * sidebar's agents with no task are, which a name or archive given here
-   * waits on beside the control's own; none where only its own list draws.
-   */
-  viewedAgents?: readonly NamedAgent[] | undefined;
   /** Opens Settings on its Integrations page. */
   onOpenIntegrations: () => void;
   /** Opens Settings on its Agents page. */
@@ -847,10 +740,6 @@ export function useAgents(input: {
   const [pressed, setPressed] = useState<{ taskId: string; starting: StartingAgent } | undefined>(
     undefined,
   );
-  // The agents Starts made on a task whose list was not read as they landed, which stand among its agents until the list is.
-  const [unlisted, setUnlisted] = useState<
-    { taskId: string; agents: readonly AgentSummary[] } | undefined
-  >(undefined);
   // Each agent continued's press, by the agent's id, held until its Start lands.
   const continues = useRef(new Map<string, PendingContinue>());
   const toast = useToast();
@@ -864,9 +753,9 @@ export function useAgents(input: {
   const latest = useRef(input);
   latest.current = input;
 
-  // The list is this task's: another task's, or none, is nothing to draw.
-  // Note that the agent New task just started stands as its task's list until
-  // that list is read, so its tab draws at once rather than after the read.
+  // The read is this task's: another task's, or none, is nothing to draw.
+  // Note that the agent New task just started stands as its task's read until
+  // that read lands, so its tab draws at once rather than after the read.
   const read = ours(list) ? list.agents : undefined;
   const seed = useMemo(() => (started === undefined ? undefined : [started.agent]), [started]);
   const held = read ?? (taskId !== undefined && started?.taskId === taskId ? seed : undefined);
@@ -874,47 +763,29 @@ export function useAgents(input: {
     () => (started === undefined ? undefined : { agentId: started.agent.id, line: started.line }),
     [started],
   );
-  // Note that until the list is read, the task's agents the followed task list carries stand as its
-  // live agents, so the column draws at once; the read adds the archived ones, which only it holds.
+  // The task's agents as the followed task list carries them, or the page's agent; none where it carries neither.
   const { listedAgents } = input;
-  const listedHere = useMemo(
-    () =>
-      taskId === undefined ? undefined : listedAgents?.filter((agent) => agent.planId === taskId),
-    [listedAgents, taskId],
-  );
-  const shown = held ?? listedHere;
-  // Note that the agents Starts made before the list was read stand beside what is shown, whatever
-  // the followed task list carries yet, so their tabs never leave between the answer and the list.
-  const landedHere =
-    read === undefined && unlisted?.taskId === taskId ? unlisted?.agents : undefined;
+  const listedHere = useMemo(() => {
+    if (taskId !== undefined) return listedAgents?.filter((agent) => agent.planId === taskId);
+    const page = listedAgents?.filter((agent) => agent.id === agentId);
+    return page?.length === 0 ? undefined : page;
+  }, [listedAgents, taskId, agentId]);
+  // Note that an agent the read or New task holds stands beside the list's until the list first
+  // carries it, and leaves with it once it no longer does, so a tab never leaves between the two.
+  const subject = taskId ?? agentId;
+  const carried = useRef({ subject, ids: new Set<string>() });
+  if (carried.current.subject !== subject) carried.current = { subject, ids: new Set() };
+  for (const agent of listedHere ?? []) carried.current.ids.add(agent.id);
   const standing = useMemo(() => {
-    const missing = landedHere?.filter(
-      (landed) => shown?.some((agent) => agent.id === landed.id) !== true,
-    );
-    return missing === undefined || missing.length === 0 ? shown : [...(shown ?? []), ...missing];
-  }, [shown, landedHere]);
-  // A name or archive given here stands over every list that names the agent until a view carries
-  // it, and lets go once none holds the agent, as after a sign-out. The clock is read only while
-  // one waits.
-  const [titles, setTitles] = useState(NO_PENDING_TITLES);
-  const [archives, setArchives] = useState(NO_PENDING_ARCHIVES);
-  const given = useMemo((): PendingAgents => ({ titles, archives }), [titles, archives]);
-  const pendingNow = usePendingNow(titles.size > 0 || archives.size > 0);
-  const { viewedAgents } = input;
-  useEffect(() => {
-    const viewedOf = (agentId: string) =>
-      standing?.find((agent) => agent.id === agentId) ??
-      viewedAgents?.find((agent) => agent.id === agentId);
-    setTitles((was) => pendingSettled(was, (id) => viewedOf(id)?.title, sameTitle, pendingNow));
-    setArchives((was) =>
-      pendingSettled(was, (id) => archiveOf(viewedOf(id)), sameArchive, pendingNow),
-    );
-  }, [standing, viewedAgents, pendingNow]);
-  const drawn = useMemo(
-    () => (standing === undefined ? undefined : withPendingAgents(standing, given)),
-    [standing, given],
+    if (listedHere === undefined) return held;
+    const readOf = new Map(held?.map((agent) => [agent.id, agent] as const));
+    const arriving = held?.filter((agent) => !carried.current.ids.has(agent.id)) ?? [];
+    return [...listedHere.map((agent) => withRead(agent, readOf.get(agent.id))), ...arriving];
+  }, [listedHere, held]);
+  const agents = useMemo(
+    () => standing?.filter((agent) => agent.archivedAt === undefined),
+    [standing],
   );
-  const agents = useMemo(() => drawn?.filter((agent) => agent.archivedAt === undefined), [drawn]);
   // Note that a Start out on the task stands among its tabs under the press's key, the task's
   // agents known or not, since it is the tab the press opens.
   const pressedHere = pressed?.taskId === taskId ? pressed?.starting : undefined;
@@ -923,37 +794,21 @@ export function useAgents(input: {
     return pressedHere === undefined ? ids : [...(ids ?? []), pressedHere.key];
   }, [agents, pressedHere]);
   const archivedAgents = useMemo(
-    () =>
-      held === undefined ? undefined : drawn?.filter((agent) => agent.archivedAt !== undefined),
-    [held, drawn],
+    () => standing?.filter((agent) => agent.archivedAt !== undefined),
+    [standing],
   );
-  const listFailed = ours(list) && list.failed;
+  const listFailed = ours(list) && list.failed && listedHere === undefined;
   const listMissing = ours(list) && list.missing === true;
-  // What transcript pages said of their agents before the list was read: a
-  // tab follows its agent from the id alone, so a page may land first, and
-  // it knows the agent's run and title better than the list's answer does,
-  // which is laid under it once a read of it lands (`withHeard`). What was
-  // heard is kept through a read that failed, and is the open task's, or
-  // the page's agent's, alone: another's list lets it go.
-  const subject = taskId ?? agentId;
-  const heardBeforeList = useRef<{ subject: string | undefined; heard: Map<string, HeardOfAgent> }>(
-    { subject, heard: new Map() },
-  );
-  if (heardBeforeList.current.subject !== subject) {
-    heardBeforeList.current = { subject, heard: new Map() };
-  }
-  const listedNow = useRef(false);
-  listedNow.current = read !== undefined;
+  // The archives asked here and still out.
+  const [archivesOut, setArchivesOut] = useState(0);
 
-  // Read when the task opens, or the page's agent where no task is, and again when a Start or a Stop asks (`reads`).
+  // Read when the task opens, or the page's agent where no task is, and again when a Start asks (`reads`).
   useEffect(() => {
     if (taskId === undefined && agentId === undefined) return;
     let live = true;
     listRead(latest.current.acts.act, taskId, agentId).then(
       (answer) => {
         if (!live) return;
-        const { heard } = heardBeforeList.current;
-        if (!("failure" in answer)) heardBeforeList.current.heard = new Map();
         setList((was) =>
           "failure" in answer
             ? {
@@ -969,7 +824,7 @@ export function useAgents(input: {
             : {
                 taskId,
                 agentId: listOf,
-                agents: withHeard(answer.agents, heard),
+                agents: answer.agents,
                 failed: false,
                 workspaceId: answer.workspaceId,
                 repository: answer.repository,
@@ -1037,19 +892,6 @@ export function useAgents(input: {
     [act],
   );
 
-  /** The list with an agent started on the task joined to it, where it is that task's and read. */
-  const joined = (on: string, agent: AgentSummary) =>
-    setList((was) =>
-      was.taskId === on && was.agents !== undefined
-        ? {
-            ...was,
-            agents: was.agents.some((each) => each.id === agent.id)
-              ? was.agents
-              : [...was.agents, agent],
-          }
-        : was,
-    );
-
   /** One Start asked of the service on the task, or, from the page's agent, where that agent is, held as under way until it answers. */
   const askStart = (
     on: string,
@@ -1067,22 +909,14 @@ export function useAgents(input: {
   };
 
   /**
-   * A Start that landed: the agent joins the list and its tab opens. Note
-   * that one landing after the developer left the task opens no tab on the
-   * task now open, and that the list is read again only where it was not
-   * read yet, the agent standing among the task's agents until it is, since
-   * a read already standing is joined the agent at once and one still out
-   * may answer from before the Start.
+   * A Start that landed: its tab opens on the agent the task list already
+   * carries, and the task's agents are read again for what only the read
+   * says of it and of the agent it continues. Note that one landing after
+   * the developer left the task opens no tab on the task now open.
    */
   const landed = (on: string, agent: AgentSummary) => {
     if ((latest.current.taskId ?? latest.current.agentId) !== on) return;
-    joined(on, agent);
     latest.current.onStarted(agent.id);
-    if (listedNow.current) return;
-    setUnlisted((was) => ({
-      taskId: on,
-      agents: [...(was?.taskId === on ? was.agents : []), agent],
-    }));
     readAgain();
   };
 
@@ -1214,7 +1048,7 @@ export function useAgents(input: {
   const onForkDraft = (fork: AgentFork): string => {
     const id = mintKey();
     if (startsOn === undefined) return id;
-    const source = held?.find((agent) => agent.id === fork.agentId);
+    const source = standing?.find((agent) => agent.id === fork.agentId);
     moveWords(startsOn, id, fork);
     withDraft(startsOn, {
       id,
@@ -1239,7 +1073,7 @@ export function useAgents(input: {
     const adds = words.trim() !== "" || attachments.length > 0;
     const id = joins && !adds && draft !== undefined ? draft.id : mintKey();
     if (startsOn === undefined) return id;
-    const source = held?.find((agent) => agent.id === sourceId);
+    const source = standing?.find((agent) => agent.id === sourceId);
     const fork = continueFork(sourceId);
     moveWords(startsOn, id, fork, { text: words.trim(), attachments });
     withDraft(startsOn, {
@@ -1309,14 +1143,12 @@ export function useAgents(input: {
   };
 
   // Note that the task New task started may not stand open yet as its start
-  // answers, and the list read as it opens holds the agent already. A list
-  // not yet read for the task is the agent alone until it is, so its tab
-  // draws at once rather than after the read.
+  // answers, and the read as it opens holds the agent already. Until a read
+  // or the task list holds it, the agent stands alone, so its tab draws at
+  // once rather than after either.
   const onTaskStarted = (on: string, agent: AgentSummary, words: StartedWords) => {
     setStarted({ taskId: on, agent, line: openingLineOf(words) });
-    if (latest.current.taskId !== on) return;
-    joined(on, agent);
-    readAgain();
+    if (latest.current.taskId === on) readAgain();
   };
 
   // Note that the files are changed from the draft as it stands when the
@@ -1430,35 +1262,18 @@ export function useAgents(input: {
   };
 
   // A refused Stop leaves the button as it was, so it says so in a toast.
-  const onStop = async (agentId: string): Promise<void> => {
+  const onStop = async (agentId: string): Promise<boolean> => {
     const answer = await act(ACT_KIND.AGENTS_STOP, { agentId }).catch(() => undefined);
-    if (answer !== undefined && !("failure" in answer)) {
-      setList((was) =>
-        was.agents === undefined
-          ? was
-          : { ...was, agents: withAgentRun(was.agents, agentId, answer.agent) },
-      );
-    } else {
-      failed(STOP_FAILED);
-    }
-    readAgain();
+    const took = answer !== undefined && !("failure" in answer);
+    if (!took) failed(STOP_FAILED);
+    return took;
   };
 
   const onRewind = useCallback(
-    async (agentId: string, messageId: string): Promise<AgentAgentAnswer> => {
-      const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_REWIND, {
-        agentId,
-        messageId,
-      }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
-      if (!("failure" in answer)) {
-        setList((was) =>
-          was.agents === undefined
-            ? was
-            : { ...was, agents: withAgentRun(was.agents, agentId, answer.agent) },
-        );
-      }
-      return answer;
-    },
+    (agentId: string, messageId: string): Promise<AgentAgentAnswer> =>
+      act(ACT_KIND.AGENTS_REWIND, { agentId, messageId }).catch(
+        (): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+      ),
     [act],
   );
 
@@ -1472,137 +1287,81 @@ export function useAgents(input: {
         clientKey,
         ...(attachments.length === 0 ? undefined : { attachments }),
       }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
-      if (!("failure" in answer)) {
-        setList((was) =>
-          was.agents === undefined
-            ? was
-            : { ...was, agents: withAgentRun(was.agents, agentId, answer.agent) },
-        );
-      }
       return answer;
     },
     [act],
   );
 
-  // Note that only the newest change of each agent's model is taken into the
-  // list, because two changes may answer out of order and the older answer
-  // would otherwise stand over the choice the developer made last.
-  const chooses = useRef(new Map<string, number>());
+  // A change of model is drawn by the host the moment it is asked, and taken back should the service refuse it.
   const onChoose = useCallback<ChoiceWriter>(
-    async (agentId, choice) => {
-      const change = (chooses.current.get(agentId) ?? 0) + 1;
-      chooses.current.set(agentId, change);
-      const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_CHOOSE, {
-        agentId,
-        ...choiceRequest(choice),
-      }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
-      if (!("failure" in answer) && chooses.current.get(agentId) === change) {
-        setList((was) =>
-          was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
-        );
-      }
-      return answer;
-    },
+    (agentId, choice) =>
+      act(ACT_KIND.AGENTS_CHOOSE, { agentId, ...choiceRequest(choice) }).catch(
+        (): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+      ),
     [act],
   );
 
-  // Note that each agent's switches are sent one after another, each once the
-  // one before it has answered, because a switch writes the whole list and two
-  // writes in flight may land in either order, which would leave the service
-  // holding the older list for the next turn. Only the newest switch's answer is
-  // taken into the list, and only its refusal is said, in a toast, as the
-  // switches fall back.
-  const switches = useRef(new Map<string, { count: number; sent: Promise<unknown> }>());
+  // Note that the host sends each agent's switches one after another, in the
+  // order asked, because a switch writes the whole list and two writes in
+  // flight may land in either order. Only the newest switch's refusal is
+  // said, in a toast, as the switches fall back.
+  const switches = useRef(new Map<string, number>());
   const onSwitchServers = useCallback<ServersWriter>(
     async (agentId, disabledServers) => {
-      const before = switches.current.get(agentId);
-      const change = (before?.count ?? 0) + 1;
-      const sent = (before?.sent ?? Promise.resolve()).then(() =>
-        act(ACT_KIND.AGENTS_SERVERS, { agentId, disabledServers }).catch(
-          (): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
-        ),
-      );
-      switches.current.set(agentId, { count: change, sent });
-      const answer: AgentAgentAnswer = await sent;
-      if (switches.current.get(agentId)?.count !== change) return answer;
-      if ("failure" in answer) {
-        failed(SERVERS_FAILED);
-        return answer;
-      }
-      setList((was) =>
-        was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
-      );
+      const change = (switches.current.get(agentId) ?? 0) + 1;
+      switches.current.set(agentId, change);
+      const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_SERVERS, {
+        agentId,
+        disabledServers,
+      }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
+      if ("failure" in answer && switches.current.get(agentId) === change) failed(SERVERS_FAILED);
       return answer;
     },
     [act, failed],
   );
 
-  // The agent as the views the control's presses reach carry it, before anything given here.
-  const viewedAgent = (agentId: string) =>
-    shown?.find((agent) => agent.id === agentId) ??
-    viewedAgents?.find((agent) => agent.id === agentId);
-
-  // A rename's field closes as the edit ends, and the new name is drawn at once, so a second
-  // rename may be out before the first answers; as with a change of model, only the newest one's
-  // answer is taken into the list, and only the newest one's refusal is said, in a toast, as the
-  // name it replaced comes back.
+  // A rename's field closes as the edit ends, and the host draws the new name at once, so a second
+  // rename may be out before the first answers; only the newest one's refusal is said, in a toast,
+  // as the name it replaced comes back.
   const renames = useRef(new Map<string, number>());
   const onRename = async (agentId: string, title: string): Promise<boolean> => {
     const rename = (renames.current.get(agentId) ?? 0) + 1;
     renames.current.set(agentId, rename);
-    const asked = pendingValue(titles.get(agentId), title, viewedAgent(agentId)?.title, sameTitle);
-    setTitles((was) => new Map(was).set(agentId, asked));
     const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_RENAME, {
       agentId,
       title,
     }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
-    const newest = renames.current.get(agentId) === rename;
-    if ("failure" in answer) {
-      setTitles((was) => pendingWithout(was, agentId, asked));
-      if (newest) failed(RENAME_FAILED);
-      return false;
-    }
-    if (newest) {
-      setList((was) =>
-        was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
-      );
-    }
-    return true;
+    if (!("failure" in answer)) return true;
+    if (renames.current.get(agentId) === rename) failed(RENAME_FAILED);
+    return false;
   };
 
   // Note that the archive is read through a ref from its toast's Undo,
-  // because the press lands renders after the toast was raised. The agent
-  // moves at once, and back where the service refuses, unless a dialog that asked waits on it.
+  // because the press lands renders after the toast was raised. The host
+  // draws the agent moved at once, and back where the service refuses,
+  // unless a dialog that asked waits on it.
   const onArchive = async (
     agentId: string,
     archived: boolean,
     drawn: ArchiveDrawn = ARCHIVE_DRAWN.AT_ONCE,
   ): Promise<ActionResult> => {
-    const asked = pendingValue(
-      archives.get(agentId),
-      archived ? Date.now() : null,
-      archiveOf(viewedAgent(agentId)),
-      sameArchive,
-    );
-    if (drawn === ARCHIVE_DRAWN.AT_ONCE) setArchives((was) => new Map(was).set(agentId, asked));
+    setArchivesOut((count) => count + 1);
     const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_ARCHIVE, {
       agentId,
       archived,
-    }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
+      ...(drawn === ARCHIVE_DRAWN.ON_ANSWER ? { drawn } : undefined),
+    })
+      .catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }))
+      .finally(() => setArchivesOut((count) => count - 1));
     const words = archiveWords(archived);
     if ("failure" in answer) {
-      setArchives((was) => pendingWithout(was, agentId, asked));
       const notReady = answer.failure === AGENT_CALL_FAILURE.AGENT_NOT_READY;
       return {
         status: ACTION_RESULT_STATUS.REJECTED,
         reason: notReady ? ARCHIVE_NOT_READY : words.refused,
       };
     }
-    setList((was) =>
-      was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
-    );
     toast(undoToast(words.done, () => archiveNow.current(agentId, !archived).then(sayRefusal)));
-    readAgain();
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
   const archiveNow = useRef(onArchive);
@@ -1619,12 +1378,7 @@ export function useAgents(input: {
         reason: notReady ? ARCHIVE_NOT_READY : DELETE_WORDS.refused,
       };
     }
-    setList((was) =>
-      was.agents === undefined
-        ? was
-        : { ...was, agents: was.agents.filter((agent) => agent.id !== agentId) },
-    );
-    // Note that the list is read again, which drops a read already out that still holds the agent.
+    // Note that the read is taken again too, which drops a read already out that still holds the agent.
     readAgain();
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
@@ -1656,30 +1410,6 @@ export function useAgents(input: {
     [act, taskId, agentId],
   );
 
-  const onTitle = useCallback((agentId: string, title: string | null) => {
-    if (!listedNow.current) heardOf(heardBeforeList.current.heard, agentId, { title });
-    setList((was) =>
-      was.agents === undefined ||
-      !was.agents.some((agent) => agent.id === agentId && agent.title !== title)
-        ? was
-        : {
-            ...was,
-            agents: was.agents.map((agent) => (agent.id === agentId ? { ...agent, title } : agent)),
-          },
-    );
-  }, []);
-
-  // Every transcript page says where its agent stands, mostly as it stood:
-  // the list is kept as it was then, so the window is not drawn again for it.
-  const onStatus = useCallback((agentId: string, run: AgentRun) => {
-    if (!listedNow.current) heardOf(heardBeforeList.current.heard, agentId, { run });
-    setList((was) => {
-      if (was.agents === undefined) return was;
-      const agents = withAgentRun(was.agents, agentId, run);
-      return agents === was.agents ? was : { ...was, agents };
-    });
-  }, []);
-
   const readTranscript = useCallback<TranscriptReader>(
     (params) => act(ACT_KIND.AGENTS_MESSAGES, params),
     [act],
@@ -1691,7 +1421,7 @@ export function useAgents(input: {
   );
   // Note that an archived agent's pull request is read too, after every other agent's, since the
   // summary offers it as any other and the task list pushes none of an archived agent's.
-  const published = useTaskPullRequests(taskId, held, readPullRequestOnce, held);
+  const published = useTaskPullRequests(taskId, standing, readPullRequestOnce, standing);
 
   // A pull request a tab names by its number is kept by agent and number,
   // apart from the agents' own, so it never stands for what an agent
@@ -1859,7 +1589,7 @@ export function useAgents(input: {
     agentRepository,
     origin: ours(list) ? list.origin : undefined,
     agentIds,
-    heldIds: held?.map((agent) => agent.id),
+    heldIds: standing?.map((agent) => agent.id),
     draft,
     onNewDraft,
     onForkDraft,
@@ -1899,13 +1629,11 @@ export function useAgents(input: {
     onOpenIntegrations: () => latest.current.onOpenIntegrations(),
     me: input.me,
     onOpenApiKeys: (provider) => latest.current.onOpenApiKeys(provider),
-    pending: given,
+    archiving: archivesOut > 0,
     onRename,
     onArchive,
     onDelete,
     readAgent,
-    onStatus,
-    onTitle,
     readTranscript,
     transcripts: windowTranscriptFollower,
     readPullRequest: published.read,

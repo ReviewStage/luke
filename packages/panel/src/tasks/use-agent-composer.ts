@@ -10,7 +10,6 @@ import { sentLineId } from "@luke/wire/host-ids";
 import { useEffect, useRef, useState } from "react";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
 import {
-  type AgentRun,
   closesComposer,
   heldSentLines,
   messageFailureNote,
@@ -31,10 +30,9 @@ import {
  * comes first (`unreadSentLines`). The line is held until both have, since
  * the service withdraws the row of a line the agent did not take, so a
  * refusal that lands after its row still says the line did not go
- * (`heldSentLines`). The service's answer is the agent as it
- * then stands, which is running, and the tab's status takes it, so a
- * message to an agent that had finished turns its status back and starts
- * the transcript reading again.
+ * (`heldSentLines`). The agent's status is the task list's, which carries
+ * the turn a message opens as it lands, so a message to an agent that had
+ * finished turns its status back and starts the transcript reading again.
  *
  * Messages go one at a time, in the order they were sent: the service writes
  * a line and hands it to eve under the conversation's lock, so two sends out
@@ -247,8 +245,6 @@ export function useAgentComposer(input: {
   payer?: AgentPayer | undefined;
   /** The teammate who started the agent (`teammateStarter`), whose own credentials a refusal names; none for the reader's own. */
   starter?: string | undefined;
-  /** The service said where the agent stands now, which is newer than the list. */
-  onStatus: (agentId: string, run: AgentRun) => void;
 }): HeldComposer {
   const { agentId, messages } = input;
   const kept = useDraft({ kind: DRAFT_PLACE.AGENT, planId: input.taskId, agentId });
@@ -257,7 +253,7 @@ export function useAgentComposer(input: {
   // The lines as last drawn, which an answer landing later reads.
   const heldNow = useRef(held);
   heldNow.current = held;
-  // Note that the sender and the status are read through a ref, because the
+  // Note that the sender and the messages are read through a ref, because the
   // tab hands new closures on every render and an answer lands on whichever
   // render is current.
   const latest = useRef(input);
@@ -326,7 +322,6 @@ export function useAgentComposer(input: {
             latest.current.messages,
           ),
         }));
-        latest.current.onStatus(agentId, answer.agent);
         return;
       }
       // A line the tab no longer holds, its agent's tab drawn afresh meanwhile, is nobody's to mark.
@@ -444,7 +439,6 @@ export function useAgentComposer(input: {
       if (latest.current.agentId !== agentId) return;
       if (!("failure" in answer)) {
         ours((was) => ({ ...was, reverting: undefined }));
-        latest.current.onStatus(agentId, answer.agent);
         return;
       }
       const note = messageFailureNote(answer, latest.current.taskId, latest.current.payer);

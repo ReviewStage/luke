@@ -132,13 +132,7 @@ import { freshAccount, RESTING_PAGE, restingPage } from "./resting-page.js";
 import type { FixturePlace } from "./tasks-fixture.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
-import {
-  type AgentsControl,
-  type ModelsRead,
-  readAgentById,
-  useAgents,
-  withPendingAgents,
-} from "./use-agents.js";
+import { type AgentsControl, type ModelsRead, readAgentById, useAgents } from "./use-agents.js";
 import {
   chooseChannel,
   leaveChannel,
@@ -800,8 +794,8 @@ export interface TasksControl {
   onPinAgent: (agentId: string, pinned: boolean) => void;
   /** The account's pins of agents on a plan, the archived ones left out, which the sidebar's Pinned section draws beside the pinned plans; none while the list is not followed live. */
   taskAgentPins: readonly TaskAgentPin[];
-  /** Every agent on a plan, the archived ones left out, as the list followed live names it; none while it is not. */
-  taskAgents: readonly AgentSummary[];
+  /** Every agent the list followed live carries, on a plan or with none, the archived ones among them; none while it is not. */
+  liveAgents: readonly AgentSummary[] | undefined;
   /**
    * Gives the pins a drag in the sidebar's Pinned section moved their new
    * places, on the account: a plan's and an agent's, drawn
@@ -985,6 +979,11 @@ const NO_IDS: readonly string[] = [];
 /** No agent with no plan, before the list carries any. */
 const NO_TASKLESS_AGENTS: readonly TasklessAgent[] = [];
 
+/** An agent with no plan as a plan's agents are named, which names an automation only where one started it. */
+function summaryOfTaskless({ automationId, ...agent }: TasklessAgent): AgentSummary {
+  return automationId === null ? agent : { ...agent, automationId };
+}
+
 /** How an agent's pin asked of the service landed: written, refused, or never asked, the account having changed while it waited its turn. */
 const AGENT_PIN_ASKED = {
   CHANGED: "changed",
@@ -993,9 +992,6 @@ const AGENT_PIN_ASKED = {
 } as const;
 
 type AgentPinAsked = (typeof AGENT_PIN_ASKED)[keyof typeof AGENT_PIN_ASKED];
-
-/** No agent on a plan, the same array every render, while the list is not followed live. */
-const NO_TASK_AGENTS: readonly AgentSummary[] = [];
 
 /** No pin of an agent on a plan, the same array every render. */
 const NO_TASK_AGENT_PINS: readonly TaskAgentPin[] = [];
@@ -1243,6 +1239,14 @@ export function useTasksTab(input: {
     [tasks.tasks, listedWorkspaceId],
   );
   const { tasklessAgents } = tasks;
+  // Every agent the list followed live carries, on a plan or with none, the archived ones among them; none while it is not.
+  const liveAgents = useMemo(
+    () =>
+      tasks.taskAgents === undefined
+        ? undefined
+        : [...tasks.taskAgents, ...(tasklessAgents ?? NO_TASKLESS_AGENTS).map(summaryOfTaskless)],
+    [tasks.taskAgents, tasklessAgents],
+  );
   const { inboxWaiting, inboxTasks } = input;
   const listedInbox = useMemo(
     () => ({
@@ -1277,7 +1281,7 @@ export function useTasksTab(input: {
     repository:
       openDocument?.id === viewed.activeTaskId ? (openDocument?.repository ?? null) : null,
     listedAgents: tasks.tasks.some((task) => task.id === viewed.activeTaskId)
-      ? tasks.taskAgents
+      ? liveAgents
       : undefined,
     onOpenIntegrations: input.onOpenIntegrations,
     onOpenApiKeys: input.onOpenApiKeys,
@@ -1285,21 +1289,19 @@ export function useTasksTab(input: {
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
     onDraftRestored: (on, draftId) => mainRef.current?.onShow(on, { draft: draftId }),
     keywords: dictationWords,
-    viewedAgents: tasklessAgents,
     device: openDocument?.id === viewed.activeTaskId ? openDocument?.runsOn?.device : undefined,
   });
   // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
-  // each named and archived as given here until main's view carries it, and pinned as main draws it.
-  const agentsGiven = agents.pending;
+  // each named, archived, and pinned as main draws it.
   const listedAgents = useMemo(() => {
-    const listed = withPendingAgents(tasklessAgents ?? NO_TASKLESS_AGENTS, agentsGiven).filter(
+    const listed = (tasklessAgents ?? NO_TASKLESS_AGENTS).filter(
       (agent) => listedWorkspaceId === undefined || agent.workspaceId === listedWorkspaceId,
     );
     return {
       standing: listed.filter((agent) => agent.archivedAt === undefined),
       archived: listed.filter((agent) => agent.archivedAt !== undefined),
     };
-  }, [tasklessAgents, agentsGiven, listedWorkspaceId]);
+  }, [tasklessAgents, listedWorkspaceId]);
   // An Untitled task takes its first agent's title on the service, and the
   // window hears no push for a task's row, so the tasks are read again as an
   // agent of the open task first holds a title while it stands Untitled.
@@ -1360,7 +1362,7 @@ export function useTasksTab(input: {
     startingTask === undefined &&
     agents.agentIds !== undefined &&
     agents.onUnarchive === undefined &&
-    agents.pending.archives.size === 0;
+    !agents.archiving;
   const draftTask = viewed.activeTaskId;
   useEffect(() => {
     if (draftWanted && draftTask !== undefined) openDraftNow.current();
@@ -3420,7 +3422,7 @@ export function useTasksTab(input: {
     onWriteSections: writeSections,
     onPinAgent: pinAgent,
     taskAgentPins,
-    taskAgents: taskAgents ?? NO_TASK_AGENTS,
+    liveAgents,
     onMovePins: movePins,
     onDeleteTask: deleteTask,
     back,

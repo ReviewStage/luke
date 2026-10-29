@@ -1529,45 +1529,8 @@ export function effortLabel(effort: string): string {
   return EFFORT_LABEL.get(effort) ?? `${effort.charAt(0).toUpperCase()}${effort.slice(1)}`;
 }
 
-/** The agents with one agent as the service just answered it, in its place. */
-export function withAgent(
-  agents: readonly AgentSummary[],
-  answered: AgentSummary,
-): readonly AgentSummary[] {
-  return agents.map((agent) => (agent.id === answered.id ? answered : agent));
-}
-
-/** Where an agent stands as a page or an answer read it: its status, and when the run under way began where the service said. */
+/** Where a worker stands as a page of its transcript read it: its status, and when the run under way began where the service said. */
 export type AgentRun = Pick<AgentSummary, "status" | "runStartedAt">;
-
-/**
- * The agents with one agent's run read from its own transcript page or an
- * answer about it, where that knows better than the list: its status, and
- * the start a working line counts from, which moves with each turn and is
- * none while a message awaits one. Where the agent already stands so, the
- * agents are answered as they were, so a page that moved nothing redraws
- * nothing that reads them.
- */
-export function withAgentRun(
-  agents: readonly AgentSummary[],
-  agentId: string,
-  run: AgentRun,
-): readonly AgentSummary[] {
-  const standing = agents.find((agent) => agent.id === agentId);
-  if (
-    standing === undefined ||
-    (standing.status === run.status && standing.runStartedAt === run.runStartedAt)
-  ) {
-    return agents;
-  }
-  return agents.map((agent) => {
-    if (agent.id !== agentId) return agent;
-    const { runStartedAt: _was, ...held } = agent;
-    return run.runStartedAt === undefined
-      ? { ...held, status: run.status }
-      : { ...held, status: run.status, runStartedAt: run.runStartedAt };
-  });
-}
 
 /** The kinds of part a stored message holds that the tab draws apart. */
 export const AGENT_PART = {

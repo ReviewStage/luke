@@ -48,10 +48,10 @@ export function ArchivedComposerNote({
   /** Who archived the agent and why, where the agent itself was archived and the service said. */
   archivedBy?: ArchivedByReading | undefined;
   /** Stops the agent, while it has a turn to stop; settles once the service has answered. */
-  stop?: (() => Promise<void>) | undefined;
+  stop?: (() => Promise<unknown>) | undefined;
 }): React.JSX.Element {
   const [out, setOut] = useState<ArchivedPress | undefined>(undefined);
-  const press = (which: ArchivedPress, run: () => void | Promise<void>) => {
+  const press = (which: ArchivedPress, run: () => unknown) => {
     if (out !== undefined) return;
     const settles = run();
     // Note that a press that answers at once, as one that asks first does, has nothing to wait on.

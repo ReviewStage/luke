@@ -1,3 +1,4 @@
+import { ARCHIVE_DRAWN, type ArchiveDrawn } from "@luke/features/agent-view";
 import type { AgentSummary } from "@luke/features/agent-wire";
 import {
   ArchiveIcon,
@@ -27,7 +28,7 @@ import { useBusyPress } from "../settings/busy-press.js";
 import { agentName, agentStillWriting, teammateStarter } from "../tasks/agent-model.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
-import { type AgentsControl, ARCHIVE_DRAWN, type ArchiveDrawn } from "../tasks/use-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { type MenuAction, rowMenu } from "./action-menu.js";

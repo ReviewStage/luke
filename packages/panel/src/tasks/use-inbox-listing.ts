@@ -154,6 +154,7 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     taskId,
     ...(chosenAgentId === undefined ? undefined : { agentId: chosenAgentId }),
     repository: chosenTask?.repository ?? null,
+    listedAgents: tasks.liveAgents,
     // The Inbox draws no agent's composer, so nothing here opens Settings.
     onOpenIntegrations: () => undefined,
     onOpenApiKeys: () => undefined,

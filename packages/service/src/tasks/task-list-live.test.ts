@@ -190,7 +190,7 @@ const liveListOf = (userId: string, now: number) =>
 /** A plan's agents as its own list answers them at `now`, as the service's endpoint builds them. */
 const heldTaskAgentsOf = (userId: string, taskId: string, now: number) =>
   Effect.gen(function* () {
-    const agents = yield* listAgents(userId, taskId);
+    const agents = yield* listAgents(userId, taskId, { includeArchived: true });
     const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
     const names = yield* readAccountNames(agents.flatMap(summaryAccounts));
     return agents.map((agent) => agentSummary(agent, standing(agent.conversationId), now, names));
@@ -414,7 +414,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         for (const reader of [owner, teammate, outsider]) {
           assert.deepEqual(yield* liveListOf(reader, NOW), yield* heldListOf(reader, NOW));
         }
-        // Every plan's agents, as each plan's own list names them, for the desktop's ledger; the live rows come in the order they were started across the plans.
+        // Every plan's agents, the archived among them, as each plan's own list names them, for its tabs; the live rows come in the order they were started across the plans.
         const byId = (agents: readonly { readonly id: string }[]) =>
           agents.toSorted((a, b) => a.id.localeCompare(b.id));
         for (const reader of [owner, teammate]) {

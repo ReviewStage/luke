@@ -35,7 +35,7 @@ import {
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
 import { isAgentTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -356,33 +356,6 @@ function AgentMentions({
   return value === undefined ? children : <TaskMentions value={value}>{children}</TaskMentions>;
 }
 
-/**
- * Reads the open task's agents again once the page's agent, an agent of
- * that task, is archived or brought back here. Note that the page reads its
- * one agent apart from the task's list, which is read only as the task
- * opens, so without this an agent brought back on its page would stay out
- * of its task's tabs, and ⌘K would still call it archived.
- */
-function useTaskAgentsFollow(
-  tasks: TasksControl,
-  agentId: string,
-  agent: { readonly planId: string | null; readonly archivedAt?: number | undefined } | undefined,
-): void {
-  const seen = useRef<{ agentId: string; archivedAt: number | undefined } | undefined>(undefined);
-  const taskId = agent?.planId ?? null;
-  const archivedAt = agent?.archivedAt;
-  const drawn = agent !== undefined;
-  const { activeTaskId } = tasks;
-  const readTaskAgents = tasks.agents.onRetryList;
-  useEffect(() => {
-    if (!drawn) return;
-    const was = seen.current;
-    seen.current = { agentId, archivedAt };
-    if (was === undefined || was.agentId !== agentId || was.archivedAt === archivedAt) return;
-    if (taskId !== null && taskId === activeTaskId) readTaskAgents();
-  }, [drawn, agentId, archivedAt, taskId, activeTaskId, readTaskAgents]);
-}
-
 /** One agent's page, in the plan's place: the agent read by its id, drawn as the task column's agent pane. */
 export function DesktopAgentPage({
   tasks,
@@ -425,6 +398,7 @@ export function DesktopAgentPage({
     taskId: undefined,
     agentId,
     repository: null,
+    listedAgents: tasks.liveAgents,
     onOpenIntegrations: tasks.agents.onOpenIntegrations,
     onOpenApiKeys: tasks.agents.onOpenApiKeys,
     // An agent a Continue or a Fork started opens on its own page, as a Start's tab opens on a task.
@@ -432,7 +406,6 @@ export function DesktopAgentPage({
     me: tasks.me,
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
-  useTaskAgentsFollow(tasks, agentId, agent);
   // Note that the models come from the open task's agents where this page has not read them, so
   // the agent is named alike in both; and that an archived agent, which takes no message, is
   // brought back by its own Unarchive, there being no task to bring back with it.

@@ -202,7 +202,7 @@ async function drawnTab(input: {
     },
     onStop: (agentId) => {
       input.onStop?.(agentId);
-      return Promise.resolve();
+      return Promise.resolve(true);
     },
     onOpenApiKeys: (provider) => input.onOpenApiKeys?.(provider),
     onMessage: () => Promise.resolve(input.message ?? { failure: AGENT_CALL_FAILURE.UNANSWERED }),
