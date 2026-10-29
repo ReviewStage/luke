@@ -70,6 +70,7 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.RUNS_ON_LOCKED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.TASK_BLOCK_CYCLE]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.AGENT_STATE_STALE]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -181,6 +182,8 @@ export const HOSTED_REFUSAL = {
   CHILD_REPOSITORY_LOCKED: { error: HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED },
   /** A block asked for would close a cycle among the workspace's tasks; nothing was written. */
   TASK_BLOCK_CYCLE: { error: HOSTED_API_ERROR.TASK_BLOCK_CYCLE },
+  /** A device agent's save named a generation no longer its newest; nothing was granted or committed. */
+  AGENT_STATE_STALE: { error: HOSTED_API_ERROR.AGENT_STATE_STALE },
 } as const satisfies Record<string, HostedRefusal>;
 
 /** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */

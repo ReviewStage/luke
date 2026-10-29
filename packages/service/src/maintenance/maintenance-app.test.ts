@@ -27,6 +27,7 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.
 import { GitHubApp } from "../github/github-app.js";
 import { type ModelCatalog, modelCatalogOf } from "../providers/model-catalog.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
+import { NO_AGENT_STATE_STORE } from "../testing/agent-state-blobs-fake.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -106,6 +107,7 @@ const sweep = (
       database,
       reached,
       Layer.succeed(HostedEnvironment, environment(cronSecret)),
+      NO_AGENT_STATE_STORE,
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
       maintenanceApp().pipe(HttpRouter.provideRequest(services)),

@@ -18,14 +18,19 @@
  * The state key is minted and sealed where the agent has none
  * (`mintAgentStateKey`), and this module only ever holds and answers it
  * sealed; `openAgentStateKey` beside the seal is the one way to read it.
+ * The key rotation's rewrap reads every key's row and moves each onto the
+ * ring's current version, never opening the key itself.
  *
  * The sweep is the deployment's and reads every account. It answers a
  * generation superseded by a newer one of its agent; every generation of an
  * agent whose transcript is gone, its conversation purged seven days after
  * the agent or its task was deleted (`./soft-delete.ts`) or deleted with the
  * account, so saved state goes when the transcript goes; and every
- * generation of an agent archived at least seven days ago. The caller
- * deletes each generation's blob, then its row.
+ * generation committed at least seven days ago, the newest included,
+ * whether or not its agent is archived, as a cloud agent's sandbox snapshot
+ * goes seven days after its last use, so an agent woken after that starts
+ * fresh from its branch. The caller deletes each generation's blob, then
+ * its row.
  */
 
 import {
@@ -54,8 +59,8 @@ import { InstantColumnSchema } from "./columns.js";
 import { type KeyRing, mintAgentStateKey, type SealedAgentStateKey } from "./provider-key-seal.js";
 import type { TaskStoreEffect } from "./task-store.js";
 
-/** How long an archived agent's saved state stands past its archive before the sweep may delete it. */
-const ARCHIVED_AGENT_STATE_RETENTION_MS = Duration.toMillis(Duration.days(7));
+/** How long a generation of saved state stands past its commit before the sweep may delete it, the agent's newest included. */
+const AGENT_STATE_RETENTION_MS = Duration.toMillis(Duration.days(7));
 
 /** The commit's generation is no longer the agent's newest: a newer save landed since its saver started. */
 export class AgentStateStale extends Data.TaggedError("AgentStateStale")<{
@@ -96,6 +101,15 @@ const SealedKeySchema = Schema.Struct({
   sealedDataKey: Schema.String,
   sealedKey: Schema.String,
 });
+
+const KeyRowSchema = Schema.Struct({
+  userId: Schema.String,
+  agentId: Schema.String,
+  ...SealedKeySchema.fields,
+});
+
+/** One agent's sealed state key, with whose it is, as the rotation's rewrap reads it. */
+export type AgentStateKeyRow = typeof KeyRowSchema.Type;
 
 const SweepableSchema = Schema.Struct({
   id: Schema.String,
@@ -230,6 +244,50 @@ const findKey = SqlSchema.findOneOption({
     ),
 });
 
+const findEveryKey = SqlSchema.findAll({
+  Request: Schema.Void,
+  Result: KeyRowSchema,
+  execute: () =>
+    Database.use((db) =>
+      db
+        .select({
+          userId: agentTable.userId,
+          agentId: agentStateKey.agentId,
+          keyVersion: agentStateKey.keyVersion,
+          sealedDataKey: agentStateKey.sealedDataKey,
+          sealedKey: agentStateKey.sealedKey,
+        })
+        .from(agentStateKey)
+        .innerJoin(agentTable, eq(agentTable.id, agentStateKey.agentId))
+        .orderBy(asc(agentStateKey.agentId)),
+    ),
+});
+
+const rewrapKey = SqlSchema.findAll({
+  Request: Schema.Struct({
+    agentId: Schema.String,
+    fromVersion: Schema.Int,
+    sealedKey: Schema.String,
+    keyVersion: Schema.Int,
+    sealedDataKey: Schema.String,
+  }),
+  Result: Schema.Struct({ agentId: Schema.String }),
+  execute: (write) =>
+    Database.use((db) =>
+      db
+        .update(agentStateKey)
+        .set({ keyVersion: write.keyVersion, sealedDataKey: write.sealedDataKey })
+        .where(
+          and(
+            eq(agentStateKey.agentId, write.agentId),
+            eq(agentStateKey.keyVersion, write.fromVersion),
+            eq(agentStateKey.sealedKey, write.sealedKey),
+          ),
+        )
+        .returning({ agentId: agentStateKey.agentId }),
+    ),
+});
+
 const insertKey = SqlSchema.void({
   Request: Schema.Struct({ ...AgentKeySchema.fields, ...SealedKeySchema.fields }),
   execute: (write) =>
@@ -255,10 +313,10 @@ const insertKey = SqlSchema.void({
 
 /**
  * Whether the generation row may go: a newer generation of its agent
- * stands, its agent's transcript is gone, or its agent was archived by
- * `archivedBy`.
+ * stands, its agent's transcript is gone, or it was committed by
+ * `expiredBy`.
  */
-function sweepable(archivedBy: Date): SQL | undefined {
+function sweepable(expiredBy: Date): SQL | undefined {
   const superseded = exists(
     queryBuilder
       .select({ id: standing.id })
@@ -276,24 +334,14 @@ function sweepable(archivedBy: Date): SQL | undefined {
       .from(conversations)
       .where(eq(conversations.id, agentStateGeneration.conversationId)),
   );
-  const archived = exists(
-    queryBuilder
-      .select({ id: agentTable.id })
-      .from(agentTable)
-      .where(
-        and(
-          eq(agentTable.id, agentStateGeneration.agentId),
-          lte(agentTable.archivedAt, archivedBy),
-        ),
-      ),
-  );
-  return or(superseded, transcriptGone, archived);
+  const expired = lte(agentStateGeneration.savedAt, expiredBy);
+  return or(superseded, transcriptGone, expired);
 }
 
 const findSweepable = SqlSchema.findAll({
-  Request: Schema.Struct({ archivedBy: Schema.Date, limit: Schema.Int }),
+  Request: Schema.Struct({ expiredBy: Schema.Date, limit: Schema.Int }),
   Result: SweepableSchema,
-  execute: ({ archivedBy, limit }) =>
+  execute: ({ expiredBy, limit }) =>
     Database.use((db) =>
       db
         .select({
@@ -303,7 +351,7 @@ const findSweepable = SqlSchema.findAll({
           path: agentStateGeneration.path,
         })
         .from(agentStateGeneration)
-        .where(sweepable(archivedBy))
+        .where(sweepable(expiredBy))
         .orderBy(asc(agentStateGeneration.savedAt), asc(agentStateGeneration.id))
         .limit(limit),
     ),
@@ -327,6 +375,19 @@ export function newestAgentState(
   agentId: string,
 ): TaskStoreEffect<Option.Option<AgentStateGeneration>> {
   return findNewest({ userId, agentId });
+}
+
+/**
+ * The agent's newest generation, null where it has none, where the account
+ * started the agent and it is pinned to the device given; none otherwise,
+ * so a device asks to save only its own agents.
+ */
+export function pinnedAgentState(
+  userId: string,
+  agentId: string,
+  deviceId: string,
+): TaskStoreEffect<Option.Option<{ readonly newest: number | null }>> {
+  return findPinnedAgent({ userId, agentId, deviceId });
 }
 
 /**
@@ -378,19 +439,44 @@ export function ensureAgentStateKey(
   });
 }
 
+/** Every agent's sealed state key, with whose it is, across every account, for the rotation's rewrap. */
+export function listEveryAgentStateKeyRow(): TaskStoreEffect<readonly AgentStateKeyRow[]> {
+  return findEveryKey(undefined);
+}
+
+/**
+ * Moves one key's row onto a new wrap of its data key, and answers whether
+ * it did: not where the row was rewrapped or its agent deleted since it was read.
+ */
+export function rewrapAgentStateKeyRow(
+  row: AgentStateKeyRow,
+  rewrapped: SealedAgentStateKey,
+): TaskStoreEffect<boolean> {
+  return Effect.map(
+    rewrapKey({
+      agentId: row.agentId,
+      fromVersion: row.keyVersion,
+      sealedKey: row.sealedKey,
+      keyVersion: rewrapped.keyVersion,
+      sealedDataKey: rewrapped.sealedDataKey,
+    }),
+    (moved) => moved.length > 0,
+  );
+}
+
 /**
  * The next generations the sweep may delete, across every account, at most
  * `limit`, the longest saved first: those superseded by a newer generation
- * of their agent, those of an agent whose transcript is gone, and those of
- * an agent archived at least `ARCHIVED_AGENT_STATE_RETENTION_MS` before
- * `now`. The caller deletes each one's blob before its row.
+ * of their agent, those of an agent whose transcript is gone, and those
+ * committed at least `AGENT_STATE_RETENTION_MS` before `now`, the newest
+ * included. The caller deletes each one's blob before its row.
  */
 export function sweepableAgentStates(
   now: Date,
   limit: number,
 ): TaskStoreEffect<readonly SweepableAgentState[]> {
-  const archivedBy = new Date(now.getTime() - ARCHIVED_AGENT_STATE_RETENTION_MS);
-  return findSweepable({ archivedBy, limit });
+  const expiredBy = new Date(now.getTime() - AGENT_STATE_RETENTION_MS);
+  return findSweepable({ expiredBy, limit });
 }
 
 /** Deletes the generations named, once the sweep deleted their blobs; answers how many rows went. */

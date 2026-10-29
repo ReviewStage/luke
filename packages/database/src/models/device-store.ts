@@ -61,6 +61,7 @@ const DeviceStandingSchema = Schema.Struct({
   ...DeviceLayoutSchema.fields,
   signedIn: deviceSignedInSchema,
   isolation: Schema.Literals(Object.values(DEVICE_ISOLATION)),
+  capabilities: Schema.Array(Schema.Literals(Object.values(DEVICE_CAPABILITY))),
 });
 
 export type DeviceStanding = typeof DeviceStandingSchema.Type;
@@ -236,6 +237,7 @@ const findLayout = SqlSchema.findOneOption({
           codexExecutable: device.codexExecutable,
           signedIn: device.signedIn,
           isolation: device.isolation,
+          capabilities: device.capabilities,
         })
         .from(device)
         .where(
@@ -282,7 +284,7 @@ export function registerDevice(
   );
 }
 
-/** The account's Mac's home folder, bundled CLI, and isolation, as it last registered them, and which harnesses it last said it is signed in to; nothing where the account holds no such Mac. */
+/** The account's Mac's home folder, bundled CLI, isolation, and capabilities, as it last registered them, and which harnesses it last said it is signed in to; nothing where the account holds no such Mac. */
 export function deviceLayout(
   userId: string,
   id: string,

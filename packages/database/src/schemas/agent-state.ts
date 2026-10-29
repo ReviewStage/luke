@@ -54,7 +54,7 @@ export const agentStateGeneration = pgTable(
     baseCommit: text("base_commit"),
     /** The device that saved the bundle; null once that device's row is gone. */
     deviceId: uuid("device_id").references(() => device.id, { onDelete: "set null" }),
-    /** When the commit was accepted. */
+    /** When the commit was accepted; the generation expires seven days on, the newest included. */
     savedAt: timestamptz("saved_at").notNull(),
   },
   (table) => [

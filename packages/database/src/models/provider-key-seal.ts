@@ -43,8 +43,9 @@ import { Redacted, Result, Schema } from "effect";
  * sealed for the agent's life (`agent_state_key`), with purposes of its own
  * (`luke/agent-state/*`) and the account and the agent bound beside them.
  * The key is drawn inside the seal, so it is in the clear only within this
- * module and in what `openAgentStateKey` answers. The rewrap does not yet
- * visit those rows, so a version a row names stays in the list.
+ * module and in what `openAgentStateKey` answers. The rewrap moves those
+ * rows too (`rewrapAgentStateKey`), so a version leaves the list once it
+ * has run.
  *
  * Rotation is a new version at the head of the environment's list: new
  * saves wrap under it, and `scripts/rewrap-provider-keys.sh` moves every
@@ -448,4 +449,21 @@ export function openAgentStateKey(
     sealed.sealedKey,
   );
   return key === undefined ? Result.fail(PROVIDER_KEY_UNREADABLE) : Result.succeed(key);
+}
+
+/** The agent's sealed state key with its data key wrapped again under the ring's current version, the key itself untouched, or unreadable where its wrap does not open for this owner. */
+export function rewrapAgentStateKey(
+  ring: KeyRing,
+  owner: AgentStateKeyOwner,
+  sealed: SealedAgentStateKey,
+): Result.Result<SealedAgentStateKey, ProviderKeyUnreadable> {
+  const wrapped = rewrapSecret(
+    ring,
+    SEAL_PURPOSE.AGENT_STATE,
+    [owner.userId, owner.agentId],
+    sealed,
+  );
+  return wrapped === undefined
+    ? Result.fail(PROVIDER_KEY_UNREADABLE)
+    : Result.succeed({ ...wrapped, sealedKey: sealed.sealedKey });
 }

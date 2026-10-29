@@ -149,6 +149,10 @@ export const HOSTED_SERVICE_PATH = {
   DEVICE_AGENT_REQUEST_CLAIM: "/api/device-agents/requests/claim",
   /** The ids of the account's agents that should still stand on a Mac: pinned to it and not archived (GET). */
   DEVICE_AGENT_LIVE_AGENTS: "/api/device-agents/live-agents",
+  /** One of a device's agents asking to save its state: one upload to a fresh path of the store, and the agent's state key (POST). */
+  DEVICE_AGENT_STATE_SAVE: "/api/device-agents/state/save",
+  /** A save the device uploaded, committed as the agent's next generation (POST). */
+  DEVICE_AGENT_STATE_COMMIT: "/api/device-agents/state/commit",
   /** A host's enroll: an install token traded for a device of kind host and its device secret, answered once (POST). `host-wire.ts` declares the bodies. */
   DEVICE_AGENT_ENROLL: "/api/device-agents/enroll",
   /** One of the account's own registered devices enrolled on its signed-in session, traded for a device secret answered once (POST). `host-wire.ts` declares the bodies. */

@@ -25,8 +25,9 @@ import { purgeClearedConversations } from "../soft-delete.js";
 /**
  * A device agent's saved state over a real dialect: a commit is a
  * check-and-set on the agent's newest generation, every read, commit, and
- * key is held to the account that started the agent, and a deleted agent's
- * generations stand until its transcript is purged. Synthetic accounts,
+ * key is held to the account that started the agent, a deleted agent's
+ * generations stand until its transcript is purged, and every generation,
+ * the newest included, expires seven days after its commit. Synthetic accounts,
  * paths, and digests throughout; the ring is a throwaway of this file's.
  */
 
@@ -173,5 +174,22 @@ it.layer(getTestDB())("an agent's saved state", (it) => {
         yield* purgeClearedConversations(new Date(NOW.getTime() + 8 * DAY_MS));
         assert.deepEqual(yield* pathsSwept(NOW), ["state/one", "state/two"]);
       }),
+  );
+
+  it.effect("a generation, the newest included, is swept seven days after its commit", () =>
+    Effect.gen(function* () {
+      const { userId, agentId, deviceId } = yield* openAccount;
+      yield* commitAgentState(userId, saved(agentId, deviceId, null, "state/only"), NOW);
+      const pathsSwept = (at: number) =>
+        Effect.map(sweepableAgentStates(new Date(at), EVERY), (rows) =>
+          rows.filter((row) => row.agentId === agentId).map((row) => row.path),
+        );
+
+      const justShort = yield* pathsSwept(NOW.getTime() + 7 * DAY_MS - 1);
+      const sevenDaysOn = yield* pathsSwept(NOW.getTime() + 7 * DAY_MS);
+
+      assert.deepEqual(justShort, []);
+      assert.deepEqual(sevenDaysOn, ["state/only"]);
+    }),
   );
 });
