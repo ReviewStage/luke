@@ -32,7 +32,7 @@ import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
- * device-agent-client.ts -- a local agent's Mac as it asks the service (`contract/device-agents.ts`): it registers and beats, holds a read for its lines and one for its requests, claims each by its id, and settles a line or answers a request.
+ * device-agent-client.ts -- a local agent's Mac as it asks the service (`contract/device-agents.ts`): it registers and beats, reads which of its agents should still stand, holds a read for its lines and one for its requests, claims each by its id, and settles a line or answers a request.
  *
  * Each is a procedure of the hosted contract over the one account call, so
  * the bearer is read fresh per attempt and a 401 is renewed and retried
@@ -40,8 +40,8 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
  * which the caller asks again after a pause; a claim refused is
  * `DEVICE_AGENT_NOT_CLAIMED` (another claim took it, its caller withdrew it,
  * or the account's experiment is off) and one unanswered nothing; a
- * register, a settle, or an answer not taken is false, and a beat not taken
- * is nothing. A host also
+ * register, a settle, or an answer not taken is false, and a beat or a
+ * read of the live agents not taken is nothing. A host also
  * asks the runner token route for a GitHub token for one of its agents
  * (`githubToken`), on the same credential, its device secret.
  */
@@ -289,6 +289,16 @@ export class HostedDeviceAgentClient {
   ): Effect.Effect<DeviceAgentBeat | undefined, never, HttpClient.HttpClient> {
     return askHosted(this.#hosted.deviceAgents.beat, { deviceId, signedIn }).pipe(
       Effect.map((answer): DeviceAgentBeat => ({ openLaunches: answer.openLaunches })),
+      Effect.orElseSucceed(() => undefined),
+    );
+  }
+
+  /** The ids of the account's agents that should still stand on this Mac; nothing where the service did not answer or refused, which is never an empty list. */
+  liveAgents(
+    deviceId: string,
+  ): Effect.Effect<readonly string[] | undefined, never, HttpClient.HttpClient> {
+    return askHosted(this.#hosted.deviceAgents.liveAgents, { deviceId }).pipe(
+      Effect.map((answer): readonly string[] => answer.agentIds),
       Effect.orElseSucceed(() => undefined),
     );
   }

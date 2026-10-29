@@ -1,5 +1,5 @@
 /**
- * device-agents.ts -- a local agent's Mac (`device-agent-wire.ts`): it registers and beats, holds a read for its lines and one for its requests, claims each, and settles a line or answers a request.
+ * device-agents.ts -- a local agent's Mac (`device-agent-wire.ts`): it registers and beats, reads which of its agents should still stand, holds a read for its lines and one for its requests, claims each, and settles a line or answers a request.
  *
  * A host enrolls first (`../host-wire.ts`), trading an install token for
  * its device secret, or a member's own desktop enrolls its device on its
@@ -23,6 +23,7 @@ import {
   deviceAgentDoneAnswerSchema,
   deviceAgentLineClaimAnswerSchema,
   deviceAgentLinesAnswerSchema,
+  deviceAgentLiveAgentsAnswerSchema,
   deviceAgentRegisterRequestSchema,
   deviceAgentRequestClaimAnswerSchema,
   deviceAgentRequestsAnswerSchema,
@@ -64,6 +65,10 @@ export const deviceAgentsContract = {
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_PRESENCE }))
     .input(exactInput(deviceAgentBeatRequestSchema))
     .output(EffectSchema.flip(deviceAgentBeatAnswerSchema)),
+  liveAgents: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_LIVE_AGENTS }))
+    .input(deviceAgentDeviceRequestSchema)
+    .output(EffectSchema.flip(deviceAgentLiveAgentsAnswerSchema)),
   lines: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_LINES }))
     .input(deviceAgentDeviceRequestSchema)

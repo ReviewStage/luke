@@ -467,6 +467,16 @@ export const deviceAgentBeatAnswerSchema = EffectSchema.Struct({
   openLaunches: EffectSchema.optionalKey(EffectSchema.Array(wireUuidSchema)),
 });
 
+/**
+ * The ids of the account's agents that should still stand on this Mac:
+ * those pinned to it and not archived, whatever their task's status. A
+ * device removes the folder and VM of any agent of Luke's it holds that is
+ * not named, so the list is what stands rather than a discard it could miss.
+ */
+export const deviceAgentLiveAgentsAnswerSchema = EffectSchema.Struct({
+  agentIds: EffectSchema.Array(wireUuidSchema),
+});
+
 /** The lines waiting for this Mac, in their order, none where none came while the read was held; nothing claimed. */
 export const deviceAgentLinesAnswerSchema = EffectSchema.Struct({
   lines: EffectSchema.Array(deviceAgentLineSchema),

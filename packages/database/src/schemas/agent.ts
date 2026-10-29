@@ -341,6 +341,8 @@ export const agentTable = pgTable(
     uniqueIndex("agent_runner_token_hash")
       .on(table.runnerTokenHash)
       .where(sql`${table.runnerTokenHash} is not null`),
+    // A device reads the agents that should still stand on it, those pinned to it and not archived.
+    index("agent_device_live").on(table.deviceId).where(sql`${table.archivedAt} is null`),
     // A member holds one standing operator per workspace, so two ensures that race make one row.
     uniqueIndex("agent_member_operator")
       .on(table.organizationId, table.userId)

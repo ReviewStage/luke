@@ -30,6 +30,9 @@
  * register under an id another account holds writes nothing and answers
  * not found too, and a register keeps only the capabilities this service
  * knows (`DEVICE_CAPABILITY`), so a newer follower's list is never refused.
+ * The live agents' read answers the ids of the account's agents pinned to
+ * that Mac and not archived (`GET /api/device-agents/live-agents`), which
+ * the Mac keeps and removes everything else of Luke's it holds against.
  * A held read answers what waits for that Mac (`GET /api/device-agents/lines`,
  * `GET /api/device-agents/requests`), a claim takes one row by its id, a
  * launch line's secrets with it, a line's claim asked again under the
@@ -41,6 +44,7 @@ import { accountExperimentOn } from "@luke/database/models/account-store";
 import {
   answerDeviceAgentRequest,
   claimDeviceAgentRequest,
+  liveDeviceAgents,
   openDeviceAgentLaunches,
 } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
@@ -187,6 +191,13 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
         openDeviceAgentLaunches(context.userId, input.deviceId),
       );
       return { ...DONE, openLaunches };
+    }),
+    liveAgents: deviceAgents.liveAgents.effect(function* ({ context, input }) {
+      yield* followed(context, input.deviceId);
+      const agentIds = yield* hostedStoreOrUnavailable(
+        liveDeviceAgents(context.userId, input.deviceId),
+      );
+      return { agentIds };
     }),
     lines: deviceAgents.lines.effect(function* ({ context, input }) {
       yield* followed(context, input.deviceId);

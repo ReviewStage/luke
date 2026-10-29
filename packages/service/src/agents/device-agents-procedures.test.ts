@@ -1,5 +1,5 @@
 /**
- * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: an account with the experiment off is answered nothing, a desktop's own sign-in is refused as needing an upgrade, a Mac enrolls on that sign-in, created where Luke never saw it and never under another account, and a host enrolls on its member's install token and calls on its own secret, for itself alone, at or past the version floor, until it is removed.
+ * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: an account with the experiment off is answered nothing, a desktop's own sign-in is refused as needing an upgrade, a Mac enrolls on that sign-in, created where Luke never saw it and never under another account, and a host enrolls on its member's install token and calls on its own secret, for itself alone, its live agents' read included, at or past the version floor, until it is removed.
  *
  * Synthetic accounts, bearers, tokens, Macs, and hosts throughout.
  */
@@ -39,6 +39,7 @@ const PATH = {
   PRESENCE: "/api/device-agents/presence",
   LINES: "/api/device-agents/lines",
   LINE_CLAIM: "/api/device-agents/lines/claim",
+  LIVE_AGENTS: "/api/device-agents/live-agents",
   ENROLL: "/api/device-agents/enroll",
   ENROLL_OWN: "/api/device-agents/devices/enroll",
   HOSTS: "/api/hosts",
@@ -255,6 +256,38 @@ it.layer(getTestDB())("a local agent's Mac", (it) => {
         );
         assert.equal(yield* statusOf(macRegister(secret, deviceId)), HOSTED_HTTP_STATUS.OK);
       }),
+  );
+
+  it.effect("a host reads the live agents of its own device alone", () =>
+    Effect.gen(function* () {
+      const owner = yield* account(true);
+      const other = yield* account(true);
+      const host = yield* enrolledHost(owner);
+      const otherHost = yield* enrolledHost(other);
+      const task = yield* startTask(owner, { name: "Invitations" });
+      const started = yield* createAgent(owner, {
+        taskId: task.id,
+        idempotencyKey: randomUUID(),
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        planSnapshot: "# Invitations\n",
+        prompt: null,
+        repository: null,
+        machine: AGENT_MACHINE.DEVICE,
+        deviceId: host.deviceId,
+      });
+      const live = (secret: string, deviceId: string) =>
+        answerOf(request(secret, PATH.LIVE_AGENTS, { deviceId, version: HOST_VERSION.FLOOR }));
+
+      const own = yield* live(host.secret, host.deviceId);
+      const othersDevice = yield* live(otherHost.secret, host.deviceId);
+
+      assert.deepEqual(own, {
+        status: HOSTED_HTTP_STATUS.OK,
+        body: { agentIds: [Option.getOrThrow(started).agent.id] },
+      });
+      assert.equal(othersDevice.status, HOSTED_HTTP_STATUS.NOT_FOUND);
+    }),
   );
 
   it.effect(
