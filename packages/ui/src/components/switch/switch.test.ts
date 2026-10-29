@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { Switch, SwitchMark } from "./switch.js";
+import { LabeledSwitch, Switch, SwitchMark } from "./switch.js";
 
 /**
  * switch.test.ts -- a switch is a control of its own, named by its label,
@@ -58,6 +58,19 @@ test("a switch is named by its label and each press asks for the other state", (
   assert.equal(control.getAttribute("aria-checked"), "true");
   act(() => control.click());
   assert.equal(control.getAttribute("aria-checked"), "false");
+});
+
+test("a labeled switch writes its name beside it, and a press on the words turns it", () => {
+  function Words(): React.JSX.Element {
+    const [on, setOn] = useState(false);
+    return createElement(LabeledSwitch, { checked: on, label: "Auto-merge", onChange: setOn });
+  }
+  const page = render(createElement(Words));
+  const control = switchNamed(page, "Auto-merge");
+  const words = page.querySelector("label")?.lastElementChild ?? assert.fail("no words");
+  assert.equal(words.textContent, "Auto-merge");
+  act(() => (words as HTMLElement).click());
+  assert.equal(control.getAttribute("aria-checked"), "true");
 });
 
 test("the drawing alone is hidden from a reader, and the row around it is the switch", () => {

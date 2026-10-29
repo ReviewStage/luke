@@ -1,4 +1,14 @@
-import { GAP, Inline, JUSTIFY, Stack, Switch, SwitchMark, TEXT_TONE, Text } from "@luke/ui";
+import {
+  GAP,
+  Inline,
+  JUSTIFY,
+  LabeledSwitch,
+  Stack,
+  Switch,
+  SwitchMark,
+  TEXT_TONE,
+  Text,
+} from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -13,6 +23,11 @@ function Held({ start, label }: { start: boolean; label: string }): React.JSX.El
   return <Switch checked={on} label={label} onChange={setOn} />;
 }
 
+function HeldLabeled({ start, label }: { start: boolean; label: string }): React.JSX.Element {
+  const [on, setOn] = useState(start);
+  return <LabeledSwitch checked={on} label={label} onChange={setOn} />;
+}
+
 function Switches(): React.JSX.Element {
   return (
     <>
@@ -22,6 +37,12 @@ function Switches(): React.JSX.Element {
           <Held start label="On" />
           <Switch checked={false} label="Off, unavailable" disabled onChange={() => undefined} />
           <Switch checked label="On, unavailable" disabled onChange={() => undefined} />
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="switch-labeled" title="Beside its name">
+        <Inline gap={GAP.FIELD}>
+          <HeldLabeled start label="Auto-merge" />
+          <HeldLabeled start={false} label="Auto-merge" />
         </Inline>
       </CatalogSection>
       <CatalogSection id="switch-mark" title="Drawing alone, inside a row">
