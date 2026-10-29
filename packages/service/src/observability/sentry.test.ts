@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import * as Sentry from "@sentry/effect";
-import { Effect, Fiber, Layer, Logger } from "effect";
+import { Effect, ErrorReporter, Fiber, Layer, Logger } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { recordingSentry, sentOfType } from "../testing/sentry-transport.js";
 import { sentryCronCheckIns, sentryLogger, sentryReportedFetch, standReported } from "./sentry.js";
@@ -54,6 +54,25 @@ it.effect("an effect under error reporting is captured once, and an interruption
     }).pipe(Effect.provide(sentry.layer));
     assert.deepEqual(exceptionTypes(sentry.sent), ["TypeError"]);
   }),
+);
+
+it.effect(
+  "a reported failure's ids land as tags on its issue, and its other attributes as extra data",
+  () =>
+    Effect.gen(function* () {
+      const sentry = recordingSentry();
+      const failure = Object.assign(new TypeError("refused"), {
+        [ErrorReporter.attributes]: { agentId: "a", turnId: "t", route: "/api/agents" },
+      });
+      yield* Effect.exit(Effect.withErrorReporting(Effect.fail(failure))).pipe(
+        Effect.provide(sentry.layer),
+      );
+      const [event] = sentOfType(sentry.sent, "event").map((item) => JSON.parse(item.text));
+      assert.deepEqual(
+        { tags: [event.tags.agentId, event.tags.turnId], extra: event.extra },
+        { tags: ["a", "t"], extra: { route: "/api/agents" } },
+      );
+    }),
 );
 
 it.effect(
