@@ -8,6 +8,7 @@ import {
   createAgent,
   discardAgent,
   nativeRuntimesOfReached,
+  readAgent,
   readAgentByKey,
   readAgentContext,
 } from "@luke/database/models/agent-store";
@@ -189,6 +190,10 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * them, and once stopped the source is archived, by the coding agent that
  * continued it or else the member, which is logged where it fails; a source
  * eve would not stop stands unarchived. A fork of a pilot takes over nothing.
+ * A continue of an agent a
+ * pilot started, such as a sub-pilot, reports to that pilot as its source
+ * did, whoever continues it; every other continue or fork records only the
+ * coding agent whose `start_agent` asks as its starter.
  * An ask that names a branch has its agent's checkout cloned at that branch
  * rather than the default one, which the agent's row keeps; the branch is
  * read on GitHub through the same installation before anything is made, so
@@ -749,6 +754,20 @@ const archivedPilot = (userId: string, pilot: Agent, by: Agent | undefined) => {
   );
 };
 
+/**
+ * The pilot a continue keeps as its starter: the one that started its
+ * source, where that is a pilot, so a continued sub-pilot still reports up
+ * to its parent; none for a source no pilot started.
+ */
+const pilotStarterOf = (userId: string, source: Agent) =>
+  source.startedByAgentId === null
+    ? Effect.succeed(undefined)
+    : Effect.map(hostedStoreOrUnavailable(readAgent(userId, source.startedByAgentId)), (starter) =>
+        Option.isSome(starter) && starter.value.kind === AGENT_KIND.PILOT
+          ? starter.value.id
+          : undefined,
+      );
+
 /** The place an agent stands in, which a Start from it puts the new agent in: its task, or its workspace and repository where it has none; none for an agent with neither, which no checkout could go on from. */
 export function placeOfAgent(
   agent: Pick<Agent, "taskId" | "organizationId" | "repository">,
@@ -1124,6 +1143,8 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   const takesOver = continued && from.source.kind === AGENT_KIND.PILOT ? from.source : undefined;
   const place =
     takesOver !== undefined && brief.taskId !== null ? { ...brief, kind: AGENT_KIND.PILOT } : brief;
+  // A continue of an agent a pilot started reports to that pilot, whoever continues it.
+  const pilotStarter = continued ? yield* pilotStarterOf(userId, from.source) : undefined;
   // Where it runs, the runtime, and the payer are decided as the agent is made, by the starter's account, its source or task, and its model, and never change.
   const where = yield* machineOfStart(userId, from?.source, landing.task);
   const runtime = yield* startRuntimeOf(userId, choice.model, keys, where.asked);
@@ -1134,7 +1155,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       automationId: ask.automationId,
       automationOrigin: ask.automationOrigin,
       startedFrom: landing.startedFrom,
-      startedByAgentId: ask.startedBy?.id,
+      startedByAgentId: pilotStarter ?? ask.startedBy?.id,
       takesOverFrom: takesOver?.id,
       title,
       idempotencyKey: ask.idempotencyKey,

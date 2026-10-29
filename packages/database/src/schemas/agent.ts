@@ -96,7 +96,9 @@ import { task } from "./task.js";
  * one, always an agent of the same account, which is told when this one's
  * run ends without finishing; null for an agent a member, Luke, or an
  * automation started, and once the starter's row is gone. A Continue or a
- * Fork by hand names none, whoever started its source.
+ * Fork by hand names none, whoever started its source, but for a continue
+ * of an agent a pilot started, which names that pilot, so a continued
+ * sub-pilot still reports up to its parent.
  * `author` is who the agent's commits are by and its pull request is opened
  * as, the developer or the Luke GitHub App with why (`AGENT_AUTHOR`),
  * settled once as its first session starts and never moved after, so its
