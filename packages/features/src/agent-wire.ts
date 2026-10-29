@@ -806,7 +806,8 @@ export const agentSummarySchema = EffectSchema.Struct({
   mac: EffectSchema.optionalKey(
     EffectSchema.Struct({
       name: EffectSchema.String,
-      seenAt: countedNumber,
+      /** Absent from the task list followed live, which a beat does not wake. */
+      seenAt: EffectSchema.optionalKey(countedNumber),
       /** Which device it is, so a window keeps `seenAt` true by reading that device's beats; absent from a service older than it. */
       deviceId: EffectSchema.optionalKey(wireUuidSchema),
     }),

@@ -108,12 +108,9 @@ const MODELS_READ_BOUND_MS = 15_000;
  * archive, a change of model, or a switch of MCP servers the moment it is
  * asked, kept until the list carries it (`@luke/host`'s
  * `task-list-collections.ts`), and a Start's agent before the Start answers.
- * The task's agents are read too, as a task opens, after a Start, and as the
- * task's column's "+" opens, for what only that read says of each: the
- * runtime it runs on, the Mac a local one runs on, and the agents continued
- * from it, laid under the list's (`withRead`). An agent the read holds that
- * the list has not carried yet stands until it does, and the read's agents
- * stand alone where the list does not carry the task. A Start mints a key of its own
+ * Where no task is open, the agent named is read as its own page, for its
+ * workspace, its repository, and the run that started it, and the list's
+ * row of it stands over that read once the list carries it. A Start mints a key of its own
  * for the press, so a service that did not answer is asked again under the
  * same key on the next press of the same choice and answers the agent the
  * first press made rather than a second one; a press of another choice is
@@ -187,9 +184,9 @@ export interface HeldPeople {
 export interface AgentsControl {
   /** The signed-in account's id, whose own agents carry no "Started by"; none while signed out, or for an identity stored without one. */
   me: string | undefined;
-  /** The open task's agents in the order started, an archived one left out, or nothing before the first read lands. */
+  /** The open task's agents in the order started, an archived one left out, or nothing before the task list carries the task. */
   agents: readonly AgentSummary[] | undefined;
-  /** The open task's archived agents in the order started, or nothing before the first read lands. */
+  /** The open task's archived agents in the order started, or nothing before the task list carries the task. */
   archived: readonly AgentSummary[] | undefined;
   /** The workspace the one agent read as its page belongs to; none on a task, where the task says it, and before the page's read lands. */
   workspaceId?: string | undefined;
@@ -197,15 +194,15 @@ export interface AgentsControl {
   agentRepository?: string | undefined;
   /** The automation's run that started the one agent read as its page; none on a plan, for an agent started by hand, and before the page's read lands. */
   origin?: AgentOrigin | undefined;
-  /** The agent tabs the panel may show, by agent id; nothing before the first read lands. */
+  /** The agent tabs the panel may show, by agent id; nothing before the task list carries the task. */
   agentIds: readonly string[] | undefined;
-  /** Every agent of the task by id, an archived one among them, which its Inbox stands on, since an archived agent's items still stand; nothing before the first read lands. */
+  /** Every agent of the task by id, an archived one among them, which its Inbox stands on, since an archived agent's items still stand; nothing before the task list carries the task. */
   heldIds: readonly string[] | undefined;
-  /** Whether the last read of the list did not land. */
+  /** Whether the last read of the page's agent did not land, and the task list carries it not either. */
   listFailed: boolean;
   /** Whether the last read answered that the agent read by its id is not there for the reader: deleted, or of a workspace they are not in. */
   listMissing: boolean;
-  /** Reads the list again: after a read that failed, or as the column's "+" opens, so it says where each agent stands now. */
+  /** Reads the page's agent again after a read that failed; a task's agents are the task list's, which follows itself. */
   onRetryList: () => void;
   /** The models the menu offers, as last read; nothing before the menu first asks. */
   models: readonly CatalogModel[] | undefined;
@@ -350,7 +347,7 @@ export interface AgentsControl {
    * rather than said, for the dialog that asked to say.
    */
   onDelete: (agentId: string) => Promise<ActionResult>;
-  /** Reads the task's agents again now, answering the one named as it stands, or nothing where the read did not land or holds no such agent. */
+  /** Reads one agent again now by its id, as its own page reads it, answering it as it stands, or nothing where the read did not land. */
   readAgent: (agentId: string) => Promise<AgentSummary | undefined>;
   /** One read of an agent's transcript past a cursor at once, as Copy transcript asks it. */
   readTranscript: TranscriptReader;
@@ -569,20 +566,12 @@ type PageList = AgentListAnswer & {
 };
 
 /**
- * The read a list is taken from: the task's agents, archived ones among
- * them, where a task is open, and else the one agent named, read as its
- * page and held as a list of one, with the workspace it belongs to.
+ * The one agent named, read as its page and held as a list of one, with the
+ * workspace it belongs to, its repository, and the run that started it.
  */
-function listRead(
-  act: ActHandle["act"],
-  taskId: string | undefined,
-  agentId: string | undefined,
-): Promise<PageList> {
-  if (taskId !== undefined) {
-    return act(ACT_KIND.AGENTS_LIST, { taskId, includeArchived: true });
-  }
+function pageRead(act: ActHandle["act"], agentId: string): Promise<PageList> {
   // Note that a page names no automation by null where a summary leaves the key out.
-  return act(ACT_KIND.AGENTS_PAGE, { agentId: agentId ?? "" }).then((answer): PageList => {
+  return act(ACT_KIND.AGENTS_PAGE, { agentId }).then((answer): PageList => {
     if ("failure" in answer) return answer;
     const { automationId, origin, ...agent } = answer.agent;
     return {
@@ -604,27 +593,10 @@ export function readAgentById(
   act: ActHandle["act"],
   agentId: string,
 ): Promise<AgentSummary | undefined> {
-  return listRead(act, undefined, agentId).then(
+  return pageRead(act, agentId).then(
     (answer) => ("failure" in answer ? undefined : answer.agents[0]),
     () => undefined,
   );
-}
-
-/**
- * The list's agent with what only the task's read says of it laid under
- * it: the runtime it runs on, the Mac a local one runs on, and the agents
- * continued from it, which the list's row does not carry.
- */
-function withRead(agent: AgentSummary, read: AgentSummary | undefined): AgentSummary {
-  if (read === undefined) return agent;
-  const { runtime, machine, mac, continuedBy } = read;
-  return {
-    ...(runtime === undefined ? undefined : { runtime }),
-    ...(machine === undefined ? undefined : { machine }),
-    ...(mac === undefined ? undefined : { mac }),
-    ...(continuedBy === undefined ? undefined : { continuedBy }),
-    ...agent,
-  };
 }
 
 /** Whether two choices ask the same of a Start, read as `choiceRequest` sends them: only the standard window is a window apart. */
@@ -696,9 +668,8 @@ export function useAgents(input: {
   const { taskId, agentId, repository } = input;
   const { act } = input.acts;
   const mintKey = input.mintKey ?? (() => crypto.randomUUID());
-  // Note that the list is held under the agent too, where it is the page's one agent, so another agent's page holds nothing of the last.
+  // The page's one agent as read, held under the agent, so another agent's page holds nothing of the last.
   const [list, setList] = useState<{
-    taskId: string | undefined;
     agentId: string | undefined;
     agents: readonly AgentSummary[] | undefined;
     failed: boolean;
@@ -706,10 +677,10 @@ export function useAgents(input: {
     workspaceId?: string | undefined;
     repository?: string | undefined;
     origin?: AgentOrigin | undefined;
-  }>({ taskId: undefined, agentId: undefined, agents: undefined, failed: false });
+  }>({ agentId: undefined, agents: undefined, failed: false });
   const listOf = taskId === undefined ? agentId : undefined;
-  const ours = (was: { taskId: string | undefined; agentId: string | undefined }) =>
-    was.taskId === taskId && was.agentId === listOf;
+  const ours = (was: { agentId: string | undefined }) =>
+    listOf !== undefined && was.agentId === listOf;
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
   const [macs, setMacs] = useState<readonly MacOffer[] | undefined>(undefined);
   const [modelsRead, setModelsRead] = useState<ModelsRead>({
@@ -753,9 +724,8 @@ export function useAgents(input: {
   const latest = useRef(input);
   latest.current = input;
 
-  // The read is this task's: another task's, or none, is nothing to draw.
-  // Note that the agent New task just started stands as its task's read until
-  // that read lands, so its tab draws at once rather than after the read.
+  // The page's read, or the agent New task just started on the open task, which stands until the
+  // list carries it, so its tab draws at once.
   const read = ours(list) ? list.agents : undefined;
   const seed = useMemo(() => (started === undefined ? undefined : [started.agent]), [started]);
   const held = read ?? (taskId !== undefined && started?.taskId === taskId ? seed : undefined);
@@ -770,17 +740,16 @@ export function useAgents(input: {
     const page = listedAgents?.filter((agent) => agent.id === agentId);
     return page?.length === 0 ? undefined : page;
   }, [listedAgents, taskId, agentId]);
-  // Note that an agent the read or New task holds stands beside the list's until the list first
-  // carries it, and leaves with it once it no longer does, so a tab never leaves between the two.
+  // Note that an agent the page's read or New task holds stands beside the list's until the list
+  // first carries it, and leaves with it once it no longer does, so a tab never leaves between the two.
   const subject = taskId ?? agentId;
   const carried = useRef({ subject, ids: new Set<string>() });
   if (carried.current.subject !== subject) carried.current = { subject, ids: new Set() };
   for (const agent of listedHere ?? []) carried.current.ids.add(agent.id);
   const standing = useMemo(() => {
     if (listedHere === undefined) return held;
-    const readOf = new Map(held?.map((agent) => [agent.id, agent] as const));
     const arriving = held?.filter((agent) => !carried.current.ids.has(agent.id)) ?? [];
-    return [...listedHere.map((agent) => withRead(agent, readOf.get(agent.id))), ...arriving];
+    return arriving.length === 0 ? listedHere : [...listedHere, ...arriving];
   }, [listedHere, held]);
   const agents = useMemo(
     () => standing?.filter((agent) => agent.archivedAt === undefined),
@@ -802,27 +771,24 @@ export function useAgents(input: {
   // The archives asked here and still out.
   const [archivesOut, setArchivesOut] = useState(0);
 
-  // Read when the task opens, or the page's agent where no task is, and again when a Start asks (`reads`).
+  // The page's agent read as the page opens, where no task is, and again when a delete or a Retry asks (`reads`).
   useEffect(() => {
-    if (taskId === undefined && agentId === undefined) return;
+    if (listOf === undefined) return;
     let live = true;
-    listRead(latest.current.acts.act, taskId, agentId).then(
+    const kept = (was: typeof list) => (was.agentId === listOf ? was : undefined);
+    pageRead(latest.current.acts.act, listOf).then(
       (answer) => {
         if (!live) return;
         setList((was) =>
           "failure" in answer
             ? {
-                taskId,
+                ...kept(was),
                 agentId: listOf,
-                agents: ours(was) ? was.agents : undefined,
+                agents: kept(was)?.agents,
                 failed: true,
                 missing: answer.failure === AGENT_CALL_FAILURE.NOT_FOUND,
-                workspaceId: ours(was) ? was.workspaceId : undefined,
-                repository: ours(was) ? was.repository : undefined,
-                origin: ours(was) ? was.origin : undefined,
               }
             : {
-                taskId,
                 agentId: listOf,
                 agents: answer.agents,
                 failed: false,
@@ -833,23 +799,20 @@ export function useAgents(input: {
         );
       },
       () => {
-        // A read that failed keeps the agents already drawn: their tabs stand until a read lands.
+        // A read that failed keeps the agent already drawn: its tab stands until a read lands.
         if (live)
           setList((was) => ({
-            taskId,
+            ...kept(was),
             agentId: listOf,
-            agents: ours(was) ? was.agents : undefined,
+            agents: kept(was)?.agents,
             failed: true,
-            workspaceId: ours(was) ? was.workspaceId : undefined,
-            repository: ours(was) ? was.repository : undefined,
-            origin: ours(was) ? was.origin : undefined,
           }));
       },
     );
     return () => {
       live = false;
     };
-  }, [taskId, agentId, reads]);
+  }, [listOf, reads]);
 
   const readAgain = useCallback(() => setReads((count) => count + 1), []);
 
@@ -910,14 +873,12 @@ export function useAgents(input: {
 
   /**
    * A Start that landed: its tab opens on the agent the task list already
-   * carries, and the task's agents are read again for what only the read
-   * says of it and of the agent it continues. Note that one landing after
-   * the developer left the task opens no tab on the task now open.
+   * carries. Note that one landing after the developer left the task opens
+   * no tab on the task now open.
    */
   const landed = (on: string, agent: AgentSummary) => {
     if ((latest.current.taskId ?? latest.current.agentId) !== on) return;
     latest.current.onStarted(agent.id);
-    readAgain();
   };
 
   const pressStart = async (choice?: ModelChoice): Promise<Failure | undefined> => {
@@ -1143,12 +1104,10 @@ export function useAgents(input: {
   };
 
   // Note that the task New task started may not stand open yet as its start
-  // answers, and the read as it opens holds the agent already. Until a read
-  // or the task list holds it, the agent stands alone, so its tab draws at
-  // once rather than after either.
+  // answers. Until the task list carries its agent, the agent stands as its
+  // task's, so its tab draws at once rather than after the list.
   const onTaskStarted = (on: string, agent: AgentSummary, words: StartedWords) => {
     setStarted({ taskId: on, agent, line: openingLineOf(words) });
-    if (latest.current.taskId === on) readAgain();
   };
 
   // Note that the files are changed from the draft as it stands when the
@@ -1378,7 +1337,7 @@ export function useAgents(input: {
         reason: notReady ? ARCHIVE_NOT_READY : DELETE_WORDS.refused,
       };
     }
-    // Note that the read is taken again too, which drops a read already out that still holds the agent.
+    // Note that a page's agent is read again, which drops a read already out that still holds it.
     readAgain();
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
@@ -1386,29 +1345,7 @@ export function useAgents(input: {
     if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) failed(result.reason);
   };
 
-  const readAgent = useCallback(
-    async (named: string): Promise<AgentSummary | undefined> => {
-      if (taskId === undefined && agentId === undefined) return undefined;
-      const answer = await listRead(act, taskId, agentId).catch(() => undefined);
-      if (answer === undefined || "failure" in answer) return undefined;
-      // Note that the page's workspace, repository, and run come with the read, as the list's own read takes them.
-      setList((was) =>
-        ours(was)
-          ? {
-              taskId,
-              agentId: listOf,
-              agents: answer.agents,
-              failed: false,
-              workspaceId: answer.workspaceId,
-              repository: answer.repository,
-              origin: answer.origin,
-            }
-          : was,
-      );
-      return answer.agents.find((agent) => agent.id === named);
-    },
-    [act, taskId, agentId],
-  );
+  const readAgent = useCallback((named: string) => readAgentById(act, named), [act]);
 
   const readTranscript = useCallback<TranscriptReader>(
     (params) => act(ACT_KIND.AGENTS_MESSAGES, params),

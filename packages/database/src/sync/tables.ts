@@ -24,6 +24,7 @@ import { attachment } from "../schemas/attachment.js";
 import { invitation, member, organization, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { channel } from "../schemas/channel.js";
+import { device } from "../schemas/device.js";
 import { deviceAgentLine, deviceAgentRequest } from "../schemas/device-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
 import { githubPersonalToken } from "../schemas/github-personal-token.js";
@@ -99,6 +100,44 @@ export const userSync = defineSyncTable(user, {
     },
   ],
   ignore: [user.updatedAt, user.lastLoginMethod],
+});
+
+/**
+ * A member's device, on its account's topic and, through its memberships,
+ * every workspace it is in, so a Mac's new name reaches the task lists that
+ * name the local agents on it. Note that every column but its name is
+ * ignored, because the device beats and registers again often, rewriting
+ * when it was last seen and what it runs, and no view the capture wakes
+ * reads them: a window judges a device by its own presence read.
+ */
+export const deviceSync = defineSyncTable(device, {
+  topics: [
+    { kind: TOPIC.ACCOUNT, column: device.userId },
+    {
+      through: member,
+      key: member.userId,
+      by: device.userId,
+      topics: [{ kind: TOPIC.WORKSPACE, column: member.organizationId }],
+    },
+  ],
+  ignore: [
+    device.kind,
+    device.platform,
+    device.arch,
+    device.isolation,
+    device.home,
+    device.claudeExecutable,
+    device.codexExecutable,
+    device.signedIn,
+    device.capabilities,
+    device.setup,
+    device.setupFailure,
+    device.secretHash,
+    device.version,
+    device.removedAt,
+    device.createdAt,
+    device.lastSeenAt,
+  ],
 });
 
 /** An invitation to a workspace, pending or settled, on the workspace's topic. */
@@ -451,6 +490,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   agentSync,
   memberSync,
   userSync,
+  deviceSync,
   invitationSync,
   organizationSync,
   personalWorkspaceSync,

@@ -179,7 +179,7 @@ test("a read of the models that never answers is said as failed past its bound, 
   }
 });
 
-test("the task's agents are the followed list's, the archived among them, drawn before the read, which lays under each only what it alone says", async () => {
+test("the task's agents are the followed list's alone, the archived among them, with no read of them asked", async () => {
   const OTHER_TASK = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
   const elsewhere = { ...STARTED, id: "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", planId: OTHER_TASK };
   const archived = {
@@ -188,35 +188,32 @@ test("the task's agents are the followed list's, the archived among them, drawn 
     status: AGENT_STATUS.COMPLETED,
     archivedAt: 2,
   };
-  const renamed = { ...STARTED, title: "Invite expiry job" };
+  const local = { ...STARTED, runtime: AGENT_RUNTIME.CLAUDE_CODE };
   const tab = mount({
     taskId: TASK,
     repository: "acme/relay",
-    listedAgents: [elsewhere, renamed, archived],
+    listedAgents: [elsewhere, local, archived],
   });
-  const read = Promise.withResolvers<WireBoundaryInput>();
-  tab.answer(ACT_KIND.AGENTS_LIST, read.promise);
   await tab.mount();
 
-  assert.deepEqual(tab.control().agentIds, [AGENT]);
+  assert.deepEqual(
+    tab.control().agents?.map((agent) => [agent.id, agent.runtime]),
+    [[AGENT, AGENT_RUNTIME.CLAUDE_CODE]],
+  );
   assert.deepEqual(
     tab.control().archived?.map((agent) => agent.id),
     [archived.id],
   );
-
-  // The read was taken before the rename the list carries, and alone names the runtime.
-  read.resolve({ agents: [{ ...STARTED, runtime: AGENT_RUNTIME.CLAUDE_CODE }, archived] });
-  await settle();
   assert.deepEqual(
-    tab.control().agents?.map((agent) => [agent.title, agent.runtime]),
-    [["Invite expiry job", AGENT_RUNTIME.CLAUDE_CODE]],
+    tab.asked.filter((each) => each.kind !== ACT_KIND.AGENTS_PULL_REQUEST),
+    [],
+    "nothing of the task's agents is read",
   );
 });
 
 test("a draft asks nothing of the service, one per plan, until its first message starts the agent on those words as its prompt under the draft's key, with the MCP servers it switched off, opening its tab", async () => {
   const OTHER_TASK = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
-  const tab = mount({ taskId: TASK, repository: "acme/relay" });
-  tab.answer(ACT_KIND.AGENTS_LIST, { agents: [] }, { agents: [] }, { agents: [STARTED] });
+  const tab = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
   tab.answer(
     ACT_KIND.AGENTS_START,
     { failure: AGENT_CALL_FAILURE.UNANSWERED },
@@ -293,7 +290,6 @@ test("a draft asks nothing of the service, one per plan, until its first message
 
 test("a plan's Start stands its agent's tab at once under the press's key, which gives way to the agent the list carries once made, or to nothing where it was refused", async () => {
   const tab = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
-  tab.answer(ACT_KIND.AGENTS_LIST, { agents: [] });
   let land: (answer: WireBoundaryInput) => void = () => undefined;
   tab.answer(
     ACT_KIND.AGENTS_START,
@@ -334,8 +330,7 @@ test("a plan's Start stands its agent's tab at once under the press's key, which
 });
 
 test("a draft's words outlast a relaunch, the plan opening on its draft again under the same key, its files and chips left behind, and a draft let go stays gone", async () => {
-  const before = mount({ taskId: TASK, repository: "acme/relay" });
-  before.answer(ACT_KIND.AGENTS_LIST, { agents: [] });
+  const before = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
   await before.mount();
   let draft = "";
   act(() => {
@@ -350,8 +345,7 @@ test("a draft's words outlast a relaunch, the plan opening on its draft again un
   act(() => before.control().onDraftAttachments((held) => [...held, notes]));
   for (const root of roots.splice(0)) act(() => root.unmount());
 
-  const after = mount({ taskId: TASK, repository: "acme/relay" });
-  after.answer(ACT_KIND.AGENTS_LIST, { agents: [] });
+  const after = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
   await after.mount();
   assert.deepEqual(after.control().draft, {
     id: draft,
@@ -364,8 +358,7 @@ test("a draft's words outlast a relaunch, the plan opening on its draft again un
   assert.equal(after.control().draft, undefined);
   for (const root of roots.splice(0)) act(() => root.unmount());
 
-  const again = mount({ taskId: TASK, repository: "acme/relay" });
-  again.answer(ACT_KIND.AGENTS_LIST, { agents: [] });
+  const again = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
   await again.mount();
   assert.equal(again.control().draft, undefined);
 });
@@ -373,8 +366,6 @@ test("a draft's words outlast a relaunch, the plan opening on its draft again un
 test("two windows' draft agents on one plan each keep their own words under their own key", async () => {
   const first = mount({ taskId: TASK, repository: "acme/relay" }, AtomRegistry.make(), "first");
   const second = mount({ taskId: TASK, repository: "acme/relay" }, AtomRegistry.make(), "second");
-  first.answer(ACT_KIND.AGENTS_LIST, { agents: [] });
-  second.answer(ACT_KIND.AGENTS_LIST, { agents: [] });
   await first.mount();
   await second.mount();
   act(() => {
@@ -392,8 +383,7 @@ test("two windows' draft agents on one plan each keep their own words under thei
   for (const root of roots.splice(0)) act(() => root.unmount());
 
   // The other window's draft, kept apart and outliving the first's, is the one a relaunch opens on.
-  const relaunched = mount({ taskId: TASK, repository: "acme/relay" });
-  relaunched.answer(ACT_KIND.AGENTS_LIST, { agents: [] });
+  const relaunched = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
   await relaunched.mount();
   assert.deepEqual(
     [relaunched.control().draft?.id, relaunched.control().draft?.prompt],
@@ -404,8 +394,7 @@ test("two windows' draft agents on one plan each keep their own words under thei
 test("a draft of files alone waits while another plan is open, but no relaunch brings back a draft with no words", async () => {
   const OTHER_TASK = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
   const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
-  const before = mount({ taskId: TASK, repository: "acme/relay" });
-  before.answer(ACT_KIND.AGENTS_LIST, { agents: [] }, { agents: [] }, { agents: [] });
+  const before = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
   await before.mount();
   act(() => {
     before.control().onNewDraft();
@@ -416,8 +405,7 @@ test("a draft of files alone waits while another plan is open, but no relaunch b
   assert.deepEqual(before.control().draft?.attachments, [notes]);
   for (const root of roots.splice(0)) act(() => root.unmount());
 
-  const after = mount({ taskId: TASK, repository: "acme/relay" });
-  after.answer(ACT_KIND.AGENTS_LIST, { agents: [] });
+  const after = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
   await after.mount();
   assert.equal(after.control().draft, undefined);
 });
@@ -708,8 +696,7 @@ test("a fork joins the task's draft under a key of its own, its words kept and i
     id: FORKED,
     from: { agentId: AGENT, messageId: MESSAGE, steps: 3, totalSteps: 5 },
   };
-  const tab = mount({ taskId: TASK, repository: "acme/relay" });
-  tab.answer(ACT_KIND.AGENTS_LIST, { agents: [source] }, { agents: [source] });
+  const tab = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [source] });
   tab.answer(ACT_KIND.AGENTS_START, { failure: AGENT_CALL_FAILURE.UNANSWERED }, { agent: forked });
   await tab.mount();
 
@@ -780,8 +767,7 @@ test("a fork joins the task's draft under a key of its own, its words kept and i
 
 test("a fork's × lets the fork go and leaves an ordinary draft with its words and chips; a fork with no draft opens one", async () => {
   const MESSAGE = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";
-  const tab = mount({ taskId: TASK, repository: "acme/relay" });
-  tab.answer(ACT_KIND.AGENTS_LIST, { agents: [STARTED] });
+  const tab = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [STARTED] });
   await tab.mount();
   const fork = { agentId: AGENT, messageId: MESSAGE, opening: "Done." };
   let draft = "";
@@ -803,8 +789,7 @@ test("a fork's × lets the fork go and leaves an ordinary draft with its words a
 test("a fork's draft with words outlasts a relaunch still a fork, under the same key, and its × keeps the words as an ordinary draft's", async () => {
   const MESSAGE = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";
   const fork = { agentId: AGENT, messageId: MESSAGE, opening: "Done." };
-  const before = mount({ taskId: TASK, repository: "acme/relay" });
-  before.answer(ACT_KIND.AGENTS_LIST, { agents: [STARTED] });
+  const before = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [STARTED] });
   await before.mount();
   let draft = "";
   act(() => {
@@ -813,8 +798,7 @@ test("a fork's draft with words outlasts a relaunch still a fork, under the same
   act(() => before.control().onDraftChange({ prompt: "Try the queue" }));
   for (const root of roots.splice(0)) act(() => root.unmount());
 
-  const after = mount({ taskId: TASK, repository: "acme/relay" });
-  after.answer(ACT_KIND.AGENTS_LIST, { agents: [STARTED] });
+  const after = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [STARTED] });
   await after.mount();
   assert.deepEqual(after.control().draft, {
     id: draft,
@@ -835,8 +819,7 @@ test("a fork's draft with words outlasts a relaunch still a fork, under the same
   });
   for (const root of roots.splice(0)) act(() => root.unmount());
 
-  const again = mount({ taskId: TASK, repository: "acme/relay" });
-  again.answer(ACT_KIND.AGENTS_LIST, { agents: [STARTED] });
+  const again = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [STARTED] });
   await again.mount();
   assert.equal(again.control().draft?.fork, undefined, "a fork let go stays let go");
   assert.equal(again.control().draft?.prompt, "Try the queue, then retry");
@@ -856,8 +839,7 @@ test("a continue opens the task's draft with the closed box's words and files af
     from: { agentId: AGENT, steps: 3, totalSteps: 3 },
   };
   const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
-  const before = mount({ taskId: TASK, repository: "acme/relay" });
-  before.answer(ACT_KIND.AGENTS_LIST, { agents: [source] }, { agents: [source] });
+  const before = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [source] });
   await before.mount();
 
   // Words already in the task's draft stay, the box's laid in after them.
@@ -886,8 +868,7 @@ test("a continue opens the task's draft with the closed box's words and files af
   assert.deepEqual(before.control().draft?.fork, fork);
   for (const root of roots.splice(0)) act(() => root.unmount());
 
-  const after = mount({ taskId: TASK, repository: "acme/relay" });
-  after.answer(ACT_KIND.AGENTS_LIST, { agents: [source] }, { agents: [continued] });
+  const after = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [source] });
   after.answer(
     ACT_KIND.AGENTS_START,
     { failure: AGENT_CALL_FAILURE.UNANSWERED },
@@ -921,8 +902,7 @@ test("a continue opens the task's draft with the closed box's words and files af
 });
 
 test("a second Continue of the agent the draft already continues keeps its key and its chips where it lays nothing in, and takes a key of its own for new words, which a Start already sent never had", async () => {
-  const tab = mount({ taskId: TASK, repository: "acme/relay" });
-  tab.answer(ACT_KIND.AGENTS_LIST, { agents: [STARTED] });
+  const tab = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [STARTED] });
   await tab.mount();
   let first = "";
   act(() => {
@@ -951,8 +931,7 @@ test("a second Continue of the agent the draft already continues keeps its key a
 test("continuing an agent starts on the task from its whole transcript under the agent's own key, a press asked again after no answer carrying the same key, and the new agent's tab opens as a Start's does", async () => {
   const SOURCE = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
   const continued = { ...STARTED, from: { agentId: SOURCE, steps: 3, totalSteps: 3 } };
-  const tab = mount({ taskId: TASK, repository: "acme/relay" });
-  tab.answer(ACT_KIND.AGENTS_LIST, { agents: [] }, { agents: [continued] });
+  const tab = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
   tab.answer(
     ACT_KIND.AGENTS_START,
     { failure: AGENT_CALL_FAILURE.UNANSWERED },
@@ -967,6 +946,8 @@ test("continuing an agent starts on the task from its whole transcript under the
   });
   assert.equal(failed?.text, "The agent could not be started.");
   assert.deepEqual(tab.started, []);
+  // The host answers the Start once the list carries the agent it made.
+  await tab.stand({ listedAgents: [continued] });
   await act(async () => {
     failed = await continueAgent(SOURCE);
   });
@@ -989,8 +970,7 @@ test("a continue carries the developer's words and files as its note, other word
   const SOURCE = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
   const OTHER = "ae3c8c6b-5f4a-4fad-8d88-8b6e9c4a5d43";
   const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
-  const tab = mount({ taskId: TASK, repository: "acme/relay" });
-  tab.answer(ACT_KIND.AGENTS_LIST, { agents: [] });
+  const tab = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
   tab.answer(
     ACT_KIND.AGENTS_START,
     { failure: AGENT_CALL_FAILURE.UNANSWERED },
@@ -1059,13 +1039,6 @@ test("a second continue of an agent once the first landed mints a key of its own
   const second = { ...STARTED, id: "ae3c8c6b-5f4a-4fad-8d88-8b6e9c4a5d43", from };
   const third = { ...STARTED, id: "bf4d9d7c-6a5b-40be-9e99-9c7fad5b6e54", from };
   const tab = mount({ taskId: TASK, repository: "acme/relay" });
-  tab.answer(
-    ACT_KIND.AGENTS_LIST,
-    { agents: [] },
-    { agents: [first] },
-    { agents: [first, second] },
-    { agents: [first, second, third] },
-  );
   tab.answer(ACT_KIND.AGENTS_START, { agent: first }, { agent: second }, { agent: third });
   await tab.mount();
   const continueAgent = tab.control().continueAgent ?? assert.fail("a Start could run");
@@ -1099,19 +1072,14 @@ test("a second continue of an agent once the first landed mints a key of its own
 
 test("no continue is offered while no Start could run: a task naming no repository", async () => {
   const bare = mount({ taskId: TASK, repository: null });
-  bare.answer(ACT_KIND.AGENTS_LIST, { agents: [] });
   await bare.mount();
   assert.equal(bare.control().continueAgent, undefined);
 });
 
-test("a delete that landed takes the agent out of the list, and a read already out that still holds it does not bring it back", async () => {
-  const OTHER = { ...STARTED, id: "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f" };
-  const tab = mount({ taskId: TASK, repository: null });
-  let answerStale: (answer: WireBoundaryInput) => void = () => undefined;
-  const stale = new Promise<WireBoundaryInput>((resolve) => {
-    answerStale = resolve;
-  });
-  tab.answer(ACT_KIND.AGENTS_LIST, stale, { agents: [OTHER] });
+test("a delete that landed on an agent's page reads it again as gone, and a read already out that still holds it does not bring it back", async () => {
+  const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
+  const stale = Promise.withResolvers<WireBoundaryInput>();
+  tab.answer(ACT_KIND.AGENTS_PAGE, stale.promise, { failure: AGENT_CALL_FAILURE.NOT_FOUND });
   tab.answer(ACT_KIND.AGENTS_DELETE, { deleted: true });
   await tab.mount();
 
@@ -1121,16 +1089,17 @@ test("a delete that landed takes the agent out of the list, and a read already o
   });
   await settle();
   // The read that went out before the delete lands last, still holding the agent.
-  await act(async () => answerStale({ agents: [STARTED, OTHER] }));
+  const page = {
+    ...STARTED,
+    planId: null,
+    automationId: null,
+    workspaceId: "workspace-1",
+    repository: null,
+  };
+  await act(async () => stale.resolve({ agent: page }));
   await settle();
 
   assert.deepEqual(result, { status: ACTION_RESULT_STATUS.ACCEPTED });
-  assert.deepEqual(
-    tab.control().agents?.map((agent) => agent.id),
-    [OTHER.id],
-  );
-  assert.deepEqual(
-    tab.asked.filter((each) => each.kind === ACT_KIND.AGENTS_DELETE),
-    [{ kind: ACT_KIND.AGENTS_DELETE, payload: { agentId: AGENT } }],
-  );
+  assert.equal(tab.control().agents, undefined);
+  assert.equal(tab.control().listMissing, true);
 });

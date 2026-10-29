@@ -7,11 +7,13 @@ import {
   archiveAgent,
   createAgent,
   listAgents,
+  type NewAgent,
   pinAgent,
   pinAgentCommitted,
   recordAgentPublished,
   renameAgentCommitted,
 } from "@luke/database/models/agent-store";
+import { devicesNamed, registerDevice } from "@luke/database/models/device-store";
 import {
   assignUnassignedTaskCommitted,
   beginTaskWorkCommitted,
@@ -24,7 +26,9 @@ import { readAccountNames } from "@luke/database/models/workspace-store";
 import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
 import { messages, turns } from "@luke/database/schemas/storage";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import {
+  DEVICE_LAYOUT,
   getTestDB,
   joinWorkspace,
   mutableFunctionsOf,
@@ -35,7 +39,9 @@ import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/agent-s
 import {
   AGENT_ARCHIVER,
   AGENT_KIND,
+  AGENT_MACHINE,
   AGENT_STATUS,
+  type AgentSummary,
   CHECK_SUMMARY,
   OPERATOR_QUIET_REPLY,
   PULL_REQUEST_STATE,
@@ -60,8 +66,8 @@ import {
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import { agentSummary, summaryAccounts } from "../agents/coder-host/status.js";
-import { standingsOf } from "../agents/coder-host/stop.js";
+import { agentSummary, summaryAccounts, summaryDevices } from "../agents/coder-host/status.js";
+import { continuedByOf, standingsOf } from "../agents/coder-host/stop.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TURN_FAILURE } from "../core.js";
 import { taskListLiveStatements } from "./task-list-live.js";
@@ -90,9 +96,10 @@ const openAgent = (
   userId: string,
   place: { readonly taskId: string; readonly blank?: boolean } | { readonly workspaceId: string },
   ago: number,
+  started: Partial<Pick<NewAgent, "runtime" | "machine" | "deviceId" | "startedFrom">> = {},
 ) =>
   Effect.gen(function* () {
-    const started = yield* createAgent(userId, {
+    const made = yield* createAgent(userId, {
       ...("taskId" in place
         ? place.blank === true
           ? { taskId: place.taskId, planSnapshot: null, prompt: null }
@@ -107,8 +114,9 @@ const openAgent = (
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: "acme/relay",
+      ...started,
     });
-    const { agent } = Option.getOrThrow(started);
+    const { agent } = Option.getOrThrow(made);
     const db = yield* Database;
     yield* db
       .update(agentTable)
@@ -187,13 +195,20 @@ const liveRowsOf = (userId: string) =>
 const liveListOf = (userId: string, now: number) =>
   Effect.map(liveRowsOf(userId), (rows) => taskListOfLiveRows(rows, now));
 
-/** A plan's agents as its own list answers them at `now`, as the service's endpoint builds them. */
+/** A plan's agents as its own list answers them at `now`, archived ones among them, as the service's endpoint builds them. */
 const heldTaskAgentsOf = (userId: string, taskId: string, now: number) =>
   Effect.gen(function* () {
     const agents = yield* listAgents(userId, taskId, { includeArchived: true });
     const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
     const names = yield* readAccountNames(agents.flatMap(summaryAccounts));
-    return agents.map((agent) => agentSummary(agent, standing(agent.conversationId), now, names));
+    const continuedBy = yield* continuedByOf(
+      userId,
+      agents.map((agent) => agent.id),
+    );
+    const macs = yield* devicesNamed(summaryDevices(agents));
+    return agents.map((agent) =>
+      agentSummary(agent, standing(agent.conversationId), now, names, continuedBy(agent.id), macs),
+    );
   });
 
 /**
@@ -401,6 +416,21 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         yield* pinAgent(owner, loose.id, true);
         const gone = yield* openAgent(teammate, { workspaceId: plan.workspaceId }, 2 * 60_000);
         yield* archiveAgent(owner, gone.id, true);
+        // A local agent on the owner's Mac running Claude Code, continued and forked on a plan of its own.
+        const runs = yield* startTask(owner, { name: "Local runs" });
+        const deviceId = randomUUID();
+        yield* registerDevice(owner, { id: deviceId, name: "Studio", ...DEVICE_LAYOUT });
+        const local = yield* openAgent(owner, { taskId: runs.id }, 20 * 60_000, {
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          machine: AGENT_MACHINE.DEVICE,
+          deviceId,
+        });
+        yield* openAgent(owner, { taskId: runs.id }, 15 * 60_000, {
+          startedFrom: { agentId: local.id, steps: 2, totalSteps: 2 },
+        });
+        yield* openAgent(owner, { taskId: runs.id }, 10 * 60_000, {
+          startedFrom: { agentId: local.id, messageId: randomUUID(), steps: 1, totalSteps: 2 },
+        });
         // Tasks made for the owner by a coding agent, and by Luke on their call.
         const followUp = yield* startTask(owner, {
           name: "Invite emails",
@@ -414,17 +444,28 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         for (const reader of [owner, teammate, outsider]) {
           assert.deepEqual(yield* liveListOf(reader, NOW), yield* heldListOf(reader, NOW));
         }
-        // Every plan's agents, the archived among them, as each plan's own list names them, for its tabs; the live rows come in the order they were started across the plans.
+        // Every plan's agents, the archived among them, as each plan's own list names them, for its
+        // tabs, their harness, Mac, and continues among it; the live rows come in the order they
+        // were started across the plans.
         const byId = (agents: readonly { readonly id: string }[]) =>
           agents.toSorted((a, b) => a.id.localeCompare(b.id));
+        // The live row names a Mac and not its last beat, which wakes nothing.
+        const withoutBeat = (agent: AgentSummary): AgentSummary => {
+          if (agent.mac === undefined) return agent;
+          const { seenAt: _seenAt, ...mac } = agent.mac;
+          return { ...agent, mac };
+        };
         for (const reader of [owner, teammate]) {
           const taskAgents = taskAgentsOfLiveRows(yield* liveRowsOf(reader), NOW);
           assert.deepEqual(
             byId(taskAgents),
-            byId([
-              ...(yield* heldTaskAgentsOf(reader, plan.id, NOW)),
-              ...(yield* heldTaskAgentsOf(reader, shelved.id, NOW)),
-            ]),
+            byId(
+              [
+                ...(yield* heldTaskAgentsOf(reader, plan.id, NOW)),
+                ...(yield* heldTaskAgentsOf(reader, shelved.id, NOW)),
+                ...(yield* heldTaskAgentsOf(reader, runs.id, NOW)),
+              ].map(withoutBeat),
+            ),
           );
         }
         const read = yield* liveListOf(owner, NOW);

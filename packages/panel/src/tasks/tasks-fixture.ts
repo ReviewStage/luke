@@ -385,6 +385,8 @@ const FIXTURE_TASK_LIST: TasksView = {
   workspaces: FIXTURE_WORKSPACES,
   github: { connected: true, login: null },
   document: { status: TASKS_READ.IDLE },
+  // Every task's agents as the list followed live carries them: none, where no profile stages one.
+  taskAgents: [],
 };
 
 /** The open task, its document read. */
@@ -616,9 +618,10 @@ export function fixtureSidePanel(run: {
 }
 
 /**
- * What a fixture run reads of its task where no profile stages more: no
- * agents. Note that main answers a fixture run's service reads with
- * nothing, which the task's column would wait on in its placeholder for good.
+ * What a fixture run reads of a task's agents where no profile stages
+ * more, as a mention's card reads them: none. Note that main answers a
+ * fixture run's service reads with nothing, which the card would wait on
+ * in its placeholder for good.
  */
 function emptyTaskAnswer(
   kind: PortActKind,
