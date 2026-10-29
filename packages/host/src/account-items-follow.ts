@@ -1,9 +1,9 @@
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAccountItems,
-  type CodingAgentScopeItems,
+  AGENT_CALL_FAILURE,
+  type AgentAccountItems,
+  type AgentScopeItems,
   INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
+} from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import {
   ACCOUNT_INBOX_ITEMS,
@@ -17,6 +17,7 @@ import {
 import {
   Duration,
   Effect,
+  Equal,
   MutableHashMap,
   Option,
   RcMap,
@@ -25,8 +26,14 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
-import type { InboxTxWaits } from "./inbox-tx-waits.js";
-import { decodedLiveRows, LIVE_RESTART, LIVE_STATE, restarting } from "./live-follow.js";
+import { type InboxReads, itemsRead } from "./inbox-collections.js";
+import {
+  followTakingRows,
+  LIVE_RESTART,
+  LIVE_STATE,
+  restarting,
+  type TxWait,
+} from "./live-follow.js";
 import { InboxScopeKey } from "./scope-inbox-follow.js";
 
 /**
@@ -46,7 +53,10 @@ import { InboxScopeKey } from "./scope-inbox-follow.js";
  * item's change, so it is resent. An item no stamp names any more is gone,
  * and dropped.
  *
- * A window is told every plan and agent holding any as the follow starts
+ * The items stand in a collection among the reads an inbox write reaches
+ * (`inbox-collections.ts`), each answer taken as its poll answers, so a
+ * window is told them as they stand after each answer and each write drawn
+ * over them: every plan and agent holding any as the follow starts
  * (`whole`), then only those that moved, one holding nothing now with no
  * items. A read refused as signed out ends the follow, which is read again
  * after `LIVE_RESTART`, and told whole again. A window's follow outlives a
@@ -108,8 +118,8 @@ export interface AccountItemsDependencies {
     poll: boolean,
     after?: string,
   ) => Effect.Effect<AccountInboxItemsLiveAnswer | SealFailure>;
-  /** Where the inboxes' waits for a write's transaction stand while followed, which the inbox's writes wait on. */
-  readonly txWaits: InboxTxWaits;
+  /** The reads an inbox write reaches, among which each account's stands while it is followed. */
+  readonly reads: InboxReads;
 }
 
 /** Each account's follow, by its id, held while a window reads it and a while after. */
@@ -184,21 +194,23 @@ function scopesOf(held: Held): Scopes {
 }
 
 /** A scope's items as the window is told them. */
-function toldScope(scope: InboxScopeKey, items: readonly InboxItem[]): CodingAgentScopeItems {
+function toldScope(scope: InboxScopeKey, items: readonly InboxItem[]): AgentScopeItems {
   return { scope: { kind: scope.kind, id: scope.id }, items };
 }
 
-/** Whether two lists hold the same items, as the follow holds each, in the same order. */
+/** Whether two lists hold the same items, each as it stands, in the same order. */
 function sameItems(one: readonly InboxItem[], other: readonly InboxItem[]): boolean {
-  return one.length === other.length && one.every((item, index) => item === other[index]);
+  return (
+    one.length === other.length && one.every((item, index) => Equal.equals(item, other[index]))
+  );
 }
 
 /** What the window is told of `now`: every scope where nothing was told before, else the scopes that moved since `before`, one gone with no items. */
-function toldOf(before: Scopes | undefined, now: Scopes): CodingAgentAccountItems {
+function toldOf(before: Scopes | undefined, now: Scopes): AgentAccountItems {
   if (before === undefined) {
     return { whole: true, scopes: [...now].map(([scope, items]) => toldScope(scope, items)) };
   }
-  const moved: CodingAgentScopeItems[] = [];
+  const moved: AgentScopeItems[] = [];
   for (const [scope, items] of now) {
     const was = MutableHashMap.get(before, scope);
     if (Option.isNone(was) || !sameItems(was.value, items)) moved.push(toldScope(scope, items));
@@ -221,7 +233,44 @@ export function accountItems(
         if ("failure" in first) return { kind: LIVE_STATE.BROKEN } as const;
         const items = yield* SubscriptionRef.make<LiveState>({ kind: LIVE_STATE.WAITING });
         const asking = yield* Ref.make<Asking>({ since: undefined, again: false });
-        const rows = decodedLiveRows(
+        const read = yield* itemsRead();
+        let wait: TxWait | undefined;
+        /** Every item as the read last answered it, with the stamp it was sent with and its scope. */
+        let held: Held | undefined;
+        /** The stamps last asked for again, so a stamp whose item the service does not send is asked for once rather than every poll. */
+        let askedFor: string | undefined;
+        /** The items as they stand, a standing write's among them, each under the scope the read answered it in. */
+        const drawn = Effect.suspend(() => {
+          if (held === undefined) return Effect.void;
+          const shown = new Map(read.shown().map((item) => [item.id, item]));
+          const now = new Map(
+            [...held].map(([id, kept]) => [id, { ...kept, item: shown.get(id) ?? kept.item }]),
+          );
+          return SubscriptionRef.set(items, { kind: LIVE_STATE.STANDING, held: now });
+        });
+        yield* dependencies.reads.stand({
+          draw: read.draw,
+          take: read.take,
+          txWait: () => wait,
+          drawn,
+          accountWide: true,
+        });
+        // Note that a poll already held when a stamp moved alone asks again only once it answers, by the hold's end at the latest.
+        const landed = (decoded: AccountInboxItemsLiveRows) =>
+          Effect.gen(function* () {
+            const after = heldAfter(held ?? new Map(), decoded);
+            held = after.held;
+            read.items.answer([...after.held.values()].map((kept) => kept.item));
+            const unsent = after.unsent.length === 0 ? undefined : JSON.stringify(after.unsent);
+            const again = unsent !== undefined && unsent !== askedFor;
+            askedFor = unsent;
+            yield* Ref.set(asking, {
+              since: sinceOf(after.held, again ? after.unsent : []),
+              again,
+            });
+            yield* drawn;
+          });
+        const taken = followTakingRows(
           {
             poll: (after) =>
               Effect.flatMap(
@@ -229,28 +278,17 @@ export function accountItems(
                 ({ since, again }) =>
                   dependencies.seal(userId, since, true, again ? undefined : after),
               ),
-            onTxWait: dependencies.txWaits.hook(),
+            onTxWait: (handed) => {
+              wait = handed;
+            },
             heldOn: ACCOUNT_INBOX_ITEMS.HELD_ON,
           },
           first,
           accountInboxItemsLiveRowsSchema,
+          landed,
         );
-        let held: Held = new Map();
-        /** The stamps last asked for again, so a stamp whose item the service does not send is asked for once rather than every poll. */
-        let askedFor: string | undefined;
-        // Note that a poll already held when a stamp moved alone asks again only once it answers, by the hold's end at the latest.
-        const landed = (decoded: AccountInboxItemsLiveRows) =>
-          Effect.gen(function* () {
-            const after = heldAfter(held, decoded);
-            held = after.held;
-            const unsent = after.unsent.length === 0 ? undefined : JSON.stringify(after.unsent);
-            const again = unsent !== undefined && unsent !== askedFor;
-            askedFor = unsent;
-            yield* Ref.set(asking, { since: sinceOf(held, again ? after.unsent : []), again });
-            yield* SubscriptionRef.set(items, { kind: LIVE_STATE.STANDING, held });
-          });
         yield* Effect.forkScoped(
-          Stream.runForEach(rows, landed).pipe(
+          taken.pipe(
             Effect.catch(() => Effect.void),
             Effect.ensuring(SubscriptionRef.set(items, { kind: LIVE_STATE.BROKEN })),
           ),
@@ -269,7 +307,7 @@ export function accountItems(
 export function followAccountItems(
   items: AccountItems,
   userId: string,
-  tell: (told: CodingAgentAccountItems) => Effect.Effect<void>,
+  tell: (told: AgentAccountItems) => Effect.Effect<void>,
 ): Effect.Effect<void> {
   const attempt = Effect.scoped(
     Effect.gen(function* () {
@@ -301,7 +339,7 @@ export function followAccountItems(
 export function followSignedInItems(
   items: AccountItems,
   signedIn: () => string | undefined,
-  tell: (told: CodingAgentAccountItems) => Effect.Effect<void>,
+  tell: (told: AgentAccountItems) => Effect.Effect<void>,
 ): Effect.Effect<void> {
   const account: Effect.Effect<string> = Effect.suspend(() => {
     const userId = signedIn();
@@ -311,9 +349,7 @@ export function followSignedInItems(
   });
   return Effect.suspend(() =>
     Effect.andThen(
-      signedIn() === undefined
-        ? tell({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED })
-        : Effect.void,
+      signedIn() === undefined ? tell({ failure: AGENT_CALL_FAILURE.UNANSWERED }) : Effect.void,
       Effect.flatMap(account, (userId) => followAccountItems(items, userId, tell)),
     ),
   );

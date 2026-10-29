@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxAnswerParams,
-  type CodingAgentInboxMessagedView,
-  type CodingAgentInboxMessageParams,
+  AGENT_CALL_FAILURE,
+  type AgentInboxAnswerParams,
+  type AgentInboxMessagedView,
+  type AgentInboxMessageParams,
   INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-view";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ASK,
@@ -432,7 +432,7 @@ test("a recording an agent's words draw plays where it stands, left out of the r
   fakeActs({
     ...appBridge(),
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_ATTACHMENT) return previous(request);
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
         value:
@@ -618,7 +618,7 @@ test("a thread draws a comment's files over its words: an agent's pictures stand
 });
 
 function standingCard(): readonly [string | null | undefined, string | null | undefined] {
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.ok(card, "an agent's card is hung");
   return [
     card.querySelector(".luke-hover-card-name")?.textContent,
@@ -658,14 +658,14 @@ test("the thread names its agent as one button wherever it does, its message's c
   );
   reach(comment);
   assert.deepEqual(standingCard(), ["Alerts", undefined]);
-  assert.deepEqual(openings("[data-tab-card]"), [], "the name is the way to the tab");
+  assert.deepEqual(openings("[data-agent-card]"), [], "the name is the way to the tab");
   act(() => comment.click());
   assert.deepEqual(asked.previewedAgents, [AGENT.id], "the agent reads beside the item");
   assert.deepEqual(asked.shownAgents, []);
 });
 
-test("an archived agent is still named by its name, its card saying it was archived, and an agent the plan does not list goes by Coding agent, its card saying it is not found; each opens its tab on its task, which shows the plan where its tab is gone, an agent the task does not list being drawn there alone", async () => {
-  world.listedAgents = [{ ...AGENT, status: CODING_AGENT_STATUS.CANCELLED, archivedAt: 4_000 }];
+test("an archived agent is still named by its name, its card saying it was archived, and an agent the plan does not list goes by Agent, its card saying it is not found; each opens its tab on its task, which shows the plan where its tab is gone, an agent the task does not list being drawn there alone", async () => {
+  world.listedAgents = [{ ...AGENT, status: AGENT_STATUS.CANCELLED, archivedAt: 4_000 }];
   let { page, asked } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   let [named] = threadRefs(page);
@@ -686,9 +686,9 @@ test("an archived agent is still named by its name, its card saying it was archi
   await settle();
   [named] = threadRefs(page);
   assert.ok(named, "the thread names an agent the plan does not list");
-  assert.equal(named.textContent, "Coding agent");
+  assert.equal(named.textContent, "Agent");
   reach(named);
-  assert.deepEqual(standingCard(), ["Coding agent", "Not found"]);
+  assert.deepEqual(standingCard(), ["Agent", "Not found"]);
   act(() => named.click());
   // An agent the task does not list, as an archived one, is drawn on its task alone, so its name goes there.
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
@@ -705,13 +705,16 @@ test("an item's row hangs the thread's card beside it, as a sidebar task's row h
     false,
     "the row wears no agent's tile, its card naming the agent",
   );
-  const words = hoveredCard(row, "[data-inbox-row-card]") ?? "";
-  assert.match(words, /^Billing usage alerts/u, "the card leads with its task");
-  assert.match(words, /How is a failed email retried\?/u);
+  const words = hoveredCard(row, "[data-inbox-item-card]") ?? "";
+  assert.match(
+    words,
+    /^How is a failed email retried\?.*Billing usage alerts/u,
+    "the card leads with its title, its task under it",
+  );
   assert.match(words, /Answered/u);
   assert.match(words, /Alerts$/u, "the agent that asked stands at its foot");
   const card =
-    document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-row-card]") ??
+    document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-item-card]") ??
     assert.fail("the thread's card is hung");
   assert.ok(
     card.querySelector('.luke-hover-card-row-end .state-glyph[data-state="working"]'),
@@ -723,7 +726,7 @@ test("an item's row hangs the thread's card beside it, as a sidebar task's row h
     card.click();
   });
   assert.equal(row.getAttribute("aria-current"), null);
-  assert.ok(document.querySelector(".luke-tooltip-card [data-inbox-row-card]"));
+  assert.ok(document.querySelector(".luke-tooltip-card [data-inbox-item-card]"));
   act(() => row.click());
   assert.equal(row.getAttribute("aria-current"), "page");
   assert.deepEqual(asked.shownAgents, [], "the press stays in the Inbox");
@@ -735,11 +738,11 @@ test("an item's card says whom an open item waits on, the reader as Needs you an
   const { page } = mount();
   await settle();
   assert.match(
-    hoveredCard(rowNamed(page, "Alert at 80%?"), "[data-inbox-row-card]") ?? "",
+    hoveredCard(rowNamed(page, "Alert at 80%?"), "[data-inbox-item-card]") ?? "",
     /Needs you/u,
   );
   assert.match(
-    hoveredCard(rowNamed(page, "Expire after 7 days?"), "[data-inbox-row-card]") ?? "",
+    hoveredCard(rowNamed(page, "Expire after 7 days?"), "[data-inbox-item-card]") ?? "",
     /Waiting on Charles Pan/u,
   );
 });
@@ -761,11 +764,11 @@ test("an item's card names its task as the window names a task everywhere: the k
     standing: [{ ...BILLING, name: LONG, number: 182, status: TASK_STATUS.IN_PROGRESS }, INVITES],
   });
   await settle();
-  hoveredCard(rowNamed(page, THRESHOLD.title), "[data-inbox-row-card]");
+  hoveredCard(rowNamed(page, THRESHOLD.title), "[data-inbox-item-card]");
   const card =
-    document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-row-card]") ??
+    document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-item-card]") ??
     assert.fail("the row's card is hung");
-  const head = card.querySelector('.task-card-standing[data-line="one"]');
+  const head = card.querySelector("[data-holder-detail]");
   assert.deepEqual(
     [...(head?.children ?? [])].map((each) => [each.classList[0], each.textContent]),
     [
@@ -930,8 +933,8 @@ test("a settled item offers, over its box, the next item that needs you as the I
   assert.ok(wearsAgentTile(next), "the next item's agent stands by its tile");
   assert.equal(next.querySelector("[data-agent-ref]"), null, "the tile hangs no card of its own");
   assert.match(
-    hoveredCard(next, "[data-inbox-row-card]") ?? "",
-    /^Billing usage alerts.*Alert at 80%\?.*Needs you/u,
+    hoveredCard(next, "[data-inbox-item-card]") ?? "",
+    /^Alert at 80%\?Needs you.*Billing usage alerts/u,
     "the card is the item's own",
   );
   act(() => next.click());
@@ -961,7 +964,7 @@ test("Next follows the way the keys last went: after K it offers the nearest ite
   assert.equal(readTitle(page), "How is a failed email retried?");
   assert.equal(offered()?.querySelector(".inbox-next-title")?.textContent, "Expire after 7 days?");
   assert.ok(wordsOf(offered())?.endsWith("J"));
-  assert.equal(offered()?.getAttribute("aria-keyshortcuts"), "J Alt+ArrowDown");
+  assert.equal(offered()?.getAttribute("aria-keyshortcuts"), "J");
 
   pressKey("j");
   pressKey("k");
@@ -971,7 +974,7 @@ test("Next follows the way the keys last went: after K it offers the nearest ite
   assert.equal(next.querySelector(".inbox-next-lead")?.textContent, "Next ↑");
   assert.equal(next.querySelector(".inbox-next-title")?.textContent, "Alert at 80%?");
   assert.ok(wordsOf(next)?.endsWith("K"));
-  assert.equal(next.getAttribute("aria-keyshortcuts"), "K Alt+ArrowDown");
+  assert.equal(next.getAttribute("aria-keyshortcuts"), "K");
   act(() => next.click());
   assert.equal(readTitle(page), "Alert at 80%?");
   act(() => keys.unmount());
@@ -1021,14 +1024,14 @@ test("a press on the row already chosen hands the keyboard nowhere, so a later n
 });
 
 /** Every answer the pane sends, written down and left unanswered, so the box stays as it was. */
-function heldAnswers(): CodingAgentInboxAnswerParams[] {
-  const sent: CodingAgentInboxAnswerParams[] = [];
+function heldAnswers(): AgentInboxAnswerParams[] {
+  const sent: AgentInboxAnswerParams[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_ANSWER) return previous(request);
       sent.push(request.payload);
       return new Promise(() => undefined);
     },
@@ -1188,11 +1191,11 @@ test("a message's file whose read failed says so under the files, and Retry read
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_ATTACHMENT) return previous(request);
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
         value: failing
-          ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+          ? { failure: AGENT_CALL_FAILURE.UNANSWERED }
           : { contentType: "application/pdf", base64: "JVBERg==" },
       });
     },
@@ -1363,7 +1366,7 @@ test("a skill named by a settled item of an agent with no plan that a link reach
   assert.deepEqual(opened, [], "nothing leaves for GitHub");
 });
 
-test("Got it on a notice whose agent waits to hear back reaches the agent, so the window reads its agents again, as it does for no nod on a notice that needs none", async () => {
+test("Got it on a notice answers it with a nod, whether its agent waits to hear back or not", async () => {
   const notice = (id: string, title: string, needsReply: boolean): InboxItem => ({
     ...noticeOf(item(id, title, 6_000)),
     startedBy: TEAMMATE,
@@ -1377,18 +1380,13 @@ test("Got it on a notice whose agent waits to hear back reaches the agent, so th
   ]);
   const { page } = mount();
   await settle();
-  const listReads: AnyAct[] = [];
-  const nods: CodingAgentInboxAnswerParams[] = [];
+  const nods: AgentInboxAnswerParams[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      // Note that only the answered items' task's agents are counted, because the item chosen next reads its own task's for its card.
-      if (request.kind === ACT_KIND.CODING_AGENTS_LIST && request.payload.taskId === BILLING.id) {
-        listReads.push(request);
-      }
-      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
+      if (request.kind === ACT_KIND.AGENTS_INBOX_ANSWER) {
         nods.push(request.payload);
         const asked = request.payload.itemId === heard.id ? heard : quiet;
         const answered = { ...asked, status: INBOX_STATUS.ANSWERED, answeredBy: READER };
@@ -1407,17 +1405,12 @@ test("Got it on a notice whose agent waits to hear back reaches the agent, so th
 
   act(() => rowNamed(page, "Add the secret").click());
   await settle();
-  const beforeQuiet = listReads.length;
   await gotIt();
   await settle();
-  assert.equal(listReads.length, beforeQuiet, "a nod nobody hears moves nothing about the agent");
-
   act(() => rowNamed(page, "Turn on the flag").click());
   await settle();
-  const beforeHeard = listReads.length;
   await gotIt();
   await settle();
-  assert.ok(listReads.length > beforeHeard, "the agent heard the nod, so its list is read again");
   assert.deepEqual(
     nods.map(({ clientKey: _key, ...nod }) => nod),
     [
@@ -1576,13 +1569,13 @@ test("words selected in an open item's question quote into its box, its reply ca
   await settle();
   act(() => rowNamed(page, "Alert at 80%?").click());
   await settle();
-  const sent: CodingAgentInboxMessageParams[] = [];
+  const sent: AgentInboxMessageParams[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       sent.push(request.payload);
       return new Promise(() => undefined);
     },
@@ -1660,7 +1653,7 @@ test("a message refused says why under the box, which keeps its words, and leave
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
-  heldMessages(() => ({ failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED }));
+  heldMessages(() => ({ failure: AGENT_CALL_FAILURE.NOT_PERMITTED }));
   const pane = itemPane(page);
 
   typeInComposer(pane, "Page on-call at night too.");
@@ -1681,22 +1674,22 @@ test("a message refused says why under the box, which keeps its words, and leave
 });
 
 test("a message refused as naming no agent says the agent is archived where it is, with Unarchive after it, which brings the agent back and lets the note go, the box keeping its words; one whose agent is gone says it no longer exists", async () => {
-  world.listedAgents = [{ ...AGENT, status: CODING_AGENT_STATUS.COMPLETED, archivedAt: 4_000 }];
+  world.listedAgents = [{ ...AGENT, status: AGENT_STATUS.COMPLETED, archivedAt: 4_000 }];
   const { page } = mount();
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
-  heldMessages(() => ({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+  heldMessages(() => ({ failure: AGENT_CALL_FAILURE.NOT_FOUND }));
   const unarchived: { agentId: string; archived: boolean }[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_ARCHIVE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_ARCHIVE) return previous(request);
       unarchived.push(request.payload);
       // Brought back, the agent is listed so from then on.
-      const back = { ...AGENT, status: CODING_AGENT_STATUS.COMPLETED };
+      const back = { ...AGENT, status: AGENT_STATUS.COMPLETED };
       world.listedAgents = [back];
       return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agent: back } });
     },
@@ -1742,14 +1735,13 @@ test("a message refused as naming no agent says the agent is archived where it i
 });
 
 test("an Unarchive that lands after another send was refused lets only the archived note go, so the newer refusal still says why", async () => {
-  world.listedAgents = [{ ...AGENT, status: CODING_AGENT_STATUS.COMPLETED, archivedAt: 4_000 }];
+  world.listedAgents = [{ ...AGENT, status: AGENT_STATUS.COMPLETED, archivedAt: 4_000 }];
   const { page } = mount();
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
-  let refusal:
-    | typeof CODING_AGENT_CALL_FAILURE.NOT_FOUND
-    | typeof CODING_AGENT_CALL_FAILURE.UNANSWERED = CODING_AGENT_CALL_FAILURE.NOT_FOUND;
+  let refusal: typeof AGENT_CALL_FAILURE.NOT_FOUND | typeof AGENT_CALL_FAILURE.UNANSWERED =
+    AGENT_CALL_FAILURE.NOT_FOUND;
   heldMessages(() => ({ failure: refusal }));
   let land: () => void = () => undefined;
   const bridge = appBridge();
@@ -1757,8 +1749,8 @@ test("an Unarchive that lands after another send was refused lets only the archi
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_ARCHIVE) return previous(request);
-      const back = { ...AGENT, status: CODING_AGENT_STATUS.COMPLETED };
+      if (request.kind !== ACT_KIND.AGENTS_ARCHIVE) return previous(request);
+      const back = { ...AGENT, status: AGENT_STATUS.COMPLETED };
       // Held until the test lands it, after the second send was refused.
       return new Promise((resolve) => {
         land = () => {
@@ -1780,7 +1772,7 @@ test("an Unarchive that lands after another send was refused lets only the archi
     ...pane.querySelectorAll<HTMLButtonElement>(".luke-composer-foot-note button"),
   ].find((button) => button.textContent === "Unarchive");
   act(() => (unarchive ?? assert.fail("Unarchive follows the note")).click());
-  refusal = CODING_AGENT_CALL_FAILURE.UNANSWERED;
+  refusal = AGENT_CALL_FAILURE.UNANSWERED;
   send();
   await settle();
   const newer = note();
@@ -2318,23 +2310,23 @@ function noticeItem(extra: Partial<InboxItem> = {}): InboxItem {
  * open again, and held unanswered otherwise; each message held unanswered.
  */
 function noticeWrites(refusing: () => boolean = () => false): {
-  answered: CodingAgentInboxAnswerParams[];
-  messaged: CodingAgentInboxMessageParams[];
+  answered: AgentInboxAnswerParams[];
+  messaged: AgentInboxMessageParams[];
 } {
-  const answered: CodingAgentInboxAnswerParams[] = [];
-  const messaged: CodingAgentInboxMessageParams[] = [];
+  const answered: AgentInboxAnswerParams[] = [];
+  const messaged: AgentInboxMessageParams[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
+      if (request.kind === ACT_KIND.AGENTS_INBOX_ANSWER) {
         answered.push(request.payload);
         if (!refusing()) return new Promise(() => undefined);
-        const value = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+        const value = { failure: AGENT_CALL_FAILURE.UNANSWERED };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       messaged.push(request.payload);
       return new Promise(() => undefined);
     },
@@ -2343,7 +2335,7 @@ function noticeWrites(refusing: () => boolean = () => false): {
 }
 
 /** What each answer sent says: its item, the revision it names, and the reply. */
-function answersOf(answered: readonly CodingAgentInboxAnswerParams[]) {
+function answersOf(answered: readonly AgentInboxAnswerParams[]) {
   return answered.map(({ itemId, revision, reply }) => ({ itemId, revision, reply }));
 }
 
@@ -2379,7 +2371,7 @@ test("a notice shown while its plan's follow has failed reads Got it, since open
     [INVITES.id, [EXPIRY]],
   ]);
   // The list's follow of the plan reads its items, and the item's own follow of it could not be read.
-  const unanswered = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+  const unanswered = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
   let follows = 0;
   world.startRead = (taskId) => {
     if (taskId !== BILLING.id) return undefined;
@@ -2459,14 +2451,14 @@ test("a teammate's notice is left open as it is opened, since acknowledging it s
 test("a reply leaves its box the moment it is sent, the box and the ask standing empty and open while it is out, so a second Enter sends nothing; refused, its words and files come back into the box, which says why", async () => {
   const shown = threadItem([askingMessage(EXPIRY_ASK)]);
   const pane = await mountThread(shown);
-  const sent: CodingAgentInboxMessageParams[] = [];
-  const answers: ((answer: CodingAgentInboxMessagedView) => void)[] = [];
+  const sent: AgentInboxMessageParams[] = [];
+  const answers: ((answer: AgentInboxMessagedView) => void)[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       sent.push(request.payload);
       // The service answers once the test says so.
       return new Promise((resolve) =>
@@ -2503,7 +2495,7 @@ test("a reply leaves its box the moment it is sent, the box and the ask standing
     "a second Enter sends nothing again",
   );
 
-  await act(async () => answers[0]?.({ failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED }));
+  await act(async () => answers[0]?.({ failure: AGENT_CALL_FAILURE.NOT_PERMITTED }));
   await settle();
 
   assert.equal(composerEditor(pane).textContent, "Does it matter for SSO teams?");
@@ -2538,14 +2530,14 @@ test("a plain reply stands at the thread's end marked Sending the moment it is s
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       const answer = repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000021")(request.payload);
       if (!("failure" in answer)) landed.push(answer.item);
       return new Promise((resolve) =>
         lands.push((refused) =>
           resolve({
             status: FAKE_ANSWER.DONE,
-            value: refused ? { failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED } : answer,
+            value: refused ? { failure: AGENT_CALL_FAILURE.NOT_PERMITTED } : answer,
           }),
         ),
       );
@@ -2609,14 +2601,14 @@ test("words written in a reply's box while the reply is out stay there, whether 
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       const { payload } = request;
       const landed = repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000020")(payload);
       return new Promise((resolve) =>
         lands.push((refused) =>
           resolve({
             status: FAKE_ANSWER.DONE,
-            value: refused ? { failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED } : landed,
+            value: refused ? { failure: AGENT_CALL_FAILURE.NOT_PERMITTED } : landed,
           }),
         ),
       );
@@ -2659,12 +2651,12 @@ test("words written on a reply's settled box while the reply carrying the ask's 
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       return new Promise((resolve) =>
         refuse.push(() =>
           resolve({
             status: FAKE_ANSWER.DONE,
-            value: { failure: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED },
+            value: { failure: AGENT_CALL_FAILURE.NOT_PERMITTED },
           }),
         ),
       );

@@ -1,5 +1,6 @@
 import type { InboxCodeBlock } from "@luke/features/inbox-wire";
 import type { CodeRef } from "@luke/features/task-wire";
+import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { readingWords } from "@luke/features/words";
 import { ANNOUNCE, ErrorState, FileCodeCard, SpinnerRegion, TabNotice } from "@luke/ui";
 import { useEffect, useRef, useState } from "react";
@@ -29,6 +30,10 @@ import {
  * repository's lines, so it is out of the session recording, which
  * `CodeCard` sees to (`ph-no-capture`).
  */
+
+/** The code of an item whose agent's repository is not known, or that has none, reads no file, there being no repository to read it through. */
+export const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
+  Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
 
 /** What a code block reads its lines through and opens its file with. */
 export interface InboxCodeDoors {

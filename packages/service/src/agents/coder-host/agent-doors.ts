@@ -14,9 +14,9 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   hasRepository,
-  readCodingAgentHeaderOfConversation,
-  readCodingAgentOfConversation,
-} from "@luke/database/models/coding-agent-store";
+  readAgentHeaderOfConversation,
+  readAgentOfConversation,
+} from "@luke/database/models/agent-store";
 import { PAGE_OWNER, PAGE_SHOWER } from "@luke/features/page-wire";
 import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
 import { Effect, Option, Result } from "effect";
@@ -40,16 +40,9 @@ import {
 } from "../../tasks/picture-look.js";
 import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import {
-  runCreateAutomation,
-  runDeleteAutomation,
-  runListAutomations,
-  runRunAutomation,
-  runUpdateAutomation,
-} from "../automation-tools.js";
-import {
   AGENT_CALLER,
+  AGENT_TOOL_REFUSAL,
   agentToolRejected,
-  CODING_AGENT_TOOL_REFUSAL,
   runListAgents,
   runListModels,
   runListTasks,
@@ -59,7 +52,14 @@ import {
   runStopAgent,
   runUpdateAgent,
   runUpdateTask,
-} from "../coding-agent-tools.js";
+} from "../agent-tools.js";
+import {
+  runCreateAutomation,
+  runDeleteAutomation,
+  runListAutomations,
+  runRunAutomation,
+  runUpdateAutomation,
+} from "../automation-tools.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { EVE_MOUNT, eveSessionsComposer } from "../eve-host/eve-sessions.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
@@ -159,7 +159,7 @@ function foundOrRefused<A>(found: Option.Option<A>) {
 /** The coding agent the admitted conversation is, whole, or the refusal that it is none. */
 function agentOfConversation(admitted: AdmittedConversation) {
   return Effect.map(
-    readCodingAgentOfConversation(admitted.target.userId, admitted.target.conversationId),
+    readAgentOfConversation(admitted.target.userId, admitted.target.conversationId),
     foundOrRefused,
   );
 }
@@ -167,7 +167,7 @@ function agentOfConversation(admitted: AdmittedConversation) {
 /** The header of the coding agent the admitted conversation is, for a tool that needs no more of it, or the refusal that it is none. */
 function agentHeaderOfConversation(admitted: AdmittedConversation) {
   return Effect.map(
-    readCodingAgentHeaderOfConversation(admitted.target.userId, admitted.target.conversationId),
+    readAgentHeaderOfConversation(admitted.target.userId, admitted.target.conversationId),
     foundOrRefused,
   );
 }
@@ -295,7 +295,7 @@ export function runAgentShowImage(
 
 /**
  * Runs one of the agent's tools about the workspace's coding agents
- * (`../coding-agent-tools.ts`), the agent the conversation is as the
+ * (`../agent-tools.ts`), the agent the conversation is as the
  * caller: a list of agents or of tasks, a message sent under the call's own
  * key, or a start on a task of its workspace under the same key, which reach
  * eve as the deployment acting for this agent's starter, and reach nothing
@@ -348,6 +348,6 @@ export function runAgentTools(
     return yield* AGENT_TOOL_RUN[call.tool](toolCall, call.input);
   }).pipe(
     Effect.tapError(logStoreFailure),
-    Effect.catch(() => Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.STORE))),
+    Effect.catch(() => Effect.succeed(agentToolRejected(AGENT_TOOL_REFUSAL.STORE))),
   );
 }

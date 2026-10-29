@@ -4,18 +4,15 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { listAgentBrowserTabs } from "@luke/database/models/agent-browser-tabs";
-import {
-  createCodingAgent,
-  recordCodingAgentRunnerToken,
-} from "@luke/database/models/coding-agent-store";
+import { createAgent, recordAgentRunnerToken } from "@luke/database/models/agent-store";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { user } from "@luke/database/schemas/auth";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace, startTask } from "@luke/database/testing";
+import { AGENT_PAYER } from "@luke/features/agent-wire";
 import { BROWSER_AGENT_ACTION } from "@luke/features/browser-agent-actions";
 import { CHANNEL_TOOL } from "@luke/features/channel-wire";
-import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { PICTURE_MEDIA_TYPE, PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
@@ -202,7 +199,7 @@ const agentWithBearer = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const task = yield* startTask(userId, { name: "Teammate invitations" });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
@@ -211,11 +208,11 @@ const agentWithBearer = Effect.gen(function* () {
     planSnapshot: "# Teammate invitations\n",
     prompt: null,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-    payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+    payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
   });
   const agent = Option.getOrThrow(started).agent;
   const bearer = randomBytes(32).toString("base64url");
-  yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
+  yield* recordAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
   return {
     userId,
     taskId: task.id,
@@ -231,7 +228,7 @@ const agentOnNoTaskWithBearer = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const organizationId = yield* openWorkspace(userId);
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: null,
     organizationId,
     planSnapshot: null,
@@ -241,11 +238,11 @@ const agentOnNoTaskWithBearer = Effect.gen(function* () {
     effort: "high",
     repository: null,
     runtime: CONVERSATION_RUNTIME.CODEX,
-    payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+    payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
   });
   const agent = Option.getOrThrow(started).agent;
   const bearer = randomBytes(32).toString("base64url");
-  yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
+  yield* recordAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
   return { userId, agentId: agent.id, bearer };
 });
 
@@ -529,7 +526,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         params: { name: INBOX_TOOL.READ, arguments: {} },
       });
 
-      yield* recordCodingAgentRunnerToken(agent.userId, agent.agentId, null);
+      yield* recordAgentRunnerToken(agent.userId, agent.agentId, null);
       const after = yield* post(fetch, agent.bearer, {
         jsonrpc: "2.0",
         id: 3,
@@ -768,7 +765,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
         const client = yield* connected(fetch, agent.bearer);
-        // Note that a task's row is keyed on the call as a start and a message are (`CodingAgentCall`'s `clientKey`), and needs no eve to be made; on no repository, since no GitHub stands here to reach one.
+        // Note that a task's row is keyed on the call as a start and a message are (`AgentCall`'s `clientKey`), and needs no eve to be made; on no repository, since no GitHub stands here to reach one.
         const create = (input: Readonly<Record<string, string | null>>) =>
           Effect.promise(() => client.callTool({ name: "create_task", arguments: input }));
         const name = "Expire stale invitations";

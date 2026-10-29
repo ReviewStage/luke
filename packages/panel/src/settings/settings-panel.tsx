@@ -13,8 +13,8 @@ import { TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import type { ActionResult } from "@luke/wire";
 import { AccountSection } from "./account-section.js";
 import { AgentComposerSection } from "./agent-composer-section.js";
+import { AgentsPage } from "./agents-page.js";
 import { AppearanceSection } from "./appearance-page.js";
-import { CodingAgentsPage } from "./coding-agents-page.js";
 import { ExperimentalPage } from "./experimental-page.js";
 import { HostsSection } from "./hosts-section.js";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page.js";
@@ -26,6 +26,7 @@ import { PrivacySection } from "./privacy-section.js";
 import { settingsRowsInput, shownWorkspace } from "./settings-rows.js";
 import { WindowShortcutSections } from "./shortcuts-page.js";
 import { SkillsPage } from "./skills-page.js";
+import { TasksSection } from "./tasks-section.js";
 import { UpdatesSection } from "./updates.js";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page.js";
 import { useSettingsWrites } from "./writes.js";
@@ -95,6 +96,7 @@ export function SettingsPanel({
               onDeleteAccount={onDeleteAccount}
             />
             {panelView ? <LinksSection view={panelView} writes={writes} /> : null}
+            {panelView ? <TasksSection view={panelView} writes={writes} /> : null}
             {panelView ? <PrivacySection view={panelView} writes={writes} /> : null}
           </>
         ) : (
@@ -122,8 +124,8 @@ export function SettingsPanel({
         />
       ) : null}
 
-      {view === SETTINGS_VIEW.CODING_AGENTS ? <CodingAgentsPage signedIn={signedIn} /> : null}
-      {view === SETTINGS_VIEW.CODING_AGENTS && panelView ? (
+      {view === SETTINGS_VIEW.AGENTS ? <AgentsPage signedIn={signedIn} /> : null}
+      {view === SETTINGS_VIEW.AGENTS && panelView ? (
         <AgentComposerSection view={panelView} writes={writes} />
       ) : null}
 

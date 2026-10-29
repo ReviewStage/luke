@@ -1,12 +1,12 @@
 import { RUN_EVENT, RUN_STATUS, TURN_FAILURE } from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_STATUS } from "@luke/wire";
-import { and, asc, eq, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, lt, notInArray, or } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
-import { CONVERSATION_KIND } from "../storage-vocabulary.js";
+import { AGENT_CONVERSATION_KINDS } from "../storage-vocabulary.js";
 import { dropNativeProjectionTurns } from "./native-projection-store.js";
 import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
 
@@ -49,7 +49,7 @@ export const TURN_ABANDON = {
    * Stop with nothing to stop; a day and an hour's grace past it is a run
    * whose end is not coming.
    */
-  CODING_AGENT_AFTER_MS: 25 * 60 * 60 * 1000,
+  AGENT_AFTER_MS: 25 * 60 * 60 * 1000,
   /**
    * How long a turn may stand running after a Stop was asked of it before
    * the sweep settles it as cancelled. eve's own cancel ends the turn within
@@ -106,11 +106,11 @@ const abandonedTurns = SqlSchema.findAll({
             isNull(conversations.deletedAt),
             or(
               and(
-                ne(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+                notInArray(conversations.kind, AGENT_CONVERSATION_KINDS),
                 lt(turns.startedAt, request.startedBefore),
               ),
               and(
-                eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+                inArray(conversations.kind, AGENT_CONVERSATION_KINDS),
                 lt(turns.startedAt, request.codingAgentStartedBefore),
               ),
               and(
@@ -147,7 +147,7 @@ const endedSessionTurns = SqlSchema.findAll({
         .where(
           and(
             eq(conversations.runtimeSessionId, request.runtimeSessionId),
-            eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+            inArray(conversations.kind, AGENT_CONVERSATION_KINDS),
             isNull(conversations.deletedAt),
             inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
           ),
@@ -186,7 +186,7 @@ const agentRunningTurns = SqlSchema.findAll({
         .where(
           and(
             eq(turns.conversationId, conversationId),
-            eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+            inArray(conversations.kind, AGENT_CONVERSATION_KINDS),
             isNull(conversations.deletedAt),
             inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
           ),
@@ -248,7 +248,7 @@ export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("web/sweepAbandoned
 ): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
   const turns = yield* abandonedTurns({
     startedBefore: new Date(options.now - TURN_ABANDON.AFTER_MS),
-    codingAgentStartedBefore: new Date(options.now - TURN_ABANDON.CODING_AGENT_AFTER_MS),
+    codingAgentStartedBefore: new Date(options.now - TURN_ABANDON.AGENT_AFTER_MS),
     cancelRequestedBefore: new Date(options.now - TURN_ABANDON.CANCEL_AFTER_MS),
     limit: options.limit ?? TURN_ABANDON.LIMIT,
   });
@@ -433,7 +433,7 @@ export function purgeWithdrawnLines(
 ): Effect.Effect<number, QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.map(
     deleteStaleWithdrawnLines({
-      before: new Date(now - TURN_ABANDON.CODING_AGENT_AFTER_MS),
+      before: new Date(now - TURN_ABANDON.AGENT_AFTER_MS),
       limit: TURN_ABANDON.WITHDRAWN_LINE_LIMIT,
     }),
     (rows) => rows.length,

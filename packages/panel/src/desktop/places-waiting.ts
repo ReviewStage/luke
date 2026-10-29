@@ -1,6 +1,6 @@
-import type { AppInboxWaitingItem } from "@luke/host/app-state";
-import { listedIn, NEEDS_YOU, waitsOnReader } from "../tasks/inbox-model.js";
-import { type SettledWaiting, useSettledToDo, useSettledWaiting } from "../tasks/inbox-settling.js";
+import type { AppInboxTask, AppInboxTaskHolding, AppInboxWaitingItem } from "@luke/host/app-state";
+import { useMemo } from "react";
+import { listedIn, waitsOnReader } from "../tasks/inbox-model.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 
 /**
@@ -19,56 +19,60 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 const NO_COUNTS: ReadonlyMap<string, number> = new Map();
 
 /**
- * Main's read of what waits with the window's answers laid over it, and how
- * many questions wait on the developer on each task it lists, every
+ * How many questions wait on the developer on each task main lists, every
  * workspace's, since ⌘K's rows name another workspace's tasks: main's count
- * of each task's (`toDo`), the open asks that wait on the reader, less those
- * the window answered since (`useSettledToDo`). A notice, a teammate's
- * question, and a settled item never count, read or not, as the Dock's badge
- * counts them. Where main carries no count of a task's to do, from a service
- * before it, its open items are counted, as before.
+ * of each task's (`toDo`), which the host lowers the moment the reader
+ * answers one (`@luke/host`'s `account-inbox-follow.ts`). A notice, a
+ * teammate's question, and a settled item never count, read or not, as the
+ * Dock's badge counts them. Where main carries no count of a task's to do,
+ * from a service before it, its open items are counted, as before. A task
+ * where none waits is left out.
  */
-function useSettledCounts(tasks: TasksControl): {
-  settled: SettledWaiting;
-  byTask: ReadonlyMap<string, number>;
-} {
-  const settled = useSettledWaiting(tasks.inbox, tasks.inboxTaskless);
-  const byTask = useSettledToDo(tasks.inboxTasks, tasks.inbox, settled.waiting);
-  return { settled, byTask };
+function toDoByTask(
+  holdings: readonly AppInboxTaskHolding[],
+  waiting: readonly AppInboxTask[],
+): ReadonlyMap<string, number> {
+  const counted = new Map<string, number>();
+  for (const { taskId, toDo } of holdings) {
+    if (toDo !== undefined) counted.set(taskId, toDo);
+  }
+  for (const { taskId, items } of waiting) {
+    if (!counted.has(taskId)) counted.set(taskId, items.length);
+  }
+  return new Map([...counted].filter(([, count]) => count > 0));
 }
 
 /**
- * Every thread waiting on the developer in the listed workspace's Inbox, as
- * the window's answers and nods leave it (`settled`): each standing task's
- * open items main lists as theirs, and every open item from an agent with no
- * task of that workspace (`listedIn`) that waits on them (`waitsOnReader`),
- * a question or a notice alike, as For you lists them. Note that a notice
- * counts until it is opened, because opening it settles it as Got it does;
- * a teammate's thread and a settled one never count.
+ * Every thread waiting on the developer in the listed workspace's Inbox:
+ * each standing task's open items main lists as theirs, and every open item
+ * from an agent with no task of that workspace (`listedIn`) that waits on
+ * them (`waitsOnReader`), a question or a notice alike, as For you lists
+ * them. Note that a notice counts until it is opened, because opening it
+ * settles it as Got it does; a teammate's thread and a settled one never
+ * count, and one the reader settles leaves main's read the moment it is
+ * asked (`@luke/host`'s `account-inbox-follow.ts`).
  */
-function waitingThreads(
-  tasks: TasksControl,
-  settled: SettledWaiting,
-): readonly Pick<AppInboxWaitingItem, "channelId">[] {
+function waitingThreads(tasks: TasksControl): readonly Pick<AppInboxWaitingItem, "channelId">[] {
   // Note that only the standing tasks are counted, as To do lists them, so a task not listed yet counts nowhere.
   const standing = new Set(tasks.listed.tasks.map((task) => task.id));
-  const ofTasks = settled.waiting
+  const ofTasks = tasks.inbox
     .filter((task) => standing.has(task.taskId))
     .flatMap((task) => task.items);
-  const taskless = settled.taskless.filter(
+  const taskless = tasks.inboxTaskless.filter(
     (each) => waitsOnReader(each, tasks.me) && listedIn(each, tasks.workspace?.id),
   );
   return [...ofTasks, ...taskless];
 }
 
-/** What a count of what waits on the developer is said with, after its figure: "3 need you". */
-export function needsYouNoun(count: number): string {
-  return count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many;
-}
+/** What the Inbox's and a channel's count are said with, after the figure, as the list they count is named: "3 for you". */
+export const FOR_YOU_NOUN = "for you";
 
 /** How many questions wait on the developer on each task, by task, as main counts them; a task where none waits is left out, and every one while signed out. */
 export function useTasksWaiting(tasks: TasksControl): ReadonlyMap<string, number> {
-  const { byTask } = useSettledCounts(tasks);
+  const byTask = useMemo(
+    () => toDoByTask(tasks.inboxTasks, tasks.inbox),
+    [tasks.inboxTasks, tasks.inbox],
+  );
   return tasks.signedIn ? byTask : NO_COUNTS;
 }
 
@@ -79,8 +83,7 @@ export function useTasksWaiting(tasks: TasksControl): ReadonlyMap<string, number
  * Inbox, and waits on the teammate. None while signed out.
  */
 export function useInboxWaiting(tasks: TasksControl): number {
-  const settled = useSettledWaiting(tasks.inbox, tasks.inboxTaskless);
-  return tasks.signedIn ? waitingThreads(tasks, settled).length : 0;
+  return tasks.signedIn ? waitingThreads(tasks).length : 0;
 }
 
 /**
@@ -91,10 +94,9 @@ export function useInboxWaiting(tasks: TasksControl): number {
  * channel counts in the Inbox's number alone.
  */
 export function useChannelWaiting(tasks: TasksControl): ReadonlyMap<string, number> {
-  const settled = useSettledWaiting(tasks.inbox, tasks.inboxTaskless);
   const counts = new Map<string, number>();
   if (!tasks.signedIn) return counts;
-  for (const { channelId } of waitingThreads(tasks, settled)) {
+  for (const { channelId } of waitingThreads(tasks)) {
     if (channelId !== undefined) counts.set(channelId, (counts.get(channelId) ?? 0) + 1);
   }
   return counts;

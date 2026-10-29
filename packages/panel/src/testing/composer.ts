@@ -1,4 +1,4 @@
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import type { Effect } from "effect";
 import { act } from "react";
@@ -23,7 +23,7 @@ const ignore = () => undefined;
 
 /** What a box takes beside its control and its skills, each answering nothing, for a test of the box alone. */
 export const QUIET_COMPOSER = {
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   model: undefined,
   models: undefined,
   modelsFailed: false,
@@ -32,7 +32,7 @@ export const QUIET_COMPOSER = {
   servers: { disabled: [], onSwitch: ignore, onOpenSettings: ignore },
   published: undefined,
   doors: { openGitHub: ignore, copy: ignore },
-  onStop: () => Promise.resolve(),
+  onStop: () => Promise.resolve(false),
 } as const;
 
 /** Imports the editor bundle and settles once it has landed, as the panel lands it after its first paint. */

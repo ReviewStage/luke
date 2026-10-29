@@ -215,7 +215,7 @@ const CONTROL_ROOTS =
 
 /**
  * Lets an inert token that hangs a card take the focus, so the keyboard
- * reaches its card (⌥↓, `hint.tsx`), unless it stands inside a control,
+ * shows its card (`hint.tsx`), unless it stands inside a control,
  * whose focus is the token's already and which holds no control within.
  * Note that this reads the token's place once it is drawn, because nothing
  * before it says what the token stands in.

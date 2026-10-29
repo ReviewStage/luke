@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { createAgent } from "@luke/database/models/agent-store";
 import { createAutomation } from "@luke/database/models/automation-store";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { createTask, readTask } from "@luke/database/models/task-store";
 import {
   type MemberSeams,
@@ -1177,7 +1177,7 @@ it.effect(
         const ada = yield* openGithubAccount("Ada Lovelace");
         const lin = yield* openGithubAccount("Lin Chen");
         const acme = yield* openTeam(api, ada, [{ userId: lin, role: "member" }]);
-        const started = yield* createCodingAgent(ada, {
+        const started = yield* createAgent(ada, {
           taskId: null,
           organizationId: acme,
           idempotencyKey: randomUUID(),
@@ -1244,7 +1244,7 @@ it.effect(
             name: "Flaky-test sweep",
             scope,
             trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
-            action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix the flakiest test." },
+            action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Fix the flakiest test." },
             guards: AUTOMATION_DEFAULT_GUARDS,
             nextRunAt: null,
             webhookSecretHash: null,

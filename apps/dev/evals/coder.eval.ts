@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { sqlClientOverUrl } from "@luke/database/core/sql-client";
-import { type CodingAgent, createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { type Agent, createAgent } from "@luke/database/models/agent-store";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
@@ -11,7 +11,7 @@ import {
   readTurnsByConversation,
   startTask,
 } from "@luke/database/testing";
-import { CODING_AGENT_TODO_STATUS } from "@luke/features/coding-agent-wire";
+import { AGENT_TODO_STATUS } from "@luke/features/agent-wire";
 import { CODER_MODEL_FIXTURE } from "@luke/service/agents/coder-host/bounds";
 import { TODOS_SAVED } from "@luke/service/agents/coder-host/todos";
 import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
@@ -115,10 +115,10 @@ function readConversationRuntimeSessionId(
   );
 }
 
-function startAgent(run: Run, taskId: string): Promise<CodingAgent> {
+function startAgent(run: Run, taskId: string): Promise<Agent> {
   return run(
     Effect.map(
-      createCodingAgent(LOCAL_DEV_PRINCIPAL, {
+      createAgent(LOCAL_DEV_PRINCIPAL, {
         taskId: taskId,
         idempotencyKey: `eval-${Date.now()}-${Math.random()}`,
         model: "anthropic/claude-opus-5.5",
@@ -284,8 +284,8 @@ export default defineEval({
       assert.equal(write.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       assert.deepEqual(write.input, {
         todos: [
-          { content: "Read the guide", status: CODING_AGENT_TODO_STATUS.IN_PROGRESS },
-          { content: "Add the invitation route", status: CODING_AGENT_TODO_STATUS.PENDING },
+          { content: "Read the guide", status: AGENT_TODO_STATUS.IN_PROGRESS },
+          { content: "Add the invitation route", status: AGENT_TODO_STATUS.PENDING },
         ],
       });
       assert.equal(write.output, TODOS_SAVED);

@@ -89,29 +89,34 @@ export function OpenHereFirst({
   return createElement(OpenHereContext.Provider, { value: first }, children);
 }
 
-/** The tasks the window lists, as their rows name their pull requests; none outside the window. */
-type ListedTasks = Parameters<typeof listedPullRequestOf>[1];
+/** The tasks and the agents on no task the window lists, as their rows name their pull requests; none outside the window. */
+interface ListedTasks {
+  readonly tasks: Parameters<typeof listedPullRequestOf>[1];
+  readonly agents: Parameters<typeof listedPullRequestOf>[2];
+}
 
-/** Reads the tasks the window lists as they stand now. */
+/** Reads the tasks and the agents on no task the window lists as they stand now. */
 type ListedTasksReader = () => ListedTasks;
 
 const ListedTasksContext = createContext<ListedTasksReader | undefined>(undefined);
 
 /**
- * Hands everything under it the tasks the window lists, whose agents' pull
- * requests open in their Pull request tabs. Note that it hands a reader
+ * Hands everything under it the tasks and the agents on no task the window
+ * lists, whose pull requests open in their Pull request tabs. Note that it hands a reader
  * standing across draws rather than the list, which is read as a link is
  * opened, because the list is new on every patch to any listed task, and
  * every part opening links would be drawn again with it.
  */
 export function ListedPullRequests({
   tasks,
+  agents,
   children,
 }: {
-  tasks: ListedTasks;
+  tasks: ListedTasks["tasks"];
+  agents?: ListedTasks["agents"];
   children: ReactNode;
 }): ReactNode {
-  const read = useSteadyDoor(() => tasks);
+  const read = useSteadyDoor((): ListedTasks => ({ tasks, agents }));
   return createElement(ListedTasksContext.Provider, { value: read }, children);
 }
 
@@ -220,21 +225,21 @@ function lukeLinkOf(href: string): ReadLink | undefined {
     : undefined;
 }
 
-/** The Pull request tab a link to a listed task's agent's pull request opens, as a Luke link names it; nothing for any other address. */
+/** The Pull request tab a link to a listed task's agent's pull request, or a listed agent's on no task, opens, as a Luke link names it; nothing for any other address. */
 function listedPullRequestLink(
   href: string,
   listed: ListedTasksReader | undefined,
 ): ReadLink | undefined {
-  const found = listed === undefined ? undefined : listedPullRequestOf(href, listed());
-  return found === undefined
-    ? undefined
-    : {
-        workspace: "",
-        place: { kind: LINK_PLACE.CHANGES, planId: found.taskId, agentId: found.agentId },
-      };
+  if (listed === undefined) return undefined;
+  const { tasks, agents } = listed();
+  const found = listedPullRequestOf(href, tasks, agents);
+  if (found === undefined) return undefined;
+  const { taskId, agentId } = found;
+  const task = taskId === undefined ? undefined : { planId: taskId };
+  return { workspace: "", place: { kind: LINK_PLACE.CHANGES, ...task, agentId } };
 }
 
-/** Opens a link {@link opensAsLink} admits: a Luke link in the window where it can be, a listed task's agent's pull request in its Pull request tab, anything else in the browser, over the capability it belongs to. */
+/** Opens a link {@link opensAsLink} admits: a Luke link in the window where it can be, a listed task's or a listed agent's on no task's pull request in its Pull request tab, anything else in the browser, over the capability it belongs to. */
 export function useOpenLink(): (href: string) => void {
   const openPlace = useContext(OpenLinkContext);
   const openHere = useContext(OpenHereContext);

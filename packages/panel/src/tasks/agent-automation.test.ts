@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -10,7 +11,6 @@ import {
   type AutomationSummary,
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -22,12 +22,12 @@ import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { agentActor } from "./agent-model.js";
 import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref.js";
-import { agentActor } from "./coding-agent-model.js";
 
 /**
  * agent-automation.test.ts -- an agent an automation's run started says so
- * on its card, "Started by" the automation's clock and name, which hang the
+ * on its card, "Started by" the automation's tile and name, which hang the
  * automation's card and open its page. Synthetic throughout.
  */
 
@@ -50,7 +50,7 @@ const TRIAGE: AutomationSummary = {
   enabled: true,
   pausedReason: null,
   trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
-  action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage Sentry." },
+  action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Triage Sentry." },
   guards: AUTOMATION_DEFAULT_GUARDS,
   nextRunAt: null,
   lastRun: {
@@ -61,7 +61,7 @@ const TRIAGE: AutomationSummary = {
     agent: {
       id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
       title: "Triage",
-      status: CODING_AGENT_STATUS.COMPLETED,
+      status: AGENT_STATUS.COMPLETED,
     },
     firedAt: 2,
     settledAt: 3,
@@ -70,14 +70,14 @@ const TRIAGE: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Triage",
   createdAt: 1_000,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
   startedBy: CHARLES,
   automationId: TRIAGE.id,
@@ -157,9 +157,12 @@ async function agentCard(nested = false) {
 
 test("an agent an automation started says it was started by the automation, its clock and name, which a press opens the page of", async () => {
   const { card, opened } = await agentCard();
-  const starter = card.querySelector<HTMLElement>(".actor-words [data-actor-ref]");
+  const starter = card.querySelector<HTMLElement>(".luke-hover-card-row [data-actor-ref]");
   assert.ok(starter, "the card names who started the agent");
-  assert.equal(card.querySelector(".actor-words")?.firstChild?.textContent, "Started by ");
+  assert.match(
+    card.querySelector(".luke-hover-card-row-label")?.textContent ?? "",
+    /^Started by Morning Sentry triage · /u,
+  );
   assert.equal(starter.dataset.kind, "automation");
   assert.equal(starter.textContent, "Morning Sentry triage");
   assert.equal(starter.tagName, "BUTTON");
@@ -172,7 +175,8 @@ test("an agent an automation started says it was started by the automation, its 
 test("the automation's name hangs its card over the agent's: its schedule, whose it is, when it runs next, and how its last run went, with no Open automation, since the name is the way to its page", async () => {
   const { card, opened } = await agentCard();
   hover(
-    card.querySelector(".actor-words [data-actor-ref]") ?? assert.fail("the automation is named"),
+    card.querySelector(".luke-hover-card-row [data-actor-ref]") ??
+      assert.fail("the automation is named"),
   );
   const standing = cards();
   assert.equal(standing.length, 2, "the automation's card hangs over the agent's");
@@ -184,9 +188,9 @@ test("the automation's name hangs its card over the agent's: its schedule, whose
   );
   assert.equal(
     automation.querySelector(".luke-hover-card-sub")?.textContent,
-    "Weekdays at 9:00 AM · UTC",
+    "Weekdays at 9:00 AM · UTC · Acme",
   );
-  assert.equal(automation.querySelector(".luke-hover-card-corner")?.textContent, "Acme");
+  assert.equal(automation.querySelector(".luke-hover-card-corner"), null);
   const notes = [...automation.querySelectorAll(".luke-hover-card-note")].map(
     (note) => note.textContent,
   );
@@ -198,14 +202,14 @@ test("the automation's name hangs its card over the agent's: its schedule, whose
     undefined,
     "the card offers nothing to press",
   );
-  act(() => card.querySelector<HTMLElement>(".actor-words [data-actor-ref]")?.click());
+  act(() => card.querySelector<HTMLElement>(".luke-hover-card-row [data-actor-ref]")?.click());
   assert.deepEqual(opened, [TRIAGE.id]);
 });
 
 test("a place's directory inside the window's, of the same workspace, shares its read rather than asking for a second", async () => {
   const { card } = await agentCard(true);
   assert.equal(
-    card.querySelector(".actor-words [data-actor-ref]")?.textContent,
+    card.querySelector(".luke-hover-card-row [data-actor-ref]")?.textContent,
     "Morning Sentry triage",
   );
   assert.deepEqual(listed, [WORKSPACE.id]);
@@ -224,11 +228,12 @@ test("an automation a GitHub event fires says where on its card, as its row in t
   ];
   const { card } = await agentCard();
   hover(
-    card.querySelector(".actor-words [data-actor-ref]") ?? assert.fail("the automation is named"),
+    card.querySelector(".luke-hover-card-row [data-actor-ref]") ??
+      assert.fail("the automation is named"),
   );
   const automation = cards()[1]?.querySelector("[data-actor-card='automation']");
   assert.equal(
     automation?.querySelector(".luke-hover-card-sub")?.textContent,
-    "When a pull request by people is opened in acme/relay or acme/ledger",
+    "When a pull request by people is opened in acme/relay or acme/ledger · Acme",
   );
 });

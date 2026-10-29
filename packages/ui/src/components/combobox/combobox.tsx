@@ -110,9 +110,10 @@ export interface ComboboxOption {
   /** Whether it cannot be chosen now: dimmed, and passed over by the pointer and a press. */
   readonly disabled?: boolean | undefined;
   /**
-   * Whether it is the one chosen now, which a check at its end says; false
-   * keeps the check's room, so the hints of a list that has a chosen
-   * option end in one line down it.
+   * Whether it is the one chosen now, which a check at its end says. An
+   * option not chosen keeps no room for the check, so its hint, a chord, a
+   * face, or why it cannot be chosen, ends at the row's edge where the check
+   * does rather than a column short of it beside an empty room.
    */
   readonly current?: boolean | undefined;
   /** The card hung beside the option while the pointer rests on it, as a row of ⌘K hangs its agent's; none hangs nothing. */
@@ -188,7 +189,7 @@ export function ComboboxOptionItem({
           {option.hint}
         </span>
       )}
-      {option.opens === true || option.current !== undefined ? (
+      {option.opens === true || option.current === true ? (
         <span
           className={cn(
             "luke-combobox-option-end",
@@ -196,7 +197,7 @@ export function ComboboxOptionItem({
             option.detail === undefined && option.hint === undefined && "ml-auto",
           )}
         >
-          {option.opens === true ? <ChevronRightIcon /> : option.current ? <CheckIcon /> : null}
+          {option.opens === true ? <ChevronRightIcon /> : <CheckIcon />}
         </span>
       ) : null}
     </div>

@@ -2,13 +2,10 @@ import { Schema as EffectSchema } from "effect";
 import {
   agentBrowserTabAnswerSchema,
   agentBrowserTabsAnswerSchema,
+  browserTabsPlaceSchema,
 } from "./agent-browser-tab-wire.js";
-import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
-import {
-  codingAgentSummarySchema,
-  localAgentRefusalSchema,
-  tasklessAgentSchema,
-} from "./coding-agent-wire.js";
+import { agentAgentAnswerSchema } from "./agent-view.js";
+import { agentSummarySchema, localAgentRefusalSchema, tasklessAgentSchema } from "./agent-wire.js";
 import {
   githubIssueSummarySchema,
   githubPullRequestNumberSchema,
@@ -47,6 +44,7 @@ import {
   planRevisionsAnswerSchema,
   repositoryPinRequestSchema,
   repositoryPinSchema,
+  taskAgentPinSchema,
   taskAssigneeIdSchema,
   taskCreateRequestSchema,
   taskFileRefusalSchema,
@@ -176,18 +174,25 @@ export const tasksViewSchema = EffectSchema.Struct({
   /** The agents with no plan in the account's workspaces, newest started first, as the last list read answered; absent before the first that carried them. */
   tasklessAgents: EffectSchema.optionalKey(EffectSchema.Array(tasklessAgentSchema)),
   /**
-   * Every agent on a plan, the archived ones left out, each as its plan's
+   * Every agent on a plan, the archived ones among them, each as its plan's
    * own list names it, the first started first: present only while the list
-   * is followed live over Neon Realtime, when it is what the notices' ledger
-   * reads in place of listing each plan's agents again on a clock.
+   * is followed live over Neon Realtime, when it is what the open plan's
+   * tabs draw, and what the notices' ledger reads, the archived left out, in
+   * place of listing each plan's agents again on a clock.
    */
-  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSummarySchema)),
+  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(agentSummarySchema)),
   /**
    * Every pull request of each plan that has one, uncapped, as its row names
    * the first few: present only while the list is followed live, when the
    * Tasks page's cards name each one rather than a count of the rest.
    */
   taskPullRequests: EffectSchema.optionalKey(EffectSchema.Array(taskPullRequestsSchema)),
+  /**
+   * The reader's pins of agents on a plan, the archived ones left out: present
+   * only while the list is followed live, when the sidebar's Pinned section
+   * draws each beside the pinned tasks.
+   */
+  taskAgentPins: EffectSchema.optionalKey(EffectSchema.Array(taskAgentPinSchema)),
   /**
    * The tasks a rename, a pin, or where they stand, asked on this Mac and not
    * yet carried by the list, is drawn over, so a list that holds its rows
@@ -364,7 +369,7 @@ export type StartCallFailure = (typeof START_CALL_FAILURES)[number];
 export const tasksStartAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     planId: EffectSchema.String,
-    agentStart: EffectSchema.optionalKey(codingAgentAgentAnswerSchema),
+    agentStart: EffectSchema.optionalKey(agentAgentAnswerSchema),
   }),
   EffectSchema.Struct({
     failure: EffectSchema.Literals(START_CALL_FAILURES),
@@ -544,14 +549,12 @@ export type TasksIssueAnswer = typeof tasksIssueAnswerSchema.Type;
 /** The issue as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
 export const tasksIssueSchema = EffectSchema.NullOr(githubIssueSummarySchema);
 
-/** A task's agents' Browser tabs, as its side panel asks the host for them: the task. */
-export const tasksBrowserTabsParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-});
+/** Browser tabs, as a side panel asks the host for them: one coding agent's, as its page names it, or a task's agents' together. */
+export const tasksBrowserTabsParamsSchema = browserTabsPlaceSchema;
 
 export type TasksBrowserTabsParams = typeof tasksBrowserTabsParamsSchema.Type;
 
-/** A task's agents' Browser tabs as the window hears them, the oldest first, or that the service did not answer. */
+/** An agent's or a task's Browser tabs as the window hears them, the oldest first, or that the service did not answer. */
 export const tasksBrowserTabsAnswerSchema = EffectSchema.Union([
   agentBrowserTabsAnswerSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
@@ -579,9 +582,8 @@ export const BROWSER_TAB_OPEN_FAILURE = {
 export type BrowserTabOpenFailure =
   (typeof BROWSER_TAB_OPEN_FAILURE)[keyof typeof BROWSER_TAB_OPEN_FAILURE];
 
-/** A Browser tab a member opens from the side panel: the task, the coding agent whose browser it opens in, and the address. */
+/** A Browser tab a member opens from the side panel: the coding agent whose browser it opens in, and the address. */
 export const tasksBrowserTabOpenParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
   agentId: EffectSchema.NonEmptyString,
   address: EffectSchema.NonEmptyString,
 });
@@ -598,22 +600,20 @@ export const tasksBrowserTabOpenAnswerSchema = EffectSchema.Union([
 
 export type TasksBrowserTabOpenAnswer = typeof tasksBrowserTabOpenAnswerSchema.Type;
 
-/** A task's agents' Browser tabs, followed by a window while its side panel lists them. */
-export const taskBrowserTabsFollowSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-});
+/** An agent's or a task's Browser tabs, followed by a window while its side panel lists them. */
+export const taskBrowserTabsFollowSchema = browserTabsPlaceSchema;
 
 export type TaskBrowserTabsFollow = typeof taskBrowserTabsFollowSchema.Type;
 
 /**
- * A followed task's Browser tabs as they now stand, the agent's pointer on
- * each among them, told each time one moves or a takeover lapses while
- * followed, or why there are none.
+ * A followed agent's or task's Browser tabs as they now stand, the agent's
+ * pointer on each among them, told each time one moves or a takeover lapses
+ * while followed, or why there are none.
  */
-export const taskBrowserTabsFollowedSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  view: tasksBrowserTabsAnswerSchema,
-});
+export const taskBrowserTabsFollowedSchema = EffectSchema.Union([
+  EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString, view: tasksBrowserTabsAnswerSchema }),
+  EffectSchema.Struct({ agentId: EffectSchema.NonEmptyString, view: tasksBrowserTabsAnswerSchema }),
+]);
 
 export type TaskBrowserTabsFollowed = typeof taskBrowserTabsFollowedSchema.Type;
 

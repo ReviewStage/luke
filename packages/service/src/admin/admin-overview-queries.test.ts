@@ -6,9 +6,9 @@ import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
 } from "@luke/database/github-installation-vocabulary";
+import { agentTable, type StoredPullRequest } from "@luke/database/schemas/agent";
 import { session, user } from "@luke/database/schemas/auth";
 import { automation, automationRun } from "@luke/database/schemas/automation";
-import { codingAgent, type StoredPullRequest } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { integrationConnection } from "@luke/database/schemas/integration";
@@ -24,6 +24,7 @@ import {
   REACH_FEATURE,
 } from "@luke/features/admin-overview-vocabulary";
 import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -31,7 +32,6 @@ import {
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import { PLAN_ACTOR, type PlanActor } from "@luke/features/task-wire";
@@ -117,7 +117,7 @@ const startAgent = (
   userId: string,
   organizationId: string,
   createdAt: string,
-  extra: Partial<typeof codingAgent.$inferInsert> = {},
+  extra: Partial<typeof agentTable.$inferInsert> = {},
 ) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -126,7 +126,7 @@ const startAgent = (
     yield* db
       .insert(conversations)
       .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
-    yield* db.insert(codingAgent).values({
+    yield* db.insert(agentTable).values({
       id,
       organizationId,
       userId,
@@ -174,7 +174,7 @@ const fireAutomation = (userId: string, organizationId: string, when: string) =>
       enabled: true,
       triggerKind: AUTOMATION_TRIGGER.SCHEDULE,
       trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 2 * * *", timezone: "UTC" },
-      action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "" },
+      action: { kind: AUTOMATION_ACTION.AGENT, prompt: "" },
       guards: AUTOMATION_DEFAULT_GUARDS,
     });
     for (const status of [AUTOMATION_RUN_STATUS.STARTED, AUTOMATION_RUN_STATUS.SKIPPED]) {
@@ -324,7 +324,7 @@ it.layer(getTestDB())("the overview's reads", (it) => {
         // Bob's own connected integration is not reach: he was not active this week.
         assert.deepEqual(Object.fromEntries(source.reach), {
           [REACH_FEATURE.TASKS]: 1,
-          [REACH_FEATURE.CODING_AGENTS]: 1,
+          [REACH_FEATURE.AGENTS]: 1,
           [REACH_FEATURE.INBOX]: 1,
           [REACH_FEATURE.INTEGRATIONS]: 1,
           [REACH_FEATURE.AUTOMATIONS]: 1,

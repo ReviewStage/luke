@@ -146,7 +146,7 @@ import { TAB_KIND, tabLook } from "./tab-look.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { cardTitle } from "./tool-call-model.js";
 import { INERT_LINK_CLASS, TranscriptWords } from "./transcript-blocks.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import { opensAsLink } from "./use-open-link.js";
 import { type PendingInboxReply, pendingReplyOn, type TaskInboxControl } from "./use-task-inbox.js";
 
@@ -911,14 +911,13 @@ const ITEM_THING = "Inbox item";
 /**
  * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
  * agent's tab end theirs, offering what the item's row's menu offers in the
- * same order (`inbox-item-actions.tsx`): Copy link; Mark as read or unread,
- * naming U; Move to channel…; and, while the item is open, Resolve without
- * answering, asked first. It is keyed by its item where it is drawn, so a
- * question asked on one item never closes the next, and the menu and the
- * question go with the pane once it is hidden.
+ * same order (`inbox-item-actions.tsx`): Copy link, the item's link under its
+ * agent; Mark as read or unread, naming U; Move to channel…; and, while the
+ * item is open, Resolve without answering, asked first. It is keyed by its
+ * item where it is drawn, so a question asked on one item never closes the
+ * next, and the menu and the question go with the pane once it is hidden.
  */
 function InboxItemMenu({
-  holder,
   item,
   shown,
   onMark,
@@ -927,7 +926,6 @@ function InboxItemMenu({
   lead = NO_LEAD,
   heading,
 }: {
-  holder: InboxHolder;
   item: InboxItem;
   shown: boolean;
   onMark: InboxPaneDoors["onMark"];
@@ -939,7 +937,7 @@ function InboxItemMenu({
   heading?: React.ReactNode;
 }): React.JSX.Element | null {
   const menu = useMenu(shown);
-  const { close, groups: itemGroups } = useInboxItemActions(holder, item, {
+  const { close, groups: itemGroups } = useInboxItemActions(item, {
     onMark,
     onMove,
     onClose,
@@ -1299,7 +1297,7 @@ export function InboxPane({
   item: InboxItem;
   /** The live read of the item's task, or of its agent with no task, which answers it and holds its draft. */
   control: TaskInboxControl;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   doors: InboxPaneDoors;
   /** Whether the list stands alone in the item's place. */
   hidden: boolean;
@@ -1414,7 +1412,6 @@ export function InboxPane({
           end={
             <InboxItemMenu
               key={item.id}
-              holder={holder}
               item={item}
               shown={!hidden}
               onMark={doors.onMark}
@@ -1457,7 +1454,6 @@ export function InboxPane({
               )}
               <InboxItemMenu
                 key={item.id}
-                holder={holder}
                 item={item}
                 shown={!hidden}
                 onMark={doors.onMark}

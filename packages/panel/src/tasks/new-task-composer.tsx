@@ -1,8 +1,4 @@
-import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_STATUS,
-  hasWordsOrFiles,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, AGENT_STATUS, hasWordsOrFiles } from "@luke/features/agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
@@ -20,7 +16,7 @@ import {
   VisuallyHidden,
 } from "@luke/ui";
 import { workspaceReaches } from "@luke/ui/tasks-model";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import {
@@ -42,7 +38,7 @@ import { SkillFiles } from "./skill-chip.js";
 import type { SkillWithFile } from "./skill-ref.js";
 import { TaskMentions, tasklessMentions, useMentionAgentsReader } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
-import { MODELS_READ } from "./use-coding-agents.js";
+import { MODELS_READ } from "./use-agents.js";
 import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.js";
 
 /**
@@ -111,7 +107,9 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * kept apart from the card (`../composer-drafts.ts`), so a card put away
  * and opened again, or the welcome's, finds them where they were left, the words
  * after a relaunch too; a task started lets them go, as emptying the box
- * does. The card holds its own repository and model, so the owner
+ * does, an agent's start as it is pressed, so a New task opened while it is
+ * out opens empty, and a refused card opened again brings its own words
+ * back. The card holds its own repository and model, so the owner
  * mounts it afresh to start those over; the workspace it starts in is the
  * owner's.
  *
@@ -284,6 +282,16 @@ export function NewTaskComposer({
   const [choice, choose] = useDefaultChoice(newTask, refused?.card.choice);
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(refused?.note);
+  // A refused card opened again holds the words it was pressed with, where the box holds nothing since.
+  useLayoutEffect(() => {
+    if (refused === undefined) return;
+    const { words: kept, press } = refused.card;
+    draft.update((now) =>
+      hasWordsOrFiles(now.text, now.attachments)
+        ? now
+        : { ...now, text: kept, attachments: press.ask.agent.attachments },
+    );
+  }, []);
   // The last agent press's key and what it asked, until a start lands.
   const pressed = useRef<NewTaskPress | undefined>(refused?.card.press);
   const repositories = newTask.repositoriesIn(workspaceId);
@@ -391,6 +399,11 @@ export function NewTaskComposer({
     setStarting(true);
     onStarting?.(true);
     setNote(undefined);
+    // Note that an agent's start lets its words go as it is pressed, because the card closes at
+    // once and a New task opened before the service answers must open empty; a refused card
+    // opened again brings its own words back (`refused.card.words`).
+    const agentStart = handing.handed !== undefined;
+    if (agentStart) draft.update(() => EMPTY_DRAFT);
     newTask
       .start("", repository, workspaceId, {
         ...(runsOn === undefined ? undefined : { runsOn }),
@@ -401,7 +414,7 @@ export function NewTaskComposer({
         if (refused === undefined) {
           // A task started lets its words go, so the next New task opens empty.
           pressed.current = undefined;
-          draft.update(() => EMPTY_DRAFT);
+          if (!agentStart) draft.update(() => EMPTY_DRAFT);
         }
         setNote(refused);
       })
@@ -413,7 +426,7 @@ export function NewTaskComposer({
   const start = () => {
     if (!canStart) return;
     const prompt = forAutomation ? automationAgentBrief(said) : said;
-    if (forAutomation && prompt.length > CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS) {
+    if (forAutomation && prompt.length > AGENT_BOUNDS.MAX_MESSAGE_CHARS) {
       setNote({ reason: FAILURE_REASON.OTHER, text: TOO_LONG });
       return;
     }
@@ -429,7 +442,7 @@ export function NewTaskComposer({
     pressed.current = press;
     begin({
       handed: { idempotencyKey: key, ...ask.agent },
-      card: { ...(forAutomation ? { purpose } : undefined), repository, choice, press },
+      card: { ...(forAutomation ? { purpose } : undefined), repository, choice, press, words },
     });
   };
   // ⌘Return on a box with nothing in it starts a bare task: no call and no agent.
@@ -458,7 +471,9 @@ export function NewTaskComposer({
   );
   const composer: AgentComposerControl = {
     draft: words,
+    // Note that the words handed back as they stand, as the field echoes the words a refused card opens on, take no note down.
     setDraft: (text) => {
+      if (text === words) return;
       draft.update((was) => ({ ...was, text }));
       setNote(undefined);
     },
@@ -494,7 +509,7 @@ export function NewTaskComposer({
         </div>
       </div>
       <AgentComposer
-        status={CODING_AGENT_STATUS.STARTING}
+        status={AGENT_STATUS.STARTING}
         composer={composer}
         wording={startsBare ? BARE_WORDS : PURPOSE_WORDS[purpose]}
         // Note that an automation's agent is held without words, since its brief fences them as the request, files alone saying none.
@@ -508,7 +523,7 @@ export function NewTaskComposer({
         skills={skills}
         published={undefined}
         doors={{ openGitHub: () => undefined, copy: () => undefined }}
-        onStop={() => Promise.resolve()}
+        onStop={() => Promise.resolve(false)}
         onKey={onKey}
         onLeave={onLeave}
         focusedByOwner={focusedByOwner}

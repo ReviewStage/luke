@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { renameAgent } from "@luke/database/models/agent-store";
 import {
   attachRunAgent,
   createAutomation,
@@ -9,10 +10,9 @@ import {
   recordAutomationRun,
   updateAutomation,
 } from "@luke/database/models/automation-store";
-import { renameCodingAgent } from "@luke/database/models/coding-agent-store";
 import { storeWriter } from "@luke/database/models/writer";
+import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import {
   expectTopicsFire,
@@ -84,9 +84,9 @@ const openAutomationWorld = Effect.gen(function* () {
   const agentId = yield* openTaskAgent(owner, workspaceId, null);
   const db = yield* Database;
   const [row] = yield* db
-    .select({ conversationId: codingAgent.conversationId })
-    .from(codingAgent)
-    .where(eq(codingAgent.id, agentId));
+    .select({ conversationId: agentTable.conversationId })
+    .from(agentTable)
+    .where(eq(agentTable.id, agentId));
   const conversationId = row?.conversationId ?? assert.fail("the agent has no conversation");
   return { owner, teammate, workspaceId, agentId, conversationId, automationId: randomUUID() };
 });
@@ -103,7 +103,7 @@ const makeAutomation = (world: AutomationWorld) =>
       name: "Nightly flaky-test sweep",
       scope: AUTOMATION_SCOPE.WORKSPACE,
       trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
-      action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix one flaky test." },
+      action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Fix one flaky test." },
       guards: AUTOMATION_DEFAULT_GUARDS,
       nextRunAt: null,
       webhookSecretHash: null,
@@ -205,7 +205,7 @@ it.layer(getTestDB())("what moves a workspace's automations notifies", (it) => {
         const turn: readonly SyncTopic[] = [[TOPIC.CONVERSATION, world.conversationId], ...agent];
 
         yield* wakesTheTeammate(
-          renameCodingAgent(world.owner, world.agentId, "Flaky-test sweep"),
+          renameAgent(world.owner, world.agentId, "Flaky-test sweep"),
           agent,
           world,
         );

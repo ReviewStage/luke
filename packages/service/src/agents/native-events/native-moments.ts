@@ -50,7 +50,7 @@ export const NATIVE_MOMENT = {
   USAGE: "usage",
   /**
    * What the newest model call read and wrote, as the agent's context ring
-   * reads it (`coding_agent.last_step`): Claude Code's per-message usage, or
+   * reads it (`agent.last_step`): Claude Code's per-message usage, or
    * the last request Codex reports beside its running total.
    */
   CONTEXT: "context",

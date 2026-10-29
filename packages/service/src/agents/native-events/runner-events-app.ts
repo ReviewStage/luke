@@ -1,15 +1,15 @@
 import { RUNNER_END, RUNNER_EVENT, type RunnerEnd } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  type CodingAgent,
-  readCodingAgentOfConversation,
-  readCodingAgentRouting,
-  recordCodingAgentCompaction,
-  recordCodingAgentNativeSession,
-  recordCodingAgentStep,
-  takeCodingAgentMentionedServers,
-} from "@luke/database/models/coding-agent-store";
-import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
+  type Agent,
+  readAgentOfConversation,
+  readAgentRouting,
+  recordAgentCompaction,
+  recordAgentNativeSession,
+  recordAgentStep,
+  takeAgentMentionedServers,
+} from "@luke/database/models/agent-store";
+import { replaceAgentWakeups } from "@luke/database/models/agent-wakeups";
 import {
   type NativeProjectionRow,
   withNativeProjection,
@@ -22,7 +22,7 @@ import {
   storeWriter,
 } from "@luke/database/models/writer";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
-import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
+import { AGENT_PAYER, type AgentPayer } from "@luke/features/agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -144,23 +144,20 @@ interface Applying {
   readonly writer: StoreWriter;
   readonly read: NativeReader;
   /** Who pays for the agent, as recorded as it started; none for an agent from before payers. */
-  readonly payer: CodingAgentPayer | undefined;
+  readonly payer: AgentPayer | undefined;
   /** The plan or prompt the agent was handed first, whose share of its context the ring estimates. */
   readonly brief: string;
 }
 
 /** The row each plan is kept in, which a turn's word on the plan is written to; a key's payer has none. */
 const PLAN_ROW: Partial<
-  Record<
-    CodingAgentPayer,
-    { readonly provider: ProviderKeyProvider; readonly kind: ProviderKeyKind }
-  >
+  Record<AgentPayer, { readonly provider: ProviderKeyProvider; readonly kind: ProviderKeyKind }>
 > = {
-  [CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION]: {
+  [AGENT_PAYER.CLAUDE_SUBSCRIPTION]: {
     provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
     kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
   },
-  [CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION]: {
+  [AGENT_PAYER.CHATGPT_SUBSCRIPTION]: {
     provider: PROVIDER_KEY_PROVIDER.OPENAI,
     kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
   },
@@ -223,7 +220,7 @@ export interface RunnerEventsOptions<R = never> {
    */
   readonly title?: (
     target: ConversationTarget,
-    agent: CodingAgent,
+    agent: Agent,
   ) => Effect.Effect<void, never, DatabaseServices | R>;
   /**
    * Told once a batch that ended a turn has landed, after its transaction,
@@ -231,7 +228,7 @@ export interface RunnerEventsOptions<R = never> {
    * the turn was stopped or failed (`../coder-host/agent-queue.ts`). Nothing
    * where left out.
    */
-  readonly turnEnded?: (agent: CodingAgent) => Effect.Effect<void, never, DatabaseServices | R>;
+  readonly turnEnded?: (agent: Agent) => Effect.Effect<void, never, DatabaseServices | R>;
 }
 
 /**
@@ -432,18 +429,18 @@ function landWrite(
       );
     case NATIVE_WRITE.SESSION:
       return Effect.asVoid(
-        recordCodingAgentNativeSession(target.userId, applying.agentId, write.sessionId),
+        recordAgentNativeSession(target.userId, applying.agentId, write.sessionId),
       );
     case NATIVE_WRITE.COMPACTED:
       // The summary may have dropped what the turns' messages handed, so the next message hands it again.
       return Effect.andThen(
-        recordCodingAgentCompaction(target.userId, applying.agentId, new Date(now)),
+        recordAgentCompaction(target.userId, applying.agentId, new Date(now)),
         compactNativeTurnHanded(target),
       );
     case NATIVE_WRITE.CONTEXT:
       // Note that the harness's own instructions and tools are no text Luke composed, so they are
       // told as the conversation's share rather than estimated, and the brief alone is estimated.
-      return recordCodingAgentStep(target.userId, applying.agentId, {
+      return recordAgentStep(target.userId, applying.agentId, {
         ...write.usage,
         systemPromptTokens: 0,
         toolDefinitionTokens: 0,
@@ -451,7 +448,7 @@ function landWrite(
         at: now,
       });
     case NATIVE_WRITE.WAKEUPS:
-      return replaceCodingAgentWakeups(
+      return replaceAgentWakeups(
         applying.agentId,
         write.wakeups.map(({ at, prompt }) => ({ at: new Date(at), prompt })),
       );
@@ -459,7 +456,7 @@ function landWrite(
       // Note that the row is the starter's credential that pays: its plan's, or, for an agent its API key
       // pays for, that key's, which a refusal marks invalid as eve's step does; a plan's limit is no key's.
       const row =
-        applying.payer === CODING_AGENT_PAYER.API_KEY
+        applying.payer === AGENT_PAYER.API_KEY
           ? write.status === PROVIDER_KEY_STATUS.LIMIT_REACHED
             ? undefined
             : apiKeyRowOf(applying.model)
@@ -536,7 +533,7 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
       // own, never the next turn's.
       for (const write of projected.writes) {
         if (write.kind !== NATIVE_WRITE.ENQUEUE) continue;
-        const taken = yield* takeCodingAgentMentionedServers(
+        const taken = yield* takeAgentMentionedServers(
           applying.target.userId,
           applying.target.conversationId,
         );
@@ -592,12 +589,10 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   if (Option.isNone(admitted)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   const { target } = admitted.value;
   const agent = yield* hostedStoreOrUnavailable(
-    readCodingAgentOfConversation(target.userId, target.conversationId),
+    readAgentOfConversation(target.userId, target.conversationId),
   );
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  const routing = yield* hostedStoreOrUnavailable(
-    readCodingAgentRouting(target.userId, agent.value.id),
-  );
+  const routing = yield* hostedStoreOrUnavailable(readAgentRouting(target.userId, agent.value.id));
   const runtime = Option.map(routing, (row) => row.runtime);
   const reader =
     read ??

@@ -2,11 +2,8 @@
 
 import assert from "node:assert/strict";
 import { type AgentQueue, QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentQueueAnswerView,
-} from "@luke/features/coding-agent-view";
-import { type AgentQueueChange, QUEUE_CHANGE } from "@luke/features/coding-agent-wire";
+import { AGENT_CALL_FAILURE, type AgentQueueAnswerView } from "@luke/features/agent-view";
+import { type AgentQueueChange, QUEUE_CHANGE } from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useState } from "react";
@@ -50,7 +47,7 @@ let held:
 
 /** Every change the tab sent, and the answers still owed, answered in the order a test says. */
 let sent: AgentQueueChange[] = [];
-let owed: ((answer: CodingAgentQueueAnswerView) => void)[] = [];
+let owed: ((answer: AgentQueueAnswerView) => void)[] = [];
 
 function Tab(): ReactNode {
   const [page, setPage] = useState<AgentQueue | undefined>();
@@ -59,7 +56,6 @@ function Tab(): ReactNode {
     taskId: "plan-1",
     messages: [],
     send: () => new Promise(ignore),
-    onStatus: ignore,
   });
   const queue = useAgentQueue("agent-1", page);
   held = { composer, queue, editing: useQueueEditing(composer, queue), page: setPage };
@@ -78,7 +74,7 @@ async function settle(): Promise<void> {
 }
 
 /** The oldest change still owed its answer, answered now. */
-async function answer(with_: CodingAgentQueueAnswerView): Promise<void> {
+async function answer(with_: AgentQueueAnswerView): Promise<void> {
   // A change waits behind the box's own sends before it is asked, so it is owed once they settle.
   await settle();
   const next = owed.shift();
@@ -87,7 +83,7 @@ async function answer(with_: CodingAgentQueueAnswerView): Promise<void> {
   await settle();
 }
 
-const refused: CodingAgentQueueAnswerView = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+const refused: AgentQueueAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
 
 const message = (id: string, text: string) => ({ id, text, queuedBy: "user-1" });
 
@@ -98,7 +94,7 @@ beforeEach(async () => {
   owed = [];
   fakeAppBridge({});
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_QUEUE]: ({ change }) => {
+    [ACT_KIND.AGENTS_QUEUE]: ({ change }) => {
       sent.push(change);
       return new Promise((resolve) => owed.push(resolve));
     },

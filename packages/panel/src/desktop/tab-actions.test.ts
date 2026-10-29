@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
+  type AgentPullRequest,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { Task } from "@luke/features/task-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -15,7 +15,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
@@ -24,7 +24,7 @@ import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js"
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { onSideBundles, unlandedBundles } from "../testing/side-bundles.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 // Note that a Pull request tab is loaded as the side panel loads it, on first use
 // (`pages-on-demand.ts`), so the module is read here first and its load settles
 // within the test's own ticks.
@@ -54,14 +54,14 @@ const TASK: Task = {
   document: { body: "", assumptions: [] },
 };
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Invite expiry job",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 
@@ -102,7 +102,7 @@ async function settle(): Promise<void> {
  */
 async function mountEveryTab(
   chosen: { main: MainTab; side: SidePanelTab },
-  pullRequests: CodingAgentsControl["pullRequests"] = new Map(),
+  pullRequests: AgentsControl["pullRequests"] = new Map(),
 ): Promise<HTMLElement> {
   const control = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
@@ -125,7 +125,7 @@ async function mountEveryTab(
       tab: chosen.side,
     },
     pages: [{ id: PAGE_ID, title: "Invite flow", version: 1, at: 1 }],
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: [AGENT],
       agentIds: [AGENT.id],
       pullRequests,
@@ -334,7 +334,7 @@ test("a tab with no content action shows no ⋯ in its bar, though its right-cli
 });
 
 /** The agent's pull request, as what it published names it. */
-const PULL_REQUEST: CodingAgentPullRequest = {
+const PULL_REQUEST: AgentPullRequest = {
   number: 42,
   title: "Expire invitations",
   url: "https://github.com/acme/web/pull/42",
@@ -400,22 +400,11 @@ function installClipboard(): string[] {
 test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the agent's, its worker's, its Changes', a page's, or the Plan tab's, the task's own", async () => {
   const copied = installClipboard();
   const task = `https://tryluke.dev/workspace-personal/plan/${TASK.id}`;
+  const agent = `https://tryluke.dev/workspace-personal/agent/${AGENT.id}`;
   const cases: [{ main: MainTab; side: SidePanelTab }, "main" | "side", string][] = [
-    [
-      { main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.INBOX },
-      "main",
-      `${task}/agent/${AGENT.id}`,
-    ],
-    [
-      { main: { draft: "draft-1" }, side: SUBAGENT },
-      "side",
-      `${task}/agent/${AGENT.id}/worker/call-1`,
-    ],
-    [
-      { main: { draft: "draft-1" }, side: { changes: AGENT.id } },
-      "side",
-      `${task}/agent/${AGENT.id}/changes`,
-    ],
+    [{ main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.INBOX }, "main", agent],
+    [{ main: { draft: "draft-1" }, side: SUBAGENT }, "side", `${agent}/worker/call-1`],
+    [{ main: { draft: "draft-1" }, side: { changes: AGENT.id } }, "side", `${agent}/changes`],
     [{ main: { draft: "draft-1" }, side: { page: PAGE_ID } }, "side", `${task}/page/${PAGE_ID}`],
     [{ main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.PLAN }, "side", task],
   ];

@@ -1,12 +1,12 @@
+import { CONTEXT_WINDOW, contextWindowSchema } from "@luke/features/agent-wire";
 import {
   CHAPTERS_MODEL_LIST,
   type ChaptersModelId,
   chaptersModelFrom,
 } from "@luke/features/chapters-model-choice";
-import { CONTEXT_WINDOW, contextWindowSchema } from "@luke/features/coding-agent-wire";
 import { LINK_OPEN_LIST, type LinkOpen } from "@luke/features/link-open";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
+import { AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import {
   type AccountPreferences,
   accountPreferencesFromStored,
@@ -43,7 +43,7 @@ export interface AccountPreferencesRow {
   /** The settings every device shares, the link choice among them where the account made one. */
   preferences: AccountPreferences;
   /** What a click on Start runs on; the catalog's default until the account chooses. */
-  codingAgent: ModelChoice;
+  agent: ModelChoice;
   /** What a Generate chapters the account presses runs on; Haiku until the account chooses, and for a stored value no build lists any more. */
   chaptersModel: ChaptersModelId;
   /** Each experiment the account turned on or back off; one it never chose is absent, and off. */
@@ -68,7 +68,7 @@ export interface AccountPreferencesRow {
 export interface AccountPreferencesWrite {
   preferences?: AccountPreferences;
   linkOpen?: LinkOpen;
-  codingAgent?: ModelChoice;
+  agent?: ModelChoice;
   chaptersModel?: ChaptersModelId;
   experiments?: ExperimentChoices;
 }
@@ -136,9 +136,9 @@ export function deleteAccount(userId: string): Effect.Effect<void, StoreFailure,
 /** The columns every read and the write's `returning` project, so a row decodes one way whatever wrote it. */
 const PREFERENCE_COLUMNS = {
   linkOpen: accountPreference.linkOpen,
-  codingAgentModel: accountPreference.codingAgentModel,
-  codingAgentEffort: accountPreference.codingAgentEffort,
-  codingAgentContextWindow: accountPreference.codingAgentContextWindow,
+  agentModel: accountPreference.agentModel,
+  agentEffort: accountPreference.agentEffort,
+  agentContextWindow: accountPreference.agentContextWindow,
   chaptersModel: accountPreference.chaptersModel,
   experiments: accountPreference.experiments,
   updatedAt: accountPreference.updatedAt,
@@ -146,9 +146,9 @@ const PREFERENCE_COLUMNS = {
 
 const PreferenceRowSchema = Schema.Struct({
   linkOpen: Schema.NullOr(Schema.String),
-  codingAgentModel: Schema.NullOr(Schema.String),
-  codingAgentEffort: Schema.NullOr(Schema.String),
-  codingAgentContextWindow: Schema.NullOr(contextWindowSchema),
+  agentModel: Schema.NullOr(Schema.String),
+  agentEffort: Schema.NullOr(Schema.String),
+  agentContextWindow: Schema.NullOr(contextWindowSchema),
   chaptersModel: Schema.NullOr(Schema.String),
   experiments: Schema.NullOr(WireValueSchema),
   updatedAt: Schema.NullOr(InstantColumnSchema),
@@ -163,18 +163,18 @@ type PreferenceRow = typeof PreferenceRowSchema.Type;
  * window is named only where it is the standard one, as the wire names it.
  */
 function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
-  const standard = row.codingAgentContextWindow === CONTEXT_WINDOW.STANDARD;
-  const codingAgent: ModelChoice =
-    row.codingAgentModel !== null && row.codingAgentEffort !== null
+  const standard = row.agentContextWindow === CONTEXT_WINDOW.STANDARD;
+  const agent: ModelChoice =
+    row.agentModel !== null && row.agentEffort !== null
       ? {
-          model: row.codingAgentModel,
-          effort: row.codingAgentEffort,
+          model: row.agentModel,
+          effort: row.agentEffort,
           ...(standard ? { contextWindow: CONTEXT_WINDOW.STANDARD } : undefined),
         }
-      : CODING_AGENT_DEFAULT_CHOICE;
+      : AGENT_DEFAULT_CHOICE;
   return {
     preferences: accountPreferencesFromStored(row.linkOpen ? { linkOpen: row.linkOpen } : {}) ?? {},
-    codingAgent,
+    agent,
     // Note that a stored model no build lists any more reads as Haiku, as a row never written does.
     chaptersModel: chaptersModelFrom(row.chaptersModel),
     // Note that a stored key no build lists any more reads as nothing, because the experiment it named graduated or went.
@@ -247,7 +247,7 @@ export function readAccountRole(
 const PreferenceWriteSchema = Schema.Struct({
   userId: Schema.String,
   linkOpen: Schema.optionalKey(Schema.Literals(LINK_OPEN_LIST)),
-  codingAgent: Schema.optionalKey(
+  agent: Schema.optionalKey(
     Schema.Struct({
       model: Schema.String,
       effort: Schema.String,
@@ -269,12 +269,12 @@ function writtenColumns(write: PreferenceWrite) {
     ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
     ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
     ...(write.updatedAt === undefined ? undefined : { updatedAt: write.updatedAt }),
-    ...(write.codingAgent === undefined
+    ...(write.agent === undefined
       ? undefined
       : {
-          codingAgentModel: write.codingAgent.model,
-          codingAgentEffort: write.codingAgent.effort,
-          codingAgentContextWindow: write.codingAgent.contextWindow ?? null,
+          agentModel: write.agent.model,
+          agentEffort: write.agent.effort,
+          agentContextWindow: write.agent.contextWindow ?? null,
         }),
   };
 }
@@ -326,7 +326,7 @@ export function writeAccountPreferences(
       userId,
       ...(write.preferences === undefined ? undefined : { updatedAt }),
       ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
-      ...(write.codingAgent === undefined ? undefined : { codingAgent: write.codingAgent }),
+      ...(write.agent === undefined ? undefined : { agent: write.agent }),
       ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
       ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),
     };

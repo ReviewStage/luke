@@ -205,6 +205,23 @@ export const APP_SETTING_SCHEMA = {
     visible: accountDrawn,
   }),
   /*
+   * Whether a task New task starts opens, as it always did, or the window
+   * stays on the page it was on and a toast says the task started, with
+   * Open. Kept on this device, as how the window moves is the device's.
+   */
+  openNewTask: toggleSetting({
+    field: "openNewTask",
+    id: APP_SETTING_ID.OPEN_NEW_TASK,
+    label: "Open a task once it starts",
+    default: true,
+    page: SETTINGS_PAGE.ACCOUNT,
+    section: SETTING_SECTION.TASKS,
+    order: 305,
+    visible: accountDrawn,
+    // Nothing to run per write: New task reads the setting as a task starts.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  /*
    * Whether this Luke sends its counts of how features are used. On by
    * default in a packaged build, the app people download, and off in a
    * development one, so a run from source counts nothing until its
@@ -260,7 +277,7 @@ export const APP_SETTING_SCHEMA = {
     optionLabel: (choice) => AGENT_ENTER_LABEL[choice],
     guard: (value: UnparsedWireValue) => optional(value, isAgentEnter),
     default: AGENT_ENTER.STEER,
-    page: SETTINGS_PAGE.CODING_AGENTS,
+    page: SETTINGS_PAGE.AGENTS,
     section: SETTING_SECTION.COMPOSER,
     order: 400,
     // Nothing to run per write: the message box reads the choice as a key is pressed.

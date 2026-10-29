@@ -55,7 +55,7 @@
  * launch a newer one replaced, told by its event number, stops nothing.
  *
  * `open`, `send`, `cancel`, and `retune` each hold the agent's runner lease
- * (`coding-agent-runner-lease.ts`) from before they read where its runner
+ * (`agent-runner-lease.ts`) from before they read where its runner
  * stands until they wrote to it or launched it, so two calls at once never
  * both relaunch, each minting a bearer that shuts the other's runner out,
  * nor write at one stdin offset; the later call waits, and finds the runner
@@ -83,18 +83,18 @@ import {
 import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
 import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
 import {
+  type Agent,
   awaitingLinesOfReached,
-  type CodingAgent,
   hasRepository,
   latestTurnsOfReached,
   RUNNING_TURN_STATUSES,
-  readCodingAgent,
-  readCodingAgentOfConversation,
-  readCodingAgentRouting,
+  readAgent,
+  readAgentOfConversation,
+  readAgentRouting,
   readNativeRunStanding,
-  recordCodingAgentRunnerToken,
-} from "@luke/database/models/coding-agent-store";
-import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
+  recordAgentRunnerToken,
+} from "@luke/database/models/agent-store";
+import { replaceAgentWakeups } from "@luke/database/models/agent-wakeups";
 import {
   clearNativeRewindHanded,
   readNativeRewind,
@@ -197,10 +197,10 @@ export interface RunnerSessionsOptions {
   /** The Luke MCP server's endpoint (P06), which the composing edge names. */
   readonly mcpUrl: string;
   /** The integrations the agent is handed as its launch starts, each an MCP server of its own beside Luke's. */
-  readonly integrations: (agent: CodingAgent) => Effect.Effect<readonly IntegrationServer[]>;
+  readonly integrations: (agent: Agent) => Effect.Effect<readonly IntegrationServer[]>;
   /** Luke's coder instructions for the agent, naming its checkout and installed skills where its machine keeps them, which the harness's config carries. */
   readonly instructions: (
-    agent: CodingAgent,
+    agent: Agent,
     place: Pick<MachineLayout, "checkoutPath" | "installedSkills" | "isolation" | "sharedFiles">,
   ) => Effect.Effect<string>;
   /** One past the last event the store applied of the conversation's runner, where a launch numbers its events from. */
@@ -240,11 +240,11 @@ export interface RunnerHarness<E extends { readonly _tag: string }> {
   readonly sessionPrefix: string;
   /** The credential a launch starts with, read afresh for every launch. */
   readonly launch: (
-    agent: CodingAgent,
+    agent: Agent,
   ) => Effect.Effect<HarnessLaunch, E | LaunchRefused, RunnerServices>;
   /** The config line of a launch on a machine of the layout given, resuming the harness's session where one is named, cut before the line a rewind dropped where one waits. */
   readonly config: (
-    agent: CodingAgent,
+    agent: Agent,
     layout: MachineLayout,
     resume: string | undefined,
     firstSequence: number,
@@ -253,9 +253,7 @@ export interface RunnerHarness<E extends { readonly _tag: string }> {
   /** The checkout's folders the harness finds a repository's skills in, whose names it keeps over an installed skill's. */
   readonly skillRoots: readonly string[];
   /** What goes ahead of a message to a runner already running. */
-  readonly ahead: (
-    agent: CodingAgent,
-  ) => Effect.Effect<HarnessAhead, E | LaunchRefused, RunnerServices>;
+  readonly ahead: (agent: Agent) => Effect.Effect<HarnessAhead, E | LaunchRefused, RunnerServices>;
 }
 
 /** How many hex characters of a launch's fingerprint its record keeps. */
@@ -541,7 +539,7 @@ export const runnerSessions = <
 
     /** The agent whose conversation the message is for. */
     const agentOf = (conversationId: string) =>
-      Effect.flatMap(readCodingAgentOfConversation(userId, conversationId), (agent) =>
+      Effect.flatMap(readAgentOfConversation(userId, conversationId), (agent) =>
         Option.isSome(agent)
           ? Effect.succeed(agent.value)
           : Effect.fail(new LaunchRefused({ reason: "no agent" })),
@@ -551,10 +549,10 @@ export const runnerSessions = <
     const ownsPlace = (found: FoundPlace) =>
       found.agentId === undefined
         ? Effect.succeed(false)
-        : Effect.map(readCodingAgent(userId, found.agentId), Option.isSome);
+        : Effect.map(readAgent(userId, found.agentId), Option.isSome);
 
     /** The repository's credential set at the running place's firewall again, minted afresh; an agent with no repository has none. */
-    const renewCredential = (target: ConversationTarget, agent: CodingAgent, place: MachinePlace) =>
+    const renewCredential = (target: ConversationTarget, agent: Agent, place: MachinePlace) =>
       Effect.gen(function* () {
         if (!hasRepository(agent)) return;
         const minted = yield* agentRepositoryToken(target, agent);
@@ -598,7 +596,7 @@ export const runnerSessions = <
      * than writing to a runner that waits for its config.
      */
     const launch = <AE, AR>(
-      agent: CodingAgent,
+      agent: Agent,
       place: {
         readonly name: MachineName;
         readonly running: MachinePlace;
@@ -668,7 +666,7 @@ export const runnerSessions = <
             first === undefined ? Effect.void : filesWritten(place.running, first),
             // An earlier launch's lines go but its untaken messages in the window, which this launch is handed.
             layout.linesRead ? clearedForLaunch(userId, agent.id) : Effect.void,
-            recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer)),
+            recordAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer)),
             alongside,
           ],
           { concurrency: "unbounded" },
@@ -717,11 +715,11 @@ export const runnerSessions = <
           );
         }
         // A released wait's wakeups go once the CLI has started again and taken its first
-        // message: it restores on resume what it can (`coding-agent-wakeups.ts`), so a copy Luke
+        // message: it restores on resume what it can (`agent-wakeups.ts`), so a copy Luke
         // still held would fire twice, or after the agent cancelled it. A launch that failed
         // before this leaves them for the sweep to deliver, and a delete that failed is logged,
         // never failing the launch that already runs.
-        yield* replaceCodingAgentWakeups(agent.id, []).pipe(
+        yield* replaceAgentWakeups(agent.id, []).pipe(
           Effect.catch((failure) =>
             Effect.logWarning(`a relaunched agent's wakeups were not handed back: ${failure._tag}`),
           ),
@@ -729,11 +727,11 @@ export const runnerSessions = <
       });
 
     /** Lines queued for the agent's runner to read, written for the launch named (`queuedFor`). */
-    const queued = (agent: CodingAgent, launch: number, lines: readonly InputLine[]) =>
+    const queued = (agent: Agent, launch: number, lines: readonly InputLine[]) =>
       queuedFor(userId, agent.id, launch, lines);
 
     /** Lines handed to the runner a place records, as it takes them (`deliveredTo`). */
-    const delivered = (agent: CodingAgent, runner: RecordedRunner, lines: readonly InputLine[]) =>
+    const delivered = (agent: Agent, runner: RecordedRunner, lines: readonly InputLine[]) =>
       deliveredTo(machine, userId, agent.id, runner, lines);
 
     /** The message as a line, under Luke's id for it where the caller named one, and the files it names, where the machine's layout keeps them. */
@@ -761,7 +759,7 @@ export const runnerSessions = <
      * eve's alone, whose compaction the row's steps are measured against.
      */
     const openedLine = (
-      agent: CodingAgent,
+      agent: Agent,
       sessionId: string,
       sent: RunnerMessage,
       fresh: boolean,
@@ -849,7 +847,7 @@ export const runnerSessions = <
      * would find it.
      */
     const openedPlace = (
-      agent: CodingAgent,
+      agent: Agent,
       sessionId: string,
       layout: MachineLayout,
       first: RunnerMessage | undefined,
@@ -889,7 +887,7 @@ export const runnerSessions = <
 
     /** The runner launched again in the running place given, its credential set afresh and the harness's session resumed; with no message of its own where it only hands on the lines an earlier launch never took. */
     const relaunched = (
-      agent: CodingAgent,
+      agent: Agent,
       sessionId: string,
       name: MachineName,
       running: MachinePlace,
@@ -901,7 +899,7 @@ export const runnerSessions = <
         const [, routing, credential] = yield* Effect.all(
           [
             renewCredential(target, agent, running),
-            readCodingAgentRouting(userId, agent.id),
+            readAgentRouting(userId, agent.id),
             harness.launch(agent),
           ],
           { concurrency: "unbounded" },
@@ -927,7 +925,7 @@ export const runnerSessions = <
      * what it has, and one from before fingerprints were tagged is never
      * read as stale.
      */
-    const staleWarm = (agent: CodingAgent, runner: RunnerMark, turnRunning: boolean) =>
+    const staleWarm = (agent: Agent, runner: RunnerMark, turnRunning: boolean) =>
       Effect.gen(function* () {
         if (runner.fingerprint === undefined || turnRunning) return false;
         const credential = yield* harness.launch(agent);
@@ -1017,12 +1015,10 @@ export const runnerSessions = <
             { concurrency: "unbounded" },
           );
           const lines = [...ahead.lines, opened.line];
-          // Note that a write to stdin is that runner's liveness check: Vercel refuses stdin to a
-          // command that exited (`command_not_found_or_exited`, a 404), or whose sandbox is
-          // stopping under it, which relaunches below, because reading the exit first waits out
-          // `EXIT_WAIT` on a runner that runs. A runner that reads its lines is queued them only
-          // where its exit read none, and one that ends before it takes them hands them to the
-          // launch its END starts (`deliverWaiting`).
+          // Note that a runner that reads its lines, as a sandbox's does, is queued them only where
+          // its exit read none, and one that ends before it takes them hands them to the launch its
+          // END starts (`deliverWaiting`). A write to a Mac's runner is its own liveness check: one
+          // whose launch line its Mac settled answers `NOT_FOUND_STATUS`, which relaunches below.
           const wrote =
             uploaded &&
             (reads
@@ -1111,7 +1107,7 @@ export const runnerSessions = <
      * exited before the line reached it (Vercel's 404), is a Stop taken all
      * the same, with no line to write, which the force settles.
      */
-    const cancelHolding = (sessionId: string, turnId: string, agent: CodingAgent) =>
+    const cancelHolding = (sessionId: string, turnId: string, agent: Agent) =>
       Effect.gen(function* () {
         const found = yield* firstPlace(machine, sessionId);
         if (Option.isNone(found) || found.value.agentId !== agent.id) {
@@ -1153,7 +1149,7 @@ export const runnerSessions = <
     const forcedStop = (
       sessionId: string,
       turnId: string,
-      agent: CodingAgent,
+      agent: Agent,
       launch: number | undefined,
     ) =>
       Effect.andThen(
@@ -1175,7 +1171,7 @@ export const runnerSessions = <
                 `A ${harness.name} runner did not end its turn on a Stop, and was ended`,
               );
               yield* machine.kill(live.handle);
-              yield* recordCodingAgentRunnerToken(userId, agent.id, null);
+              yield* recordAgentRunnerToken(userId, agent.id, null);
               yield* machine.recordRunner(recordOf(found.value, agent.id), {
                 kind: RUNNER_RECORD.NONE,
               });
@@ -1215,7 +1211,7 @@ export const runnerSessions = <
           yield* machine.kill(handle);
           yield* exited;
         }
-        yield* recordCodingAgentRunnerToken(userId, agent.id, null);
+        yield* recordAgentRunnerToken(userId, agent.id, null);
         yield* machine.recordRunner(recordOf(found.value, agent.id), { kind: RUNNER_RECORD.NONE });
       });
 
@@ -1246,7 +1242,7 @@ export const runnerSessions = <
      * whose runner takes its lines on stdin, which queues none. Answers
      * whether a runner was launched.
      */
-    const deliverWaitingHolding = (sessionId: string, agent: CodingAgent) =>
+    const deliverWaitingHolding = (sessionId: string, agent: Agent) =>
       Effect.gen(function* () {
         const found = yield* firstPlace(machine, sessionId);
         if (Option.isNone(found) || found.value.agentId !== agent.id) return false;
@@ -1278,7 +1274,7 @@ export const runnerSessions = <
      * agent reads failed at once rather than starting until its grace runs
      * out. The line the Start wrote stands. A write that fails is logged.
      */
-    const launchFailed = (agent: CodingAgent) => (failure: { readonly _tag: string }) =>
+    const launchFailed = (agent: Agent) => (failure: { readonly _tag: string }) =>
       Effect.gen(function* () {
         yield* Effect.logWarning(
           `A ${harness.name} launch failed after its Start: ${failure instanceof LaunchRefused ? failure.reason : describeFailure(failure)}`,
@@ -1316,7 +1312,7 @@ export const runnerSessions = <
      * session by then, said in the log, so no line waits that no launch will
      * read.
      */
-    const handedOn = (sessionId: string, agent: CodingAgent, lineId: string) =>
+    const handedOn = (sessionId: string, agent: Agent, lineId: string) =>
       Effect.gen(function* () {
         const found = yield* firstPlace(machine, sessionId);
         if (Option.isSome(found) && found.value.agentId === agent.id) {
@@ -1486,8 +1482,7 @@ export const runnerSessions = <
           return yield* Effect.gen(function* () {
             const found = yield* firstPlace(machine, sessionId);
             const agentId = Option.isSome(found) ? found.value.agentId : undefined;
-            const agent =
-              agentId === undefined ? Option.none() : yield* readCodingAgent(userId, agentId);
+            const agent = agentId === undefined ? Option.none() : yield* readAgent(userId, agentId);
             if (Option.isNone(agent)) {
               return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
             }
@@ -1522,7 +1517,7 @@ export const runnerSessions = <
             retired += 1;
             // The bearer goes first, so a runner still up is refused by Luke before its place is gone.
             if (place.agentId !== undefined) {
-              yield* recordCodingAgentRunnerToken(userId, place.agentId, null);
+              yield* recordAgentRunnerToken(userId, place.agentId, null);
             }
             yield* machine.discard(place);
           }

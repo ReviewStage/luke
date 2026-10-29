@@ -11,8 +11,8 @@
 import { sql } from "drizzle-orm";
 import { bigint, index, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
+import { agentTable } from "./agent.js";
 import { user } from "./auth.js";
-import { codingAgent } from "./coding-agent.js";
 
 /**
  * One line to a cloud agent's runner, in the order the service wrote them:
@@ -33,7 +33,7 @@ export const runnerLine = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     agentId: uuid("agent_id")
       .notNull()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),

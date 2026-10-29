@@ -1,4 +1,5 @@
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { ARCHIVE_DRAWN, type ArchiveDrawn } from "@luke/features/agent-view";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import {
   ArchiveIcon,
   BUTTON_SIZE,
@@ -24,14 +25,10 @@ import { Schema } from "effect";
 import { useRef, useState } from "react";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useBusyPress } from "../settings/busy-press.js";
+import { agentName, agentStillWriting, teammateStarter } from "../tasks/agent-model.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
-import { agentName, agentStillWriting, teammateStarter } from "../tasks/coding-agent-model.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
-import {
-  ARCHIVE_DRAWN,
-  type ArchiveDrawn,
-  type CodingAgentsControl,
-} from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { type MenuAction, rowMenu } from "./action-menu.js";
@@ -59,7 +56,7 @@ import { type CountNoun, foldedCount } from "./sidebar-fold.js";
  * summary, the "+" menu, and the sidebar's card and marks, while its
  * transcript and its pull request are kept, ⌘K still finds it, saying it is
  * archived and opening its own page, and a toast offers Undo
- * (`use-coding-agents.ts`).
+ * (`use-agents.ts`).
  *
  * The archived agents are folded away behind the header every group of the
  * window folds under (`GroupHeader`), an archive box that gives way to the fold's
@@ -117,7 +114,7 @@ function archiveQuestion(name: string): DialogQuestion {
 }
 
 /** A press that archives or unarchives without a dialog, its refusal said in a toast. */
-function useArchivePress(agents: CodingAgentsControl) {
+function useArchivePress(agents: AgentsControl) {
   const toast = useToast();
   return (agentId: string, archived: boolean, drawn?: ArchiveDrawn) =>
     agents.onArchive(agentId, archived, drawn).then((result: ActionResult) => {
@@ -135,7 +132,7 @@ export interface AgentArchive {
 }
 
 /** An archived agent's Unarchive as a menu offers it, its refusal said in a toast. */
-export function useAgentUnarchive(agentId: string, agents: CodingAgentsControl): MenuAction {
+export function useAgentUnarchive(agentId: string, agents: AgentsControl): MenuAction {
   const press = useArchivePress(agents);
   return commandAction(PANEL_COMMAND.UNARCHIVE_AGENT, () => press(agentId, false), false);
 }
@@ -148,11 +145,8 @@ export function useAgentUnarchive(agentId: string, agents: CodingAgentsControl):
  * about while it works. The question goes with the surface it was asked on.
  */
 export function useAgentArchive(
-  agent: Pick<
-    CodingAgentSummary,
-    "id" | "status" | "title" | "automationName" | "model" | "startedBy"
-  >,
-  agents: CodingAgentsControl,
+  agent: Pick<AgentSummary, "id" | "status" | "title" | "automationName" | "model" | "startedBy">,
+  agents: AgentsControl,
   shown: boolean,
 ): AgentArchive {
   const press = useArchivePress(agents);
@@ -200,8 +194,8 @@ function ArchivedAgentRow({
   agents,
   shown,
 }: {
-  agent: CodingAgentSummary;
-  agents: CodingAgentsControl;
+  agent: AgentSummary;
+  agents: AgentsControl;
   shown: boolean;
 }): React.JSX.Element {
   const press = useArchivePress(agents);
@@ -262,7 +256,7 @@ export function ArchivedAgents({
   agents,
   shown,
 }: {
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** Whether the summary is on screen: off it, an archived row's menu stands over nothing. */
   shown: boolean;
 }): React.JSX.Element | null {

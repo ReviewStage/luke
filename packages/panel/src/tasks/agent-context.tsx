@@ -1,4 +1,4 @@
-import type { CodingAgentBrief, CodingAgentContext } from "@luke/features/coding-agent-wire";
+import type { AgentBrief, AgentContext } from "@luke/features/agent-wire";
 import {
   AnchoredPopover,
   Fact,
@@ -102,8 +102,8 @@ function ContextBody({
   context,
   brief,
 }: {
-  context: CodingAgentContext;
-  brief: CodingAgentBrief | undefined;
+  context: AgentContext;
+  brief: AgentBrief | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const rows = contextRows(context, brief);
@@ -164,8 +164,8 @@ function ContextPopover({
   /** Whether it stands; closed, it fades out. */
   open: boolean;
   id: string;
-  context: CodingAgentContext;
-  brief: CodingAgentBrief | undefined;
+  context: AgentContext;
+  brief: AgentBrief | undefined;
   /** Closes the popover and hands focus back to the ring. */
   onClose: () => void;
   /** Focus left the popover for `left`; the owner closes unless that is still its own. */
@@ -192,9 +192,9 @@ export function AgentContextRing({
   onOpenChange,
 }: {
   /** What the agent's model's context holds, as the transcript's last page said; nothing before a step ended, which draws no ring. */
-  context: CodingAgentContext | undefined;
+  context: AgentContext | undefined;
   /** What the agent was handed, which names the brief's row. */
-  brief: CodingAgentBrief | undefined;
+  brief: AgentBrief | undefined;
   /** Whether the popover stands, where the owner holds it, as the composer does so its ⋯ menu can open it; the ring's own otherwise. */
   open?: boolean | undefined;
   onOpenChange?: ((open: boolean) => void) | undefined;

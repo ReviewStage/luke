@@ -9,7 +9,9 @@ import type { ReactNode } from "react";
  * none is drawn while nothing waits.
  *
  * Its quieter sibling, `CornerDot`, says only that something is so, a view
- * filtered, with a dot over a press's corner rather than a number.
+ * filtered, with a dot over a press's corner rather than a number; and
+ * `CornerBadge` says what kind of thing a press is, an experiment, with a
+ * small glyph on a disc at its corner.
  */
 
 /** `children`, a glyph, with `count` at its corner while it is more than none. */
@@ -61,6 +63,37 @@ export function CornerDot({
           aria-hidden="true"
         />
       ) : null}
+    </span>
+  );
+}
+
+/**
+ * `children`, a press, wearing `mark`, a glyph, on a small disc over its top
+ * end corner: the experiment's flask on a control that is still one, as an
+ * app's icon wears a beta badge. The disc is quiet, neutral and hairlined
+ * like the Experimental tag, opaque so the press's edge does not show
+ * through it. It is a picture the caller says in its press's hint, so it is
+ * hidden from a reader and takes no pointer, and a press on it presses the
+ * control beneath.
+ */
+export function CornerBadge({
+  mark,
+  children,
+}: {
+  /** The glyph on the disc. */
+  mark: ReactNode;
+  /** The press the badge stands on. */
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <span className="luke-corner-badge relative inline-flex min-w-0">
+      {children}
+      <span
+        className="luke-corner-badge-mark pointer-events-none absolute -top-luke-6 -right-luke-6 inline-grid size-corner-badge place-items-center rounded-disc border border-border-strong bg-ground text-muted-foreground [&>svg]:size-corner-badge-glyph"
+        aria-hidden="true"
+      >
+        {mark}
+      </span>
     </span>
   );
 }

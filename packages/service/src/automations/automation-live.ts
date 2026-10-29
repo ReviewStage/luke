@@ -6,8 +6,8 @@ import {
 import { queryBuilder } from "@luke/database/core/query";
 import { agentGivenNameSql } from "@luke/database/models/agent-name";
 import { AUTOMATION_COLUMNS, automationReadableBy } from "@luke/database/models/automation-store";
+import { agentTable } from "@luke/database/schemas/agent";
 import { automation, automationRun } from "@luke/database/schemas/automation";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { Option } from "effect";
 import {
@@ -42,12 +42,12 @@ export const AUTOMATION_RUNS_READ = 50;
 function runAgentSelection(userId: string, latest: ReturnType<typeof latestTurnOf>) {
   return liveSelection(
     {
-      agentId: codingAgent.id,
+      agentId: agentTable.id,
       // The name the agent goes by: Luke for an operator, else its title.
       agentTitle: sql<
         string | null
-      >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
-      ownKey: eq(codingAgent.userId, userId),
+      >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+      ownKey: eq(agentTable.userId, userId),
       turnId: latest.id,
       turnStatus: latest.status,
       cancelRequested: isNotNull(latest.cancelRequestedAt),
@@ -55,10 +55,10 @@ function runAgentSelection(userId: string, latest: ReturnType<typeof latestTurnO
       failureWord: failureWordOf(latest),
     },
     {
-      agentCreatedAt: codingAgent.createdAt,
+      agentCreatedAt: agentTable.createdAt,
       turnQueuedAt: latest.queuedAt,
       turnSettledAt: latest.settledAt,
-      awaitingLineAt: awaitingLineAtIn(codingAgent.conversationId),
+      awaitingLineAt: awaitingLineAtIn(agentTable.conversationId),
     },
   );
 }
@@ -79,7 +79,7 @@ export function automationsLiveStatements(
       firing: automationRun.firing,
       status: automationRun.status,
       reason: automationRun.reason,
-      codingAgentId: automationRun.codingAgentId,
+      agentId: automationRun.agentId,
       firedAt: automationRun.firedAt,
       settledAt: automationRun.settledAt,
     })
@@ -88,7 +88,7 @@ export function automationsLiveStatements(
     .orderBy(desc(automationRun.firedAt), desc(automationRun.id))
     .limit(1)
     .as("last_run");
-  const latest = latestTurnOf(codingAgent.conversationId, "latest_turn");
+  const latest = latestTurnOf(agentTable.conversationId, "latest_turn");
   const { nextRunAt, createdAt, updatedAt: _updatedAt, ...columns } = AUTOMATION_COLUMNS;
   const statement = queryBuilder
     .select({
@@ -117,7 +117,7 @@ export function automationsLiveStatements(
     })
     .from(automation)
     .leftJoinLateral(lastRun, sql`true`)
-    .leftJoin(codingAgent, eq(codingAgent.id, lastRun.codingAgentId))
+    .leftJoin(agentTable, eq(agentTable.id, lastRun.agentId))
     .leftJoinLateral(latest, sql`true`)
     .where(and(automationReadableBy(userId), eq(automation.organizationId, workspaceId)));
   return Option.map(liveStatementOf(statement), (automations) => ({ automations }));
@@ -139,7 +139,7 @@ export function automationRunsLiveStatements(
     .where(eq(automationRun.automationId, automationId))
     .orderBy(desc(automationRun.firedAt), desc(automationRun.id))
     .limit(AUTOMATION_RUNS_READ);
-  const latest = latestTurnOf(codingAgent.conversationId, "latest_turn");
+  const latest = latestTurnOf(agentTable.conversationId, "latest_turn");
   const statement = queryBuilder
     .select({
       ...liveSelection(
@@ -155,7 +155,7 @@ export function automationRunsLiveStatements(
     })
     .from(automationRun)
     .innerJoin(automation, eq(automation.id, automationRun.automationId))
-    .leftJoin(codingAgent, eq(codingAgent.id, automationRun.codingAgentId))
+    .leftJoin(agentTable, eq(agentTable.id, automationRun.agentId))
     .leftJoinLateral(latest, sql`true`)
     .where(
       and(
@@ -194,7 +194,7 @@ export function automationWorkspaceRunsLiveStatements(
     .where(readable)
     .orderBy(desc(automationRun.firedAt), desc(automationRun.id))
     .limit(AUTOMATION_WORKSPACE_RUNS_READ);
-  const latest = latestTurnOf(codingAgent.conversationId, "latest_turn");
+  const latest = latestTurnOf(agentTable.conversationId, "latest_turn");
   const statement = queryBuilder
     .select({
       ...liveSelection(
@@ -212,7 +212,7 @@ export function automationWorkspaceRunsLiveStatements(
     })
     .from(automationRun)
     .innerJoin(automation, eq(automation.id, automationRun.automationId))
-    .leftJoin(codingAgent, eq(codingAgent.id, automationRun.codingAgentId))
+    .leftJoin(agentTable, eq(agentTable.id, automationRun.agentId))
     .leftJoinLateral(latest, sql`true`)
     .where(and(readable, inArray(automationRun.id, newest)));
   return Option.map(liveStatementOf(statement), (runs) => ({ runs }));

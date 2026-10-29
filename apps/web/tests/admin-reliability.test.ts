@@ -2,8 +2,8 @@
 
 import type { AdminReliability } from "@luke/features/admin-answer-wire";
 import { ADMIN_ATTENTION_KIND } from "@luke/features/admin-wire";
+import { AGENT_FAILURE } from "@luke/features/agent-wire";
 import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
-import { CODING_AGENT_FAILURE } from "@luke/features/coding-agent-wire";
 import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
@@ -48,7 +48,7 @@ function reliability(overrides: Partial<AdminReliability> = {}): AdminReliabilit
       { day: "2026-10-16", lukeTurns: 0.01, agentRuns: 0.05, automationRuns: 0.04 },
       { day: "2026-10-17", lukeTurns: 0.02, agentRuns: null, automationRuns: null },
     ],
-    agentFailures: [{ failure: CODING_AGENT_FAILURE.MODEL, count: 40 }],
+    agentFailures: [{ failure: AGENT_FAILURE.MODEL, count: 40 }],
     automationReasons: [{ reason: AUTOMATION_RUN_REASON.CONCURRENCY, skipped: 90, failed: 0 }],
     attention: {
       total: 1,
@@ -189,8 +189,8 @@ test("each rate reads as a share with what it is a share of", async () => {
   const { page } = await openReliability(reliability());
 
   expect(cardOf(page, "Luke turns failed")).toBe("Luke turns failed1.4%412 of 29,880 turns");
-  expect(cardOf(page, "Coding-agent runs failed")).toBe(
-    "Coding-agent runs failed6.8%68 of 1,000 runs",
+  expect(cardOf(page, "Agent runs failed")).toBe(
+    "Agent runs failed6.8%68 of 1,000 runs",
   );
   expect(cardOf(page, "Abandoned by the sweep")).toBe(
     "Abandoned by the sweep37turns past their bound",

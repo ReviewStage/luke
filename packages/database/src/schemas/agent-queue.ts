@@ -9,11 +9,11 @@
 
 import type { HostedApiError } from "@luke/features";
 import type { QueuePause } from "@luke/features/agent-queue-wire";
-import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import type { AgentAttachment } from "@luke/features/agent-wire";
 import { index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
+import { agentTable } from "./agent.js";
 import { user } from "./auth.js";
-import { codingAgent } from "./coding-agent.js";
 
 /**
  * One queued message. `position` is its place in the agent's queue, the
@@ -35,7 +35,7 @@ export const queuedMessage = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     agentId: uuid("agent_id")
       .notNull()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -43,7 +43,7 @@ export const queuedMessage = pgTable(
     clientKey: text("client_key").notNull(),
     text: text("text").notNull(),
     /** The files that go with the words, as the message request carried them; null where none did. */
-    attachments: jsonb("attachments").$type<readonly CodingAgentAttachment[]>(),
+    attachments: jsonb("attachments").$type<readonly AgentAttachment[]>(),
     heldUntil: timestamptz("held_until"),
     claimedAt: timestamptz("claimed_at"),
     createdAt: createdAt(),
@@ -64,7 +64,7 @@ export const queuedMessage = pgTable(
 export const agentQueuePause = pgTable("agent_queue_pause", {
   agentId: uuid("agent_id")
     .primaryKey()
-    .references(() => codingAgent.id, { onDelete: "cascade" }),
+    .references(() => agentTable.id, { onDelete: "cascade" }),
   because: text("because").$type<QueuePause>().notNull(),
   refusal: text("refusal").$type<HostedApiError>(),
   pausedAt: timestamptz("paused_at").notNull(),
@@ -82,6 +82,6 @@ export const agentQueuePause = pgTable("agent_queue_pause", {
 export const agentQueueRevision = pgTable("agent_queue_revision", {
   agentId: uuid("agent_id")
     .primaryKey()
-    .references(() => codingAgent.id, { onDelete: "cascade" }),
+    .references(() => agentTable.id, { onDelete: "cascade" }),
   revision: integer("revision").notNull(),
 });

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import {
   PLAN_ACTOR,
   type PlanSectionEdit,

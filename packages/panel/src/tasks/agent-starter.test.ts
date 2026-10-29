@@ -2,15 +2,15 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_BRIEF,
+  AGENT_FAILURE,
+  AGENT_SENDER,
+  AGENT_STATUS,
+  type AgentPullRequest,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_FAILURE,
-  CODING_AGENT_SENDER,
-  CODING_AGENT_STATUS,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import { CALL_KIND } from "@luke/features/turn-rows";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
@@ -25,7 +25,6 @@ import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref.js";
 import {
   agentActor,
   endLineParts,
@@ -33,7 +32,8 @@ import {
   lineSender,
   macOwnerOf,
   teammateStarter,
-} from "./coding-agent-model.js";
+} from "./agent-model.js";
+import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref.js";
 import { MacOwnerProvider, TranscriptTool } from "./transcript-blocks.js";
 
 /**
@@ -62,20 +62,20 @@ const MEMBERS: readonly WorkspaceMember[] = [
 
 const WORKSPACE = { id: "workspace-acme", memberCount: MEMBERS.length };
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Invite flow",
   createdAt: 1_000,
-  status: CODING_AGENT_STATUS.FAILED,
+  status: AGENT_STATUS.FAILED,
   turnId: null,
-  brief: CODING_AGENT_BRIEF.PROMPT,
+  brief: AGENT_BRIEF.PROMPT,
   startedBy: CHARLES,
 };
 
-const PULL_REQUEST: CodingAgentPullRequest = {
+const PULL_REQUEST: AgentPullRequest = {
   number: 42,
   title: "Expire invitations",
   url: "https://github.com/acme/relay/pull/42",
@@ -128,7 +128,7 @@ function cards(): HTMLElement[] {
 /** The agent named where `readerId` reads it, as the Inbox's thread names it, its card hung once the pointer rests on it, and how many times it was opened. */
 async function agentNamed(
   readerId: string | undefined,
-  pullRequests: ReadonlyMap<string, CodingAgentPullRequest> = new Map(),
+  pullRequests: ReadonlyMap<string, AgentPullRequest> = new Map(),
 ) {
   const opened: string[] = [];
   const read = agentCardReading(AGENT, "Invite flow", NOTHING_HELD, false, {
@@ -148,7 +148,7 @@ async function agentNamed(
   const ref = view.querySelector("[data-agent-ref]") ?? assert.fail("the agent is named");
   hover(ref);
   const card = cards()[0] ?? assert.fail("a card hangs");
-  assert.ok(card.querySelector("[data-tab-card]"), "the agent's card hangs");
+  assert.ok(card.querySelector("[data-agent-card]"), "the agent's card hangs");
   return { card, opened };
 }
 
@@ -160,11 +160,18 @@ test("a teammate's agent's card says it was started by them, their disc and name
   assert.equal(teammateStarter(AGENT.startedBy, undefined), undefined);
 
   const { card } = await agentNamed(DEAN.userId);
-  const line = card.querySelector(".actor-words") ?? assert.fail("the card names its starter");
-  const starter = line.querySelector<HTMLElement>("[data-actor-ref]") ?? assert.fail("as an actor");
-  assert.equal(line.firstChild?.textContent, "Started by ");
+  const row =
+    card.querySelector(".luke-hover-card-row") ?? assert.fail("the card names its starter");
+  const starter = row.querySelector<HTMLElement>("[data-actor-ref]") ?? assert.fail("as an actor");
+  assert.match(
+    row.querySelector(".luke-hover-card-row-label")?.textContent ?? "",
+    /^Started by Charles Pan · /u,
+  );
   assert.equal(starter.querySelector(".luke-inline-ref-label")?.textContent, "Charles Pan");
-  assert.equal(starter.querySelector("img")?.getAttribute("src"), CHARLES_PICTURE);
+  assert.equal(
+    row.querySelector(".luke-hover-card-row-glyph img")?.getAttribute("src"),
+    CHARLES_PICTURE,
+  );
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -179,13 +186,14 @@ test("a teammate's agent's card says it was started by them, their disc and name
 
 test("the starter's name on an agent's card hangs their own card over it, read only, and the agent's card stays standing beneath", async () => {
   const { card } = await agentNamed(DEAN.userId);
-  const starter = card.querySelector(".actor-words [data-actor-ref]") ?? assert.fail("the starter");
+  const starter =
+    card.querySelector(".luke-hover-card-row [data-actor-ref]") ?? assert.fail("the starter");
   assert.equal(starter.tagName, "SPAN", "a person has no page to press through to");
 
   hover(starter);
   const standing = cards();
   assert.equal(standing.length, 2, "the person's card hangs over the agent's");
-  assert.ok(standing[0]?.querySelector("[data-tab-card]"), "the agent's card still stands");
+  assert.ok(standing[0]?.querySelector("[data-agent-card]"), "the agent's card still stands");
   const person = standing[1]?.querySelector("[data-actor-card='person']");
   assert.ok(person, "the starter's own card hangs");
   assert.match(person.textContent ?? "", /Charles Pan.*charles@example\.com.*Member/u);
@@ -217,7 +225,8 @@ async function stacked() {
   pass(PAST_ANY_WAIT);
   const control = document.querySelector("[data-agent-ref]") ?? assert.fail("the agent is named");
   move(control, card);
-  const starter = card.querySelector(".actor-words [data-actor-ref]") ?? assert.fail("the starter");
+  const starter =
+    card.querySelector(".luke-hover-card-row [data-actor-ref]") ?? assert.fail("the starter");
   move(card, starter);
   pass(PAST_ANY_WAIT);
   const theirs = cards()[1] ?? assert.fail("the starter's card hangs over the agent's");
@@ -234,7 +243,7 @@ test("the pointer resting on a starter's card keeps both it and the agent's card
     pass(PAST_ANY_WAIT);
     const standing = cards();
     assert.equal(standing.length, 2, "both cards stand while the pointer rests on the upper");
-    assert.ok(standing[0]?.querySelector("[data-tab-card]"), "the agent's card");
+    assert.ok(standing[0]?.querySelector("[data-agent-card]"), "the agent's card");
     assert.ok(standing[1]?.querySelector("[data-actor-card='person']"), "the starter's card");
   } finally {
     vi.useRealTimers();
@@ -262,7 +271,7 @@ test("the pointer going back from a starter's card to the agent's keeps the agen
     pass(PAST_ANY_WAIT);
     const standing = cards();
     assert.equal(standing.length, 1);
-    assert.ok(standing[0]?.querySelector("[data-tab-card]"), "the agent's card stands");
+    assert.ok(standing[0]?.querySelector("[data-agent-card]"), "the agent's card stands");
     const outside = document.body.appendChild(document.createElement("div"));
     move(card, outside);
     pass(PAST_ANY_WAIT);
@@ -280,21 +289,25 @@ test("the pointer going from a starter's card back onto the agent's own name kee
     pass(PAST_ANY_WAIT);
     const standing = cards();
     assert.equal(standing.length, 1);
-    assert.ok(standing[0]?.querySelector("[data-tab-card]"), "the agent's card stands");
+    assert.ok(standing[0]?.querySelector("[data-agent-card]"), "the agent's card stands");
   } finally {
     vi.useRealTimers();
   }
 });
 
-test("an agent's card wears its tile beside its name and its pull request at the corner where the plan holds one, and offers no Open agent, since the name it hangs from opens the tab", async () => {
+test("an agent's card wears its tile beside its name, its pull request on a row of its own where the plan holds one with only its standing at the corner, and offers no Open agent, since the name it hangs from opens the tab", async () => {
   const { card, opened } = await agentNamed(DEAN.userId, new Map([[AGENT.id, PULL_REQUEST]]));
   const tile = card.querySelector<HTMLElement>(".luke-hover-card-lead > .actor-mark");
   assert.equal(tile?.dataset.kind, "agent");
   assert.equal(tile?.dataset.size, "card");
   const corner =
     card.querySelector(".luke-hover-card-corner") ?? assert.fail("the head has a corner");
-  assert.ok(corner.querySelector("[data-pull-request-mark]"), "the pull request's mark leads it");
-  assert.match(corner.textContent ?? "", /^#42 · Failed/u);
+  assert.equal(corner.querySelector("[data-pull-request-mark]"), null, "no pull request in it");
+  assert.match(corner.textContent ?? "", /^Failed · /u);
+  const pullRequest = [...card.querySelectorAll(".luke-hover-card-row")].find(
+    (row) => row.querySelector("[data-pull-request-mark]") !== null,
+  );
+  assert.equal(pullRequest?.textContent, "#42 Expire invitations");
 
   const offers = [...card.querySelectorAll("button")].map((button) => button.textContent ?? "");
   assert.deepEqual(
@@ -312,22 +325,18 @@ test("an agent's card wears its tile beside its name and its pull request at the
 });
 
 test("a key a teammate's agent failed on is named as theirs, with no Settings of the reader's to mend it", () => {
-  const failed = (failure: typeof CODING_AGENT_FAILURE.PROVIDER_KEY, starter?: string) =>
-    endLineParts(CODING_AGENT_STATUS.FAILED, failure, starter)?.words;
+  const failed = (failure: typeof AGENT_FAILURE.PROVIDER_KEY, starter?: string) =>
+    endLineParts(AGENT_STATUS.FAILED, failure, starter)?.words;
 
   assert.equal(
-    failed(CODING_AGENT_FAILURE.PROVIDER_KEY, "Charles Pan"),
+    failed(AGENT_FAILURE.PROVIDER_KEY, "Charles Pan"),
     "Failed: Charles Pan's API key was refused or cannot be read",
   );
+  assert.equal(endLineReason(AGENT_FAILURE.PROVIDER_KEY, "Charles Pan"), FAILURE_REASON.OTHER);
+  assert.match(failed(AGENT_FAILURE.PROVIDER_KEY) ?? "", /your API key was refused/u);
+  assert.equal(endLineReason(AGENT_FAILURE.PROVIDER_KEY), FAILURE_REASON.API_KEY);
   assert.equal(
-    endLineReason(CODING_AGENT_FAILURE.PROVIDER_KEY, "Charles Pan"),
-    FAILURE_REASON.OTHER,
-  );
-  assert.match(failed(CODING_AGENT_FAILURE.PROVIDER_KEY) ?? "", /your API key was refused/u);
-  assert.equal(endLineReason(CODING_AGENT_FAILURE.PROVIDER_KEY), FAILURE_REASON.API_KEY);
-  assert.equal(
-    endLineParts(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.FAST_ON_OWN_KEY, "Charles Pan")
-      ?.words,
+    endLineParts(AGENT_STATUS.FAILED, AGENT_FAILURE.FAST_ON_OWN_KEY, "Charles Pan")?.words,
     "Failed: Fast isn't available on Charles Pan's own API key; choose the model with Fast off",
   );
 });
@@ -395,7 +404,7 @@ test("a starter or sender who left keeps their picture and their account's name 
 
   assert.deepEqual(macOwnerOf(lee, MEMBERS, "user-dean", former), left);
   assert.deepEqual(
-    lineSender({ ...lee, kind: CODING_AGENT_SENDER.MEMBER }, "user-dean", MEMBERS, former),
+    lineSender({ ...lee, kind: AGENT_SENDER.MEMBER }, "user-dean", MEMBERS, former),
     left,
   );
 });

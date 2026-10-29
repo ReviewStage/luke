@@ -113,9 +113,9 @@ export const AGENT_ACT_KIND = {
    * for good (stopped first the same way). The
    * window holds what it draws; nothing here does.
    */
-  CODING_AGENTS_MODELS: "codingAgents.models",
-  CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
-  CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
+  AGENTS_MODELS: "agents.models",
+  AGENTS_DEFAULT_READ: "agents.defaultRead",
+  AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
   /**
    * The account's hosts as Settings › Hosts reads and changes
    * them: listed, the beats of the account's devices read, one removed, an install token kept by its hash alone (the
@@ -126,59 +126,60 @@ export const AGENT_ACT_KIND = {
   HOSTS_REMOVE: "hosts.remove",
   HOSTS_KEEP_INSTALL_TOKEN: "hosts.keepInstallToken",
   HOSTS_REVOKE_INSTALL_TOKEN: "hosts.revokeInstallToken",
-  CODING_AGENTS_LIST: "codingAgents.list",
+  AGENTS_LIST: "agents.list",
   /** One workspace's agents, newest started first: what an automation's Same agent is chosen from. */
-  CODING_AGENTS_WORKSPACE_LIST: "codingAgents.workspaceList",
-  CODING_AGENTS_START: "codingAgents.start",
-  CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  AGENTS_WORKSPACE_LIST: "agents.workspaceList",
+  AGENTS_START: "agents.start",
+  AGENTS_MESSAGES: "agents.messages",
   /**
    * One agent's transcript, a worker's, or a task's planning worker's,
    * followed while the window holds the stream open: its pages, the first
    * from the start and each later one what moved past the last.
    */
-  CODING_AGENTS_TRANSCRIPT: "codingAgents.transcript",
+  AGENTS_TRANSCRIPT: "agents.transcript",
   /** One part of a message of a transcript, whole: what its followed page carried cut, fetched as the window opens it. */
-  CODING_AGENTS_PART: "codingAgents.part",
+  AGENTS_PART: "agents.part",
   /** The page of a followed transcript below the oldest message the window holds, as its newest or last older page named it; or why there is none. */
-  CODING_AGENTS_TRANSCRIPT_OLDER: "codingAgents.transcriptOlder",
-  CODING_AGENTS_MESSAGE: "codingAgents.message",
-  CODING_AGENTS_CHOOSE: "codingAgents.choose",
-  CODING_AGENTS_RENAME: "codingAgents.rename",
-  CODING_AGENTS_SERVERS: "codingAgents.servers",
-  CODING_AGENTS_QUEUE: "codingAgents.queue",
-  CODING_AGENTS_STOP: "codingAgents.stop",
-  CODING_AGENTS_REWIND: "codingAgents.rewind",
-  CODING_AGENTS_ARCHIVE: "codingAgents.archive",
-  CODING_AGENTS_PIN: "codingAgents.pin",
+  AGENTS_TRANSCRIPT_OLDER: "agents.transcriptOlder",
+  AGENTS_MESSAGE: "agents.message",
+  AGENTS_CHOOSE: "agents.choose",
+  AGENTS_RENAME: "agents.rename",
+  AGENTS_SERVERS: "agents.servers",
+  AGENTS_QUEUE: "agents.queue",
+  AGENTS_STOP: "agents.stop",
+  AGENTS_REWIND: "agents.rewind",
+  AGENTS_ARCHIVE: "agents.archive",
+  AGENTS_PIN: "agents.pin",
   /** The account's operator in a workspace, Luke, ensured: the one standing, made where none stands, or, with a reset, a fresh one in place of it. */
-  CODING_AGENTS_ENSURE_OPERATOR: "codingAgents.ensureOperator",
-  CODING_AGENTS_DELETE: "codingAgents.delete",
+  AGENTS_ENSURE_OPERATOR: "agents.ensureOperator",
+  AGENTS_DELETE: "agents.delete",
   /**
    * Which agent's tab the panel shows, or none: what an agent's end leaves no
    * unseen dot for while the window is focused, and what clears that dot.
    */
-  CODING_AGENTS_SHOWN: "codingAgents.shown",
+  AGENTS_SHOWN: "agents.shown",
   /** An agent's unseen dot cleared by hand, without its page being shown: its row's Mark as read. */
-  CODING_AGENTS_SEEN: "codingAgents.seen",
-  CODING_AGENTS_PAGE: "codingAgents.page",
+  AGENTS_SEEN: "agents.seen",
+  AGENTS_PAGE: "agents.page",
   /** What one agent published: its branch and pull request as GitHub holds them. */
-  CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
+  AGENTS_PULL_REQUEST: "agents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
-  CODING_AGENTS_CHANGES: "codingAgents.changes",
+  AGENTS_CHANGES: "agents.changes",
   /** One agent's pull request itself, its description, branches, mergeability, and people, which its Pull request tab's overview draws. */
-  CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
+  AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
   /** What the reviewer and label pickers of an agent's Pull request tab offer. */
-  CODING_AGENTS_REVIEW_OPTIONS: "codingAgents.reviewOptions",
+  AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
+  AGENTS_LUKE_TOOLS: "agents.lukeTools",
   /** The checks on one agent's pull request's head, which its Pull request tab's overview draws. */
-  CODING_AGENTS_OVERVIEW_CHECKS: "codingAgents.overviewChecks",
+  AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
   /** One agent's pull request's conversation and where its reviewers stand, which its Pull request tab's overview draws. */
-  CODING_AGENTS_OVERVIEW_CONVERSATION: "codingAgents.overviewConversation",
+  AGENTS_OVERVIEW_CONVERSATION: "agents.overviewConversation",
   /** One image an agent's pull request's overview names, its bytes read by the service on the App's token. */
-  CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
+  AGENTS_GITHUB_IMAGE: "agents.githubImage",
   /** One change to an agent's pull request, such as marking it ready for review, made on GitHub as the account on its own GitHub sign-in. */
-  CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
+  AGENTS_PULL_REQUEST_ACTION: "agents.pullRequestAction",
   /** Which of an agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in. */
-  CODING_AGENTS_PULL_REQUEST_VIEWED: "codingAgents.pullRequestViewed",
+  AGENTS_PULL_REQUEST_VIEWED: "agents.pullRequestViewed",
 } as const;
 
 /**
@@ -196,28 +197,28 @@ export const AGENT_INBOX_ACT_KIND = {
    * stream open: what it holds, whole, each time it changes, or why there
    * is none.
    */
-  CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
+  AGENTS_INBOX_FOLLOW: "agents.inboxFollow",
   /**
    * Every inbox item the account reaches, followed while the window holds
    * the stream open: by the plans and agents with no task they are on,
    * whole as the stream opens and then those that moved, or why there are
    * none.
    */
-  CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW: "codingAgents.accountItemsFollow",
-  CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  AGENTS_ACCOUNT_ITEMS_FOLLOW: "agents.accountItemsFollow",
+  AGENTS_INBOX_ANSWER: "agents.inboxAnswer",
   /** One open item closed without an answer against the revision the panel drew, under the panel's own key. */
-  CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
+  AGENTS_INBOX_CLOSE: "agents.inboxClose",
   /** A message on one item's thread, open or settled, under the panel's own key; it never answers the item. */
-  CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
+  AGENTS_INBOX_MESSAGE: "agents.inboxMessage",
   /** A new thread with one agent, its subject and first message, under the panel's own key. */
-  CODING_AGENTS_INBOX_START: "codingAgents.inboxStart",
+  AGENTS_INBOX_START: "agents.inboxStart",
   /** One item marked read or unread for the account; it changes neither what the item asks nor whether it waits. */
-  CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",
+  AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
   /** Every item of the account's Inbox marked read, in one workspace or in all; the dots alone. */
-  CODING_AGENTS_INBOX_READ_ALL: "codingAgents.inboxReadAll",
+  AGENTS_INBOX_READ_ALL: "agents.inboxReadAll",
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
-  CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
-  CODING_AGENTS_PICTURE: "codingAgents.picture",
+  AGENTS_INBOX_ATTACHMENT: "agents.inboxAttachment",
+  AGENTS_PICTURE: "agents.picture",
 } as const;
 
 /**

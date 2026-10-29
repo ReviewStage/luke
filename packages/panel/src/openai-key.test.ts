@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
@@ -110,9 +110,7 @@ test("with no OpenAI key saved, Dictate says to add one in settings, and the pre
   assert.equal(page.button("Dictate").length, 0);
   assert.equal(press.disabled, false, "the press is the way to Settings");
   act(() => press.click());
-  assert.deepEqual(page.opened, [
-    { page: SETTINGS_VIEW.CODING_AGENTS, section: SETTINGS_SECTION.CODEX },
-  ]);
+  assert.deepEqual(page.opened, [{ page: SETTINGS_VIEW.AGENTS, section: SETTINGS_SECTION.CODEX }]);
 });
 
 test("with an OpenAI key saved, Dictate is offered", async () => {
@@ -143,7 +141,7 @@ test("until the keys are read, when the read fails, and while no one is signed i
   act(() => roots.pop()?.unmount());
 
   for (const failed of [
-    () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     () => Promise.reject(new Error("The port is closed.")),
   ]) {
     const page = await mount(failed);

@@ -4,13 +4,14 @@
  * The function exports the `http.Server` this builds, and Vercel upgrades
  * WebSockets into it, as it does the terminal relay's. An upgrade is
  * refused before any socket stands where it is not this service's path or
- * names no task and tab; then by who is asking, on the terms the terminal
+ * names no agent and tab, or, from a desktop built before the agent was
+ * named, no task and tab; then by who is asking, on the terms the terminal
  * relay keeps too (`http/relay-upgrade.ts`): the desktop's bearer with no
  * `Origin`, or a page of the deployment's own origins by its session
  * cookie, read as every hosted route reads a browser's, so another site's
  * page that opens a socket here with the member's cookie is refused before
  * it is read. An account that does not resolve is refused, and so is a tab
- * it does not reach (`readTaskBrowserTab`), as not found, so no socket ever
+ * it does not reach (`readBrowserTab`), as not found, so no socket ever
  * stands for a tab its member cannot read. Every admitted socket is one
  * fiber of the service's own set, so the service's scope ending ends them
  * all, each handing back a takeover it took.
@@ -18,6 +19,7 @@
 
 import type { IncomingHttpHeaders } from "node:http";
 import type { ReachedBrowserTab } from "@luke/database/models/agent-browser-tabs";
+import type { BrowserTabsPlace } from "@luke/features/agent-browser-tab-wire";
 import { BROWSER_LIVE } from "@luke/features/browser-live-wire";
 import { readEither } from "@luke/wire/effect";
 import { type Cause, Effect, Option, Result, type Scope } from "effect";
@@ -37,7 +39,7 @@ const MAXIMUM_FRAME_BYTES = 64 * 1024;
 
 const readId = readEither(wireUuidSchema);
 
-/** What an upgrade asks for before its credential is resolved: the credential, and the task and tab it names. */
+/** What an upgrade asks for before its credential is resolved: the credential, and the agent or task and the tab it names. */
 export type BrowserLiveUpgrade =
   | { readonly status: number }
   | {
@@ -54,14 +56,19 @@ export function admitBrowserLiveUpgrade(
   const address = new URL(url ?? "/", "http://localhost");
   if (address.pathname !== BROWSER_LIVE.PATH) return { status: RELAY_UPGRADE_STATUS.NOT_FOUND };
   const query = (name: string) => unparsedWire(address.searchParams.get(name) ?? "");
-  const taskId = readId(query(BROWSER_LIVE.QUERY.TASK));
+  // Note that a desktop built before the agent was named names the tab's task, which reaches it as it did.
+  const named: Result.Result<BrowserTabsPlace, unknown> = address.searchParams.has(
+    BROWSER_LIVE.QUERY.AGENT,
+  )
+    ? Result.map(readId(query(BROWSER_LIVE.QUERY.AGENT)), (agentId) => ({ agentId }))
+    : Result.map(readId(query(BROWSER_LIVE.QUERY.TASK)), (taskId) => ({ taskId }));
   const tabId = readId(query(BROWSER_LIVE.QUERY.TAB));
-  if (Result.isFailure(taskId) || Result.isFailure(tabId)) {
+  if (Result.isFailure(named) || Result.isFailure(tabId)) {
     return { status: RELAY_UPGRADE_STATUS.BAD_REQUEST };
   }
   const credential = relayCredential(headers, ownOrigins);
   if ("status" in credential) return credential;
-  return { credential, ask: { taskId: taskId.success, tabId: tabId.success } };
+  return { credential, ask: { place: named.success, tabId: tabId.success } };
 }
 
 /** The HTTP face of the live view at its path (`relayServer`). */
@@ -92,7 +99,7 @@ export function admitBrowserLiveAccount(
     const account = resolved.success;
     if (Option.isNone(account)) return { status: RELAY_UPGRADE_STATUS.UNAUTHORIZED };
     const ask = { ...decision.ask, userId: account.value };
-    const found = yield* Effect.result(admission.readTab(ask.userId, ask.taskId, ask.tabId));
+    const found = yield* Effect.result(admission.readTab(ask.userId, ask.place, ask.tabId));
     if (Result.isFailure(found)) return { status: RELAY_UPGRADE_STATUS.SERVICE_UNAVAILABLE };
     if (Option.isNone(found.success)) return { status: RELAY_UPGRADE_STATUS.NOT_FOUND };
     return { ask, reached: found.success.value };

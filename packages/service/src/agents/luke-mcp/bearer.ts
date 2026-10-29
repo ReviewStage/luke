@@ -4,16 +4,16 @@
  * A native harness's runner is handed one bearer for its agent's session,
  * which it presents as `Authorization: Bearer` on every call to the server.
  * The store keeps its SHA-256 alone, on the agent's row
- * (`coding_agent.runner_token_hash`), so a read of the row cannot be replayed
+ * (`agent.runner_token_hash`), so a read of the row cannot be replayed
  * as the bearer. A bearer whose digest no standing agent holds, a retired
  * one's among them, admits nothing.
  */
 
 import { createHash } from "node:crypto";
 import {
-  type CodingAgentStoreEffect,
+  type AgentStoreEffect,
   readRunnerTokenConversation,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
 import { Effect, Option } from "effect";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 
@@ -41,7 +41,7 @@ export function presentedBearer(request: Request): string | undefined {
  */
 export function admitRunnerBearer(
   bearer: string,
-): CodingAgentStoreEffect<Option.Option<AdmittedConversation>> {
+): AgentStoreEffect<Option.Option<AdmittedConversation>> {
   return Effect.map(
     readRunnerTokenConversation(runnerTokenDigest(bearer)),
     Option.map(

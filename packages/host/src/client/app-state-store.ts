@@ -52,10 +52,18 @@ function patchEntries(patch: AppStatePatch): [AppStateSlice, AppState[AppStateSl
  * one these writes run under. `runSyncWith` runs on the calling stack exactly
  * as it does without a context, and a `SubscriptionRef` read or write never
  * suspends, so the call still answers in the same turn its caller made it in.
+ *
+ * A write made while another is being announced is queued behind it rather
+ * than run there. A subscriber parked on `changes` is resumed on the writer's
+ * own stack, while `SubscriptionRef.set` still holds the ref's one permit, so
+ * a subscriber that answers a document with a write of its own would have its
+ * `set` wait for that permit, which `runSyncWith` cannot do. Queued, it lands
+ * next, once every subscriber has been handed the document it answered.
  */
 export class AppStateStore {
   readonly #ref: SubscriptionRef.SubscriptionRef<AppState>;
   readonly #services: Context.Context<never>;
+  #queued: (() => void)[] | undefined;
 
   constructor(initial: Omit<AppState, "version">, services: Context.Context<never>) {
     this.#services = services;
@@ -69,6 +77,43 @@ export class AppStateStore {
   }
 
   update(patch: AppStatePatch): void {
+    this.#write(() => this.#apply(patch));
+  }
+
+  /**
+   * Re-announces the document exactly as it stands, without a version. It is
+   * for the facts a window answers for and the document cannot — its mode and
+   * the display it stands on — which move without any slice moving: the
+   * snapshot a window is handed carries them, so a window whose own facts
+   * changed has to be handed one again. The ref is set to its own current
+   * value so `changes` re-announces it too, the same document under the same
+   * version.
+   */
+  touch(): void {
+    this.#write(() =>
+      Effect.runSyncWith(this.#services)(SubscriptionRef.set(this.#ref, this.snapshot())),
+    );
+  }
+
+  /** The document's own change stream, direct from the ref, for the one production subscriber. */
+  get changes(): Stream.Stream<AppState> {
+    return SubscriptionRef.changes(this.#ref);
+  }
+
+  #write(write: () => void): void {
+    if (this.#queued !== undefined) {
+      this.#queued.push(write);
+      return;
+    }
+    this.#queued = [write];
+    try {
+      for (let next = this.#queued.shift(); next !== undefined; next = this.#queued.shift()) next();
+    } finally {
+      this.#queued = undefined;
+    }
+  }
+
+  #apply(patch: AppStatePatch): void {
     const previous = this.snapshot();
     // Note that a slice kept whole is one that says nothing new, which is the
     // one walk that both decides that and shares what did not move.
@@ -83,24 +128,6 @@ export class AppStateStore {
       version: previous.version + 1,
     };
     Effect.runSyncWith(this.#services)(SubscriptionRef.set(this.#ref, next));
-  }
-
-  /**
-   * Re-announces the document exactly as it stands, without a version. It is
-   * for the facts a window answers for and the document cannot — its mode and
-   * the display it stands on — which move without any slice moving: the
-   * snapshot a window is handed carries them, so a window whose own facts
-   * changed has to be handed one again. The ref is set to its own current
-   * value so `changes` re-announces it too, the same document under the same
-   * version.
-   */
-  touch(): void {
-    Effect.runSyncWith(this.#services)(SubscriptionRef.set(this.#ref, this.snapshot()));
-  }
-
-  /** The document's own change stream, direct from the ref, for the one production subscriber. */
-  get changes(): Stream.Stream<AppState> {
-    return SubscriptionRef.changes(this.#ref);
   }
 }
 
@@ -190,8 +217,8 @@ export function initialAppState(
     update: idleUpdateSnapshot(config.appVersion, installSupported),
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
     tasks: IDLE_TASKS_VIEW,
-    codingAgents: { unseen: [] },
-    inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [] },
+    agents: { unseen: [] },
+    inbox: { waiting: [], tasks: [], taskless: [], automations: [], agents: [], failedRuns: [] },
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     network: { online: true },

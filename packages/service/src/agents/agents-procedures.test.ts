@@ -3,11 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { readAgentQueue } from "@luke/database/models/agent-queue-store";
-import {
-  archiveCodingAgent,
-  createCodingAgent,
-  readCodingAgent,
-} from "@luke/database/models/coding-agent-store";
+import { archiveAgent, createAgent, readAgent } from "@luke/database/models/agent-store";
 import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
 import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
@@ -15,7 +11,7 @@ import { lapsedSandboxLeases, sandboxHeld } from "@luke/database/models/sandbox-
 import { createTask } from "@luke/database/models/task-store";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
-import { QUEUE_CHANGE } from "@luke/features/coding-agent-wire";
+import { QUEUE_CHANGE } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import {
   SANDBOX_STATE,
@@ -94,7 +90,7 @@ const openAgentWith = (options: { readonly claimed: boolean }) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
     const task = yield* startTask(userId, { name: "Terminal tab", repository: "acme/relay" });
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: `start-${randomUUID()}`,
       model: "anthropic/claude-opus-5.5",
@@ -139,7 +135,7 @@ const openTokenAgent = Effect.gen(function* () {
     repository: "octo-member/side",
     githubAccess: GITHUB_ACCESS.TOKEN,
   });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: `start-${randomUUID()}`,
     model: "anthropic/claude-opus-5.5",
@@ -430,7 +426,7 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
   it.effect("an archived agent's terminals are gone", () =>
     Effect.gen(function* () {
       const { userId, agent } = yield* openAgent;
-      yield* archiveCodingAgent(userId, agent.id, true);
+      yield* archiveAgent(userId, agent.id, true);
       const sandbox = scriptedSandbox(SANDBOX_STATE.RUNNING);
       const call = yield* standing(new Map([["Bearer owner", userId]]), sandbox.layer);
 
@@ -493,7 +489,7 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
         assert.equal(yield* Queue.take(stalled.stops), hung.sessionId);
         assert.equal(yield* Queue.take(refused.stops), failing.sessionId);
         for (const { userId, agent } of [hung, failing]) {
-          const stored = yield* readCodingAgent(userId, agent.id);
+          const stored = yield* readAgent(userId, agent.id);
           assert.notEqual(Option.getOrThrow(stored).archivedAt, null);
         }
       }),
@@ -602,7 +598,7 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
     () =>
       Effect.gen(function* () {
         const { userId, agent } = yield* openAgent;
-        yield* archiveCodingAgent(userId, agent.id, true);
+        yield* archiveAgent(userId, agent.id, true);
         const call = yield* standing(
           new Map([["Bearer owner", userId]]),
           scriptedSandbox(SANDBOX_STATE.RUNNING).layer,

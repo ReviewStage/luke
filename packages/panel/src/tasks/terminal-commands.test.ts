@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { shellsAsked } from "@luke/features/terminal-store";
@@ -23,7 +23,7 @@ import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js"
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
 import type { MainTab } from "./use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel.js";
@@ -58,11 +58,7 @@ const SUMMARY: TaskSummary = {
 };
 
 /** An agent on the task, standing where `status` says. */
-function agent(
-  id: string,
-  title: string,
-  status: CodingAgentSummary["status"],
-): CodingAgentSummary {
+function agent(id: string, title: string, status: AgentSummary["status"]): AgentSummary {
   return {
     id,
     planId: TASK.id,
@@ -75,16 +71,8 @@ function agent(
   };
 }
 
-const WORKING = agent(
-  "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-  "Invite flow",
-  CODING_AGENT_STATUS.RUNNING,
-);
-const DONE = agent(
-  "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32",
-  "Expiry job",
-  CODING_AGENT_STATUS.COMPLETED,
-);
+const WORKING = agent("8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21", "Invite flow", AGENT_STATUS.RUNNING);
+const DONE = agent("9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32", "Expiry job", AGENT_STATUS.COMPLETED);
 
 const roots: Root[] = [];
 
@@ -119,7 +107,7 @@ async function settle(): Promise<void> {
 /** The task drawn with the agents given, its column on `main` and the panel on `side`, answering what the panel was asked to show. */
 async function mount(input: {
   /** The task's agents, or nothing while their read is out. */
-  agents: readonly CodingAgentSummary[] | undefined;
+  agents: readonly AgentSummary[] | undefined;
   /** Why no agent can start now, where none can. */
   cannotStart?: string;
   main?: MainTab;
@@ -154,7 +142,7 @@ async function mount(input: {
       lastTerminal: input.lastTerminal,
       onChoose: (tab) => shown.push(tab),
     },
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: input.agents === undefined ? undefined : [...input.agents],
       agentIds: input.agents?.map((each) => each.id),
       start: {
@@ -276,9 +264,9 @@ test("with no agent on the plan, the picker offers to start one", async () => {
   });
   await task.run(APP_COMMAND.NEW_TERMINAL);
   assert.deepEqual(picker()?.rows, [
-    { name: "Start a coding agent", detail: undefined, working: false, chosen: true },
+    { name: "Start an agent", detail: undefined, working: false, chosen: true },
   ]);
-  await picker()?.choose("Start a coding agent");
+  await picker()?.choose("Start an agent");
   assert.equal(started, 1);
   assert.deepEqual(task.shown, []);
 });
@@ -290,7 +278,7 @@ test("a Start the picker pressed that the service refused says why on the toast,
     started: () => ({ reason: FAILURE_REASON.CHOOSE_REPOSITORY, text: words, taskId: TASK.id }),
   });
   await task.run(APP_COMMAND.NEW_TERMINAL);
-  await picker()?.choose("Start a coding agent");
+  await picker()?.choose("Start an agent");
   await settle();
   const said = document.body.textContent ?? "";
   assert.ok(said.includes(words), "the toast says why");
@@ -452,13 +440,13 @@ test("where no agent can start, the picker says why beside the offer and starts 
   await task.run(APP_COMMAND.NEW_TERMINAL);
   assert.deepEqual(picker()?.rows, [
     {
-      name: "Start a coding agent",
+      name: "Start an agent",
       detail: "Choose a repository",
       working: false,
       chosen: false,
     },
   ]);
-  await picker()?.choose("Start a coding agent");
+  await picker()?.choose("Start an agent");
   assert.equal(started, 0);
 });
 
@@ -473,11 +461,7 @@ test("while the plan's agents are still being read, the picker says so and offer
   assert.deepEqual(task.shown, []);
 });
 
-const FAILED = agent(
-  "ae3c8c6f-5f40-4fad-8d88-8b6e9c4f5d43",
-  "Retry job",
-  CODING_AGENT_STATUS.FAILED,
-);
+const FAILED = agent("ae3c8c6f-5f40-4fad-8d88-8b6e9c4f5d43", "Retry job", AGENT_STATUS.FAILED);
 
 test("the picker marks a failed agent's row as its tab is marked, and no other", async () => {
   const task = await mount({ agents: [WORKING, FAILED] });

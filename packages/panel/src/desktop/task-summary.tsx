@@ -1,4 +1,4 @@
-import { CODING_AGENT_BOUNDS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, type AgentSummary } from "@luke/features/agent-wire";
 import {
   CARD_CORNER,
   CARD_LOOK,
@@ -40,12 +40,12 @@ import {
   useRef,
   useState,
 } from "react";
+import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
-import { peopleOf } from "../tasks/changes-card.js";
-import { RENAME_FAILED } from "../tasks/coding-agent-model.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
+import { peopleOf } from "../tasks/pull-request-card.js";
 import { openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { keptFlag, keptKey, useKept } from "../use-kept.js";
@@ -468,7 +468,7 @@ function countedEntry(
 /** `entries` under their headings in their order, each heading only where it has a row. */
 function sectionsOf<Entry extends AddEntry>(
   entries: readonly Entry[],
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
 ): SummarySection<Entry>[] {
   // Coding agents stands while only archived agents are left, so their fold has a heading.
   const archived = (agents.archived?.length ?? 0) > 0;
@@ -526,7 +526,7 @@ function SummaryRow({
 }) {
   const editing = editor !== undefined;
   return (
-    <RowHintOptions card={entry.card} cardBeside>
+    <RowHintOptions card={entry.card}>
       <ListRow
         ref={rowRef}
         leading={<span className={SUMMARY_GLYPH}>{entry.row.icon}</span>}
@@ -553,7 +553,7 @@ const AGENT_THING = "Agent";
  * menu over the doors a row has (`agent-actions.tsx`): Copy link, Rename,
  * which turns the row into its name's field as the sidebar's rows do, Archive,
  * asking first while a teammate's agent still works, and Permanently
- * delete, asked first; Show details among them where the row hangs a card.
+ * delete, asked first.
  */
 function AgentSummaryRow({
   entry,
@@ -563,8 +563,8 @@ function AgentSummaryRow({
   onPick,
 }: {
   entry: SummaryEntry;
-  agent: CodingAgentSummary;
-  agents: CodingAgentsControl;
+  agent: AgentSummary;
+  agents: AgentsControl;
   shown: boolean;
   onPick: () => void;
 }) {
@@ -592,7 +592,7 @@ function AgentSummaryRow({
             <InlineEdit
               value={rename.asked ?? entry.row.label}
               label="Agent name"
-              maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+              maxLength={AGENT_BOUNDS.MAX_TITLE_CHARS}
               editing
               onEnd={(edit) => {
                 endedByKey(edit.byKey);
@@ -631,7 +631,7 @@ function SummaryList({
   onPicked,
 }: {
   sections: readonly SummarySection[];
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** Whether the summary is on screen, which a row's menu and its question stand on. */
   shown: boolean;
   onPicked?: () => void;
@@ -710,7 +710,7 @@ function SummaryCard({
   id: string;
   from: CardFrom;
   sections: readonly SummarySection[];
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   onDismiss: () => void;
   leaving: boolean;
   /** Hands the card's element to the hold that draws it through its exit. */
@@ -772,7 +772,7 @@ function SummaryCard({
       shadow={CARD_SHADOW.MENU}
       ref={drawn}
       id={id}
-      className="task-summary-card absolute top-0 right-0 z-2 box-border flex max-h-full w-summary origin-top-right animate-card-grow-in flex-col outline-none data-[leaving=true]:pointer-events-none data-[leaving=true]:animate-card-leave data-[leaving=true]:transition-none"
+      className="task-summary-card absolute top-0 right-0 z-menu box-border flex max-h-full w-summary origin-top-right animate-card-grow-in flex-col outline-none data-[leaving=true]:pointer-events-none data-[leaving=true]:animate-card-leave data-[leaving=true]:transition-none"
       role="dialog"
       aria-label="Summary"
       tabIndex={-1}

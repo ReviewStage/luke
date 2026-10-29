@@ -2,18 +2,26 @@ import { useAtomValue } from "@effect/atom-react";
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
 import { dateOfText } from "@luke/features/time-format";
 import { ACT_KIND } from "@luke/host/acts";
-import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule, Time, useMinute } from "@luke/ui";
+import {
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+  HoverCardRule,
+  HoverCardSkeleton,
+  Time,
+  useMinute,
+} from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
 import { askAct } from "../act.js";
-import { CreatedByRow } from "../actor-ref.js";
+import { PROVENANCE_VERB, ProvenanceRow } from "../actor-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { ChipCardSkeleton, useLinkWorkspace, WorkspaceDirectory } from "./chip-cards.js";
+import { useLinkWorkspace, WorkspaceDirectory } from "./chip-cards.js";
 import { needsYouWords, threadsWords } from "./inbox-model.js";
 import { useHeldChannel } from "./use-channels.js";
 
@@ -35,7 +43,7 @@ import { useHeldChannel } from "./use-channels.js";
  * archived, as the card is first hung, once for every card hung of it
  * while one stands, and holds them nowhere else, so no other surface's
  * channels move under it. The card waits as every chip's card does
- * (`ChipCardSkeleton`) while that read or its maker's name is out.
+ * (`HoverCardSkeleton`) while that read or its maker's name is out.
  */
 
 /** What a channel is called by its kind, in its card's sub. */
@@ -87,7 +95,7 @@ function channelCorner(channel: Channel | ArchivedChannel, now: number): ReactNo
   return latest === undefined ? undefined : <Time at={latest} now={now} hint={false} />;
 }
 
-/** Who made a channel and when, as the members around it name them (`CreatedByRow`). */
+/** Who made a channel and when, as the members around it name them (`ProvenanceRow`). */
 function CreatedBy({
   userId,
   name,
@@ -99,7 +107,14 @@ function CreatedBy({
   at: number;
   now: number;
 }): React.JSX.Element {
-  return <CreatedByRow actor={usePerson({ userId, name })} at={at} now={now} />;
+  return (
+    <ProvenanceRow
+      verb={PROVENANCE_VERB.CREATED}
+      actor={usePerson({ userId, name })}
+      at={at}
+      now={now}
+    />
+  );
 }
 
 /** A channel's card as the members around it name its maker; waiting while they are read. */
@@ -113,7 +128,9 @@ function ChannelCardBody({ channel }: { channel: Channel | ArchivedChannel }): R
       ? undefined
       : [...(members ?? []), ...(former ?? [])].find((each) => each.userId === createdBy);
   if (createdBy !== undefined && maker === undefined && reading) {
-    return <ChipCardSkeleton glyph={<GLYPH.CHANNEL />} name={channel.name} />;
+    return (
+      <HoverCardSkeleton glyph={<GLYPH.CHANNEL />} name={channel.name} sub data-channel-card="" />
+    );
   }
   return (
     <HoverCard data-channel-card="">

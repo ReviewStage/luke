@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import {
+  AGENT_STATUS,
+  type AgentPullRequest,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   encodeMention,
   MENTION_KIND,
@@ -75,7 +75,7 @@ const BILLING: TaskSummary = {
   repository: "acme/relay",
 };
 
-function agentOf(id: string, overrides: Partial<CodingAgentSummary>): CodingAgentSummary {
+function agentOf(id: string, overrides: Partial<AgentSummary>): AgentSummary {
   return {
     id,
     planId: BILLING.id,
@@ -83,7 +83,7 @@ function agentOf(id: string, overrides: Partial<CodingAgentSummary>): CodingAgen
     effort: "high",
     title: "Prorate seat changes",
     createdAt: AT,
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
     turnId: null,
     startedBy: { userId: "user-sam", name: "Sam Okafor" },
     ...overrides,
@@ -95,7 +95,7 @@ const PRORATE = agentOf("7b1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f", {});
 const SWEEPER = agentOf("5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", {
   planId: null,
   title: "Sweep flaky tests",
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   startedBy: { userId: ME, name: "Dean Stratakos" },
 });
 
@@ -103,14 +103,14 @@ const SWEEPER = agentOf("5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", {
 const AUDITOR = agentOf("2a1b0c9d-8e7f-4a6b-9c5d-4e3f2a1b0c9d", {
   planId: null,
   title: "Audit retries",
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
 });
 
 /** An agent on no task older than the workspace's newest, renamed since its chip was written, found only by its id. */
 const ARCHIVIST = agentOf("6e5d4c3b-2a1f-4e0d-9c8b-7a6f5e4d3c2b", {
   planId: null,
   title: "Archive stale branches",
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
 });
 
 /** Main's document holding the billing task, by which an agent of it names where it works. */
@@ -132,7 +132,7 @@ let answering = true;
 let pending = false;
 
 /** The pull request the prorater opened, as its Pull request tab reads it. */
-const SEAT_PULL_REQUEST: CodingAgentPullRequest = {
+const SEAT_PULL_REQUEST: AgentPullRequest = {
   number: 42,
   title: "Prorate seats on upgrade",
   url: "https://github.com/acme/relay/pull/42",
@@ -159,24 +159,24 @@ afterEach(() => {
   pending = false;
 });
 
-/** What the main process answers: a task's agents, and the workspace's searched or newest. */
+/** What the main process answers: a task's agents, and the workspace's searched, on a task or none, or newest. */
 function answer(request: AnyAct): FakeActAnswer {
   if (!answering) return { status: FAKE_ANSWER.REFUSED, reason: "Not now." };
-  if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
+  if (request.kind === ACT_KIND.AGENTS_LIST) {
     const agents = request.payload.taskId === BILLING.id ? [PRORATE] : [];
     return { status: FAKE_ANSWER.DONE, value: { agents } };
   }
-  if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+  if (request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST) {
     const { words } = request.payload;
     const agents =
       words === undefined
         ? [AUDITOR]
-        : [SWEEPER, AUDITOR].filter((agent) =>
+        : [SWEEPER, AUDITOR, PRORATE].filter((agent) =>
             agent.title?.toLowerCase().includes(words.toLowerCase()),
           );
     return { status: FAKE_ANSWER.DONE, value: { agents } };
   }
-  if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST) {
+  if (request.kind === ACT_KIND.AGENTS_PULL_REQUEST) {
     const opened = request.payload.agentId === PRORATE.id;
     return {
       status: FAKE_ANSWER.DONE,
@@ -187,7 +187,7 @@ function answer(request: AnyAct): FakeActAnswer {
       },
     };
   }
-  if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
+  if (request.kind === ACT_KIND.AGENTS_PAGE) {
     return request.payload.agentId === ARCHIVIST.id
       ? {
           status: FAKE_ANSWER.DONE,
@@ -202,7 +202,7 @@ function answer(request: AnyAct): FakeActAnswer {
         }
       : {
           status: FAKE_ANSWER.DONE,
-          value: { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND },
+          value: { failure: AGENT_CALL_FAILURE.NOT_FOUND },
         };
   }
   return { status: FAKE_ANSWER.DONE, value: undefined };
@@ -292,24 +292,18 @@ async function settle(): Promise<void> {
   });
 }
 
-/** An agent's mention, under its task or under none, as its chip is written. */
-function mentionOf(agent: CodingAgentSummary, name: string): string {
-  return mentionMarkdown(
-    agent.planId === null
-      ? { kind: MENTION_KIND.AGENT, agentId: agent.id }
-      : { kind: MENTION_KIND.AGENT, taskId: agent.planId, agentId: agent.id },
-    name,
-    PLACE,
-  );
+/** An agent's mention, by the agent whichever task it works on, as its chip is written. */
+function mentionOf(agent: AgentSummary, name: string): string {
+  return mentionMarkdown({ kind: MENTION_KIND.AGENT, agentId: agent.id }, name, PLACE);
 }
 
 /** The acts that read agents, as told. */
 function agentReads(): readonly AnyAct[] {
   return told.filter(
     (request) =>
-      request.kind === ACT_KIND.CODING_AGENTS_LIST ||
-      request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST ||
-      request.kind === ACT_KIND.CODING_AGENTS_PAGE,
+      request.kind === ACT_KIND.AGENTS_LIST ||
+      request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST ||
+      request.kind === ACT_KIND.AGENTS_PAGE,
   );
 }
 
@@ -321,15 +315,18 @@ async function cardOf(chip: Element | undefined) {
   const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
   assert.ok(card, "the chip hangs a card");
   const look = {
-    tab: card.matches("[data-tab-card]"),
-    reading: card.matches("[data-chip-card-reading]"),
+    agent: card.matches("[data-agent-card]"),
+    pullRequest: card.matches("[data-pull-request-card]"),
+    reading: card.matches("[data-hover-card-skeleton]"),
+    led: card.querySelector(".luke-hover-card-lead") !== null,
     actor: card.getAttribute("data-actor-card") ?? undefined,
     name: card.querySelector(".luke-hover-card-name")?.textContent,
     model: card.querySelector("[data-model-label]")?.textContent,
     corner: card.querySelector(".luke-hover-card-corner")?.textContent,
     working:
       card.querySelector('.luke-hover-card-lead .state-glyph[data-state="working"]') !== null,
-    foot: card.querySelector(".luke-hover-card-rule + .luke-hover-card-note")?.textContent,
+    foot: card.querySelector(".luke-hover-card-row:last-child .luke-hover-card-row-label")
+      ?.textContent,
     words: card.textContent,
   };
   act(() => {
@@ -347,7 +344,7 @@ test("chips of agents off their task's page that the window lists read nothing a
   assert.deepEqual(agentReads(), []);
 });
 
-test("a chip of an agent the window lists not reads its task's agents once as it is drawn, wearing its harness, and the card hung after reads nothing more", async () => {
+test("a chip of an agent the window lists not reads the workspace's agents its name finds once as it is drawn, wearing its harness, and the card hung after reads nothing more", async () => {
   const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
   const chip = container.querySelector("[data-mention-ref]") ?? undefined;
 
@@ -359,8 +356,8 @@ test("a chip of an agent the window lists not reads its task's agents once as it
   assert.equal(card.name, "Prorate seat changes");
   assert.deepEqual(agentReads(), [
     {
-      kind: ACT_KIND.CODING_AGENTS_LIST,
-      payload: { taskId: BILLING.id, includeArchived: true },
+      kind: ACT_KIND.AGENTS_WORKSPACE_LIST,
+      payload: { workspaceId: ACME.id, includeArchived: true, words: "Prorate" },
     },
   ]);
 });
@@ -371,13 +368,10 @@ test("a mention of an agent the window lists not, laid in a message box as an In
     createElement(MentionNodeChip, {
       mention: {
         name: "Prorate seat changes",
-        target: encodeMention(
-          { kind: MENTION_KIND.AGENT, taskId: BILLING.id, agentId: PRORATE.id },
-          PLACE,
-        ),
+        target: encodeMention({ kind: MENTION_KIND.AGENT, agentId: PRORATE.id }, PLACE),
       },
       doors: {
-        taskId: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+        holder: { taskId: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d" },
         place: PLACE,
         anchors: new Set<string>(),
         onOpenTask: () => undefined,
@@ -385,7 +379,7 @@ test("a mention of an agent the window lists not, laid in a message box as an In
         agentOf: () => ({
           actor: {
             kind: ACTOR_KIND.AGENT,
-            name: "Coding agent",
+            name: "Agent",
             provider: undefined,
             state: ACTOR_STATE.REST,
           },
@@ -407,13 +401,10 @@ test("a mention of its own task's agent whose tile the page knows no harness of 
     createElement(MentionNodeChip, {
       mention: {
         name: "Prorate seat changes",
-        target: encodeMention(
-          { kind: MENTION_KIND.AGENT, taskId: BILLING.id, agentId: PRORATE.id },
-          PLACE,
-        ),
+        target: encodeMention({ kind: MENTION_KIND.AGENT, agentId: PRORATE.id }, PLACE),
       },
       doors: {
-        taskId: BILLING.id,
+        holder: { taskId: BILLING.id },
         place: PLACE,
         anchors: new Set<string>(),
         onOpenTask: () => undefined,
@@ -421,7 +412,7 @@ test("a mention of its own task's agent whose tile the page knows no harness of 
         agentOf: () => ({
           actor: {
             kind: ACTOR_KIND.AGENT,
-            name: "Coding agent",
+            name: "Agent",
             provider: undefined,
             state: ACTOR_STATE.REST,
           },
@@ -437,12 +428,12 @@ test("a mention of its own task's agent whose tile the page knows no harness of 
   );
 });
 
-test("an agent on another task hangs its tab's card, its task's agents read once as it is hung, naming the task it works on", async () => {
+test("an agent on another task hangs its tab's card, the workspace's agents its name finds read once as it is hung, naming the task it works on", async () => {
   const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
 
   const card = await cardOf(container.querySelector("[data-mention-ref]") ?? undefined);
 
-  assert.equal(card.tab, true, "the card is the agent's tab's own");
+  assert.equal(card.agent, true, "the card is the agent's tab's own");
   assert.equal(card.name, "Prorate seat changes");
   assert.equal(card.model, "Opus 5.5 High");
   assert.doesNotMatch(card.corner ?? "", /Working/u, "the corner says no word of its work");
@@ -451,8 +442,8 @@ test("an agent on another task hangs its tab's card, its task's agents read once
   assert.equal(card.foot, "On Billing by seat");
   assert.deepEqual(agentReads(), [
     {
-      kind: ACT_KIND.CODING_AGENTS_LIST,
-      payload: { taskId: BILLING.id, includeArchived: true },
+      kind: ACT_KIND.AGENTS_WORKSPACE_LIST,
+      payload: { workspaceId: ACME.id, includeArchived: true, words: "Prorate" },
     },
   ]);
 });
@@ -504,16 +495,6 @@ test("an agent on no task is found by the name its chip was written with, else a
   );
 });
 
-test("where the read answers nothing, the chip's own card says where the agent works", async () => {
-  answering = false;
-  const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
-
-  const card = await cardOf(container.querySelector("[data-mention-ref]") ?? undefined);
-
-  assert.equal(card.tab, false);
-  assert.match(card.words ?? "", /A coding agent on another task/u);
-});
-
 test("a chip of an agent whose read answers nothing draws no mark, leaving its name alone", async () => {
   answering = false;
   const container = await drawn(`Ask ${mentionOf(PRORATE, "Prorate")}.`);
@@ -523,9 +504,9 @@ test("a chip of an agent whose read answers nothing draws no mark, leaving its n
   assert.equal(glyph?.childElementCount, 0);
 });
 
-test("two chips of one task's agents hung one after the other share the task's read", async () => {
+test("two chips of one agent hung one after the other share its read", async () => {
   const container = await drawn(
-    `${mentionOf(PRORATE, "Prorate")} then ${mentionOf(PRORATE, "the prorater")}.`,
+    `${mentionOf(PRORATE, "Prorate")} then ${mentionOf(PRORATE, "Prorate")}.`,
   );
   const [first, second] = container.querySelectorAll("[data-mention-ref]");
 
@@ -576,13 +557,12 @@ test("a pull request's chip off its task's page hangs the card its Pull request 
   const [opened, outside] = container.querySelectorAll("[data-mention-ref]");
 
   const card = await cardOf(opened);
-  assert.equal(card.tab, true, "the chip hangs the Pull request tab's card");
+  assert.equal(card.pullRequest, true, "the chip hangs the pull request's card");
   assert.equal(card.name, "Prorate seats on upgrade");
-  assert.match(card.corner ?? "", /#42/u);
-  assert.match(card.words ?? "", /3 files changed/u);
-  assert.match(card.words ?? "", /Prorate seat changes/u, "it names the agent whose it is");
+  assert.match(card.words ?? "", /in 3 files/u, "it says what the agent's read holds of it");
+  assert.match(card.words ?? "", /By Prorate seat changes/u, "it names the agent whose it is");
   const other = await cardOf(outside);
-  assert.deepEqual([other.tab, other.reading], [false, false]);
+  assert.deepEqual([other.pullRequest, other.reading], [false, false]);
 });
 
 test("while what it shows is read, an agent's chip and a pull request's chip each hang the one reading state, wearing the chip's name", async () => {
@@ -599,6 +579,24 @@ test("while what it shows is read, an agent's chip and a pull request's chip eac
     [agentCard.reading, agentCard.name, pullRequestCard.reading, pullRequestCard.name],
     [true, "Prorate", true, "#42"],
   );
+});
+
+test("an agent named as an actor leads its card with its tile while its read is out, where its tab's card leads with it once read, so the head stands still", async () => {
+  const actor = createElement(ActorRef, {
+    actor: {
+      kind: ACTOR_KIND.AGENT,
+      agentId: PRORATE.id,
+      taskId: BILLING.id,
+      name: "Prorate",
+      provider: undefined,
+      state: ACTOR_STATE.REST,
+    },
+  });
+  pending = true;
+  const container = await drawnElement(actor);
+
+  const card = await cardOf(container.querySelector("[data-actor-ref]") ?? undefined);
+  assert.deepEqual([card.reading, card.led, card.name], [true, true, "Prorate"]);
 });
 
 test("a chip of Luke hangs Luke's own card", async () => {
@@ -634,7 +632,7 @@ test("Luke and an agent named as actors hang Luke's card and the agent's tab's c
   const agentCard = await cardOf(agent);
   assert.equal(lukeCard.actor, ACTOR_KIND.LUKE);
   assert.deepEqual(
-    [agentCard.tab, agentCard.name, agentCard.foot],
-    [true, "Prorate seat changes", "On Billing by seat"],
+    [agentCard.agent, agentCard.led, agentCard.name, agentCard.foot],
+    [true, true, "Prorate seat changes", "On Billing by seat"],
   );
 });

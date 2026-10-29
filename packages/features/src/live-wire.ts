@@ -3,6 +3,7 @@ import {
   type AccountFailedRun,
   type AccountInboxAnswer,
   accountFailedRunSchema,
+  accountInboxAgentSchema,
   accountInboxAutomationSchema,
   accountInboxEntrySchema,
   accountInboxTaskSchema,
@@ -13,7 +14,7 @@ import {
   agentBrowserTabLineSchema,
   agentBrowserTabOf,
 } from "./agent-browser-tab-wire.js";
-import { codingAgentMessagesAnswerSchema } from "./coding-agent-wire.js";
+import { agentMessagesAnswerSchema } from "./agent-wire.js";
 import {
   INBOX_BOUNDS,
   INBOX_STATUS,
@@ -163,6 +164,8 @@ export const accountInboxLiveAnswerSchema = EffectSchema.Struct({
     planless: sealedLiveQuerySchema,
     plans: sealedLiveQuerySchema,
     automations: sealedLiveQuerySchema,
+    /** Each agent with no task holding items; absent from a service before it, as the held read's `agents` is. */
+    agents: EffectSchema.optionalKey(sealedLiveQuerySchema),
     failedRuns: sealedLiveQuerySchema,
   }),
 });
@@ -175,12 +178,19 @@ const tasklessLiveRowSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.NullOr(EffectSchema.String),
 });
 
+/** An agent with no plan holding items as its row delivers it: the workspace as the column holds it, null for none. */
+const agentHoldingLiveRowSchema = EffectSchema.Struct({
+  ...accountInboxAgentSchema.fields,
+  workspaceId: EffectSchema.NullOr(EffectSchema.String),
+});
+
 /** Each part's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
 export const accountInboxLiveRowSchemas = {
   items: accountInboxEntrySchema,
   planless: tasklessLiveRowSchema,
   plans: accountInboxTaskSchema,
   automations: accountInboxAutomationSchema,
+  agents: agentHoldingLiveRowSchema,
   failedRuns: accountFailedRunSchema,
 } as const;
 
@@ -190,6 +200,7 @@ export const accountInboxLiveRowsSchema = EffectSchema.Struct({
   planless: EffectSchema.Array(accountInboxLiveRowSchemas.planless),
   plans: EffectSchema.Array(accountInboxLiveRowSchemas.plans),
   automations: EffectSchema.Array(accountInboxLiveRowSchemas.automations),
+  agents: EffectSchema.optionalKey(EffectSchema.Array(accountInboxLiveRowSchemas.agents)),
   failedRuns: EffectSchema.Array(accountInboxLiveRowSchemas.failedRuns),
 });
 
@@ -284,6 +295,15 @@ export function accountInboxOfLiveRows(
     automations: rows.automations.toSorted(
       latestFirst((automation) => automation.automationId ?? ""),
     ),
+    ...(rows.agents === undefined
+      ? undefined
+      : {
+          agents: rows.agents
+            .map(({ workspaceId, ...agent }) =>
+              workspaceId === null ? agent : { ...agent, workspaceId },
+            )
+            .toSorted(latestFirst((agent) => agent.agentId)),
+        }),
     failedRuns: rows.failedRuns
       .filter((run) => run.failedAt >= now - FAILED_RUN_WINDOW_MILLIS)
       .toSorted((a, b) => b.failedAt - a.failedAt),
@@ -442,7 +462,7 @@ export const TRANSCRIPT_NOW_QUERY = { WAIT: "wait", NONE: "none" } as const;
  * edge the rows cannot say, before it reads again.
  */
 export const transcriptNowAnswerSchema = EffectSchema.Struct({
-  ...codingAgentMessagesAnswerSchema.fields,
+  ...agentMessagesAnswerSchema.fields,
   holds: EffectSchema.Boolean,
   /**
    * Where it would hold, how many milliseconds from now the clock alone may
@@ -715,7 +735,7 @@ export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
 export const ACCOUNT_INBOX_ITEMS = {
   SINCE: "since",
   HELD_ON: ["stamps"],
-  SETTLED_WINDOW_MILLIS: 7 * 24 * 60 * 60 * 1000,
+  SETTLED_WINDOW_MILLIS: 30 * 24 * 60 * 60 * 1000,
 } as const;
 
 /**

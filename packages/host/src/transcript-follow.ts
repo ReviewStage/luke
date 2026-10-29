@@ -1,15 +1,15 @@
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentMessagesAnswerView,
-  type CodingAgentTranscriptPage,
-} from "@luke/features/coding-agent-view";
+  AGENT_CALL_FAILURE,
+  type AgentMessagesAnswerView,
+  type AgentTranscriptPage,
+} from "@luke/features/agent-view";
 import {
+  AGENT_BOUNDS,
+  AGENT_CURSOR_START,
+  type AgentNewestAnswer,
+  type AgentTranscriptMessage,
   applyMessagesPage,
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_CURSOR_START,
-  type CodingAgentMessage,
-  type CodingAgentNewestAnswer,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   type AgentTranscriptLiveAnswer,
   agentTranscriptLiveRowsSchema,
@@ -87,7 +87,7 @@ export class TranscriptKey extends Data.Class<{
 
 /** The newest messages as the rows last drew them, and the lowest and highest sequence among them. */
 interface Drawn {
-  readonly messages: readonly CodingAgentMessage[];
+  readonly messages: readonly AgentTranscriptMessage[];
   readonly lowest: number;
   readonly highest: number;
   /** The conversation's journal revision as delivered beside them, which every change to a message past it counts up; none before the conversation's row lands. */
@@ -215,11 +215,11 @@ function sealedOf(
     cursor?: string,
   ) => Effect.Effect<AgentTranscriptLiveAnswer | Failed>,
 ): Effect.Effect<Option.Option<AgentTranscriptLiveAnswer>, SealUnanswered> {
-  return seal(false, undefined, CODING_AGENT_CURSOR_START).pipe(
+  return seal(false, undefined, AGENT_CURSOR_START).pipe(
     Effect.flatMap((answer) => {
       if (!("failure" in answer)) return Effect.succeed(Option.some(answer));
       if (
-        answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND ||
+        answer.failure === AGENT_CALL_FAILURE.NOT_FOUND ||
         answer.failure === LIVE_SIGNED_OUT.failure
       ) {
         return Effect.succeed(Option.none());
@@ -271,20 +271,18 @@ export function transcriptFollows<Key = TranscriptKey>(
 
 /** The page as the window reads it: the service's word on whether it would have held left here. */
 export function windowsPage(
-  answer: TranscriptNowAnswer | CodingAgentMessagesAnswerView,
-): CodingAgentMessagesAnswerView {
+  answer: TranscriptNowAnswer | AgentMessagesAnswerView,
+): AgentMessagesAnswerView {
   if (!("holds" in answer)) return answer;
   const { holds: _holds, ...page } = answer;
   return page;
 }
 
 /** A page past a cursor as the follow tells it: caught up where it came back short of a page's most. */
-function toldPage(
-  answer: TranscriptNowAnswer | CodingAgentMessagesAnswerView,
-): CodingAgentTranscriptPage {
+function toldPage(answer: TranscriptNowAnswer | AgentMessagesAnswerView): AgentTranscriptPage {
   const page = windowsPage(answer);
   if ("failure" in page) return page;
-  return { ...page, caughtUp: page.messages.length < CODING_AGENT_BOUNDS.MESSAGES_PAGE };
+  return { ...page, caughtUp: page.messages.length < AGENT_BOUNDS.MESSAGES_PAGE };
 }
 
 /** Whether a state is another than the one a page was read at. */
@@ -298,33 +296,31 @@ function movedFrom(was: LiveState): (state: LiveState) => boolean {
 
 /** A page the service did not answer, which is read again after `RESEAL`; not found is the service's last word. */
 function unanswered(answer: { readonly failure: string } | object): boolean {
-  return "failure" in answer && answer.failure !== CODING_AGENT_CALL_FAILURE.NOT_FOUND;
+  return "failure" in answer && answer.failure !== AGENT_CALL_FAILURE.NOT_FOUND;
 }
 
-const UNANSWERED_PAGE = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED_PAGE = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** How one followed transcript is read at once: its newest page, which the follow opens with, and the page past a cursor, with whether the service's held read would have held on it. */
 export interface TranscriptReads {
   readonly newest: () => Effect.Effect<
-    CodingAgentNewestAnswer | Extract<CodingAgentMessagesAnswerView, { failure: unknown }>
+    AgentNewestAnswer | Extract<AgentMessagesAnswerView, { failure: unknown }>
   >;
-  readonly after: (
-    after: string,
-  ) => Effect.Effect<TranscriptNowAnswer | CodingAgentMessagesAnswerView>;
+  readonly after: (after: string) => Effect.Effect<TranscriptNowAnswer | AgentMessagesAnswerView>;
 }
 
 /** What this host holds of one followed transcript (`transcript-held.ts`): its window as last told, recalled as a follow opens, kept as each page is told, and forgotten where the transcript is gone. */
 export interface TranscriptMemory {
-  readonly recall: Effect.Effect<Option.Option<CodingAgentNewestAnswer>>;
-  readonly keep: (window: CodingAgentNewestAnswer) => Effect.Effect<void>;
+  readonly recall: Effect.Effect<Option.Option<AgentNewestAnswer>>;
+  readonly keep: (window: AgentNewestAnswer) => Effect.Effect<void>;
   readonly forget: Effect.Effect<void>;
 }
 
 /** The window held, with a page past its cursor joined on by id: the page's word on the agent, its cursor, and the held window's `before`. */
 function joinedWindow(
-  window: CodingAgentNewestAnswer,
-  answer: TranscriptNowAnswer | CodingAgentMessagesAnswerView,
-): CodingAgentNewestAnswer {
+  window: AgentNewestAnswer,
+  answer: TranscriptNowAnswer | AgentMessagesAnswerView,
+): AgentNewestAnswer {
   const page = windowsPage(answer);
   if ("failure" in page) return window;
   const { wakeIn: _wakeIn, ...read } = page as typeof page & { readonly wakeIn?: number };
@@ -357,7 +353,7 @@ export function followTranscript<Key>(
   key: Key,
   reads: TranscriptReads,
   memory: TranscriptMemory,
-  tell: (page: CodingAgentTranscriptPage) => Effect.Effect<void>,
+  tell: (page: AgentTranscriptPage) => Effect.Effect<void>,
 ): Effect.Effect<void> {
   return Effect.scoped(
     Effect.gen(function* () {
@@ -370,7 +366,7 @@ export function followTranscript<Key>(
               tell({ ...answer, newest: true, caughtUp: false }),
             );
           }
-          toldNotFound = answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND;
+          toldNotFound = answer.failure === AGENT_CALL_FAILURE.NOT_FOUND;
           return Effect.andThen(toldNotFound ? memory.forget : Effect.void, tell(answer));
         }),
         // Note that a newest page the service keeps not answering is asked for `RESEALS` times, as the live read is, and then ends the follow on the failure told, so the window offers Try again.
@@ -395,7 +391,7 @@ export function followTranscript<Key>(
         }
         yield* memory.forget;
         if (toldNotFound) return;
-        return yield* tell({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+        return yield* tell({ failure: AGENT_CALL_FAILURE.NOT_FOUND });
       }
       const { state } = sealed.success;
       const opened =
@@ -424,7 +420,7 @@ export function followTranscript<Key>(
         { readonly said: string; readonly at: number | undefined; readonly paged: boolean }
       >();
       /** A page's messages to tell, read at its cursor's revision: every one but those the rows drew at a later revision. */
-      const heardPaged = (messages: readonly CodingAgentMessage[], cursor: string) => {
+      const heardPaged = (messages: readonly AgentTranscriptMessage[], cursor: string) => {
         const at = Number(cursorParts(cursor).revision);
         return messages.filter((message) => {
           const was = told.get(message.id);
@@ -450,7 +446,7 @@ export function followTranscript<Key>(
         });
       heardPaged(window.messages, window.cursor);
       /** The rows' messages not yet told, beside what the last page said of the agent; the cursor moves past them where they follow on from it. */
-      const tellDrawn = (page: CodingAgentTranscriptPage, state: LiveState) =>
+      const tellDrawn = (page: AgentTranscriptPage, state: LiveState) =>
         Effect.gen(function* () {
           if (state.kind !== LIVE_STATE.STANDING || "failure" in page) return;
           const fresh = heardDrawn(state.drawn);
@@ -471,7 +467,7 @@ export function followTranscript<Key>(
         Stream.runHead,
       );
       /** The last page told, whose word on the agent the rows drawn beside the next read are told with; none before the first. */
-      let last: CodingAgentTranscriptPage | undefined;
+      let last: AgentTranscriptPage | undefined;
       while (true) {
         yield* wake;
         const was = yield* SubscriptionRef.get(state);
@@ -497,7 +493,7 @@ export function followTranscript<Key>(
           yield* memory.forget;
           const newest = yield* readNewest;
           if ("failure" in newest) {
-            if (newest.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return;
+            if (newest.failure === AGENT_CALL_FAILURE.NOT_FOUND) return;
             // Note that a service that answers neither read is down rather than refusing the cursor, so the follow stays and tries both again, as any page it did not answer is read again.
             wake = Effect.sleep(RESEAL);
             continue;
@@ -513,7 +509,7 @@ export function followTranscript<Key>(
           fromHeld = false;
           const newest = yield* readNewest;
           if ("failure" in newest) {
-            if (newest.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return yield* memory.forget;
+            if (newest.failure === AGENT_CALL_FAILURE.NOT_FOUND) return yield* memory.forget;
             wake = Effect.sleep(RESEAL);
             continue;
           }
@@ -532,14 +528,14 @@ export function followTranscript<Key>(
         yield* tell(page);
         last = page;
         if ("failure" in answer) {
-          if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return yield* memory.forget;
+          if (answer.failure === AGENT_CALL_FAILURE.NOT_FOUND) return yield* memory.forget;
           wake = Effect.sleep(RESEAL);
           continue;
         }
         window = joinedWindow(window, shown);
         yield* memory.keep(window);
         // Note that a full page is followed by the next at once, and a short one is caught up, with no empty page read to say so.
-        if (answer.messages.length >= CODING_AGENT_BOUNDS.MESSAGES_PAGE) {
+        if (answer.messages.length >= AGENT_BOUNDS.MESSAGES_PAGE) {
           wake = Effect.void;
           continue;
         }

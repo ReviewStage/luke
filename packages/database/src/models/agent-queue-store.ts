@@ -52,15 +52,15 @@
 
 import type { HostedApiError } from "@luke/features";
 import { AGENT_QUEUE_BOUNDS, QUEUE_PAUSE, type QueuePause } from "@luke/features/agent-queue-wire";
-import { LINE_GRACE_MILLIS } from "@luke/features/coding-agent-status";
-import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { LINE_GRACE_MILLIS } from "@luke/features/agent-status";
+import type { AgentAttachment } from "@luke/features/agent-wire";
 import { TURN_STATUS } from "@luke/wire";
 import { and, asc, count, eq, exists, inArray, isNull, lte, max, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
+import { agentTable } from "../schemas/agent.js";
 import { agentQueuePause, agentQueueRevision, queuedMessage } from "../schemas/agent-queue.js";
-import { codingAgent } from "../schemas/coding-agent.js";
 import { turns } from "../schemas/storage.js";
 import { agentReachableBy } from "./workspace-store.js";
 
@@ -83,7 +83,7 @@ export interface QueuedMessageRow {
   readonly userId: string;
   readonly clientKey: string;
   readonly text: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly heldUntil: Date | undefined;
   readonly claimedAt: Date | undefined;
 }
@@ -119,7 +119,7 @@ const PauseRowSchema = Schema.Struct({
 /** A row as the store reads it, its files as the request carried them. */
 function messageOf(row: typeof QueuedRowSchema.Type): QueuedMessageRow {
   // SAFETY: the column is written only from a message request's files, which their schema read.
-  const attachments = (row.attachments ?? []) as readonly CodingAgentAttachment[];
+  const attachments = (row.attachments ?? []) as readonly AgentAttachment[];
   return {
     ...row,
     attachments,
@@ -142,9 +142,9 @@ const findReached = SqlSchema.findAll({
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
-        .select({ id: codingAgent.id })
-        .from(codingAgent)
-        .where(and(eq(codingAgent.id, agentId), agentReachableBy(userId))),
+        .select({ id: agentTable.id })
+        .from(agentTable)
+        .where(and(eq(agentTable.id, agentId), agentReachableBy(userId))),
     ),
 });
 
@@ -211,7 +211,7 @@ const insertMessage = SqlSchema.findAll({
         .values({
           ...row,
           // SAFETY: the files are a message request's, which their schema read.
-          attachments: attachments as readonly CodingAgentAttachment[] | null,
+          attachments: attachments as readonly AgentAttachment[] | null,
           createdAt: now,
           updatedAt: now,
         })
@@ -550,7 +550,7 @@ export function queueAgentMessage(
   message: {
     readonly clientKey: string;
     readonly text: string;
-    readonly attachments?: readonly CodingAgentAttachment[] | undefined;
+    readonly attachments?: readonly AgentAttachment[] | undefined;
   },
 ): AgentQueueEffect<Option.Option<QueueOutcome>> {
   let inserted = false;
@@ -810,9 +810,9 @@ const findUnpausedQueues = SqlSchema.findAll({
   execute: ({ limit }) =>
     Database.use((db) =>
       db
-        .selectDistinct({ agentId: queuedMessage.agentId, userId: codingAgent.userId })
+        .selectDistinct({ agentId: queuedMessage.agentId, userId: agentTable.userId })
         .from(queuedMessage)
-        .innerJoin(codingAgent, eq(codingAgent.id, queuedMessage.agentId))
+        .innerJoin(agentTable, eq(agentTable.id, queuedMessage.agentId))
         .where(
           and(
             sql`not ${exists(
@@ -828,7 +828,7 @@ const findUnpausedQueues = SqlSchema.findAll({
                 .from(turns)
                 .where(
                   and(
-                    eq(turns.conversationId, codingAgent.conversationId),
+                    eq(turns.conversationId, agentTable.conversationId),
                     inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
                   ),
                 ),

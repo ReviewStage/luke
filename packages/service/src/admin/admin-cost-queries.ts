@@ -12,18 +12,29 @@
  */
 
 import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
+import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { hostedUsage } from "@luke/database/schemas/usage";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { AGENT_CONVERSATION_KINDS } from "@luke/database/storage-vocabulary";
 import {
   type AdminCost,
   type AdminCostAccountInfo,
   COST_SOURCE,
 } from "@luke/features/admin-cost-wire";
 import type { AdminMetricsScope, AdminMetricsWindow } from "@luke/features/admin-wire";
-import { and, count, eq, gt, gte, isNotNull, type SQLWrapper, sql, sum } from "drizzle-orm";
+import {
+  and,
+  count,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNotNull,
+  type SQLWrapper,
+  sql,
+  sum,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -83,7 +94,7 @@ const TURN_INSTANT = sql`coalesce(${turns.settledAt}, ${turns.queuedAt})`;
  * are its conversation's children, as `turnUsagesOf` sums an agent's; every
  * other turn is Luke's own.
  */
-const TURN_SOURCE = sql<string>`case when ${conversations.kind} = ${CONVERSATION_KIND.CODING_AGENT} or ${parentConversation.kind} = ${CONVERSATION_KIND.CODING_AGENT} then ${COST_SOURCE.CODING_AGENTS} else ${COST_SOURCE.LUKE} end`;
+const TURN_SOURCE = sql<string>`case when ${inArray(conversations.kind, AGENT_CONVERSATION_KINDS)} or ${inArray(parentConversation.kind, AGENT_CONVERSATION_KINDS)} then ${COST_SOURCE.AGENTS} else ${COST_SOURCE.LUKE} end`;
 
 /**
  * One element per share a turn's tokens were priced in: its by-model
@@ -96,7 +107,7 @@ const TURN_SHARES = sql`jsonb_array_elements(case when jsonb_typeof(${turns.usag
 
 const TokenRowSchema = Schema.Struct({
   day: Schema.String,
-  source: Schema.Literals([COST_SOURCE.CODING_AGENTS, COST_SOURCE.LUKE]),
+  source: Schema.Literals([COST_SOURCE.AGENTS, COST_SOURCE.LUKE]),
   userId: Schema.String,
   model: Schema.NullOr(Schema.String),
   fastRefused: Schema.Boolean,
@@ -180,7 +191,7 @@ const findDictationSeconds = SqlSchema.findAll({
 });
 
 /** When GitHub said the agent's pull request merged, in epoch milliseconds, as its row keeps it. */
-const MERGED_AT = sql<number>`(${codingAgent.published}->>'mergedAt')::bigint`;
+const MERGED_AT = sql<number>`(${agentTable.published}->>'mergedAt')::bigint`;
 
 const MERGED_DAY = utcDayOfEpochMs(MERGED_AT);
 
@@ -198,11 +209,11 @@ const findMergedPullRequests = SqlSchema.findAll({
   execute: (filter) =>
     Database.use((db) =>
       db
-        .select({ day: MERGED_DAY, userId: codingAgent.userId, merged: count() })
-        .from(codingAgent)
-        .innerJoin(user, eq(user.id, codingAgent.userId))
+        .select({ day: MERGED_DAY, userId: agentTable.userId, merged: count() })
+        .from(agentTable)
+        .innerJoin(user, eq(user.id, agentTable.userId))
         .where(and(gte(MERGED_AT, filter.fetchStart.getTime()), keptAccounts(filter)))
-        .groupBy(MERGED_DAY, codingAgent.userId),
+        .groupBy(MERGED_DAY, agentTable.userId),
     ),
 });
 

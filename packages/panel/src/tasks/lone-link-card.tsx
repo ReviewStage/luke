@@ -1,4 +1,4 @@
-import { CHECK_SUMMARY } from "@luke/features/coding-agent-wire";
+import { CHECK_SUMMARY } from "@luke/features/agent-wire";
 import { INBOX_BLOCK } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
@@ -14,10 +14,11 @@ import { placeChipLook } from "@luke/features/place-chip-model";
 import { LIST_VARIANT, List, ListRow, ProviderMark, RowHint, RowHintOptions } from "@luke/ui";
 import { AppWindowIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
+import { pullRequestStateWord } from "./agent-model.js";
 import { LinesChanged, PUBLISHED_META_CLASS } from "./agent-published.js";
-import { pullRequestStateWord } from "./coding-agent-model.js";
 import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { githubName, MentionChipCard } from "./mention-chip.js";
+import { holderTaskId } from "./mention-holder.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { useKnownNames } from "./use-known-names.js";
@@ -110,7 +111,7 @@ function PullRequestRowCard({
   const doors = useMentionDoors();
   const openLink = useOpenLink();
   const standing = useLinkStanding(mention, {
-    taskId: doors.taskId,
+    taskId: holderTaskId(doors.holder),
     workspace: doors.place.workspace,
   });
   const known = standing?.pullRequest;

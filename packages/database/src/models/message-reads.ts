@@ -47,7 +47,7 @@ import {
   turnlessUserLine,
   turns,
 } from "../schemas/storage.js";
-import { CONVERSATION_KIND } from "../storage-vocabulary.js";
+import { AGENT_CONVERSATION_KINDS } from "../storage-vocabulary.js";
 import {
   EpochMillisColumnSchema,
   InstantColumnSchema,
@@ -1098,7 +1098,7 @@ function lineOfTheAgents(): SQL {
  * written in the coding-agent conversation `conversationId` names, by the
  * same rule `awaitingLinesOfReached` reads, or null where none stands: what
  * a live statement selects so its reader judges the line's grace
- * (`@luke/features/coding-agent-status`) without the statement reading the
+ * (`@luke/features/agent-status`) without the statement reading the
  * clock.
  */
 export function newestAwaitingLineAt(conversationId: SQLWrapper): SQL<Date | null> {
@@ -1111,7 +1111,7 @@ export function newestAwaitingLineAt(conversationId: SQLWrapper): SQL<Date | nul
     .where(
       and(
         eq(messages.conversationId, conversationId),
-        eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+        inArray(conversations.kind, AGENT_CONVERSATION_KINDS),
         turnlessUserLine(messages),
         isNull(messages.withdrawnAt),
         lineOfTheAgents(),
@@ -1150,7 +1150,7 @@ const newestAwaitingLines = SqlSchema.findAll({
           and(
             userId === null ? undefined : eq(messages.userId, userId),
             inArray(messages.conversationId, [...conversationIds]),
-            eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+            inArray(conversations.kind, AGENT_CONVERSATION_KINDS),
             turnlessUserLine(messages),
             isNull(messages.withdrawnAt),
             lineOfTheAgents(),

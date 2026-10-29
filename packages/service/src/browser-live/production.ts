@@ -12,7 +12,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import {
   handBackBrowserTab,
   noteBrowserTabPage,
-  readTaskBrowserTab,
+  readBrowserTab,
   renewBrowserTabTakeover,
   takeOverBrowserTab,
 } from "@luke/database/models/agent-browser-tabs";
@@ -45,7 +45,7 @@ export const browserLiveDependencies: Effect.Effect<
     agentBrowserLayer.pipe(Layer.provide(sandboxPtyLayer)),
   );
   return {
-    readTab: (userId, taskId, tabId) => run(readTaskBrowserTab(userId, taskId, tabId)),
+    readTab: (userId, place, tabId) => run(readBrowserTab(userId, place, tabId)),
     // Note that the tab was read under the member's reach first, so its agent's conversation is read whoever started it.
     sessionOf: (conversationId) =>
       run(

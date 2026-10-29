@@ -380,6 +380,47 @@ export function decodedLiveRows<Part extends string, Rows>(
   );
 }
 
+/**
+ * A read followed until it is gone, each answer's rows, every part's,
+ * decoded under `schema` and handed to `take` the moment its poll answers,
+ * before the follow carries the answer's txids on to a write waiting for
+ * them. So a write confirmed on the read finds its rows already taken,
+ * where a reader of `decodedLiveRows` may not have taken them yet. An
+ * answer carrying no rows inline hands none; one whose rows do not decode
+ * is a failed poll, asked again, and a first one fails the follow, which
+ * the caller seals again.
+ */
+export function followTakingRows<Part extends string, Rows>(
+  dependencies: LiveFollowDependencies<Part>,
+  first: SealedRead<Part>,
+  schema: Schema.Decoder<Rows>,
+  take: (rows: Rows) => Effect.Effect<void>,
+): Effect.Effect<void, LiveBroken> {
+  const decode = Schema.decodeUnknownOption(schema);
+  const parts = Object.keys(first.queries).filter((part): part is Part => part in first.queries);
+  /** Takes the answer's rows where it carries them, answering whether they decoded. */
+  const taken = (read: SealedRead<Part>) => {
+    const carried = rowsOf(parts, read);
+    if (carried === undefined) return Effect.succeed(true);
+    return Option.match(decode(carried), {
+      onNone: () => Effect.succeed(false),
+      onSome: (rows) => Effect.as(take(rows), true),
+    });
+  };
+  return Effect.gen(function* () {
+    if (!(yield* taken(first))) return yield* new LiveBroken({ reason: "a row did not decode" });
+    const poll: LiveFollowDependencies<Part>["poll"] = (after, cursor) =>
+      Effect.flatMap(dependencies.poll(after, cursor), (read) =>
+        "failure" in read
+          ? Effect.succeed(read)
+          : Effect.map(taken(read), (decoded) =>
+              decoded ? read : { failure: "a row did not decode" },
+            ),
+      );
+    yield* Stream.runDrain(liveRows({ ...dependencies, poll }, first));
+  });
+}
+
 /** How long a follow that stopped, or whose read the service did not answer, waits before it is read again. */
 export const LIVE_RESTART = Duration.seconds(5);
 

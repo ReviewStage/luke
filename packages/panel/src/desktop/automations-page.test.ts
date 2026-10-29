@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
@@ -19,7 +20,6 @@ import {
   type AutomationSummary,
   type AutomationWorkspaceRun,
 } from "@luke/features/automation-wire";
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -90,7 +90,7 @@ function automation(n: number, patch: Partial<AutomationSummary> = {}): Automati
     enabled: true,
     pausedReason: null,
     trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
-    action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage today's issues." },
+    action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Triage today's issues." },
     guards: AUTOMATION_DEFAULT_GUARDS,
     nextRunAt: null,
     lastRun: null,
@@ -249,9 +249,9 @@ let deletes: string[] = [];
 /** Every ask for a workspace's agents, as the act carried it. */
 let agentsAsked: unknown[] = [];
 /** The workspace's newest agents on the repository, as a read with no words answers them. */
-let workspaceAgents: readonly CodingAgentSummary[] = [];
+let workspaceAgents: readonly AgentSummary[] = [];
 /** The agents a search for `words` finds, as the service answers it. */
-let agentsFound: (words: string) => readonly CodingAgentSummary[] = () => [];
+let agentsFound: (words: string) => readonly AgentSummary[] = () => [];
 /** The service's runs of every automation, newest first, as a read of one's runs answers them. */
 let runs: AutomationRunSummary[] = [];
 /** Every run of the workspace's automations, as its Runs tab's follow pushes them. */
@@ -477,7 +477,7 @@ beforeEach(() => {
         drawWrite();
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { deleted: true } });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
+      if (request.kind === ACT_KIND.AGENTS_MODELS) {
         catalogReads += 1;
         const value = catalogRefused
           ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
@@ -488,13 +488,13 @@ beforeEach(() => {
             };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
+      if (request.kind === ACT_KIND.AGENTS_DEFAULT_READ) {
         const value = defaultRefused
           ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
           : { choice: DEFAULT_CHOICE };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+      if (request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST) {
         agentsAsked.push(request.payload);
         const { words } = request.payload;
         if (words === undefined ? agentListRefused : agentSearchRefused) {
@@ -1249,7 +1249,7 @@ test("a new automation is created only once it is named and told its task, and t
       cron: "0 9 * * 1-5",
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     },
-    action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage the issues opened overnight." },
+    action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Triage the issues opened overnight." },
     scope: AUTOMATION_SCOPE.PERSONAL,
     target: { kind: AUTOMATION_TARGET.NEW_AGENT },
     archiveSuccessful: false,
@@ -2969,7 +2969,7 @@ test("an automation row's ⋯, its right-click and the menu key open the same me
     assert.equal(openMenus()[0]?.getAttribute("aria-label"), "Automation actions");
     assert.deepEqual(
       items().map((item) => item.textContent),
-      ["Copy link", "Run now", "Show details⌥↓", "Delete"],
+      ["Copy link", "Run now", "Delete"],
     );
     await closeMenu();
   }

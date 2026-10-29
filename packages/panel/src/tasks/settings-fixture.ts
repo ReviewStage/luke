@@ -99,7 +99,7 @@ const STAGED_INSTALL_SCRIPT = "https://luke.test/install.sh";
 const SETTINGS_LINKS: ReadonlyMap<string, SettingsLink> = new Map<string, SettingsLink>([
   [RUN_PROFILE.SETTINGS_ACCOUNT, { page: SETTINGS_VIEW.ACCOUNT }],
   [RUN_PROFILE.SETTINGS_WORKSPACE, { page: SETTINGS_VIEW.WORKSPACE, workspaceId: WORKSPACE.ACME }],
-  [RUN_PROFILE.SETTINGS_AGENTS, { page: SETTINGS_VIEW.CODING_AGENTS }],
+  [RUN_PROFILE.SETTINGS_AGENTS, { page: SETTINGS_VIEW.AGENTS }],
   [RUN_PROFILE.SETTINGS_HOSTS, { page: SETTINGS_VIEW.HOSTS }],
   [RUN_PROFILE.SETTINGS_INTEGRATIONS, { page: SETTINGS_VIEW.INTEGRATIONS }],
   [RUN_PROFILE.SETTINGS_SKILLS, { page: SETTINGS_VIEW.SKILLS, workspaceId: WORKSPACE.ACME }],
@@ -471,7 +471,7 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
   const signedUp = dailySignups.reduce((sum, day) => sum + day.count, 0);
   const reach = [
     [REACH_FEATURE.TASKS, 38],
-    [REACH_FEATURE.CODING_AGENTS, 33],
+    [REACH_FEATURE.AGENTS, 33],
     [REACH_FEATURE.INBOX, 26],
     [REACH_FEATURE.INTEGRATIONS, 29],
     [REACH_FEATURE.AUTOMATIONS, 9],
@@ -572,8 +572,8 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
       },
     ],
   }),
-  [ACT_KIND.CODING_AGENTS_MODELS]: () => ({ models: MODELS }),
-  [ACT_KIND.CODING_AGENTS_DEFAULT_READ]: () => ({
+  [ACT_KIND.AGENTS_MODELS]: () => ({ models: MODELS }),
+  [ACT_KIND.AGENTS_DEFAULT_READ]: () => ({
     choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
   }),
   [ACT_KIND.CHAPTERS_MODEL_READ]: () => ({ model: CHAPTERS_MODEL.SONNET }),

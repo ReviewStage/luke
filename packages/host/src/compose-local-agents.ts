@@ -4,12 +4,12 @@ import type {
   DeviceAgentDevice,
   HostedDeviceAgentClient,
 } from "@luke/features";
+import { DEVICE_BEAT } from "@luke/features/agent-wire";
 import {
   CHECKOUT_IDENTITY_SCRIPT,
   type CheckoutIdentity,
   checkoutIdentityEnv,
 } from "@luke/features/checkout-identity";
-import { DEVICE_BEAT } from "@luke/features/coding-agent-wire";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ISOLATION,
@@ -579,8 +579,15 @@ export function composeLocalAgents(
          * between turns; whether it stands. The last hold let go of stops the
          * VM, so a check between turns never leaves it running, and never
          * stops it under a runner. A VM a discard deleted is held by nothing.
+         * Where a runner's launch (`lineId`) holds it and the stop fails, the
+         * launch joins `unstopped`, so a beat stops it again before the
+         * launch is settled.
          */
-        const vmHeld = <E, R>(agentId: string, start: Effect.Effect<boolean, E, R>) =>
+        const vmHeld = <E, R>(
+          agentId: string,
+          start: Effect.Effect<boolean, E, R>,
+          lineId?: string,
+        ) =>
           Effect.gen(function* () {
             const lock = vmLockOf(agentId);
             const up = yield* lock.withPermit(
@@ -599,8 +606,9 @@ export function composeLocalAgents(
                     if (held === undefined) return;
                     if (held > 1) return vmHolds.set(agentId, held - 1);
                     vmHolds.delete(agentId);
-                    if (!(yield* platform.sandbox.stopped(agentId)))
-                      report("a local agent's VM could not be stopped");
+                    if (yield* platform.sandbox.stopped(agentId)) return;
+                    if (lineId !== undefined) unstopped.set(lineId, VM_STOP_TRIES);
+                    report("a local agent's VM could not be stopped");
                   }),
                 )
                 .pipe(Effect.provideContext(services)),
@@ -627,10 +635,13 @@ export function composeLocalAgents(
 
         /** A launch whose runner never started, kept and settled as not started, naming why where the device says. */
         const notStarted = (agentId: string, id: string, refusal?: DeviceLaunchRefusal) =>
-          Effect.andThen(
-            keepLaunch(userId, id, agentId),
-            settledLaunch(id, { exitCode: NOT_STARTED, refusal }),
-          );
+          Effect.gen(function* () {
+            yield* keepLaunch(userId, id, agentId);
+            const ending = { exitCode: NOT_STARTED, refusal };
+            // Note that a launch whose VM would not stop as its start was given up stays kept with how it ended, which every beat stops again before it settles (`vmLetGo`).
+            if (unstopped.has(id)) return void endings.set(id, ending);
+            yield* settledLaunch(id, ending);
+          });
 
         /** The agent's own repository made where it has none, reading the agent's GitHub token where it has one through the sandbox's helper, never the token itself: a folder for an agent with no repository. */
         const madeWorktree = (
@@ -802,6 +813,7 @@ export function composeLocalAgents(
                 sandbox.started({ agentId, folder: layout.folder, github: withRepository }),
                 true,
               ),
+              line.id,
             ).pipe(
               Scope.provide(runnerScope),
               Effect.as(Option.none<string>()),
@@ -868,7 +880,13 @@ export function composeLocalAgents(
               // Note that how it ended is kept before the runner is let go of, so a beat that settles it first carries its exit code.
               endings.set(line.id, ending);
               runners.delete(agentId);
-              yield* Scope.close(runnerScope, Exit.void);
+              // Note that the launch is starting again while its scope closes, since the VM's stop outlasts a beat and no beat may settle the launch before it has said whether the stop failed.
+              starting.add(line.id);
+              yield* Scope.close(runnerScope, Exit.void).pipe(
+                Effect.ensuring(Effect.sync(() => starting.delete(line.id))),
+              );
+              // Note that a launch whose VM would not stop stays kept, which every beat stops again before it settles (`vmLetGo`).
+              if (unstopped.has(line.id)) return;
               yield* settledLaunch(line.id, ending);
             }).pipe(Effect.forkIn(agentScope));
             runners.set(agentId, { lineId: line.id, stdin, handle, exited });

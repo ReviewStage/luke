@@ -15,6 +15,7 @@ import {
   adminFavoriteParamsSchema,
   adminReadParamsSchema,
 } from "@luke/features/admin-wire";
+import { type BrowserTabsPlace, browserTabsPlaceId } from "@luke/features/agent-browser-tab-wire";
 import {
   browserTabsOfLiveRows,
   LIVE_SIGNED_OUT,
@@ -463,6 +464,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   let view: TasksView = idleView();
   let published: TasksView = view;
+  /**
+   * Every ask to change the task on screen, an open, a close, or a start
+   * that opens its task, counted as it arrives. Note that a start opens its
+   * task only while it is still the newest of them, because one answered
+   * after the developer went to another task would turn the window back.
+   */
+  let screenAsks = 0;
 
   function publish(): void {
     // Note that the view keeps the identity of what it shares with the one
@@ -533,17 +541,18 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   }
 
-  /** The Browser tabs of each task a window's side panel follows, by the task. */
+  /** The Browser tabs of each agent or task a window's side panel follows, by the agent's or the task's id, which never collide. */
   const browserTabsFollows = yield* FiberMap.make<string>();
   const decodeBrowserTabs = Schema.decodeUnknownOption(taskBrowserTabsLiveRowsSchema);
 
   /**
-   * Follows `taskId`'s Browser tabs live until let go, each change emitted as
+   * Follows the Browser tabs of `place`, one agent's or a task's agents',
+   * live until let go, each change emitted as
    * `TASKS_BROWSER_TABS_CHANGED`. A takeover lapses with no row moving, so
    * the rows last delivered are told again at each instant one lapses, until
    * the next delivery takes their place.
    */
-  function followBrowserTabs(taskId: string) {
+  function followBrowserTabs(place: BrowserTabsPlace) {
     type Rows = typeof taskBrowserTabsLiveRowsSchema.Type;
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
     const userId = dependencies.accountId();
@@ -551,7 +560,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       kernel.emit(
         GATEWAY_EVENT.TASKS_BROWSER_TABS_CHANGED,
         carried({
-          taskId,
+          ...place,
           view:
             rows === undefined
               ? { failure: TASK_CALL_FAILURE.UNANSWERED }
@@ -585,7 +594,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         return yield* pushLive({
           seal: (poll, after) =>
             gate() && userId !== undefined
-              ? Effect.map(served(client.browserTabsLive(taskId, userId, poll, after)), (sealed) =>
+              ? Effect.map(served(client.browserTabsLive(place, userId, poll, after)), (sealed) =>
                   sealed.ok
                     ? sealed.answer
                     : {
@@ -677,7 +686,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const scope = yield* Scope.make();
     const collections = yield* Scope.provide(scope)(
       taskListCollections({
-        draw: ({ list, taskAgents, taskPullRequests, pendingTasks }) => {
+        draw: ({ list, taskAgents, taskPullRequests, taskAgentPins, pendingTasks }) => {
           const { pendingTasks: _held, ...rest } = view;
           view = pendingTasks.length === 0 ? rest : { ...rest, pendingTasks };
           write({
@@ -685,6 +694,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             tasklessAgents: list.planlessAgents ?? [],
             taskAgents,
             taskPullRequests,
+            taskAgentPins,
           });
           if (view.activeTaskId !== undefined) heldAsListed(view.activeTaskId);
         },
@@ -1559,6 +1569,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return { opened: false };
         const { taskId } = read;
+        screenAsks += 1;
         // A press on the task already open, drawn or being read, asks nothing again.
         const status = view.document.status;
         if (
@@ -1674,18 +1685,18 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const answer = yield* Cache.get(issueReads, linkReadKey(read));
         return carried<TasksIssueAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
-    // A task's agents' Browser tabs are answered to the side panel that
-    // asked and held nowhere, since each carries a page's address and title:
+    // An agent's or a task's agents' Browser tabs are answered to the side
+    // panel that asked and held nowhere, since each carries a page's address and title:
     // the panel draws what it was answered, and reads again while it stands.
     [GATEWAY_METHOD.TASKS_BROWSER_TABS]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
           tasksBrowserTabsParamsSchema,
           params,
-          "reading a task's Browser tabs names the task",
+          "reading Browser tabs names the agent or the task",
         );
         if (!gate()) return carried<TasksBrowserTabsAnswer>(BROWSER_TABS_UNANSWERED);
-        return carried<TasksBrowserTabsAnswer>(yield* served(client.readBrowserTabs(read.taskId)));
+        return carried<TasksBrowserTabsAnswer>(yield* served(client.readBrowserTabs(read)));
       }),
     // A tab a member opens in an agent's browser is answered to the panel
     // that asked and held nowhere, as the task's tabs are.
@@ -1694,7 +1705,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = yield* readParams(
           tasksBrowserTabOpenParamsSchema,
           params,
-          "opening a Browser tab names the task, the agent, and the address",
+          "opening a Browser tab names the agent and the address",
         );
         if (!gate()) return carried<TasksBrowserTabOpenAnswer>(BROWSER_TABS_UNANSWERED);
         return carried<TasksBrowserTabOpenAnswer>(yield* served(client.openBrowserTab(read)));
@@ -1777,19 +1788,18 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* FiberMap.remove(historyFollows, read.taskId);
         return {};
       }),
-    // A task's Browser tabs are followed for a window's side panel while it
-    // lists them, and told only as `TASKS_BROWSER_TABS_CHANGED`; a follow of
+    // An agent's or a task's Browser tabs are followed for a window's side
+    // panel while it lists them, and told only as `TASKS_BROWSER_TABS_CHANGED`; a follow of
     // what is already followed does nothing.
     [GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
           taskBrowserTabsFollowSchema,
           params,
-          "following a task's Browser tabs names the task",
+          "following Browser tabs names the agent or the task",
         );
         if (!gate()) return {};
-        const { taskId } = read;
-        yield* FiberMap.run(browserTabsFollows, taskId, followBrowserTabs(taskId), {
+        yield* FiberMap.run(browserTabsFollows, browserTabsPlaceId(read), followBrowserTabs(read), {
           onlyIfMissing: true,
         });
         return {};
@@ -1799,9 +1809,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = yield* readParams(
           taskBrowserTabsFollowSchema,
           params,
-          "letting a task's Browser tabs go names the task",
+          "letting Browser tabs go names the agent or the task",
         );
-        yield* FiberMap.remove(browserTabsFollows, read.taskId);
+        yield* FiberMap.remove(browserTabsFollows, browserTabsPlaceId(read));
         return {};
       }),
     // A plan's pages are followed for a window's Inbox while it draws an item
@@ -1943,6 +1953,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // showed.
     [GATEWAY_METHOD.TASKS_CLOSE]: () =>
       Effect.gen(function* () {
+        screenAsks += 1;
         yield* FiberHandle.clear(recordFollow);
         yield* serial(
           Effect.sync(() => {
@@ -1962,22 +1973,36 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return carried<TasksStartAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         const { quiet, ...request } = read;
-        // A quiet start, a group's quick add, opens nothing, and answers once the list carries the task.
+        // A quiet start, a group's quick add or New task set to stay, opens nothing, and answers
+        // once the list carries the task, with its agent's start where it asked for one.
         if (quiet === true) {
           return yield* writtenThenListed(
-            Effect.map(served(client.create(request)), (started) =>
-              started.ok
-                ? ([
-                    carried<TasksStartAnswer>({ planId: started.answer.task.id }),
-                    started.answer.txid,
-                  ] as const)
-                : ([carried<TasksStartAnswer>({ failure: started.failure }), undefined] as const),
-            ),
+            Effect.map(served(client.create(request)), (started) => {
+              if (!started.ok) {
+                const { failure, localAgentRefusal } = started;
+                return [
+                  carried<TasksStartAnswer>(
+                    localAgentRefusal === undefined ? { failure } : { failure, localAgentRefusal },
+                  ),
+                  undefined,
+                ] as const;
+              }
+              const { task, agent, txid } = started.answer;
+              return [
+                carried<TasksStartAnswer>({
+                  planId: task.id,
+                  ...(agent === undefined ? undefined : { agentStart: agent }),
+                }),
+                txid,
+              ] as const;
+            }),
           );
         }
         // Note that a start answers once the task is drawn open rather than once the list carries
         // it, because nothing draws its row from the answer, so a list from before the write only
         // lacks a row it has not drawn yet, and the window opens the task's agent at once.
+        screenAsks += 1;
+        const asked = screenAsks;
         return yield* serial(
           Effect.gen(function* () {
             const started = yield* served(client.create(request));
@@ -1988,6 +2013,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               );
             }
             const { task, agent } = started.answer;
+            const answer = carried<TasksStartAnswer>({
+              planId: task.id,
+              ...(agent === undefined ? undefined : { agentStart: agent }),
+            });
+            // A start the developer went on from, to another task or another start, opens nothing.
+            if (screenAsks !== asked) return answer;
             view = {
               ...withoutPages(view),
               activeTaskId: task.id,
@@ -1995,10 +2026,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             };
             publish();
             yield* openRecord(task.id);
-            return carried<TasksStartAnswer>({
-              planId: task.id,
-              ...(agent === undefined ? undefined : { agentStart: agent }),
-            });
+            return answer;
           }),
         );
       }),

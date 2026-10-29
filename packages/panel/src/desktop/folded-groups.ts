@@ -34,8 +34,10 @@ import { keptKey, useKept } from "../use-kept.js";
  * whose items it lists, a teammate by their account's id, and whether its
  * rows show their media, and its list's width; a task's own Inbox keeps a
  * scope of its own, one for every task, apart from the window's, and shows
- * no media. A choice kept before its scope was is read as the scope that
- * now lists what it listed: a tab kept before the scopes, Needs you or
+ * no media; and the channels keep one scope and one choice of whose items
+ * they list, shared by every channel, apart from the window's, All of
+ * everyone's until first turned. A choice kept before its scope was is read
+ * as the scope that now lists what it listed: a tab kept before the scopes, Needs you or
  * Unread, as To do, and All open or Everything as All; the Needs you
  * button's press, kept before the tabs, as To do where it was pressed and
  * All where it was not; and the sort Waiting longest as Oldest first. A
@@ -63,6 +65,7 @@ const STORAGE_KEY = {
   INBOX_GROUPING: "luke.inboxGrouping",
   INBOX_SORT: "luke.inboxSort",
   INBOX_WHOSE: "luke.inboxWhose",
+  CHANNEL_SCOPE: "luke.channelScope",
   INBOX_MEDIA_PREVIEWS: "luke.inboxMediaPreviews",
   INBOX_SECOND_LINE: "luke.inboxSecondLine",
   INBOX_LIST_WIDTH: "luke.inboxListWidth",
@@ -137,17 +140,23 @@ const storedSort = Schema.fromJsonString(
   ),
 );
 
+/** Whose items an Inbox lists. */
+const whoseSchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal(INBOX_WHOSE.EVERYONE) }),
+  Schema.Struct({ kind: Schema.Literal(INBOX_WHOSE.MINE) }),
+  Schema.Struct({
+    kind: Schema.Literal(INBOX_WHOSE.PERSON),
+    userId: Schema.String,
+    name: Schema.String,
+  }),
+]);
+
 /** Whose items the Inbox lists. */
-const storedWhose = Schema.fromJsonString(
-  Schema.Union([
-    Schema.Struct({ kind: Schema.Literal(INBOX_WHOSE.EVERYONE) }),
-    Schema.Struct({ kind: Schema.Literal(INBOX_WHOSE.MINE) }),
-    Schema.Struct({
-      kind: Schema.Literal(INBOX_WHOSE.PERSON),
-      userId: Schema.String,
-      name: Schema.String,
-    }),
-  ]),
+const storedWhose = Schema.fromJsonString(whoseSchema);
+
+/** The channels' scope and whose items they list, one for every channel. */
+const storedChannelScope = Schema.fromJsonString(
+  Schema.Struct({ show: Schema.Literals(Object.values(INBOX_SHOW)), whose: whoseSchema }),
 );
 
 /** The tabs an earlier version kept, before the scopes: Needs you, Unread, and All open; Everything was kept as All is. */
@@ -191,6 +200,12 @@ const storedShow = Schema.fromJsonString(
   ),
 );
 
+/** The channels' scope: which items they show, and whose. */
+interface ChannelScope {
+  readonly show: InboxShow;
+  readonly whose: InboxWhose;
+}
+
 /** The Inbox's view choices, each kept on this Mac under its own key. */
 const KEPT = {
   INBOX_SHOW: keptKey<InboxShow>(
@@ -206,6 +221,7 @@ const KEPT = {
   GROUPING: keptKey<InboxGrouping>(STORAGE_KEY.INBOX_GROUPING, storedGrouping),
   SORT: keptKey<InboxSort>(STORAGE_KEY.INBOX_SORT, storedSort),
   WHOSE: keptKey<InboxWhose>(STORAGE_KEY.INBOX_WHOSE, storedWhose),
+  CHANNEL_SCOPE: keptKey<ChannelScope>(STORAGE_KEY.CHANNEL_SCOPE, storedChannelScope),
   MEDIA_PREVIEWS: keptKey(STORAGE_KEY.INBOX_MEDIA_PREVIEWS, storedFlag),
   SECOND_LINE: keptKey(STORAGE_KEY.INBOX_SECOND_LINE, storedFlag),
   FOLDED_GROUPS: keptKey(STORAGE_KEY.GROUPS, storedFolds),
@@ -378,6 +394,22 @@ export function useInboxViewChoices(): InboxViewChoices {
     onMediaPreviews,
     secondLine,
     onSecondLine,
+  };
+}
+
+/** The channels' scope until the reader turns it: All of everyone's, since a channel is everyone's threads on one topic. */
+const CHANNEL_SCOPE_OPENING: ChannelScope = { show: INBOX_SHOW.ALL, whose: EVERYONES };
+
+/** The channels' scope, one for every channel, All of everyone's until first turned, and kept as it is turned; the Inbox's other choices stand beside it. */
+export function useChannelScope(): InboxShowChoice & InboxWhoseChoice {
+  const [scope, , change] = useKept(KEPT.CHANNEL_SCOPE, CHANNEL_SCOPE_OPENING);
+  // Note that each turn is merged over what storage holds now, so another window's turn of the other choice is kept beside it.
+  const turn = (turned: Partial<ChannelScope>) => change((kept) => ({ ...kept, ...turned }));
+  return {
+    show: scope.show,
+    onShow: (show) => turn({ show }),
+    whose: scope.whose,
+    onWhose: (whose) => turn({ whose }),
   };
 }
 

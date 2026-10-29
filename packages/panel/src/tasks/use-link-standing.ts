@@ -2,7 +2,7 @@ import {
   type GitHubPerson,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import type { GitHubPullRequestSummary, IssueState } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { issueAddressOf, pullRequestAddressOf } from "@luke/features/link-grammar";
@@ -14,7 +14,7 @@ import * as Atom from "effect/reactivity/Atom";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./coding-agent-model.js";
+import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./agent-model.js";
 
 /**
  * use-link-standing.ts -- a GitHub pull request or issue a link in Luke's words names, as its chip says it: its key, its title, where it stands, who opened it, and a pull request's lines added and removed, read through the workspace's own GitHub App.
@@ -40,9 +40,9 @@ import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./coding-agent-model.js"
  * what its address says.
  */
 
-/** Where the words a chip stands in are: the plan's id, or none off a plan, and the workspace's slug its mentions are written under. */
+/** Where the words a chip stands in are: the plan's id, none off a plan, and the workspace's slug its mentions are written under. */
 export interface ChipWhere {
-  readonly taskId: string;
+  readonly taskId: string | undefined;
   readonly workspace: string;
 }
 
@@ -300,7 +300,11 @@ function wordsWorkspace(
   namedId: string | undefined,
 ): Workspace | undefined {
   const workspaces = planning?.workspaces ?? [];
-  const taskWorkspaceId = planning?.tasks.find((task) => task.id === where.taskId)?.workspaceId;
+  const { taskId } = where;
+  const taskWorkspaceId =
+    taskId === undefined
+      ? undefined
+      : planning?.tasks.find((task) => task.id === taskId)?.workspaceId;
   return (
     workspaces.find((each) => each.id === taskWorkspaceId) ??
     workspaces.find((each) => each.id === namedId) ??

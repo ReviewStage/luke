@@ -11,9 +11,9 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
+import { agentTable } from "./agent.js";
 import { organization, user } from "./auth.js";
 import { channel } from "./channel.js";
-import { codingAgent } from "./coding-agent.js";
 import { inboxMessage } from "./inbox-message.js";
 import { task } from "./task.js";
 
@@ -55,7 +55,7 @@ export const inboxItem = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     agentId: uuid("agent_id")
       .notNull()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     /**
      * The channel of the item's workspace the thread lives in. An insert
      * that names none takes the workspace's #general, which the trigger

@@ -1,4 +1,4 @@
-import { DEVICE_STANDING } from "@luke/features/coding-agent-wire";
+import { DEVICE_STANDING } from "@luke/features/agent-wire";
 import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
 import {
   HOST_WIRE,
@@ -120,9 +120,9 @@ const WORDS = {
   UNKNOWN: "Can't check status",
   CHECKING: "Checking",
   UPGRADE_NEEDED: "Upgrade needed",
-  UPGRADE_TITLE: "Run this on the server to upgrade it",
+  UPGRADE_TITLE: "Run this on the host to upgrade it",
   MAC_UPGRADE: "Update the Luke app on this Mac to upgrade it.",
-  INSTALL_TITLE: "Run this as root on each server",
+  INSTALL_TITLE: "Run this as root on each host",
   LOOP_TITLE: "Or on many servers at once",
   COPY_PROMPT: "Copy agent prompt",
   PROMPT_COPIED: "Agent prompt copied",

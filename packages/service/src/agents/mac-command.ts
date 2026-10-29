@@ -180,7 +180,7 @@ function notRun(reason: string): MacCommandAnswer {
 }
 
 /** Whether a Mac of the account read for its commands within the freshness window. */
-function macListening(userId: string): TaskStoreEffect<boolean> {
+export function macListening(userId: string): TaskStoreEffect<boolean> {
   return Effect.flatMap(Clock.currentTimeMillis, (now) =>
     macListeningSince(
       userId,

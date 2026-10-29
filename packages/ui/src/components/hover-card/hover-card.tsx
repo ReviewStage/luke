@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { GAP, LAYOUT_ELEMENT, Stack } from "../layout/layout.js";
 import { useLinkAddress } from "../menu/link-address.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area.js";
+import { Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
 
 /**
  * hover-card.tsx -- the parts every hover card is drawn from: its head, its notes, and its rule, in one type scale.
@@ -14,10 +15,15 @@ import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area
  * The head is the subject's glyph where it wears one, its name in the card's
  * one weight, wrapped to two lines, or on one line faded where it is cut
  * short as a tab's label is; under the name, a quieter line of what it runs
- * on or whose it is; and at the head's right its corner, muted: how long ago,
- * how it ended, or how many wait. Under the head stand its notes, read whole
+ * on, whose it is, or where it comes from; and at the head's right its
+ * corner, muted, which holds one short word and nothing else: the subject's
+ * age, how it ended, or how many wait. A role, an owner, or a source is no
+ * corner's; it joins the line under the name. Under the head stand its notes, read whole
  * and so wrapped to three lines, or one line faded at its end, and a rule
- * before what a card lists under it.
+ * before what a card lists under it. A card that counts things lists its
+ * figures under that rule as a receipt does, each label muted at the card's
+ * edge and its figure at the other in tabular numbers, a caption's size on a
+ * caption's tight line, so a column of counts reads at a glance.
  *
  * A card's rows are set as a menu's rows are: a glyph on the head's glyph
  * column, words on one line fading out where cut short, and what stands at
@@ -33,6 +39,12 @@ import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area
  * What is drawn here is the card's words alone. The surface it stands on,
  * when it shows, how long it lingers for the pointer to cross onto it, and
  * what its subject is read from are the app's.
+ *
+ * While what a card says is read, it stands as its skeleton
+ * (`HoverCardSkeleton`): the head as the loaded card will draw it, its glyph
+ * or its mark in the same slot, its name, and a line held where the line
+ * under the name will stand, over a line for each note to come, so the card
+ * is placed once at its size and its head does not move as the read lands.
  *
  * A card says what its subject is and offers no way to it, no "Open agent"
  * under a rule, because the control it hangs from opens the subject on a
@@ -72,17 +84,36 @@ const RULE = "luke-hover-card-rule m-0 h-px w-full flex-none border-0 bg-border"
 const ROW =
   "luke-hover-card-row group/row -mx-2 box-border flex h-menu-row w-[calc(100%+--spacing(4))] min-w-0 items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-2 py-0 text-left text-body leading-[inherit] text-foreground transition-colors duration-(--luke-duration-hover) ease-motion-exit data-[look=detail]:text-caption data-[look=detail]:leading-[inherit] data-[look=detail]:text-muted-foreground";
 const ROW_PRESS =
-  "[font-family:inherit] [font-style:inherit] [font-weight:inherit] cursor-press hover:bg-fill-strong focus-visible:bg-fill-strong focus-visible:outline-none";
+  "[font-family:inherit] [font-style:inherit] [font-weight:inherit] cursor-press hover:bg-fill-strong";
+const ROW_FOCUS = "focus-visible:bg-fill-strong focus-visible:outline-none";
 const ROW_GLYPH =
   "luke-hover-card-row-glyph inline-flex w-menu-glyph flex-none justify-center [&>:not(.luke-avatar,:has(.luke-avatar))]:size-menu-glyph group-data-[look=detail]/row:[&>img]:size-hover-card-glyph";
 const ROW_LABEL = "luke-hover-card-row-label min-w-0 flex-1 overflow-hidden whitespace-nowrap";
 const ROW_END =
   "luke-hover-card-row-end flex-none whitespace-nowrap text-caption leading-[inherit] text-muted-foreground tabular-nums";
+const FIGURES = "luke-hover-card-figures m-0 flex flex-col gap-list-gap text-caption";
+const FIGURE =
+  "luke-hover-card-figure flex justify-between gap-control-gap [&_dd]:m-0 [&_dd]:tabular-nums [&_dt]:text-muted-foreground";
 const SCROLL = "luke-hover-card-scroll -mx-2 flex max-h-hover-card-list flex-col";
 const SCROLL_BODY = "luke-hover-card-scroll-body px-2";
 
+/** What a card's skeleton says to a reader while what the card shows is read. */
+const CARD_READING = "Reading…";
+
+/** How wide the line held under a skeleton's name stands, as a model's or a place's words would. */
+const SUB_WIDTH = "50%";
+
+/** How wide a skeleton's last note line stands, short of the card's edge as a note's last line ends; every line before it fills the card. */
+const LAST_NOTE_WIDTH = "80%";
+
 /** The data attributes a card's root carries, which name the card for a test or a capture. */
 type HoverCardMarks = { readonly [mark: `data-${string}`]: string | undefined };
+
+/** One of a card's figures: what it counts, and the count as the card says it. */
+export interface HoverCardFigure {
+  readonly label: string;
+  readonly figure: ReactNode;
+}
 
 /** How a card's row is set: a quieter line under its name, or a row of a list under a rule. */
 export const HOVER_CARD_ROW_LOOK = {
@@ -91,6 +122,12 @@ export const HOVER_CARD_ROW_LOOK = {
 } as const;
 
 export type HoverCardRowLook = (typeof HOVER_CARD_ROW_LOOK)[keyof typeof HOVER_CARD_ROW_LOOK];
+
+/** What a row hands on to a hint hung from it, its handlers and its description among them. */
+type HoverCardRowAnchor = Omit<
+  HTMLAttributes<HTMLElement>,
+  "className" | "style" | "children" | "role" | "tabIndex"
+>;
 
 /** A card's root: its parts in a column, one gap apart. */
 export function HoverCard({
@@ -124,9 +161,9 @@ export function HoverCardHead({
   name: ReactNode;
   /** Whether the name stands on one line, faded where it is cut short, rather than wrapping to two: a task standing in for a title. */
   oneLine?: boolean;
-  /** The quieter line under the name: what the subject runs on, whose it is, or when it ran. */
+  /** The quieter line under the name: what the subject runs on, whose it is, where it comes from, or when it ran. */
   sub?: ReactNode;
-  /** What stands muted at the head's right. */
+  /** What stands muted at the head's right, one short word: the subject's age, how it ended, or how many wait. */
   corner?: ReactNode;
 }): React.JSX.Element {
   const head = (
@@ -158,6 +195,50 @@ export function HoverCardHead({
   );
 }
 
+/**
+ * A card while what it shows is read: its head as the loaded card will draw
+ * it, `mark` or `glyph` in the slot the loaded card wears it in, and its
+ * name, which the control it hangs from already knows; a line held under
+ * the name where the loaded card says one; and `notes` lines standing for
+ * what it says under its head. Its root is marked as a skeleton's for what
+ * finds it, beside the marks the loaded card's root carries.
+ */
+export function HoverCardSkeleton({
+  mark,
+  glyph,
+  name,
+  sub = false,
+  notes = 1,
+  ...marks
+}: {
+  /** What leads the loaded card's head at a card's size, a face or a tile. */
+  mark?: ReactNode;
+  /** The glyph on the loaded card's name's first line. */
+  glyph?: ReactNode;
+  name: ReactNode;
+  /** Whether the loaded card says a line under its name, which the skeleton holds. */
+  sub?: boolean;
+  /** How many lines the loaded card says under its head. */
+  notes?: number;
+} & HoverCardMarks): React.JSX.Element {
+  const lines = Array.from({ length: notes }, (_, at) => at);
+  return (
+    <HoverCard {...marks} data-hover-card-skeleton="">
+      <HoverCardHead
+        mark={mark}
+        glyph={glyph}
+        name={name}
+        sub={sub ? <Skeleton width={SUB_WIDTH} /> : undefined}
+      />
+      <SkeletonRegion label={CARD_READING}>
+        {lines.map((at) => (
+          <Skeleton key={at} width={at === notes - 1 ? LAST_NOTE_WIDTH : undefined} />
+        ))}
+      </SkeletonRegion>
+    </HoverCard>
+  );
+}
+
 /** Words under a card's head, wrapped to three lines, or on one line faded where it is cut short. */
 export function HoverCardNote({
   oneLine = false,
@@ -180,7 +261,31 @@ export function HoverCardRule(): React.JSX.Element {
   return <hr className={RULE} />;
 }
 
-/** A row of a card: its glyph, its words on one line, and what stands at its end; a button where a press opens what it names. */
+/** What a card counts, under a rule and named by `label`: each figure's label muted at the card's edge and its figure at the other, in tabular numbers. */
+export function HoverCardFigures({
+  label,
+  figures,
+}: {
+  label: string;
+  figures: readonly HoverCardFigure[];
+}): React.JSX.Element {
+  return (
+    <dl className={FIGURES} aria-label={label}>
+      {figures.map((figure) => (
+        <div key={figure.label} className={FIGURE}>
+          <dt>{figure.label}</dt>
+          <dd>{figure.figure}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/**
+ * A row of a card: its glyph, its words on one line, and what stands at its
+ * end; a button where a press opens what it names, and otherwise text. What
+ * else it is handed, a hint's handlers and description, it hands on to the row.
+ */
 export function HoverCardRow({
   look = HOVER_CARD_ROW_LOOK.LINE,
   glyph,
@@ -188,6 +293,7 @@ export function HoverCardRow({
   end,
   onPress,
   linkHref,
+  ...anchor
 }: {
   look?: HoverCardRowLook;
   glyph: ReactNode;
@@ -198,7 +304,7 @@ export function HoverCardRow({
   onPress?: (() => void) | undefined;
   /** The address its press opens, where it opens one, which a right-click offers as a link's (`useLinkAddress`). */
   linkHref?: string | undefined;
-}): React.JSX.Element {
+} & HoverCardRowAnchor): React.JSX.Element {
   const linkAddress = useLinkAddress(linkHref);
   const row = (
     <>
@@ -210,13 +316,14 @@ export function HoverCardRow({
     </>
   );
   return onPress === undefined ? (
-    <span className={ROW} data-look={look}>
+    <span {...anchor} className={ROW} data-look={look}>
       {row}
     </span>
   ) : (
     <button
+      {...anchor}
       type="button"
-      className={`${ROW} ${ROW_PRESS}`}
+      className={`${ROW} ${ROW_PRESS} ${ROW_FOCUS}`}
       data-look={look}
       ref={linkAddress}
       onClick={pulseOnPress(onPress, PRESS_PULSE.QUIET)}

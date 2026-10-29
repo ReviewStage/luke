@@ -25,7 +25,6 @@ import { extendTailwindMerge } from "tailwind-merge";
  * tailwind-merge reads each in.
  */
 const PANEL_PLACES = {
-  tracking: ["experiment-tag"],
   spacing: [
     "automation-field",
     "automation-next",
@@ -474,7 +473,6 @@ const merge = extendTailwindMerge({
         "title",
         ...PANEL_SHELL.tracking,
         ...PANEL_WINDOW.tracking,
-        ...PANEL_PLACES.tracking,
         ...TASK_SURFACES.tracking,
       ],
       leading: [

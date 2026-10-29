@@ -134,7 +134,7 @@ it.layer(getTestDB())("the sandbox terminal lease", (it) => {
         const now = at(10);
         const minutesBeforeNow = (minutes: number) => new Date(now.getTime() - minutes * 60_000);
         const cancelBoundMinutes = TURN_ABANDON.CANCEL_AFTER_MS / 60_000;
-        const runDayMinutes = TURN_ABANDON.CODING_AGENT_AFTER_MS / 60_000;
+        const runDayMinutes = TURN_ABANDON.AGENT_AFTER_MS / 60_000;
         const working = yield* runningAgent(minutesBeforeNow(60));
         const stopping = yield* runningAgent(
           minutesBeforeNow(60),

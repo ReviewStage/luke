@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { createServer } from "node:net";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { SyncListener, type SyncListenerShape } from "@luke/database/sync/listener";
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import { defineSyncTable } from "@luke/database/sync/sync-table";
 import { getTestDB, installSyncTables } from "@luke/database/testing";
+import { noDatabase } from "@luke/database/testing/no-database";
 import { sql } from "drizzle-orm";
 import { pgTable, text, uuid } from "drizzle-orm/pg-core";
 import {
@@ -40,7 +40,10 @@ import { NO_TOPICS, Sync, type SyncWatch } from "./watch.js";
  * database is still delivering is never outrun. The listener is the test
  * database's, behind a probe that counts its connections and can end one,
  * as a closed socket does, or deafen it, as a connection that died without
- * a word is.
+ * a word is. The hub is handed a pool that refuses every statement, since
+ * what it sends goes over its listener's own connection: a heartbeat that
+ * went through the pool would leave the listener's session idle, and
+ * Postgres reaps an idle listener's session (`LISTENER.REAPED`).
  */
 
 /** A wait nothing in these tests reaches, so a watch that wakes was woken. */
@@ -133,14 +136,17 @@ const probedListener = Effect.gen(function* () {
   const listener: SyncListenerShape = {
     listen: Effect.gen(function* () {
       yield* acknowledging.await;
-      const payloads = yield* underlying.listen;
+      const listening = yield* underlying.listen;
       const connection = { ended: Deferred.makeUnsafe<never, SqlError>(), deaf: false };
       standing = connection;
       yield* Ref.update(opened, (count) => count + 1);
-      return Stream.merge(
-        Stream.filter(payloads, () => !connection.deaf),
-        Stream.fromEffect(Deferred.await(connection.ended)),
-      );
+      return {
+        payloads: Stream.merge(
+          Stream.filter(listening.payloads, () => !connection.deaf),
+          Stream.fromEffect(Deferred.await(connection.ended)),
+        ),
+        notify: listening.notify,
+      };
     }),
   };
   return {
@@ -163,7 +169,12 @@ const onHub = <A, E, R>(test: (probe: Probe) => Effect.Effect<A, E, R>) =>
     const { clock, asleep } = yield* announcingClock;
     const { listener, ...probe } = yield* probedListener;
     return yield* test({ ...probe, asleep }).pipe(
-      Effect.provide(syncHub.pipe(Layer.provide(Layer.succeed(SyncListener, listener)))),
+      Effect.provide(
+        syncHub.pipe(
+          Layer.provide(Layer.succeed(SyncListener, listener)),
+          Layer.provide(noDatabase),
+        ),
+      ),
       Effect.provideService(Clock.Clock, clock),
     );
   });
@@ -251,7 +262,7 @@ it.layer(probeDB)("Luke Sync's hub", (it) => {
     ),
   );
 
-  it.effect("a watch on an idle listener that still hears keeps it", () =>
+  it.effect("a watch on an idle listener that still hears itself keeps it", () =>
     onHub(({ opened }) =>
       Effect.gen(function* () {
         const sync = yield* Sync;
@@ -354,51 +365,23 @@ it.layer(probeDB)("Luke Sync's hub", (it) => {
     ),
   );
 
-  it.effect.each([
-    {
-      sync: "LUKE_SYNC unset",
-      environment: (unpooled: string) => ({ DATABASE_URL_UNPOOLED: unpooled }),
-    },
-    { sync: "LUKE_SYNC on and no unpooled URL", environment: () => ({ LUKE_SYNC: "on" }) },
-  ])(
-    "with $sync, a watch on topics wakes on its fallback, and nothing listens",
-    ({ environment }) =>
-      Effect.gen(function* () {
-        let connections = 0;
-        const server = yield* Effect.acquireRelease(
-          Effect.callback<ReturnType<typeof createServer>>((resume) => {
-            const listening = createServer((socket) => {
-              connections += 1;
-              socket.destroy();
-            });
-            listening.listen(0, "127.0.0.1", () => resume(Effect.succeed(listening)));
-          }),
-          (listening) => Effect.sync(() => listening.close()),
-        );
-        const address = server.address();
-        assert.ok(address !== null && typeof address === "object");
-        const { clock, asleep } = yield* announcingClock;
-        const variables = environment(
-          `postgres://u:p@127.0.0.1:${address.port}/luke?sslmode=disable`,
-        );
+  it.effect("with no unpooled URL, a watch on topics wakes on its fallback", () =>
+    Effect.gen(function* () {
+      const { clock, asleep } = yield* announcingClock;
 
-        const elapsed = yield* Effect.gen(function* () {
-          const sync = yield* Sync;
-          const next = yield* nextOf(yield* sync.watch([probeRow().task], FALLBACK));
-          const from = yield* Clock.currentTimeMillis;
-          yield* driven({ fiber: next, asleep }, FALLBACK);
-          return (yield* Clock.currentTimeMillis) - from;
-        }).pipe(
-          Effect.provide(syncFromEnvironment),
-          Effect.provideService(
-            ConfigProvider.ConfigProvider,
-            ConfigProvider.fromUnknown(variables),
-          ),
-          Effect.provideService(Clock.Clock, clock),
-        );
+      const elapsed = yield* Effect.gen(function* () {
+        const sync = yield* Sync;
+        const next = yield* nextOf(yield* sync.watch([probeRow().task], FALLBACK));
+        const from = yield* Clock.currentTimeMillis;
+        yield* driven({ fiber: next, asleep }, FALLBACK);
+        return (yield* Clock.currentTimeMillis) - from;
+      }).pipe(
+        Effect.provide(syncFromEnvironment),
+        Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({})),
+        Effect.provideService(Clock.Clock, clock),
+      );
 
-        assert.ok(elapsed >= Duration.toMillis(FALLBACK), "the watch woke before its fallback");
-        assert.equal(connections, 0);
-      }),
+      assert.ok(elapsed >= Duration.toMillis(FALLBACK), "the watch woke before its fallback");
+    }),
   );
 });

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
+import { createAgent, renameAgent } from "@luke/database/models/agent-store";
 import {
   createAutomation,
   ownFailedRunsLiveStatement,
@@ -14,15 +15,16 @@ import {
   createChannel,
   ensureGeneralChannel,
 } from "@luke/database/models/channel-store";
-import { createCodingAgent, renameCodingAgent } from "@luke/database/models/coding-agent-store";
 import { updateTask } from "@luke/database/models/task-store";
+import { agentTable } from "@luke/database/schemas/agent";
 import { organization, user } from "@luke/database/schemas/auth";
 import { automationRun, automation as automationTable } from "@luke/database/schemas/automation";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
+import { task as taskTable } from "@luke/database/schemas/task";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import type { AccountInboxTask } from "@luke/features/account-inbox-wire";
+import { AGENT_ATTACHMENT_TYPE, AGENT_KIND, type AgentAttachment } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -32,11 +34,7 @@ import {
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
-import {
-  CODING_AGENT_ATTACHMENT_TYPE,
-  CODING_AGENT_KIND,
-  type CodingAgentAttachment,
-} from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -70,6 +68,7 @@ import {
   accountWaitingItems,
   accountWaitingStamps,
   acknowledgeInboxItem,
+  agentInboxItems,
   answerInboxAsk,
   CHANNEL_MOVE_REFUSAL,
   type ChannelThreadPage,
@@ -137,7 +136,7 @@ const openUser = Effect.gen(function* () {
 const openAgentIn = Effect.gen(function* () {
   const userId = yield* openUser;
   const task = yield* startTask(userId, { name: "Teammate invitations" });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
@@ -189,7 +188,7 @@ const answerDone = (
   userId: string,
   item: Pick<InboxItem, "id" | "thread">,
   clientKey: string = randomUUID(),
-  files?: readonly CodingAgentAttachment[],
+  files?: readonly AgentAttachment[],
 ) =>
   Effect.map(
     answerInboxAsk(userId, item.id, {
@@ -216,9 +215,9 @@ const answeringOf = (item: Pick<InboxItem, "thread">) =>
 /** A file as an answer carries it: its name, its type, and its bytes in base64. */
 const attached = (
   name: string,
-  mediaType: CodingAgentAttachment["mediaType"],
+  mediaType: AgentAttachment["mediaType"],
   bytes: Uint8Array,
-): CodingAgentAttachment => ({ name, mediaType, data: Buffer.from(bytes).toString("base64") });
+): AgentAttachment => ({ name, mediaType, data: Buffer.from(bytes).toString("base64") });
 
 const TRACE = new TextEncoder().encode("TypeError: invite is undefined\n");
 const SHOT = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
@@ -234,7 +233,7 @@ const openAutomation = (userId: string, workspaceId: string) =>
       name: "Flaky-test sweep",
       scope: AUTOMATION_SCOPE.WORKSPACE,
       trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
-      action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix the flakiest test." },
+      action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Fix the flakiest test." },
       guards: AUTOMATION_DEFAULT_GUARDS,
       nextRunAt: new Date("2026-10-15T09:00:00Z"),
       webhookSecretHash: null,
@@ -248,7 +247,7 @@ const openTasklessAgentOf = (byAutomation: boolean) =>
     const userId = yield* openUser;
     const workspaceId = yield* openWorkspace(userId);
     const automationId = byAutomation ? yield* openAutomation(userId, workspaceId) : undefined;
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: null,
       organizationId: workspaceId,
       automationId,
@@ -285,6 +284,7 @@ const liveAnswerOf = (userId: string, readAt: number) =>
         planless: yield* runLive(parts.planless, accountInboxLiveRowSchemas.planless),
         plans: yield* runLive(parts.plans, accountInboxLiveRowSchemas.plans),
         automations: yield* runLive(parts.automations, accountInboxLiveRowSchemas.automations),
+        agents: yield* runLive(parts.agents, accountInboxLiveRowSchemas.agents),
         failedRuns: yield* runLive(failedRuns, accountInboxLiveRowSchemas.failedRuns),
       },
       readAt,
@@ -459,7 +459,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.ok(yield* markInboxItemRead(onTask.agent.userId, first.id));
         // A second task of the starter's, settled, whose agent asks on it after, which the Inbox lists like any other.
         const shelved = yield* startTask(onTask.agent.userId, { name: "Billing export" });
-        const shelvedAgent = yield* createCodingAgent(onTask.agent.userId, {
+        const shelvedAgent = yield* createAgent(onTask.agent.userId, {
           taskId: shelved.id,
           idempotencyKey: randomUUID(),
           model: "anthropic/claude-opus-5.5",
@@ -556,7 +556,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
                 repositories: ["acme/relay"],
                 name,
                 trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
-                action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix one flaky test." },
+                action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Fix one flaky test." },
                 guards: AUTOMATION_DEFAULT_GUARDS,
                 nextRunAt: null,
                 webhookSecretHash: null,
@@ -644,7 +644,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           "the teammate's read names who started the agent, whom it asks",
         );
         assert.ok(!theirs.items.some((entry) => entry.id === posted.id));
-        assert.deepEqual([others.planless, others.automations], [[], []]);
+        assert.deepEqual([others.planless, others.automations, others.agents], [[], [], []]);
 
         // Made personal, the automation's runs stay the workspace's, and which automation it is its creator's.
         yield* Database.use((db) =>
@@ -671,6 +671,25 @@ it.layer(getTestDB())("the inbox store", (it) => {
           creatorRead.planless?.map((entry) => [entry.automationId, entry.automationName]),
           [[automationId, "Flaky-test sweep"]],
         );
+
+        // Settled, the item waits no longer, and its agent is still listed as holding it, named as its open item was, to every member who may read it.
+        assert.ok(Option.isSome(yield* answerDone(agent.userId, posted)));
+        const settled = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
+        assert.deepEqual(settled.planless, []);
+        assert.deepEqual(
+          settled.agents?.map((held) => [
+            held.agentId,
+            held.items,
+            held.toDo,
+            held.automationName,
+            held.repository,
+            held.workspaceId,
+          ]),
+          [[agent.agentId, 1, 0, null, "acme/relay", workspaceId]],
+        );
+        assert.deepEqual((yield* accountInboxPast(outsider, INBOX_CURSOR_START)).agents, []);
+        const live = yield* liveAnswerOf(teammate, settled.readAt);
+        assert.deepEqual({ ...live, cursor: settled.cursor }, settled);
       }),
   );
 
@@ -737,8 +756,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const posted = yield* post(agent);
         const { id } = posted;
         const files = [
-          attached("trace.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT, TRACE),
-          attached("after.png", CODING_AGENT_ATTACHMENT_TYPE.PNG, SHOT),
+          attached("trace.txt", AGENT_ATTACHMENT_TYPE.TEXT, TRACE),
+          attached("after.png", AGENT_ATTACHMENT_TYPE.PNG, SHOT),
         ];
 
         const elsewhere = { ...posted, thread: [] };
@@ -755,8 +774,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.deepEqual(
           kept?.map((file) => [file.name, file.mediaType]),
           [
-            ["trace.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT],
-            ["after.png", CODING_AGENT_ATTACHMENT_TYPE.PNG],
+            ["trace.txt", AGENT_ATTACHMENT_TYPE.TEXT],
+            ["after.png", AGENT_ATTACHMENT_TYPE.PNG],
           ],
         );
         const [trace, shot] = kept ?? [];
@@ -766,7 +785,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           assert.deepEqual(answeringOf(read)?.files, kept);
           const found = yield* readInboxAttachment(reader, id, trace.attachmentId);
           const served: InboxFile = Option.getOrThrow(found);
-          assert.equal(served.contentType, CODING_AGENT_ATTACHMENT_TYPE.TEXT);
+          assert.equal(served.contentType, AGENT_ATTACHMENT_TYPE.TEXT);
           assert.deepEqual(new Uint8Array(served.bytes), TRACE);
         }
         assert.ok(Option.isNone(yield* readInboxAttachment(outsider, id, shot.attachmentId)));
@@ -782,7 +801,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         // Past the picture bound, inside a PDF's.
         const spec = new Uint8Array(2_000_000).fill(0x25);
         const answered = yield* answerDone(agent.userId, posted, randomUUID(), [
-          attached("spec.pdf", CODING_AGENT_ATTACHMENT_TYPE.PDF, spec),
+          attached("spec.pdf", AGENT_ATTACHMENT_TYPE.PDF, spec),
         ]);
         const [file] = answeringOf(Option.getOrThrow(answered))?.files ?? [];
         assert.ok(file);
@@ -814,7 +833,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const { id } = posted;
         const picture = posted.thread?.[0]?.files?.[0];
         assert.ok(picture);
-        const files = [attached("trace.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT, TRACE)];
+        const files = [attached("trace.txt", AGENT_ATTACHMENT_TYPE.TEXT, TRACE)];
         const fileOf = (item: Pick<InboxItem, "thread">) =>
           answeringOf(item)?.files?.[0]?.attachmentId ?? "";
 
@@ -857,9 +876,9 @@ it.layer(getTestDB())("the inbox store", (it) => {
 
         const agents = yield* Database.use((db) =>
           db
-            .select({ organizationId: codingAgent.organizationId })
-            .from(codingAgent)
-            .where(eq(codingAgent.id, agent.agentId)),
+            .select({ organizationId: agentTable.organizationId })
+            .from(agentTable)
+            .where(eq(agentTable.id, agent.agentId)),
         );
         const items = yield* Database.use((db) =>
           db
@@ -882,11 +901,11 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const [agentRow] = yield* Database.use((db) =>
           db
             .select({
-              organizationId: codingAgent.organizationId,
-              repositories: codingAgent.repositories,
+              organizationId: agentTable.organizationId,
+              repositories: agentTable.repositories,
             })
-            .from(codingAgent)
-            .where(eq(codingAgent.id, agent.agentId)),
+            .from(agentTable)
+            .where(eq(agentTable.id, agent.agentId)),
         );
         const [itemRow] = yield* Database.use((db) =>
           db
@@ -1019,6 +1038,114 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.ok(Option.isNone(yield* answerDone(stranger, posted)));
       }),
   );
+
+  it.effect(
+    "an agent whose starter no longer sees its task still posts, reads, and moves its own asks, addressed to no one who cannot see them, while that starter, whom an ask on a task assigned to nobody waits on, reads, counts, and answers none of them, in the Inbox, a channel, or the task's or the agent's read",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const teammate = yield* openUser;
+        const task = yield* startTask(owner, {
+          name: "Teammate invitations",
+          repository: "acme/relay",
+          githubAccess: GITHUB_ACCESS.APP,
+        });
+        yield* joinWorkspace(task.workspaceId, teammate);
+        // The App reaches the agent for every member, so only its task's visibility keeps it from the teammate.
+        const started = yield* createAgent(teammate, {
+          taskId: task.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          githubAccess: GITHUB_ACCESS.APP,
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+        });
+        // The task moves onto its owner's own token, which the teammate keeps none to read through.
+        yield* Database.use((db) =>
+          db
+            .update(taskTable)
+            .set({ githubAccess: GITHUB_ACCESS.TOKEN })
+            .where(eq(taskTable.id, task.id)),
+        );
+        yield* updateTask(owner, task.id, { assigneeId: null });
+        const agent = {
+          userId: teammate,
+          taskId: task.id,
+          agentId: Option.getOrThrow(started).agent.id,
+        };
+        assert.deepEqual(
+          yield* postInboxThread(agent, {
+            ...SETTINGS,
+            key: "for-teammate",
+            addresseeId: teammate,
+          }),
+          Result.fail(INBOX_POST_REFUSAL.ADDRESSEE_CANNOT_SEE),
+          "an ask is addressed to no one who cannot see its thread",
+        );
+        // Addressed to nobody on a task assigned to nobody, the ask waits on its starter all the same.
+        const posted = yield* post(agent);
+        assert.deepEqual(
+          (yield* agentInboxItems(agent)).map((each) => each.id),
+          [posted.id],
+          "the agent reads its own ask, as it acts as itself",
+        );
+        const app = Result.getOrThrow(
+          yield* createChannel(
+            owner,
+            task.workspaceId,
+            { name: "app", purpose: "All about app.", project: false },
+            new Date(1),
+          ),
+        ).id;
+        assert.deepEqual(
+          [
+            yield* moveChannelThread(teammate, posted.id, app),
+            Result.isSuccess(yield* moveChannelThread(teammate, posted.id, app, agent.agentId)),
+          ],
+          [Result.fail(CHANNEL_MOVE_REFUSAL.NO_THREAD), true],
+          "the agent moves its own thread as itself, which its starter moves not as a member",
+        );
+        const channelId =
+          Option.getOrThrow(yield* readInboxItem(owner, posted.id)).item.channelId ?? "";
+        const seen = (userId: string) =>
+          Effect.gen(function* () {
+            const account = yield* accountInboxPast(userId, INBOX_CURSOR_START);
+            const badges = yield* channelWaitingCounts(userId, task.workspaceId);
+            return {
+              item: Option.isSome(yield* readInboxItem(userId, posted.id)),
+              task: (yield* taskInboxItems(userId, task.id)).length,
+              agent: (yield* memberAgentInboxItems(userId, agent.agentId)).length,
+              account: account.items.length + account.plans.length,
+              stamps: (yield* accountWaitingStamps(userId)).length,
+              threads: (yield* firstPage(userId, channelId)).length,
+              badge: badges.get(channelId) ?? 0,
+            };
+          });
+
+        assert.deepEqual(yield* seen(owner), {
+          item: true,
+          task: 1,
+          agent: 1,
+          account: 2,
+          stamps: 1,
+          threads: 1,
+          badge: 0,
+        });
+        assert.deepEqual(yield* seen(teammate), {
+          item: false,
+          task: 0,
+          agent: 0,
+          account: 0,
+          stamps: 0,
+          threads: 0,
+          badge: 0,
+        });
+        assert.ok(Option.isNone(yield* answerDone(teammate, posted)));
+      }),
+  );
+
   it.effect(
     "a member's message, a teammate's as much as the starter's, stands on the thread of an open item and of an answered one, oldest first and naming its writer, leaves the status, the answer, and the revision as they stood, moves the item's last change and the plan read's cursor, and an outsider writes none",
     () =>
@@ -1097,8 +1224,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const agent = yield* openAgent;
         const { id } = yield* post(agent);
         const files = [
-          attached("trace.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT, TRACE),
-          attached("after.png", CODING_AGENT_ATTACHMENT_TYPE.PNG, SHOT),
+          attached("trace.txt", AGENT_ATTACHMENT_TYPE.TEXT, TRACE),
+          attached("after.png", AGENT_ATTACHMENT_TYPE.PNG, SHOT),
         ];
         const key = randomUUID();
         yield* TestClock.adjust(Duration.seconds(1));
@@ -1132,8 +1259,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.deepEqual(
           message?.files?.map((file) => [file.name, file.mediaType]),
           [
-            ["trace.txt", CODING_AGENT_ATTACHMENT_TYPE.TEXT],
-            ["after.png", CODING_AGENT_ATTACHMENT_TYPE.PNG],
+            ["trace.txt", AGENT_ATTACHMENT_TYPE.TEXT],
+            ["after.png", AGENT_ATTACHMENT_TYPE.PNG],
           ],
         );
         const [trace] = message?.files ?? [];
@@ -1544,7 +1671,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         yield* openWorkspace(stranger);
         const agentOn = (userId: string, onTask: string) =>
           Effect.gen(function* () {
-            const started = yield* createCodingAgent(userId, {
+            const started = yield* createAgent(userId, {
               taskId: onTask,
               idempotencyKey: randomUUID(),
               model: "anthropic/claude-opus-5.5",
@@ -1702,12 +1829,12 @@ it.layer(getTestDB())("the inbox store's operator, private to its member", (it) 
         const workspaceId = yield* openWorkspace(owner);
         yield* joinWorkspace(workspaceId, teammate);
         const operator = Option.getOrThrow(
-          yield* createCodingAgent(owner, {
+          yield* createAgent(owner, {
             taskId: null,
             organizationId: workspaceId,
             planSnapshot: null,
             prompt: null,
-            kind: CODING_AGENT_KIND.OPERATOR,
+            kind: AGENT_KIND.OPERATOR,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
             effort: "high",
@@ -1754,7 +1881,7 @@ it.layer(getTestDB())("the inbox store's operator, private to its member", (it) 
         const carried = (yield* planlessOf(owner, true)).find((each) => each.id === posted.id);
         assert.deepEqual(
           [carried?.id, carried?.agentKind, carried?.repository, carried?.channelId !== undefined],
-          [posted.id, CODING_AGENT_KIND.OPERATOR, null, true],
+          [posted.id, AGENT_KIND.OPERATOR, null, true],
           "its member's read carries the operator's ask, its kind, and its channel",
         );
         assert.deepEqual(
@@ -1899,6 +2026,49 @@ it.layer(getTestDB())("who an inbox item waits on", (it) => {
       const [item] = yield* memberAgentInboxItems(teammate, agent.agentId);
       assert.equal(item?.waitsOn?.userId, agent.userId);
     }),
+  );
+
+  it.effect(
+    "a settled item still unread of an agent with no task, the member's operator's among them, is counted in the account's read of its starter alone, never a teammate's",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openTasklessAgent;
+        const owner = agent.userId;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const operator = Option.getOrThrow(
+          yield* createAgent(owner, {
+            taskId: null,
+            organizationId: workspaceId,
+            planSnapshot: null,
+            prompt: null,
+            kind: AGENT_KIND.OPERATOR,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: null,
+          }),
+        ).agent;
+        const operatorAgent = { userId: owner, taskId: null, agentId: operator.id };
+        // Each answered by the owner, then written on again by its agent: settled, and unread for the owner.
+        const settledOf = (of: InboxAgent) =>
+          Effect.gen(function* () {
+            const item = yield* postedItem(of, "settled");
+            assert.ok(Option.isSome(yield* answerDone(owner, item)));
+            yield* TestClock.adjust(Duration.seconds(1));
+            assert.ok(Option.isSome(yield* replyInboxItem(of, "settled", "One more thing.")));
+            return item.id;
+          });
+        const coder = yield* settledOf(agent);
+        const operated = yield* settledOf(operatorAgent);
+        const stampIds = (readerId: string) =>
+          Effect.map(accountWaitingStamps(readerId), (stamps) => stamps.map((stamp) => stamp.id));
+
+        assert.deepEqual(
+          [(yield* stampIds(owner)).toSorted(), yield* stampIds(teammate)],
+          [[coder, operated].toSorted(), []],
+        );
+      }),
   );
 });
 
@@ -2131,7 +2301,7 @@ it.layer(getTestDB())("a thread's channel", (it) => {
         const { agent, workspaceId } = yield* openAgentIn;
         const outsider = yield* openUser;
         yield* openWorkspace(outsider);
-        yield* renameCodingAgent(agent.userId, agent.agentId, "Teammate invitations");
+        yield* renameAgent(agent.userId, agent.agentId, "Teammate invitations");
         const app = yield* channelIn(agent.userId, workspaceId, "app");
         const item = yield* post(agent, { ...SETTINGS, channelId: app, addresseeId: agent.userId });
         yield* TestClock.adjust(Duration.seconds(1));

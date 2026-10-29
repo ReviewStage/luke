@@ -1,4 +1,4 @@
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import { createdByOnly, TASK_ORDER, taskTime } from "./task-list-model.js";
 
@@ -40,8 +40,8 @@ export interface PersonPage {
 
 /** The statuses of an agent that may still write: starting, or running. */
 const AT_WORK: ReadonlySet<TaskAgentLine["status"]> = new Set([
-  CODING_AGENT_STATUS.STARTING,
-  CODING_AGENT_STATUS.RUNNING,
+  AGENT_STATUS.STARTING,
+  AGENT_STATUS.RUNNING,
 ]);
 
 /** When an agent last moved, for ordering: its line's time, else its task's. */

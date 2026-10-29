@@ -1,5 +1,5 @@
 #!/bin/sh
-# install.sh -- installs Luke's host daemon on a Linux box (x64 or arm64), enrolls it with an install token, and upgrades it in place when run again without one.
+# install.sh -- installs Luke's host daemon on a Linux box (x64 or arm64) or an Apple silicon Mac, enrolls it with an install token, and upgrades it in place when run again without one.
 #
 # Served by the web app at /install.sh with the release written in
 # (apps/web/scripts/install-script.ts), and run as root:
@@ -25,6 +25,20 @@
 # again without --token, it upgrades in place and keeps the box's enrollment.
 # `sudo luke-host uninstall` removes it.
 #
+# On an Apple silicon Mac it installs for the user who ran the command under
+# sudo, as GitHub's runner does on macOS, and refuses where there is none, as
+# when root itself is logged in, or where the Luke app already runs agents for
+# that user. It refuses a macOS older than MAC_MIN_VERSION, and checks no
+# /dev/kvm, since smolvm runs on Hypervisor.framework there. It unpacks the
+# release under that user's Application Support, owned by them, enrolls the
+# Mac as that user, and installs a LaunchAgent in their ~/Library/LaunchAgents
+# that runs the daemon at login, on a state folder of its own, and again after
+# a crash but not after a clean exit, logging under their ~/Library/Logs. It
+# starts the agent at once where that user is logged in, and otherwise at their
+# next login: it runs only while they are. The daemon fetches its own smolvm
+# (SMOLVM_MAC_PIN) and the sandbox image as it starts. The desktop app refuses
+# to turn This Mac on beside this agent.
+#
 # smolvm's own install script is never run: its release is fetched and checked
 # here, as the daemon's is.
 set -eu
@@ -34,6 +48,8 @@ SHA256_X64="@@SHA256_X64@@"
 SHA256_ARM64="@@SHA256_ARM64@@"
 URL_X64="@@URL_X64@@"
 URL_ARM64="@@URL_ARM64@@"
+SHA256_DARWIN_ARM64="@@SHA256_DARWIN_ARM64@@"
+URL_DARWIN_ARM64="@@URL_DARWIN_ARM64@@"
 
 # The smolvm release Luke runs agents in, and Luke's sandbox image its VMs boot,
 # held to the daemon's pins (SMOLVM_LINUX_PIN, SANDBOX_IMAGE in
@@ -72,6 +88,20 @@ EXIT_REFUSED=78
 CONNECT_WAIT_SECONDS=300
 # How long fetching the sandbox image may take.
 IMAGE_WAIT_SECONDS=1800
+# A Mac's install, under the home of the user it is for: its LaunchAgent, by the
+# label the desktop app refuses to turn This Mac on beside
+# (DARWIN_STANDALONE_LAUNCH_AGENT in packages/host/src/daemon/host-os.ts), the
+# folder holding the release and its state, and its logs. The desktop app's own
+# state folder holds its luke-host's device record once that is enrolled, which
+# means the app runs agents for that user already. `luke-host uninstall` names
+# the first three too.
+MAC_LABEL="dev.reviewstage.luke.host.standalone"
+MAC_APP_FOLDER="Library/Application Support/Luke Host"
+MAC_LOG_FOLDER="Library/Logs/Luke Host"
+MAC_APP_STATE_FOLDER="Library/Application Support/Luke"
+# The oldest macOS it installs on: the release's launcher reads its own path
+# with readlink -f, which macOS has had since 12.3, and smolvm needs macOS 11.
+MAC_MIN_VERSION="12.3"
 # The throwaway machine the boot check makes; every agent's is named luke-<id>,
 # so this one never collides with one.
 BOOT_MACHINE="install-boot-check"
@@ -82,6 +112,9 @@ BOOT_WORKLOAD_USER="0:0"
 BOOT_WAIT_SECONDS=180
 # How long stopping or deleting the throwaway machine may take.
 BOOT_CLEANUP_SECONDS=60
+# How long a command `timeout` signalled, at its deadline or on an interrupt it
+# was handed, has to end before `timeout` kills it.
+TIMEOUT_KILL_SECONDS=10
 
 if [ -t 1 ]; then
   CHECK="$(printf '\033[32m✓\033[0m')"
@@ -117,7 +150,7 @@ require_supported_os() {
     Linux) ;;
     Darwin)
       case "$2" in
-        arm64) fail "Luke host runs on Linux. On a Mac, install the Luke app and sign in instead." ;;
+        arm64) ;;
         *) fail "Luke does not run agents on Intel Macs." ;;
       esac
       ;;
@@ -167,8 +200,13 @@ require_systemd() {
 }
 
 # Fails unless the file's SHA-256 is the one given: $1 the file, $2 its digest.
+# Note that a Mac has shasum where Linux has sha256sum.
 check_sha256() {
-  actual="$(sha256sum "$1" | cut -d ' ' -f 1)"
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual="$(sha256sum "$1" | cut -d ' ' -f 1)"
+  else
+    actual="$(shasum -a 256 "$1" | cut -d ' ' -f 1)"
+  fi
   [ "$actual" = "$2" ] || fail "The download's checksum is $actual, not $2. Nothing was installed."
 }
 
@@ -223,18 +261,24 @@ fail_unstarted() {
   fail "$1. $UNIT was restarted on this box's existing enrollment."
 }
 
-# Runs smolvm as the luke-host user, in its home, as the daemon's service does:
-# $@ smolvm's arguments, after a timeout command and its seconds where $1 is
-# --within <seconds>.
-smolvm_as_host() {
+# Runs smolvm as the luke-host user, in its home, as the daemon's service does,
+# replacing the shell it runs in, so it is run in a subshell or in the
+# background, where the shell's pid is the command's: $@ smolvm's arguments,
+# after a timeout command and its seconds where $1 is --within <seconds>.
+smolvm_exec() {
   limit=""
   if [ "$1" = "--within" ]; then
-    command -v timeout >/dev/null 2>&1 && limit="timeout $2"
+    command -v timeout >/dev/null 2>&1 && limit="timeout -k $TIMEOUT_KILL_SECONDS $2"
     shift 2
   fi
-  (cd "$HOST_HOME" && runuser -u "$HOST_USER" -- env \
+  cd "$HOST_HOME" && exec runuser -u "$HOST_USER" -- env \
     -u XDG_DATA_HOME -u XDG_CACHE_HOME -u XDG_CONFIG_HOME HOME="$HOST_HOME" \
-    $limit "$SMOLVM" "$@")
+    $limit "$SMOLVM" "$@"
+}
+
+# smolvm_exec in a subshell, as an ordinary command: it returns what smolvm did.
+smolvm_as_host() {
+  (smolvm_exec "$@")
 }
 
 # The last line smolvm printed in the file $1, or that it timed out where it
@@ -252,16 +296,14 @@ smolvm_said() {
 # a run of the image, which keeps the image for every VM after it.
 fetch_sandbox_image() {
   printf 'Fetching the sandbox image (about 1.3 GB), so the first agent does not wait for it...\n'
-  said="$(mktemp)"
+  said="$work/image-said"
   code=0
   smolvm_as_host --within "$IMAGE_WAIT_SECONDS" machine run --net --image "$SANDBOX_IMAGE" -- true \
     >/dev/null 2>"$said" || code=$?
   if [ "$code" -ne 0 ]; then
     why="$(smolvm_said "$said" "$code")"
-    rm -f "$said"
     fail_unstarted "Could not fetch the sandbox image (smolvm: $why)"
   fi
-  rm -f "$said"
   ok "Fetched the sandbox image"
 }
 
@@ -275,51 +317,267 @@ remove_boot_machine() {
   smolvm_as_host --within "$BOOT_CLEANUP_SECONDS" machine delete --name "$BOOT_MACHINE" -f >/dev/null 2>"$1"
 }
 
+# The boot check's smolvm command, $@ as smolvm_as_host takes them, run in the
+# background and waited for, so a signal the script traps is handled the moment
+# it comes rather than once the command ends. It returns what smolvm did, and
+# $boot_job is its pid while it runs, which is smolvm_exec's own: the command
+# replaces the job's shell.
+boot_run() {
+  boot_status=0
+  smolvm_exec "$@" &
+  boot_job=$!
+  wait "$boot_job" || boot_status=$?
+  boot_job=""
+  return "$boot_status"
+}
+
+# What an interrupt (INT or TERM) during the boot check does: ends the step in
+# flight, deletes the boot check's machine, and fails like any other failure of
+# the check, so a service this run stopped is started again. Note that a trap
+# is the one thing here that holds: `timeout` runs its command in a process
+# group of its own so that it can kill the whole group at the deadline, which
+# is also why a terminal's Ctrl-C never reaches the command and a signal sent
+# to this script alone is not passed on; `timeout --foreground` would give up
+# that group kill to change the first and still leave the second, and neither
+# would delete the machine.
+boot_interrupted() {
+  trap - INT TERM
+  # Note that the step is waited out before the machine goes, since a create still finishing after the delete would leave the machine behind; `timeout` ends only once smolvm has, killing it after TIMEOUT_KILL_SECONDS where it ignores the TERM it is relayed.
+  if [ -n "$boot_job" ]; then
+    kill "$boot_job" 2>/dev/null || true
+    wait "$boot_job" 2>/dev/null || true
+  fi
+  remove_boot_machine "$removal" || true
+  fail_unstarted "The VM boot check was interrupted"
+}
+
 # Proves a VM boots before anything is started: one throwaway machine made from
 # the pinned image as the daemon makes every agent's (smolvm-sandbox.ts), with
 # the same smolvm, user and flags, nested where the box has $KVM_DEVICE on
 # Linux, started, `true` run in it as luke-host, then stopped and deleted
-# whether it booted or not. It fails with the step and smolvm's last line, and
-# where the machine booted but could not be deleted.
+# whether it booted, failed, or was interrupted. It fails with the step and
+# smolvm's last line, and where the machine booted but could not be deleted.
 require_vm_boots() {
   boot_nested=""
   if [ "$(uname -s)" = "Linux" ] && [ -e "$KVM_DEVICE" ]; then
     boot_nested="--nested"
   fi
   boot_user="$(id -u "$HOST_USER"):$(id -g "$HOST_USER")"
-  said="$(mktemp)"
-  removal="$(mktemp)"
+  # Note that the files are made in $work, so its EXIT trap removes them.
+  said="$work/boot-said"
+  removal="$work/boot-removal"
+  boot_job=""
+  trap boot_interrupted INT TERM
   # Note that one an interrupted run left behind is cleared first, so the name is free.
   remove_boot_machine "$removal" || true
   boot_step=create
   code=0
-  smolvm_as_host --within "$BOOT_WAIT_SECONDS" machine create --name "$BOOT_MACHINE" \
+  boot_run --within "$BOOT_WAIT_SECONDS" machine create --name "$BOOT_MACHINE" \
     --image "$SANDBOX_IMAGE" --net --user "$BOOT_WORKLOAD_USER" $boot_nested \
     -- sh -c "$BOOT_WORKLOAD" >/dev/null 2>"$said" || code=$?
   if [ "$code" -eq 0 ]; then
     boot_step=start
-    smolvm_as_host --within "$BOOT_WAIT_SECONDS" machine start --name "$BOOT_MACHINE" \
+    boot_run --within "$BOOT_WAIT_SECONDS" machine start --name "$BOOT_MACHINE" \
       >/dev/null 2>"$said" || code=$?
   fi
   if [ "$code" -eq 0 ]; then
     boot_step=exec
-    smolvm_as_host --within "$BOOT_WAIT_SECONDS" machine exec --name "$BOOT_MACHINE" \
+    boot_run --within "$BOOT_WAIT_SECONDS" machine exec --name "$BOOT_MACHINE" \
       --user "$boot_user" -- true >/dev/null 2>"$said" || code=$?
   fi
   removed=0
   remove_boot_machine "$removal" || removed=$?
+  trap - INT TERM
   if [ "$code" -ne 0 ]; then
     why="$(smolvm_said "$said" "$code")"
-    rm -f "$said" "$removal"
     fail_unstarted "No VM booted (smolvm machine $boot_step: $why)"
   fi
   if [ "$removed" -ne 0 ]; then
     why="$(smolvm_said "$removal" "$removed")"
-    rm -f "$said" "$removal"
     fail_unstarted "A VM booted, but smolvm could not delete it (smolvm machine delete --name $BOOT_MACHINE: $why)"
   fi
-  rm -f "$said" "$removal"
   ok "Booted a VM from the sandbox image"
+}
+
+# Refuses a macOS older than MAC_MIN_VERSION, $1 as `sw_vers -productVersion`
+# prints it, naming the version it needs.
+require_macos_version() {
+  major="${1%%.*}"
+  minor="${1#"$major"}"
+  minor="${minor#.}"
+  minor="${minor%%.*}"
+  case "$major" in '' | *[!0-9]*) major=0 ;; esac
+  case "$minor" in '' | *[!0-9]*) minor=0 ;; esac
+  need_major="${MAC_MIN_VERSION%%.*}"
+  need_minor="${MAC_MIN_VERSION#*.}"
+  if [ "$major" -gt "$need_major" ] || { [ "$major" -eq "$need_major" ] && [ "$minor" -ge "$need_minor" ]; }; then
+    return 0
+  fi
+  fail "Luke host needs macOS $MAC_MIN_VERSION or later, and this Mac runs macOS ${1:-of a version it did not say}. Update macOS, then run this again."
+}
+
+# Sets mac_user to the user a Mac's install is for, the one who ran the command
+# under sudo, and refuses where there is none, as when root itself is logged in.
+require_mac_user() {
+  mac_user="${SUDO_USER:-}"
+  if [ -z "$mac_user" ] || [ "$mac_user" = "root" ]; then
+    fail "Run it with sudo from the Mac account its agents should run as, not as root: curl -fsSL $ORIGIN/install.sh | sudo sh -s -- --token <token>"
+  fi
+}
+
+# Refuses where the Luke app already runs agents for the user whose home is $1:
+# its luke-host enrolled, so its device record stands in the app's state folder.
+require_no_app_host() {
+  [ ! -e "$1/$MAC_APP_STATE_FOLDER/device.json" ] ||
+    fail "The Luke app already runs agents on this Mac for this account, so nothing was installed."
+}
+
+# Writes the LaunchAgent to $1: the release in $2 run as the user it is
+# installed for, on the state folder $3, which a release build would otherwise
+# take to be the desktop app's, logging to $4. It runs at login, and again after
+# a crash but not after a clean exit, the daemon's answer to its host being
+# removed in Luke. Note that there is no ProcessType, since a Background job's
+# CPU and disk are throttled and its agents' VMs are work the member asked for.
+write_launch_agent() {
+cat >"$1" <<PLIST_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>$MAC_LABEL</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>$2/bin/luke-host</string>
+		<string>run</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>LUKE_HOST_STATE_ROOT</key>
+		<string>$3</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>StandardOutPath</key>
+	<string>$4</string>
+	<key>StandardErrorPath</key>
+	<string>$4</string>
+</dict>
+</plist>
+PLIST_EOF
+}
+
+# Starts the LaunchAgent written to $2 in the login session of the user whose
+# uid is $1, where they are logged in; where they are not, says it starts at
+# their next login. Answers whether it started.
+start_launch_agent() {
+  if launchctl print "gui/$1" >/dev/null 2>&1; then
+    launchctl bootstrap "gui/$1" "$2" || fail "launchctl could not start $MAC_LABEL for this account."
+    ok "Started $MAC_LABEL (starts at login)"
+    return 0
+  fi
+  ok "Installed $MAC_LABEL, which starts at this account's next login"
+  return 1
+}
+
+# Installs, enrolls and starts Luke host on an Apple silicon Mac, for the user
+# who ran the command under sudo, with the token parsed below where there is one.
+install_darwin() {
+  require_mac_user
+  home="$(dscl . -read "/Users/$mac_user" NFSHomeDirectory 2>/dev/null | sed -n 's/^NFSHomeDirectory: //p')"
+  [ -n "$home" ] && [ -d "$home" ] || fail "Could not find $mac_user's home folder."
+  require_no_app_host "$home"
+  uid="$(id -u "$mac_user")"
+  group="$(id -gn "$mac_user")"
+  app="$home/$MAC_APP_FOLDER"
+  install="$app/luke-host"
+  state="$app/state"
+  logs="$home/$MAC_LOG_FOLDER"
+  log="$logs/luke-host.log"
+  agents="$home/Library/LaunchAgents"
+  plist="$agents/$MAC_LABEL.plist"
+  [ -n "$SHA256_DARWIN_ARM64" ] || fail "Luke host $VERSION has no release for macOS yet."
+  if [ -z "$token" ] && [ ! -f "$state/device.json" ]; then
+    fail "This Mac is not enrolled yet. Run the command from Settings › Hosts › Add hosts, with its --token."
+  fi
+
+  printf 'Luke host %s for darwin-arm64, for %s\n' "$VERSION" "$mac_user"
+  work="$(mktemp -d)"
+  trap 'rm -rf "$work"' EXIT
+  tarball="luke-host-$VERSION-darwin-arm64.tar.gz"
+  download "$URL_DARWIN_ARM64" "$work/$tarball"
+  check_sha256 "$work/$tarball" "$SHA256_DARWIN_ARM64"
+  ok "Downloaded and checked $tarball (sha256 matches)"
+  mkdir "$work/unpacked"
+  tar -xzf "$work/$tarball" -C "$work/unpacked" || fail "Could not unpack $tarball"
+  [ -x "$work/unpacked/luke-host/bin/luke-host" ] || fail "$tarball holds no luke-host."
+
+  # Note that a running daemon is stopped before its files are swapped, which stops every agent it runs, as on Linux.
+  launchctl bootout "gui/$uid/$MAC_LABEL" >/dev/null 2>&1 || true
+  mkdir -p "$app" "$logs" "$agents"
+  chown "$mac_user:$group" "$agents"
+  rm -rf "$install.new" "$install.old"
+  mv "$work/unpacked/luke-host" "$install.new"
+  if [ -d "$install" ]; then
+    mv "$install" "$install.old"
+  fi
+  mv "$install.new" "$install"
+  rm -rf "$install.old"
+  chown -R "$mac_user:$group" "$app" "$logs"
+  chmod 700 "$app"
+  mkdir -p "$(dirname "$LINK")"
+  ln -sf "$install/bin/luke-host" "$LINK"
+  ok "Installed to $install"
+
+  name="$(scutil --get ComputerName 2>/dev/null || hostname -s)"
+  if [ -n "$token" ]; then
+    # Note that the token goes in on stdin, never an argument another user could read.
+    if ! enrolled="$(cd "$app" && printf '%s\n' "$token" | sudo -u "$mac_user" -H env LUKE_HOST_STATE_ROOT="$state" \
+      "$install/bin/luke-host" enroll --name "$name" --origin "$ORIGIN")"; then
+      if [ -f "$state/device.json" ] && [ -f "$plist" ]; then
+        start_launch_agent "$uid" "$plist" >/dev/null || true
+        fail "Not enrolled again: $install was upgraded and started again on this Mac's existing enrollment."
+      fi
+      exit 1
+    fi
+    ok "$enrolled"
+  else
+    ok "Kept this Mac's enrollment"
+  fi
+
+  write_launch_agent "$plist" "$install" "$state" "$log"
+  chown "$mac_user:$group" "$plist"
+  chmod 644 "$plist"
+  before="$( (wc -l <"$log") 2>/dev/null | tr -d ' ')"
+  [ -n "$before" ] || before=0
+  if ! start_launch_agent "$uid" "$plist"; then
+    printf '\n%s is enrolled, and Luke host starts on it when %s logs in.\n' "$name" "$mac_user"
+  else
+    waited=0
+    connected=false
+    while [ "$waited" -lt "$CONNECT_WAIT_SECONDS" ]; do
+      if tail -n "+$((before + 1))" "$log" 2>/dev/null | grep -q "Connected to Luke"; then
+        connected=true
+        break
+      fi
+      sleep 2
+      waited=$((waited + 2))
+    done
+    if [ "$connected" = true ]; then
+      ok "Connected to Luke"
+    else
+      printf '! Not connected to Luke yet. Follow it with: tail -f "%s"\n' "$log"
+    fi
+    printf '\n%s is ready. Pick it under a task'"'"'s Runs on.\n' "$name"
+  fi
+  printf 'It runs while %s is logged in, so on a Mac nobody sits at, turn on automatic login for %s.\n' "$mac_user" "$mac_user"
+  printf 'To upgrade later, run the same command without --token.\n'
+  printf 'To remove it: sudo luke-host uninstall\n'
 }
 
 # A test sources the script up to here, to call its functions and read what it carries.
@@ -356,8 +614,16 @@ case "$ORIGIN" in
   *) fail "--origin must be an https:// address, not $ORIGIN" ;;
 esac
 require_supported_os "$(uname -s)" "$(hardware_machine)" "$(cat /proc/version 2>/dev/null || true)"
-require_kvm
+if [ "$(uname -s)" = "Darwin" ]; then
+  require_macos_version "$(sw_vers -productVersion 2>/dev/null || true)"
+else
+  require_kvm
+fi
 [ "$(id -u)" -eq 0 ] || fail "Run it as root: curl -fsSL $ORIGIN/install.sh | sudo sh -s -- --token <token>"
+if [ "$(uname -s)" = "Darwin" ]; then
+  install_darwin
+  exit 0
+fi
 require_systemd
 command -v sha256sum >/dev/null 2>&1 || fail "Luke host needs sha256sum (coreutils)."
 command -v git >/dev/null 2>&1 || fail "Luke host needs git, which its agents make their worktrees with."

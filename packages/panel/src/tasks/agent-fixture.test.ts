@@ -46,14 +46,14 @@ const AGENT = { agentId: FIXTURE_AGENT_ID };
 
 /** The reads the agent's column and its side panel's tabs ask that answer once, each a value the contract encodes. */
 const READS: readonly Read[] = [
-  read(ACT_KIND.CODING_AGENTS_LIST, { taskId: FIXTURE_TASK_ID, includeArchived: true }),
-  read(ACT_KIND.CODING_AGENTS_PULL_REQUEST, AGENT),
-  read(ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST, AGENT),
-  read(ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS, AGENT),
-  read(ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION, AGENT),
-  read(ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS, AGENT),
-  read(ACT_KIND.CODING_AGENTS_CHANGES, AGENT),
-  read(ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED, AGENT),
+  read(ACT_KIND.AGENTS_LIST, { taskId: FIXTURE_TASK_ID, includeArchived: true }),
+  read(ACT_KIND.AGENTS_PULL_REQUEST, AGENT),
+  read(ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST, AGENT),
+  read(ACT_KIND.AGENTS_OVERVIEW_CHECKS, AGENT),
+  read(ACT_KIND.AGENTS_OVERVIEW_CONVERSATION, AGENT),
+  read(ACT_KIND.AGENTS_REVIEW_OPTIONS, AGENT),
+  read(ACT_KIND.AGENTS_CHANGES, AGENT),
+  read(ACT_KIND.AGENTS_PULL_REQUEST_VIEWED, AGENT),
   read(ACT_KIND.CHAPTERS_READ, AGENT),
   read(ACT_KIND.TASKS_FILE, {
     taskId: FIXTURE_TASK_ID,
@@ -118,7 +118,7 @@ function hunkCounts(patch: string): readonly { readonly said: string; readonly h
 }
 
 it("every changed file's patch counts the lines its hunks hold, as the diff view reads it", () => {
-  const changes = answered(RUN_PROFILE.AGENT_FILES, ACT_KIND.CODING_AGENTS_CHANGES, AGENT);
+  const changes = answered(RUN_PROFILE.AGENT_FILES, ACT_KIND.AGENTS_CHANGES, AGENT);
   assert.ok("pullRequest" in changes && changes.pullRequest !== null);
   const miscounted = changes.pullRequest.files.flatMap((file) =>
     hunkCounts(file.patch ?? "").flatMap(({ said, held }) =>
@@ -143,7 +143,7 @@ function listedFiles(path: string): readonly string[] {
 }
 
 it("every file the File tab's tree lists, and every file the pull request changed, reads whole on the agent's branch", () => {
-  const changes = answered(RUN_PROFILE.AGENT_FILES, ACT_KIND.CODING_AGENTS_CHANGES, AGENT);
+  const changes = answered(RUN_PROFILE.AGENT_FILES, ACT_KIND.AGENTS_CHANGES, AGENT);
   assert.ok("pullRequest" in changes && changes.pullRequest !== null);
   const listed = listedFiles("");
   const unread = [
@@ -165,7 +165,7 @@ it("every file the File tab's tree lists, and every file the pull request change
 
 it("a profile that stages no agent answers nothing itself", () => {
   assert.equal(
-    agentActAnswer(RUN_PROFILE.TASKS, ACT_KIND.CODING_AGENTS_LIST, { taskId: FIXTURE_TASK_ID }),
+    agentActAnswer(RUN_PROFILE.TASKS, ACT_KIND.AGENTS_LIST, { taskId: FIXTURE_TASK_ID }),
     undefined,
   );
 });
@@ -184,8 +184,8 @@ it.effect(
       yield* Effect.promise(loadTasksFixture);
       const sent: PortActKind[] = [];
       fakeActPort({
-        [ACT_KIND.CODING_AGENTS_LIST]: () => {
-          sent.push(ACT_KIND.CODING_AGENTS_LIST);
+        [ACT_KIND.AGENTS_LIST]: () => {
+          sent.push(ACT_KIND.AGENTS_LIST);
           return Promise.resolve({ agents: [] });
         },
         [ACT_KIND.PROVIDER_KEYS_READ]: () => {
@@ -195,7 +195,7 @@ it.effect(
       });
 
       const listed = yield* Effect.promise(() =>
-        askAct(ACT_KIND.CODING_AGENTS_LIST, { taskId: FIXTURE_TASK_ID }),
+        askAct(ACT_KIND.AGENTS_LIST, { taskId: FIXTURE_TASK_ID }),
       );
       const keys = yield* Effect.promise(() => askAct(ACT_KIND.PROVIDER_KEYS_READ));
 

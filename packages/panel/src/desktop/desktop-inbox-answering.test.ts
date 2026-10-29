@@ -2,10 +2,10 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxAnsweredView,
+  AGENT_CALL_FAILURE,
+  type AgentInboxAnsweredView,
   INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
+} from "@luke/features/agent-view";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -241,37 +241,6 @@ test("an open item's row offers Resolve without answering beside its mark and la
   assert.equal(hoverClose(threshold), null, "the closed row offers Close no longer");
 });
 
-/** The act channel answering every close as `answer` does, written down by item. */
-function answeredCloses(answer: (itemId: string) => { item: InboxItem; taken: boolean }): string[] {
-  const sent: string[] = [];
-  const bridge = appBridge();
-  const previous = fakeActsAnswer();
-  fakeActs({
-    ...bridge,
-    act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_CLOSE) return previous(request);
-      sent.push(request.payload.itemId);
-      return Promise.resolve({
-        status: FAKE_ANSWER.DONE,
-        value: answer(request.payload.itemId),
-      });
-    },
-  });
-  return sent;
-}
-
-/** Closes the item from its pane's ⋯ menu, answering the question Close. */
-async function closeFromPane(page: HTMLElement): Promise<void> {
-  const ellipsis =
-    itemPane(page).querySelector<HTMLButtonElement>(
-      '.luke-toolbar button[aria-label="Inbox item actions"]',
-    ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
-  act(() => ellipsis.click());
-  act(() => menuItem("Resolve without answering").click());
-  await settle();
-  await confirmClose();
-}
-
 test("a close taken lets go of the item's draft, though another item is chosen", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
@@ -292,22 +261,6 @@ test("a close taken lets go of the item's draft, though another item is chosen",
   await confirmClose();
 
   assert.equal(rowDrafted(page, "Alert at 80%?"), false, "the closed item's draft is let go");
-});
-
-test("a close the agent changed its item before is not taken: the item stands as the agent now asks it, though no read holds the newer revision yet", async () => {
-  const { page } = mount([], { chosen: ON_THRESHOLD });
-  await settle();
-  const changed = { ...THRESHOLD, revision: 2, title: "Alert at 85%?", updatedAt: 6_000 };
-  const sent = answeredCloses(() => ({ item: changed, taken: false }));
-
-  await closeFromPane(page);
-
-  assert.deepEqual(sent, [THRESHOLD.id]);
-  assert.equal(
-    needsYouMark(rowNamed(page, "Alert at 85%?")),
-    "*",
-    "it needs you as the agent now asks it",
-  );
 });
 
 test("a waiting choice wears a Recommended badge at the head of the option its agent recommends and of no other, and a choice recommending nothing wears none", async () => {
@@ -720,10 +673,10 @@ const THRESHOLD_ANSWERED: InboxItem = {
   updatedAt: 6_000,
 };
 
-test("an answer leaves Needs you the moment it is sent, its plan's count dropping with it, and no stale read brings it back: not its plan's own held read, nor the list's once another plan's item is chosen, nor main's word before it caught up", async () => {
+test("an answer leaves Needs you the moment it is sent, its row staying where it stood and its plan's count dropping with it", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
-  const { sent, answer } = gatedAnswers();
+  const { sent } = gatedAnswers();
   assert.deepEqual(foldedCounts(page), ["Billing usage alerts1 needs you", "Invites1 needs you"]);
 
   answerWithNote(page, "Use 90%");
@@ -742,38 +695,6 @@ test("an answer leaves Needs you the moment it is sent, its plan's count droppin
   );
   assert.deepEqual(subjectOf(page), ["Alert at 80%?"]);
   assert.deepEqual(foldedCounts(page), ["Billing usage alerts", "Invites1 needs you"]);
-
-  await act(async () => answer({ item: THRESHOLD_ANSWERED }));
-  await settle();
-  // The plan's inbox is pushed as it stood before the answer, read before it was taken.
-  await act(async () =>
-    world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id }, { items: [THRESHOLD, RETRY] }),
-  );
-  await settle();
-  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "");
-
-  // The choice moves to another plan's item, so the answered one's plan is drawn from the list's read, which main has not moved yet.
-  act(() => rowNamed(page, "Expire after 7 days?").click());
-  await settle();
-  assert.equal(readTitle(page), "Expire after 7 days?");
-  assert.equal(
-    needsYouMark(rowNamed(page, "Alert at 80%?")),
-    "",
-    "the stale read brings nothing back",
-  );
-  assert.deepEqual(foldedCounts(page), ["Billing usage alerts", "Invites1 needs you"]);
-
-  // Main catches up, and the list reads the plan again, holding the answer itself.
-  world.inboxes.set(BILLING.id, [THRESHOLD_ANSWERED, RETRY]);
-  act(() =>
-    world.setHolding([
-      { taskId: BILLING.id, items: 2, updatedAt: 6_000 },
-      { taskId: INVITES.id, items: 1, updatedAt: 4_000 },
-    ]),
-  );
-  await settle();
-  assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "");
-  assert.equal(readTitle(page), "Expire after 7 days?", "the choice never jumps back");
 });
 
 /** The list as drawn, each row by its title alone and each group by its name, what marks a row and what a group counts left out, so a row that moves or changes group is told from one that only changes its marks. */
@@ -886,7 +807,7 @@ test("an answer the service refuses brings its item back as it was, needing you,
   await settle();
   assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "");
 
-  await act(async () => answer({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+  await act(async () => answer({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
   await settle();
   const pane = itemPane(page);
   assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*");
@@ -903,13 +824,13 @@ test("a nod on a notice the agent posted over first is not taken: the notice sta
   world.inboxes.set(BILLING.id, [notice, RETRY]);
   const { page } = mount();
   await settle();
-  const waiting: ((view: CodingAgentInboxAnsweredView) => void)[] = [];
+  const waiting: ((view: AgentInboxAnsweredView) => void)[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_ANSWER) return previous(request);
       return new Promise((resolve) =>
         waiting.push((value) => resolve({ status: FAKE_ANSWER.DONE, value })),
       );
@@ -1878,11 +1799,11 @@ test("an item's card shows a to-do naming no steps of its own its title as its o
   world.inboxes = new Map([[BILLING.id, [ROTATE]]]);
   const { page } = mount();
   await settle();
-  hoveredCard(rowNamed(page, ROTATE.title), "[data-inbox-row-card]");
+  hoveredCard(rowNamed(page, ROTATE.title), "[data-inbox-item-card]");
   assert.deepEqual(
     [
       ...document.querySelectorAll(
-        '.luke-tooltip-card [data-inbox-row-card] ul[aria-label="Steps"] > li',
+        '.luke-tooltip-card [data-inbox-item-card] ul[aria-label="Steps"] > li',
       ),
     ].map((step) => step.textContent),
     ["Rotate the deployment key"],

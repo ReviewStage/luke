@@ -1,14 +1,11 @@
 import type { AgentQueue, QueuedMessage } from "@luke/features/agent-queue-wire";
+import { AGENT_CALL_FAILURE, type AgentQueueAnswerView } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentQueueAnswerView,
-} from "@luke/features/coding-agent-view";
-import {
+  type AgentAttachment,
   type AgentQueueChange,
-  type CodingAgentAttachment,
   hasWordsOrFiles,
   QUEUE_CHANGE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useEffect, useRef, useState } from "react";
@@ -31,7 +28,7 @@ import type { HeldComposer } from "./use-agent-composer.js";
  */
 
 /** What a change answered where the act itself failed. */
-const UNANSWERED: CodingAgentQueueAnswerView = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+const UNANSWERED: AgentQueueAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
 
 /** What a refused delete says in its dialog. */
 const DELETE_REFUSED = "Luke could not delete the message. Try again.";
@@ -107,7 +104,7 @@ export interface AgentQueueControl {
   readonly change: (
     change: AgentQueueChange,
     after?: Promise<unknown>,
-  ) => Promise<CodingAgentQueueAnswerView>;
+  ) => Promise<AgentQueueAnswerView>;
   /** The message at `from` put at `to`, as a drag drops it. */
   readonly move: (from: number, to: number) => void;
   /** One message deleted, answered as a confirm reads it. */
@@ -140,7 +137,7 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
     const id = counter.current;
     setOut((was) => [...was, { id, change: next, revision: undefined }]);
     return (after ?? Promise.resolve())
-      .then(() => act(ACT_KIND.CODING_AGENTS_QUEUE, { agentId, change: next }))
+      .then(() => act(ACT_KIND.AGENTS_QUEUE, { agentId, change: next }))
       .catch(() => UNANSWERED)
       .then((answer) => {
         // Note that a change refused is dropped at once, and one answered stands until a page at its revision.
@@ -176,7 +173,7 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
 interface Stashed {
   readonly id: string;
   readonly text: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
 }
 
 /** How an agent's box queues its message and edits one queued already, as the composer's `queueing` takes it. */

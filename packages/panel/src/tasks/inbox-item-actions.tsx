@@ -4,7 +4,7 @@ import { GLYPH } from "@luke/ui/icons";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { type InboxClose, type InboxCloser, useInboxClose } from "./inbox-close.js";
-import { INBOX_HOLDER, type InboxHolder, isUnread } from "./inbox-model.js";
+import { isUnread } from "./inbox-model.js";
 import { markReadItem } from "./task-menu-items.js";
 
 /**
@@ -46,25 +46,19 @@ interface InboxItemActions {
   readonly groups: (lead?: readonly MenuAction[][]) => MenuAction[][];
 }
 
-/** The place an item is linked by: under its task where a task holds it, else under its agent. */
-function inboxItemPlace(holder: InboxHolder | undefined, item: InboxItem): LinkPlace {
-  return holder?.kind === INBOX_HOLDER.TASK
-    ? { kind: LINK_PLACE.INBOX_ITEM, planId: holder.task.id, itemId: item.id }
-    : { kind: LINK_PLACE.INBOX_ITEM, agentId: item.agentId, itemId: item.id };
+/** The place an item is linked by: under its agent, whichever task holds it, which its reader finds by the agent. */
+function inboxItemPlace(item: InboxItem): LinkPlace {
+  return { kind: LINK_PLACE.INBOX_ITEM, agentId: item.agentId, itemId: item.id };
 }
 
-/** One item's acts; `holder` is what holds it, none where it is not read yet. */
-export function useInboxItemActions(
-  holder: InboxHolder | undefined,
-  item: InboxItem,
-  doors: InboxItemDoors,
-): InboxItemActions {
+/** One item's acts. */
+export function useInboxItemActions(item: InboxItem, doors: InboxItemDoors): InboxItemActions {
   const { onMark, onMove, onClose, shown, keyed } = doors;
   const read =
     onMark === undefined
       ? undefined
       : markReadItem({ unread: isUnread(item), onMark: (unread) => onMark(item, unread) }, keyed);
-  const copyLink = useCopyLinkItem()(inboxItemPlace(holder, item));
+  const copyLink = useCopyLinkItem()(inboxItemPlace(item));
   const close = useInboxClose(item, onClose, shown);
   const move: MenuAction | undefined =
     onMove === undefined

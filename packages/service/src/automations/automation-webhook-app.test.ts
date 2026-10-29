@@ -108,7 +108,7 @@ const openWebhook = Effect.gen(function* () {
     repositories: ["Acme/Relay"],
     name: "Fix Sentry alerts",
     trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
-    action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix the error the alert names." },
+    action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Fix the error the alert names." },
     guards: AUTOMATION_DEFAULT_GUARDS,
     nextRunAt: null,
     webhookSecretHash: createHash("sha256").update(secret).digest("hex"),

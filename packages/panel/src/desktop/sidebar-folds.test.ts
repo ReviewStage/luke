@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -11,7 +11,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
-import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { ArchivedAgents } from "./agent-archive.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
@@ -78,13 +78,13 @@ test("the summary's archived agents fold under a group header that counts them f
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.CANCELLED,
+    status: AGENT_STATUS.CANCELLED,
     turnId: null,
     archivedAt: 2,
   } as const;
   const summary = mount(
     createElement(ArchivedAgents, {
-      agents: codingAgentsControl({
+      agents: agentsControl({
         archived: [
           { ...agent, id: "agent-1", title: "Retry audit" },
           { ...agent, id: "agent-2", title: "Spike" },

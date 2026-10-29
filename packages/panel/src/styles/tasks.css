@@ -653,12 +653,6 @@
   background-color: var(--luke-color-code-ground);
 }
 
-/* Beside Files changed's cards, the search stands where the first card does,
-   the room between files above it, so the tree and the list share a top. */
-.file-tab:has(> .diff-list) + .file-tree-pane .file-tree-search {
-  padding-top: var(--luke-list-inset);
-}
-
 /* Pierre's tree draws in a shadow root of its own, which inherits these:
    the panel's words, its fills, and its focus ring, so the tree reads as
    the panel's own list, beside a File tab and under a crumb alike. The ring

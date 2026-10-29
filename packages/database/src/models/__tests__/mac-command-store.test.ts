@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { AGENT_KIND, type AgentKind } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -10,7 +11,6 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationFiring,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_KIND, type CodingAgentKind } from "@luke/features/coding-agent-wire";
 import { macCommandsLiveRowsSchema, macCommandsOfLiveRows } from "@luke/features/live-wire";
 import {
   MAC_COMMAND_KIND,
@@ -29,8 +29,8 @@ import { eq, sql } from "drizzle-orm";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { Database } from "../../core/query.js";
+import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
-import { codingAgent } from "../../schemas/coding-agent.js";
 import { macCommand } from "../../schemas/mac-command.js";
 import { conversations, messages } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER, type MessageSender } from "../../storage-vocabulary.js";
@@ -273,7 +273,7 @@ const openAgent = (
   userId: string,
   organizationId: string,
   prompt: string | null = null,
-  kind: CodingAgentKind = CODING_AGENT_KIND.CODER,
+  kind: AgentKind = AGENT_KIND.CODER,
 ) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -281,7 +281,7 @@ const openAgent = (
     yield* db
       .insert(conversations)
       .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
-    yield* db.insert(codingAgent).values({
+    yield* db.insert(agentTable).values({
       id,
       organizationId,
       userId,
@@ -443,7 +443,7 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
     () =>
       Effect.gen(function* () {
         const { starter, workspace } = yield* people;
-        const operator = yield* openAgent(starter, workspace, null, CODING_AGENT_KIND.OPERATOR);
+        const operator = yield* openAgent(starter, workspace, null, AGENT_KIND.OPERATOR);
         yield* sendLine(starter, operator.conversationId, 1);
         yield* sendLine(starter, operator.conversationId, 2);
         yield* sendLine(starter, operator.conversationId, 3, {
@@ -460,7 +460,7 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
     () =>
       Effect.gen(function* () {
         const { starter, teammate, workspace } = yield* people;
-        const messaged = yield* openAgent(starter, workspace, null, CODING_AGENT_KIND.OPERATOR);
+        const messaged = yield* openAgent(starter, workspace, null, AGENT_KIND.OPERATOR);
         yield* sendLine(starter, messaged.conversationId, 1);
         yield* sendLine(starter, messaged.conversationId, 2, {
           kind: MESSAGE_SENDER.MEMBER,
@@ -469,7 +469,7 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
         const theirs = yield* openAgent(teammate, workspace);
         // A member stands one operator per workspace, so the second is in a workspace of its own.
         const elsewhere = yield* openWorkspace(starter);
-        const reached = yield* openAgent(starter, elsewhere, null, CODING_AGENT_KIND.OPERATOR);
+        const reached = yield* openAgent(starter, elsewhere, null, AGENT_KIND.OPERATOR);
         yield* sendLine(starter, reached.conversationId, 1);
         yield* sendLine(starter, reached.conversationId, 2, {
           kind: MESSAGE_SENDER.AGENT,
@@ -495,7 +495,7 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
                 repositories: [],
                 name: "Triage",
                 trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * *", timezone: "UTC" },
-                action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage what came in." },
+                action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Triage what came in." },
                 guards: AUTOMATION_DEFAULT_GUARDS,
                 nextRunAt: null,
                 webhookSecretHash: null,
@@ -533,7 +533,7 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
         const started = yield* openAgent(starter, workspace, "Triage what came in.");
         const db = yield* Database;
         yield* db
-          .update(codingAgent)
+          .update(agentTable)
           .set({
             automationOrigin: {
               name: "Triage",
@@ -541,7 +541,7 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
               prompt: "Triage what came in.",
             },
           })
-          .where(eq(codingAgent.id, started.id));
+          .where(eq(agentTable.id, started.id));
         yield* sendLine(starter, started.conversationId, 1);
         assert.equal(
           yield* heardFromAnotherAccount({

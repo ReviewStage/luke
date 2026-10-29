@@ -3,17 +3,17 @@
 import assert from "node:assert/strict";
 import { MOTION_DURATION_MS } from "@luke/brand";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentPullRequestViewedAnswerView,
-} from "@luke/features/coding-agent-view";
+  AGENT_CALL_FAILURE,
+  type AgentPullRequestViewedAnswerView,
+} from "@luke/features/agent-view";
 import {
+  AGENT_STATUS,
+  type AgentChangedFile,
+  type AgentSummary,
   CHANGED_FILE_STATUS,
-  CODING_AGENT_STATUS,
-  type CodingAgentChangedFile,
-  type CodingAgentSummary,
   DIFF_SIDE,
   PATCH_OMITTED,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   FILE_VIEWED_STATE,
   PULL_REQUEST_ACTION,
@@ -68,7 +68,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import type { ChangesReads, ChangesThreads } from "./agent-changes-tab.js";
@@ -93,14 +93,14 @@ import { OpenFileTabProvider } from "./open-file-tab.js";
  * files only.
  */
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Seat limit",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 
@@ -115,10 +115,7 @@ const PATCH = [
 const PAGE = "https://github.com/acme/relay/pull/7";
 
 /** A changed file of the pull request, modified with the seats patch unless told otherwise. */
-function changed(
-  path: string,
-  overrides: Partial<CodingAgentChangedFile> = {},
-): CodingAgentChangedFile {
+function changed(path: string, overrides: Partial<AgentChangedFile> = {}): AgentChangedFile {
   return {
     path,
     previousPath: null,
@@ -141,20 +138,20 @@ interface ImageCommits {
 let commits: ImageCommits = {};
 
 /** The pull request's files, in the order GitHub lists them, which is not the tree's. */
-let files: CodingAgentChangedFile[] = [changed("src/seats.ts")];
+let files: AgentChangedFile[] = [changed("src/seats.ts")];
 /** Whether the read stopped short of every file; it did not unless a test says so. */
 let truncated = false;
 
 /** How the service answers the read of the member's viewed marks; unanswered unless a test answers it. */
-let viewedAnswer: CodingAgentPullRequestViewedAnswerView = {
-  failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+let viewedAnswer: AgentPullRequestViewedAnswerView = {
+  failure: AGENT_CALL_FAILURE.UNANSWERED,
 };
 /** How many times the marks were read. */
 let viewedReads = 0;
 /** What the next read of the marks waits on, where a test holds it; none answers at once. */
 let viewedHeld: Promise<void> | undefined;
 
-const control = codingAgentsControl({
+const control = agentsControl({
   agents: [AGENT],
   agentIds: [AGENT.id],
   models: [],
@@ -254,7 +251,7 @@ beforeEach(() => {
   files = [changed("src/seats.ts")];
   truncated = false;
   commits = {};
-  viewedAnswer = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+  viewedAnswer = { failure: AGENT_CALL_FAILURE.UNANSWERED };
   viewedReads = 0;
   viewedHeld = undefined;
   boxWidth = 900;
@@ -1295,7 +1292,7 @@ function answerImages(refusing: Set<string> = new Set()): string[] {
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
-    [ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: ({ src }) => {
+    [ACT_KIND.AGENTS_GITHUB_IMAGE]: ({ src }) => {
       asked.push(src);
       if (refusing.has(src)) return Promise.reject(refusedOnPort("Unreachable."));
       return Promise.resolve({ contentType: "image/png", base64: btoa(src) });
@@ -1546,7 +1543,7 @@ test("after a Refresh an image far from the view reads nothing until it comes ne
 });
 
 /** The viewed marks the service names: the seats file viewed, the plan viewed and changed since, the readme not. */
-const MARKED: CodingAgentPullRequestViewedAnswerView = {
+const MARKED: AgentPullRequestViewedAnswerView = {
   outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
   files: [
     { path: "a.ts", state: FILE_VIEWED_STATE.VIEWED },
@@ -1570,7 +1567,7 @@ function answerMarks(answer: () => PullRequestWriteAnswer): PullRequestActionReq
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
-    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
+    [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
       asked.push(request);
       return Promise.resolve(answer());
     },
@@ -1842,7 +1839,7 @@ function holdMarks(): Array<{
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
-    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
+    [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
       const answered = Promise.withResolvers<PullRequestWriteAnswer>();
       held.push({ request, answer: answered.resolve });
       return answered.promise;
@@ -2286,7 +2283,7 @@ test("no file is read whole for an agent on no task, a head not named, or a task
     undefined,
     "another repository",
   );
-  const taskless = codingAgentsControl({
+  const taskless = agentsControl({
     agents: [{ ...AGENT, planId: null }],
     agentIds: [AGENT.id],
     models: [],

@@ -21,6 +21,7 @@ import {
   type GitHubUnavailable,
   githubRead,
   readBody,
+  readText,
   send,
 } from "./github-app.js";
 
@@ -131,8 +132,8 @@ export function readBranchHead(
   });
 }
 
-/** What GitHub answers for one commit: its sha. */
-const CommitSchema = Schema.Struct({ sha: Schema.String });
+/** The media type GitHub answers a commit with as its sha alone, rather than the commit with its every file's patch. */
+const COMMIT_SHA_MEDIA_TYPE = "application/vnd.github.sha";
 
 /**
  * The commit a branch, tag, or commit of the repository names now
@@ -140,7 +141,8 @@ const CommitSchema = Schema.Struct({ sha: Schema.String });
  * https://docs.github.com/en/rest/commits/commits#get-a-commit), so files
  * read at it are pinned to it; nothing where GitHub names no commit for it,
  * as it answers an unknown ref (404, or 422 for one it cannot read as a
- * ref). Read anonymously where the token is `null`.
+ * ref). Asked for as its sha alone, which is all this reads. Read
+ * anonymously where the token is `null`.
  */
 export function readCommitSha(
   token: Redacted.Redacted | null,
@@ -151,7 +153,7 @@ export function readCommitSha(
     const request = githubRead(
       `/repos/${repository.fullName}/commits/${encodeURIComponent(ref)}`,
       token,
-    );
+    ).pipe(HttpClientRequest.setHeader("accept", COMMIT_SHA_MEDIA_TYPE));
     return yield* Effect.scoped(
       Effect.gen(function* () {
         const response = yield* send(request);
@@ -161,8 +163,7 @@ export function readCommitSha(
         ) {
           return undefined;
         }
-        const answer = yield* readBody(response, CommitSchema);
-        return answer.sha;
+        return (yield* readText(response)).trim();
       }),
     );
   });

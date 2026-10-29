@@ -6,17 +6,15 @@ import {
 import { queryBuilder } from "@luke/database/core/query";
 import {
   AGENT_WORKSPACE,
-  agentReachableBy,
-  agentSeenBy,
+  agentVisibleTo,
   taskReachableBy,
 } from "@luke/database/models/workspace-store";
-import { agentPin, taskPin } from "@luke/database/schemas";
+import { agentPin, conversations, device, taskPin } from "@luke/database/schemas";
+import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
-import { conversations } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
-import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
-import { and, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { AGENT_BRIEF } from "@luke/features/agent-wire";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
 import {
@@ -37,7 +35,8 @@ import {
  * reader's own pin and the owner's name, and the agents with their newest
  * turn, when the newest line of the developer's awaiting its turn was
  * written and whether that turn's session ended, when the newest turn to end
- * ended, what each last published, and the names of the members each names. A third, the issues
+ * ended, what each last published, the harness its conversation runs on, the
+ * Mac a local one runs on, and the names of the members each names. A third, the issues
  * the plans linked, answers no rows now that a plan links none, and stands
  * because a released desktop follows it. Every column stands
  * under the key `@luke/features/task-list-live` reads it by and every
@@ -116,70 +115,71 @@ function issuesStatement() {
 /**
  * Every agent of a plan the account reaches, and every agent with no plan
  * in its workspaces, archived ones among them, each with its newest turn by
- * the order turns were queued, as `findLatestTurns` reads it.
+ * the order turns were queued, as `findLatestTurns` reads it, the harness
+ * its conversation runs on, and the Mac it runs on by its name, as
+ * `devicesNamed` reads them. Note that the Mac's last beat is not read,
+ * because a beat wakes nothing (`deviceSync`) and a window judges a Mac by
+ * its own presence read.
  */
 function agentsStatement(userId: string) {
-  const latest = latestTurnOf(codingAgent.conversationId, "latest_turn");
+  const latest = latestTurnOf(agentTable.conversationId, "latest_turn");
   return queryBuilder
     .select(
       liveSelection(
         {
-          id: codingAgent.id,
-          planId: codingAgent.taskId,
+          id: agentTable.id,
+          planId: agentTable.taskId,
           workspaceId: AGENT_WORKSPACE,
-          model: codingAgent.model,
-          effort: codingAgent.effort,
-          contextWindow: codingAgent.contextWindow,
-          title: codingAgent.title,
-          kind: codingAgent.kind,
-          brief: sql<string>`case when ${codingAgent.prompt} is not null then ${CODING_AGENT_BRIEF.PROMPT} when ${codingAgent.planSnapshot} is not null then ${CODING_AGENT_BRIEF.PLAN} else ${CODING_AGENT_BRIEF.BLANK} end`,
-          repository: codingAgent.repository,
-          starterId: codingAgent.userId,
+          model: agentTable.model,
+          effort: agentTable.effort,
+          contextWindow: agentTable.contextWindow,
+          title: agentTable.title,
+          kind: agentTable.kind,
+          brief: sql<string>`case when ${agentTable.prompt} is not null then ${AGENT_BRIEF.PROMPT} when ${agentTable.planSnapshot} is not null then ${AGENT_BRIEF.PLAN} else ${AGENT_BRIEF.BLANK} end`,
+          repository: agentTable.repository,
+          starterId: agentTable.userId,
           starterName: starter.name,
-          automationId: codingAgent.automationId,
-          automationName: sql<string | null>`${codingAgent.automationOrigin} ->> 'name'`,
-          archivedBy: codingAgent.archivedBy,
+          automationId: agentTable.automationId,
+          automationName: sql<string | null>`${agentTable.automationOrigin} ->> 'name'`,
+          archivedBy: agentTable.archivedBy,
           archiverName: archiver.name,
-          disabledServers: codingAgent.disabledServers,
-          published: codingAgent.published,
-          startedFrom: codingAgent.startedFrom,
+          disabledServers: agentTable.disabledServers,
+          published: agentTable.published,
+          startedFrom: agentTable.startedFrom,
           runtime: conversations.runtime,
+          machine: agentTable.machine,
+          deviceId: agentTable.deviceId,
+          deviceName: device.name,
           pinPosition: agentPin.position,
           turnId: latest.id,
           turnStatus: latest.status,
           cancelRequested: isNotNull(latest.cancelRequestedAt),
           turnSessionEnded: sessionEndedOf(latest),
-          quietTurn: quietTurnOf(codingAgent.kind, codingAgent.conversationId, latest),
+          quietTurn: quietTurnOf(agentTable.kind, agentTable.conversationId, latest),
         },
         {
-          archivedAt: codingAgent.archivedAt,
+          archivedAt: agentTable.archivedAt,
           pinnedAt: agentPin.pinnedAt,
-          createdAt: codingAgent.createdAt,
+          createdAt: agentTable.createdAt,
           cancelRequestedAt: latest.cancelRequestedAt,
           queuedAt: latest.queuedAt,
           startedAt: latest.startedAt,
           settledAt: latest.settledAt,
-          awaitingLineAt: awaitingLineAtIn(codingAgent.conversationId),
-          lastSettledAt: lastSettledAtIn(codingAgent.conversationId),
+          awaitingLineAt: awaitingLineAtIn(agentTable.conversationId),
+          lastSettledAt: lastSettledAtIn(agentTable.conversationId),
         },
       ),
     )
-    .from(codingAgent)
-    .leftJoin(task, eq(task.id, codingAgent.taskId))
-    .leftJoin(conversations, eq(conversations.id, codingAgent.conversationId))
-    .leftJoin(
-      agentPin,
-      and(eq(agentPin.codingAgentId, codingAgent.id), eq(agentPin.userId, userId)),
-    )
-    .leftJoin(starter, eq(starter.id, codingAgent.userId))
-    .leftJoin(archiver, eq(archiver.id, sql`${codingAgent.archivedBy} ->> 'userId'`))
+    .from(agentTable)
+    .leftJoin(agentPin, and(eq(agentPin.agentId, agentTable.id), eq(agentPin.userId, userId)))
+    .leftJoin(starter, eq(starter.id, agentTable.userId))
+    .leftJoin(archiver, eq(archiver.id, sql`${agentTable.archivedBy} ->> 'userId'`))
+    .leftJoin(conversations, eq(conversations.id, agentTable.conversationId))
+    .leftJoin(device, eq(device.id, agentTable.deviceId))
     .leftJoinLateral(latest, sql`true`)
     .where(
-      or(
-        // An agent on a task is listed only where the account sees it too, as the held list reads it.
-        and(isNotNull(codingAgent.taskId), taskReachableBy(userId), agentSeenBy(userId)),
-        and(isNull(codingAgent.taskId), agentReachableBy(userId)),
-      ),
+      // An agent on a task is listed only where the account reaches the task too, as a read of it by its id is.
+      agentVisibleTo(userId),
     );
 }
 

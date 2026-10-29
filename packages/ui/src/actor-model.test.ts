@@ -379,7 +379,7 @@ test("a linked GitHub login who left keeps their picture and their account's nam
   );
 });
 
-test("a task Luke or an agent made names them, the automation whose run started the agent in its place, and an agent the window does not hold as a coding agent; a task made by hand names nobody", () => {
+test("a task Luke or an agent made names them, the automation whose run started the agent in its place, and an agent the window does not hold as an agent; a task made by hand names nobody", () => {
   assert.equal(originActor(undefined, undefined), undefined);
   assert.equal(originActor({ actor: PLAN_ACTOR.NOTETAKER }, undefined), LUKE_ACTOR);
   const held = {
@@ -405,7 +405,7 @@ test("a task Luke or an agent made names them, the automation whose run started 
   );
   assert.deepEqual(originActor({ actor: PLAN_ACTOR.AGENT }, undefined), {
     kind: ACTOR_KIND.AGENT,
-    name: "Coding agent",
+    name: "Agent",
     provider: undefined,
     state: ACTOR_STATE.REST,
   });

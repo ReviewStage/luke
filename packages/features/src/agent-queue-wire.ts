@@ -11,7 +11,7 @@ import { Schema as EffectSchema } from "effect";
  * send key, and opens the next turn (`@luke/service`'s `agent-queue.ts`).
  * A Stop pauses the queue, and so does a turn that failed or a hand-off the
  * service refused, which the pause names; nothing goes until Resume. What a
- * member asks of the queue is `coding-agent-wire.ts`'s, beside a message.
+ * member asks of the queue is `agent-wire.ts`'s, beside a message.
  */
 
 /** Why a queue stands paused: the developer's Stop, a turn that failed, or a hand-off the service refused. */

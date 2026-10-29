@@ -14,8 +14,8 @@ import {
 import { sql } from "drizzle-orm";
 import { boolean, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
+import { agentTable } from "./agent.js";
 import { organization, user } from "./auth.js";
-import { codingAgent } from "./coding-agent.js";
 
 /**
  * automation.ts -- an account's automations, each a trigger and a coding agent to start in a workspace, and every run one made.
@@ -70,7 +70,7 @@ export const automation = pgTable(
       .notNull()
       .default(AUTOMATION_TARGET.NEW_AGENT),
     /** The agent a run continues where `target_kind` is the same agent; null otherwise or once it is deleted. */
-    targetAgentId: uuid("target_agent_id").references(() => codingAgent.id, {
+    targetAgentId: uuid("target_agent_id").references(() => agentTable.id, {
       onDelete: "set null",
     }),
     archiveSuccessful: boolean("archive_successful").notNull().default(false),
@@ -98,7 +98,7 @@ export const automation = pgTable(
  * for a webhook or a "Run now". A webhook's body is kept beside it as
  * `payload`, since the sweep that starts the run's agent comes after the
  * request that brought it. The status is the firing's; how the agent it
- * started is doing is the agent's own, read through `coding_agent_id`,
+ * started is doing is the agent's own, read through `agent_id`,
  * which goes null where the agent is deleted while the run stays in the
  * history. The row goes with its automation.
  */
@@ -120,7 +120,7 @@ export const automationRun = pgTable(
     /** Why it was skipped or failed; null while queued and once started. */
     reason: text("reason").$type<AutomationRunReason>(),
     /** The coding agent it started; null before, and where that agent is gone. */
-    codingAgentId: uuid("coding_agent_id").references(() => codingAgent.id, {
+    agentId: uuid("agent_id").references(() => agentTable.id, {
       onDelete: "set null",
     }),
     firedAt: timestamptz("fired_at").notNull(),
@@ -132,7 +132,7 @@ export const automationRun = pgTable(
      * run is recovered by that agent's line whatever the automation names
      * since; null for any other run, and once that agent is deleted.
      */
-    claimedAgentId: uuid("claimed_agent_id").references(() => codingAgent.id, {
+    claimedAgentId: uuid("claimed_agent_id").references(() => agentTable.id, {
       onDelete: "set null",
     }),
     /**
@@ -153,6 +153,6 @@ export const automationRun = pgTable(
     // The sweep recovers the started runs no agent was recorded for, oldest claim first.
     index("automation_run_unrecorded_settled")
       .on(table.status, table.settledAt)
-      .where(sql`${table.codingAgentId} is null`),
+      .where(sql`${table.agentId} is null`),
   ],
 );

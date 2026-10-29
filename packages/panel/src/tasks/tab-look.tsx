@@ -1,9 +1,9 @@
 import {
-  CODING_AGENT_KIND,
-  type CodingAgentKind,
-  type CodingAgentPullRequest,
-  type CodingAgentStatus,
-} from "@luke/features/coding-agent-wire";
+  AGENT_KIND,
+  type AgentKind,
+  type AgentPullRequest,
+  type AgentStatus,
+} from "@luke/features/agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import type { TaskStatus } from "@luke/features/task-wire";
 import { AgentPlaceholderIcon, DocumentIcon, PlusIcon, TaskStatusMark, WingFace } from "@luke/ui";
@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { HarnessMark } from "../harness-marks.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph.js";
-import { agentGlyphState, providerOf } from "./coding-agent-model.js";
+import { agentGlyphState, providerOf } from "./agent-model.js";
 import { fileLook } from "./file-ref.js";
 import { PullRequestMark, type PullRequestMarked } from "./pull-request-mark.js";
 import { type FixedSidePanelTab, SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "./use-side-panel.js";
@@ -67,9 +67,9 @@ export const TAB_KIND = {
 /** Where an agent stands as its glyph wears it: its model, and where it stands where that is known. */
 interface AgentStanding {
   readonly model: string;
-  readonly status?: CodingAgentStatus | undefined;
+  readonly status?: AgentStatus | undefined;
   /** What kind of agent it is, an operator wearing Luke's face; absent for a coder. */
-  readonly kind?: CodingAgentKind | undefined;
+  readonly kind?: AgentKind | undefined;
 }
 
 /** A task as its tab or its row names it: its name, and its status where the place knows it. */
@@ -107,9 +107,7 @@ export type TabSubject =
   | {
       readonly kind: typeof TAB_KIND.CHANGES;
       /** The pull request, which names the tab by its number and title and whose mark it wears for where it stands; none before it is read. */
-      readonly pullRequest?:
-        | (PullRequestMarked & Pick<CodingAgentPullRequest, "title">)
-        | undefined;
+      readonly pullRequest?: (PullRequestMarked & Pick<AgentPullRequest, "title">) | undefined;
     }
   | {
       readonly kind: typeof TAB_KIND.TERMINAL;
@@ -197,7 +195,7 @@ export function SubagentMark({ model }: { model: string | undefined }) {
 export function AgentGlyph({ agent }: { agent: AgentStanding | undefined }) {
   const provider = agent === undefined ? undefined : providerOf(agent.model);
   const state = agent?.status === undefined ? GLYPH_STATE.REST : agentGlyphState(agent.status);
-  const operator = agent?.kind === CODING_AGENT_KIND.OPERATOR;
+  const operator = agent?.kind === AGENT_KIND.OPERATOR;
   return <StateGlyph glyph={<AgentMark provider={provider} operator={operator} />} state={state} />;
 }
 
@@ -208,7 +206,7 @@ function SubagentGlyph({ model, state }: { model: string | undefined; state: Gly
 
 /** The mark at the end of an agent's row or tab: the failed mark once its turn failed, nothing otherwise (`stateEndMark`). */
 export function agentEndMark(
-  agent: { readonly status: CodingAgentStatus },
+  agent: { readonly status: AgentStatus },
   hinted: boolean,
 ): React.JSX.Element | undefined {
   return stateEndMark(agentGlyphState(agent.status), hinted);
@@ -237,7 +235,7 @@ export function tabLook(subject: TabSubject): KindLook {
     case TAB_KIND.AGENT:
       return {
         icon: <AgentGlyph agent={subject.agent} />,
-        label: subject.name ?? TAB_WORDS.CODING_AGENT,
+        label: subject.name ?? TAB_WORDS.AGENT,
       };
     case TAB_KIND.SUBAGENT:
       return {

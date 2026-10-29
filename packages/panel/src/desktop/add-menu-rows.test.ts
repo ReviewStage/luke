@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -9,7 +9,7 @@ import { afterEach, test } from "vitest";
 import { NOTHING_HELD } from "../tasks/agent-ref.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { agentEntries } from "./main-tabs.js";
 import { type PanelCards, panelEntries } from "./side-panel.js";
 import { type AddEntry, AddTabButton } from "./strip-tabs.js";
@@ -32,7 +32,7 @@ afterEach(() => {
 });
 
 /** An agent on the task, named by its title. */
-function agent(id: string, title: string, status: CodingAgentSummary["status"]) {
+function agent(id: string, title: string, status: AgentSummary["status"]) {
   return {
     id,
     planId: "plan-1",
@@ -42,11 +42,11 @@ function agent(id: string, title: string, status: CodingAgentSummary["status"]) 
     createdAt: 1,
     status,
     turnId: null,
-  } satisfies CodingAgentSummary;
+  } satisfies AgentSummary;
 }
 
-const BROKEN = agent("agent-1", "Billing export", CODING_AGENT_STATUS.FAILED);
-const HEALTHY = agent("agent-2", "Invoice sweep", CODING_AGENT_STATUS.COMPLETED);
+const BROKEN = agent("agent-1", "Billing export", AGENT_STATUS.FAILED);
+const HEALTHY = agent("agent-2", "Invoice sweep", AGENT_STATUS.COMPLETED);
 
 /** A "+" drawn offering `entries`, pressed open; the options it lists, by their names. */
 async function opened(entries: readonly AddEntry[]): Promise<Map<string, HTMLElement>> {
@@ -90,7 +90,7 @@ function endMarks(option: HTMLElement | undefined): (string | null)[] {
 
 test("a failed agent's row in the column's \"+\" wears the failed mark and a healthy one's wears none, and a row hangs its agent's card while the pointer rests on it", async () => {
   const base = tasksControl();
-  const agents = codingAgentsControl({
+  const agents = agentsControl({
     agents: [BROKEN, HEALTHY],
     agentIds: [BROKEN.id, HEALTHY.id],
   });
@@ -100,14 +100,14 @@ test("a failed agent's row in the column's \"+\" wears the failed mark and a hea
   assert.deepEqual(endMarks(options.get("Invoice sweep")), []);
 
   restOn(options.get("Invoice sweep") ?? assert.fail("the agent is listed"));
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Invoice sweep");
 });
 
 test("a Terminal row in the side panel's \"+\" wears its agent's failed mark, and hangs the agent's card", async () => {
   const base = tasksControl();
   const cards: PanelCards = {
-    agents: codingAgentsControl({ agents: [BROKEN], agentIds: [BROKEN.id] }),
+    agents: agentsControl({ agents: [BROKEN], agentIds: [BROKEN.id] }),
     held: NOTHING_HELD,
     pagePlace: { taskId: "plan-1" },
     shownAgent: undefined,
@@ -128,6 +128,6 @@ test("a Terminal row in the side panel's \"+\" wears its agent's failed mark, an
   const row = options.get("Billing export");
   assert.deepEqual(endMarks(row), ["Failed"]);
   restOn(row ?? assert.fail("the terminal is listed"));
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Billing export");
 });

@@ -15,7 +15,8 @@ import {
 
 /**
  * Which upgrades the live view takes, before any socket stands: only its
- * own path naming a task and a tab; from the desktop, which names no
+ * own path naming an agent and a tab, or, from a desktop built before the
+ * agent was named, a task and a tab; from the desktop, which names no
  * origin, only under a bearer; from a page, only from one of the
  * deployment's own, under its session cookie; and only for an account that
  * resolves and reaches the tab. Anything else is refused with a status and
@@ -23,6 +24,7 @@ import {
  */
 
 const TASK = "0f9e8d7c-6b5a-4f3e-8d2c-1b0a9f8e7d6c";
+const AGENT = "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d";
 const TAB = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
 const OWN_ORIGIN = "https://luke.example.test";
 const OWN = new Set([OWN_ORIGIN]);
@@ -33,17 +35,22 @@ function address(query: Record<string, string>, path: string = BROWSER_LIVE.PATH
   return `${path}?${new URLSearchParams(query).toString()}`;
 }
 
-const ASKED = { task: TASK, tab: TAB };
+const ASKED = { agent: AGENT, tab: TAB };
 
 test("the desktop's bearer with no origin, and a page of the deployment's own with its cookie, are each taken", () => {
   assert.deepEqual(admitBrowserLiveUpgrade(address(ASKED), BEARER, OWN), {
     credential: { bearer: "Bearer token-1" },
-    ask: { taskId: TASK, tabId: TAB },
+    ask: { place: { agentId: AGENT }, tabId: TAB },
   });
+  assert.deepEqual(
+    admitBrowserLiveUpgrade(address({ task: TASK, tab: TAB }), BEARER, OWN),
+    { credential: { bearer: "Bearer token-1" }, ask: { place: { taskId: TASK }, tabId: TAB } },
+    "a desktop built before the agent was named still names the task",
+  );
   const page = admitBrowserLiveUpgrade(address(ASKED), COOKIE, OWN);
   assert.ok("credential" in page && "page" in page.credential);
   assert.equal(page.credential.page.get("cookie"), COOKIE.cookie);
-  assert.deepEqual(page.ask, { taskId: TASK, tabId: TAB });
+  assert.deepEqual(page.ask, { place: { agentId: AGENT }, tabId: TAB });
 });
 
 test("no credential, another site's origin, and a page's bearer without a cookie are refused before any socket stands", () => {
@@ -78,11 +85,15 @@ test("no credential, another site's origin, and a page's bearer without a cookie
   );
 });
 
-test("another path and an unreadable task or tab are refused", () => {
+test("another path and an unreadable agent, task, or tab are refused", () => {
   assert.deepEqual(admitBrowserLiveUpgrade(address(ASKED, "/api/terminal/sessions"), BEARER, OWN), {
     status: RELAY_UPGRADE_STATUS.NOT_FOUND,
   });
-  for (const unreadable of [{ ...ASKED, tab: "not-an-id" }, { task: TASK }]) {
+  for (const unreadable of [
+    { ...ASKED, tab: "not-an-id" },
+    { agent: "not-an-id", tab: TAB },
+    { agent: AGENT },
+  ]) {
     assert.deepEqual(admitBrowserLiveUpgrade(address(unreadable), BEARER, OWN), {
       status: RELAY_UPGRADE_STATUS.BAD_REQUEST,
     });
@@ -110,7 +121,7 @@ const REACHED: ReachedBrowserTab = {
     cursorViewportH: null,
     cursorAt: null,
   },
-  agent: { id: "agent-1", userId: "starter-1", githubAccess: GITHUB_ACCESS.APP },
+  agent: { id: AGENT, userId: "starter-1", githubAccess: GITHUB_ACCESS.APP },
 };
 
 /** An account store that answers the bearer and cookie given for their members, and a tab store reached by one member alone. */
@@ -125,15 +136,15 @@ const admission: BrowserLiveAdmission = {
             Option.filter(() => credential.page.get("cookie") === COOKIE.cookie),
           ),
     ),
-  readTab: (userId, taskId, tabId) =>
+  readTab: (userId, place, tabId) =>
     Effect.succeed(
-      userId === "member-1" && taskId === TASK && tabId === TAB
+      userId === "member-1" && "agentId" in place && place.agentId === AGENT && tabId === TAB
         ? Option.some(REACHED)
         : Option.none(),
     ),
 };
 
-const ASK = { taskId: TASK, tabId: TAB };
+const ASK = { place: { agentId: AGENT }, tabId: TAB };
 
 it.effect(
   "only an account that resolves and reaches the tab is admitted; any other is refused before any socket stands",

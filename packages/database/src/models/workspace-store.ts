@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { pinnedPictureUrl } from "@luke/features/account-picture";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
 import {
@@ -24,8 +24,8 @@ import {
   queryBuilder,
 } from "../core/query.js";
 import { GITHUB_INSTALLATION_STATUS } from "../github-installation-vocabulary.js";
+import { agentTable } from "../schemas/agent.js";
 import { member, organization, user } from "../schemas/auth.js";
-import { codingAgent } from "../schemas/coding-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
 import { githubPersonalToken } from "../schemas/github-personal-token.js";
 import { githubRepositoryRead } from "../schemas/github-repository-read.js";
@@ -495,7 +495,7 @@ export function workspaceReachableBy(userId: string, organizationId: string | SQ
 }
 
 /** A coding agent row's workspace: the column itself, never null since `20261015062923_organization_not_null`, so a membership check reaches its indexes. */
-export const AGENT_WORKSPACE = sql<string>`${codingAgent.organizationId}`;
+export const AGENT_WORKSPACE = sql<string>`${agentTable.organizationId}`;
 
 /** How a task or an agent row was reached on GitHub, whose it is, and its repository, as `seenThroughGitHub` reads them. */
 interface GitHubReachedColumns {
@@ -532,43 +532,50 @@ function seenThroughGitHub(userId: string, row: GitHubReachedColumns): SQL {
 /** The condition that the account sees the coding agent row as its GitHub access allows (`seenThroughGitHub`), for a statement that gates its workspace already. */
 export function agentSeenBy(userId: string): SQL {
   return seenThroughGitHub(userId, {
-    access: codingAgent.githubAccess,
-    owner: codingAgent.userId,
-    repository: codingAgent.repository,
+    access: agentTable.githubAccess,
+    owner: agentTable.userId,
+    repository: agentTable.repository,
   });
 }
 
 /**
- * The condition that the account may read and write the coding agent row a
- * statement reads: it is a member of the agent's workspace, an agent with no
- * task as much as one on a task, sees it as its GitHub access allows, and the
- * agent is no teammate's operator. Note that an operator is private to its
- * member, because it reads their inbox, DMs, and every agent they reach, so
- * every read and write gated here refuses or leaves out another member's.
+ * The condition that the account reaches the coding agent row itself: it is
+ * a member of the agent's workspace, an agent with no task as much as one on
+ * a task, sees it as its GitHub access allows, and the agent is no
+ * teammate's operator. Note that an operator is private to its member,
+ * because it reads their inbox, DMs, and every agent they reach. It gates
+ * what an agent does as itself, under the member who started it: its own
+ * writes and reads by its id or its conversation, and its posts. What a
+ * member, or another agent, reads or does to an agent keeps `agentVisibleTo`.
  */
 export function agentReachableBy(userId: string): SQL {
   return sql`(${memberOfWorkspace(userId, AGENT_WORKSPACE)} and ${agentSeenBy(userId)} and ${agentNoTeammatesOperator(userId)})`;
 }
 
 /**
- * The condition that the account sees the coding agent row whole: it reaches
- * the agent (`agentReachableBy`), and for an agent on a task that task too
- * (`taskReachableBy`). Note that the task is asked as well, because a read of
- * an agent by its id would otherwise skip the GitHub visibility of its task.
+ * The condition that the account may read and write the coding agent row a
+ * statement reads, the one rule a member, or another agent, keeps for every
+ * list of agents and every read or write by id: it reaches the agent
+ * (`agentReachableBy`), and for an agent on a task that task too
+ * (`taskReachableBy`). Note that the task is asked as well, because a read
+ * of an agent by its id would otherwise skip the GitHub visibility of its
+ * task, which a list of the task's agents keeps. An agent acting as itself
+ * keeps `agentReachableBy` alone, so its starter losing the task's
+ * visibility never leaves a working agent mute.
  */
 export function agentVisibleTo(userId: string): SQL {
   const taskReached = exists(
     queryBuilder
       .select({ one: task.id })
       .from(task)
-      .where(and(eq(task.id, codingAgent.taskId), taskReachableBy(userId))),
+      .where(and(eq(task.id, agentTable.taskId), taskReachableBy(userId))),
   );
-  return sql`(${agentReachableBy(userId)} and (${codingAgent.taskId} is null or ${taskReached}))`;
+  return sql`(${agentReachableBy(userId)} and (${agentTable.taskId} is null or ${taskReached}))`;
 }
 
 /** The condition that the coding agent row is no operator but the account's own: a coder, or an operator the account started. */
 export function agentNoTeammatesOperator(userId: string): SQL {
-  return sql`(${codingAgent.kind} <> ${CODING_AGENT_KIND.OPERATOR} or ${eq(codingAgent.userId, userId)})`;
+  return sql`(${agentTable.kind} <> ${AGENT_KIND.OPERATOR} or ${eq(agentTable.userId, userId)})`;
 }
 
 /** The condition that the account sees the task row as its GitHub access allows (`seenThroughGitHub`), for a statement that gates its workspace already. */

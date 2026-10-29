@@ -2,7 +2,7 @@
  * agent-machines.ts -- the two agent machines behind one: each call answered by the machine its agent's row names, Vercel Sandbox or the starter's Mac.
  *
  * A call that holds an agent asks the machine its row names
- * (`coding_agent.machine`), and one that holds a place or a runner asks the
+ * (`agent.machine`), and one that holds a place or a runner asks the
  * machine that place names. A call that holds a session alone, as a door
  * and a later call's find do, asks the Mac first whether the session is a
  * local agent's, and Vercel Sandbox otherwise, so a sandbox's session costs
@@ -15,8 +15,8 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import type { CodingAgentMachine } from "@luke/features/coding-agent-wire";
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import type { AgentMachineKind } from "@luke/features/agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { Effect, Layer } from "effect";
 import type { HttpClient } from "effect/http";
 import {
@@ -30,8 +30,8 @@ import { type VercelMachineOptions, vercelLifecycle, vercelMachine } from "./ver
 
 /** The lifecycle of whichever machine answers for the session, or for the place or runner named. */
 function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): MachineLifecycle {
-  const of = (machine: CodingAgentMachine): MachineLifecycle =>
-    machine === CODING_AGENT_MACHINE.DEVICE ? mac : cloud;
+  const of = (machine: AgentMachineKind): MachineLifecycle =>
+    machine === AGENT_MACHINE.DEVICE ? mac : cloud;
   const bySession = <A>(
     session: string,
     call: (machine: MachineLifecycle) => Effect.Effect<A, SandboxUnavailable>,
@@ -54,8 +54,8 @@ function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): Ma
 
 /** Both machines behind one, as above. */
 function routedMachine(cloud: AgentMachineService, mac: DeviceMachineService): AgentMachineService {
-  const of = (machine: CodingAgentMachine | undefined): AgentMachineService =>
-    machine === CODING_AGENT_MACHINE.DEVICE ? mac : cloud;
+  const of = (machine: AgentMachineKind | undefined): AgentMachineService =>
+    machine === AGENT_MACHINE.DEVICE ? mac : cloud;
   return {
     ...routedLifecycle(cloud, mac),
     layout: (agent) => of(agent.machine).layout(agent),

@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
 import { Deferred, Effect, Exit, Layer, Option, Result, Scope } from "effect";
@@ -89,7 +89,7 @@ async function openAgent(host: CoderHost) {
     Effect.gen(function* () {
       const userId = yield* openGithubUser();
       const task = yield* startTask(userId, { name: "Invitations", repository: "acme/relay" });
-      const started = yield* createCodingAgent(userId, {
+      const started = yield* createAgent(userId, {
         taskId: task.id,
         idempotencyKey: `start-${mintSession()}`,
         model: "anthropic/claude-opus-5.5",

@@ -4,7 +4,7 @@ import {
   type DeviceStanding,
   deviceStanding,
   MAC_PRESENCE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import type { DevicePresenceAnswer } from "@luke/features/host-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { Duration, Effect, Option, Schedule, Stream } from "effect";

@@ -12,6 +12,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { playListMotions } from "../testing/pane-motion.js";
+import { pointerCross } from "../testing/pointer-cross.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
@@ -56,14 +57,6 @@ afterEach(() => {
 
 function task(id: string, name: string, updatedAt: number): TaskSummary {
   return { id, workspaceId: WORKSPACE.id, name, createdAt: 1, updatedAt, repository: null };
-}
-
-/** The pointer crossing from `from` onto `to`, as React hears a leave and an enter. */
-function pointerCross(from: Element, to: Element): void {
-  act(() => {
-    from.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: to }));
-    to.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, relatedTarget: from }));
-  });
 }
 
 /**

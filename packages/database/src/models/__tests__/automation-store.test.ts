@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -11,7 +12,6 @@ import {
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
 import { eq } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option } from "effect";
@@ -20,6 +20,7 @@ import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { automation, automationRun } from "../../schemas/automation.js";
 import { getTestDB, plansOf } from "../../testing/index.js";
+import { archiveAgent, createAgent } from "../agent-store.js";
 import {
   aimOperatorHeartbeat,
   automationRunsSince,
@@ -36,6 +37,7 @@ import {
   ownFailedAutomationRuns,
   queuedAutomationRuns,
   readAutomation,
+  readAutomationToRun,
   readWebhookAutomation,
   recordAutomationRun,
   settleAutomationRun,
@@ -43,7 +45,6 @@ import {
   subjectRunStartedSince,
   updateAutomation,
 } from "../automation-store.js";
-import { archiveCodingAgent, createCodingAgent } from "../coding-agent-store.js";
 
 /**
  * An account's automations and their runs, over a real dialect: made only
@@ -85,7 +86,7 @@ const nightly = (organizationId: string): NewAutomation => ({
   repositories: ["acme/api"],
   name: "Nightly flaky-test sweep",
   trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 2 * * *", timezone: "Europe/London" },
-  action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Find and fix one flaky test." },
+  action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Find and fix one flaky test." },
   guards: AUTOMATION_DEFAULT_GUARDS,
   nextRunAt: new Date("2026-10-15T01:00:00Z"),
   webhookSecretHash: null,
@@ -114,12 +115,12 @@ it.layer(getTestDB())("the automation store", (it) => {
         });
         const operatorOf = (userId: string) =>
           Effect.map(
-            createCodingAgent(userId, {
+            createAgent(userId, {
               taskId: null,
               organizationId: workspace,
               planSnapshot: null,
               prompt: null,
-              kind: CODING_AGENT_KIND.OPERATOR,
+              kind: AGENT_KIND.OPERATOR,
               idempotencyKey: randomUUID(),
               model: "anthropic/claude-opus-5.5",
               effort: "high",
@@ -129,7 +130,7 @@ it.layer(getTestDB())("the automation store", (it) => {
           );
         // Archived by hand, as the archive or update_agent does it, with no Reset to name it.
         const archived = (userId: string, agentId: string) =>
-          Effect.asVoid(archiveCodingAgent(userId, agentId, true));
+          Effect.asVoid(archiveAgent(userId, agentId, true));
         const retired = yield* operatorOf(owner);
         yield* archived(owner, retired);
         const fresh = yield* operatorOf(owner);
@@ -239,6 +240,35 @@ it.layer(getTestDB())("the automation store", (it) => {
           ["hello"],
         );
         assert.ok(Option.isNone(departed), "a departed owner's webhook reads as none");
+      }),
+  );
+
+  it.effect(
+    "an automation whose stored action still says `coding-agent`, as the release serving beside the rename's migration writes it, reads to run",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const workspaceId = yield* openWorkspace(owner);
+        const made = Option.getOrThrow(
+          yield* createAutomation(owner, { ...nightly(workspaceId), nextRunAt: null }),
+        );
+        const db = yield* Database;
+        yield* db
+          .update(automation)
+          .set({
+            action: {
+              kind: AUTOMATION_ACTION.CODING_AGENT,
+              prompt: "Find and fix one flaky test.",
+            },
+          })
+          .where(eq(automation.id, made.id));
+
+        const read = yield* readAutomationToRun(made.id);
+
+        assert.deepEqual(
+          Option.map(read, (row) => row.action.kind),
+          Option.some(AUTOMATION_ACTION.CODING_AGENT),
+        );
       }),
   );
 

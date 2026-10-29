@@ -1,10 +1,10 @@
 import {
-  CODING_AGENT_KIND,
-  CODING_AGENT_MACHINE,
-  type CodingAgentAttachment,
-  type CodingAgentBrief,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_KIND,
+  AGENT_MACHINE,
+  type AgentAttachment,
+  type AgentBrief,
+  type AgentSummary,
+} from "@luke/features/agent-wire";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
@@ -23,7 +23,7 @@ import {
   TRANSCRIPT_COPY,
   type TranscriptCopy,
 } from "../tasks/transcript-copy.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import { useCapability } from "../use-app-state.js";
 import type { MenuAction, MenuEntry } from "./action-menu.js";
@@ -53,7 +53,7 @@ import { type TranscriptRead, useTranscriptCopier } from "./strip-tabs.js";
  * (`agent-delete.tsx`), which closes the surface once it landed. A row
  * leaves out only what `NOT_ON_A_ROW` names, and nothing of its own is
  * added beside the menu but what the row's kind keeps, a pinned tab's Unpin
- * before it and a summary row's Show details (`row-menu.tsx`).
+ * before it.
  * Run, which runs the agent's pushed branch on this Mac, stands on its
  * Pull request tab instead (`agent-pull-request-tab.tsx`).
  * The doors that open a terminal are the column's, from where it stands
@@ -221,10 +221,10 @@ export interface AgentActions {
 
 /** A coding agent's transcript read whole from the service under the title given, since its tab holds it only while shown. */
 export function agentTranscriptRead(
-  readTranscript: CodingAgentsControl["readTranscript"],
+  readTranscript: AgentsControl["readTranscript"],
   agentId: string,
   title: string,
-  brief: CodingAgentBrief | undefined,
+  brief: AgentBrief | undefined,
   quiet = false,
 ): TranscriptRead {
   return () =>
@@ -268,7 +268,7 @@ export function useAgentTerminalDoors(
 export interface AgentDraftDoors {
   readonly onFork: ((fork: AgentFork) => void) | undefined;
   readonly onContinue:
-    | ((agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) => void)
+    | ((agentId: string, words: string, attachments: readonly AgentAttachment[]) => void)
     | undefined;
 }
 
@@ -280,7 +280,7 @@ export interface AgentDraftDoors {
  * (`useSteadyDoor`), and none while what the agents stand under is archived.
  */
 export function useAgentDraftDoors(
-  agents: Pick<CodingAgentsControl, "onForkDraft" | "onContinueDraft">,
+  agents: Pick<AgentsControl, "onForkDraft" | "onContinueDraft">,
   archived: boolean,
   onOpenDraft: (draftId: string) => void,
 ): AgentDraftDoors {
@@ -290,7 +290,7 @@ export function useAgentDraftDoors(
   const onContinue = useSteadyDoor(
     archived
       ? undefined
-      : (agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) =>
+      : (agentId: string, words: string, attachments: readonly AgentAttachment[]) =>
           onOpenDraft(agents.onContinueDraft(agentId, words, attachments)),
   );
   return { onFork, onContinue };
@@ -304,7 +304,7 @@ export function useAgentDraftDoors(
  */
 export function useAgentActions(
   agent: Pick<
-    CodingAgentSummary,
+    AgentSummary,
     | "id"
     | "planId"
     | "status"
@@ -317,7 +317,7 @@ export function useAgentActions(
     | "machine"
     | "startedBy"
   >,
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   input: {
     /** The agent's name as the surface draws it, which a transcript copied is headed by. */
     readonly label: string;
@@ -330,18 +330,18 @@ export function useAgentActions(
 ): AgentActions {
   const { label, shown, terminals, onDeleted } = input;
   const copied = useTranscriptCopier();
-  const copyLink = useCopyLinkItem()(agentPlace(agent));
+  const copyLink = useCopyLinkItem()(agentPlace(agent.id));
   const rename = useInlineRename(agent.id, agents.onRename);
   const archive = useAgentArchive(agent, agents, shown);
   const unarchive = useAgentUnarchive(agent.id, agents);
   const deletion = useAgentDelete(agent, agents, { shown, onDeleted });
-  const luke = agent.kind === CODING_AGENT_KIND.OPERATOR;
+  const luke = agent.kind === AGENT_KIND.OPERATOR;
   // Note that an Unarchive stands while what the agent stands under is archived, and neither it nor
   // an archived agent is renamed then.
   const renamable = !luke && agents.onUnarchive === undefined && agent.archivedAt === undefined;
   const { onOpenTerminal } = terminals;
   const macTerminal = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
-  const local = agent.machine === CODING_AGENT_MACHINE.DEVICE;
+  const local = agent.machine === AGENT_MACHINE.DEVICE;
   // Note that a local agent runs in a worktree on its starter's Mac, which no relayed tab reaches, so
   // its Terminal opens the Mac's own Terminal there, offered to its starter alone, whose Mac it is.
   const starter = agent.startedBy !== undefined && agent.startedBy.userId === agents.me;

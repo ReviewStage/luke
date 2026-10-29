@@ -3,9 +3,23 @@ export const CONVERSATION_KIND = {
   MAIN: "main",
   OBSERVED: "observed",
   CHILD: "child",
-  /** A coding agent's transcript: its `messages` rows are what the agent tab shows and its latest turn is its status. */
+  /** An agent's transcript: its `messages` rows are what the agent tab shows and its latest turn is its status. */
   CODING_AGENT: "coding_agent",
+  /** An agent's transcript as it is spelled once a migration rewrites the stored rows; read beside `coding_agent` until then. */
+  AGENT: "agent",
 } as const;
+
+/**
+ * Both spellings of an agent's conversation. Note that every reader takes
+ * both, because the release that rewrites the stored rows to `agent` runs
+ * its migration while this one still serves.
+ */
+export const AGENT_CONVERSATION_KINDS = [CONVERSATION_KIND.CODING_AGENT, CONVERSATION_KIND.AGENT];
+
+/** Whether a conversation's kind is an agent's own, in either spelling. */
+export function isAgentConversationKind(kind: string): boolean {
+  return kind === CONVERSATION_KIND.CODING_AGENT || kind === CONVERSATION_KIND.AGENT;
+}
 
 /**
  * What answers a conversation's turns: eve, or a provider's own coding
@@ -21,8 +35,8 @@ export const CONVERSATION_RUNTIME = {
 
 export type ConversationRuntime = (typeof CONVERSATION_RUNTIME)[keyof typeof CONVERSATION_RUNTIME];
 
-/** What sent one of the developer's lines to a coding agent, as the wire spells it too, so the host reads a live row's sender by the same words (`@luke/features/coding-agent-wire`). */
-export { MESSAGE_SENDER, type MessageSender } from "@luke/features/coding-agent-wire";
+/** What sent one of the developer's lines to a coding agent, as the wire spells it too, so the host reads a live row's sender by the same words (`@luke/features/agent-wire`). */
+export { MESSAGE_SENDER, type MessageSender } from "@luke/features/agent-wire";
 
 /**
  * What an inbox item's attachment is: a picture the agent posted with an

@@ -1,23 +1,23 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { pauseAgentQueue } from "@luke/database/models/agent-queue-store";
 import {
+  type Agent,
+  type AgentLatestTurn,
+  type AgentStartedFromIt,
   awaitingLinesOfReached,
-  type CodingAgent,
-  type CodingAgentLatestTurn,
-  type CodingAgentStartedFromIt,
   continuationsOf,
   latestTurnsOfReached,
   nativeRuntimesOfReached,
   RUNNING_TURN_STATUSES,
-} from "@luke/database/models/coding-agent-store";
-import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
+} from "@luke/database/models/agent-store";
+import { replaceAgentWakeups } from "@luke/database/models/agent-wakeups";
 import { devicesNamed } from "@luke/database/models/device-store";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
 import type { TaskStandingAgent } from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import { Clock, DateTime, Effect, Exit, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
@@ -41,8 +41,8 @@ import {
 import { failedCallRefusal, routedSessions } from "./runtime-sessions.js";
 import {
   type AgentTurnStanding,
-  codingAgentStatusOf,
-  codingAgentSummary,
+  agentStatusOf,
+  agentSummary,
   lineAwaitsTurn,
   startedBlank,
   summaryAccounts,
@@ -57,7 +57,7 @@ import {
  * caller (`eveFor`); a continue of the agent stops it here too,
  * over the eve its Start reached (`start.ts`), and an agent's `stop_agent`
  * stops one as the deployment acting for the member the caller acts for
- * (`../coding-agent-tools.ts`). The cancel names the turn the row was
+ * (`../agent-tools.ts`). The cancel names the turn the row was
  * written for, so a turn that ended meanwhile is not followed by a newer
  * one stopped in its place, and an eve that refuses leaves the row as it
  * stood and the caller unavailable. An agent stopped for good, as an
@@ -153,7 +153,7 @@ export const continuedByOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   agentIds: readonly string[],
 ): Effect.fn.Return<
-  (agentId: string) => readonly CodingAgentStartedFromIt[],
+  (agentId: string) => readonly AgentStartedFromIt[],
   HostedRefusal,
   DatabaseServices
 > {
@@ -164,13 +164,13 @@ export const continuedByOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** The agent's summary as the account reads it, with its status read now. */
 export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  agent: CodingAgent,
-): Effect.fn.Return<CodingAgentSummary, HostedRefusal, DatabaseServices> {
+  agent: Agent,
+): Effect.fn.Return<AgentSummary, HostedRefusal, DatabaseServices> {
   const standing = yield* standingsOf([agent.conversationId]);
   const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));
   const continuedBy = yield* continuedByOf(userId, [agent.id]);
   const macs = yield* hostedStoreOrUnavailable(devicesNamed(summaryDevices([agent])));
-  return codingAgentSummary(
+  return agentSummary(
     agent,
     standing(agent.conversationId),
     yield* Clock.currentTimeMillis,
@@ -182,12 +182,12 @@ export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** Where the agent stands now. */
 export const statusOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  agent: CodingAgent,
-): Effect.fn.Return<CodingAgentSummary["status"], HostedRefusal, DatabaseServices> {
+  agent: Agent,
+): Effect.fn.Return<AgentSummary["status"], HostedRefusal, DatabaseServices> {
   const { turn, awaitingLineAt } = (yield* standingsOf([agent.conversationId]))(
     agent.conversationId,
   );
-  return codingAgentStatusOf(turn, {
+  return agentStatusOf(turn, {
     createdAt: agent.createdAt,
     now: yield* Clock.currentTimeMillis,
     awaitingLineAt,
@@ -196,7 +196,7 @@ export const statusOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /** Whether the turn is one a Stop has something to stop: still running, with eve's id to name, and no Stop on it yet. */
-function stoppable(turn: CodingAgentLatestTurn | undefined): turn is CodingAgentLatestTurn & {
+function stoppable(turn: AgentLatestTurn | undefined): turn is AgentLatestTurn & {
   readonly eveTurnId: string;
 } {
   return (
@@ -213,7 +213,7 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Effect.Effect<StoreWriter>,
   request: Request,
   account: string,
-  agent: CodingAgent,
+  agent: Agent,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   // An agent its starter's plan pays for is stopped by those the plan's policy admits.
   yield* admitsPlanWriter(account, agent);
@@ -240,7 +240,7 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
     HttpClient.HttpClient | DatabaseServices
   >,
   writer: Effect.Effect<StoreWriter>,
-  agent: CodingAgent,
+  agent: Agent,
   key?: string,
   /** The coding agent whose `stop_agent` or continue makes the Stop; none for the developer's or Luke's. */
   by?: string,
@@ -248,7 +248,7 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   // A native agent's released wait left wakeups with no turn running to name, which a Stop ends
   // as a stopped CLI's own end with it, so they go whether or not a turn stands to cancel.
-  yield* hostedStoreOrUnavailable(replaceCodingAgentWakeups(agent.id, []));
+  yield* hostedStoreOrUnavailable(replaceAgentWakeups(agent.id, []));
   const turn = (yield* standingsOf([agent.conversationId]))(agent.conversationId).turn;
   if (!stoppable(turn)) return false;
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
@@ -299,11 +299,11 @@ export const stoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Effect.Effect<StoreWriter>,
   request: Request,
   account: string,
-  agent: CodingAgent,
+  agent: Agent,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   yield* stoppedTurn(reach, writer, request, account, agent);
   const status = yield* statusOf(agent);
-  if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
+  if (status === AGENT_STATUS.STARTING || status === AGENT_STATUS.RUNNING) {
     return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
   }
 });
@@ -323,7 +323,7 @@ export const everyStoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Effect.Effect<StoreWriter>,
   request: Request,
   account: string,
-  agents: readonly CodingAgent[],
+  agents: readonly Agent[],
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   const stops = yield* Effect.forEach(
     agents,
@@ -336,7 +336,7 @@ export const everyStoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** Whether `stoppedForGood` would stop every agent rather than refuse one, each read as `stopsForGood` reads it, a few at once. */
 export const everyStopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
-  agents: readonly CodingAgent[],
+  agents: readonly Agent[],
 ) {
   const ready = yield* Effect.forEach(agents, stopsForGood, {
     concurrency: AGENT_STOP_CONCURRENCY,
@@ -351,7 +351,7 @@ export const everyStopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
  * Stop already. A caller stopping several agents as one asks this of every
  * one first, so a refusal cancels nobody's work.
  */
-export const stopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (agent: CodingAgent) {
+export const stopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (agent: Agent) {
   const { turn, awaitingLineAt } = (yield* standingsOf([agent.conversationId]))(
     agent.conversationId,
   );
@@ -362,9 +362,9 @@ export const stopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (agent: 
     blank: startedBlank(agent),
   };
   if (lineAwaitsTurn(turn, standing)) return false;
-  const status = codingAgentStatusOf(turn, standing);
-  if (status === CODING_AGENT_STATUS.STARTING) return false;
-  return status !== CODING_AGENT_STATUS.RUNNING || stoppable(turn);
+  const status = agentStatusOf(turn, standing);
+  if (status === AGENT_STATUS.STARTING) return false;
+  return status !== AGENT_STATUS.RUNNING || stoppable(turn);
 });
 
 /**
@@ -383,12 +383,12 @@ export const standsStopped = /* @__PURE__ */ Effect.fnUntraced(function* (
   const awaiting = yield* awaitingLinesOfReached(conversationIds);
   const now = yield* Clock.currentTimeMillis;
   return agents.every((agent) => {
-    const status = codingAgentStatusOf(turns.get(agent.conversationId), {
+    const status = agentStatusOf(turns.get(agent.conversationId), {
       createdAt: agent.createdAt,
       now,
       awaitingLineAt: awaiting.get(agent.conversationId),
       blank: agent.blank,
     });
-    return status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
+    return status !== AGENT_STATUS.STARTING && status !== AGENT_STATUS.RUNNING;
   });
 });

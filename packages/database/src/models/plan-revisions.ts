@@ -19,8 +19,8 @@ import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
+import { agentTable } from "../schemas/agent.js";
 import { user } from "../schemas/auth.js";
-import { codingAgent } from "../schemas/coding-agent.js";
 import { planRevision } from "../schemas/plan-revision.js";
 import { task } from "../schemas/task.js";
 import { agentGivenNameSql } from "./agent-name.js";
@@ -233,14 +233,14 @@ const findLastEdit = SqlSchema.findOneOption({
           editorName: user.name,
           at: planRevision.at,
           agentId: planRevision.agentId,
-          agentModel: codingAgent.model,
+          agentModel: agentTable.model,
           // The name the agent goes by: Luke for an operator, else its title.
           agentTitle: sql<
             string | null
-          >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
+          >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
         })
         .from(planRevision)
-        .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
+        .leftJoin(agentTable, eq(agentTable.id, planRevision.agentId))
         .leftJoin(user, eq(user.id, planRevision.userId))
         .where(eq(planRevision.taskId, taskId))
         .orderBy(desc(planRevision.seq))
@@ -282,11 +282,11 @@ const findRevisionLines = SqlSchema.findAll({
           editorId: user.id,
           editorName: user.name,
           at: planRevision.at,
-          agentModel: codingAgent.model,
+          agentModel: agentTable.model,
           // The name the agent goes by: Luke for an operator, else its title.
           agentTitle: sql<
             string | null
-          >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
+          >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
           agentId: planRevision.agentId,
           seq: planRevision.seq,
           startedAt: planRevision.startedAt,
@@ -296,7 +296,7 @@ const findRevisionLines = SqlSchema.findAll({
         })
         .from(planRevision)
         .innerJoin(task, eq(task.id, planRevision.taskId))
-        .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
+        .leftJoin(agentTable, eq(agentTable.id, planRevision.agentId))
         .leftJoin(user, eq(user.id, planRevision.userId))
         .leftJoin(
           restored,

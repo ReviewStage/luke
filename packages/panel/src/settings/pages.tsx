@@ -28,7 +28,7 @@ interface SettingsPage {
 const SETTINGS_PAGE = {
   [SETTINGS_VIEW.ACCOUNT]: { title: "Account", icon: <GLYPH.PERSON /> },
   [SETTINGS_VIEW.WORKSPACE]: { title: "Workspace", icon: <GLYPH.PEOPLE /> },
-  [SETTINGS_VIEW.CODING_AGENTS]: { title: "Agents", icon: <GLYPH.AGENT /> },
+  [SETTINGS_VIEW.AGENTS]: { title: "Agents", icon: <GLYPH.AGENT /> },
   [SETTINGS_VIEW.HOSTS]: { title: "Hosts", icon: <GLYPH.HOST /> },
   [SETTINGS_VIEW.INTEGRATIONS]: { title: "Integrations", icon: <PlugIcon /> },
   [SETTINGS_VIEW.SKILLS]: { title: "Skills", icon: <GLYPH.SKILL /> },

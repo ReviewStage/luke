@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -10,8 +12,6 @@ import {
 } from "@luke/features/automation-wire";
 import { CHANNEL_CALL_FAILURE } from "@luke/features/channel-view";
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
-import { CODING_AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -66,7 +66,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
 const AT = 1_792_000_000_000;
 
 /** What a page's card says where its page cannot be read, as the reader sees it. */
-const PAGE_UNREAD = "Luke cannot read this page.";
+const PAGE_UNREAD = "Luke can't read this page.";
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 
@@ -153,7 +153,7 @@ const SWEEP: AutomationSummary = {
   enabled: true,
   pausedReason: null,
   trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 2 * * *", timezone: "UTC" },
-  action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Sweep flaky tests." },
+  action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Sweep flaky tests." },
   guards: AUTOMATION_DEFAULT_GUARDS,
   nextRunAt: null,
   lastRun: null,
@@ -237,7 +237,7 @@ const STATE: AppStateSnapshot = (() => {
           title: "Sweep the flaky tests",
           model: "anthropic/claude-opus-5.5",
           effort: "high",
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           createdAt: AT,
           automationId: null,
           workspaceId: ACME.id,
@@ -341,7 +341,7 @@ let openChannelsRefused = false;
 
 /** The host's side of the inbox streams: the plan's items and the agent on no task's, each followed as a chip's glyph or card reads them. */
 const inboxes = followedInboxes((scope) => {
-  if (inboxRefused) return { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+  if (inboxRefused) return { failure: AGENT_CALL_FAILURE.UNANSWERED };
   if (scope.kind === INBOX_SCOPE_KIND.PLAN && scope.id === TASK_ID) {
     return { items: [WAITING, ANSWERED] };
   }
@@ -382,9 +382,7 @@ const taskCards = {
       : createElement(TaskCard, {
           task: TASK,
           models: [],
-          pictures: false,
           now,
-          onOpenGitHub: () => undefined,
           onShowAgent: () => undefined,
           focus,
         }),
@@ -392,13 +390,13 @@ const taskCards = {
 
 /** The plan's page, whose words the section's heading is read from. */
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: TASK.name,
   workspace: PLACE.workspace,
   repository: PLACE.repository,
   text: () => PLAN_TEXT,
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: PLACE,
     anchors: new Set(["goal", "roll-it-out"]),
     onOpenTask: () => undefined,
@@ -543,7 +541,7 @@ test("a plan's chip hangs the plan's card, and a section's the same card's head 
 
   assert.equal(taskCard.card, "data-task-card");
   assert.equal(taskCard.name, TASK.name);
-  assert.deepEqual(taskCard.details, ["acme/relay"]);
+  assert.match(taskCard.sub ?? "", /^acme\/relay · /u);
   assert.equal(taskCard.focus, undefined);
   assert.equal(sectionCard.card, "data-task-card");
   assert.equal(sectionCard.name, TASK.name);
@@ -555,9 +553,9 @@ test("a plan's chip hangs the plan's card, and a section's the same card's head 
 test("a plan's chip on another plan's page hangs the card the plan's tab hangs, and one of a plan the window lists not that tab's own name card", async () => {
   const elsewhere: TaskMentionsValue = {
     ...PAGE,
-    taskId: OTHER_TASK,
+    holder: { taskId: OTHER_TASK },
     taskName: "Another plan",
-    doors: { ...PAGE.doors, taskId: OTHER_TASK, anchors: new Set() },
+    doors: { ...PAGE.doors, holder: { taskId: OTHER_TASK }, anchors: new Set() },
   };
   const container = await drawn(
     [
@@ -575,7 +573,7 @@ test("a plan's chip on another plan's page hangs the card the plan's tab hangs, 
   const listedCard = await cardOf(listed);
   const unlistedCard = await cardOf(unlisted);
   assert.deepEqual([listedCard.card, listedCard.name], ["data-task-card", TASK.name]);
-  assert.deepEqual([unlistedCard.card, unlistedCard.name], ["data-tab-card", "Someone's plan"]);
+  assert.deepEqual([unlistedCard.card, unlistedCard.name], ["data-task-card", "Someone's plan"]);
 });
 
 test("a page's chip hangs its title, its version and who showed it, and when it moved, a page of a plan not open read as it is first hung; one neither the window nor the read holds says it can't be read", async () => {
@@ -612,7 +610,7 @@ test("a page's chip hangs its title, its version and who showed it, and when it 
 
   assert.equal(page.card, "data-page-card");
   assert.equal(page.name, "Unfurl matrix");
-  assert.equal(page.sub, "Version 3 · Shown by Luke");
+  assert.deepEqual([page.sub, page.detailWords], ["Version 3", ["Shown by Luke"]]);
   assert.ok(page.corner, "the corner says when the page last moved");
   assert.deepEqual([other.name, other.notes], ["Old draft", [PAGE_UNREAD]]);
   // A page id the open plan holds, named on another plan, is not the open plan's page.
@@ -620,7 +618,7 @@ test("a page's chip hangs its title, its version and who showed it, and when it 
   // A page of a plan not open hangs its tab's card all the same, as an Inbox item's bar names it.
   assert.equal(read.card, "data-page-card");
   assert.equal(read.name, "Rollout tracker");
-  assert.equal(read.sub, "Shown by Luke");
+  assert.deepEqual([read.sub, read.detailWords], [undefined, ["Shown by Luke"]]);
 });
 
 test("a page's chip of the open plan the window holds no pages for reads the plan's pages as it is hung, and says it can't be read once they lack it", async () => {
@@ -661,7 +659,7 @@ test("a chip of a page an agent on no task showed hangs the same card as a plan'
   const page = await cardOf(shown);
   assert.equal(page.card, "data-page-card");
   assert.equal(page.name, "Flake ledger");
-  assert.equal(page.sub, "Version 2 · Shown by Sweep the flaky tests");
+  assert.deepEqual([page.sub, page.detailWords], ["Version 2", ["Shown by Sweep the flaky tests"]]);
   assert.ok(page.corner, "the corner says when the page last moved");
   assert.equal(
     document.querySelector(".luke-tooltip-card .luke-page-thumb-frame")?.getAttribute("src"),
@@ -721,13 +719,13 @@ test("an Inbox item's chip hangs its Inbox row's own card, whether the item wait
   const settled = await cardOf(answered);
   const sweep = await cardOf(swept);
 
-  assert.equal(asking.card, "data-inbox-row-card");
+  assert.equal(asking.card, "data-inbox-item-card");
   assert.equal(asking.name, "Keep expired links?");
   assert.equal(asking.sub, "Needs you");
-  assert.equal(settled.card, "data-inbox-row-card");
+  assert.equal(settled.card, "data-inbox-item-card");
   assert.equal(settled.name, "Rename the invite email?");
   assert.match(settled.sub ?? "", /^Answered/u);
-  assert.equal(sweep.card, "data-inbox-row-card");
+  assert.equal(sweep.card, "data-inbox-item-card");
   assert.equal(sweep.name, "Quarantine the flaky test?");
 });
 
@@ -761,7 +759,7 @@ test("an Inbox item's chip whose inbox could not be read keeps the card main's b
 
   assert.equal(brief.card, "data-inbox-item-card");
   assert.equal(brief.name, "Keep expired links?");
-  assert.deepEqual(brief.notes, ["Waiting for an answer"]);
+  assert.deepEqual(brief.notes, ["Needs you"]);
   assert.equal(own.card, "data-mention-card");
 });
 
@@ -772,7 +770,7 @@ test("a member's chip hangs their card", async () => {
 
   assert.equal(member.card, "data-actor-card");
   assert.equal(member.name, "Sam Okafor");
-  assert.equal(member.sub, "sam@example.com");
+  assert.equal(member.sub, "sam@example.com · Owner");
 });
 
 test("an automation's chip hangs its card, who made it and when at its foot, the workspace's automations read only once the card is hung", async () => {
@@ -786,7 +784,9 @@ test("an automation's chip hangs its card, who made it and when at its foot, the
   assert.equal(before, 0, "nothing is read as the chip is drawn");
   assert.equal(card.card, "data-actor-card");
   assert.equal(card.name, "Nightly sweep");
-  assert.deepEqual(card.detailWords, ["Created by Sam Okafor · Oct 25"]);
+  assert.match(card.sub ?? "", / · Acme$/u, "whose it is joins what fires it");
+  assert.equal(card.corner, undefined);
+  assert.deepEqual(card.detailWords, ["Created by Sam Okafor · 1d ago"]);
   assert.equal(reads(), 1);
 });
 
@@ -800,9 +800,9 @@ test("a member's and an automation's chips under another workspace's link are re
   const member = await cardOf(person);
   const audit = await cardOf(automation);
 
-  assert.deepEqual([member.name, member.corner], ["Sam Okafor", "Member"]);
+  assert.deepEqual([member.name, member.sub], ["Sam Okafor", "sam@example.com · Member"]);
   assert.equal(audit.name, "Weekly audit");
-  assert.deepEqual(audit.detailWords, ["Created by Priya Nair · Oct 25"], "its maker is Beta's");
+  assert.deepEqual(audit.detailWords, ["Created by Priya Nair · 1d ago"], "its maker is Beta's");
 });
 
 test("a member's chip under a link naming its workspace by id, as one with no slug is written, is read as that workspace holds them", async () => {
@@ -810,7 +810,7 @@ test("a member's chip under a link naming its workspace by id, as one with no sl
 
   const member = await cardOf(chipsOf(container)[0]);
 
-  assert.deepEqual([member.name, member.corner], ["Sam Okafor", "Member"]);
+  assert.deepEqual([member.name, member.sub], ["Sam Okafor", "sam@example.com · Member"]);
 });
 
 /** The card a channel's chip hangs, its workspace's channels read as it is first hung, counted back from `CHANNELS_NOW`. */
@@ -829,7 +829,7 @@ test("a channel's chip hangs its card: its bare name, its kind and how many thre
     [standing.name, standing.sub, standing.corner, standing.notes],
     ["billing", "Channel · 42 threads", "3m", ["Invoices, plans, and the payment provider"]],
   );
-  assert.deepEqual(standing.detailWords, ["Created by Sam Okafor · Oct 25"]);
+  assert.deepEqual(standing.detailWords, ["Created by Sam Okafor · 1d ago"]);
   assert.equal(project.sub, "Project · 12 threads");
 });
 

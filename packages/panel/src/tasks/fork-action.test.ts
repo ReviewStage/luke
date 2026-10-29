@@ -2,18 +2,18 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_BRIEF,
+  AGENT_STATUS,
+  type AgentStatus,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab.js";
 import { agentForkDoors, ForkProvider } from "./fork-action.js";
 import type { AgentFork } from "./fork-model.js";
@@ -41,7 +41,7 @@ afterEach(() => {
   fakeAppBridge({});
 });
 
-function summary(id: string, extra: Partial<CodingAgentSummary> = {}): CodingAgentSummary {
+function summary(id: string, extra: Partial<AgentSummary> = {}): AgentSummary {
   return {
     id,
     planId: TASK,
@@ -49,13 +49,13 @@ function summary(id: string, extra: Partial<CodingAgentSummary> = {}): CodingAge
     effort: "high",
     title: null,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     ...extra,
   };
 }
 
-const SETTLED: CodingAgentMessage = {
+const SETTLED: AgentTranscriptMessage = {
   id: TURN,
   role: MESSAGE_ROLE.ASSISTANT,
   parts: [{ type: "text", text: "I moved the invite email to the queue and added a retry." }],
@@ -65,11 +65,11 @@ const SETTLED: CodingAgentMessage = {
 
 /** The message drawn in an agent's tab handing it forking as `doors` builds it, or as a place handing none, every fork and opening recorded. */
 function drawn(input: {
-  message?: CodingAgentMessage;
+  message?: AgentTranscriptMessage;
   moving?: boolean;
-  agent?: CodingAgentSummary;
-  listed?: readonly CodingAgentSummary[];
-  archivedAgents?: readonly CodingAgentSummary[];
+  agent?: AgentSummary;
+  listed?: readonly AgentSummary[];
+  archivedAgents?: readonly AgentSummary[];
   taskArchived?: boolean;
   opensDraft?: boolean;
   provided?: boolean;
@@ -77,7 +77,7 @@ function drawn(input: {
   const forks: AgentFork[] = [];
   const opened: ToolTarget[] = [];
   const agent = input.agent ?? summary(SOURCE);
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: input.listed ?? [agent],
     archived: input.archivedAgents ?? [],
     onUnarchive: input.taskArchived === true ? () => undefined : undefined,
@@ -123,7 +123,7 @@ test("an agent's own settled message offers Fork to new agent after Copy, and it
 });
 
 test("a settled turn of no words, its calls alone or failed before it said anything, offers Fork with no Copy, and its press forks at that message", () => {
-  const callsOnly: CodingAgentMessage = {
+  const callsOnly: AgentTranscriptMessage = {
     ...SETTLED,
     parts: [
       { type: "step-start" },
@@ -152,7 +152,7 @@ test("an agent on no task offers Fork to new agent as a task's agent does, its p
 });
 
 test("no fork is offered on the developer's message, a task archived, a place that opens no draft, or a tab that hands none, as a worker's", () => {
-  const developers: CodingAgentMessage = {
+  const developers: AgentTranscriptMessage = {
     id: "line-1",
     role: MESSAGE_ROLE.USER,
     parts: [{ type: "text", text: "Use the queue." }],
@@ -221,7 +221,7 @@ test("a message no agent was forked at names none", () => {
 });
 
 /** An agent's reply as its transcript carries it, its words whole or still being written. */
-function reply(id: string, text: string): CodingAgentMessage {
+function reply(id: string, text: string): AgentTranscriptMessage {
   return {
     id,
     role: MESSAGE_ROLE.ASSISTANT,
@@ -231,18 +231,18 @@ function reply(id: string, text: string): CodingAgentMessage {
   };
 }
 
-function line(id: string, text: string): CodingAgentMessage {
+function line(id: string, text: string): AgentTranscriptMessage {
   return { id, role: MESSAGE_ROLE.USER, parts: [{ type: "text", text }] };
 }
 
 /** The ids of the messages an agent's tab offers to fork at, over a page of `messages`, for an agent of `status`. */
 async function forkedAtInTab(
-  status: CodingAgentStatus,
-  messages: readonly CodingAgentMessage[],
+  status: AgentStatus,
+  messages: readonly AgentTranscriptMessage[],
 ): Promise<readonly Omit<AgentFork, "agentId" | "opening">[]> {
   fakeAppBridge({});
-  const agent = summary(SOURCE, { status, brief: CODING_AGENT_BRIEF.PROMPT });
-  const control = codingAgentsControl({
+  const agent = summary(SOURCE, { status, brief: AGENT_BRIEF.PROMPT });
+  const control = agentsControl({
     agents: [agent],
     transcripts: pushedTranscripts(() => [
       { messages: [...messages], cursor: "2:0", status, title: null },
@@ -310,20 +310,20 @@ test("while an agent works, the newest of its replies, which the running turn ma
     writing,
   ];
 
-  for (const working of [CODING_AGENT_STATUS.RUNNING, CODING_AGENT_STATUS.STARTING]) {
+  for (const working of [AGENT_STATUS.RUNNING, AGENT_STATUS.STARTING]) {
     assert.deepEqual(
       await forkedAtInTab(working, settled),
       [{ messageId: TURN }, { messageId: LATEST, messageSteps: 2, messageStepParts: 2 }],
       `${working}: the newest reply is cut where it stands`,
     );
   }
-  assert.deepEqual(await forkedAtInTab(CODING_AGENT_STATUS.COMPLETED, settled), [
+  assert.deepEqual(await forkedAtInTab(AGENT_STATUS.COMPLETED, settled), [
     { messageId: TURN },
     { messageId: LATEST },
   ]);
   // A reply that has begun no step yet holds nothing to keep, so it offers no fork until it does.
   assert.deepEqual(
-    await forkedAtInTab(CODING_AGENT_STATUS.RUNNING, [
+    await forkedAtInTab(AGENT_STATUS.RUNNING, [
       line("task", "Queue the invite email."),
       reply(TURN, "Moved it onto the queue."),
       line("line-1", "Now add a retry."),

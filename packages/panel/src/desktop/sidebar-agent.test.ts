@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
   type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -14,11 +14,11 @@ import { act, createElement, Fragment, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { type AgentActions, agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 
@@ -38,7 +38,7 @@ const RUN: TasklessAgent = {
   effort: "high",
   title: "Remove the stale copy",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
   automationName: "Copy sweep",
   automationId: "7d6c5b4a-3f2e-4d1c-8b0a-9f8e7d6c5b4a",
@@ -78,12 +78,12 @@ beforeEach(() => {
   window.localStorage.clear();
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
+      if (request.kind === ACT_KIND.AGENTS_PAGE) {
         const { automationId, activityAt: _at, ...agent } = standing;
         const value = { agent: { ...agent, automationId } };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_SEEN) {
+      if (request.kind === ACT_KIND.AGENTS_SEEN) {
         seen.push(request.payload.agentId);
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
       }
@@ -101,10 +101,10 @@ afterEach(() => {
 /** The row of `agent`, drawn among the sidebar's tasks, whose archive is heard into `archives`. */
 function mount(
   agent: TasklessAgent,
-  pullRequests: CodingAgentsControl["pullRequests"] = new Map(),
+  pullRequests: AgentsControl["pullRequests"] = new Map(),
   unread = false,
 ): HTMLElement {
-  const agents = codingAgentsControl({
+  const agents = agentsControl({
     me: ME,
     pullRequests,
     onArchive: (agentId, archived) => {
@@ -187,8 +187,8 @@ test("an agent at rest is archived from its row's right-click at once, once its 
 });
 
 test("the reader's own working agent is archived at once from its row, asking nothing, since its toast's Undo brings it back", async () => {
-  standing = { ...RUN, status: CODING_AGENT_STATUS.RUNNING };
-  const row = mount({ ...RUN, status: CODING_AGENT_STATUS.RUNNING });
+  standing = { ...RUN, status: AGENT_STATUS.RUNNING };
+  const row = mount({ ...RUN, status: AGENT_STATUS.RUNNING });
   const archive = item(rightClick(row), "Archive");
   await act(async () => archive.click());
   await settle();
@@ -198,7 +198,7 @@ test("the reader's own working agent is archived at once from its row, asking no
 });
 
 test("a teammate's agent the list read at rest but whose page reads it working is asked about first, and archived only once asked", async () => {
-  standing = { ...RUN, startedBy: ADA, status: CODING_AGENT_STATUS.RUNNING };
+  standing = { ...RUN, startedBy: ADA, status: AGENT_STATUS.RUNNING };
   const row = mount({ ...RUN, startedBy: ADA });
   const archive = item(rightClick(row), "Archive");
   await act(async () => archive.click());
@@ -267,7 +267,7 @@ test("rested on, the row hangs the agent's card beside it, naming it as its tab'
   const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
   restOn(press);
 
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Remove the stale copy");
 });
 
@@ -288,7 +288,7 @@ test("a draft waiting in the agent's box marks its row with the Draft pencil whi
     const container = document.createElement("div");
     document.body.append(container);
     const held = createRoot(container);
-    const agents = codingAgentsControl({});
+    const agents = agentsControl({});
     act(() =>
       held.render(
         onRegistry(
@@ -341,12 +341,16 @@ test("the row's card says the agent last moved when its row does, the end of its
   const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
   restOn(press);
 
-  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
-  const corner = card?.querySelector(".luke-hover-card-corner")?.textContent ?? "";
+  const card = document.querySelector(".luke-tooltip-card [data-agent-card]");
   assert.equal(
-    corner,
-    "#42 · 2m",
-    "its pull request, and its run's end rather than its start three days ago",
+    card?.querySelector(".luke-hover-card-corner")?.textContent,
+    "2m",
+    "its run's end rather than its start three days ago",
+  );
+  assert.equal(
+    card?.querySelector("[data-pull-request-mark]")?.closest(".luke-hover-card-row")?.textContent,
+    "#42 Remove the stale copy",
+    "its pull request",
   );
 });
 
@@ -365,8 +369,8 @@ test("the row's card shows a pull request read since the list was, before the li
   const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
   restOn(press);
 
-  const corner = document.querySelector(".luke-tooltip-card .luke-hover-card-corner");
-  assert.match(corner?.textContent ?? "", /^#43/u);
+  const mark = document.querySelector(".luke-tooltip-card [data-pull-request-mark]");
+  assert.match(mark?.closest(".luke-hover-card-row")?.textContent ?? "", /^#43/u);
 });
 
 /** Presses `label` in the row's right-click menu. */
@@ -488,7 +492,7 @@ function OfferedActions({
   agent: TasklessAgent;
   onActions: (actions: AgentActions) => void;
 }): null {
-  const actions = useAgentActions(agent, codingAgentsControl({}), {
+  const actions = useAgentActions(agent, agentsControl({}), {
     label: agent.title ?? "",
     shown: true,
     terminals: { onOpenTerminal: () => undefined },
@@ -541,17 +545,10 @@ test("every action an agent's tab and page offer stands in its row's right-click
   }
 });
 
-test("an agent's row draws the one agent menu in its order: Rename and the read mark, then Pin, then Archive, then Permanently delete alone, Show details where the row's menu puts it; Copy link stands nowhere under no workspace", () => {
+test("an agent's row draws the one agent menu in its order: Rename and the read mark, then Pin, then Archive, then Permanently delete alone; Copy link stands nowhere under no workspace", () => {
   const row = mount(RUN);
   const labels = rightClick(row).map((each) => each.textContent);
-  assert.deepEqual(labels, [
-    "Rename",
-    "Mark as unreadU",
-    "PinP",
-    "Archive",
-    "Show details⌥↓",
-    "Permanently delete",
-  ]);
+  assert.deepEqual(labels, ["Rename", "Mark as unreadU", "PinP", "Archive", "Permanently delete"]);
 });
 
 test("an agent row's ⋯ opens the menu its right-click does, the ⋯ a Tab stop after its press", () => {

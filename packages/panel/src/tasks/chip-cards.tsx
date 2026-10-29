@@ -4,15 +4,7 @@ import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import {
-  DocumentIcon,
-  HoverCard,
-  HoverCardHead,
-  HoverCardNote,
-  Skeleton,
-  SkeletonRegion,
-  useMinute,
-} from "@luke/ui";
+import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote, useMinute } from "@luke/ui";
 import { Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -28,6 +20,7 @@ import {
 import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { holderTaskId } from "./mention-holder.js";
 import { useMentionedReader } from "./mentioned-agent-card.js";
 import { PageCard } from "./page-card.js";
 import { useTaskMentions } from "./task-mentions.js";
@@ -40,8 +33,8 @@ import { useTaskMentions } from "./task-mentions.js";
  * sidebar row and from a chip in an agent's words: a plan's is the plan's
  * card (`../desktop/task-card.tsx`), and a section's or a version's the
  * same card's head with the section's heading or the version under it in
- * the agents' stead; a page's is its tab's, its title, its version, and
- * when it last moved over a preview of it (`page-card.tsx`), a plan's page
+ * the agents' stead; a page's is its tab's, its title, its version, when
+ * it last moved, and who showed it over a preview of it (`page-card.tsx`), a plan's page
  * read from what the window holds where the plan is open, and the page of
  * any other plan or of an agent on no task, which the window holds nothing
  * of, read as the card is first hung (`ReadPageChipCard`); a person's is their card (`../actor-ref.tsx`); an Inbox item's is
@@ -84,39 +77,8 @@ function versionWords(revision: number): string {
 /** What an automation's card opens: nothing, since the chip it hangs from opens the automation. */
 const OPEN_NOTHING = (): void => undefined;
 
-/** What a card's placeholder says to a reader while what it shows is read. */
-const CARD_READING = "Reading…";
-
-/** How wide the line standing in for a card's note stands while it is read, as the skill card's does. */
-const CARD_NOTE_WIDTH = "80%";
-
 /** What a page's card says where its page cannot be read: deleted, or on a plan or an agent the reader cannot reach. */
-const PAGE_UNREAD = "Luke cannot read this page.";
-
-/**
- * Every chip's card while what it shows is read, whatever its kind: the
- * chip's glyph and name, which it already knows, in a card's own head, and
- * one line standing in for what the card says under it, so a plan, an
- * agent, a page, a pull request, a person, and an automation all wait
- * alike rather than each showing the chip's words, a bare address, or
- * nothing.
- */
-export function ChipCardSkeleton({
-  glyph,
-  name,
-}: {
-  glyph: ReactNode;
-  name: string;
-}): React.JSX.Element {
-  return (
-    <HoverCard data-chip-card-reading="">
-      <HoverCardHead glyph={glyph} name={name} />
-      <SkeletonRegion label={CARD_READING}>
-        <Skeleton width={CARD_NOTE_WIDTH} />
-      </SkeletonRegion>
-    </HoverCard>
-  );
-}
+const PAGE_UNREAD = "Luke can't read this page.";
 
 /** A page's card where its page cannot be read: the chip's glyph and name, and a note saying so. */
 export function UnreadPageCard({ glyph, name }: { glyph: ReactNode; name: string }): ReactNode {
@@ -139,8 +101,8 @@ export function useSectionHeading(taskId: string | undefined, anchor: string): s
   const text =
     taskId === undefined
       ? undefined
-      : page?.taskId === taskId
-        ? page.text()
+      : holderTaskId(page?.holder) === taskId
+        ? page?.text()
         : opened?.id === taskId
           ? opened.document.body
           : undefined;

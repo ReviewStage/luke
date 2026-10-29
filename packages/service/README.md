@@ -229,7 +229,7 @@ reading the workspace's repositories again when the window next takes focus
 
 The App's webhook is `POST /api/github/webhook` (`src/github/github-webhook-app.ts`),
 which keeps what an agent published current on the agent's row
-(`coding_agent.published`) for the task list while nobody has the agent's tab
+(`agent.published`) for the task list while nobody has the agent's tab
 open. GitHub signs every delivery with the App's webhook secret,
 `GITHUB_APP_WEBHOOK_SECRET`, and the route compares `X-Hub-Signature-256`
 against the HMAC-SHA256 of the body's own bytes in constant time before it
@@ -1092,7 +1092,7 @@ directory or service is called.
 and those names.
 
 An agent is one eve session over a `coding_agent` conversation
-(`packages/database/src/models/coding-agent-store.ts`), and the host behind the authored
+(`packages/database/src/models/agent-store.ts`), and the host behind the authored
 files is `src/agents/coder-host/`: the shared door and conversation
 admission (`src/agents/eve-host/door.ts`,
 `src/agents/eve-host/conversation.ts`), with the developer's own bearer the caller
@@ -1126,7 +1126,7 @@ an agent on no plan, as an automation's run starts one, is offered
 neither, and one handed a prompt on a plan only `show_page`, so no agent is
 offered a tool its every call would refuse.
 Beside them stand
-the agent tools (`src/agents/coding-agent-tools.ts`): `list_agents`, every other agent on
+the agent tools (`src/agents/agent-tools.ts`): `list_agents`, every other agent on
 any task and by any member, each with its task, narrowed to one task or its
 own where asked, archived ones marked; `read_agent`, one agent of the
 workspace by its id, with what its branch published and a tail of its
@@ -1222,7 +1222,7 @@ models offered or the named model's efforts, which the body throws so the
 model reads it and tries again), opens the child conversation the call
 names (`childConversationId(agent conversation, callId)`) and writes the
 pair under it
-(`coding_agent_delegation`, migration 0066); then the body opens the worker
+(`agent_delegation`, migration 0066); then the body opens the worker
 through `ctx.agent("worker")`. eve hands a resolver no lineage, so the
 worker's hook (`subagents/worker/hooks/store.ts`) pins the parent call's id
 in the worker's own state as the session starts, the model resolver reads
@@ -1288,7 +1288,7 @@ granted fails whole, so they are asked only where granted), and the token is
 then set at the firewall for the session's own `gh` and `git` through eve's
 `authenticateGitHub`; it never enters the sandbox's filesystem or
 environment. Who the agent writes as is settled once, as its first session
-starts, and kept on its row (`coder-host/checkout.ts`, `CODING_AGENT_AUTHOR`):
+starts, and kept on its row (`coder-host/checkout.ts`, `AGENT_AUTHOR`):
 an agent a developer started writes as them where their GitHub sign-in may
 push to the repository, its commits authored as their GitHub account and
 ending on a `Co-authored-by` trailer naming the App's bot; an automation's
@@ -1365,7 +1365,7 @@ resets the chosen model and the Start menu never touches the settings. A
 it (below): a model it does not offer or an effort that model does not list
 is `invalid-request`, and a catalog the instance cannot read is `unavailable`.
 The store keeps the columns on `account_preference`, and
-reads a half-written pair as the default; `coding_agent_context_window` is
+reads a half-written pair as the default; `agent_context_window` is
 null for the model's whole window (migration 0077). `updated_at` is the preferences
 part's own instant, nullable since migration 0062 and left null by a write
 that carries only `codingAgent`: the desktop reads the answer's `updatedAt`
@@ -1463,14 +1463,14 @@ lays it out are `src/chapters/chapters-prompt.ts`.
 
 ## The agent routes
 
-`src/agents/coding-agents-app.ts` is the group the desktop starts, lists,
+`src/agents/agents-app.ts` is the group the desktop starts, lists,
 reads, messages, re-models, and stops a task's agents through. An agent
 belongs to its task's workspace: every route reads it through the task's
-membership gate (`coding-agent-store.ts`), so any member lists, reads,
+membership gate (`agent-store.ts`), so any member lists, reads,
 messages, renames, re-models, and stops an agent a teammate started, while
 its conversation stays its starter's, the row's `userId`, under which its
 turns and lines are read and written, and its Start's retry key stays the
-starter's own; `packages/features/src/coding-agent-wire.ts`
+starter's own; `packages/features/src/agent-wire.ts`
 declares every request and answer, and `service-paths.ts` the addresses.
 `POST /api/plans/{id}/agents` takes `{ idempotencyKey, model?, effort?, task? }`:
 both of the choice or neither, the account's default (`/api/account/preferences`)
@@ -1483,13 +1483,13 @@ the task named it (`repository-not-reachable`, 403;
 task's plan as the Markdown Copy puts on the clipboard
 (`@luke/features/plan-markdown`); then
 makes the agent and its conversation
-(`createCodingAgent`), and opens the eve session under the developer's own
+(`createAgent`), and opens the eve session under the developer's own
 bearer with the snapshot as the first message of a typed turn. A Start
 naming a prompt (`task`), the developer's own words bounded as a message is, opens the
 session with the prompt as that first message instead: the agent is never
 handed the plan, its row keeps the prompt and no snapshot, and it still works
 in the task's repository under the same checks; an eve that
-did not take it discards the agent again (`discardCodingAgent`) and answers
+did not take it discards the agent again (`discardAgent`) and answers
 `unavailable`, so a retry starts afresh. A retry under the same key answers
 the agent the first Start made, 200 rather than 201, and opens nothing. A
 model a Start names runs that agent alone: only Settings' write
@@ -1512,7 +1512,7 @@ conversation's rows past the cursor as `UIMessage`s, the cursor to read on
 from, the agent's status as the page was read, and, where that status is
 `failed`, `failureReason` as one of the wire's fixed words (`model`,
 `sandbox`, `github`, `abandoned`, `other`), mapped by
-`src/agents/coder-host/status.ts`'s `codingAgentFailureOf` from the turn row's failure
+`src/agents/coder-host/status.ts`'s `agentFailureOf` from the turn row's failure
 word and the host's own refusal sentences in its detail, so nothing eve or
 a provider said reaches the desktop
 (`src/agents/coder-host/transcript.ts`): a row is new past a cursor when its sequence
@@ -1524,7 +1524,7 @@ held reads ends on the page whose status says the agent ended and a tab on
 a starting agent costs one held read per hold; an agent that has ended
 answers at once.
 `POST /api/agents/{id}/messages` takes `{ text, clientKey }`, the words
-trimmed and at most `CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS` long
+trimmed and at most `AGENT_BOUNDS.MAX_MESSAGE_CHARS` long
 (`message-too-long`, 400, past that) and the client's own key for the send,
 at most `MAX_KEY_CHARS` long. The message steers the turn under way, which
 is the coder channel's own policy (`src/agents/coder-host/channel.ts`): the model sees
@@ -1571,17 +1571,21 @@ of a workspace the account is not in, or a call that made no delegation, is
 `not-found`.
 `PATCH /api/agents/{id}` takes `{ model, effort }`, checked against the
 catalog exactly as a Start checks its own, and writes the choice on the
-agent's row (`updateCodingAgentChoice`), answering the agent's summary with
+agent's row (`updateAgentChoice`), answering the agent's summary with
 it; the coder agent reads the row at every step (`apps/dev/agent.ts`'s
 `defineDynamic`, through `src/agents/coder-host/host.ts`'s `model`), so a change
 mid-turn is the next step's and an idle agent's next turn takes it. It
 refuses an agent of a workspace the account is not in as not found and a model or effort the
 catalog does not offer as `invalid-request`, and leaves the account's
-default as it was. The same PATCH taking `{ pinned }` pins the agent for the
-asking member alone, or unpins it (`pinCodingAgent`): a pin is the account's
-own row of `agent_pin`, as a task's is of `plan_pin`, kept from the first
-pin's instant and gone with the agent or the account, and the plan list's
-`planlessAgents` answer it as `pinnedAt` only where the reader holds one.
+default as it was. The same PATCH taking `{ pinned }` pins the agent, on a
+task or on none, for the asking member alone, or unpins it (`pinAgent`),
+gated as the member's read of the agent is (`agentVisibleTo`), its task's
+reach among it, so an agent they cannot see is neither pinned nor unpinned:
+a pin is the account's own row of `agent_pin`, as a task's is of
+`plan_pin`, kept from the first pin's instant and gone with the agent or the
+account; the plan list's `planlessAgents` answer it as `pinnedAt` only where
+the reader holds one, and its live follow carries the reader's pins of
+agents on a task as `taskAgentPins`.
 `POST /api/agents/{id}/stop` is eve's cancel of the turn under way, named by
 eve's own id on the row, then the row's stamp; the service's hook stops the
 sandbox as the cancelled turn ends, and anything the agent pushed stays.
@@ -1595,7 +1599,7 @@ shell alone, and the branch its sandbox stands on as a turn ends is the one
 its pull request is on, whatever it cut, switched, or deleted on the way:
 the service's hook (`apps/dev/hooks/store.ts`) runs `git branch
 --show-current` in the checkout as each turn ends and writes the answer on
-the agent's row (`coding_agent.branch`, through `src/agents/coder-host/host.ts`'s
+the agent's row (`agent.branch`, through `src/agents/coder-host/host.ts`'s
 `recordBranch`), null for a detached HEAD, ahead of relaying the end (a
 tab reads the pull request the moment it hears the agent ended, and the
 answer is then kept a while) and before it stops the sandbox; a read that
@@ -1611,7 +1615,7 @@ request from the branch, else whether the branch was pushed at all, with
 the head's check runs and commit statuses read together for the one word,
 and a head whose checks the App may not read reading as `none` with a
 warning rather than failing the answer. Every answer read is written on the
-agent's row (`coding_agent.published`, the pull request or null), which is
+agent's row (`agent.published`, the pull request or null), which is
 what the task list's `agents` reads. The answer is kept
 per agent for `CODER.PUBLISHED_TTL` (thirty seconds) in an Effect `Cache`
 built once with the routes, under a key that says whether the agent had
@@ -1630,7 +1634,7 @@ reading as unchanged, a file only moved carries an empty patch, and a
 list cut at the bound says so. An agent with no pull request yet answers
 a null one. The agent's sandbox is no source: nothing outside its session
 reaches it and its diff is not kept in the store.
-`src/agents/coding-agents-app.test.ts` answers the routes over a fake eve, a
+`src/agents/agents-app.test.ts` answers the routes over a fake eve, a
 scripted GitHub, a fixed catalog, and PGlite; `src/agents/coder-host/coder-host.test.ts`
 drives the host, the shared relay, the branch recorded at a turn's end
 over the sandbox double, and the held read on the test clock;
@@ -1836,7 +1840,7 @@ with its title, model, effort, status, since when, and the member who
 started it while their account stands, and the pull requests they opened,
 each number once and at most three, as GitHub last answered a read of them.
 Four statements answer the whole list: the agents of every task listed with
-`coding_agent.published` (migration 0078), their newest turns, the lines
+`agent.published` (migration 0078), their newest turns, the lines
 awaiting a turn, and their starters' names; the list asks GitHub nothing.
 `packages/features/src/task-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in
@@ -2053,7 +2057,7 @@ less the `prompts` table it drew and less the `tool_sets` table
 tool set's and nothing else of either, because nothing replays them, and the
 tool set is the build's own and read from the build that offered it. A
 conversation row names its kind (`coding_agent`, which
-`packages/database/src/models/coding-agent-store.ts` opens, is the one any
+`packages/database/src/models/agent-store.ts` opens, is the one any
 code still opens; `plan`, a task's own Luke's, is opened no more), the
 runtime's own session id, its soft-delete instant, and the counter that
 numbers its messages. A message is one AI SDK `UIMessage`, its parts and
@@ -2198,19 +2202,18 @@ a write that commits while that read runs still wakes the next look.
 `src/sync/hub.ts` is the instance's hub: one `LISTEN` on the sync channel per
 function instance, over `DATABASE_URL_UNPOOLED`, since a pooler cannot hold a
 `LISTEN`. It is opened with the first watch on topics and closed thirty
-seconds after the last. It notifies itself through the pool every fifteen
-seconds, reading the notification queue's usage in the same round trip, and
-reconnects where that notification does not come back within fifteen more; a
-watch opened on a listener nobody was watching proves it with the same round
-trip before it answers. Losing a connection and opening its replacement each
-wake every watch, so its reader reads again.
+seconds after the last. It notifies itself over that same connection every
+fifteen seconds, reading the notification queue's usage in the same round
+trip, and reconnects where that notification does not come back within
+fifteen more; a watch opened on a listener nobody was watching proves it with
+the same round trip before it answers. Losing a connection and opening its
+replacement each wake every watch, so its reader reads again.
 
-`webServices` provides the hub only where `LUKE_SYNC` reads `on`. Off, or
-unset, `Sync` stands as the clock, nothing reads `DATABASE_URL_UNPOOLED` and
-nothing listens, and every `next` waits its caller's own poll, as every held
-read did before. On without `DATABASE_URL_UNPOOLED`, the listener stays down
-and waits run on their clock; so do they while a listener reconnects, and a
-watch on no topics always does. The hub's metrics (`luke.sync.*`) count
+`webServices` always provides the hub. While no listener stands, as while one
+reconnects or where the deployment has no `DATABASE_URL_UNPOOLED`, every
+`next` waits its caller's own poll, as every held read did before Luke Sync;
+a watch on no topics always does, and a runtime that provides no hub, as a
+test may, stands on the clock. The hub's metrics (`luke.sync.*`) count
 notifications, wakes, fallback wakes, reconnects, and the milliseconds the
 listener stood down, and gauge the notification queue's usage; none carries a
 topic, an id, or a transaction id.

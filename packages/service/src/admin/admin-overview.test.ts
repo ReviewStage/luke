@@ -100,7 +100,7 @@ test("the funnel and reach keep their order, with shares of their bases and none
         [FUNNEL_STEP.SIGNED_UP, 10],
         [FUNNEL_STEP.CREATED_TASK, 5],
       ]),
-      reach: new Map([[REACH_FEATURE.CODING_AGENTS, 3]]),
+      reach: new Map([[REACH_FEATURE.AGENTS, 3]]),
     },
     NOW,
     ADMIN_METRICS_WINDOW.MONTH,
@@ -122,7 +122,7 @@ test("the funnel and reach keep their order, with shares of their bases and none
     overview.reach.features.map((row) => [row.feature, row.share]),
     [
       [REACH_FEATURE.TASKS, 0],
-      [REACH_FEATURE.CODING_AGENTS, 0.75],
+      [REACH_FEATURE.AGENTS, 0.75],
       [REACH_FEATURE.INBOX, 0],
       [REACH_FEATURE.INTEGRATIONS, 0],
       [REACH_FEATURE.AUTOMATIONS, 0],

@@ -42,13 +42,13 @@ const TASK: Task = {
 };
 
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: "Invitations",
   workspace: "acme",
   repository: null,
   text: () => TASK.document.body,
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: { workspace: "acme", repository: null },
     anchors: new Set(["approach"]),
     onOpenTask: () => undefined,

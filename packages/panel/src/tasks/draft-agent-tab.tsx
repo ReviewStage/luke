@@ -1,18 +1,18 @@
-import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, hasWordsOrFiles } from "@luke/features/agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import { useSecond } from "@luke/ui";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation.js";
 import { AgentComposer } from "./agent-composer.js";
+import { agentName, modelLabel } from "./agent-model.js";
 import type { TranscriptCards } from "./agent-tab.js";
 import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { ArchivedComposerNote } from "./archived-note.js";
-import { agentName, modelLabel } from "./coding-agent-model.js";
 import { ForkChip } from "./fork-action.js";
 import { forkChoice, startingWords } from "./fork-model.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
-import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentDraft, AgentsControl } from "./use-agents.js";
 import { WorkingLine } from "./working-time.js";
 
 /**
@@ -54,7 +54,7 @@ import { WorkingLine } from "./working-time.js";
  * not land leaves the line for the note and Retry under the box, the words
  * kept.
  *
- * A draft New task handed over (`use-coding-agents.ts`'s `onHandDraft`)
+ * A draft New task handed over (`use-agents.ts`'s `onHandDraft`)
  * is a task whose agent the service refused as New task started them
  * both: it holds the words, files, and model New task's box held, and why
  * (`refused`), which the tab shows under the box with Retry and what mends
@@ -62,7 +62,7 @@ import { WorkingLine } from "./working-time.js";
  */
 
 /** A draft has nothing to stop and has published nothing, so its box's Stop and doors answer nothing. */
-const NOTHING_TO_STOP = () => Promise.resolve();
+const NOTHING_TO_STOP = () => Promise.resolve(false);
 const NO_DOORS = { openGitHub: () => undefined, copy: () => undefined };
 
 /** What a fork's working line names its source as where the task does not list it. */
@@ -91,7 +91,7 @@ export function DraftAgentTab({
   cards,
 }: {
   draft: AgentDraft;
-  control: CodingAgentsControl;
+  control: AgentsControl;
   /** The cards a fork's source chip hangs, as its tab's own chip does; none where the place draws none. */
   cards?: TranscriptCards | undefined;
 }): React.JSX.Element {
@@ -183,7 +183,7 @@ export function DraftAgentTab({
           <ForkChip fork={fork} source={source} cards={cards} onDrop={control.onDropFork} />
         )}
         <AgentComposer
-          status={CODING_AGENT_STATUS.STARTING}
+          status={AGENT_STATUS.STARTING}
           sendsEmpty={fork !== undefined}
           composer={composer}
           model={

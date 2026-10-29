@@ -1,4 +1,3 @@
-import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -18,8 +17,6 @@ import {
   withContextMenu,
 } from "../menu/menu.js";
 import { MoreButton, moreLabel } from "../more-button/more-button.js";
-import { Shortcut } from "../shortcut/shortcut.js";
-import { showDetailsFrom } from "../tooltip/hint.js";
 
 /**
  * row-menu.tsx -- a row's one menu, opened alike by its ⋯, a right-click, and the menu key: what a `ListRow` draws, for the rows that are no `ListRow`.
@@ -27,10 +24,7 @@ import { showDetailsFrom } from "../tooltip/hint.js";
  * A Board card, or a grid row of chips, offers its thing's acts as a
  * `ListRow` does (`ListRowMenu`), so it opens them by the same three doors:
  * its ⋯ (`more`), a right-click or a touch's long press anywhere on it, and
- * the menu key or ⇧F10 pressed on it or any control inside it. Where the
- * row's own control hangs a hover card, the menu offers Show details, which
- * opens that card with focus inside it, as ⌥↓ on the control does, so what
- * the card holds is reached without a pointer. The owner
+ * the menu key or ⇧F10 pressed on it or any control inside it. The owner
  * spreads `props` on the box that is the row, draws `more` where its ⋯
  * stands and `popup` beside the row, and a `ListRow` takes the same pieces
  * from here. A row unavailable, or whose thing offers no acts now, offers
@@ -59,29 +53,6 @@ export interface ListRowMenu {
 export interface RowMenuRequest {
   readonly count: number;
   readonly submenu?: string | undefined;
-}
-
-/** The chord Show details names, which opens the card from the control itself. */
-const DETAILS_CHORD = APP_SHORTCUTS[APP_COMMAND.SHOW_DETAILS].chord;
-
-/**
- * The row's groups with Show details among them, in a group of its own
- * before the last, so the row's own first act stays first and what ends or
- * removes the thing, which a row's menu sets last and alone, stays last; or
- * after the one group a menu holds.
- */
-function withDetails(
-  groups: readonly (readonly MenuEntry[])[],
-  details: () => void,
-): readonly (readonly MenuEntry[])[] {
-  const item: MenuEntry = {
-    label: APP_SHORTCUTS[APP_COMMAND.SHOW_DETAILS].label,
-    hint: <Shortcut chord={DETAILS_CHORD} />,
-    onSelect: details,
-  };
-  const filled = groups.filter((group) => group.length > 0);
-  if (filled.length < 2) return [...filled, [item]];
-  return [...filled.slice(0, -1), [item], ...filled.slice(-1)];
 }
 
 /** What a row's ⋯ is drawn with beyond its menu: a size where the row is dense, and the words naming which row it is. */
@@ -150,8 +121,6 @@ export function useRowMenu(
         {...state.trigger()}
       />
     ) : null;
-  // Note that the card is the row's own control's alone, never that of whatever opened the menu, a ⋯ or a chip the menu key was pressed on, because a chip's card is of another thing than the row; a row with no control of its own hangs none.
-  const details = state.drawn === undefined ? undefined : showDetailsFrom(opener?.current);
   const popup: ReactNode =
     live !== undefined && state.drawn !== undefined ? (
       <Menu
@@ -160,7 +129,7 @@ export function useRowMenu(
         subject={live.subject}
         heading={live.heading}
         footer={live.footer}
-        groups={details === undefined ? live.groups : withDetails(live.groups, details)}
+        groups={live.groups}
         openOn={openOn}
         onClose={state.close}
       />

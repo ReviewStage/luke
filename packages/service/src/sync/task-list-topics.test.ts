@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { pinCodingAgentCommitted } from "@luke/database/models/coding-agent-store";
+import { pinAgentCommitted } from "@luke/database/models/agent-store";
+import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import { createTask, updateTaskCommitted } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
+import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import {
+  DEVICE_LAYOUT,
   expectTopicsFire,
   getTestDB,
   joinWorkspace,
@@ -31,9 +33,10 @@ import { tasksLive } from "./live-queries.js";
  * account's own pins, which notify the account under the transaction the
  * pin's answer names, which is what the desktop confirms the pin on; for a
  * teammate's task and its agent's turn in a workspace the account shares,
- * which notify that workspace; and for a membership made or ended, which
- * notifies the account, after which the read looks up the workspaces it
- * stands in now.
+ * which notify that workspace; for a teammate's Mac renamed, which notifies
+ * every workspace its owner is in, while its beat notifies nothing; and for
+ * a membership made or ended, which notifies the account, after which the
+ * read looks up the workspaces it stands in now.
  *
  * Synthetic accounts, workspaces, tasks, agents, and turns throughout.
  */
@@ -94,13 +97,13 @@ it.layer(getTestDB())("what moves an account's task list notifies", (it) => {
         );
 
         const agentPinned = yield* wakesTheTaskList(
-          pinCodingAgentCommitted(userId, agentId, true),
+          pinAgentCommitted(userId, agentId, true),
           account,
           userId,
         );
         const agentPin = Option.getOrElse(agentPinned.value, () => assert.fail("no agent pinned"));
         assert.deepEqual(agentPinned.txids, [agentPin.txid]);
-        yield* wakesTheTaskList(pinCodingAgentCommitted(userId, agentId, false), account, userId);
+        yield* wakesTheTaskList(pinAgentCommitted(userId, agentId, false), account, userId);
       }),
   );
 
@@ -117,9 +120,9 @@ it.layer(getTestDB())("what moves an account's task list notifies", (it) => {
         const agentId = yield* openTaskAgent(teammate, teamId, task.id);
         const db = yield* Database;
         const [agent] = yield* db
-          .select({ conversationId: codingAgent.conversationId })
-          .from(codingAgent)
-          .where(eq(codingAgent.id, agentId));
+          .select({ conversationId: agentTable.conversationId })
+          .from(agentTable)
+          .where(eq(agentTable.id, agentId));
         const conversationId =
           agent?.conversationId ?? assert.fail("the agent has no conversation");
         const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
@@ -141,6 +144,34 @@ it.layer(getTestDB())("what moves an account's task list notifies", (it) => {
             [TOPIC.WORKSPACE, teamId],
           ],
           userId,
+        );
+      }),
+  );
+
+  it.effect(
+    "a teammate's Mac renamed notifies the workspaces they are in, as its local agents' rows name it, and its beat or a register naming it alike notify nothing",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount;
+        yield* openWorkspace(userId);
+        const teammate = yield* openAccount;
+        const teamId = yield* openWorkspace(teammate);
+        yield* joinWorkspace(teamId, userId);
+        const deviceId = randomUUID();
+        yield* registerDevice(teammate, { id: deviceId, name: "Studio", ...DEVICE_LAYOUT });
+
+        yield* wakesTheTaskList(
+          registerDevice(teammate, { id: deviceId, name: "Studio Display", ...DEVICE_LAYOUT }),
+          [
+            [TOPIC.ACCOUNT, teammate],
+            [TOPIC.WORKSPACE, teamId],
+          ],
+          userId,
+        );
+        yield* expectTopicsFire(beatDevice(teammate, deviceId), []);
+        yield* expectTopicsFire(
+          registerDevice(teammate, { id: deviceId, name: "Studio Display", ...DEVICE_LAYOUT }),
+          [],
         );
       }),
   );

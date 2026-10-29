@@ -2,10 +2,10 @@ import { THREAD_LINE_LEAD } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { EventCard, type EventCardNote, SubjectLine, TEXT_LINK_LOOK, TextLink } from "@luke/ui";
 import type { GitHubLineMetadata, ThreadLineMetadata } from "@luke/wire";
-import type { ReactNode } from "react";
-import { githubLineHead } from "./coding-agent-model.js";
+import { createContext, type ReactNode, useContext } from "react";
+import { githubLineHead } from "./agent-model.js";
 import { linkChip, type MentionDoors } from "./mention-chip.js";
-import { NO_TASK, useMentionDoors } from "./task-mentions.js";
+import { useMentionDoors } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import { useOpenLink } from "./use-open-link.js";
 
@@ -51,19 +51,23 @@ function CardLink({
   );
 }
 
-/** The link a thread's chip is read from: the item under the task the transcript is drawn on; none off a task's page, where no workspace names it. */
-function threadLink(itemId: string, doors: MentionDoors): string | undefined {
-  if (doors.taskId === NO_TASK || doors.place.workspace === "") return undefined;
-  return linkOf(
-    { kind: LINK_PLACE.INBOX_ITEM, planId: doors.taskId, itemId },
-    doors.place.workspace,
-  );
+/** The agent whose transcript is drawn, whose threads its thread lines are on; none where no transcript says. */
+export const TranscriptAgent = createContext<string | undefined>(undefined);
+
+/** The link a thread's chip is read from: the item under the agent whose transcript is drawn, on a task's page or the agent's own; none where no agent or workspace names it. */
+function threadLink(
+  agentId: string | undefined,
+  itemId: string,
+  doors: MentionDoors,
+): string | undefined {
+  if (agentId === undefined || doors.place.workspace === "") return undefined;
+  return linkOf({ kind: LINK_PLACE.INBOX_ITEM, agentId, itemId }, doors.place.workspace);
 }
 
 /** A thread's line's head: what the member did on the thread, and the thread's chip, which opens it. */
 export function ThreadLineHead({ line }: { line: ThreadLineMetadata }): React.JSX.Element {
   const doors = useMentionDoors();
-  const href = threadLink(line.item_id, doors);
+  const href = threadLink(useContext(TranscriptAgent), line.item_id, doors);
   const chip = href === undefined ? undefined : linkChip(href, href, doors);
   return (
     <SubjectLine lead={THREAD_LINE_LEAD[line.event]} data-thread-line="">

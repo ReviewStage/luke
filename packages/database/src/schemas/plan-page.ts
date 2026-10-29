@@ -2,7 +2,7 @@ import type { PageShower } from "@luke/features/page-wire";
 import { sql } from "drizzle-orm";
 import { check, index, integer, jsonb, pgTable, text, unique, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
-import { codingAgent } from "./coding-agent.js";
+import { agentTable } from "./agent.js";
 import { task } from "./task.js";
 
 /**
@@ -25,13 +25,13 @@ import { task } from "./task.js";
  * it; one Luke showed, or one shown before the column, names none, and at
  * least one of the two always stands.
  *
- * Rows go with their task, as its agents do (`coding_agent.task_id`). An
+ * Rows go with their task, as its agents do (`agent.task_id`). An
  * agent's deletion only clears its name from a task's versions, as a plan
  * revision's and a comment's are cleared, so a task's page never loses a
  * version from the middle of its run. The pages of an agent on no task have
  * no other owner, so they go with the agent however it goes, deleted itself
  * or by its account's, workspace's, or conversation's deletion cascading
- * into it: a trigger on `coding_agent` deletes them first
+ * into it: a trigger on `agent` deletes them first
  * (`20261021205954_plan_page_version_agent`), since no foreign key action
  * tells the two kinds of row apart.
  */
@@ -43,7 +43,7 @@ export const planPageVersion = pgTable(
     /** The task the page stands on; null for a page of a coding agent on no task. */
     taskId: uuid("task_id").references(() => task.id, { onDelete: "cascade" }),
     /** The coding agent that showed the version, on a task or not; null for one Luke showed, or one shown before it was kept. */
-    agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
+    agentId: uuid("agent_id").references(() => agentTable.id, { onDelete: "set null" }),
     /** The page the version is of, the same on each of its versions. */
     pageId: uuid("page_id").notNull(),
     /** The version's number within its page, from one. */

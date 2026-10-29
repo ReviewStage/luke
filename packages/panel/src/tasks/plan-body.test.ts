@@ -1,11 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_BRIEF, AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
 import {
   WORKSPACE_ROLE,
@@ -25,7 +21,7 @@ import { handState, signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import type { EditAgents } from "./edit-ref.js";
 import { PlanBody } from "./plan-body.js";
 import type { TaskLooks } from "./use-task-looks.js";
@@ -62,16 +58,16 @@ const MEMBERS: readonly WorkspaceMember[] = [
   { ...CHARLES, email: "charles@example.com", role: WORKSPACE_ROLE.MEMBER },
 ];
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Fix auth flow",
   createdAt: 1_000,
-  status: CODING_AGENT_STATUS.RUNNING,
+  status: AGENT_STATUS.RUNNING,
   turnId: null,
-  brief: CODING_AGENT_BRIEF.PROMPT,
+  brief: AGENT_BRIEF.PROMPT,
 };
 
 let root: Root | undefined;
@@ -300,7 +296,7 @@ test("a teammate's card says who they are and what they last changed in the plan
   const card = cardOf(await draw(task, { readerId: DEAN.userId }));
 
   assert.ok(card.querySelector('[data-actor-card="person"]'), "a person's card hangs");
-  assert.match(card.textContent ?? "", /Charles Pancharles@example\.comMember/u);
+  assert.match(card.textContent ?? "", /Charles Pancharles@example\.com · Member/u);
   assert.match(card.textContent ?? "", /Edited Goal and Risks · now$/u);
 });
 
@@ -330,7 +326,7 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
     duringCall: false,
   });
   const agents: EditAgents = {
-    control: codingAgentsControl({ agents: [AGENT] }),
+    control: agentsControl({ agents: [AGENT] }),
     onOpen: (agentId) => opened.push(agentId),
   };
   const view = await draw(byAgent, { readerId: DEAN.userId, agents });
@@ -345,7 +341,7 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
 
   const unlisted = await draw(byAgent, {
     readerId: DEAN.userId,
-    agents: { ...agents, control: codingAgentsControl() },
+    agents: { ...agents, control: agentsControl() },
   });
   assert.equal(unlisted.querySelector(".plan-byline-edited [data-actor-ref]")?.tagName, "SPAN");
 });

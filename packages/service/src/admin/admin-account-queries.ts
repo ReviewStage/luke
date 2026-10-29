@@ -12,16 +12,13 @@
 
 import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
 import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
-import {
-  awaitingLinesOfReached,
-  latestTurnsOfReached,
-} from "@luke/database/models/coding-agent-store";
+import { awaitingLinesOfReached, latestTurnsOfReached } from "@luke/database/models/agent-store";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { utcDayKey } from "@luke/database/models/quota";
 import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
+import { agentTable } from "@luke/database/schemas/agent";
 import { member, organization, session } from "@luke/database/schemas/auth";
 import { automation, automationRun } from "@luke/database/schemas/automation";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { integrationConnection } from "@luke/database/schemas/integration";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
@@ -29,8 +26,8 @@ import { accountPreference } from "@luke/database/schemas/preferences";
 import { turns } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
 import type { AdminMetricsWindow } from "@luke/features/admin-wire";
+import { CONTEXT_WINDOW, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { AUTOMATION_RUN_REASON, AUTOMATION_RUN_STATUS } from "@luke/features/automation-wire";
-import { CONTEXT_WINDOW, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   FAST_ACCESS,
@@ -73,7 +70,7 @@ type AdminQueryFailure = QueryError | Schema.SchemaError;
 const WindowRequestSchema = Schema.Struct({ userId: Schema.String, windowStart: Schema.Date });
 
 /** The state of an agent's pull request alone, out of the row GitHub's answer was kept in. */
-const PULL_REQUEST_STATE_OF = sql<string | null>`${codingAgent.published} ->> 'state'`;
+const PULL_REQUEST_STATE_OF = sql<string | null>`${agentTable.published} ->> 'state'`;
 
 const findSessionSeen = SqlSchema.findOneOption({
   Request: Schema.String,
@@ -116,14 +113,14 @@ const findAgentTotals = SqlSchema.findOneOption({
       db
         .select({
           started: count(),
-          opened: count(codingAgent.published),
+          opened: count(agentTable.published),
           merged: sql<number>`count(*) filter (where ${PULL_REQUEST_STATE_OF} = ${PULL_REQUEST_STATE.MERGED})`,
         })
-        .from(codingAgent)
+        .from(agentTable)
         .where(
           and(
-            eq(codingAgent.userId, request.userId),
-            gte(codingAgent.createdAt, request.windowStart),
+            eq(agentTable.userId, request.userId),
+            gte(agentTable.createdAt, request.windowStart),
           ),
         ),
     ),
@@ -143,13 +140,13 @@ const AgentRowSchema = Schema.Struct({
 type AgentRow = typeof AgentRowSchema.Type;
 
 const AGENT_COLUMNS = {
-  id: codingAgent.id,
-  conversationId: codingAgent.conversationId,
-  createdAt: codingAgent.createdAt,
-  repository: codingAgent.repository,
-  model: codingAgent.model,
-  effort: codingAgent.effort,
-  contextWindow: codingAgent.contextWindow,
+  id: agentTable.id,
+  conversationId: agentTable.conversationId,
+  createdAt: agentTable.createdAt,
+  repository: agentTable.repository,
+  model: agentTable.model,
+  effort: agentTable.effort,
+  contextWindow: agentTable.contextWindow,
   pullRequestState: PULL_REQUEST_STATE_OF,
 };
 
@@ -171,21 +168,21 @@ const findAgents = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select(AGENT_COLUMNS)
-        .from(codingAgent)
+        .from(agentTable)
         .where(
           and(
-            eq(codingAgent.userId, request.userId),
+            eq(agentTable.userId, request.userId),
             request.windowStart === null
               ? undefined
               : or(
-                  gte(codingAgent.createdAt, request.windowStart),
+                  gte(agentTable.createdAt, request.windowStart),
                   exists(
                     db
                       .select({ id: turns.id })
                       .from(turns)
                       .where(
                         and(
-                          eq(turns.conversationId, codingAgent.conversationId),
+                          eq(turns.conversationId, agentTable.conversationId),
                           gte(turns.settledAt, request.windowStart),
                         ),
                       ),
@@ -193,7 +190,7 @@ const findAgents = SqlSchema.findAll({
                 ),
           ),
         )
-        .orderBy(desc(codingAgent.createdAt), desc(codingAgent.id))
+        .orderBy(desc(agentTable.createdAt), desc(agentTable.id))
         .limit(request.limit),
     ),
 });
@@ -331,9 +328,9 @@ const findDefaults = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .select({
-          model: accountPreference.codingAgentModel,
-          effort: accountPreference.codingAgentEffort,
-          contextWindow: accountPreference.codingAgentContextWindow,
+          model: accountPreference.agentModel,
+          effort: accountPreference.agentEffort,
+          contextWindow: accountPreference.agentContextWindow,
           experiments: accountPreference.experiments,
         })
         .from(accountPreference)

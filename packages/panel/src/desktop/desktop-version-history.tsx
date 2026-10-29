@@ -1,5 +1,5 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
@@ -152,7 +152,7 @@ export interface VersionSubject {
   readonly versions: PlanHistoryControl;
   readonly title: string | undefined;
   /** The coding agents whose harness a revision of theirs wears. */
-  readonly agents: readonly Pick<CodingAgentSummary, "id" | "model">[];
+  readonly agents: readonly Pick<AgentSummary, "id" | "model">[];
   /** What a revision did, in a few words. */
   readonly summary: (line: PlanRevisionLine) => string;
   /** Goes to the place that wrote a revision; none where nothing else in the window writes the subject. */
@@ -265,10 +265,10 @@ function RevisionRow({
       ? []
       : [{ label: "Restore this version", icon: <RotateCcwIcon />, onSelect: onRestore }],
   ].filter((group) => group.length > 0);
-  // Note that the author's card hangs beside the row as the pointer rests on it; an author with none, Luke or an agent, hangs nothing.
+  // Note that the author's card hangs beside the row as the pointer rests on it, Luke's his own; an agent or an automation the version names by name alone hangs nothing.
   const card = actorCard(author);
   return (
-    <RowHintOptions card={card} cardBeside>
+    <RowHintOptions card={card}>
       <ListRow
         ref={rowRef}
         leading={<ActorMark actor={author} size={ACTOR_SIZE.ROW} />}

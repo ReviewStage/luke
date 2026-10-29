@@ -222,6 +222,7 @@ const SAMPLE_VALUE = {
   diffLigatures: true,
   diffMinimizeComments: true,
   linkOpen: LINK_OPEN.MAC_APP,
+  openNewTask: false,
   // A packaged build shares usage data unless told not to, so Off is the choice.
   usageData: false,
 } satisfies { [Field in AppSettingField]: NonNullable<AppSettingValue<Field>> };

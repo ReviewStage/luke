@@ -240,7 +240,7 @@ export interface RowMark {
  * Pin and Mark done here, and an agent's its Pin and Archive. They are the row's siblings
  * rather than inside it, so a press on one opens nothing, but part of the
  * row to its card, which stands while the pointer is on them and goes as
- * one is pressed (`Tooltip`'s `cardRegion`).
+ * one is pressed (`RowHint`).
  */
 export function RowMarks({
   marks,
@@ -811,7 +811,7 @@ export function SidebarTask({
   const drafted = usePlanDrafted(task.id) && !open;
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
-  // Note that the row's item is its press's parent, which its card counts as its control.
+  // Note that the row's item is its press's parent, whose keys it hears while focused.
   const hold = useCallback((press: HTMLElement | null) => {
     row.current = press;
     item.current = press?.parentElement ?? null;
@@ -835,7 +835,7 @@ export function SidebarTask({
   );
   return (
     <>
-      <RowHintOptions card={card} cardBeside cardRegion={item}>
+      <RowHintOptions card={card}>
         <ListRow
           ref={hold}
           motionKey={task.id}

@@ -336,7 +336,7 @@ const FAILURE_WORDS = {
   [INSTALLED_SKILL_CALL_FAILURE.REF_NOT_FOUND]:
     "That branch, tag, or commit isn't in the repository.",
   [INSTALLED_SKILL_CALL_FAILURE.GITHUB_UNANSWERED]:
-    "GitHub didn't answer, or is limiting requests. Try again in a minute.",
+    "GitHub didn't answer, or is limiting requests. Try again later.",
 } as const satisfies Record<InstalledSkillCallFailure, string>;
 
 /** What a failed call says: a taken name and refused files name the skill where the service did. */

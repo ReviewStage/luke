@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS } from "@luke/features/agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import {
   INTEGRATION_PROVIDER,
@@ -112,10 +112,12 @@ async function settle(): Promise<void> {
  * The dialog open in its owner, a start answered by `answer` and each
  * start's name and repository written down, with the agent it asked for;
  * `preset` is what the press that opened it chose, a repository as a
- * repository group's + does.
+ * repository group's + does; a start answered by a promise stays out until
+ * the test settles it. An agent's start puts the card away as it is pressed
+ * and a refusal opens it again on what it held, as the tab does.
  */
 async function mount(
-  answer: string | Failure | undefined = undefined,
+  answer: string | Failure | undefined | Promise<Failure | undefined> = undefined,
   preset?: NewTaskPreset,
   chooser: Partial<RepositoryChooser> = {},
 ) {
@@ -134,13 +136,14 @@ async function mount(
   let openAgain = (): void => undefined;
   function Owner() {
     const [open, setOpen] = useState(true);
+    const [reopened, setReopened] = useState<NewTaskPreset | undefined>(undefined);
     openAgain = () => setOpen(true);
     const dialog = createElement(NewTaskDialog, {
       newTask: {
         ...control.newTask,
         workspaceId: listed,
         open,
-        preset,
+        preset: reopened ?? preset,
         repositoriesIn: () => repositories,
         models: MODELS,
         readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
@@ -153,9 +156,23 @@ async function mount(
           starts.push([name, repository]);
           agents.push(from?.handed);
           startedIn.push(workspaceId);
-          return Promise.resolve(
-            typeof answer === "string" ? { reason: FAILURE_REASON.OTHER, text: answer } : answer,
+          const refused = Promise.resolve(answer).then((said) =>
+            typeof said === "string" ? { reason: FAILURE_REASON.OTHER, text: said } : said,
           );
+          const card = from?.card;
+          if (from?.handed === undefined || card === undefined) return refused;
+          // An agent's start puts the card away as it is pressed, and a refusal opens it again on what it held, as the tab does.
+          setOpen(false);
+          return refused.then((note) => {
+            if (note !== undefined) {
+              setReopened({
+                ...(card.purpose === undefined ? undefined : { purpose: card.purpose }),
+                refused: { card, note },
+              });
+              setOpen(true);
+            }
+            return note;
+          });
         },
         onClose: () => setOpen(false),
       },
@@ -558,6 +575,27 @@ test("words left in a card put away come back as New task opens again and after 
   assert.equal(card.field().textContent, "");
   await card.relaunch();
   assert.equal(card.field().textContent, "");
+});
+
+test("an agent's start still out lets its words go, so New task opened before it answers opens empty, and a refusal opens the card again on its words, saying why", async () => {
+  let answer: (refused: Failure | undefined) => void = () => undefined;
+  const card = await mount(
+    new Promise<Failure | undefined>((resolve) => {
+      answer = resolve;
+    }),
+  );
+  card.type("Dark mode");
+  await card.key("Enter");
+
+  await card.reopen();
+  assert.equal(card.field().textContent, "", "the card opened again is empty");
+  await card.key("Escape");
+  await act(async () =>
+    answer({ reason: FAILURE_REASON.OTHER, text: "Luke cannot reach acme/web." }),
+  );
+  await settle();
+  assert.equal(card.field().textContent, "Dark mode");
+  assert.match(card.note() ?? "", /Luke cannot reach acme\/web\./u);
 });
 
 test("words typed before the workspaces are read stay in the box as the workspace lands, over its older draft, and are its draft", async () => {
@@ -976,7 +1014,7 @@ test("for an automation's agent an empty box starts no bare task, and words past
   await card.key("Enter", { metaKey: true });
   assert.equal(card.starts.length, 0, "no bare task");
 
-  card.type("a".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS));
+  card.type("a".repeat(AGENT_BOUNDS.MAX_MESSAGE_CHARS));
   await card.key("Enter");
   assert.equal(card.starts.length, 0, "nothing past the bound is sent");
   assert.match(card.note() ?? "", /^That request is too long\./u);

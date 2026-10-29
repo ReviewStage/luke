@@ -28,7 +28,7 @@ import {
   TERMINAL_SCREEN_CLASS,
 } from "./terminal-look.js";
 import { TerminalShells } from "./terminal-shells.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import { useTerminalSession } from "./use-terminal-session.js";
 import { WorkingTime } from "./working-time.js";
 
@@ -140,7 +140,7 @@ export function TerminalTab({
   shells,
 }: {
   agentId: string;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** Whether the tab is on screen, the one moment it holds a connection. */
   shown: boolean;
   /** Opens the agent's own tab in the task's column. */

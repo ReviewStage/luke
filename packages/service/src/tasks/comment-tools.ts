@@ -133,9 +133,7 @@ function writerOf(entry: PlanCommentEntry): string {
     case PLAN_COMMENT_ACTOR.LUKE:
       return "Luke";
     case PLAN_COMMENT_ACTOR.AGENT:
-      return entry.writer.agentId === undefined
-        ? "coding agent"
-        : `coding agent ${entry.writer.agentId}`;
+      return entry.writer.agentId === undefined ? "agent" : `agent ${entry.writer.agentId}`;
     case PLAN_COMMENT_ACTOR.MEMBER:
       return entry.writer.by?.name ?? "a former member";
   }
@@ -160,7 +158,7 @@ function threadRead(thread: PlanCommentThread): WireRecord {
       to:
         entry.asked?.actor === PLAN_COMMENT_ACTOR.LUKE
           ? "Luke"
-          : `coding agent ${entry.asked?.agentId ?? ""}`,
+          : `agent ${entry.asked?.agentId ?? ""}`,
     }));
   return {
     thread: thread.id,

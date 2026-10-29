@@ -49,13 +49,13 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 /** The task's page an agent's tab stands on, whose repository a file's link is read against. */
 const TASK_PAGE: TaskMentionsValue = {
-  taskId: TASK,
+  holder: { taskId: TASK },
   taskName: "Teammate invitations",
   workspace: "acme",
   repository: "acme/relay",
   text: () => "## Rollout\n\nStore first.\n",
   doors: {
-    taskId: TASK,
+    holder: { taskId: TASK },
     place: { workspace: "acme", repository: "acme/relay" },
     anchors: new Set(["rollout"]),
     onOpenTask: () => undefined,

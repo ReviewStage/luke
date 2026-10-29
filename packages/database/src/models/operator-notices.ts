@@ -2,7 +2,7 @@
  * operator-notices.ts -- the notices an operator reads of its member's agents on its next turn, and the hour a failure's wake holds.
  *
  * A member's operator watches their own agents of its workspace, every
- * `coding_agent` of the operator's workspace and member but an operator,
+ * `agent` row of the operator's workspace and member but an operator,
  * those the operator started among them and a teammate's never, through
  * notices (`../schemas/operator-notice.ts`). A notice is written only where
  * that member has a standing operator, in the one statement that finds it,
@@ -19,13 +19,13 @@
  * nothing.
  */
 
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import { and, asc, desc, eq, gte, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { agentTable } from "../schemas/agent.js";
 import { operatorNotice, operatorWake } from "../schemas/operator-notice.js";
 import { OPERATOR_NOTICE_KIND, type OperatorNoticeKind } from "../storage-vocabulary.js";
 import { agentAutomationNameSql } from "./agent-name.js";
@@ -40,7 +40,7 @@ export type NoticedAgent =
 const NoticeKindSchema = Schema.Literals(Object.values(OPERATOR_NOTICE_KIND));
 
 /** The operator standing over the agent's member in its workspace, as the notice's insert joins it. */
-const operatorOf = alias(codingAgent, "operator");
+const operatorOf = alias(agentTable, "operator");
 
 /** How the notice's insert finds its agent: by the agent's id, or by its conversation's. */
 const NOTICED_BY = { AGENT: "agent", CONVERSATION: "conversation" } as const;
@@ -61,26 +61,23 @@ const upsertNotice = SqlSchema.void({
             .select({
               operatorId: sql<string>`${operatorOf.id}`.as("operator_id"),
               kind: sql<OperatorNoticeKind>`${kind}`.as("kind"),
-              agentId: sql<string>`${codingAgent.id}`.as("agent_id"),
-              taskId: sql<string | null>`${codingAgent.taskId}`.as("task_id"),
+              agentId: sql<string>`${agentTable.id}`.as("agent_id"),
               at: sql<Date>`${at}::timestamptz`.as("at"),
             })
-            .from(codingAgent)
+            .from(agentTable)
             .innerJoin(
               operatorOf,
               and(
-                eq(operatorOf.organizationId, codingAgent.organizationId),
-                eq(operatorOf.userId, codingAgent.userId),
-                eq(operatorOf.kind, CODING_AGENT_KIND.OPERATOR),
+                eq(operatorOf.organizationId, agentTable.organizationId),
+                eq(operatorOf.userId, agentTable.userId),
+                eq(operatorOf.kind, AGENT_KIND.OPERATOR),
                 isNull(operatorOf.archivedAt),
               ),
             )
             .where(
               and(
-                by === NOTICED_BY.AGENT
-                  ? eq(codingAgent.id, id)
-                  : eq(codingAgent.conversationId, id),
-                ne(codingAgent.kind, CODING_AGENT_KIND.OPERATOR),
+                by === NOTICED_BY.AGENT ? eq(agentTable.id, id) : eq(agentTable.conversationId, id),
+                ne(agentTable.kind, AGENT_KIND.OPERATOR),
               ),
             ),
         )
@@ -97,9 +94,8 @@ const UnreadNoticeSchema = Schema.Struct({
   id: Schema.String,
   kind: NoticeKindSchema,
   agentId: Schema.String,
-  taskId: Schema.NullOr(Schema.String),
   at: Schema.Date,
-  agentKind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
+  agentKind: Schema.Literals(Object.values(AGENT_KIND)),
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
   agentAutomationName: Schema.NullOr(Schema.String),
@@ -117,15 +113,14 @@ const findUnread = SqlSchema.findAll({
           id: operatorNotice.id,
           kind: operatorNotice.kind,
           agentId: operatorNotice.agentId,
-          taskId: operatorNotice.taskId,
           at: operatorNotice.at,
-          agentKind: codingAgent.kind,
-          agentTitle: codingAgent.title,
-          agentModel: codingAgent.model,
-          agentAutomationName: agentAutomationNameSql(codingAgent),
+          agentKind: agentTable.kind,
+          agentTitle: agentTable.title,
+          agentModel: agentTable.model,
+          agentAutomationName: agentAutomationNameSql(agentTable),
         })
         .from(operatorNotice)
-        .innerJoin(codingAgent, eq(codingAgent.id, operatorNotice.agentId))
+        .innerJoin(agentTable, eq(agentTable.id, operatorNotice.agentId))
         .where(and(eq(operatorNotice.operatorId, operatorId), isNull(operatorNotice.readAt)))
         .orderBy(desc(operatorNotice.at), desc(operatorNotice.id))
         .limit(limit),
@@ -165,8 +160,7 @@ const DueWakeSchema = Schema.Struct({
   userId: Schema.String,
   organizationId: Schema.String,
   agentId: Schema.String,
-  taskId: Schema.NullOr(Schema.String),
-  agentKind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
+  agentKind: Schema.Literals(Object.values(AGENT_KIND)),
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
   agentAutomationName: Schema.NullOr(Schema.String),
@@ -175,7 +169,7 @@ const DueWakeSchema = Schema.Struct({
 export type DueOperatorWake = typeof DueWakeSchema.Type;
 
 /** The agent that failed, as a due wake's join names it apart from the operator. */
-const failedAgent = alias(codingAgent, "failed_agent");
+const failedAgent = alias(agentTable, "failed_agent");
 
 const findDueWakes = SqlSchema.findAll({
   Request: Schema.Struct({ since: Schema.Date, holdMs: Schema.Int, limit: Schema.Int }),
@@ -190,7 +184,6 @@ const findDueWakes = SqlSchema.findAll({
           userId: operatorOf.userId,
           organizationId: operatorOf.organizationId,
           agentId: operatorNotice.agentId,
-          taskId: operatorNotice.taskId,
           agentKind: failedAgent.kind,
           agentTitle: failedAgent.title,
           agentModel: failedAgent.model,

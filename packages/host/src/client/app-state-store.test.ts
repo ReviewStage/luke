@@ -107,6 +107,35 @@ it.effect("a patch that says nothing new announces nothing on `changes`", () =>
   }),
 );
 
+it.effect("a subscriber that patches the document as it is announced lands its patch next", () =>
+  Effect.gen(function* () {
+    const app = store();
+    // The subscriber is parked on `changes` when the first patch lands, so it is
+    // resumed on the writer's own stack, and answers it with a patch of its own.
+    const answering = yield* Effect.forkChild(
+      Stream.runForEach(Stream.take(app.changes, 2), (state) =>
+        Effect.sync(() => {
+          if (state.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED) {
+            app.update({ network: { online: false } });
+          }
+        }),
+      ),
+    );
+    const seen = yield* watchChanges(app, 3, () => {
+      app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
+    });
+    yield* Fiber.join(answering);
+    assert.deepEqual(
+      seen.map((state) => [state.version, state.network.online]),
+      [
+        [0, true],
+        [1, true],
+        [2, false],
+      ],
+    );
+  }),
+);
+
 it("two slices in one patch are one version", () => {
   const app = store();
   app.update({

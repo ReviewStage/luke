@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import {
+  AGENT_STATUS,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import {
   LINK_PLACE,
@@ -32,7 +32,7 @@ import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { FIXTURE_IDS } from "@luke/host/fixture-stage";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
-import { experimentsOn } from "@luke/settings/testing";
+import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
 import { timeRuntime } from "@luke/ui";
 import { memoryHistory } from "@luke/ui/history-adapter";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -144,7 +144,7 @@ function mount(
   const payloads: { readonly kind: PortActKind; readonly payload: unknown }[] = [];
   const links: SettingsLink[] = [];
   const record = (kind: PortActKind) => {
-    if (!kind.startsWith("codingAgents.")) told.push(kind);
+    if (!kind.startsWith("agents.")) told.push(kind);
     else agentActs.push(kind);
   };
   let control: TasksControl | undefined;
@@ -215,7 +215,7 @@ function mount(
           void portAnswer(kind, ...args).catch(() => undefined);
           // The one told payload the tests read, parsed as the boundary would.
           const shown = Option.getOrUndefined(readShown(args[0]));
-          if (kind === ACT_KIND.CODING_AGENTS_SHOWN && shown !== undefined) {
+          if (kind === ACT_KIND.AGENTS_SHOWN && shown !== undefined) {
             shownAgents.push(shown.agentId);
           }
         }) as ActHandle["tell"],
@@ -229,6 +229,7 @@ function mount(
       inboxWaiting: held.inboxWaiting,
       inboxTasks: held.inboxTasks,
       inboxTaskless: [],
+      inboxAgents: [],
       failedRuns: [],
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
@@ -498,6 +499,65 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
   assert.equal(tab.control().newTask.open, false, "Settings taking the window put the dialog away");
 });
 
+/** A start's payload, read back for whether it asked to open nothing. */
+const readQuiet = Schema.decodeUnknownOption(
+  Schema.Struct({ quiet: Schema.optionalKey(Schema.Boolean) }),
+);
+
+test("with Open a task once it starts off, New task starts the task and its agent without opening them, and its toast's Open opens the agent's tab, asking first while a page stands unsaved work", async () => {
+  handState({}, { settings: appSettingsWire(settingsView({ openNewTask: false })) });
+  const agent = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
+  const tab = mount(
+    { shown: true, tasks: OPEN, room: SHELL_ROOM.NARROW },
+    {
+      [ACT_KIND.TASKS_START]: () =>
+        Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent } }),
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+    },
+    AtomRegistryModule.make(),
+  );
+  await settle();
+
+  act(() => tab.control().onNewTask());
+  await act(async () => {
+    await tab.control().newTask.start("", null, tab.control().newTask.workspaceId, {
+      handed: {
+        idempotencyKey: "start-1",
+        prompt: "Dark mode",
+        attachments: [],
+        choice: undefined,
+      },
+    });
+  });
+  const started = {
+    quiet: tab.payloads
+      .filter((asked) => asked.kind === ACT_KIND.TASKS_START)
+      .map((asked) => Option.getOrUndefined(readQuiet(asked.payload))?.quiet),
+    dialog: tab.control().newTask.open,
+    says: newestToastSays(),
+  };
+  const asked: (() => void)[] = [];
+  act(() => {
+    tab.control().leaveGuard.stand((leave) => asked.push(leave));
+  });
+  act(() => (newestToastAction() ?? assert.fail("the toast offers Open")).click());
+  await settle();
+  const whileAsked = opensAsked(tab.payloads);
+  act(() => asked[0]?.());
+  tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
+  await settle();
+
+  assert.deepEqual(started, { quiet: [true], dialog: false, says: "Task startedOpen" });
+  assert.deepEqual(whileAsked, [], "Open asks first while a page stands unsaved work");
+  assert.deepEqual(opensAsked(tab.payloads), [OTHER_TASK_ID]);
+  assert.deepEqual(
+    { tab: tab.control().mainTabs.tab, panel: panelOf(tab).open },
+    { tab: { agent: AGENT_ID }, panel: false },
+    "the task opens on its agent alone, no plan laid over it in a narrow room",
+  );
+  handState({});
+});
+
 /** A line of a file of the task's repository, as a place names it to open. */
 const FILE_REF = { path: "src/invite.ts", startLine: 1, endLine: 1 };
 
@@ -509,14 +569,14 @@ function panelOf(tab: ReturnType<typeof mount>) {
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
-const RUNNING_AGENT: CodingAgentSummary = {
+const RUNNING_AGENT: AgentSummary = {
   id: AGENT_ID,
   planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: null,
   createdAt: 3,
-  status: CODING_AGENT_STATUS.RUNNING,
+  status: AGENT_STATUS.RUNNING,
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
 };
 
@@ -527,10 +587,7 @@ async function settle(): Promise<void> {
 }
 
 test("⇧⌘T opens the tabs closed again, the latest first, each in its strip at its place and a file's on the lines it showed, until none is left", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
   const panel = () => tab.control().sidePanel;
   const column = () => tab.control().mainTabs;
@@ -571,10 +628,8 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
 });
 
 test("a task none of whose tabs was viewed shows its strip's last, keeps the tab chosen across a launch, and opens a new agent's draft once its last tab closes", async () => {
-  const listed = {
-    [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
-  };
-  const tab = mount({ shown: true, tasks: OPEN }, listed);
+  const listed = withAgents([RUNNING_AGENT]);
+  const tab = mount({ shown: true, tasks: listed });
   await settle();
   const column = () => tab.control().mainTabs;
   const agent = { agent: AGENT_ID };
@@ -586,7 +641,7 @@ test("a task none of whose tabs was viewed shows its strip's last, keeps the tab
   act(() => column().onChoose(agent));
   assert.deepEqual(column().tab, agent);
 
-  const launched = mount({ shown: true, tasks: OPEN }, listed);
+  const launched = mount({ shown: true, tasks: listed });
   await settle();
   const again = () => launched.control().mainTabs;
   assert.deepEqual(again().tab, agent, "a launch opens the task on the agent it last showed");
@@ -610,7 +665,7 @@ function namingRow(lines: readonly string[], total: number) {
         title: null,
         model: RUNNING_AGENT.model,
         effort: RUNNING_AGENT.effort,
-        status: CODING_AGENT_STATUS.COMPLETED,
+        status: AGENT_STATUS.COMPLETED,
       })),
       pullRequestTotal: 0,
       pullRequests: [],
@@ -621,8 +676,7 @@ function namingRow(lines: readonly string[], total: number) {
 test("a task whose row settles its tab shows that agent's before its agents are read, and one whose row cannot say shows none until they are", async () => {
   const OLDER = "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9";
   const UNNAMED = "2c3d4e5f-6071-4829-93a4-b5c6d7e8f9a0";
-  // The list of agents never answers, so whatever the column shows, the row chose.
-  const unread = { [ACT_KIND.CODING_AGENTS_LIST]: () => new Promise<never>(() => undefined) };
+  // The list carries none of the task's agents yet, so whatever the column shows, the row chose.
   const shownOn = async (
     lines: readonly string[],
     total: number,
@@ -636,10 +690,7 @@ test("a task whose row settles its tab shows that agent's before its agents are 
           recent === undefined ? {} : { [TASK.id]: { recent: recent.map((agent) => ({ agent })) } },
       }),
     );
-    const tab = mount(
-      { shown: true, tasks: { ...OPEN, tasks: [namingRow(lines, total)] } },
-      unread,
-    );
+    const tab = mount({ shown: true, tasks: { ...OPEN, tasks: [namingRow(lines, total)] } });
     await settle();
     assert.equal(tab.control().agents.agents, undefined, "the agents are still being read");
     return tab.control().mainTabs.tab;
@@ -689,10 +740,7 @@ test("a column kept while the plan, the Inbox, and the Call stood in it reads wi
       },
     }),
   );
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
   const column = () => tab.control().mainTabs;
   assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
@@ -700,23 +748,18 @@ test("a column kept while the plan, the Inbox, and the Call stood in it reads wi
 });
 
 test("a column whose last agent is archived shows a new agent's draft standing alone", async () => {
-  let listed: readonly CodingAgentSummary[] = [RUNNING_AGENT];
   const archived = { ...RUNNING_AGENT, archivedAt: 5 };
   const tab = mount(
-    { shown: true, tasks: OPEN },
-    {
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
-      [ACT_KIND.CODING_AGENTS_ARCHIVE]: () => {
-        listed = [archived];
-        return Promise.resolve({ agent: archived });
-      },
-    },
+    { shown: true, tasks: withAgents([RUNNING_AGENT]) },
+    { [ACT_KIND.AGENTS_ARCHIVE]: () => Promise.resolve({ agent: archived }) },
   );
   await settle();
   const column = () => tab.control().mainTabs;
   act(() => column().onChoose({ agent: AGENT_ID }));
   assert.deepEqual(column().tab, { agent: AGENT_ID });
 
+  // The host draws the archive on the list as it is asked.
+  tab.stand({ tasks: withAgents([archived]) });
   await act(() => tab.control().agents.onArchive(AGENT_ID, true));
   await settle();
   const draft = { draft: tab.control().agents.draft?.id ?? assert.fail("no draft opened") };
@@ -791,7 +834,6 @@ test("in a narrow room a Luke link to another task's panel item opens that item,
     { shown: true, tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID }, room: SHELL_ROOM.NARROW },
     {
       [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
     },
   );
   act(() =>
@@ -877,10 +919,9 @@ test("a Luke link keyed by the agent alone opens on the agent's task where it ha
     },
   });
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: withAgents([RUNNING_AGENT]) },
     {
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
-      [ACT_KIND.CODING_AGENTS_PAGE]: (payload) => {
+      [ACT_KIND.AGENTS_PAGE]: (payload) => {
         const { agentId } = payload as { agentId: string };
         if (agentId === SLOW) {
           return new Promise((resolve) => {
@@ -944,10 +985,7 @@ test("a Luke link to a page an agent on no task showed opens that agent's page, 
       return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { pages: [page] } });
     },
   });
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
 
   act(() =>
@@ -965,10 +1003,7 @@ test("a Luke link to a page an agent on no task showed opens that agent's page, 
 });
 
 test("a Luke link to an agent's worker opens the worker's own tab in the task's side panel beside its agent's, and one to its Changes their tab", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
 
   act(() =>
@@ -1014,17 +1049,12 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
       changedFiles: 2,
     },
   };
-  let listed: readonly CodingAgentSummary[] = [EARLIER, RUNNING_AGENT];
+  const archived = { ...EARLIER, archivedAt: 5 };
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: withAgents([EARLIER, RUNNING_AGENT]) },
     {
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
-      [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: () => Promise.resolve(shared),
-      [ACT_KIND.CODING_AGENTS_ARCHIVE]: () => {
-        const archived = { ...EARLIER, archivedAt: 5 };
-        listed = [archived, RUNNING_AGENT];
-        return Promise.resolve({ agent: archived });
-      },
+      [ACT_KIND.AGENTS_PULL_REQUEST]: () => Promise.resolve(shared),
+      [ACT_KIND.AGENTS_ARCHIVE]: () => Promise.resolve({ agent: archived }),
     },
   );
   await settle();
@@ -1043,6 +1073,7 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
   assert.deepEqual(tab.control().sidePanel.changes, [{ changes: EARLIER.id }]);
 
   // Archived, the earlier agent's tab is no longer drawn, so the link opens the later agent's own.
+  tab.stand({ tasks: withAgents([archived, RUNNING_AGENT]) });
   await act(() => tab.control().agents.onArchive(EARLIER.id, true));
   await settle();
   open(AGENT_ID);
@@ -1050,10 +1081,7 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
 });
 
 test("a Luke link to an agent's message opens the agent and asks its tab to bring the message into view, each ask its own, let go once answered", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
   const link = {
     workspace: "acme",
@@ -1071,10 +1099,7 @@ test("a Luke link to an agent's message opens the agent and asks its tab to brin
 });
 
 test("a Luke link to a review thread opens its agent's Pull request tab on the view it names and asks the tab to bring the thread into view, each ask its own, let go once taken", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([RUNNING_AGENT]) });
   await settle();
   const link = (view: PullRequestThreadView) =>
     ({
@@ -1114,14 +1139,27 @@ test("a Luke link to a review thread opens its agent's Pull request tab on the v
   assert.equal(tab.control().threadReveal, undefined);
 });
 
-test("a Luke link to an Inbox item opens it in its task's own Inbox tab in the task's workspace, and one to an automation in the workspace its slug names", () => {
-  const tab = mount(
-    { shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: "notes" } },
-    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
-  );
+test("a Luke link to an Inbox item opens it in its task's own Inbox tab in the task's workspace, under the task or under its agent, whose task is read, and one to an automation in the workspace its slug names", async () => {
   const alerts = "alerts";
   const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
+  const agentItemId = "7f3a4b5c-6d7e-4f80-9a12-a3b4c5d6e7f8";
   const automationId = "6e2f3a4b-5c6d-4e7f-8a91-92a3b4c5d6e7";
+  const tab = mount(
+    { shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: "notes" } },
+    {
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+      [ACT_KIND.AGENTS_PAGE]: () =>
+        Promise.resolve({
+          agent: {
+            ...RUNNING_AGENT,
+            planId: alerts,
+            automationId: null,
+            workspaceId: ACME.id,
+            repository: null,
+          },
+        }),
+    },
+  );
 
   act(() =>
     tab.control().onOpenLink({
@@ -1137,6 +1175,15 @@ test("a Luke link to an Inbox item opens it in its task's own Inbox tab in the t
   const taken = tab.control().inboxItemReveal;
   act(() =>
     tab.control().onOpenLink({
+      workspace: "renamed-since",
+      place: { kind: LINK_PLACE.INBOX_ITEM, agentId: AGENT_ID, itemId: agentItemId },
+    }),
+  );
+  await settle();
+  const agentReveal = tab.control().inboxItemReveal;
+  const agentInboxOpen = tab.control().inboxView.open;
+  act(() =>
+    tab.control().onOpenLink({
       workspace: "personal",
       place: { kind: LINK_PLACE.AUTOMATION, automationId },
     }),
@@ -1147,6 +1194,8 @@ test("a Luke link to an Inbox item opens it in its task's own Inbox tab in the t
   assert.deepEqual(reveal, { planId: alerts, itemId, ask: 1 });
   assert.equal(taken, undefined);
   assert.equal(listed, ACME.id);
+  assert.deepEqual(agentReveal, { planId: alerts, itemId: agentItemId, ask: 1 });
+  assert.equal(agentInboxOpen, false, "an item of a listed task stands in its task, not the Inbox");
   assert.equal(tab.control().inboxView.open, false);
   assert.deepEqual(tab.control().automationsView.place, {
     kind: AUTOMATIONS_PAGE.EDIT,
@@ -2267,7 +2316,7 @@ test("an agent profile opens its task on the agent it stages, beside the agent's
   const terminal = mount({ ...run, profile: RUN_PROFILE.AGENT_TERMINAL });
   const page = mount({ ...run, profile: RUN_PROFILE.AGENT_PAGE });
 
-  assert.equal(tasks.control().agents.agents, undefined);
+  assert.deepEqual(tasks.control().agents.agents, []);
   assert.deepEqual(
     checks.control().agents.agents?.map((agent) => agent.title),
     ["Add teammate invitations"],
@@ -2286,6 +2335,11 @@ test("an agent profile opens its task on the agent it stages, beside the agent's
 function listed(): TasksView["tasks"][number] {
   const { document: _document, ...summary } = TASK;
   return summary;
+}
+
+/** The task listed and open, its agents as the list followed live carries them. */
+function withAgents(agents: readonly AgentSummary[]): TasksView {
+  return { ...OPEN, tasks: [listed()], taskAgents: agents };
 }
 
 /** The view a launch starts on: nothing open, and the list not yet read. */
@@ -2498,11 +2552,11 @@ test("an account with nothing yet rests on no page, its welcome standing, and ne
 });
 
 test("one agent's pins are asked one after another, so the service hears an Unpin pressed before a Pin landed after it", async () => {
-  const answers: ((answer: PortActResult<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
+  const answers: ((answer: PortActResult<typeof ACT_KIND.AGENTS_PIN>) => void)[] = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
     {
-      [ACT_KIND.CODING_AGENTS_PIN]: () =>
+      [ACT_KIND.AGENTS_PIN]: () =>
         new Promise((resolve) => {
           answers.push(resolve);
         }),
@@ -2511,7 +2565,7 @@ test("one agent's pins are asked one after another, so the service hears an Unpi
   /** Each pin the tab asked of main, in order, as `pinned`. */
   const asked = () =>
     tab.payloads
-      .filter((each) => each.kind === ACT_KIND.CODING_AGENTS_PIN)
+      .filter((each) => each.kind === ACT_KIND.AGENTS_PIN)
       .map((each) => Option.getOrUndefined(readPin(each.payload))?.pinned);
 
   await act(async () => {
@@ -2520,65 +2574,18 @@ test("one agent's pins are asked one after another, so the service hears an Unpi
   });
   const first = asked();
   // The first is answered as refused, which is no matter to the order the second is asked in.
-  await act(async () => answers[0]?.({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+  await act(async () => answers[0]?.({ failure: AGENT_CALL_FAILURE.NOT_FOUND }));
 
   assert.deepEqual(first, [true]);
   assert.deepEqual(asked(), [true, false]);
 });
 
-test("an agent with no task is renamed and archived in the sidebar's list at once, and put back where the service refuses", async () => {
-  const taskless = {
-    id: "agent-9",
-    planId: null,
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    title: "Nightly triage",
-    createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
-    turnId: null,
-    automationId: null,
-    workspaceId: "workspace-1",
-    repository: null,
-    activityAt: 1,
-  };
-  const renamed = Promise.withResolvers<PortActResult<typeof ACT_KIND.CODING_AGENTS_RENAME>>();
-  const archived = Promise.withResolvers<PortActResult<typeof ACT_KIND.CODING_AGENTS_ARCHIVE>>();
-  const tab = mount(
-    { shown: true, tasks: { ...listRead([]), tasklessAgents: [taskless] } },
-    {
-      [ACT_KIND.CODING_AGENTS_RENAME]: () => renamed.promise,
-      [ACT_KIND.CODING_AGENTS_ARCHIVE]: () => archived.promise,
-    },
-  );
-  await settle();
-  const listed = () => {
-    const { standing, archived: gone } = tab.control().listedAgents;
-    return {
-      standing: standing.map((agent) => agent.title),
-      archived: gone.map((agent) => agent.title),
-    };
-  };
-
-  await act(async () => {
-    void tab.control().agents.onRename(taskless.id, "Morning triage");
-    void tab.control().agents.onArchive(taskless.id, true);
-  });
-  assert.deepEqual(listed(), { standing: [], archived: ["Morning triage"] });
-
-  await act(async () => {
-    renamed.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
-    archived.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
-  });
-  await settle();
-  assert.deepEqual(listed(), { standing: ["Nightly triage"], archived: [] });
-});
-
 test("an agent's pin still waiting its turn when the account changes is never asked, so it lands on no one else's pins", async () => {
-  const answers: ((answer: PortActResult<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
+  const answers: ((answer: PortActResult<typeof ACT_KIND.AGENTS_PIN>) => void)[] = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
     {
-      [ACT_KIND.CODING_AGENTS_PIN]: () =>
+      [ACT_KIND.AGENTS_PIN]: () =>
         new Promise((resolve) => {
           answers.push(resolve);
         }),
@@ -2591,9 +2598,9 @@ test("an agent's pin still waiting its turn when the account changes is never as
 
   tab.stand({ signedIn: false });
   tab.stand({ signedIn: true, account: "teammate@example.com" });
-  await act(async () => answers[0]?.({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+  await act(async () => answers[0]?.({ failure: AGENT_CALL_FAILURE.NOT_FOUND }));
 
-  assert.equal(tab.payloads.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_PIN).length, 1);
+  assert.equal(tab.payloads.filter((each) => each.kind === ACT_KIND.AGENTS_PIN).length, 1);
 });
 
 test("a pin dragged to a new place the service refuses puts back what the drop placed on this Mac, with a toast", async () => {
@@ -2683,10 +2690,83 @@ test("a Plan tab an earlier version pinned to the sidebar becomes the task's own
   await act(async () => undefined);
   assert.deepEqual(asked(refused), [{ taskId: TASK.id, pinned: true }]);
   assert.deepEqual(
-    refused.control().sidePanel.pins.map(({ task }) => task),
+    refused.control().sidePanel.pins.map((pin) => ("task" in pin ? pin.task : pin.agent)),
     [TASK.id],
     "the refused task's tab stays pinned, the pinned task's goes",
   );
+});
+
+/** An agent pin's payload, read back as the act's own schema admits it. */
+const readAgentPin = Schema.decodeUnknownOption(
+  Schema.Struct({
+    agentId: Schema.String,
+    pinned: Schema.Boolean,
+    position: Schema.optionalKey(Schema.String),
+  }),
+);
+
+test("an agent's tab an earlier version pinned on this Mac becomes the agent's own pin on the account, where it was dragged, once the list followed live names its task, and leaves this Mac only once that pin landed or the account already pinned it", async () => {
+  const kept = () =>
+    window.localStorage.setItem(
+      "luke.sidePanel",
+      JSON.stringify({
+        open: true,
+        tabs: ["plan"],
+        width: 320,
+        pins: [{ task: TASK.id, tab: { agent: AGENT_ID }, label: "Agent", at: 1, position: "a3" }],
+      }),
+    );
+  const storedPins = () =>
+    JSON.parse(window.localStorage.getItem("luke.sidePanel") ?? "{}").pins as unknown[];
+  const asked = (tab: ReturnType<typeof mount>) =>
+    tab.payloads
+      .filter((each) => each.kind === ACT_KIND.AGENTS_PIN)
+      .map((each) => Option.getOrUndefined(readAgentPin(each.payload)));
+  const live = { ...listRead([listed()]), taskAgents: [RUNNING_AGENT] };
+  const carriedPin = [{ agent: AGENT_ID, task: TASK.id, position: "a3" }];
+  /** A launch over the kept pin, the service answering its pin as `answer` does. */
+  const launch = async (
+    tasks: TasksView,
+    answer: () => Promise<PortActResult<typeof ACT_KIND.AGENTS_PIN>>,
+  ) => {
+    kept();
+    const tab = mount({ shown: true, tasks }, { [ACT_KIND.AGENTS_PIN]: answer });
+    await settle();
+    return tab;
+  };
+
+  const pending = Promise.withResolvers<PortActResult<typeof ACT_KIND.AGENTS_PIN>>();
+  const landed = await launch(listRead([listed()]), () => pending.promise);
+  assert.deepEqual(asked(landed), [], "nothing is asked before the list is followed live");
+  landed.stand({ tasks: live });
+  await settle();
+  assert.deepEqual(asked(landed), [{ agentId: AGENT_ID, pinned: true, position: "a3" }]);
+  assert.deepEqual(landed.control().sidePanel.carried, carriedPin, "kept while its pin is out");
+  assert.equal(storedPins().length, 1);
+  await act(async () => pending.resolve({ agent: RUNNING_AGENT }));
+  assert.deepEqual(landed.control().sidePanel.carried, []);
+  assert.deepEqual(storedPins(), [], "nor does it stay on this Mac");
+  closeWindow();
+
+  // The service answers so as well for an agent the account cannot see just now.
+  const refused = await launch(live, () =>
+    Promise.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND }),
+  );
+  assert.equal(asked(refused).length, 1);
+  assert.deepEqual(
+    refused.control().sidePanel.carried,
+    carriedPin,
+    "a refused pin keeps the tab's for the next launch",
+  );
+  closeWindow();
+
+  const already = await launch(
+    { ...live, taskAgentPins: [{ agentId: AGENT_ID, taskId: TASK.id, pinnedAt: 5 }] },
+    () => Promise.resolve({ agent: RUNNING_AGENT }),
+  );
+  assert.deepEqual(asked(already), [], "an agent already pinned is asked nothing");
+  assert.deepEqual(already.control().sidePanel.carried, []);
+  assert.deepEqual(storedPins(), []);
 });
 
 /** A start's agent, read back where it names one. */
@@ -2766,11 +2846,10 @@ test("a group's quick add sends one quiet start with the group's standing and no
 test("New task's Agent mode sends one start carrying the agent, its words and model, and opens the task on the agent it started", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: withAgents([started]) },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [started] }),
     },
   );
   const { choice, prompt, note, starts } = await startAgentTask(tab);
@@ -2787,7 +2866,7 @@ test("New task's Agent mode sends one start carrying the agent, its words and mo
   );
   assert.equal(idempotencyKey, AGENT_KEY, "the agent carries the card's key");
   assert.deepEqual(
-    tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START),
+    tab.payloads.filter(({ kind }) => kind === ACT_KIND.AGENTS_START),
     [],
     "no second call starts the agent",
   );
@@ -2796,24 +2875,27 @@ test("New task's Agent mode sends one start carrying the agent, its words and mo
 });
 
 test("archiving a task's last agent opens no draft while the archive is out, so a refused one brings the agent back alone", async () => {
-  const archived = Promise.withResolvers<PortActResult<typeof ACT_KIND.CODING_AGENTS_ARCHIVE>>();
+  const archived = Promise.withResolvers<PortActResult<typeof ACT_KIND.AGENTS_ARCHIVE>>();
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: withAgents([RUNNING_AGENT]) },
     {
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
-      [ACT_KIND.CODING_AGENTS_ARCHIVE]: () => archived.promise,
+      [ACT_KIND.AGENTS_ARCHIVE]: () => archived.promise,
     },
   );
   await settle();
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
 
+  // The host draws the archive on the list as it is asked, and takes it back as the service refuses it.
   await act(async () => {
     void tab.control().agents.onArchive(AGENT_ID, true);
   });
+  tab.stand({ tasks: withAgents([{ ...RUNNING_AGENT, archivedAt: 5 }]) });
+  await settle();
   assert.deepEqual(tab.control().mainTabs.tabs, [], "the agent leaves at once");
   assert.equal(tab.control().agents.draft, undefined, "no draft opens while the archive is out");
 
-  await act(async () => archived.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+  tab.stand({ tasks: withAgents([RUNNING_AGENT]) });
+  await act(async () => archived.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND }));
   await settle();
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
   assert.equal(tab.control().agents.draft, undefined);
@@ -2822,11 +2904,10 @@ test("archiving a task's last agent opens no draft while the archive is out, so 
 test("a task started, with an agent or without, leaves a hidden side panel hidden", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: withAgents([started]) },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [started] }),
     },
   );
   act(() => tab.control().sidePanel.onToggle());
@@ -2845,11 +2926,10 @@ test("a task started, with an agent or without, leaves a hidden side panel hidde
 test("New task's agent opens alone, no plan beside it, and the side panel stands open as it was on the task left", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: withAgents([started]) },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [started] }),
     },
   );
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.PLAN });
@@ -2874,8 +2954,6 @@ test("New task's agent stands on its task with the words it started on as its fi
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
-      // The task's agents are still being read.
-      [ACT_KIND.CODING_AGENTS_LIST]: () => new Promise(() => undefined),
     },
   );
   const { prompt } = await startAgentTask(tab);
@@ -2895,10 +2973,9 @@ test("New task's agent start opens its page at once on the words as its agent's 
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: withAgents([started]) },
     {
       [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)),
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [started] }),
     },
   );
   const prompt = "Make the sidebar keep its folds.";
@@ -2924,6 +3001,32 @@ test("New task's agent start opens its page at once on the words as its agent's 
   assert.equal(tab.control().agents.opening?.line.text, prompt);
 });
 
+test("what the developer opened while New task's agent start was out, a page and New task again, still stands as the start lands", async () => {
+  const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
+  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
+  );
+  act(() => tab.control().onNewTask());
+  let note: Promise<Failure | undefined> = Promise.resolve(undefined);
+  act(() => {
+    note = tab.control().newTask.start("", "acme/web", undefined, {
+      handed: { idempotencyKey: AGENT_KEY, prompt: "Fix it.", attachments: [], choice: undefined },
+    });
+  });
+  act(() => tab.control().automationsView.onOpen());
+  act(() => tab.control().onNewTask());
+
+  await act(async () => {
+    answers[0]?.({ planId: OTHER_TASK_ID, agentStart: { agent: started } });
+    await note;
+  });
+  assert.equal(tab.control().automationsView.open, true, "the page stands");
+  assert.equal(tab.control().newTask.open, true, "New task stands");
+  assert.equal(tab.control().starting, undefined);
+});
+
 test("New task's agent start opens no draft beside its agent while the task stands open before the start answers", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
@@ -2931,8 +3034,6 @@ test("New task's agent start opens no draft beside its agent while the task stan
     { shown: true, tasks: OPEN },
     {
       [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)),
-      // The task's agents are still being read.
-      [ACT_KIND.CODING_AGENTS_LIST]: () => new Promise(() => undefined),
     },
   );
   act(() => tab.control().onNewTask());
@@ -2984,6 +3085,7 @@ test("New task's agent start refused after its page opened opens the card again 
       key: AGENT_KEY,
       ask: { repository: "acme/web", workspaceId: undefined, agent: handed },
     },
+    words: handed.prompt,
   };
   act(() => tab.control().onNewTask());
   let note: Promise<Failure | undefined> = Promise.resolve(undefined);
@@ -3030,6 +3132,7 @@ test("Create with an agent opens New task's card for an automation's agent over 
       key: AGENT_KEY,
       ask: { repository: "acme/web", workspaceId: undefined, agent: handed },
     },
+    words: handed.prompt,
   };
   let note: Promise<Failure | undefined> = Promise.resolve(undefined);
   act(() => {
@@ -3051,19 +3154,23 @@ test("Create with an agent opens New task's card for an automation's agent over 
 
 test("an agent refused as New task's Agent mode started its task opens the task on a draft holding the words, model, and why, whose Retry starts the agent on that task under the start's key", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
-  // The service holds the agent once its own Start made it.
-  let agents: CodingAgentSummary[] = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
     {
       [ACT_KIND.TASKS_START]: () =>
         Promise.resolve({
           planId: OTHER_TASK_ID,
-          agentStart: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+          agentStart: { failure: AGENT_CALL_FAILURE.UNANSWERED },
         }),
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents }),
-      [ACT_KIND.CODING_AGENTS_START]: () => {
-        agents = [started];
+      // The host answers a Start once the list carries the agent its own Start made.
+      [ACT_KIND.AGENTS_START]: () => {
+        tab.stand({
+          tasks: {
+            ...AGENT_TASK,
+            tasks: [{ ...listed(), id: OTHER_TASK_ID }],
+            taskAgents: [started],
+          },
+        });
         return Promise.resolve({ agent: started });
       },
     },
@@ -3083,7 +3190,7 @@ test("an agent refused as New task's Agent mode started its task opens the task 
   assert.deepEqual(tab.control().mainTabs.tab, { draft: draft.id }, "the task opens on its tab");
   assert.equal(draft.id, AGENT_KEY, "the draft holds the start's key");
   assert.deepEqual(
-    tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START),
+    tab.payloads.filter(({ kind }) => kind === ACT_KIND.AGENTS_START),
     [],
     "nothing is sent again by itself",
   );
@@ -3093,7 +3200,7 @@ test("an agent refused as New task's Agent mode started its task opens the task 
     await tab.control().agents.startPrompt(draft.id, draft.prompt, draft.choice, draft.attachments);
   });
   await settle();
-  const retries = tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START);
+  const retries = tab.payloads.filter(({ kind }) => kind === ACT_KIND.AGENTS_START);
   assert.equal(retries.length, 1);
   assert.deepEqual(JSON.parse(JSON.stringify(retries[0]?.payload)), {
     taskId: OTHER_TASK_ID,
@@ -3106,30 +3213,25 @@ test("an agent refused as New task's Agent mode started its task opens the task 
 });
 
 test("an agent's title first landing on a task still Untitled reads the tasks again, so the name it took shows; a titled task asks nothing", async () => {
-  const untitled: TasksView = {
-    ...OPEN,
-    document: { status: TASKS_READ.READY, task: { ...TASK, name: "Untitled" } },
-  };
+  const viewOf = (name: string, title: string | null): TasksView => ({
+    ...withAgents([{ ...RUNNING_AGENT, title }]),
+    tasks: [{ ...listed(), name }],
+    document: { status: TASKS_READ.READY, task: { ...TASK, name } },
+  });
   const refreshes = (tab: ReturnType<typeof mount>) =>
     tab.told.filter((kind) => kind === ACT_KIND.TASKS_REFRESH).length;
-  const tab = mount(
-    { shown: true, tasks: untitled },
-    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-  );
+  const tab = mount({ shown: true, tasks: viewOf("Untitled", null) });
   await settle();
   const before = refreshes(tab);
-  act(() => tab.control().agents.onTitle(AGENT_ID, "Fix token refresh"));
+  tab.stand({ tasks: viewOf("Untitled", "Fix token refresh") });
   await settle();
   const landed = refreshes(tab) - before;
   closeWindow();
 
-  const named = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-  );
+  const named = mount({ shown: true, tasks: viewOf(TASK.name, null) });
   await settle();
   const namedBefore = refreshes(named);
-  act(() => named.control().agents.onTitle(AGENT_ID, "Fix token refresh"));
+  named.stand({ tasks: viewOf(TASK.name, "Fix token refresh") });
   await settle();
 
   assert.equal(landed, 1);
@@ -3142,10 +3244,7 @@ function payloadsOf(tab: ReturnType<typeof mount>, kind: PortActKind): unknown[]
 }
 
 test("a task with no agent opens on a new agent's draft once its agents are read, asking the service nothing, and closing it opens a fresh one", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([]) });
   await vi.waitFor(async () => {
     await settle();
     assert.ok(tab.control().agents.draft, "the task holds a draft");
@@ -3153,7 +3252,7 @@ test("a task with no agent opens on a new agent's draft once its agents are read
   const draft = tab.control().agents.draft;
   assert.ok(draft);
   assert.deepEqual(tab.control().mainTabs.tab, { draft: draft.id }, "and its column shows it");
-  assert.deepEqual(payloadsOf(tab, ACT_KIND.CODING_AGENTS_START), [], "nothing is started");
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.AGENTS_START), [], "nothing is started");
 
   act(() => {
     tab.control().mainTabs.onClose({ draft: draft.id });
@@ -3164,14 +3263,11 @@ test("a task with no agent opens on a new agent's draft once its agents are read
   assert.ok(fresh);
   assert.notEqual(fresh.id, draft.id, "the draft closed is let go");
   assert.deepEqual(tab.control().mainTabs.tab, { draft: fresh.id });
-  assert.deepEqual(payloadsOf(tab, ACT_KIND.CODING_AGENTS_START), []);
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.AGENTS_START), []);
 });
 
 test("closing a draft holding words lets it go at once, and its toast's Undo opens its tab again with the same words, files, and chips", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([]) });
   await vi.waitFor(async () => {
     await settle();
     assert.ok(tab.control().agents.draft, "the task holds a draft");
@@ -3202,14 +3298,11 @@ test("closing a draft holding words lets it go at once, and its toast's Undo ope
     disabledServers: [],
   });
   assert.deepEqual(tab.control().mainTabs.tab, { draft: draft.id }, "and its tab is shown again");
-  assert.deepEqual(payloadsOf(tab, ACT_KIND.CODING_AGENTS_START), [], "nothing is started");
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.AGENTS_START), [], "nothing is started");
 });
 
 test("a draft closed with words whose place a fork has taken since is laid into that fork by Undo, the fork kept", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([]) });
   await vi.waitFor(async () => {
     await settle();
     assert.ok(tab.control().agents.draft, "the task holds a draft");
@@ -3237,10 +3330,7 @@ test("a draft closed with words whose place a fork has taken since is laid into 
 });
 
 test("a closed draft's Undo is withdrawn as its task is left", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([]) });
   await vi.waitFor(async () => {
     await settle();
     assert.ok(tab.control().agents.draft, "the task holds a draft");
@@ -3258,10 +3348,7 @@ test("a closed draft's Undo is withdrawn as its task is left", async () => {
 });
 
 test("a task with no agent opens its new agent's draft with a hidden side panel left hidden", async () => {
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
-  );
+  const tab = mount({ shown: true, tasks: withAgents([]) });
   if (tab.control().sidePanel.open) act(() => tab.control().sidePanel.onToggle());
   await vi.waitFor(async () => {
     await settle();
@@ -3385,10 +3472,10 @@ const FINISHED_ID = "4f6e2a1b-7c3d-4e5f-8a9b-0c1d2e3f4a5b";
 const UNSEEN_ID = "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d";
 
 /** Two agents beside the running one: one whose turn ended and was seen, and one whose turn ended unseen. */
-const IDLE_AGENTS: readonly CodingAgentSummary[] = [
+const IDLE_AGENTS: readonly AgentSummary[] = [
   RUNNING_AGENT,
-  { ...RUNNING_AGENT, id: FINISHED_ID, createdAt: 4, status: CODING_AGENT_STATUS.COMPLETED },
-  { ...RUNNING_AGENT, id: UNSEEN_ID, createdAt: 5, status: CODING_AGENT_STATUS.COMPLETED },
+  { ...RUNNING_AGENT, id: FINISHED_ID, createdAt: 4, status: AGENT_STATUS.COMPLETED },
+  { ...RUNNING_AGENT, id: UNSEEN_ID, createdAt: 5, status: AGENT_STATUS.COMPLETED },
 ];
 
 /** An item waiting in the open task's Inbox, posted by the agent given. */
@@ -3404,8 +3491,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const tab = mount(
-        { shown: true, tasks: OPEN },
-        { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+        { shown: true, tasks: withAgents([RUNNING_AGENT]) },
+        {},
         registryOn(yield* Clock.Clock),
       );
       yield* landed;
@@ -3414,7 +3501,7 @@ it.effect(
       const pulls = { changes: AGENT_ID };
       act(() => panel().onOpenFile(FILE_REF));
       act(() => panel().onChoose(pulls));
-      act(() => panel().onPin(pulls, "Pull request"));
+      act(() => panel().onPin({ task: TASK.id }, pulls, "Pull request"));
       act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
       yield* landed;
       const strip = panel().strip;
@@ -3442,8 +3529,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const tab = mount(
-        { shown: true, tasks: OPEN, unseenAgents: [UNSEEN_ID] },
-        { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: IDLE_AGENTS }) },
+        { shown: true, tasks: withAgents(IDLE_AGENTS), unseenAgents: [UNSEEN_ID] },
+        {},
         registryOn(yield* Clock.Clock),
       );
       yield* landed;
@@ -3482,9 +3569,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const clock = yield* Clock.Clock;
-      const listed = {
-        [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
-      };
+      const listed = {};
       const pulls = { changes: AGENT_ID };
       const first = mount({ shown: true, tasks: OPEN }, listed, registryOn(clock));
       yield* landed;
@@ -3515,8 +3600,8 @@ it.effect(
         }),
       );
       const tab = mount(
-        { shown: true, tasks: OPEN, unseenAgents: [UNSEEN_ID] },
-        { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: IDLE_AGENTS }) },
+        { shown: true, tasks: withAgents(IDLE_AGENTS), unseenAgents: [UNSEEN_ID] },
+        {},
         registryOn(yield* Clock.Clock),
       );
       yield* landed;
@@ -3541,8 +3626,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const tab = mount(
-        { shown: true, tasks: OPEN, unseenAgents: [UNSEEN_ID] },
-        { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: IDLE_AGENTS }) },
+        { shown: true, tasks: withAgents(IDLE_AGENTS), unseenAgents: [UNSEEN_ID] },
+        {},
         registryOn(yield* Clock.Clock),
       );
       yield* landed;
@@ -3561,29 +3646,22 @@ it.effect(
   "a tab shown as its task is left for one whose agents are still unread is stamped as it was left, not when it was last stamped",
   () =>
     Effect.gen(function* () {
-      const unread = Promise.withResolvers<never>();
       const tab = mount(
-        { shown: true, tasks: OPEN, unseenAgents: [UNSEEN_ID] },
-        {
-          [ACT_KIND.CODING_AGENTS_LIST]: (params) =>
-            Option.getOrUndefined(readListed(params))?.taskId === TASK.id
-              ? Promise.resolve({ agents: IDLE_AGENTS })
-              : unread.promise,
-          [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
-        },
+        { shown: true, tasks: withAgents(IDLE_AGENTS), unseenAgents: [UNSEEN_ID] },
+        { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
         registryOn(yield* Clock.Clock),
       );
       yield* landed;
       const column = () => tab.control().mainTabs;
       act(() => column().onChoose({ agent: FINISHED_ID }));
       yield* passing(Duration.minutes(50));
-      tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
+      tab.stand({ tasks: { ...withAgents(IDLE_AGENTS), activeTaskId: OTHER_TASK_ID } });
       yield* landed;
       // The panel filling the window over the column keeps the tab from being viewed again on return.
       act(() => tab.control().sidePanel.onToggleFullScreen());
 
       yield* passing(Duration.hours(23));
-      tab.stand({ tasks: OPEN });
+      tab.stand({ tasks: withAgents(IDLE_AGENTS) });
       yield* passing(Duration.minutes(30));
       assert.deepEqual(
         column().tabs,
@@ -3595,6 +3673,3 @@ it.effect(
       assert.deepEqual(column().tabs, [{ agent: AGENT_ID }, { agent: UNSEEN_ID }]);
     }),
 );
-
-/** A list's payload, read back as the act's own schema admits it. */
-const readListed = Schema.decodeUnknownOption(Schema.Struct({ taskId: Schema.String }));

@@ -19,7 +19,7 @@ import { Schema as EffectSchema } from "effect";
 export const accountPreferencesAnswerSchema = EffectSchema.Struct({
   preferences: EffectSchema.Record(EffectSchema.String, EffectSchema.Unknown),
   linkOpen: EffectSchema.optionalKey(EffectSchema.Unknown),
-  codingAgent: EffectSchema.optionalKey(EffectSchema.Unknown),
+  agent: EffectSchema.optionalKey(EffectSchema.Unknown),
   chaptersModel: EffectSchema.optionalKey(EffectSchema.Unknown),
   experiments: EffectSchema.optionalKey(
     EffectSchema.Record(EffectSchema.String, EffectSchema.Unknown),
@@ -34,7 +34,7 @@ export type AccountPreferencesAnswerWire = typeof accountPreferencesAnswerSchema
 export const accountPreferencesWriteSchema = EffectSchema.Struct({
   preferences: EffectSchema.optionalKey(EffectSchema.Unknown),
   linkOpen: EffectSchema.optionalKey(EffectSchema.Unknown),
-  codingAgent: EffectSchema.optionalKey(EffectSchema.Unknown),
+  agent: EffectSchema.optionalKey(EffectSchema.Unknown),
   chaptersModel: EffectSchema.optionalKey(EffectSchema.Unknown),
   experiments: EffectSchema.optionalKey(EffectSchema.Unknown),
 });

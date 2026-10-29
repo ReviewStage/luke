@@ -620,7 +620,7 @@ body,
    its own: the measure is the sent message's (`Message`'s `is-user`), and a
    card folded or open spans all of it, the frame around a card whose head
    holds a control beside it among them. */
-.agent-origin > :is([data-task-card], [data-replay-card], :has(> [data-replay-card])) {
+.agent-origin > :is([data-origin-plan], [data-replay-card], :has(> [data-replay-card])) {
   width: 100%;
 }
 
@@ -1412,17 +1412,6 @@ body,
 
 /* The window's one strip is `@luke/ui`'s Tabs (tab-strip.tsx), drawn alike
    in the plan's column and the side panel, folding as the room says. */
-
-/* Who opened a pull request on its card, and how long ago it moved after
-   them (`tasks/pull-request-card-notes.tsx`): the time wraps under the name
-   as one piece where a long login leaves it no room, so the name is never
-   cut for it, as an agent's origin line wraps. Only the line holding that
-   time wraps, so every other card's line naming an actor, a one-line
-   starter's among them, keeps to its one row. */
-.actor-words:has(> .card-when) {
-  flex-wrap: wrap;
-  row-gap: var(--luke-list-gap);
-}
 
 /* A narrow room's bars have no room beside their buttons for their tabs,
    so a strip and its "+" take a row of their own under them, as a phone's

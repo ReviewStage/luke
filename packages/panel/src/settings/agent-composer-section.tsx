@@ -23,7 +23,7 @@ export function AgentComposerSection({
   return (
     <SettingsSection title="Message box">
       <SchemaSettingRows
-        page={SCHEMA_SETTINGS_PAGE.CODING_AGENTS}
+        page={SCHEMA_SETTINGS_PAGE.AGENTS}
         section={SETTING_SECTION.COMPOSER}
         view={view}
         writes={writes}

@@ -16,6 +16,8 @@
  * write to them notifies the account it moves, so a read the account loses
  * is woken and answers without it.
  */
+
+import { agentDelegationTable, agentTable } from "../schemas/agent.js";
 import { agentBrowserTab } from "../schemas/agent-browser-tab.js";
 import { agentPin } from "../schemas/agent-pin.js";
 import { agentQueuePause, agentQueueRevision, queuedMessage } from "../schemas/agent-queue.js";
@@ -23,7 +25,7 @@ import { attachment } from "../schemas/attachment.js";
 import { invitation, member, organization, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
 import { channel } from "../schemas/channel.js";
-import { codingAgent, codingAgentDelegation } from "../schemas/coding-agent.js";
+import { device } from "../schemas/device.js";
 import { deviceAgentLine, deviceAgentRequest } from "../schemas/device-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
 import { githubPersonalToken } from "../schemas/github-personal-token.js";
@@ -65,13 +67,13 @@ export const taskSync = defineSyncTable(task, {
  * so is when its pull request was last read, because every read of the pull
  * request rewrites that; no view reads either live.
  */
-export const codingAgentSync = defineSyncTable(codingAgent, {
+export const agentSync = defineSyncTable(agentTable, {
   topics: [
-    { kind: TOPIC.AGENT, column: codingAgent.id },
-    { kind: TOPIC.TASK, column: codingAgent.taskId },
-    { kind: TOPIC.WORKSPACE, column: codingAgent.organizationId },
+    { kind: TOPIC.AGENT, column: agentTable.id },
+    { kind: TOPIC.TASK, column: agentTable.taskId },
+    { kind: TOPIC.WORKSPACE, column: agentTable.organizationId },
   ],
-  ignore: [codingAgent.lastStep, codingAgent.publishedRead],
+  ignore: [agentTable.lastStep, agentTable.publishedRead],
 });
 
 /** An account's membership of a workspace, on the workspace's topic and the account's. */
@@ -99,6 +101,44 @@ export const userSync = defineSyncTable(user, {
     },
   ],
   ignore: [user.updatedAt, user.lastLoginMethod],
+});
+
+/**
+ * A member's device, on its account's topic and, through its memberships,
+ * every workspace it is in, so a Mac's new name reaches the task lists that
+ * name the local agents on it. Note that every column but its name is
+ * ignored, because the device beats and registers again often, rewriting
+ * when it was last seen and what it runs, and no view the capture wakes
+ * reads them: a window judges a device by its own presence read.
+ */
+export const deviceSync = defineSyncTable(device, {
+  topics: [
+    { kind: TOPIC.ACCOUNT, column: device.userId },
+    {
+      through: member,
+      key: member.userId,
+      by: device.userId,
+      topics: [{ kind: TOPIC.WORKSPACE, column: member.organizationId }],
+    },
+  ],
+  ignore: [
+    device.kind,
+    device.platform,
+    device.arch,
+    device.isolation,
+    device.home,
+    device.claudeExecutable,
+    device.codexExecutable,
+    device.signedIn,
+    device.capabilities,
+    device.setup,
+    device.setupFailure,
+    device.secretHash,
+    device.version,
+    device.removedAt,
+    device.createdAt,
+    device.lastSeenAt,
+  ],
 });
 
 /** An invitation to a workspace, pending or settled, on the workspace's topic. */
@@ -434,13 +474,13 @@ export const turnsSync = defineSyncTable(turns, {
   topics: [
     { kind: TOPIC.CONVERSATION, column: turns.conversationId },
     {
-      through: codingAgent,
-      key: codingAgent.conversationId,
+      through: agentTable,
+      key: agentTable.conversationId,
       by: turns.conversationId,
       topics: [
-        { kind: TOPIC.AGENT, column: codingAgent.id },
-        { kind: TOPIC.TASK, column: codingAgent.taskId },
-        { kind: TOPIC.WORKSPACE, column: codingAgent.organizationId },
+        { kind: TOPIC.AGENT, column: agentTable.id },
+        { kind: TOPIC.TASK, column: agentTable.taskId },
+        { kind: TOPIC.WORKSPACE, column: agentTable.organizationId },
       ],
     },
   ],
@@ -452,12 +492,12 @@ export const turnsSync = defineSyncTable(turns, {
  * topic, looked up through the worker's own conversation, so the agent's
  * transcript hears the call that opened the worker.
  */
-export const codingAgentDelegationSync = defineSyncTable(codingAgentDelegation, {
+export const agentDelegationSync = defineSyncTable(agentDelegationTable, {
   topics: [
     {
       through: conversations,
       key: conversations.id,
-      by: codingAgentDelegation.childConversationId,
+      by: agentDelegationTable.childConversationId,
       topics: [{ kind: TOPIC.CONVERSATION, column: conversations.parentConversationId }],
     },
   ],
@@ -465,9 +505,10 @@ export const codingAgentDelegationSync = defineSyncTable(codingAgentDelegation, 
 
 export const SYNC_TABLES: readonly SyncTable[] = [
   taskSync,
-  codingAgentSync,
+  agentSync,
   memberSync,
   userSync,
+  deviceSync,
   invitationSync,
   organizationSync,
   personalWorkspaceSync,
@@ -502,5 +543,5 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   messagesSync,
   conversationsSync,
   turnsSync,
-  codingAgentDelegationSync,
+  agentDelegationSync,
 ];

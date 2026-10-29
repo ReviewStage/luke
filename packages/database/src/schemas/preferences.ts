@@ -1,5 +1,5 @@
+import type { AgentMachineKind, ContextWindow } from "@luke/features/agent-wire";
 import type { ChaptersModelId } from "@luke/features/chapters-model-choice";
-import type { CodingAgentMachine, ContextWindow } from "@luke/features/coding-agent-wire";
 import type { LinkOpen } from "@luke/features/link-open";
 import type { ExperimentChoices } from "@luke/settings";
 import { jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
@@ -32,9 +32,9 @@ export const accountPreference = pgTable("account_preference", {
    * which is also what a choice written before the window could be chosen
    * reads as, and `standard` where the smaller window was chosen.
    */
-  codingAgentModel: text("coding_agent_model"),
-  codingAgentEffort: text("coding_agent_effort"),
-  codingAgentContextWindow: text("coding_agent_context_window").$type<ContextWindow>(),
+  agentModel: text("agent_model"),
+  agentEffort: text("agent_effort"),
+  agentContextWindow: text("agent_context_window").$type<ContextWindow>(),
   /**
    * The Claude model a Generate chapters this account presses runs on
    * (`@luke/features/chapters-model-choice`); null until the account
@@ -59,7 +59,7 @@ export const accountPreference = pgTable("account_preference", {
    * since removed is still told apart from no pick at all. Written alone,
    * it moves no `updated_at`.
    */
-  runsOnMachine: text("runs_on_machine").$type<CodingAgentMachine>(),
+  runsOnMachine: text("runs_on_machine").$type<AgentMachineKind>(),
   runsOnDeviceId: uuid("runs_on_device_id"),
   createdAt: createdAt(),
   /**

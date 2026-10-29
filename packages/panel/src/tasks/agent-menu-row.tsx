@@ -14,13 +14,14 @@
  * it is hung, as a chip's is. A search finds it by its name and its detail.
  */
 
-import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
+import type { AgentPullRequest } from "@luke/features/agent-wire";
 import type { MenuRow } from "@luke/ui";
 import { ACTOR_KIND, type EditReader, teammateCreator } from "@luke/ui/actor-model";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { agentName } from "./agent-model.js";
 import { AgentCard, AgentHoverCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
-import { agentName } from "./coding-agent-model.js";
+import { type CardFoot, taskFoot } from "./agent-tab-card.js";
 import type { MentionableAgent } from "./mention-picker.js";
 import { type MentionedAgentsPlace, useMentionedPlace } from "./mentioned-agent-card.js";
 import { agentEndMark, TAB_KIND, tabLook } from "./tab-look.js";
@@ -43,7 +44,7 @@ const CARD_FOOT = {
 } as const;
 
 /** The pull requests a row's card names, none: an agent's own is drawn where its task is open, and the workspace's list carries none. */
-const NO_PULL_REQUESTS = new Map<string, CodingAgentPullRequest>();
+const NO_PULL_REQUESTS = new Map<string, AgentPullRequest>();
 
 /** What a menu draws its agents' rows against: the catalog and reader its cards name, the members its faces are read from, and the task it is open on, where it is open on one. */
 export interface AgentRowPlace extends MentionedAgentsPlace {
@@ -53,9 +54,9 @@ export interface AgentRowPlace extends MentionedAgentsPlace {
 }
 
 /** The line under an agent's card: the task it works on, where the list named it. */
-function cardFoot(agent: MentionableAgent): string | undefined {
-  if (agent.task === undefined) return CARD_FOOT.NO_TASK;
-  return agent.task.name === undefined ? undefined : `${CARD_FOOT.ON}${agent.task.name}`;
+function cardFoot(agent: MentionableAgent): CardFoot | undefined {
+  if (agent.task === undefined) return taskFoot(CARD_FOOT.NO_TASK);
+  return agent.task.name === undefined ? undefined : taskFoot(`${CARD_FOOT.ON}${agent.task.name}`);
 }
 
 /**

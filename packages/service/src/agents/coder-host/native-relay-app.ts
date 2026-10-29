@@ -22,10 +22,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import {
-  readCodingAgentHeaderOfConversation,
-  readCodingAgentRouting,
-} from "@luke/database/models/coding-agent-store";
+import { readAgentHeaderOfConversation, readAgentRouting } from "@luke/database/models/agent-store";
 import { HTTP_METHOD } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
@@ -66,12 +63,10 @@ const admittedConversation = /* @__PURE__ */ Effect.fnUntraced(function* (
   conversationId: string,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices> {
   const agent = yield* hostedStoreOrUnavailable(
-    readCodingAgentHeaderOfConversation(call.account, conversationId),
+    readAgentHeaderOfConversation(call.account, conversationId),
   );
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const routing = yield* hostedStoreOrUnavailable(
-    readCodingAgentRouting(call.account, agent.value.id),
-  );
+  const routing = yield* hostedStoreOrUnavailable(readAgentRouting(call.account, agent.value.id));
   if (Option.isNone(routing) || routing.value.runtime !== call.runtime) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }

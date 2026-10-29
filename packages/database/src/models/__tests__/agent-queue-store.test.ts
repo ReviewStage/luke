@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
-import { LINE_GRACE_MILLIS } from "@luke/features/coding-agent-status";
+import { LINE_GRACE_MILLIS } from "@luke/features/agent-status";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
+import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
-import { codingAgent } from "../../schemas/coding-agent.js";
 import { turns } from "../../schemas/storage.js";
 import { getTestDB, startTask } from "../../testing/index.js";
 import {
@@ -27,7 +27,7 @@ import {
   takeQueuedMessage,
   unpausedQueues,
 } from "../agent-queue-store.js";
-import { createCodingAgent } from "../coding-agent-store.js";
+import { createAgent } from "../agent-store.js";
 
 /**
  * A coding agent's queue over a real dialect: messages queued in order, a
@@ -46,7 +46,7 @@ const openAccount = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const task = yield* startTask(userId, { name: "Invitations" });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
@@ -200,9 +200,9 @@ it.layer(getTestDB())("an agent's queue", (it) => {
       }
       const db = yield* Database;
       const [agent] = yield* db
-        .select({ conversationId: codingAgent.conversationId })
-        .from(codingAgent)
-        .where(eq(codingAgent.id, busy.agentId));
+        .select({ conversationId: agentTable.conversationId })
+        .from(agentTable)
+        .where(eq(agentTable.id, busy.agentId));
       assert.ok(agent !== undefined);
       yield* db.insert(turns).values({
         userId: busy.userId,

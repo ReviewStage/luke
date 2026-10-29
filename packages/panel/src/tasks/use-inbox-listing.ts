@@ -1,4 +1,4 @@
-import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { searchTokens } from "@luke/ui/search-tokens";
@@ -6,25 +6,23 @@ import { useCallback, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import {
   type InboxViewChoices,
+  useChannelScope,
   useInboxTaskFolds,
   useInboxViewChoices,
 } from "../desktop/folded-groups.js";
 import { useInboxCloser } from "./inbox-close.js";
 import {
   channelGroups,
-  EVERYONES,
   INBOX_HOLDER,
   INBOX_SHOW,
   INBOX_WHOSE,
   type InboxGroup,
   type InboxListed,
-  type InboxShow,
-  type InboxWhose,
   inboxAgentOf,
   inboxCounts,
   listedItems,
 } from "./inbox-model.js";
-import { useCodingAgents } from "./use-coding-agents.js";
+import { useAgents } from "./use-agents.js";
 import { useHeldInboxList } from "./use-held-inbox-list.js";
 import {
   agentHoldings,
@@ -39,7 +37,7 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
 /**
  * use-inbox-listing.ts -- the window's Inbox read once: every item of every
  * task of the listed workspace that holds one, and every agent with no task
- * that waits, as its list lists them under the view the developer chose, and
+ * that holds one, as its list lists them under the view the developer chose, and
  * the item chosen, read live through its holder's own read.
  *
  * The window's Inbox page reads it for its list and the item beside it
@@ -50,11 +48,12 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * scope (`inboxList`).
  *
  * Narrowed to a channel, it lists and counts that channel's items alone
- * (`channelGroups`), under a scope of the channel's own: All of everyone's
- * each time a channel opens, since a channel is everyone's threads on one
- * topic, and whatever the reader turns it to while that channel stays
- * shown, never kept. Its grouping, its order, and the rest of its view are
- * the Inbox's own.
+ * (`channelGroups`), under the channels' scope, one for every channel and
+ * apart from the Inbox's: All of everyone's until the reader turns it,
+ * since a channel is everyone's threads on one topic, and then whatever
+ * they turned it to, in every channel and across a launch
+ * (`useChannelScope`). Its grouping, its order, and the rest of its view
+ * are the Inbox's own.
  */
 
 /**
@@ -70,39 +69,17 @@ function listedHoldings(
   return holdings.filter((holding) => listed.some((task) => task.id === holding.taskId));
 }
 
-/** A channel's own scope, as the reader last turned it while that channel stood. */
-interface ChannelScope {
-  readonly channelId: string;
-  readonly show: InboxShow;
-  readonly whose: InboxWhose;
-}
-
-/**
- * The Inbox's view choices, narrowed to a channel where one is given: its
- * scope the channel's own, All of everyone's as it opens, held only while
- * it stands; the Inbox's kept choices where none is.
- */
+/** The Inbox's view choices, under the channels' scope where a channel is given; the Inbox's kept choices where none is. */
 function useScopedChoices(channelId: string | undefined): InboxViewChoices {
   const kept = useInboxViewChoices();
-  const [scope, setScope] = useState<ChannelScope | undefined>(undefined);
-  // Note that a scope is forgotten once its channel is left, so the channel opens on All of everyone's again.
-  if (scope !== undefined && scope.channelId !== channelId) setScope(undefined);
-  if (channelId === undefined) return kept;
-  const standing =
-    scope?.channelId === channelId ? scope : { channelId, show: INBOX_SHOW.ALL, whose: EVERYONES };
-  return {
-    ...kept,
-    show: standing.show,
-    onShow: (show) => setScope({ ...standing, show }),
-    whose: standing.whose,
-    onWhose: (whose) => setScope({ ...standing, whose }),
-  };
+  const channels = useChannelScope();
+  return channelId === undefined ? kept : { ...kept, ...channels };
 }
 
-/** The choice that opens a listed item: by its task, or by its agent where it has none. */
+/** The choice that opens a listed item: by its task, and its agent, which its link names, or by its agent where it has none. */
 export function choiceOf({ holder, item }: InboxListed): InboxChoice {
   return holder.kind === INBOX_HOLDER.TASK
-    ? { taskId: holder.task.id, itemId: item.id }
+    ? { taskId: holder.task.id, itemAgentId: item.agentId, itemId: item.id }
     : { agentId: item.agentId, itemId: item.id };
 }
 
@@ -128,14 +105,20 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     [inboxTasks, listedTasks],
   );
   const waitingTaskless = tasks.inboxTaskless;
+  const agentsHolding = tasks.inboxAgents;
   const read = useHolderInboxItems(
     useMemo(
-      () => [...taskHoldings(holdings), ...agentHoldings(waitingTaskless)],
-      [holdings, waitingTaskless],
+      () => [...taskHoldings(holdings), ...agentHoldings(agentsHolding)],
+      [holdings, agentsHolding],
     ),
   );
   const readTasks = read.current[INBOX_SCOPE_KIND.PLAN];
   const readAgents = read.current[INBOX_SCOPE_KIND.AGENT];
+  // Note that a holder the feed holds nothing of is read for the list, but its own read may still hold an item a link names.
+  const settlesTask = (id: string) =>
+    readTasks.has(id) && !read.feedHoldsNothing[INBOX_SCOPE_KIND.PLAN].has(id);
+  const settlesAgent = (id: string) =>
+    readAgents.has(id) && !read.feedHoldsNothing[INBOX_SCOPE_KIND.AGENT].has(id);
   const asked = view.chosen;
   const chosenTask =
     asked !== undefined && "taskId" in asked
@@ -143,11 +126,12 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
       : undefined;
   const taskId = chosenTask?.id;
   const chosenAgentId = asked !== undefined && "agentId" in asked ? asked.agentId : undefined;
-  const agents = useCodingAgents({
+  const agents = useAgents({
     acts: { act },
     taskId,
     ...(chosenAgentId === undefined ? undefined : { agentId: chosenAgentId }),
     repository: chosenTask?.repository ?? null,
+    listedAgents: tasks.liveAgents,
     // The Inbox draws no agent's composer, so nothing here opens Settings.
     onOpenIntegrations: () => undefined,
     onOpenApiKeys: () => undefined,
@@ -188,13 +172,13 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
           ),
         }
       : read.items;
-  // An agent with no plan that a link names, none of whose items waits any longer, is grouped by its own read, which the account's list of waiting agents leaves out, in its own workspace's list alone.
+  // An agent with no plan that a link names, which main does not list as holding items yet, is grouped by its own read, in its own workspace's list alone.
   const pageAgent = agents.agents?.[0] ?? agents.archived?.[0];
   const settledAgent =
     chosenAgentId !== undefined &&
     holdsLive &&
     pageAgent !== undefined &&
-    !waitingTaskless.some((each) => each.agentId === chosenAgentId)
+    !agentsHolding.some((each) => each.agentId === chosenAgentId)
       ? [
           inboxAgentOf({
             ...pageAgent,
@@ -203,11 +187,11 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
           }),
         ]
       : [];
-  // Note that every read here draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
+  // Note that every read here draws the window's own marks, answers, and messages already, as the host draws them into each (`@luke/host`'s `inbox-collections.ts`).
   const everyChannel: readonly InboxGroup[] = inboxGroups(held, {
     tasks: holdings,
     listed: tasks.tasks,
-    agents: [...waitingTaskless, ...settledAgent],
+    agents: [...agentsHolding, ...settledAgent],
     workspaceId: tasks.workspace?.id,
   });
   const standing =
@@ -229,8 +213,8 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     readerId: tasks.me,
   };
   // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its place,
-  // both held still while the page stands.
-  const { list, steps } = useHeldInboxList(
+  // both held still while the page stands: every row while the pointer is over the list, and the chosen row while it stays chosen.
+  const { list, steps, onPointing } = useHeldInboxList(
     standing,
     filter,
     asked?.itemId,
@@ -253,11 +237,11 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
   // Note that a plan's items read before main's latest word of it may lack the item asked for, so only a current read settles it.
   const chosenWaits =
     (taskId !== undefined &&
-      !readTasks.has(taskId) &&
+      !settlesTask(taskId) &&
       !live.read &&
       (holdings.some((holding) => holding.taskId === taskId) || agentsUnread)) ||
     (chosenAgentId !== undefined &&
-      !readAgents.has(chosenAgentId) &&
+      !settlesAgent(chosenAgentId) &&
       !live.read &&
       !agents.listMissing);
   // Note that the holdings are filtered against the task list, so until it is read they hold nothing and prove nothing.
@@ -272,9 +256,9 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
   // Note that only the asked holder's own reads are waited on, since another's that failed says nothing of this item.
   const holderRead =
     taskId !== undefined
-      ? readTasks.has(taskId) || live.read || holderEmpty
+      ? settlesTask(taskId) || live.read || holderEmpty
       : chosenAgentId !== undefined
-        ? live.read || readAgents.has(chosenAgentId) || holderEmpty
+        ? live.read || settlesAgent(chosenAgentId) || holderEmpty
         : true;
   // Note that only a task's item waits on the task list, since an agent with no task is read apart from it.
   const missing =
@@ -325,6 +309,7 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     counts,
     list,
     steps,
+    onPointing,
     chosen,
     filteredOut,
     search: { query, onQuery: setQuery },

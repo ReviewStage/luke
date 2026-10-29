@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import {
-  type CodingAgent,
-  createCodingAgent,
+  type Agent,
+  createAgent,
   hasRepository,
-  readCodingAgent,
-  settleCodingAgentAuthor,
-  updateCodingAgentBranch,
+  readAgent,
+  settleAgentAuthor,
+  updateAgentBranch,
   type WithRepository,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
+import { AGENT_AUTHOR, type AgentAuthor } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { ACTION_RESULT_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Clock, Effect, Option } from "effect";
@@ -75,11 +75,7 @@ function repository(answer: Opening) {
 }
 
 /** An agent of a signed-in developer on the repository, its author settled as given. */
-const openAgent = (
-  installationId: number,
-  author: CodingAgentAuthor | null,
-  row?: GitHubAccountRow,
-) =>
+const openAgent = (installationId: number, author: AgentAuthor | null, row?: GitHubAccountRow) =>
   Effect.gen(function* () {
     const installation: InstallationFixture = {
       id: installationId,
@@ -89,7 +85,7 @@ const openAgent = (
     const userId = yield* openGithubUser(row);
     const task = yield* startTask(userId, { name: "Invitations", repository: RELAY_FULL_NAME });
     yield* connectWorkspaceGitHub(task.workspaceId, installation);
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: "start-1",
       model: "anthropic/claude-opus-5.5",
@@ -99,8 +95,8 @@ const openAgent = (
       repository: RELAY_FULL_NAME,
     });
     const { agent } = Option.getOrThrow(started);
-    if (author !== null) yield* settleCodingAgentAuthor(userId, agent.id, author);
-    const settled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+    if (author !== null) yield* settleAgentAuthor(userId, agent.id, author);
+    const settled = Option.getOrThrow(yield* readAgent(userId, agent.id));
     assert.ok(hasRepository(settled));
     return {
       installation,
@@ -113,7 +109,7 @@ const openAgent = (
 const open = (
   opened: {
     readonly installation: InstallationFixture;
-    readonly agent: WithRepository<CodingAgent>;
+    readonly agent: WithRepository<Agent>;
   },
   target: { readonly userId: string; readonly conversationId: string },
   answer: Opening,
@@ -124,7 +120,7 @@ const open = (
     const result = yield* openPullRequest(target, opened.agent, unparsedWire(input)).pipe(
       Effect.provide(githubReaching([opened.installation], undefined, {}, github.script).layer),
     );
-    const row = Option.getOrThrow(yield* readCodingAgent(target.userId, opened.agent.id));
+    const row = Option.getOrThrow(yield* readAgent(target.userId, opened.agent.id));
     return { result, openings: github.openings, author: row.author, branch: row.branch };
   });
 
@@ -132,7 +128,7 @@ const open = (
 const openTokenAgent = Effect.gen(function* () {
   const userId = yield* openTokenMember();
   const task = yield* startTask(userId, { name: "Invitations", repository: RELAY_FULL_NAME });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: "start-1",
     model: "anthropic/claude-opus-5.5",
@@ -143,8 +139,8 @@ const openTokenAgent = Effect.gen(function* () {
     githubAccess: GITHUB_ACCESS.TOKEN,
   });
   const { agent } = Option.getOrThrow(started);
-  yield* settleCodingAgentAuthor(userId, agent.id, CODING_AGENT_AUTHOR.TOKEN);
-  const settled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+  yield* settleAgentAuthor(userId, agent.id, AGENT_AUTHOR.TOKEN);
+  const settled = Option.getOrThrow(yield* readAgent(userId, agent.id));
   assert.ok(hasRepository(settled));
   return {
     agent: settled,
@@ -155,7 +151,7 @@ const openTokenAgent = Effect.gen(function* () {
 /** Opens a token agent's pull request against a GitHub where the member's token may push to the repository and no installation reaches it. */
 const openOnToken = (
   opened: {
-    readonly agent: WithRepository<CodingAgent>;
+    readonly agent: WithRepository<Agent>;
     readonly target: { userId: string; conversationId: string };
   },
   answer: Opening,
@@ -172,7 +168,7 @@ const openOnToken = (
     const result = yield* openPullRequest(opened.target, opened.agent, unparsedWire(INPUT)).pipe(
       Effect.provide(githubReaching([], GITHUB_APP_WITH_TOKENS, {}, script).layer),
     );
-    const row = Option.getOrThrow(yield* readCodingAgent(opened.target.userId, opened.agent.id));
+    const row = Option.getOrThrow(yield* readAgent(opened.target.userId, opened.agent.id));
     return { result, openings: github.openings, author: row.author };
   });
 
@@ -194,7 +190,7 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
             openings.map((sent) => sent.headers.get("authorization")),
             [`Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`],
           );
-          assert.equal(author, CODING_AGENT_AUTHOR.TOKEN, "the row is left as it stood");
+          assert.equal(author, AGENT_AUTHOR.TOKEN, "the row is left as it stood");
         }
       }),
   );
@@ -203,7 +199,7 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
     "an agent writing as its developer has its pull request opened on their token, once, against the default branch, its description as the agent wrote it, its branch recorded on the agent as it opens",
     () =>
       Effect.gen(function* () {
-        const agent = yield* openAgent(21, CODING_AGENT_AUTHOR.DEVELOPER);
+        const agent = yield* openAgent(21, AGENT_AUTHOR.DEVELOPER);
 
         const { result, openings, author, branch } = yield* open(agent, agent.target, opened);
 
@@ -224,7 +220,7 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
           body: INPUT.body,
           draft: false,
         });
-        assert.equal(author, CODING_AGENT_AUTHOR.DEVELOPER);
+        assert.equal(author, AGENT_AUTHOR.DEVELOPER);
         // The branch stands on the row at once, so GitHub's delivery about the opening finds the agent mid-turn.
         assert.equal(branch, INPUT.head);
       }),
@@ -234,8 +230,8 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
     "where GitHub refuses the developer's token or their account's access, the App opens it in their place and the row records why",
     () =>
       Effect.gen(function* () {
-        const refusedToken = yield* openAgent(22, CODING_AGENT_AUTHOR.DEVELOPER);
-        const noAccess = yield* openAgent(23, CODING_AGENT_AUTHOR.DEVELOPER);
+        const refusedToken = yield* openAgent(22, AGENT_AUTHOR.DEVELOPER);
+        const noAccess = yield* openAgent(23, AGENT_AUTHOR.DEVELOPER);
         const appOnly = (status: number) => (bearer: string) =>
           bearer === `Bearer ${DEVELOPER_TOKEN}`
             ? Response.json({ message: "Refused" }, { status })
@@ -256,7 +252,7 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
         }
         assert.deepEqual(
           [unlinked.author, forbidden.author],
-          [CODING_AGENT_AUTHOR.APP_UNLINKED, CODING_AGENT_AUTHOR.APP_NO_PUSH],
+          [AGENT_AUTHOR.APP_UNLINKED, AGENT_AUTHOR.APP_NO_PUSH],
         );
       }),
   );
@@ -265,7 +261,7 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
     "an agent writing as the App, or from before its author was settled, opens on the App's token and never reads the developer's",
     () =>
       Effect.gen(function* () {
-        const automated = yield* openAgent(24, CODING_AGENT_AUTHOR.APP_AUTOMATION);
+        const automated = yield* openAgent(24, AGENT_AUTHOR.APP_AUTOMATION);
         const unsettled = yield* openAgent(25, null);
 
         for (const agent of [automated, unsettled]) {
@@ -286,9 +282,9 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
     "GitHub refusing the pull request itself opens nothing and moves nothing, the agent's branch among it, and a call without a title is refused before GitHub hears of it",
     () =>
       Effect.gen(function* () {
-        const agent = yield* openAgent(26, CODING_AGENT_AUTHOR.DEVELOPER);
+        const agent = yield* openAgent(26, AGENT_AUTHOR.DEVELOPER);
         // The agent already stands on a branch of its own, with its pull request from it.
-        yield* updateCodingAgentBranch(agent.target.userId, agent.agent.id, "luke/ready");
+        yield* updateAgentBranch(agent.target.userId, agent.agent.id, "luke/ready");
         const exists = () =>
           Response.json(
             {
@@ -309,7 +305,7 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
             "Not opened: GitHub said: Validation Failed A pull request already exists for Acme:luke/teammate-invitations.",
         });
         assert.equal(refused.openings.length, 1, "the App does not try in the developer's place");
-        assert.equal(refused.author, CODING_AGENT_AUTHOR.DEVELOPER);
+        assert.equal(refused.author, AGENT_AUTHOR.DEVELOPER);
         assert.equal(
           refused.branch,
           "luke/ready",
@@ -324,7 +320,7 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
     "a base the agent names is the branch GitHub is asked to merge into, and a base GitHub does not know opens nothing and answers why",
     () =>
       Effect.gen(function* () {
-        const agent = yield* openAgent(31, CODING_AGENT_AUTHOR.DEVELOPER);
+        const agent = yield* openAgent(31, AGENT_AUTHOR.DEVELOPER);
         const stacked = { ...INPUT, base: "luke/teammate-invitations-store" };
         // GitHub's own answer to a base it has no branch for: an error with a field and a code, and no message.
         const unknownBase = () =>
@@ -361,9 +357,9 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
     "a rate limit on the developer's request, or their token not refreshing while GitHub is down, opens nothing and leaves the agent theirs, for the call to be made again",
     () =>
       Effect.gen(function* () {
-        const limited = yield* openAgent(27, CODING_AGENT_AUTHOR.DEVELOPER);
+        const limited = yield* openAgent(27, AGENT_AUTHOR.DEVELOPER);
         const now = yield* Clock.currentTimeMillis;
-        const expired = yield* openAgent(28, CODING_AGENT_AUTHOR.DEVELOPER, {
+        const expired = yield* openAgent(28, AGENT_AUTHOR.DEVELOPER, {
           accessToken: "ghu_expired",
           refreshToken: "ghr_standing",
           accessTokenExpiresAt: new Date(now - GITHUB_FIXTURE.HOUR_MS),
@@ -393,7 +389,7 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
         assert.deepEqual(outage.openings, []);
         assert.deepEqual(
           [throttled.author, outage.author],
-          [CODING_AGENT_AUTHOR.DEVELOPER, CODING_AGENT_AUTHOR.DEVELOPER],
+          [AGENT_AUTHOR.DEVELOPER, AGENT_AUTHOR.DEVELOPER],
         );
       }),
   );

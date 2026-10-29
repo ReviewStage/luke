@@ -1,12 +1,12 @@
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import type { Agent } from "@luke/database/models/agent-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
 import {
+  AGENT_BOUNDS,
   AGENT_MESSAGE_LEAD,
+  AGENT_STATUS,
   agentMessageReplyLine,
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_STATUS,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { agentName } from "@luke/features/model-label";
 import type { WireRecord } from "@luke/wire";
@@ -21,17 +21,17 @@ import {
 } from "../../core.js";
 import type { HostedRefusal } from "../../http/http-effect.js";
 import {
+  type AgentCall,
+  type AgentToolServices,
   agentToolRejected,
-  type CodingAgentCall,
-  type CodingAgentToolServices,
   callerTask,
   callerUserId,
   callerWorkspace,
   orStoreRefusal,
-} from "../coding-agent-tools.js";
+} from "../agent-tools.js";
 import { workspaceAgent } from "../workspace-agents.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
-import { agentLineSender, steerCodingAgent } from "./steer.js";
+import { agentLineSender, steerAgent } from "./steer.js";
 
 /**
  * agent-message.ts -- `message_agent`: one coding agent's message to another of its workspace, shown in the two agents' transcripts alone.
@@ -60,7 +60,7 @@ import { agentLineSender, steerCodingAgent } from "./steer.js";
 const MESSAGE_FRAME_ROOM_CHARS = 1_000;
 
 /** The most characters a message's own words may spell. */
-const MAX_MESSAGE_WORDS_CHARS = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - MESSAGE_FRAME_ROOM_CHARS;
+const MAX_MESSAGE_WORDS_CHARS = AGENT_BOUNDS.MAX_MESSAGE_CHARS - MESSAGE_FRAME_ROOM_CHARS;
 
 /** Why `message_agent` sent nothing, in words the model can act on. */
 export const MESSAGE_AGENT_REFUSAL = {
@@ -68,12 +68,12 @@ export const MESSAGE_AGENT_REFUSAL = {
     `Not sent: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered, and the message as text of at ` +
     `most ${MAX_MESSAGE_WORDS_CHARS} characters.`,
   SELF: "Not sent: that id is your own; message another agent.",
-  NO_AGENT: `Not sent: no coding agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
+  NO_AGENT: `Not sent: no agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
   ARCHIVED:
     "Not sent: that agent is archived, so it takes no message and is not woken until a member unarchives it.",
   STARTER_LEFT:
     "Not sent: the member who started that agent has left your workspace, so nothing reaches it.",
-  NO_SERVICE: "Not sent: this deployment cannot reach the coding agents' service.",
+  NO_SERVICE: "Not sent: this deployment cannot reach the agents' service.",
   NOT_PERMITTED:
     "Not sent: that agent runs on its starter's own GitHub token or plan, so only they and their agents can message it.",
   NOT_REACHABLE:
@@ -126,7 +126,7 @@ const readMessage = Schema.decodeUnknownResult(MESSAGE_AGENT_INPUT);
 export const MESSAGE_AGENT_TOOL = {
   name: AGENT_TOOL.MESSAGE_AGENT,
   description:
-    "Send another coding agent of your workspace a message, by its id, on any task. It lands in that agent's " +
+    "Send another agent of your workspace a message, by its id, on any task. It lands in that agent's " +
     "conversation under your name, opening with your mention link and closing with how to answer you, and " +
     "only the two of you see it: a running agent reads it at its next step, and an idle one starts a turn on it. " +
     "Answers `accepted` once that agent's session has taken it, without waiting for it to act or reply, or " +
@@ -143,16 +143,16 @@ function refusalWords(refusal: HostedRefusal): string {
 }
 
 /** The line the other agent receives: who sent it, by its mention link, the words, and how to answer. */
-function messageLine(sender: CodingAgent, senderMention: string, text: string): string {
+function messageLine(sender: Agent, senderMention: string, text: string): string {
   const head = `${AGENT_MESSAGE_LEAD} · ${senderMention} to you:`;
   return [head, text, agentMessageReplyLine(sender.id)].join("\n\n");
 }
 
 /** One call of `message_agent`: the words handed to another agent of the caller's workspace, or why nothing was sent. */
 export function runMessageAgent(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+): Effect.Effect<WireRecord, never, AgentToolServices> {
   const asked = readMessage(input);
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(MESSAGE_AGENT_REFUSAL.UNREADABLE));
@@ -166,7 +166,7 @@ export function runMessageAgent(
       const userId = callerUserId(caller);
       const workspace = yield* callerWorkspace(caller);
       if (Option.isNone(workspace)) return agentToolRejected(MESSAGE_AGENT_REFUSAL.NO_AGENT);
-      const found = yield* workspaceAgent(userId, workspace.value, agentId);
+      const found = yield* workspaceAgent(userId, workspace.value, agentId, sender.id);
       if (Option.isNone(found)) return agentToolRejected(MESSAGE_AGENT_REFUSAL.NO_AGENT);
       const target = found.value;
       if (target.archivedAt !== null) return agentToolRejected(MESSAGE_AGENT_REFUSAL.ARCHIVED);
@@ -178,13 +178,12 @@ export function runMessageAgent(
       const eve = call.eveAs?.(target.userId);
       if (eve === undefined) return agentToolRejected(MESSAGE_AGENT_REFUSAL.NO_SERVICE);
       const step = yield* workspaceStepOf(userId, workspace.value);
-      const mentioned = { kind: MENTION_KIND.AGENT, agentId: sender.id } as const;
       const mention = writtenMention(
-        sender.taskId === null ? mentioned : { ...mentioned, taskId: sender.taskId },
+        { kind: MENTION_KIND.AGENT, agentId: sender.id },
         agentName(sender),
         step,
       );
-      const sent = yield* steerCodingAgent(eve, call.writer, userId, target, {
+      const sent = yield* steerAgent(eve, call.writer, userId, target, {
         text: messageLine(sender, mention, text),
         clientKey: call.clientKey,
         sender: agentLineSender(sender),
@@ -198,7 +197,7 @@ export function runMessageAgent(
           id: target.id,
           title: agentName(target),
           model: target.model,
-          status: CODING_AGENT_STATUS.RUNNING,
+          status: AGENT_STATUS.RUNNING,
           onYourTask: target.taskId !== null && target.taskId === callerTask(caller),
         },
       };

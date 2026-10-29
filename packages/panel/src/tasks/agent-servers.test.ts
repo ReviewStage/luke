@@ -161,7 +161,7 @@ async function opened(standing: IntegrationStatuses = statuses) {
 
 /** Each section's heading and its rows' names, as drawn. */
 function sections(container: HTMLElement) {
-  return [...container.querySelectorAll(".agent-servers-list > ul")].map((group) => [
+  return [...container.querySelectorAll(".agent-servers-list ul")].map((group) => [
     group.getAttribute("aria-label"),
     [...group.querySelectorAll(".agent-servers-name")].map((name) => name.textContent),
   ]);
@@ -538,7 +538,7 @@ test("a server's problem fades where its row cuts it short, as every cut line of
   assert.equal(problem?.textContent, "Linear refused the sign-in.");
 });
 
-test("a server's own error is no part of its row's sentence, and stands quoted after it in the problem's hint", async () => {
+test("a server's own error is no part of its row's sentence, and stands quoted in the card its row hangs", async () => {
   answerLinear({
     reason: INTEGRATION_TOOLS_PROBLEM.REJECTED,
     message: "workspace is suspended",
@@ -548,12 +548,17 @@ test("a server's own error is no part of its row's sentence, and stands quoted a
   const words = problem.textContent;
 
   restOn(problem);
-  const hint = document.querySelector('[role="tooltip"]:not([inert])');
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
 
   assert.equal(words, "Linear could not be reached.");
-  assert.equal(
-    hint?.textContent,
-    "Linear could not be reached. Linear said: “workspace is suspended”",
+  assert.ok(
+    [...(card?.querySelectorAll(".luke-hover-card-note") ?? [])].some(
+      (note) => note.textContent === "Linear said: “workspace is suspended”",
+    ),
+    "the server's card says the server's own words",
   );
 });
 
@@ -566,8 +571,8 @@ test("a server's row hangs the server's card beside it, and a tool a search foun
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
-  assert.equal(card?.querySelector(".agent-servers-name")?.textContent, "Vercel");
-  assert.equal(card?.querySelector(".agent-servers-count")?.textContent, "4 tools");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Vercel");
+  assert.equal(card?.querySelector(".luke-hover-card-sub")?.textContent, "4 tools");
 
   type("get_deployment");
   restOn(
@@ -579,7 +584,7 @@ test("a server's row hangs the server's card beside it, and a tool a search foun
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   const toolCard = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
-  assert.equal(toolCard?.querySelector(".agent-servers-name")?.textContent, "Vercel");
+  assert.equal(toolCard?.querySelector(".luke-hover-card-name")?.textContent, "Vercel");
   assert.equal(toolCard?.querySelectorAll('ul[aria-label$=" tools"] > li').length, 1);
 });
 
@@ -593,7 +598,7 @@ test("a server that is not connected hangs its card too, though its press is no 
   });
 
   const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
-  assert.equal(card?.querySelector(".agent-servers-name")?.textContent, "Mercury");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Mercury");
   assert.equal(
     container.querySelectorAll(".agent-servers-list .luke-list-row-chevron").length,
     2,

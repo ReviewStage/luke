@@ -2,13 +2,12 @@ import { sql } from "drizzle-orm";
 import { index, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type { OperatorNoticeKind } from "../storage-vocabulary.js";
 import { timestamptz } from "./_helpers.js";
-import { codingAgent } from "./coding-agent.js";
-import { task } from "./task.js";
+import { agentTable } from "./agent.js";
 
 /**
  * operator-notice.ts -- what an operator is told of its member's agents on its next turn, and when a failure last woke it.
  *
- * A member's operator (`coding_agent.kind = operator`) watches the member's
+ * A member's operator (`agent.kind = operator`) watches the member's
  * own agents of its workspace through notices rather than one wake per
  * event: a turn settled, a turn failed or abandoned, a pull request merged
  * or closed, a new ask in the member's inbox. One row per event kind and
@@ -24,15 +23,13 @@ export const operatorNotice = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     operatorId: uuid("operator_id")
       .notNull()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     /** What happened (`OPERATOR_NOTICE_KIND`). */
     kind: text("kind").$type<OperatorNoticeKind>().notNull(),
     /** The member's agent it happened to. */
     agentId: uuid("agent_id")
       .notNull()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
-    /** The agent's task as the event was written; null for an agent with none. */
-    taskId: uuid("task_id").references(() => task.id, { onDelete: "set null" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     /** When the latest event this row stands for happened: a repeat while unread moves it. */
     at: timestamptz("at").notNull(),
     /** When the operator's desk handed the row; null while unread. */
@@ -67,10 +64,10 @@ export const operatorWake = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     operatorId: uuid("operator_id")
       .notNull()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     agentId: uuid("agent_id")
       .notNull()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     /** When the latest wake for this agent's failure landed. */
     wokenAt: timestamptz("woken_at").notNull(),
   },

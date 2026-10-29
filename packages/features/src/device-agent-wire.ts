@@ -5,7 +5,7 @@ import { wireUuidSchema } from "./service-wire.js";
 /**
  * device-agent-wire.ts -- the work the service hands a local agent's Mac, as rows the Mac follows, and what the Mac answers.
  *
- * A coding agent whose machine is the starter's Mac (`CODING_AGENT_MACHINE`)
+ * A coding agent whose machine is the starter's Mac (`AGENT_MACHINE`)
  * runs its runner there rather than in a Vercel Sandbox. The service writes
  * the runner's lines (`DEVICE_AGENT_LINE_KIND`) and its tools' requests
  * (`DEVICE_AGENT_REQUEST_KIND`) as rows under the account and the Mac the agent

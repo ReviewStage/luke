@@ -13,7 +13,7 @@
  *
  * The agent is at work while it starts, while a turn runs, and while a
  * message sent to it awaits its turn, as its status reads
- * (`codingAgentStatusOf`), and then nothing is handed on: the turn's end
+ * (`agentStatusOf`), and then nothing is handed on: the turn's end
  * hands on the next (`runner-events-app.ts`'s `turnEnded`), and so does a
  * change a member makes while the agent stands idle, so a queue never waits
  * on a turn end that came and went. A member's change claims in the request
@@ -35,13 +35,13 @@ import {
   releaseQueuedMessage,
   unpausedQueues,
 } from "@luke/database/models/agent-queue-store";
-import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { type Agent, readAgent } from "@luke/database/models/agent-store";
 import { awaitingLinesOfReached, latestTurnsOfReached } from "@luke/database/models/message-reads";
 import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import type { HostedApiError } from "@luke/features";
 import { type AgentQueue, QUEUE_PAUSE, type QueuePause } from "@luke/features/agent-queue-wire";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import { TURN_STATUS } from "@luke/wire";
 import { Clock, DateTime, Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -50,8 +50,8 @@ import { deploymentEve, deploymentEveForAccounts } from "../deployment-eve.js";
 import { deploymentEveOrigin } from "../eve-host/eve-origin.js";
 import { type AgentSessions, EVE_MOUNT, type EveTypedTurn } from "../eve-host/eve-sessions.js";
 import { routedSessions } from "./runtime-sessions.js";
-import { codingAgentStatusOf, startedBlank } from "./status.js";
-import { steerCodingAgentWritten } from "./steer.js";
+import { agentStatusOf, startedBlank } from "./status.js";
+import { steerAgentWritten } from "./steer.js";
 import { type EveReach, eveFor } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
@@ -126,18 +126,18 @@ export function queueOnPage(agentId: string) {
 }
 
 /** Whether the agent is at work, as its status reads: starting, a turn running, or a message sent to it awaiting its turn. */
-const atWork = Effect.fn("web/queueAtWork")(function* (agent: CodingAgent) {
+const atWork = Effect.fn("web/queueAtWork")(function* (agent: Agent) {
   const turn = (yield* latestTurnsOfReached([agent.conversationId])).get(agent.conversationId);
   const awaitingLineAt = (yield* awaitingLinesOfReached([agent.conversationId])).get(
     agent.conversationId,
   );
-  const status = codingAgentStatusOf(turn, {
+  const status = agentStatusOf(turn, {
     createdAt: agent.createdAt,
     now: yield* Clock.currentTimeMillis,
     awaitingLineAt,
     blank: startedBlank(agent),
   });
-  return status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING;
+  return status === AGENT_STATUS.STARTING || status === AGENT_STATUS.RUNNING;
 });
 
 /**
@@ -148,22 +148,16 @@ const atWork = Effect.fn("web/queueAtWork")(function* (agent: CodingAgent) {
  */
 export const sendQueued = Effect.fn("web/sendQueued")(function* (
   eveFor: QueueEve,
-  agent: CodingAgent,
+  agent: Agent,
   message: QueuedMessageRow,
 ) {
   const eve = yield* eveFor(message.userId);
-  yield* steerCodingAgentWritten(
-    eve,
-    storeWriter({ tools: CODER_TOOL_SET }),
-    message.userId,
-    agent,
-    {
-      text: message.text,
-      clientKey: message.clientKey,
-      ...(message.attachments.length === 0 ? undefined : { attachments: message.attachments }),
-      sender: { kind: MESSAGE_SENDER.MEMBER, userId: message.userId },
-    },
-  );
+  yield* steerAgentWritten(eve, storeWriter({ tools: CODER_TOOL_SET }), message.userId, agent, {
+    text: message.text,
+    clientKey: message.clientKey,
+    ...(message.attachments.length === 0 ? undefined : { attachments: message.attachments }),
+    sender: { kind: MESSAGE_SENDER.MEMBER, userId: message.userId },
+  });
   yield* hostedStoreOrUnavailable(dropQueuedMessage(agent.id, message.id));
 });
 
@@ -173,7 +167,7 @@ export const sendQueued = Effect.fn("web/sendQueued")(function* (
  * its answer reads the queue, so the answer already leaves the message out.
  * A failure is logged rather than answered, and claims nothing.
  */
-export const claimNext = Effect.fn("web/claimNextQueued")(function* (agent: CodingAgent) {
+export const claimNext = Effect.fn("web/claimNextQueued")(function* (agent: Agent) {
   const step = Effect.gen(function* () {
     if (yield* hostedStoreOrUnavailable(atWork(agent))) return Option.none<QueuedMessageRow>();
     return yield* hostedStoreOrUnavailable(claimQueueHead(agent.id));
@@ -196,7 +190,7 @@ export const claimNext = Effect.fn("web/claimNextQueued")(function* (agent: Codi
  */
 export const sendClaimed = Effect.fn("web/sendClaimedQueued")(function* (
   eveFor: QueueEve,
-  agent: CodingAgent,
+  agent: Agent,
   message: QueuedMessageRow,
 ) {
   yield* sendQueued(eveFor, agent, message).pipe(
@@ -213,10 +207,7 @@ export const sendClaimed = Effect.fn("web/sendClaimedQueued")(function* (
 });
 
 /** The agent's queue handed on where the agent stands idle and the queue unpaused: its next message claimed, then sent. */
-export const handOnQueue = Effect.fn("web/handOnQueue")(function* (
-  eveFor: QueueEve,
-  agent: CodingAgent,
-) {
+export const handOnQueue = Effect.fn("web/handOnQueue")(function* (eveFor: QueueEve, agent: Agent) {
   const claimed = yield* claimNext(agent);
   if (Option.isSome(claimed)) yield* sendClaimed(eveFor, agent, claimed.value);
 });
@@ -231,7 +222,7 @@ export const handOnQueue = Effect.fn("web/handOnQueue")(function* (
  */
 export const queueAtTurnEnd = Effect.fn("web/queueAtTurnEnd")(function* (
   eveFor: QueueEve,
-  agent: CodingAgent,
+  agent: Agent,
 ) {
   const turns = yield* latestTurnsOfReached([agent.conversationId]).pipe(
     Effect.catchCause((cause) =>
@@ -259,7 +250,7 @@ const PAUSE_OF_TURN: ReadonlyMap<string, QueuePause> = new Map([
  * reached as the deployment acting for each queued message's member, since
  * no request of theirs stands behind it.
  */
-export const queueAtNativeTurnEnd = (agent: CodingAgent) =>
+export const queueAtNativeTurnEnd = (agent: Agent) =>
   Effect.gen(function* () {
     const eveFor = yield* deploymentEveForAccounts<EveTypedTurn>(
       deploymentEveOrigin(),
@@ -282,7 +273,7 @@ const QUEUE_SWEEP_LIMIT = 50;
 export const sweepAgentQueues = Effect.fn("web/sweepAgentQueues")(function* (eveFor: QueueEve) {
   const queues = yield* unpausedQueues(QUEUE_SWEEP_LIMIT);
   for (const { agentId, userId } of queues) {
-    const agent = yield* readCodingAgent(userId, agentId);
+    const agent = yield* readAgent(userId, agentId);
     if (Option.isSome(agent)) yield* handOnQueue(eveFor, agent.value);
   }
   return queues.length;

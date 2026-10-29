@@ -9,6 +9,7 @@ import {
   type ReactElement,
   type ReactNode,
   type RefCallback,
+  type RefObject,
   useCallback,
   useContext,
   useEffect,
@@ -230,9 +231,10 @@ interface ListRowHintProps {
   onBlur?: FocusEventHandler<HTMLElement> | undefined;
 }
 
-/** The app's hint a row's press hangs: its words, and the press it wraps. */
+/** The app's hint a row's press hangs: its words, the row the press stands in, and the press it wraps. */
 export type ListRowHint = ComponentType<{
   label: string | undefined;
+  row: RefObject<HTMLElement | null>;
   children: ReactElement<ListRowHintProps>;
 }>;
 
@@ -547,9 +549,13 @@ export function ListRow({
   // The press hands the row's ref its element, and the link menu the address it opens.
   const linkAddress = useLinkAddress(linkHref);
   const pressElement = useRef<HTMLButtonElement | null>(null);
+  // Note that the row a hint hangs its card beside is the press's parent, the
+  // item or, on a row that swipes, the slide that carries its acts with it.
+  const rowElement = useRef<HTMLElement | null>(null);
   const pressRef = useCallback(
     (element: HTMLButtonElement | null) => {
       pressElement.current = element;
+      rowElement.current = element?.parentElement ?? null;
       ref?.(element);
       linkAddress(element);
     },
@@ -711,7 +717,9 @@ export function ListRow({
       ) : hint === undefined ? (
         press
       ) : (
-        <hint.Hint label={hint.label}>{press}</hint.Hint>
+        <hint.Hint label={hint.label} row={rowElement}>
+          {press}
+        </hint.Hint>
       )}
       {said(actions) ? (
         // Note that the acts are a group named by the row's title, so a reader hears which row's "Pin" or "Mark as read" it is.

@@ -11,15 +11,29 @@
  *
  * A connection can die without a word, as one does while Vercel holds an
  * instance paused, so the listener proves its own: every `LISTENER.HEARTBEAT`
- * it notifies the channel through the pool, reading the notification queue's
- * usage in the same round trip, and reconnects where that notification has
- * not come back within the same span. A watch opened on a listener nobody
- * was watching proves it the same way before it answers, so a connection
- * that died while the instance slept is replaced before the read. Losing a
- * connection, and opening its replacement, each wake every watch: the tables
- * are the truth, so a reader that reads again has all of it, and nothing
- * heard while no connection stood needs replaying. While none stands, a
- * watch's `next` waits its fallback, so a wait is never worse than its clock.
+ * it notifies the channel over the listening connection itself, reading the
+ * notification queue's usage in the same round trip, and reconnects where
+ * that notification has not come back within the same span. A watch opened
+ * on a listener nobody was watching proves it the same way before it
+ * answers, so a connection that died while the instance slept is replaced
+ * before the read.
+ *
+ * The other end needs the same care: an instance Vercel paused, as it pauses
+ * an old deployment's once the alias moves, never runs the close its idle
+ * listener is due, and its kernel still answers Postgres's keepalives, so
+ * its session would stand for as long as the instance does, and a burst of
+ * deploys piles those up to the database's connection limit. So the
+ * listener's session is opened with an idle timeout of `LISTENER.REAPED`, a
+ * few heartbeats long: each heartbeat is a statement of that session, so a
+ * live listener is never reaped, and one whose instance stopped beating is
+ * closed by Postgres. A live instance that finds its session closed has lost
+ * a connection like any other.
+ *
+ * Losing a connection, and opening its replacement, each wake every watch:
+ * the tables are the truth, so a reader that reads again has all of it, and
+ * nothing heard while no connection stood needs replaying. While none
+ * stands, a watch's `next` waits its fallback, so a wait is never worse than
+ * its clock.
  *
  * Metrics carry counts and durations only, never a topic, an id, or a txid.
  */
@@ -27,10 +41,10 @@ import { randomUUID } from "node:crypto";
 import {
   SyncListener,
   type SyncListenerShape,
+  type SyncListening,
   syncListenerOverUrl,
 } from "@luke/database/sync/listener";
 import {
-  SYNC_CHANNEL,
   type SyncChange,
   SyncNotificationSchema,
   type SyncTopic,
@@ -38,7 +52,6 @@ import {
 } from "@luke/database/sync/notification";
 import {
   Clock,
-  Config,
   Data,
   Deferred,
   Duration,
@@ -52,15 +65,9 @@ import {
   Schema,
   Stream,
 } from "effect";
-import { SqlClient } from "effect/sql";
 import { ConnectionError, SqlError } from "effect/sql/SqlError";
 import { databaseUnpooledUrl } from "../db/index.js";
-import { CLOCK_SYNC, clockWatch, Sync, type SyncShape, type SyncWatch } from "./watch.js";
-
-/** The deployment's switch for Luke Sync: on only where it reads `on`, off where it is unset or reads anything else. */
-const LUKE_SYNC = { OFF: "off", ON: "on" } as const;
-
-const SYNC_ENVIRONMENT = { SWITCH: "LUKE_SYNC" } as const;
+import { clockWatch, Sync, type SyncShape, type SyncWatch } from "./watch.js";
 
 /** How the listener is held and proved. */
 const LISTENER = {
@@ -70,6 +77,12 @@ const LISTENER = {
   HEARTBEAT: Duration.seconds(15),
   /** How long a watch on a listener nobody watched waits for its round trip before replacing it. */
   CONFIRM: Duration.seconds(2),
+  /**
+   * How long Postgres keeps the listener's session once it runs no statement:
+   * three heartbeats, so a live listener, whose beats are a heartbeat apart
+   * and come back within one, is never reaped.
+   */
+  REAPED: Duration.seconds(45),
 } as const;
 
 /** How long a `next` gathers what arrives once a notification woke it, so a burst of writes wakes a reader once. */
@@ -161,7 +174,7 @@ interface Watchers {
 
 /** One standing connection's own doors. */
 interface Connection {
-  /** Notifies the channel through the pool, answering whether this connection heard it within the bound. */
+  /** Notifies the channel over this connection, answering whether it heard the notification within the bound. */
   readonly beat: (within: Duration.Duration) => Effect.Effect<boolean>;
   /** Gives the connection up, so the listener opens another. */
   readonly drop: Effect.Effect<void>;
@@ -189,7 +202,6 @@ interface Listening {
 /** What every connection of the instance's listener shares. */
 interface Hub {
   readonly listener: SyncListenerShape;
-  readonly sql: SqlClient.SqlClient;
   readonly watchers: Watchers;
 }
 
@@ -280,19 +292,26 @@ const stood = (hub: Hub, listening: Listening, connection: Connection) =>
     if (reconnected) yield* Metric.update(SYNC_METRIC.RECONNECTS, 1);
   });
 
-/** A standing connection was given up: every watch reads again, and waits on its clock until another stands. */
+/**
+ * A standing connection was given up: every watch reads again, and waits on
+ * its clock until another stands. Note that the listener counts as down, and
+ * warns, only while a watch is registered on it, because a connection lost
+ * while none is, as a resumed instance finds the one Postgres reaped while it
+ * was paused, is replaced before any watch waits on its clock, and is
+ * expected after every pause.
+ */
 const lost = (hub: Hub, listening: Listening, loss: Loss) =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
+    const watched = hub.watchers.all.size > 0;
     listening.state = LISTENER_STATE.OPENING;
     listening.connection = undefined;
     listening.lost = true;
-    listening.downSince ??= now;
+    if (watched) listening.downSince ??= now;
     Latch.closeUnsafe(listening.settled);
     wakeAll(hub.watchers);
-    yield* Effect.logWarning(
-      `sync: the listener's connection was given up (${loss}); reopening it`,
-    );
+    const message = `sync: the listener's connection was given up (${loss}); reopening it`;
+    yield* watched ? Effect.logWarning(message) : Effect.logDebug(message);
   });
 
 /** A connection would not open: the listener is down, so a watch answers at once and waits on its clock. */
@@ -313,22 +332,26 @@ const unopened = (listening: Listening, error: ListenerUnopened) =>
   });
 
 /**
- * Notifies the channel with a nonce of its own through the pool, reading the
- * notification queue's usage in the same round trip, and answers whether
- * the connection heard the nonce within the bound. A notification that
- * could not be sent proves nothing, so it answers no.
+ * Notifies the channel with a nonce of its own over the listening
+ * connection, reading the notification queue's usage in the same round
+ * trip, and answers whether the connection heard the nonce within the bound.
+ * Note that the notification goes over the listening connection rather than
+ * the pool, because that statement is what keeps a live listener's session
+ * inside `LISTENER.REAPED`. A notification that could not be sent proves
+ * nothing, so it answers no.
  */
-const beat = (hub: Hub, beats: Map<string, Deferred.Deferred<void>>, within: Duration.Duration) =>
+const beat = (
+  listening: SyncListening,
+  beats: Map<string, Deferred.Deferred<void>>,
+  within: Duration.Duration,
+) =>
   Effect.suspend(() => {
     const nonce = randomUUID();
     const arrived = Deferred.makeUnsafe<void>();
     beats.set(nonce, arrived);
     return Effect.gen(function* () {
-      const payload = yield* encodeNotification({ h: nonce });
-      const [standing] = yield* hub.sql<{ readonly usage: number }>`
-        select pg_notify(${SYNC_CHANNEL}, ${payload}), pg_notification_queue_usage() as usage
-      `;
-      if (standing !== undefined) yield* Metric.update(SYNC_METRIC.QUEUE_USAGE, standing.usage);
+      const usage = yield* listening.notify(yield* encodeNotification({ h: nonce }));
+      yield* Metric.update(SYNC_METRIC.QUEUE_USAGE, usage);
       yield* Deferred.await(arrived);
     }).pipe(
       Effect.timeoutOption(within),
@@ -381,18 +404,18 @@ const heartbeat = (connection: Connection) =>
 const connected = (hub: Hub, listening: Listening) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const payloads = yield* hub.listener.listen.pipe(
+      const channel = yield* hub.listener.listen.pipe(
         Effect.mapError((cause) => new ListenerUnopened({ cause })),
       );
       const beats = new Map<string, Deferred.Deferred<void>>();
       const dropped = Deferred.makeUnsafe<void>();
       const connection: Connection = {
-        beat: (within) => beat(hub, beats, within),
+        beat: (within) => beat(channel, beats, within),
         drop: Effect.asVoid(Deferred.succeed(dropped, undefined)),
       };
       yield* stood(hub, listening, connection);
       return yield* Effect.raceFirst(
-        heard(hub, payloads, beats),
+        heard(hub, channel.payloads, beats),
         Effect.raceFirst(
           Effect.andThen(heartbeat(connection), Effect.never),
           Effect.andThen(
@@ -520,16 +543,15 @@ const watchOn =
     });
 
 /**
- * The instance's hub over the listener and pool it is handed: the listener
- * opened with the first watch on topics and let go `LISTENER.IDLE` after
- * the last, and a watch on no topics on its clock alone.
+ * The instance's hub over the listener it is handed: the listener opened
+ * with the first watch on topics and let go `LISTENER.IDLE` after the last,
+ * and a watch on no topics on its clock alone.
  */
 export const syncHub = Layer.effect(
   Sync,
   Effect.gen(function* () {
     const hub: Hub = {
       listener: yield* SyncListener,
-      sql: yield* SqlClient.SqlClient,
       watchers: { byTopic: new Map(), all: new Set() },
     };
     const listener = yield* RcRef.make({ acquire: opened(hub), idleTimeToLive: LISTENER.IDLE });
@@ -537,27 +559,24 @@ export const syncHub = Layer.effect(
   }),
 );
 
-/** The listener on the deployment's unpooled URL, or, where it sees none, one that never opens, so the hub stays down. */
+/**
+ * The listener on the deployment's unpooled URL, its session reaped
+ * `LISTENER.REAPED` after its last statement, or, where it sees none, one
+ * that never opens, so the hub stays down.
+ */
 const unpooledListener: Layer.Layer<SyncListener> = Layer.unwrap(
   Effect.map(Effect.orElseSucceed(databaseUnpooledUrl, Option.none), (url) =>
     Option.match(url, {
       onNone: () => Layer.succeed(SyncListener, { listen: Effect.fail(UNPOOLED_URL_MISSING) }),
-      onSome: (unpooled) => syncListenerOverUrl({ url: unpooled }),
+      onSome: (unpooled) =>
+        syncListenerOverUrl({ url: unpooled, idleSessionTimeout: LISTENER.REAPED }),
     }),
   ),
 );
 
 /**
- * Luke Sync as the deployment's environment sets it: the hub over the
- * unpooled URL where `LUKE_SYNC` reads `on`, and the clock otherwise, when
- * the unpooled URL is never read and no listener is ever opened.
+ * Luke Sync as the deployment's environment has it: the hub over the
+ * unpooled URL, whose listener stays down where the deployment sees none,
+ * so every watch waits on its clock.
  */
-export const syncFromEnvironment = Layer.unwrap(
-  Effect.map(
-    Effect.orElseSucceed(Config.option(Config.String(SYNC_ENVIRONMENT.SWITCH)), Option.none),
-    (switched) =>
-      Option.getOrUndefined(switched)?.trim() === LUKE_SYNC.ON
-        ? syncHub.pipe(Layer.provide(unpooledListener))
-        : Layer.succeed(Sync, CLOCK_SYNC),
-  ),
-);
+export const syncFromEnvironment = syncHub.pipe(Layer.provide(unpooledListener));

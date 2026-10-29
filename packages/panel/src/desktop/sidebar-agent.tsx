@@ -1,4 +1,4 @@
-import { CODING_AGENT_BOUNDS, type TasklessAgent } from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, type TasklessAgent } from "@luke/features/agent-wire";
 import { automationRun } from "@luke/features/model-label";
 import {
   InlineEdit,
@@ -22,10 +22,10 @@ import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { DraftMark } from "../draft-mark.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { AgentCard, tasklessRowSubject } from "../tasks/agent-ref.js";
-import { RENAME_FAILED } from "../tasks/coding-agent-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
-import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
+import { type AgentsControl, readAgentById } from "../tasks/use-agents.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type MenuEntry, rowMenu } from "./action-menu.js";
 import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
@@ -93,7 +93,7 @@ function SidebarAgentCard({
   agents,
 }: {
   agent: TasklessAgent;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
 }): React.JSX.Element {
   return <AgentCard subject={tasklessRowSubject(agent, agents)} models={agents.models} />;
 }
@@ -116,7 +116,7 @@ export function SidebarAgent({
 }: {
   agent: TasklessAgent;
   /** The window's agent control, whose archive and rename act on any agent by its id. */
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** Whether this agent's page is the one standing. */
   current: boolean;
   /** Whether its turn ended while the developer was not looking at it: main's unseen dot, which a mark by hand adds to. */
@@ -144,7 +144,7 @@ export function SidebarAgent({
   const starter = starterOf(agent, face, reader);
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
-  // Note that the row's item is its press's parent, which its card counts as its control.
+  // Note that the row's item is its press's parent, whose keys it hears while focused.
   const hold = useCallback((press: HTMLElement | null) => {
     row.current = press;
     item.current = press?.parentElement ?? null;
@@ -210,7 +210,7 @@ export function SidebarAgent({
   const card = useMemo(() => <SidebarAgentCard agent={agent} agents={agents} />, [agent, agents]);
   return (
     <>
-      <RowHintOptions card={card} cardBeside cardRegion={item}>
+      <RowHintOptions card={card}>
         <ListRow
           ref={hold}
           motionKey={agent.id}
@@ -226,7 +226,7 @@ export function SidebarAgent({
               <InlineEdit
                 value={rename.asked ?? name}
                 label="Agent name"
-                maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+                maxLength={AGENT_BOUNDS.MAX_TITLE_CHARS}
                 editing
                 onEnd={(edit) => {
                   endedByKey(edit.byKey);

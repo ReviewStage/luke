@@ -63,7 +63,7 @@ export function FileCard({
   note?: string | undefined;
 }): React.JSX.Element {
   return (
-    <HoverCard data-tab-card="" data-file-card="">
+    <HoverCard data-file-card="">
       <HoverCardHead glyph={<FileTypeIcon name={fileName(path)} />} name={path} sub={repository} />
       {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
     </HoverCard>

@@ -1,8 +1,8 @@
 import {
+  type AgentPullRequest,
+  type AgentPullRequestAnswer,
   CHECK_SUMMARY,
-  type CodingAgentPullRequest,
-  type CodingAgentPullRequestAnswer,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import {
@@ -27,8 +27,9 @@ import type { ReactNode } from "react";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { LINK_COPY } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction, rowMenu } from "../desktop/action-menu.js";
-import { checkoutCommand, publishedUrl, pullRequestStateWord } from "./coding-agent-model.js";
+import { checkoutCommand, publishedUrl, pullRequestStateWord } from "./agent-model.js";
 import { MentionChipCard } from "./mention-chip.js";
+import { holderTaskId } from "./mention-holder.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { useLinkStanding } from "./use-link-standing.js";
@@ -132,7 +133,7 @@ export function BranchChip({
   doors,
   narrow = false,
 }: {
-  published: CodingAgentPullRequestAnswer | undefined;
+  published: AgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
   /** Whether the composer is too narrow for the chip's words, so it draws its mark alone. */
   narrow?: boolean;
@@ -192,7 +193,7 @@ export function PublishedRow({
   branch,
   doors,
 }: {
-  pullRequest: CodingAgentPullRequest;
+  pullRequest: AgentPullRequest;
   /** The branch the pull request is from, whose name and checkout its menu copies; none where it is not known. */
   branch: string | null;
   doors: PublishedDoors;
@@ -213,7 +214,7 @@ export function PublishedRow({
     url: pullRequest.url,
   } as const;
   const standing = useLinkStanding(mention, {
-    taskId: mentionDoors.taskId,
+    taskId: holderTaskId(mentionDoors.holder),
     workspace: mentionDoors.place.workspace,
   });
   const card = (

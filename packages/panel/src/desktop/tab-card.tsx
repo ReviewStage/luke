@@ -1,23 +1,22 @@
-import type {
-  CodingAgentChangesPeople,
-  CodingAgentPullRequest,
-} from "@luke/features/coding-agent-wire";
+import type { AgentChangesPeople, AgentPullRequest } from "@luke/features/agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import type { TaskStatus } from "@luke/features/task-wire";
 import { HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import type { ReactNode } from "react";
 import { AgentCard, type AgentSubject } from "../tasks/agent-ref.js";
-import { AgentTabCard, type CardReading } from "../tasks/agent-tab-card.js";
-import { ChangesCard } from "../tasks/changes-card.js";
+import { AgentTabCard, type CardReading, taskFoot } from "../tasks/agent-tab-card.js";
 import { PageChipCard, TaskChipCard } from "../tasks/chip-cards.js";
 import { browserOf } from "../tasks/cloud-browser-pane.js";
 import { FileCard } from "../tasks/file-ref.js";
 import { type InboxBoardView, NEEDS_YOU, needsYouWords } from "../tasks/inbox-model.js";
-import { PageCard, PageNameCard } from "../tasks/page-card.js";
+import { PageCard, PageNameCard, PageNameSkeleton } from "../tasks/page-card.js";
+import { PullRequestCard } from "../tasks/pull-request-card.js";
 import { type PlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { TerminalCardFoot } from "../tasks/terminal-shells.js";
+import { openerOf } from "../tasks/use-link-standing.js";
 import {
   type FixedSidePanelTab,
   SIDE_PANEL_TAB,
@@ -64,7 +63,7 @@ export type CardSubject =
       readonly kind: typeof TAB_KIND.AGENT;
       readonly subject: AgentSubject;
       readonly models: readonly CatalogModel[] | undefined;
-      /** What a place that holds no tab of the agent says under a rule, the task it works on; none where its tab stands beside it. */
+      /** What a place that holds no tab of the agent says at the card's foot, the task it works on; none where its tab stands beside it. */
       readonly foot?: string | undefined;
     }
   | {
@@ -80,8 +79,8 @@ export type CardSubject =
       readonly subject: AgentSubject;
       readonly models: readonly CatalogModel[] | undefined;
       /** The pull request, none before it is read. */
-      readonly pullRequest: CodingAgentPullRequest | undefined;
-      readonly people: CodingAgentChangesPeople | undefined;
+      readonly pullRequest: AgentPullRequest | undefined;
+      readonly people: AgentChangesPeople | undefined;
       readonly onOpenAgent: () => void;
     }
   | {
@@ -112,10 +111,10 @@ export type CardSubject =
       readonly address: string;
     };
 
-/** A thing's card where the window holds nothing more of it: its glyph and its name. */
+/** A task's card where the window lists no such task: its glyph and the name the place knows it by. */
 function NamedCard({ glyph, name }: { glyph: ReactNode; name: string }): React.JSX.Element {
   return (
-    <HoverCard data-tab-card="">
+    <HoverCard data-task-card="">
       <HoverCardHead glyph={glyph} name={name} />
     </HoverCard>
   );
@@ -142,8 +141,9 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
   const waiting = inbox.waiting.length;
   const latest = waiting > 0 ? inbox.waiting.at(-1) : inbox.settled[0];
   return (
-    <HoverCard data-tab-card="">
+    <HoverCard data-inbox-card="">
       <HoverCardHead
+        glyph={tabLook({ kind: TAB_KIND.INBOX }).icon}
         name={TAB_WORDS.INBOX}
         corner={waiting === 0 ? NEEDS_YOU.NONE : needsYouWords(waiting)}
       />
@@ -192,7 +192,13 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
     case TAB_KIND.MAC_TERMINAL:
       return null;
     case TAB_KIND.AGENT:
-      return <AgentCard subject={subject.subject} models={subject.models} foot={subject.foot} />;
+      return (
+        <AgentCard
+          subject={subject.subject}
+          models={subject.models}
+          foot={subject.foot === undefined ? undefined : taskFoot(subject.foot)}
+        />
+      );
     case TAB_KIND.SUBAGENT:
       return (
         <AgentTabCard
@@ -203,23 +209,31 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
         />
       );
     // Note that a pull request not yet read hangs none, its tab naming it Pull request until it is.
-    case TAB_KIND.CHANGES:
-      return subject.pullRequest === undefined || subject.subject.agent === undefined ? null : (
-        <ChangesCard
-          subject={subject.subject}
-          models={subject.models}
-          pullRequest={subject.pullRequest}
-          people={subject.people}
-          onOpenAgent={subject.onOpenAgent}
+    case TAB_KIND.CHANGES: {
+      const { pullRequest, people } = subject;
+      if (pullRequest === undefined || subject.subject.agent === undefined) return null;
+      // Note that the agent's own read of who opened it stands in wherever the tab's names no one, as before its read or where its read of the people failed, since GitHub names a deleted account as its ghost rather than no one.
+      return (
+        <PullRequestCard
+          pullRequest={pullRequest}
+          lines={pullRequest}
+          files={pullRequest.changedFiles}
+          opener={people?.author ?? openerOf(pullRequest)}
+          agent={{ subject: subject.subject, models: subject.models, onOpen: subject.onOpenAgent }}
+          reviewers={people?.reviewers}
         />
       );
-    // A Terminal tab hangs its agent's card, saying under a rule whose sandbox its shells run in.
+    }
+    // A Terminal tab hangs its agent's card, saying at its foot whose sandbox its shells run in.
     case TAB_KIND.TERMINAL:
       return (
         <AgentCard
           subject={subject.subject}
           models={subject.models}
-          foot={<TerminalCardFoot agentId={subject.agentId} />}
+          foot={{
+            glyph: <GLYPH.TERMINAL />,
+            words: <TerminalCardFoot agentId={subject.agentId} />,
+          }}
         />
       );
     case TAB_KIND.FILE:
@@ -231,12 +245,13 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
         <PageChipCard
           place={subject.place}
           pageId={subject.pageId}
+          reading={<PageNameSkeleton name={subject.name} />}
           fallback={<PageNameCard name={subject.name} />}
         />
       );
     case TAB_KIND.BROWSER:
       return (
-        <HoverCard data-tab-card="">
+        <HoverCard data-browser-card="">
           <HoverCardHead
             glyph={subject.owner.icon}
             name={subject.title}

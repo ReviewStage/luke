@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { user } from "@luke/database/schemas/auth";
 import { conversations, turns } from "@luke/database/schemas/storage";
@@ -130,7 +130,7 @@ const openAgent = (
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
     const task = yield* startTask(userId, { name: "Teammate invitations" });
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: "start-1",
       model: "anthropic/claude-opus-5.5",
