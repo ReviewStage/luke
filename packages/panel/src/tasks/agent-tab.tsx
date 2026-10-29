@@ -2697,7 +2697,9 @@ function AgentTabView({
             doors={doors}
             tools={<AgentPlace agent={agent} />}
             onStop={onStop}
-            agentName={name}
+            // Note that a started agent's conversation always opens on its plan or
+            // task, so the box takes a follow up even before the transcript is read.
+            followsUp
             keywords={keywords}
             skills={skills}
             replyDoor={replyDoor}

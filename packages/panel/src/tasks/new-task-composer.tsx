@@ -524,6 +524,7 @@ export function NewTaskComposer({
         published={undefined}
         doors={{ openGitHub: () => undefined, copy: () => undefined }}
         onStop={() => Promise.resolve(false)}
+        followsUp={false}
         onKey={onKey}
         onLeave={onLeave}
         focusedByOwner={focusedByOwner}
