@@ -53,6 +53,7 @@ import {
   readTaskPlan,
   type StoredTask,
   type TaskHeader,
+  type TaskRunsOnWrite,
   updateTaskCommitted,
 } from "@luke/database/models/task-store";
 import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
@@ -109,6 +110,7 @@ import {
   restoreRevision,
   saveDeveloperEdit,
 } from "./plan-notes.js";
+import { type TaskParent, taskParentOf } from "./task-parent.js";
 
 export interface TasksProcedureSeams extends EveReach, SandboxStopReach {
   resolveUserId: UserIdResolver;
@@ -358,6 +360,50 @@ const runsOnAsked = (userId: string, asked: TaskRunsOnRequest) =>
     (choice) => ({ machine: choice.machine, deviceId: choice.deviceId ?? null }),
   );
 
+/** Whether a place a request names is the one a task holds: the cloud, or the same device. */
+function runsOnStands(asked: TaskRunsOnRequest, held: TaskRunsOnWrite): boolean {
+  return (
+    asked.machine === held.machine &&
+    (asked.machine === AGENT_MACHINE.VERCEL || asked.deviceId === held.deviceId)
+  );
+}
+
+/**
+ * The parent a start names, confirmed in the workspace it starts in
+ * (`task-parent.ts`): one the account does not reach is not found, as any
+ * task it does not reach is, and a start naming another repository than the
+ * parent's, or another place to run, is refused by name; nothing is written
+ * either way.
+ */
+const parentAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  organizationId: string,
+  input: {
+    readonly parentTaskId: string;
+    readonly repository?: string | null;
+    readonly runsOn?: TaskRunsOnRequest;
+  },
+): Effect.fn.Return<TaskParent, HostedRefusal, DatabaseServices> {
+  const parent = yield* taskParentOf(
+    userId,
+    organizationId,
+    input.parentTaskId,
+    input.repository,
+  ).pipe(
+    Effect.catch((failure) => {
+      if (failure._tag === "TaskParentUnreached") return Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      if (failure._tag === "TaskParentRepositoryDiffers") {
+        return Effect.fail(HOSTED_REFUSAL.CHILD_REPOSITORY_LOCKED);
+      }
+      return hostedStoreOrUnavailable(Effect.fail(failure));
+    }),
+  );
+  if (input.runsOn !== undefined && !runsOnStands(input.runsOn, parent.runsOn)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.RUNS_ON_LOCKED);
+  }
+  return parent;
+});
+
 /**
  * How a start asks its task to be worked, checked before anything is
  * written: a pilot only for an account with the Pilot experiment on, refused
@@ -386,10 +432,7 @@ const runsOnChange = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices> {
   if (asked === undefined) return;
   const { runsOn } = yield* reachedTask(userId, taskId);
-  const stands =
-    asked.machine === runsOn.machine &&
-    (asked.machine === AGENT_MACHINE.VERCEL || asked.deviceId === runsOn.deviceId);
-  if (!stands) return yield* Effect.fail(HOSTED_REFUSAL.RUNS_ON_LOCKED);
+  if (!runsOnStands(asked, runsOn)) return yield* Effect.fail(HOSTED_REFUSAL.RUNS_ON_LOCKED);
 });
 
 /** The plans resource, every procedure to a signed-in caller. */
@@ -429,14 +472,13 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * agent's key already started an agent in the workspace answers that
      * agent's plan and the agent (`startedBefore`). A pilot task is refused,
      * also before anything is written, to an account without the Pilot
-     * experiment (`modeAsked`).
+     * experiment (`modeAsked`). A plan started as a child of another takes
+     * its parent's repository and place to run (`parentAsked`), confirmed
+     * again as any start's repository is.
      */
     create: plans.create.effect(function* ({ input, context }) {
       const { userId, request } = context;
       const { agent } = input;
-      if (agent !== undefined && (input.repository === undefined || input.repository === null)) {
-        return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
-      }
       yield* modeAsked(userId, input.mode);
       const organizationId = yield* startingWorkspace(seams, userId, input.workspaceId);
       const before =
@@ -444,13 +486,25 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           ? Option.none()
           : yield* startedBefore(userId, agent.idempotencyKey, organizationId);
       if (Option.isSome(before)) return { status: TASK_START_STATUS.RETRIED, body: before.value };
+      // A retry is answered above first, since its parent may be gone by now, or its device away, while its task stands.
+      const { parentTaskId } = input;
+      const parent =
+        parentTaskId === undefined
+          ? undefined
+          : yield* parentAsked(userId, organizationId, { ...input, parentTaskId });
+      const repository = parent === undefined ? input.repository : parent.repository;
+      if (agent !== undefined && (repository === undefined || repository === null)) {
+        return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+      }
       // Where its agents run is checked before anything is written, so a device refused starts no task;
-      // a retry is answered above first, since its device may be away by now while its task stands.
+      // a child runs where its parent runs, which was confirmed as the parent was made.
       const runsOn =
-        input.runsOn === undefined ? undefined : yield* runsOnAsked(userId, input.runsOn);
+        parent === undefined && input.runsOn !== undefined
+          ? yield* runsOnAsked(userId, input.runsOn)
+          : parent?.runsOn;
       const reached = yield* reachableRepository(
         Effect.succeed(organizationId),
-        input.repository,
+        repository,
         userId,
       );
       // An agent is the start, so its plan opens with no planning phase.
@@ -466,6 +520,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ...(input.priority === undefined ? undefined : { priority: input.priority }),
         ...(input.assigneeId === undefined ? undefined : { assigneeId: input.assigneeId }),
         ...(runsOn === undefined ? undefined : { runsOn }),
+        ...(parent === undefined ? undefined : { parentTaskId: parent.id }),
         ...(input.mode === undefined ? undefined : { mode: input.mode }),
       }).pipe(
         Effect.catch((failure) =>
@@ -475,9 +530,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ),
       );
       // Where the task runs is kept as the member's last pick, which a task an agent makes for them starts on
-      // (`agentMadeRunsOn`). Note that a pick that fails to keep fails nothing, because the task is already
-      // committed, and a create answered with an error would be retried into a second task.
-      if (input.runsOn !== undefined) {
+      // (`agentMadeRunsOn`), though a child's is its parent's rather than a pick. Note that a pick that fails
+      // to keep fails nothing, because the task is already committed, and a create answered with an error
+      // would be retried into a second task.
+      if (input.runsOn !== undefined && parent === undefined) {
         yield* keepRunsOnPick(userId, input.runsOn).pipe(
           Effect.catch((failure) =>
             Effect.logWarning(`the last Runs on pick could not be kept: ${failure._tag}`),
