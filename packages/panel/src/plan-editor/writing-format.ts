@@ -118,10 +118,39 @@ function formatOf(editor: Editor): EditorFormat {
   };
 }
 
+/** Whether `line` stands at least partly inside `seen`. */
+function shows(seen: EditorBox, line: DOMRect): boolean {
+  return (
+    line.bottom > seen.top &&
+    line.top < seen.bottom &&
+    line.right > seen.left &&
+    line.left < seen.right
+  );
+}
+
 /**
- * Where the selected words stand in the window, as much of every line of
- * them as can be seen; none where they cannot be measured. Note that the
- * box is held inside what the editor shows, the window cut to the editor's
+ * The box around the lines of `lines` that stand inside `seen`, held to
+ * `seen`; where none does, the box around them all held to its edge, so
+ * the toolbar stands at the side of the field the words went past.
+ */
+function shownBox(lines: readonly DOMRect[], seen: EditorBox): EditorBox | undefined {
+  const shown = lines.some((line) => shows(seen, line))
+    ? lines.filter((line) => shows(seen, line))
+    : lines;
+  if (shown.length === 0) return undefined;
+  const held = (at: number, low: number, high: number) => Math.min(Math.max(at, low), high);
+  return {
+    left: held(Math.min(...shown.map((line) => line.left)), seen.left, seen.right),
+    top: held(Math.min(...shown.map((line) => line.top)), seen.top, seen.bottom),
+    right: held(Math.max(...shown.map((line) => line.right)), seen.left, seen.right),
+    bottom: held(Math.max(...shown.map((line) => line.bottom)), seen.top, seen.bottom),
+  };
+}
+
+/**
+ * Where the selected words stand in the window, the lines of them that
+ * can be seen; none where they cannot be measured. Note that only the
+ * lines the editor shows are kept, inside the window cut to the editor's
  * own scroller and each box that clips it, because words selected past a
  * scroller's edge, all of a long draft say, would stand the toolbar by
  * lines no one can see.
@@ -134,15 +163,10 @@ function selectionBox(editor: Editor): EditorBox | undefined {
     const range = document.createRange();
     range.setStart(start.node, start.offset);
     range.setEnd(end.node, end.offset);
-    const words = range.getBoundingClientRect();
     const seen = cutTo(visibleViewport(), [view.dom, ...clipsAround(view.dom)]);
-    const held = (at: number, low: number, high: number) => Math.min(Math.max(at, low), high);
-    return {
-      left: held(words.left, seen.left, seen.right),
-      top: held(words.top, seen.top, seen.bottom),
-      right: held(words.right, seen.left, seen.right),
-      bottom: held(words.bottom, seen.top, seen.bottom),
-    };
+    const lines = [...range.getClientRects()];
+    // Note that a range a page lays out as no lines, a collapsed caret's say, is still measured whole.
+    return shownBox(lines.length === 0 ? [range.getBoundingClientRect()] : lines, seen);
   } catch {
     // Note that a position the view cannot find in its own nodes measures nothing.
     return undefined;
