@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { registerDevice } from "@luke/database/models/device-store";
 import { readRunsOnPick } from "@luke/database/models/runs-on-pick";
 import { createTask, readTask } from "@luke/database/models/task-store";
@@ -15,7 +14,6 @@ import {
 import { HOSTED_API_ERROR } from "@luke/features";
 import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import type { TaskRunsOnRequest } from "@luke/features/task-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { Clock, type Context, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { sessionSandboxesLayer } from "../agents/session-sandboxes.js";
@@ -95,7 +93,6 @@ it.layer(getTestDB())("where a task runs its agents", (it) => {
         const owner = yield* openTokenMember();
         const stranger = yield* openTokenMember({ token: "fixture-stranger-token" });
         const workspace = yield* openWorkspace(owner);
-        yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.LOCAL_AGENTS]: true } });
         const studio = yield* deviceOf(owner, "Studio");
         const laptop = yield* deviceOf(owner, "Laptop");
         const onStudio = { machine: AGENT_MACHINE.DEVICE, deviceId: studio } as const;
@@ -157,7 +154,6 @@ it.layer(getTestDB())("where a task runs its agents", (it) => {
     Effect.gen(function* () {
       const owner = yield* openTokenMember();
       const workspace = yield* openWorkspace(owner);
-      yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.LOCAL_AGENTS]: true } });
       const studio = yield* deviceOf(owner, "Studio");
       const onStudio = { machine: AGENT_MACHINE.DEVICE, deviceId: studio } as const;
       const send = yield* standing(new Map([["Bearer owner", owner]]));

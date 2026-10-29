@@ -137,7 +137,7 @@ export const macOfferSchema = EffectSchema.Struct({
 
 export type MacOffer = typeof macOfferSchema.Type;
 
-/** The models the service offers (GET), and the account's devices a task may run its agents on, there now or not, where the account has the `local-agents` experiment on and registered any; absent otherwise, and from a service older than it. */
+/** The models the service offers (GET), and the account's devices a task may run its agents on, there now or not, where the account registered any; absent otherwise, and from a service older than it. */
 export const modelsAnswerSchema = EffectSchema.Struct({
   models: EffectSchema.Array(catalogModelSchema),
   macs: EffectSchema.optionalKey(EffectSchema.Array(macOfferSchema)),

@@ -15,7 +15,6 @@ import {
 import { noMatchWords, readFailedWords, TERM } from "@luke/features/words";
 import { taskKey } from "@luke/features/workspace-key";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
@@ -47,7 +46,6 @@ import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
 import { Picker } from "../settings/picker-row.js";
-import { useExperiment } from "../use-app-state.js";
 import { mergePolicySwitchOf, runningSwitchOf } from "./pilot-switches.js";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip.js";
 import { TaskRunsOnChip } from "./runs-on.js";
@@ -419,8 +417,7 @@ function TreeRunButton({
  * The task's status, priority, and assignee chips, under its title, its
  * repository's where the page hands the chip's doors, with the service's
  * refusal of the last pick beside it, and where its agents run while the
- * Local agents experiment is on and the member has a device or the task
- * runs on one, and the Auto-merge switch and Start or Stop on a pilot tree's top task. A
+ * member has a device or the task runs on one, and the Auto-merge switch and Start or Stop on a pilot tree's top task. A
  * task from a service before statuses draws none of the
  * standing chips, and still its repository's, which does not wait on them,
  * since the plan's menu leaves Change repository to the chip.
@@ -444,7 +441,6 @@ export function TaskStandingChips({
   inSight?: boolean | undefined;
 }): React.JSX.Element | null {
   const { status, priority } = task;
-  const localAgents = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   const standing = status !== undefined && priority !== undefined;
   // S opens the status chip's menu while the chip is in sight and takes a pick, each press counted so it opens it again.
   const [statusAsks, setStatusAsks] = useState(0);
@@ -458,9 +454,7 @@ export function TaskStandingChips({
   const mergePolicy = standing ? mergePolicySwitchOf(task) : undefined;
   const running = standing ? runningSwitchOf(task) : undefined;
   const runsOnDrawn =
-    standing &&
-    localAgents &&
-    ((devices !== undefined && devices.length > 0) || task.runsOn !== undefined);
+    standing && ((devices !== undefined && devices.length > 0) || task.runsOn !== undefined);
   return (
     <div className="plan-task-standing">
       <Inline gap={GAP.CONTROL}>

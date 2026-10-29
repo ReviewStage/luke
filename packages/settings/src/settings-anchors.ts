@@ -55,7 +55,6 @@ export const SETTINGS_SEARCH_ROW = {
 export const EXPERIMENT_ANCHOR = {
   [EXPERIMENT.OPERATOR]: "experiment-operator",
   [EXPERIMENT.MEMORY]: "experiment-memory",
-  [EXPERIMENT.LOCAL_AGENTS]: "experiment-local-agents",
   [EXPERIMENT.CHANNELS]: "experiment-channels",
   [EXPERIMENT.PILOT]: "experiment-pilot",
 } as const satisfies Record<Experiment, string>;

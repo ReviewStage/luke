@@ -14,6 +14,7 @@ import { pageFrameUrl } from "@luke/features/page-frame";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { ProviderMark } from "@luke/ui";
+import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -439,7 +440,7 @@ const FAILURE_LINES: readonly {
       failedPart("run_on_mac", { command: "pnpm test" }),
       toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
     ],
-    label: "2 tool calls, a call failed",
+    label: "2 tool calls, 1 failed",
   },
   {
     name: "a stopped turn's run of calls that all answered",
@@ -457,7 +458,16 @@ const FAILURE_LINES: readonly {
       toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
       { type: "text", text: "Read it." },
     ],
-    label: "2 tool calls, 1 message, a call failed",
+    label: "2 tool calls, 1 message, 1 failed",
+  },
+  {
+    name: "a finished turn's lead holding two calls that failed",
+    parts: [
+      failedPart("run_on_mac", { command: "pnpm test" }),
+      failedPart("read_file", { filePath: "src/new.ts" }),
+      { type: "text", text: "Neither ran." },
+    ],
+    label: "2 tool calls, 2 failed",
   },
   {
     name: "a finished turn's lead whose calls all answered",
@@ -486,15 +496,18 @@ const FAILURE_LINES: readonly {
         },
       ],
     ]),
-    label: "1 tool call, 1 subagent, a call failed",
+    label: "1 tool call, 1 subagent, 1 failed",
   },
 ];
 
 for (const { name, parts, standings, label } of FAILURE_LINES) {
-  test(`a closed fold's line wears the failed mark where a call it holds failed: ${name}`, () => {
+  test(`a closed fold's line wears the failed mark and says how many failed where calls it holds failed: ${name}`, () => {
     const { container } = drawn(assistant(parts), false, standings);
     const line = container.querySelector("[data-turn-fold] > summary");
     assert.deepEqual(failureOn(line), { marked: label !== undefined, label });
+    // The label's last part is how many failed, which the line says in words beside its mark.
+    const failed = label?.slice(label.lastIndexOf(", ") + 2);
+    if (failed !== undefined) assert.ok(line?.textContent?.endsWith(failed), failed);
   });
 }
 
@@ -1115,6 +1128,7 @@ function agentMessageDrawn(
   message: AgentTranscriptMessage,
   page?: TaskMentionsValue,
   agentId?: string,
+  sender?: Actor,
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -1128,6 +1142,7 @@ function agentMessageDrawn(
       lead: AGENT_LEAD,
       moving: false,
       delegation: { models: [] },
+      sender,
     }),
   });
   act(() =>
@@ -1155,7 +1170,7 @@ test("a message another agent sent draws as its sender's bubble at the left, nam
   assert.ok(bubble, "the message draws as its sender's bubble");
   assert.equal(bubble.dataset.messageId, "message", "a link to the line finds its bubble");
   assert.match(
-    bubble.querySelector(".luke-message-line-sender")?.textContent ?? "",
+    bubble.querySelector(".luke-message-head-sender")?.textContent ?? "",
     /Invite expiry/u,
   );
   assert.equal(
@@ -1167,7 +1182,7 @@ test("a message another agent sent draws as its sender's bubble at the left, nam
 test("a message from an agent the line keeps no chip of is named by the name its row keeps", () => {
   const bubble = agentMessageDrawn(AGENT_MESSAGE).querySelector("[data-agent-message]");
   assert.match(
-    bubble?.querySelector(".luke-message-line-sender")?.textContent ?? "",
+    bubble?.querySelector(".luke-message-head-sender")?.textContent ?? "",
     /Invite emails/u,
   );
 });
@@ -1191,7 +1206,7 @@ const TASK_PAGE: TaskMentionsValue = {
   },
 };
 
-test("a member's message on a thread is headed by what they did and the thread's chip, its words without the header that names the item to the agent, whatever its title spells", () => {
+test("a teammate's message on a thread is headed by who sent it, what they did and the thread's chip named by the thread's title, its words without the header that names the item to the agent, whatever its title spells", () => {
   fakeAppBridge({});
   const container = agentMessageDrawn(
     {
@@ -1211,10 +1226,20 @@ test("a member's message on a thread is headed by what they did and the thread's
     },
     TASK_PAGE,
     TASK_AGENT,
+    { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED, name: "Ada Lovelace" },
   );
   const head = container.querySelector<HTMLElement>("[data-thread-line]");
   assert.match(head?.textContent ?? "", /^Thread message/u);
-  assert.ok(head?.querySelector("[data-mention-ref]"), "the head wears the thread's chip");
+  assert.equal(
+    head?.querySelector("[data-mention-ref] .luke-inline-ref-label")?.textContent,
+    'Ship " (key fake): the invites?',
+    "the head wears the thread's chip, named by its title before the item is read",
+  );
+  assert.match(
+    container.querySelector("[data-message-id]")?.textContent ?? "",
+    /^Ada Lovelace\s*Thread message.*Which PRs first\?/u,
+    "who sent it heads the line, over its words",
+  );
   assert.equal(
     container.querySelector(".message-content")?.textContent?.trim(),
     "Which PRs first?",

@@ -25,8 +25,7 @@ import { wireUuidSchema } from "./service-wire.js";
  * harnesses the Mac is signed in to itself (`deviceSignedInSchema`), which a
  * local agent's launch prefers to the account's saved credential. Claiming a launch line hands its
  * secrets over once (`deviceAgentLaunchSecretsSchema`): the service opens them
- * from the row's seal and clears the row's copy in the same claim. Every
- * call answers nothing to an account with the `local-agents` experiment off.
+ * from the row's seal and clears the row's copy in the same claim.
  *
  * Every path the service hands out is absolute, under the agent's own
  * folder in the Mac's home (`deviceAgentLayout`): its worktree, the files a

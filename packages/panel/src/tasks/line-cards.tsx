@@ -1,6 +1,13 @@
-import { THREAD_LINE_LEAD } from "@luke/features/inbox-wire";
+import { THREAD_LINE_LEAD, threadLineTitle } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
-import { EventCard, type EventCardNote, SubjectLine, TEXT_LINK_LOOK, TextLink } from "@luke/ui";
+import {
+  EventCard,
+  type EventCardNote,
+  type SubjectFit,
+  SubjectLine,
+  TEXT_LINK_LOOK,
+  TextLink,
+} from "@luke/ui";
 import type { GitHubLineMetadata, ThreadLineMetadata } from "@luke/wire";
 import { createContext, type ReactNode, useContext } from "react";
 import { githubLineHead } from "./agent-model.js";
@@ -64,13 +71,30 @@ function threadLink(
   return linkOf({ kind: LINK_PLACE.INBOX_ITEM, agentId, itemId }, doors.place.workspace);
 }
 
-/** A thread's line's head: what the member did on the thread, and the thread's chip, which opens it. */
-export function ThreadLineHead({ line }: { line: ThreadLineMetadata }): React.JSX.Element {
+/**
+ * A thread's line's head: what the member did on the thread, and the
+ * thread's chip, which opens it, named by the title the line's words carry
+ * until the item itself is read, rather than by its kind.
+ */
+export function ThreadLineHead({
+  line,
+  words,
+  fit,
+}: {
+  line: ThreadLineMetadata;
+  /** The line's words as the agent read them, whose first line names the item by its title. */
+  words: string;
+  /** How much of the line the chip takes: the rest of it alone, or its own width beside its sender (`MessageHead`). */
+  fit?: SubjectFit | undefined;
+}): React.JSX.Element {
   const doors = useMentionDoors();
   const href = threadLink(useContext(TranscriptAgent), line.item_id, doors);
-  const chip = href === undefined ? undefined : linkChip(href, href, doors);
+  const chip =
+    href === undefined
+      ? undefined
+      : linkChip(href, threadLineTitle(words, line.event) ?? href, doors);
   return (
-    <SubjectLine lead={THREAD_LINE_LEAD[line.event]} data-thread-line="">
+    <SubjectLine lead={THREAD_LINE_LEAD[line.event]} fit={fit} data-thread-line="">
       {chip}
     </SubjectLine>
   );

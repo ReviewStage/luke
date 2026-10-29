@@ -150,9 +150,10 @@ const MODELS_READ_BOUND_MS = 15_000;
  * at once with the words it was started on as its first line (`opening`),
  * before the task's list or the agent's transcript is read, and one
  * the service refused leaves the task a draft holding the words, the files,
- * and the model New task's chip named, with why (`onHandDraft`), under the
- * key that start carried, so its tab's Retry is an agent's own Start on the
- * task and answers the agent the first start made where it made one.
+ * and the model picked on New task's chip, where one was, with why
+ * (`onHandDraft`), under the key that start carried, so its tab's Retry is
+ * an agent's own Start on the task and answers the agent the first start
+ * made where it made one.
  *
  * An agent may be archived on its own, which the service does only once a
  * turn it still runs is stopped. The archived agents are split from the
@@ -465,7 +466,7 @@ function taskDraft(
   };
 }
 
-/** What New task hands a task it started whose agent was refused: the key that start carried, the prompt, its files, the choice its chip made, none for the account's default, and why. */
+/** What New task hands a task it started whose agent was refused: the key that start carried, the prompt, its files, the choice picked on its chip, none where the chip was left on the account's default, which the draft's tab then reads afresh, and why. */
 interface HandedDraft {
   readonly id: string;
   readonly prompt: string;

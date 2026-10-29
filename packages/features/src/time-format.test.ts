@@ -33,17 +33,21 @@ test("a run's span names its day once where it ended on it, and both days where 
   const at = (day: number, hour: number, minute: number) =>
     new Date(2026, 9, day, hour, minute).getTime();
 
-  assert.equal(runSpanText(at(8, 21, 34), at(8, 21, 43), now), "Today, 9:34 – 9:43 PM · 9m 0s");
+  assert.equal(runSpanText(at(8, 21, 34), at(8, 21, 43), now), "Today, 9:34 – 9:43 PM · 9m");
   assert.equal(
     runSpanText(at(7, 23, 50), at(8, 0, 10), now),
-    "Yesterday, 11:50 PM – Today, 12:10 AM · 20m 0s",
+    "Yesterday, 11:50 PM – Today, 12:10 AM · 20m",
   );
 });
 
-test("a run's length counts in seconds, then minutes, then hours", () => {
+test("a run's length counts in seconds, then minutes, then hours, then days past two of them, leaving out a zero unit", () => {
   assert.equal(workingTime(42_000), "42s");
   assert.equal(workingTime(72_000), "1m 12s");
+  assert.equal(workingTime(120_000), "2m");
   assert.equal(workingTime(3_780_000), "1h 3m");
+  assert.equal(workingTime(3_600_000), "1h");
+  assert.equal(workingTime(47 * 3_600_000), "47h");
+  assert.equal(workingTime((21 * 24 + 9) * 3_600_000 + 1_000), "21d 9h");
   assert.equal(workingTime(-5), "0s");
 });
 

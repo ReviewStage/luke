@@ -33,20 +33,24 @@ import {
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-this-mac-host.ts -- This Mac's local agents run by `luke-host`, the same host program a Linux box runs, as the desktop app turns it on and off and shows where it stands.
+ * compose-this-mac-host.ts -- This Mac's local agents run by `luke-host`, the same host program a Linux box runs, as the member turns it on in the desktop app and the app shows where it stands.
  *
- * With the Local agents experiment on, the Mac is turned on in one
- * sequence, in order: the Mac is enrolled on the member's own sign-in
+ * This Mac runs agents only once the member turns it on, with Turn on under
+ * This Mac in Settings › Hosts (`THIS_MAC_HOST_TURN_ON`), because turning it
+ * on registers a login item that runs `luke-host` at login, the app open or
+ * not, and `luke-host` downloads what its VMs run on. The Mac is turned on
+ * in one sequence, in order: it is enrolled on the member's own sign-in
  * under the device id the account has on this Mac (`local-agent-state.ts`),
  * minted the first time (`enrollOwn`), which converts its device in place,
  * so its agents, folders and VMs carry over; its record is written where
  * `luke-host` reads it, the app's own state folder
  * (`host-device-record.ts`); the launches kept under the account are handed
  * to the device, whose follower settles them; and its login item is
- * registered (`ThisMacHost`). It runs as the app starts or the experiment
- * turns on, with nothing to switch, since a task runs here only where its
- * Runs on picks this Mac. Turning the experiment off unregisters the login
- * item and keeps the record, so turning it on again only registers it again.
+ * registered (`ThisMacHost`). From then on the record keeps it on: a Mac
+ * holding a record of the account's that Luke has not refused stands on as
+ * the app starts, its login item registered again where it is not, with
+ * nothing to switch, since a task runs here only where its Runs on picks
+ * this Mac; one holding none stands not turned on until the member asks.
  *
  * The record names the account the Mac runs agents for, the one whose
  * device id it carries, so another account signed in on the same Mac sees
@@ -95,7 +99,6 @@ const FAILED_WORDS = {
   NOT_SAVED: "Luke couldn't save this Mac's sign-in in its state folder. Retry.",
   LOGIN_ITEM: "macOS refused Luke's login item",
   NO_LOGIN_ITEM: "This build of Luke carries no login item to run agents with.",
-  NOT_STOPPED: "macOS didn't turn off Luke's login item, so agents may still be running here",
   SETUP: "Luke couldn't download what agents run on here",
 } as const;
 
@@ -112,8 +115,6 @@ export interface ThisMacHostDependencies {
   account: Pick<AccountComposer, "capabilitiesActive">;
   /** The account signed in now, by its id; none where nobody is. */
   accountId: () => string | undefined;
-  /** Whether the account's Local agents experiment is on. */
-  switchedOn: Effect.Effect<boolean>;
   /** The setup the service lists for the device, by its id, nothing to say where it lists no such device; none where it could not answer. */
   deviceSetup: (
     deviceId: string,
@@ -209,8 +210,6 @@ export function composeThisMacHost(
     const services = yield* Effect.context<ThisMacHostServices>();
     const { kernel, account, client } = dependencies;
     const standing = yield* Ref.make<ThisMacHostStanding>(standingOf(THIS_MAC_HOST_STANDING.OFF));
-    /** Whether the switch was on as it was last read; none before the first read, so an app start is no turn-on. */
-    const lastOn = yield* Ref.make<boolean | undefined>(undefined);
     /** Whether the last turn-on failed, which only the member's own act tries again. */
     const turnOnFailed = yield* Ref.make(false);
     /** The setup last read for Settings, of which device, and when. */
@@ -341,10 +340,10 @@ export function composeThisMacHost(
 
     /**
      * One read of where things stand, acted on: `explicit` is the member's
-     * own Turn on again or Retry, the only thing besides the experiment
-     * turned off and on that enrolls a removed Mac or tries a failed turn-on
-     * again, and the only thing that starts `luke-host` again, where its
-     * setup or the last turn-on failed.
+     * own Turn on, Turn on again, or Retry, the only thing that enrolls a Mac
+     * holding no record of the account's or a removed one, tries a failed
+     * turn-on again, or starts `luke-host` again, where its setup or the last
+     * turn-on failed.
      */
     const reconcile = (explicit: boolean) =>
       reconciling.withPermit(
@@ -355,38 +354,23 @@ export function composeThisMacHost(
             !account.capabilitiesActive() ||
             !kernel.runMode.sendsNetwork
           ) {
+            yield* Ref.set(turnOnFailed, false);
             return yield* set(standingOf(THIS_MAC_HOST_STANDING.OFF));
           }
-          const on = yield* dependencies.switchedOn;
           const record = yield* readHostDevice(kernel.stateRoot);
           const owner = Option.isSome(record)
             ? yield* localAgentOwnerOf(kernel.stateRoot, record.value.deviceId)
             : undefined;
           // Note that another account's Mac is neither turned on nor off from here.
           if (Option.isSome(record) && owner !== userId) {
-            return yield* set(
-              standingOf(on ? THIS_MAC_HOST_STANDING.OTHER_ACCOUNT : THIS_MAC_HOST_STANDING.OFF),
-            );
+            return yield* set(standingOf(THIS_MAC_HOST_STANDING.OTHER_ACCOUNT));
           }
-          const wasOn = yield* Ref.get(lastOn);
-          if (!on) {
-            yield* Ref.set(turnOnFailed, false);
-            if (Option.isSome(record) && wasOn !== false) {
-              const unregistered = yield* host.loginItem(HOST_LOGIN_ITEM_ACT.UNREGISTER);
-              // Note that the switch is not taken as off until the login item is, so the next read, or Retry, unregisters it again.
-              if (Result.isFailure(unregistered)) {
-                return yield* set(
-                  failed(`${FAILED_WORDS.NOT_STOPPED} (${unregistered.failure}). Retry.`),
-                );
-              }
-            }
-            yield* Ref.set(lastOn, false);
-            return yield* set(standingOf(THIS_MAC_HOST_STANDING.OFF));
+          if ((yield* Ref.get(turnOnFailed)) && !explicit) return yield* Ref.get(standing);
+          // Note that a Mac is never enrolled on its own, because turning it on registers a login item and downloads what its VMs run on.
+          if (Option.isNone(record) && !explicit) {
+            return yield* set(standingOf(THIS_MAC_HOST_STANDING.NOT_TURNED_ON));
           }
-          yield* Ref.set(lastOn, true);
-          const asked = explicit || wasOn === false;
-          if ((yield* Ref.get(turnOnFailed)) && !asked) return yield* Ref.get(standing);
-          if (Option.isSome(record) && record.value.refused === true && !asked) {
+          if (Option.isSome(record) && record.value.refused === true && !explicit) {
             return yield* set(standingOf(THIS_MAC_HOST_STANDING.REMOVED));
           }
           if (Option.isNone(record) || record.value.refused === true) {

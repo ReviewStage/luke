@@ -84,8 +84,8 @@ test("each experiment is a switch, on as the account chose, that writes the choi
     [...page.querySelectorAll('[role="switch"]')]
       .slice(0, 2)
       .map((each) => each.getAttribute("aria-label")),
-    ["Pilot", "Local agents"],
-    "Local agents stands second, after the newest",
+    ["Pilot", "Channels"],
+    "Channels stands second, after the newest",
   );
 
   await act(async () => memory.click());
@@ -103,7 +103,6 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
   });
   assert.deepEqual(feedbackAbout, [
     EXPERIMENT.PILOT,
-    EXPERIMENT.LOCAL_AGENTS,
     EXPERIMENT.CHANNELS,
     EXPERIMENT.MEMORY,
     EXPERIMENT.OPERATOR,

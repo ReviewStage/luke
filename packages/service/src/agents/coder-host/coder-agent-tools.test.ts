@@ -770,9 +770,6 @@ test("start_agent on a task that runs on another member's device is refused in w
   const deviceId = randomUUID();
   const onTheirDevice = await database.run(
     Effect.gen(function* () {
-      yield* writeAccountPreferences(agents.teammates.userId, {
-        experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
-      });
       yield* registerDevice(agents.teammates.userId, {
         id: deviceId,
         name: "Studio",
@@ -1968,7 +1965,6 @@ test("a task an agent makes runs on the device its member last chose, away or no
   const studio = randomUUID();
   await database.run(
     Effect.gen(function* () {
-      yield* writeAccountPreferences(bob, { experiments: { [EXPERIMENT.LOCAL_AGENTS]: true } });
       yield* registerDevice(bob, { id: studio, name: "Studio", ...DEVICE_LAYOUT });
       // The Studio last beat at the epoch, so it is away.
       const db = yield* Database;

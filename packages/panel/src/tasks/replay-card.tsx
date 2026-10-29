@@ -12,6 +12,7 @@ import {
   DisclosureSummary,
   Inline,
   MESSAGE_LINE_ALIGN,
+  MessageHead,
   MessageLine,
   OneLine,
   TEXT_ELEMENT,
@@ -31,7 +32,7 @@ import { Message, MessageContent, RECEIVED_MESSAGE_CLASS } from "../ai-elements/
 import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/plan.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { lineSender, providerOf, receivedLine } from "./agent-model.js";
+import { lineSender, providerOf } from "./agent-model.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
 import { CopyMessageAction } from "./copy-message.js";
 import { linkChip } from "./mention-chip.js";
@@ -240,9 +241,9 @@ function useLineSender(
 
 /**
  * A replayed line, drawn as a transcript draws a line sent to the agent: a
- * sent message, at the column's left where it is the other side's words
- * (Luke's, GitHub's, another agent's), under the line naming who sent it,
- * unless it is the reader's own, when, where its marker said, and Copy.
+ * sent message, at the column's left under who sent it where it is anyone's
+ * but the reader's, as a transcript's line is, then when, where its marker
+ * said, and Copy.
  */
 function LineStep({
   view,
@@ -252,19 +253,19 @@ function LineStep({
   readerId: string | undefined;
 }): React.JSX.Element {
   const sender = useLineSender(view, readerId);
-  const received = receivedLine(view.sentBy);
+  const received = sender !== undefined;
   return (
     <Message
       from={received ? MESSAGE_ROLE.ASSISTANT : MESSAGE_ROLE.USER}
       className={received ? RECEIVED_MESSAGE_CLASS : undefined}
       data-replay-step={REPLAY_STEP_KIND.LINE}
     >
+      {received ? <MessageHead sender={sender} /> : null}
       <MessageContent>
         <TranscriptWords text={view.words} />
       </MessageContent>
       <MessageLine
         align={received ? MESSAGE_LINE_ALIGN.START : MESSAGE_LINE_ALIGN.END}
-        sender={sender}
         at={view.at}
         actions={<CopyMessageAction words={view.words} />}
       />

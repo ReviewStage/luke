@@ -50,7 +50,7 @@ const PAGE_GROUPS = [
   { heading: "Workspace", rows: ["Workspace"] },
   {
     heading: "Account",
-    rows: ["Account", "Agents", "Integrations", "Skills", "Experimental"],
+    rows: ["Account", "Agents", "Hosts", "Integrations", "Skills", "Experimental"],
   },
   {
     heading: "This Mac",
@@ -379,29 +379,11 @@ test("the sidebar lists Memory under Workspace and its search finds it only whil
   assert.equal(shownTitle(on), "Memory");
 });
 
-test("the sidebar lists Hosts under Account after Agents, and its search finds it, only while the account has Local agents on", async () => {
-  const off = mount(createElement(SettingsHarness));
-  assert.deepEqual(pageGroups(off)[1]?.rows, PAGE_GROUPS[1]?.rows);
-  assert.deepEqual(foundUnder(off, "Add hosts"), []);
-
-  const experiments = experimentsOn(EXPERIMENT.LOCAL_AGENTS);
-  handState(experiments);
-  const on = mount(createElement(SettingsHarness, { stored: settingsView({ experiments }) }));
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
-
-  assert.deepEqual(pageGroups(on)[1]?.rows, [
-    "Account",
-    "Agents",
-    "Hosts",
-    "Integrations",
-    "Skills",
-    "Experimental",
-  ]);
-  openPage(on, "Hosts");
-  assert.equal(shownTitle(on), "Hosts");
-  assert.deepEqual(foundUnder(on, "Add hosts"), ["Hosts"]);
+test("the sidebar's search finds Add hosts on the Hosts page", () => {
+  const page = mount(createElement(SettingsHarness));
+  openPage(page, "Hosts");
+  assert.equal(shownTitle(page), "Hosts");
+  assert.deepEqual(foundUnder(page, "Add hosts"), ["Hosts"]);
 });
 
 test("the Workspace page is titled with the workspace the sidebar lists, and follows the sidebar when it lists another", () => {

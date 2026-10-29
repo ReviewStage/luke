@@ -303,7 +303,7 @@ test("opened, the card draws each step as a transcript does, a line as a sent me
   // A line is a sent message, named by whoever sent it, Charles here though Dean started the source.
   const [line, call, said] = steps;
   assert.match(line?.textContent ?? "", /Use seven days\./u);
-  assert.equal(line?.querySelector(".luke-message-line-sender")?.textContent, "Charles Pan");
+  assert.equal(line?.querySelector(".luke-message-head-sender")?.textContent, "Charles Pan");
   assert.match(said?.textContent ?? "", /Seven days it is\./u);
   // A call is a call's row, its verb and subject on the line, folded until opened.
   const head = call?.querySelector("summary");
@@ -382,7 +382,10 @@ test("a first message whose markers do not add up is drawn whole as the plan's c
   assert.equal(container.querySelector("[data-replay-card]"), null);
   assert.equal(container.querySelectorAll(".agent-origin").length, 1);
   press(container.querySelector("[data-origin-plan] > summary"));
-  assert.match(container.querySelector("[data-origin-plan]")?.textContent ?? "", /Use seven days\./u);
+  assert.match(
+    container.querySelector("[data-origin-plan]")?.textContent ?? "",
+    /Use seven days\./u,
+  );
 });
 
 test("on an agent's own page, which lists no source, the card names the source as a read of it does, wearing its harness's mark, and opens it as a link to it would", async () => {
@@ -469,7 +472,7 @@ test("a replayed line is named under its sender as a transcript names one: Luke,
   press(container.querySelector("[data-replay-card] > summary"));
   await settle();
   const senders = [...container.querySelectorAll("[data-replay-step]")].map((step) => {
-    const sender = step.querySelector(".luke-message-line-sender");
+    const sender = step.querySelector(".luke-message-head-sender");
     if (sender === null) return null;
     const ref = sender.querySelector<HTMLElement>("[data-actor-ref]");
     const name = ref?.querySelector(".luke-inline-ref-label")?.textContent ?? sender.textContent;
@@ -671,7 +674,7 @@ test("a replayed call whose marker names its tool is drawn as the live transcrip
   );
 });
 
-test("a replayed line stands over who sent it, when, and Copy, and the card's Copy copies the replay as it was handed", async () => {
+test("a replayed line stands under who sent it, over when and Copy, and the card's Copy copies the replay as it was handed", async () => {
   const copied: string[] = [];
   fakeAppPlatform(copyingInto(copied));
   const agent = summary({
@@ -695,11 +698,12 @@ test("a replayed line stands over who sent it, when, and Copy, and the card's Co
   press(container.querySelector("[data-replay-card] > summary"));
   await settle();
 
-  const line = container.querySelector("[data-replay-step='line'] > .luke-message-line");
+  const step = container.querySelector("[data-replay-step='line']");
   assert.equal(
-    line?.querySelector(".luke-message-line-sender .luke-inline-ref-label")?.textContent,
+    step?.querySelector(".luke-message-head-sender .luke-inline-ref-label")?.textContent,
     "Charles Pan",
   );
+  const line = step?.querySelector(":scope > .luke-message-line");
   assert.equal(
     line?.querySelector("time")?.getAttribute("dateTime"),
     new Date(SENT_AT).toISOString(),

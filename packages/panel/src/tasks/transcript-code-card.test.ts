@@ -12,7 +12,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
  * transcript-code-card.test.ts -- a fenced block in a transcript or an Inbox
- * item is a code card: its language in the header with
+ * item is a code card: its language's name in the header with
  * one Copy, a block of more than 40 lines cut there behind Show all, and
  * Copy copies the whole block however it stands. Synthetic code.
  */
@@ -72,7 +72,7 @@ test("a long fence in a transcript is cut at 40 lines behind Show all, which sho
   const drawing = await drawn(createElement(TranscriptWords, { text: fenced(code) }));
 
   assert.equal(
-    drawing.querySelector(".luke-code-card figcaption")?.textContent?.startsWith("typescript"),
+    drawing.querySelector(".luke-code-card figcaption")?.textContent?.startsWith("TypeScript"),
     true,
   );
   assert.deepEqual(shownLines(drawing), code.split("\n").slice(0, 40));

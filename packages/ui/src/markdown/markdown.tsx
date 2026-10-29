@@ -30,12 +30,22 @@
 
 import { MOTION_DELAY_MS } from "@luke/brand";
 import type { ElementContent, Root } from "hast";
-import { memo, type ReactNode, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  memo,
+  type ReactNode,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import remarkGfm from "remark-gfm";
 import {
   type AllowedTags,
   type AnimateOptions,
   Block,
+  type BlockProps,
   type Components,
   defaultRehypePlugins,
   defaultRemarkPlugins,
@@ -45,7 +55,7 @@ import {
   type UrlTransform,
 } from "streamdown";
 import { landedMark } from "../components/landed/landed.js";
-import { motionHeld } from "../motion-timing.js";
+import { MOTION_TOKEN, tokenTiming } from "../motion-timing.js";
 import { QUOTE_CLASS } from "../quote-face.js";
 import { MARKDOWN_CLASS, markdownClass } from "./markdown-class.js";
 import {
@@ -119,15 +129,46 @@ const NOTE_REMARK_STEPS: MarkdownSteps = [[remarkGfm, { singleTilde: false }]];
 const ARRIVING_SPREAD_MS = 480;
 
 /**
- * How a streaming reply's newest words arrive: each word fades in on its own
- * (`markdown-motion.css`), a row's stagger after the word before it, and a
- * sentence that lands whole is spread over at most `ARRIVING_SPREAD_MS`.
+ * How a streaming reply's newest words arrive, or nothing where motion is
+ * held: each word fades in on its own (`markdown-motion.css`) over the
+ * arriving fade's tokens, read where the words stand as they start, a row's
+ * stagger after the word before it, and a sentence that lands whole is
+ * spread over at most `ARRIVING_SPREAD_MS`. Note that the tokens' timing is
+ * handed to Streamdown rather than read by the stylesheet, because
+ * Streamdown times each word itself, a word it already drew at none, and a
+ * fade held still asks for no delays either, which would still stagger the
+ * words where the durations are zeroed.
  */
-const WORDS_ARRIVING: AnimateOptions = {
-  sep: "word",
-  stagger: MOTION_DELAY_MS.ROW_STAGGER,
-  maxBacklogMs: ARRIVING_SPREAD_MS,
-};
+function wordsArriving(): AnimateOptions | undefined {
+  const timing = tokenTiming(document.body, MOTION_TOKEN.DURATION_QUICK, MOTION_TOKEN.EASE_EXIT);
+  if (typeof timing?.duration !== "number" || typeof timing.easing !== "string") return undefined;
+  return {
+    sep: "word",
+    stagger: MOTION_DELAY_MS.ROW_STAGGER,
+    maxBacklogMs: ARRIVING_SPREAD_MS,
+    duration: timing.duration,
+    easing: timing.easing,
+  };
+}
+
+/** Whether the blocks a transcript draws now stand as the reader already saw them, which each block reads as it is first drawn. */
+const WordsStand = createContext(false);
+
+/**
+ * One block of a streaming transcript, as Streamdown draws it, its words
+ * marked shown where it is first drawn standing: through the block's own
+ * animate step (`setPrevContentLength`), which Streamdown offers a host for
+ * words it should take as already drawn, so they stand still and only words
+ * landing after fade in. Note that the mark is laid in the render that first
+ * draws the block, before Streamdown reads its words, and laid twice, as a
+ * strict render does, it marks the same.
+ */
+function ArrivingBlock(props: BlockProps): React.JSX.Element {
+  const stands = useContext(WordsStand);
+  const step = props.animatePlugin;
+  useState(() => (stands ? step?.setPrevContentLength(Number.POSITIVE_INFINITY) : undefined));
+  return <Block {...props} />;
+}
 
 function heading(level: number, children: ReactNode): React.JSX.Element {
   return (
@@ -264,6 +305,8 @@ export interface MarkdownProps {
   landed?: boolean | undefined;
   /** Whether a transcript's words are still arriving, read block by block, an unclosed fence or emphasis drawn as written so far, the newest fading in. */
   streaming?: boolean | undefined;
+  /** Whether the words a streaming transcript is first drawn with were written before the reader looked, as a turn's are when its tab opens on it under way, so they stand and only words landing after fade in. */
+  standing?: boolean | undefined;
   /** The elements the place draws its own way, over the look's own. */
   components?: Components | undefined;
   /** The Markdown steps the words are read with, in the look's place: a note's and a document's are GitHub's dialect, a transcript's Streamdown's own. */
@@ -334,25 +377,35 @@ function WholeWords({
 }
 
 /**
- * Whether a transcript has streamed since it was drawn, and whether its
- * newest words fade in as they land. A transcript that has streamed is read
- * block by block for as long as it is drawn, its words settled or not,
- * because reading settled words whole draws a new tree in place of the one
- * on screen, which takes away what the reader selected and cuts off a word
- * still fading in, the last sentence's most of all, since it lands with the
- * turn's end. Words fade only where motion is not held, read when the
- * streaming starts, because a fade's delays would still stagger the words
- * where its durations are zeroed.
+ * Whether a transcript has streamed since it was drawn, how its newest
+ * words arrive, and whether the words it draws now stand. A transcript that
+ * has streamed is read block by block for as long as it is drawn, its words
+ * settled or not, because reading settled words whole draws a new tree in
+ * place of the one on screen, which takes away what the reader selected and
+ * cuts off a word still fading in, the last sentence's most of all, since it
+ * lands with the turn's end. The words drawn as the fade starts stand where
+ * they were there before the reader looked (`standing`), or before the
+ * stream began, as a settled reply's are when its agent writes to it again;
+ * only the words landing after them fade in.
  */
-function useStreamed(streaming: boolean): { streamed: boolean; fades: boolean } {
+function useStreamed(
+  streaming: boolean,
+  standing: boolean,
+): { streamed: boolean; arriving: AnimateOptions | undefined; stands: boolean } {
   const [streamed, setStreamed] = useState(streaming);
-  const [fades, setFades] = useState(() => streaming && !motionHeld());
-  // Note that the start is taken in the render that sees it, so its first words fade too.
+  const [arriving, setArriving] = useState(() => (streaming ? wordsArriving() : undefined));
+  const [stands, setStands] = useState(streaming && standing);
+  // Note that the start is taken in the render that sees it, so the words then drawn are the ones that stand.
   if (streaming && !streamed) {
     setStreamed(true);
-    setFades(!motionHeld());
+    setArriving(wordsArriving());
+    setStands(true);
   }
-  return { streamed, fades };
+  // Note that the words stand for the one draw that first shows them, so a block drawn after it arrives.
+  useLayoutEffect(() => {
+    if (stands) setStands(false);
+  }, [stands]);
+  return { streamed, arriving, stands };
 }
 
 /**
@@ -365,6 +418,7 @@ function useStreamed(streaming: boolean): { streamed: boolean; fades: boolean } 
 export const Markdown = memo(function Markdown({
   className,
   streaming = false,
+  standing = false,
   landed = false,
   ...whole
 }: MarkdownProps): React.JSX.Element {
@@ -389,23 +443,27 @@ export const Markdown = memo(function Markdown({
     () => ({ input: readTaskInput, ...components }),
     [components],
   );
-  const { streamed, fades } = useStreamed(streaming);
+  const { streamed, arriving, stands } = useStreamed(streaming, standing);
   if (look === MARKDOWN_LOOK.TRANSCRIPT) {
     return (
-      <Streamdown
-        mode={streamed ? "streaming" : "static"}
-        {...(fades ? { animated: WORDS_ARRIVING, isAnimating: true } : {})}
-        {...(className === undefined ? {} : { className })}
-        components={transcriptComponents}
-        {...(remarkPlugins === undefined ? {} : { remarkPlugins })}
-        {...(transcriptSteps === undefined ? {} : { rehypePlugins: transcriptSteps })}
-        {...(allowedTags === undefined ? {} : { allowedTags })}
-        {...(literalTagContent === undefined ? {} : { literalTagContent })}
-        {...(urlTransform === undefined ? {} : { urlTransform })}
-        {...(normalizeHtmlIndentation === undefined ? {} : { normalizeHtmlIndentation })}
-      >
-        {words}
-      </Streamdown>
+      <WordsStand.Provider value={stands}>
+        <Streamdown
+          mode={streamed ? "streaming" : "static"}
+          {...(arriving === undefined
+            ? {}
+            : { animated: arriving, isAnimating: true, BlockComponent: ArrivingBlock })}
+          {...(className === undefined ? {} : { className })}
+          components={transcriptComponents}
+          {...(remarkPlugins === undefined ? {} : { remarkPlugins })}
+          {...(transcriptSteps === undefined ? {} : { rehypePlugins: transcriptSteps })}
+          {...(allowedTags === undefined ? {} : { allowedTags })}
+          {...(literalTagContent === undefined ? {} : { literalTagContent })}
+          {...(urlTransform === undefined ? {} : { urlTransform })}
+          {...(normalizeHtmlIndentation === undefined ? {} : { normalizeHtmlIndentation })}
+        >
+          {words}
+        </Streamdown>
+      </WordsStand.Provider>
     );
   }
   if (look === MARKDOWN_LOOK.DOCUMENT || look === MARKDOWN_LOOK.INLINE) {

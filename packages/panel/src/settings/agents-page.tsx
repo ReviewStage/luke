@@ -76,9 +76,8 @@ import { SwitchRow } from "./switch-row.js";
  * each saying how Claude Code or Codex is connected and opening the dialog
  * that connects it with a plan or an API key (`agent-auth-section.tsx`),
  * then this file's Default model, then the model a Generate chapters runs
- * on (`chapters-model-section.tsx`), then the page's schema rows, Run agents
- * on this Mac among them while local agents are on. The harnesses and the Default model
- * share the one read of the keys, so a
+ * on (`chapters-model-section.tsx`), then the page's schema rows. The
+ * harnesses and the Default model share the one read of the keys, so a
  * key saved or removed above is what the model row says at once. The default model's one value is the account's, kept
  * on the service beside the settings preferences and written by this page
  * and by a Start that named a model alike, so the page reads it afresh as it
@@ -94,7 +93,8 @@ import { SwitchRow } from "./switch-row.js";
  * switch runs the model's fast version, resting where the model has none
  * or the service withholds it because Anthropic never granted the key's
  * organization fast mode, saying which, and on the account's own key with
- * a link to ask Anthropic for it;
+ * a link to ask Anthropic for it; for a model nothing pays for, its press
+ * lands on that harness's row as the pick's does, and writes nothing;
  * the stored id is the catalog's own, the fast version's where the switch
  * is on. The effort row is a segmented control over the efforts the chosen
  * model lists, and for a model that offers two context windows a context
@@ -316,11 +316,13 @@ function DefaultRows({
           checked={read.fast}
           anchor={SETTINGS_SEARCH_ROW.AGENT_FAST}
           disabled={busy || base?.fast === undefined}
-          onChange={(fast) =>
-            base === undefined
-              ? Promise.resolve(WRITE_ACCEPTED)
-              : onChange(choiceAt(choiceModelId(base, fast)))
-          }
+          onChange={(fast) => {
+            if (base === undefined) return Promise.resolve(WRITE_ACCEPTED);
+            // A model nothing pays for runs no faster: the press goes to connect it, as its pick does, and the switch stands.
+            const missing = modelConnectFailure(base.model);
+            if (missing !== undefined) return remedy(missing)?.();
+            return onChange(choiceAt(choiceModelId(base, fast)));
+          }}
         />
       )}
       <SettingsRow
