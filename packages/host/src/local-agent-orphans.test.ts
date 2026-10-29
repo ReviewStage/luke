@@ -1,5 +1,5 @@
 /**
- * local-agent-orphans.test.ts -- the follower letting go of what a device holds for agents the service no longer lists there: an agent's VM, credentials and folder removed once two successful reads in a row leave it out, never on a read that was not answered, never under a runner or a launch still kept, never anything not named as an agent's, a Mac's folder with unsaved work kept once and never checked again, at most five a pass, and a VM whose delete failed tried again, and a pass that died never the last.
+ * local-agent-orphans.test.ts -- the follower letting go of what a device holds for agents the service no longer lists there: an agent's VM, credentials and folder removed once two successful reads in a row leave it out, never on a read that was not answered, never under a runner or a launch still kept, never anything not named as an agent's, a Mac's folder with unsaved work kept once and never checked again, at most five a pass, and a VM whose delete failed tried again, failures taking turns under the cap, and a pass that died never the last.
  *
  * The follower runs the real smolvm sandbox over a fake `smolvm` that keeps
  * its machines in a set, on a real temporary folder, against a fake service
@@ -61,7 +61,8 @@ interface Held {
 /**
  * The follower on a host, or a Mac where `unsavedWork` names what its check
  * prints, with what `held` lays out, its live-agents read answering `reads`
- * one after another, and `failedDeletes` of smolvm's first deletes failing.
+ * one after another, and smolvm refusing each delete `deleteFails` says, by
+ * the machine and how many times it was asked to delete it.
  * `launches` hands launch lines whose runners run until the test ends, and
  * `keptLaunches` are kept from a run that ended, whose settles the service
  * refuses.
@@ -70,7 +71,7 @@ const following = (input: {
   readonly held: Held;
   readonly reads: readonly (readonly string[] | undefined)[];
   readonly unsavedWork?: string;
-  readonly failedDeletes?: number;
+  readonly deleteFails?: (machine: string, attempt: number) => boolean;
   readonly launches?: (home: string) => readonly DeviceAgentClaimedLine[];
   readonly keptLaunches?: readonly { readonly id: string; readonly agentId: string }[];
   /** The first listing of what the VMs hold dies, as a bug would. */
@@ -104,7 +105,7 @@ const following = (input: {
       );
     }
 
-    let failedDeletes = input.failedDeletes ?? 0;
+    const deletes = new Map<string, number>();
     const signalled = Deferred.makeUnsafe<void>();
     const spawner = scriptedSpawner((program, args) => {
       if (program === "/bin/bash" && args[0] === "-l")
@@ -123,10 +124,8 @@ const following = (input: {
             ? { exitCode: 0 }
             : { exitCode: 1, stderr: '{"error":{"code":"NOT_FOUND","message":"no machine"}}\n' };
         case "delete":
-          if (failedDeletes > 0) {
-            failedDeletes -= 1;
-            return { exitCode: 1 };
-          }
+          deletes.set(name, (deletes.get(name) ?? 0) + 1);
+          if (input.deleteFails?.(name, deletes.get(name) ?? 0) === true) return { exitCode: 1 };
           return machines.delete(name) ? { exitCode: 0 } : { exitCode: 1 };
         case "exec":
           if (args.includes(UNSAVED_WORK_SCRIPT)) {
@@ -435,7 +434,7 @@ it.effect(
         const device = yield* following({
           held: { whole: [AGENT.ORPHAN] },
           reads: [[], [], []],
-          failedDeletes: 1,
+          deleteFails: (_machine, attempt) => attempt === 1,
         });
         yield* device.passed(2);
 
@@ -462,4 +461,29 @@ it.effect("a pass that died is reported, and the passes after it still run", () 
       assert.ok(device.reported.some((line) => line.includes("failed")));
     }),
   ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "agents whose removal keeps failing take turns under the cap, so one that would now go is never starved by five that never will",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const agents = Array.from({ length: 6 }, (_, index) => agentNumbered(index + 1));
+        const last = agents[5] ?? "";
+        const device = yield* following({
+          held: { whole: agents },
+          reads: [[], [], [], [], []],
+          // Note that five never delete, and the sixth fails once, on the pass it is first tried.
+          deleteFails: (machine, attempt) => machine !== `luke-${last}` || attempt === 1,
+        });
+        yield* device.passed(4);
+
+        assert.equal(device.holdsOf(last).vm, true);
+        // Note that it waits one pass behind the one left out of the last, then goes first.
+        yield* device.passed(5);
+
+        assert.deepEqual(device.holdsOf(last), NOTHING);
+        assert.ok(agents.slice(0, 5).every((agentId) => device.holdsOf(agentId).vm));
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
 );

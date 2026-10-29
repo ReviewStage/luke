@@ -1389,8 +1389,9 @@ export function composeLocalAgents(
 
         /** The successful reads in a row each agent the device holds things for was left out of, by its id. */
         const missedReads = new Map<string, number>();
-        /** The agents a pass could not let go of, which the next pass tries after the rest, so a few that always fail never take every place. */
-        const failedLetGo = new Set<string>();
+        /** The pass each agent still held was last tried on, so the agents never tried go first and the rest take turns, and a few that always fail never take every place. */
+        const lastTried = new Map<string, number>();
+        let passes = 0;
 
         /** The agents whose folders stand directly under the agents' root, each named by its id. */
         const agentFolders = Effect.gen(function* () {
@@ -1442,13 +1443,17 @@ export function composeLocalAgents(
          * or a read that failed changes nothing.
          */
         const orphansLetGo = Effect.gen(function* () {
+          passes += 1;
           const held = yield* heldAgents;
           if (Option.isNone(held)) return;
           const live = yield* asked(client.liveAgents(deviceId));
           if (live === undefined) return;
           const standing = new Set(live);
           for (const id of [...missedReads.keys()]) {
-            if (!held.value.has(id) || standing.has(id)) missedReads.delete(id);
+            if (!held.value.has(id) || standing.has(id)) {
+              missedReads.delete(id);
+              lastTried.delete(id);
+            }
           }
           for (const id of held.value) {
             if (!standing.has(id)) missedReads.set(id, (missedReads.get(id) ?? 0) + 1);
@@ -1461,18 +1466,16 @@ export function composeLocalAgents(
           const orphans = [...missedReads]
             .filter(([id, missed]) => missed >= ORPHAN_AFTER && !kept.includes(id))
             .map(([id]) => id)
-            .sort((one, other) => Number(failedLetGo.has(one)) - Number(failedLetGo.has(other)));
+            .sort((one, other) => (lastTried.get(one) ?? 0) - (lastTried.get(other) ?? 0));
           let tried = 0;
           for (const id of orphans) {
             if (tried >= ORPHANS_PER_PASS) break;
             const ended = yield* orphanLetGo(id);
             if (Option.isNone(ended)) continue;
             tried += 1;
-            if (ended.value === DISCARD_END.FAILED) {
-              failedLetGo.add(id);
-              continue;
-            }
-            failedLetGo.delete(id);
+            lastTried.set(id, passes);
+            if (ended.value === DISCARD_END.FAILED) continue;
+            lastTried.delete(id);
             missedReads.delete(id);
             if (ended.value === DISCARD_END.REMOVED) {
               report(`a local agent the service no longer lists here was removed: ${id}`);
