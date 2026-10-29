@@ -2,12 +2,17 @@ import { AGENT_BOUNDS, AGENT_STATUS, hasWordsOrFiles } from "@luke/features/agen
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
+import { TASK_MODE, type TaskMode } from "@luke/features/task-wire";
 import { TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
 import {
   CHIP_WIDTH,
+  CHOICE_BAR_LOOK,
+  CHOICE_BAR_SIZE,
+  ChoiceBar,
+  type ChoiceItem,
   POPOVER_ALIGN,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -65,6 +70,13 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * where a task runs because the chip said Cloud. The repository chip starts on the one the press chose
  * (a repository group's +), else the one the newest task in the workspace
  * was about, either only where the workspace's GitHub reaches it.
+ *
+ * While the Pilot experiment is on, a task's card offers Pilot or Agent at
+ * the head row's end, set to Pilot: how the task is worked, kept on the task
+ * as it starts (`TASK_MODE`). A pick holds for this card alone, and a refused
+ * card opened again holds the one it was pressed with. A bare task and an
+ * automation's agent are worked by agents, so ⌘Return on an empty box names
+ * no mode, and an automation's card offers none.
  *
  * The words are a coding agent's prompt. Start stands once there are
  * words or files, and a repository, without which it is held and
@@ -154,6 +166,20 @@ const BARE_WORDS: ComposerWords = {
   chord: BARE_CHORD,
 };
 
+/** New task's ways of working a task, while the Pilot experiment is on: Pilot first, the one the card starts on. */
+const MODE_CHOICES: readonly ChoiceItem<TaskMode>[] = [
+  {
+    value: TASK_MODE.PILOT,
+    label: "Pilot",
+    hint: `One pilot plans the ${TERM.TASK.one}, splits it into child ${TERM.TASK.many}, and runs ${TERM.AGENT.many} on them`,
+  },
+  {
+    value: TASK_MODE.AGENT,
+    label: "Agent",
+    hint: `One ${TERM.AGENT.one} works on the ${TERM.TASK.one}`,
+  },
+];
+
 /** Why an automation's agent did not start where the brief and the words pass an agent's first message's bound. */
 const TOO_LONG = "That request is too long.";
 
@@ -174,6 +200,8 @@ interface AgentAsk {
   readonly workspaceId: string | undefined;
   /** The device the task's agents run on, by its id; none for the cloud. */
   readonly deviceId?: string | undefined;
+  /** How the task is worked, where the card offered the choice; none while the Pilot experiment is off. */
+  readonly mode?: TaskMode | undefined;
   readonly agent: Omit<NewTaskAgent, "idempotencyKey">;
 }
 
@@ -183,12 +211,13 @@ export interface NewTaskPress {
   readonly key: string;
 }
 
-/** Whether two presses ask the same: the same task, device, words, files in the same order, and model. */
+/** Whether two presses ask the same: the same task, device, mode, words, files in the same order, and model. */
 function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
   return (
     a.repository === b.repository &&
     a.workspaceId === b.workspaceId &&
     a.deviceId === b.deviceId &&
+    a.mode === b.mode &&
     a.agent.prompt === b.agent.prompt &&
     a.agent.attachments.length === b.agent.attachments.length &&
     a.agent.attachments.every((file, index) => file === b.agent.attachments[index]) &&
@@ -282,6 +311,10 @@ export function NewTaskComposer({
   const [choice, choose] = useDefaultChoice(newTask, refused?.card.choice);
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(refused?.note);
+  // Pilot or Agent stands on a task's card while the Pilot experiment is on, set to Pilot.
+  const offersPilot = useExperiment(EXPERIMENT.PILOT) && !forAutomation;
+  const [mode, setMode] = useState<TaskMode>(refused?.card.press.ask.mode ?? TASK_MODE.PILOT);
+  const asked = offersPilot ? mode : undefined;
   // A refused card opened again holds the words it was pressed with, where the box holds nothing since.
   useLayoutEffect(() => {
     if (refused === undefined) return;
@@ -394,7 +427,7 @@ export function NewTaskComposer({
     );
   };
 
-  const begin = (handing: Pick<NewTaskStart, "handed" | "card"> = {}) => {
+  const begin = (handing: Pick<NewTaskStart, "handed" | "mode" | "card"> = {}) => {
     if (starting || devicesUnread) return;
     setStarting(true);
     onStarting?.(true);
@@ -434,6 +467,7 @@ export function NewTaskComposer({
       repository,
       workspaceId,
       deviceId: device?.deviceId,
+      mode: asked,
       agent: { prompt, attachments, choice },
     };
     const held = pressed.current;
@@ -442,6 +476,7 @@ export function NewTaskComposer({
     pressed.current = press;
     begin({
       handed: { idempotencyKey: key, ...ask.agent },
+      ...(asked === undefined ? undefined : { mode: asked }),
       card: { ...(forAutomation ? { purpose } : undefined), repository, choice, press, words },
     });
   };
@@ -507,6 +542,19 @@ export function NewTaskComposer({
           )}
           {repositoryChip}
         </div>
+        {offersPilot ? (
+          <div className="new-task-mode ml-auto shrink-0">
+            <ChoiceBar<TaskMode>
+              label={`How the ${TERM.TASK.one} is worked`}
+              items={MODE_CHOICES}
+              value={mode}
+              look={CHOICE_BAR_LOOK.SEGMENTED}
+              size={CHOICE_BAR_SIZE.COMPACT}
+              disabled={starting}
+              onChange={setMode}
+            />
+          </div>
+        ) : null}
       </div>
       <AgentComposer
         status={AGENT_STATUS.STARTING}
