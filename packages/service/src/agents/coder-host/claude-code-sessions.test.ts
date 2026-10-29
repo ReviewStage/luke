@@ -2854,7 +2854,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a launch past its Start that dies or is interrupted reads as the agent's failed turn, saying what cut it off",
+    "a launch past its Start that dies, or is interrupted before its sandbox opened, reads as the agent's failed turn saying what cut it off, and one interrupted as its runner starts is left to that runner",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2869,24 +2869,38 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
             ),
           ),
         );
-        const holding = runnerSandboxApi();
-        const cut = yield* openAgent;
-        const cutKept = keptAfterResponse();
-        const cutSessions = yield* sessionsFor(cut.userId, { next: 0 }).pipe(
-          Effect.provide(services(holding)),
-        );
-        // The runner's start is held and never let through, so the launch is interrupted there.
-        const started = gate();
-        holding.hooks.onStart = started.pass;
-
         yield* diedSessions.open(message(died.agent, "Go.")).pipe(Effect.provide(diedKept.layer));
         yield* diedKept.run;
-        yield* cutSessions.open(message(cut.agent, "Go.")).pipe(Effect.provide(cutKept.layer));
-        const launching = yield* Effect.forkChild(cutKept.run);
-        yield* Effect.promise(() => started.arrived);
-        yield* Fiber.interrupt(launching);
 
-        for (const { agent } of [died, cut]) {
+        // Each launch is held at a call it never gets past, and interrupted there: the clone, before
+        // its sandbox opened, and the runner's start, once it had.
+        const interruptedAt = (
+          sessions: Effect.Success<ReturnType<typeof sessionsFor>>,
+          agent: Agent,
+          held: ReturnType<typeof gate>,
+        ) =>
+          Effect.gen(function* () {
+            const kept = keptAfterResponse();
+            yield* sessions.open(message(agent, "Go.")).pipe(Effect.provide(kept.layer));
+            const launching = yield* Effect.forkChild(kept.run);
+            yield* Effect.promise(() => held.arrived);
+            yield* Fiber.interrupt(launching);
+          });
+        const cloning = runnerSandboxApi();
+        const cloned = yield* repositoryAgent(cloning, ownInstallation());
+        const atClone = gate();
+        cloning.hooks.onRun = atClone.pass;
+        yield* interruptedAt(cloned.sessions, cloned.agent, atClone);
+        const starting = runnerSandboxApi();
+        const started = yield* openAgent;
+        const startingSessions = yield* sessionsFor(started.userId, { next: 0 }).pipe(
+          Effect.provide(services(starting)),
+        );
+        const atStart = gate();
+        starting.hooks.onStart = atStart.pass;
+        yield* interruptedAt(startingSessions, started.agent, atStart);
+
+        for (const { agent } of [died, cloned]) {
           assert.deepEqual(yield* newestTurn(agent), {
             status: TURN_STATUS.FAILED,
             failure: AGENT_FAILURE.SANDBOX,
@@ -2897,9 +2911,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           `${REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE} the launch died: TypeError`,
         );
         assert.equal(
-          yield* newestFailureDetail(cut.agent),
+          yield* newestFailureDetail(cloned.agent),
           `${REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE} the launch was interrupted`,
         );
+        assert.equal((yield* newestTurn(started.agent)).status, undefined);
       }),
   );
 

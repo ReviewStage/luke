@@ -115,7 +115,7 @@ import { type ConversationTarget, storeWriter } from "@luke/database/models/writ
 import { TURN_FAILURE } from "@luke/features/turn-run";
 import { causeKind, failureKind } from "@luke/runtime/effect";
 import type { UserContent } from "ai";
-import { Cause, Clock, Context, Data, DateTime, Duration, Effect, Option } from "effect";
+import { Cause, Clock, Context, Data, DateTime, Duration, Effect, Option, Ref } from "effect";
 import { TURN_ORIGIN } from "../../core.js";
 import type { HostedEnvironment } from "../../environment.js";
 import {
@@ -917,7 +917,8 @@ export const runnerSessions = <
      * beside the opening, and the deepen and the skills' upload run beside
      * the launch's own uploads. A place whose launch failed is thrown away
      * again by the machine, since no conversation records the session that
-     * would find it.
+     * would find it. `sandboxOpened` runs once the place stands, before the
+     * launch.
      */
     const openedPlace = (
       agent: Agent,
@@ -927,6 +928,7 @@ export const runnerSessions = <
       credential: HarnessLaunch,
       waitOnImage: boolean,
       queuedFirst?: OpenedLine,
+      sandboxOpened: Effect.Effect<void> = Effect.void,
     ) =>
       Effect.gen(function* () {
         const target: ConversationTarget = { userId, conversationId: agent.conversationId };
@@ -943,7 +945,10 @@ export const runnerSessions = <
           },
           (opened, skills) =>
             Effect.andThen(
-              Effect.logInfo(`A ${harness.name} launch opened its sandbox`),
+              Effect.andThen(
+                Effect.logInfo(`A ${harness.name} launch opened its sandbox`),
+                sandboxOpened,
+              ),
               launch(
                 agent,
                 { name: opened.name, running: opened.place, session: sessionId },
@@ -1400,28 +1405,44 @@ export const runnerSessions = <
      * can say so, its function frozen or ended under it, is known by the last
      * step it reached. One that fails or dies takes its first message back
      * and is written as the agent's failed turn (`launchFailed`), and so is
-     * one interrupted, in a finalizer the interruption cannot cut short.
+     * one interrupted before its sandbox opened, in a finalizer the
+     * interruption cannot cut short. Note that one interrupted once its
+     * sandbox opened is said and reported alone, its first message and its
+     * turns left as they stand, because its runner may already have started
+     * and taken the message, and a failed turn would be written over its work.
      */
     const launchedAfterStart = <R>(
       agent: Agent,
       sessionId: string,
-      launching: Effect.Effect<void, { readonly _tag: string }, R>,
+      launching: (
+        sandboxOpened: Effect.Effect<void>,
+      ) => Effect.Effect<void, { readonly _tag: string }, R>,
       withdrawn: Effect.Effect<void, never, DatabaseServices>,
-    ) => {
-      const failedWith = (cause: Cause.Cause<{ readonly _tag: string }>) =>
-        Effect.andThen(withdrawn, launchFailed(agent, sessionId)(launchFailureOf(cause)));
-      return Effect.gen(function* () {
-        yield* Effect.logInfo(`A ${harness.name} launch began after its Start`);
-        yield* holdingRunner(agent.id, launching);
-        yield* Effect.logInfo(`A ${harness.name} launch started its runner`);
-      }).pipe(
-        Effect.catchCause((cause) =>
-          Cause.hasInterruptsOnly(cause) ? Effect.failCause(cause) : failedWith(cause),
-        ),
-        Effect.onInterrupt(() => failedWith(Cause.interrupt())),
-        Effect.annotateLogs(agentLogIds(agent, sessionId)),
-      );
-    };
+    ) =>
+      Effect.gen(function* () {
+        const opened = yield* Ref.make(false);
+        const failedWith = (cause: Cause.Cause<{ readonly _tag: string }>) =>
+          Effect.andThen(withdrawn, launchFailed(agent, sessionId)(launchFailureOf(cause)));
+        const interrupted = Effect.flatMap(Ref.get(opened), (up) =>
+          up
+            ? agentFailureSaid(
+                `A ${harness.name} launch was interrupted after its sandbox opened, so its runner may run`,
+                causeKind(Cause.interrupt()),
+                true,
+              )
+            : failedWith(Cause.interrupt()),
+        );
+        return yield* Effect.gen(function* () {
+          yield* Effect.logInfo(`A ${harness.name} launch began after its Start`);
+          yield* holdingRunner(agent.id, launching(Ref.set(opened, true)));
+          yield* Effect.logInfo(`A ${harness.name} launch started its runner`);
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Cause.hasInterruptsOnly(cause) ? Effect.failCause(cause) : failedWith(cause),
+          ),
+          Effect.onInterrupt(() => interrupted),
+        );
+      }).pipe(Effect.annotateLogs(agentLogIds(agent, sessionId)));
 
     /**
      * A message queued while another call held the lease handed on once that
@@ -1563,7 +1584,17 @@ export const runnerSessions = <
                 launchedAfterStart(
                   agent,
                   sessionId,
-                  openedPlace(agent, sessionId, layout, first, credential, true, opened),
+                  (sandboxOpened) =>
+                    openedPlace(
+                      agent,
+                      sessionId,
+                      layout,
+                      first,
+                      credential,
+                      true,
+                      opened,
+                      sandboxOpened,
+                    ),
                   withdrawn,
                 ),
               ).pipe(Effect.onError(() => withdrawn));

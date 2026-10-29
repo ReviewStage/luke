@@ -1256,9 +1256,12 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   const handed = brief.prompt ?? brief.planSnapshot;
   if (handed !== null) {
     // Every line the opening says names the agent, the runtime's own past the answer included. Note
-    // that the agent stands from here, so an opening cut short before eve took the first message, as
-    // a caller's deadline cuts a `start_agent`, discards it as a refused one does, in a finalizer the
-    // interruption cannot cut short, and says so, rather than leaving an agent no session was opened for.
+    // that the agent stands from here, so an opening cut short before eve was asked, as a caller's
+    // deadline cuts a `start_agent`, discards it as a refused one does, in a finalizer the
+    // interruption cannot cut short, and says so, rather than leaving an agent no session was opened
+    // for. One cut short while eve was asked is said alone, since its session may have opened, a
+    // native launch handed on past the answer, and the agent is that session's.
+    let asked = false;
     const opened = yield* Effect.gen(function* () {
       const sessions = yield* eve.pipe(
         Effect.tapError((refusal) =>
@@ -1306,6 +1309,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
         ),
       );
       // The runtime says why an open it refused was refused; eve that could not be asked is said here.
+      asked = true;
       return yield* sessions
         .open({
           conversationId: agent.conversationId,
@@ -1329,12 +1333,18 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       Effect.onError((cause) =>
         Cause.hasFails(cause)
           ? Effect.void
-          : discardedAt(
-              userId,
-              agent,
-              `a Start was cut short before its agent's session opened: ${causeKind(cause)}`,
-              causeKind(cause),
-            ),
+          : asked
+            ? agentFailureSaid(
+                `a Start was cut short while its agent's session was opening: ${causeKind(cause)}`,
+                causeKind(cause),
+                true,
+              )
+            : discardedAt(
+                userId,
+                agent,
+                `a Start was cut short before its agent's session opened: ${causeKind(cause)}`,
+                causeKind(cause),
+              ),
       ),
       Effect.annotateLogs(agentLogIds(agent)),
     );

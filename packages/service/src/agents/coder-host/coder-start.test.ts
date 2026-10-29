@@ -239,7 +239,7 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
   );
 
   it.effect(
-    "a Start whose session never opened, eve not reached or the Start cut short before eve took its first message, leaves no agent behind",
+    "a Start whose session never opened, eve not reached or the Start cut short before eve was asked, leaves no agent behind, and one cut short while eve was asked keeps it",
     () =>
       Effect.gen(function* () {
         const { owner, workspaceId } = yield* openConnectedWorkspace;
@@ -249,23 +249,34 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
             Effect.provide(services),
           ),
         );
-        const reached = yield* Deferred.make<void>();
-        const hanging: AgentSessions = {
-          ...fakeEve().sessions,
-          open: () => Effect.andThen(Deferred.succeed(reached, undefined), Effect.never),
-        };
-        const cut = workspaceAsk(workspaceId);
-        const starting = yield* startAgent(Effect.succeed(hanging), owner, cut).pipe(
-          Effect.provide(services),
-          Effect.forkChild,
+        // Each Start is held where it never gets past, and interrupted there.
+        const cutAt = (eve: (reached: Deferred.Deferred<void>) => Effect.Effect<AgentSessions>) =>
+          Effect.gen(function* () {
+            const reached = yield* Deferred.make<void>();
+            const ask = workspaceAsk(workspaceId);
+            const starting = yield* startAgent(eve(reached), owner, ask).pipe(
+              Effect.provide(services),
+              Effect.forkChild,
+            );
+            yield* Deferred.await(reached);
+            yield* Fiber.interrupt(starting);
+            return yield* readAgentByKey(owner, ask.idempotencyKey);
+          });
+        const beforeAsking = yield* cutAt((reached) =>
+          Effect.andThen(Deferred.succeed(reached, undefined), Effect.never),
         );
-        yield* Deferred.await(reached);
-        yield* Fiber.interrupt(starting);
+        const whileAsking = yield* cutAt((reached) =>
+          Effect.succeed({
+            ...fakeEve().sessions,
+            open: () => Effect.andThen(Deferred.succeed(reached, undefined), Effect.never),
+          }),
+        );
 
         assert.ok(Result.isFailure(refused));
         assert.equal(refused.failure, HOSTED_REFUSAL.UNAVAILABLE);
         assert.ok(Option.isNone(yield* readAgentByKey(owner, unreached.idempotencyKey)));
-        assert.ok(Option.isNone(yield* readAgentByKey(owner, cut.idempotencyKey)));
+        assert.ok(Option.isNone(beforeAsking));
+        assert.ok(Option.isSome(whileAsking));
       }),
   );
 
