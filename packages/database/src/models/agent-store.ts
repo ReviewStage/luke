@@ -3385,6 +3385,43 @@ export function readAgentHeaderOfConversation(
   return findAgentHeaderOfConversation({ userId, conversationId });
 }
 
+/**
+ * Whether the agent in the row read is under a pilot: started by an agent
+ * of kind pilot (`AGENT_KIND.PILOT`), a coding agent and a sub-pilot alike.
+ * Such an agent reports to that pilot with `message_agent` and posts no
+ * thread the developer reads, which are the top pilot's alone; one started
+ * by a coder, by no agent, or by an agent since deleted is under none.
+ */
+export function agentUnderPilot(): SQL<boolean> {
+  const starter = alias(agentTable, "pilot_starter");
+  return exists(
+    queryBuilder
+      .select({ id: starter.id })
+      .from(starter)
+      .where(and(eq(starter.id, agentTable.startedByAgentId), eq(starter.kind, AGENT_KIND.PILOT))),
+  ).mapWith(Boolean);
+}
+
+const findAgentUnderPilot = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ underPilot: Schema.Boolean }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ underPilot: agentUnderPilot() })
+        .from(agentTable)
+        .where(and(eq(agentTable.id, agentId), agentReachableBy(userId))),
+    ),
+});
+
+/** Whether the agent is under a pilot (`agentUnderPilot`); false for an agent the account does not reach. */
+export function readAgentUnderPilot(userId: string, agentId: string): AgentStoreEffect<boolean> {
+  return Effect.map(
+    findAgentUnderPilot({ userId, agentId }),
+    Option.exists((row) => row.underPilot),
+  );
+}
+
 /** What the agent's own conversation holds in its model's context: the model it runs on now, its newest step, and when eve last compacted it; null for each of the last two before it happens. */
 export interface AgentContextRow {
   readonly model: string;
