@@ -81,6 +81,7 @@ import {
 } from "@luke/features/provider-key-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import {
+  MERGE_POLICY,
   PLAN_ACTOR,
   TASK_BOUNDS,
   TASK_MODE,
@@ -3542,6 +3543,32 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: READ_TASK_REFUSAL.UNREADABLE,
   });
+});
+
+test("read_task names a grandchild's merge policy as its top task's, whatever the grandchild's own column holds", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const top = await database.run(createTask(caller.userId, { organizationId: workspaceId }));
+  const child = await database.run(
+    createTask(caller.userId, { organizationId: workspaceId, parentTaskId: top.id }),
+  );
+  const grandchild = await database.run(
+    createTask(caller.userId, { organizationId: workspaceId, parentTaskId: child.id }),
+  );
+  await database.run(
+    Effect.flatMap(Database, (db) =>
+      db.update(task).set({ mergePolicy: MERGE_POLICY.HOLD }).where(eq(task.id, top.id)),
+    ),
+  );
+
+  const read = await call(CODER_TOOL.READ_TASK, { taskId: grandchild.id });
+  assert.equal(
+    isRecord(read.task) && read.task.topTaskMergePolicy,
+    MERGE_POLICY.HOLD,
+    JSON.stringify(read),
+  );
 });
 
 test("create_task, update_task, list_tasks, and read_task carry a task's status, priority, and key, list_tasks narrows by status, and an unknown status is refused", async () => {

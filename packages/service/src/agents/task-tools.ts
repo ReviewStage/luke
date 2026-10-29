@@ -1,6 +1,10 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { recordRevision } from "@luke/database/models/plan-revisions";
-import { createTaskOnce, readTask } from "@luke/database/models/task-store";
+import {
+  createTaskOnce,
+  readEffectiveMergePolicy,
+  readTask,
+} from "@luke/database/models/task-store";
 import { AGENT_KIND } from "@luke/features/agent-wire";
 import { githubRepositoryFullNameSchema } from "@luke/features/github-repositories-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
@@ -62,7 +66,9 @@ import { workspaceNamingOf, writtenMention } from "./written-mentions.js";
  * brief the developer started it with, the tasks it is blocked by and blocks
  * that the member reaches, and its plan's saved text cut on a
  * line to a bound, so an agent reads another task's plan without its being
- * mentioned.
+ * mentioned. It names the merge policy of the task's top task
+ * (`topTaskMergePolicy`), which governs the task's whole tree, so an agent
+ * reads the one policy its pull requests merge under whatever its depth.
  *
  * `create_task` makes a task as the member the caller acts for makes one from
  * the sidebar: in the caller's workspace, owned by that member, on the
@@ -109,7 +115,8 @@ export const READ_TASK_TOOL = {
     "key (such as ACME-42), name, where it stands (its status) and how much it matters (its " +
     "priority), repository, who started it, whether it is the task you " +
     "work on, its mention, the brief the developer started it with (null for none), the tasks " +
-    "it is blocked by and the tasks it blocks (each with its id, name, status, and mention), " +
+    "it is blocked by and the tasks it blocks (each with its id, name, status, and mention), the " +
+    "merge policy of its top task, which its pull requests merge under, " +
     `and its plan as last saved, cut on a line at ${PLAN_TEXT_READ_CHARS} characters with how many were ` +
     `left out. Read one before you start an agent on it, or to learn what another task is about; ` +
     `${AGENT_TOOL.LIST_AGENTS} with its taskId names the agents on it.`,
@@ -142,6 +149,7 @@ export function runReadTask(
       const { step, name } = yield* workspaceNamingOf(userId, workspace.value);
       const plan = cutOnLine(text, PLAN_TEXT_READ_CHARS);
       const blocks = yield* taskBlockReadings(userId, task, step);
+      const mergePolicy = yield* readEffectiveMergePolicy(userId, task.id);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         task: {
@@ -154,6 +162,8 @@ export function runReadTask(
           mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
           brief: brief ?? null,
           ...blocks,
+          // Never the task's own column: a child's policy is its top task's.
+          topTaskMergePolicy: Option.getOrNull(mergePolicy),
         },
         plan: { text: plan.text, saved, leftOutChars: plan.leftOutChars },
       };
