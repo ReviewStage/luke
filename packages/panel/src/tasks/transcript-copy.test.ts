@@ -236,7 +236,7 @@ test("GitHub's review is copied as its card reads, from its metadata, without th
       "## Developer",
       "@octocat approved #42",
       "Ship it.",
-      "src/a.ts:3",
+      "src/a.ts L3",
       "Nice.",
     ].join("\n\n") + "\n",
   );

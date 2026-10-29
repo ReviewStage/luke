@@ -1123,10 +1123,9 @@ test("a teammate's message on a thread is headed by who sent it, what they did a
   );
 });
 
-/** What a GitHub card's head says beside the summary that folds it: who did what to which pull request. */
-function cardHead(card: HTMLElement): string {
-  const frame = card.closest<HTMLElement>(".luke-disclosure-frame");
-  return frame?.querySelector(":scope > .luke-disclosure-actions")?.textContent ?? "";
+/** The head that folds a GitHub card, by which a reader names it: who did what to which pull request. */
+function cardHead(card: HTMLElement): HTMLElement {
+  return card.querySelector<HTMLElement>("summary") ?? assert.fail("The card has no head");
 }
 
 /** A GitHub line the agent was told, as the service steers one in. */
@@ -1183,9 +1182,10 @@ test("a review from GitHub draws as a folding card, open, headed by who did what
   });
   const card = container.querySelector<HTMLElement>("[data-github-line]");
   assert.ok(card, "the line draws as GitHub's card");
-  assert.match(cardHead(card), /requested changes on.*#42\s*1 comment/u);
-  assert.equal(card.querySelector("summary")?.getAttribute("aria-expanded"), "true");
-  const body = card.querySelector<HTMLElement>(".luke-disclosure-body")?.textContent ?? "";
+  const head = cardHead(card);
+  assert.equal(head.getAttribute("aria-label"), "octocat requested changes on #42, 1 comment");
+  assert.equal(head.getAttribute("aria-expanded"), "true");
+  const body = card.textContent ?? "";
   assert.match(body, /Close, but the store reads the list twice\./u);
   assert.match(body, /apps\/web\/store\.ts L12\s*Guard the empty list here\./u);
   assert.doesNotMatch(container.textContent ?? "", /Act on it|github-review/u);
@@ -1210,13 +1210,32 @@ test("a check line is headed by how many of its checks failed on the pull reques
   );
   const card = container.querySelector<HTMLElement>("[data-github-line]");
   assert.ok(card, "the line draws as GitHub's card");
-  assert.match(cardHead(card), /2 of 3 checks failed on.*#42/u);
+  assert.equal(
+    cardHead(card).getAttribute("aria-label"),
+    "github-actions[bot] 2 of 3 checks failed on #42",
+  );
   const rows = [...card.querySelectorAll("li")].map((row) => row.textContent ?? "");
   assert.deepEqual(
     rows.map((row) => /^(.*?),/u.exec(row)?.[1]),
     ["test (webkit)", "e2e", "lint"],
   );
   assert.match(rows[1] ?? "", /Timed out/u);
+});
+
+test("a check line whose checks were skipped rather than passed says so, and holds their rows", () => {
+  const container = agentMessageDrawn(
+    githubLine("checks-skipped", "Every check finished on `c0ffee`.\n\nNone failed.", {
+      event: "checks_completed",
+      failing: false,
+      checks: [{ name: "deploy", conclusion: "skipped" }],
+    }),
+  );
+  const card = container.querySelector<HTMLElement>("[data-github-line]");
+  assert.ok(card, "the line draws as GitHub's card");
+  const head = cardHead(card);
+  assert.equal(head.getAttribute("aria-label"), "github-actions[bot] 1 check skipped on #42");
+  assert.equal(head.getAttribute("aria-expanded"), "true");
+  assert.match(card.textContent ?? "", /deploy.*Skipped/u);
 });
 
 test.each([
@@ -1228,7 +1247,7 @@ test.each([
       by: "octocat",
       verdict: "approved",
     }),
-    head: /approved.*#42/u,
+    head: "octocat approved #42",
   },
   {
     held: "every check passing",
@@ -1237,13 +1256,14 @@ test.each([
       failing: false,
       checks: [{ name: "lint", conclusion: "success" }],
     }),
-    head: /1 check passed on.*#42/u,
+    head: "github-actions[bot] 1 check passed on #42",
   },
-])("$held draws its card's head alone, with nothing to fold", ({ line, head }) => {
+])("$held draws its card's head alone, with nothing to open", ({ line, head }) => {
   const card = agentMessageDrawn(line).querySelector<HTMLElement>("[data-github-line]");
   assert.ok(card, "the line draws as GitHub's card");
-  assert.match(cardHead(card), head);
-  assert.equal(card.querySelector(".luke-disclosure-turn"), null, "no chevron");
-  card.querySelector<HTMLElement>("summary")?.click();
-  assert.equal(card.querySelector(".luke-disclosure-body"), null, "a press opens nothing");
+  const summary = cardHead(card);
+  assert.equal(summary.getAttribute("aria-label"), head);
+  act(() => summary.click());
+  assert.equal(summary.getAttribute("aria-expanded"), "false", "a press opens nothing");
+  assert.equal(card.textContent?.trim(), "");
 });

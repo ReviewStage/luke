@@ -1733,7 +1733,23 @@ export function githubLineChecks(line: GitHubLineMetadata): readonly GitHubLineC
   ];
 }
 
-/** What a check line's sender did, by how many of its checks failed where it names them, else by whether any did. */
+/** Whether every check a check line names passed: none failed, and each it names succeeded rather than was skipped, neutral, or stale. */
+export function githubChecksPassed(line: GitHubLineMetadata, words: string): boolean {
+  if (githubChecksFailed(line, words)) return false;
+  return (line.checks ?? []).every((check) => check.conclusion === GITHUB_CHECK_CONCLUSION.SUCCESS);
+}
+
+/** How many checks, as a head counts them: one, or all of them. */
+function allChecks(count: number): string {
+  return count === 1 ? "1 check" : `all ${count} checks`;
+}
+
+/**
+ * What a check line's sender did, by how many of its checks failed where it
+ * names them, else by whether any did; with none failed, by how many passed
+ * and how many were skipped, neutral and stale among them, as the Pull
+ * request tab counts them, since a check skipped did not pass.
+ */
 function checksDid(line: GitHubLineMetadata, words: string): string {
   const checks = line.checks ?? [];
   const failed = checks.filter((check) => isFailingConclusion(check.conclusion)).length;
@@ -1741,8 +1757,15 @@ function checksDid(line: GitHubLineMetadata, words: string): string {
   if (failed > 0) return `${failed} of ${checks.length} ${noun} failed on`;
   if (line.event === GITHUB_LINE_EVENT.CHECK_FAILED) return "a check failed on";
   if (githubChecksFailed(line, words)) return "some checks failed on";
-  if (checks.length === 1) return "1 check passed on";
-  return checks.length === 0 ? "every check passed on" : `all ${checks.length} checks passed on`;
+  if (checks.length === 0) return "every check passed on";
+  const passed = checks.filter(
+    (check) => check.conclusion === GITHUB_CHECK_CONCLUSION.SUCCESS,
+  ).length;
+  const skipped = checks.length - passed;
+  if (skipped === 0) return `${allChecks(passed)} passed on`;
+  return passed === 0
+    ? `${allChecks(skipped)} skipped on`
+    : `${passed} passed, ${skipped} skipped on`;
 }
 
 /**
@@ -1770,16 +1793,23 @@ export function githubLineHead(line: GitHubLineMetadata, words: string): GitHubL
   }
 }
 
-/** A GitHub line as words, as its card draws them: its head, the words, each inline comment by its line over what it says, then each check it names by how it ended. */
+/**
+ * A GitHub line as words, as its card draws them, which a copy reads and a
+ * find counts: its head, the words, each inline comment by its file and
+ * line over what it says, then each check it names by how it ended, where
+ * the card holds them, every check passing being its head alone.
+ */
 export function githubLineWords(line: GitHubLineMetadata, words: string): string {
   const head = githubLineHead(line, words);
   const comments = (line.comments ?? []).map((comment) => {
-    const where = comment.line === undefined ? comment.path : `${comment.path}:${comment.line}`;
+    const where = comment.line === undefined ? comment.path : `${comment.path} L${comment.line}`;
     return comment.body === "" ? where : `${where}\n\n${comment.body}`;
   });
-  const checks = githubLineChecks(line)
-    .map((check) => `${check.name}: ${CONCLUSION_WORDS[check.conclusion]}`)
-    .join("\n");
+  const checks = githubChecksPassed(line, words)
+    ? ""
+    : githubLineChecks(line)
+        .map((check) => `${check.name}: ${CONCLUSION_WORDS[check.conclusion]}`)
+        .join("\n");
   return [`${head.event} ${head.target}`, line.words ?? "", ...comments, checks]
     .filter((part) => part !== "")
     .join("\n\n");

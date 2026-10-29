@@ -8,14 +8,14 @@ import { THREAD_LINE_LEAD, threadLineTitle } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import {
   DISCLOSURE_FILL,
-  type EventCardNote,
+  type EventNote,
   EventNotes,
   type SubjectFit,
   SubjectLine,
   TEXT_LINK_LOOK,
   TextLink,
 } from "@luke/ui";
-import { CircleCheckIcon, GLYPH } from "@luke/ui/icons";
+import { CircleCheckIcon, CircleSlashIcon, GLYPH } from "@luke/ui/icons";
 import {
   GITHUB_CHECK_CONCLUSION,
   GITHUB_LINE_EVENT,
@@ -29,6 +29,7 @@ import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai
 import {
   CONCLUSION_WORDS,
   githubChecksFailed,
+  githubChecksPassed,
   githubLineChecks,
   githubLineHead,
 } from "./agent-model.js";
@@ -159,13 +160,23 @@ function CardMark({ ink, children }: { ink: MarkInk; children: ReactNode }): Rea
   );
 }
 
-/** What a GitHub line wears in its card's icon's seat: a review's verdict as the Pull request tab's badge, a comment's speech mark, or a check event's one failed glyph or a pass's check. */
+/** Where a check line's checks stand as one, in the Pull request tab's words: failed where one did, skipped where none passed of those it names, else passed. */
+function checksStanding(line: GitHubLineMetadata, words: string): CheckState {
+  if (githubChecksFailed(line, words)) return CHECK_STATE.FAILED;
+  const checks = line.checks ?? [];
+  const nonePassed =
+    checks.length > 0 &&
+    checks.every((check) => check.conclusion !== GITHUB_CHECK_CONCLUSION.SUCCESS);
+  return nonePassed ? CHECK_STATE.SKIPPED : CHECK_STATE.PASSED;
+}
+
+/** What a GitHub line wears in its card's icon's seat: a review's verdict as the Pull request tab's badge, a comment's speech mark, or a check event's one failed glyph, a skip's quiet slash, or a pass's check. */
 function GitHubLineMark({
   line,
-  failed,
+  words,
 }: {
   line: GitHubLineMetadata;
-  failed: boolean;
+  words: string;
 }): React.JSX.Element {
   switch (line.event) {
     case GITHUB_LINE_EVENT.REVIEW:
@@ -180,16 +191,28 @@ function GitHubLineMark({
       );
     case GITHUB_LINE_EVENT.CHECK_FAILED:
     case GITHUB_LINE_EVENT.CHECKS_COMPLETED:
-      return failed ? (
-        <CardMark ink={MARK_INK.FAILED}>
-          <GLYPH.FAILED />
-        </CardMark>
-      ) : (
-        <CardMark ink={MARK_INK.PASSED}>
-          <CircleCheckIcon />
-        </CardMark>
-      );
+      return <ChecksMark standing={checksStanding(line, words)} />;
   }
+}
+
+/** A check event's mark: the one failed glyph in the danger ink, a skip's slash in the quiet ink, or a pass's check in green. */
+function ChecksMark({ standing }: { standing: CheckState }): React.JSX.Element {
+  if (standing === CHECK_STATE.FAILED) {
+    return (
+      <CardMark ink={MARK_INK.FAILED}>
+        <GLYPH.FAILED />
+      </CardMark>
+    );
+  }
+  return standing === CHECK_STATE.SKIPPED ? (
+    <CardMark ink={MARK_INK.QUIET}>
+      <CircleSlashIcon />
+    </CardMark>
+  ) : (
+    <CardMark ink={MARK_INK.PASSED}>
+      <CircleCheckIcon />
+    </CardMark>
+  );
 }
 
 /** How many inline comments a card's head says it holds. */
@@ -209,7 +232,7 @@ function pullRequestPage(line: GitHubLineMetadata): string {
 function commentNote(
   comment: NonNullable<GitHubLineMetadata["comments"]>[number],
   at: number,
-): EventCardNote {
+): EventNote {
   const name = comment.path.split("/").at(-1) ?? comment.path;
   return {
     key: String(at),
@@ -262,7 +285,8 @@ function GitHubCheckRows({ line }: { line: GitHubLineMetadata }): React.JSX.Elem
  * commented reads "reviewed" under the Pull request tab's Commented badge,
  * and a comment "commented on" under a speech mark, as the tab tells them
  * apart. A card with nothing under its head, an approval with no words or
- * every check passing, is its head alone.
+ * every check passing, is its head alone; a check event whose checks were
+ * skipped rather than passed holds their rows, under a quiet mark.
  */
 export function GitHubLineCard({
   line,
@@ -280,9 +304,8 @@ export function GitHubLineCard({
   const said = line.words ?? "";
   const comments = line.comments ?? [];
   const checks = githubLineChecks(line);
-  const failed = githubChecksFailed(line, words);
-  // Note that a check event holds its rows only while one failed, because every check passing is said whole by its head.
-  const rows = checks.length > 0 && failed;
+  // Note that a check event holds its rows only where a check did not pass, because every check passing is said whole by its head.
+  const rows = checks.length > 0 && !githubChecksPassed(line, words);
   const folds = said !== "" || comments.length > 0 || rows;
   const count = comments.length === 0 ? "" : commentsWords(comments.length);
   const named = `${line.by} ${head.does} ${head.target}`;
@@ -308,7 +331,7 @@ export function GitHubLineCard({
     >
       <PlanHeader folds={folds} aria-label={count === "" ? named : `${named}, ${count}`}>
         <PlanIcon>
-          <GitHubLineMark line={line} failed={failed} />
+          <GitHubLineMark line={line} words={words} />
         </PlanIcon>
       </PlanHeader>
       {folds ? (
