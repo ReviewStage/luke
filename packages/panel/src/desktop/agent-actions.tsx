@@ -23,7 +23,7 @@ import {
   TRANSCRIPT_COPY,
   type TranscriptCopy,
 } from "../tasks/transcript-copy.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import { useCapability } from "../use-app-state.js";
 import type { MenuAction, MenuEntry } from "./action-menu.js";
@@ -221,7 +221,7 @@ export interface AgentActions {
 
 /** A coding agent's transcript read whole from the service under the title given, since its tab holds it only while shown. */
 export function agentTranscriptRead(
-  readTranscript: CodingAgentsControl["readTranscript"],
+  readTranscript: AgentsControl["readTranscript"],
   agentId: string,
   title: string,
   brief: AgentBrief | undefined,
@@ -280,7 +280,7 @@ export interface AgentDraftDoors {
  * (`useSteadyDoor`), and none while what the agents stand under is archived.
  */
 export function useAgentDraftDoors(
-  agents: Pick<CodingAgentsControl, "onForkDraft" | "onContinueDraft">,
+  agents: Pick<AgentsControl, "onForkDraft" | "onContinueDraft">,
   archived: boolean,
   onOpenDraft: (draftId: string) => void,
 ): AgentDraftDoors {
@@ -317,7 +317,7 @@ export function useAgentActions(
     | "machine"
     | "startedBy"
   >,
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   input: {
     /** The agent's name as the surface draws it, which a transcript copied is headed by. */
     readonly label: string;

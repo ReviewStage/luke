@@ -138,8 +138,8 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
+import { agentName } from "../tasks/agent-model.js";
 import { CHANNEL_SHOWN, channelShown } from "../tasks/channels-model.js";
-import { agentName } from "../tasks/coding-agent-model.js";
 import { useChannelPlace, useChannels, useInboxNarrowed } from "../tasks/use-channels.js";
 import { useHeldOrder } from "../tasks/use-held-order.js";
 import {

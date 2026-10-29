@@ -86,7 +86,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { viewerPlace } from "../testing/viewer-place.js";
 import { ToastHost } from "../toast.js";
@@ -95,7 +95,7 @@ import { RepositoryRemedyProvider } from "./repository-remedy.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
 import { type ThreadReveal, ThreadRevealProvider } from "./thread-reveal.js";
 import { type PullRequestReader, useTaskPullRequests } from "./use-agent-pull-request.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
 
@@ -363,20 +363,20 @@ function published(state: PullRequestState) {
 
 /** The overview's three reads, any of them answering otherwise than the fixtures above. */
 interface OverviewReads {
-  readonly pullRequest?: CodingAgentsControl["readOverviewPullRequest"];
-  readonly reviewOptions?: CodingAgentsControl["readReviewOptions"];
-  readonly checks?: CodingAgentsControl["readOverviewChecks"];
-  readonly conversation?: CodingAgentsControl["readOverviewConversation"];
+  readonly pullRequest?: AgentsControl["readOverviewPullRequest"];
+  readonly reviewOptions?: AgentsControl["readReviewOptions"];
+  readonly checks?: AgentsControl["readOverviewChecks"];
+  readonly conversation?: AgentsControl["readOverviewConversation"];
 }
 
 /** The plan's agents, the one whose pull request it is among them, its reads answering as given and the fixtures otherwise. */
 function controlAnswering(
   reads: OverviewReads = {},
   state: PullRequestState = PULL_REQUEST_STATE.OPEN,
-  readChanges: CodingAgentsControl["readChanges"] = () =>
+  readChanges: AgentsControl["readChanges"] = () =>
     Promise.resolve({ pullRequest: { url: PAGE, truncated: false, files: [] } }),
-): CodingAgentsControl {
-  return codingAgentsControl({
+): AgentsControl {
+  return agentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
     models: [],
@@ -403,7 +403,7 @@ function Switching({
   first,
   onRun,
 }: {
-  control: CodingAgentsControl;
+  control: AgentsControl;
   /** The tab it opens on, as the chip that opened it asked. */
   first: PullRequestView;
   /** Runs the branch on this Mac, as the side panel offers where the platform has a Mac terminal; none elsewhere. */
@@ -458,7 +458,7 @@ function Toolbar({ actions }: { actions: TabActionGroups | undefined }) {
  * drawn from what the task's real reads of the agent's published pull
  * request keep (`useTaskPullRequests`), as the window draws them.
  */
-function Named({ control, reader }: { control: CodingAgentsControl; reader: PullRequestReader }) {
+function Named({ control, reader }: { control: AgentsControl; reader: PullRequestReader }) {
   const kept = useTaskPullRequests(AGENT.planId ?? undefined, control.agents, reader);
   const pullRequest = kept.pullRequests.get(AGENT.id);
   return createElement(
@@ -538,7 +538,7 @@ function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
 
 /** Draws the agent's tab inside the workspace's member directory and the account's GitHub, its reads landed; inside the window's opener for a place in Luke where one is given. */
 async function draw(
-  control: CodingAgentsControl,
+  control: AgentsControl,
   first: PullRequestView = PULL_REQUEST_VIEW.CONVERSATION,
   registry = AtomRegistry.make(),
   github: GitHubConnectControl = NO_GITHUB,
@@ -2559,7 +2559,7 @@ const MERGING: PullRequestMerging = {
 };
 
 /** The plan's agents, its pull request standing as given and merged as given. */
-function merging(merge: MergeState, merged: Partial<PullRequestMerging> = {}): CodingAgentsControl {
+function merging(merge: MergeState, merged: Partial<PullRequestMerging> = {}): AgentsControl {
   return controlAnswering({
     pullRequest: () =>
       Promise.resolve({
@@ -2874,7 +2874,7 @@ test("a pull request ready to merge offers the first method the repository allow
 
 test("auto-merge is offered while checks run, and turned off once on; a merge queue's base offers Merge when ready; each is asked of the service for the agent at once, and Remove from queue asks first", async () => {
   const cases: readonly (readonly [
-    CodingAgentsControl,
+    AgentsControl,
     string,
     string | undefined,
     PullRequestActionRequest,
@@ -4289,7 +4289,7 @@ test("the title's edit is kept as the focus leaves its field, as it is on Enter"
 
 test("Refresh, the one its screen offers, reads Files changed again once the view was shown", async () => {
   let changeReads = 0;
-  const readChanges: CodingAgentsControl["readChanges"] = () => {
+  const readChanges: AgentsControl["readChanges"] = () => {
     changeReads += 1;
     return Promise.resolve({ pullRequest: { url: PAGE, truncated: false, files: [] } });
   };
@@ -4317,7 +4317,7 @@ test("Files changed draws each review thread under its line, its comments throug
     url: `${PAGE}#pullrequestreview-9`,
     threads: [thread()],
   } as const;
-  const readChanges: CodingAgentsControl["readChanges"] = () =>
+  const readChanges: AgentsControl["readChanges"] = () =>
     Promise.resolve({
       pullRequest: {
         url: PAGE,
@@ -4521,7 +4521,7 @@ test("the pointer resting on a review thread in Files changed lights the lines i
 
 test("a review thread on its line in Files changed is replied on and resolved from under its comments, as in the Conversation", async () => {
   const flagged = thread({ id: "PRRT_flag" });
-  const readChanges: CodingAgentsControl["readChanges"] = () =>
+  const readChanges: AgentsControl["readChanges"] = () =>
     Promise.resolve({
       pullRequest: {
         url: PAGE,
@@ -5300,7 +5300,7 @@ function Routed({
   heard,
   first = PULL_REQUEST_VIEW.CONVERSATION,
 }: {
-  control: CodingAgentsControl;
+  control: AgentsControl;
   heard: ReadLink[];
   first?: PullRequestView;
 }) {
@@ -5347,7 +5347,7 @@ function Routed({
 function jumpControl(
   threads: readonly ReviewThread[],
   files: readonly (typeof INVITE_FILE)[] = [INVITE_FILE],
-): CodingAgentsControl {
+): AgentsControl {
   return controlAnswering(
     { conversation: () => Promise.resolve({ pullRequest: reviewWith(threads) }) },
     PULL_REQUEST_STATE.OPEN,
@@ -5866,7 +5866,7 @@ function viewing(
   options: { readonly published?: readonly [number, number]; readonly truncated?: boolean } = {},
 ) {
   const [additions, deletions] = options.published ?? [60, 7];
-  const control: CodingAgentsControl = {
+  const control: AgentsControl = {
     ...controlAnswering({}, PULL_REQUEST_STATE.OPEN, () =>
       Promise.resolve({
         pullRequest: {
@@ -6191,7 +6191,7 @@ test("the member's pending comments stand on their lines in Files changed, marke
 
 test("on a phone no Preview or Run stands beside the title, and Files changed draws no bar: the task's header's ⋯ offers each after the pull request's own, the merge staying in the header", async () => {
   const ran: string[] = [];
-  const readChanges: CodingAgentsControl["readChanges"] = () =>
+  const readChanges: AgentsControl["readChanges"] = () =>
     Promise.resolve({
       pullRequest: {
         url: PAGE,

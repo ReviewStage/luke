@@ -32,7 +32,7 @@ import {
 } from "../tasks/inbox-model.js";
 import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
 import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
 import { useInboxReadMarks, useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import type { TaskInboxControl } from "../tasks/use-task-inbox.js";
@@ -101,7 +101,7 @@ export function SideInboxTab({
   workspaceId: string | undefined;
   inbox: TaskInboxControl;
   /** The holder's agents, which name an item's agent and hear what an answer woke. */
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** The reader's account id, which says whose of the open items wait on them; none before it is known. */
   readerId: string | undefined;
   /** Whether the tab is on screen: its page shown with its panel open. */

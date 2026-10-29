@@ -11,7 +11,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
-import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { ArchivedAgents } from "./agent-archive.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
@@ -84,7 +84,7 @@ test("the summary's archived agents fold under a group header that counts them f
   } as const;
   const summary = mount(
     createElement(ArchivedAgents, {
-      agents: codingAgentsControl({
+      agents: agentsControl({
         archived: [
           { ...agent, id: "agent-1", title: "Retry audit" },
           { ...agent, id: "agent-2", title: "Spike" },

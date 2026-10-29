@@ -1685,7 +1685,7 @@ function currentTasks(tasks: SidePanelState["tasks"]): HeldState["tasks"] {
 function stripPinLabel(tab: PinnableTab | AgentStripTab): string {
   if (isFileTab(tab)) return fileName(tab.file);
   if (isChangesTab(tab)) return TAB_WORDS.PULL_REQUEST;
-  return isAgentTab(tab) ? TAB_WORDS.CODING_AGENT : SIDE_PANEL_TAB_KIND[tab].label;
+  return isAgentTab(tab) ? TAB_WORDS.AGENT : SIDE_PANEL_TAB_KIND[tab].label;
 }
 
 /** Whether a kept pin opens a tab this version has: any but a retired fixed kind's, the Call's among them. */

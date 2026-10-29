@@ -13,7 +13,7 @@ import { taskCards } from "../desktop/side-panel.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
 import { AgentSubagentTab } from "./agent-tab.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
@@ -72,12 +72,12 @@ async function workerTab(
 ): Promise<HTMLElement> {
   const agents = [AGENT, TEAMMATE];
   const cards = taskCards({
-    agents: codingAgentsControl({ agents }),
+    agents: agentsControl({ agents }),
     held: NOTHING_HELD,
     chosen: () => false,
     pages: undefined,
   });
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents,
     transcripts: pushedTranscripts(() => [
       {
@@ -251,7 +251,7 @@ test("a worker's tab whose earlier messages could not be read says so over its l
       return Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
     },
   } as unknown as Parameters<typeof fakeActPort>[0]);
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [AGENT],
     transcripts: pushedTranscripts(() => [
       {

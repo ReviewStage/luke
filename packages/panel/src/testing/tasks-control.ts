@@ -16,7 +16,7 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { SummaryPin } from "../desktop/task-summary.js";
 import type { TranscriptFollower } from "../tasks/use-agent-transcript.js";
-import { type CodingAgentsControl, MODELS_READ } from "../tasks/use-coding-agents.js";
+import { type AgentsControl, MODELS_READ } from "../tasks/use-agents.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB, SIDE_PANEL_TABS, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
 import {
@@ -119,9 +119,7 @@ const NO_REPOSITORIES = {
 } as const satisfies TasksControl["repositories"];
 
 /** A task with no agents and no repository, every press ignored. */
-export function codingAgentsControl(
-  overrides: Partial<CodingAgentsControl> = {},
-): CodingAgentsControl {
+export function agentsControl(overrides: Partial<AgentsControl> = {}): AgentsControl {
   return {
     me: undefined,
     agents: [],
@@ -344,7 +342,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     },
     unreadTabs: [],
     pages: undefined,
-    agents: codingAgentsControl(),
+    agents: agentsControl(),
     history: versionHistoryControl(),
     onSelect: ignore,
     onRestoreTask: ignore,

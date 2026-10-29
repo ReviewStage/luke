@@ -3,7 +3,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import type { WireValue } from "@luke/wire";
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { useAct } from "../act.js";
-import type { AgentPartCut } from "./coding-agent-model.js";
+import type { AgentPartCut } from "./agent-model.js";
 
 /**
  * whole-parts.tsx -- a transcript's parts its page carried cut, read whole as the reader opens one.

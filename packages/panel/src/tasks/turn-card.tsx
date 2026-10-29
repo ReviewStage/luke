@@ -16,7 +16,7 @@ import {
   HoverCardRule,
 } from "@luke/ui";
 import { HarnessMark } from "../harness-marks.js";
-import { providerOf } from "./coding-agent-model.js";
+import { providerOf } from "./agent-model.js";
 import { ModelLabel } from "./model-label.js";
 
 /**

@@ -75,13 +75,13 @@ import {
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { useOpenSettings } from "../open-settings.js";
 import { stateEndMark } from "../state-glyph.js";
+import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
-import { RENAME_FAILED } from "../tasks/coding-agent-model.js";
 import { HOME_ROW_CONTEXT, HOME_ROW_META, HOME_ROW_PICTURE } from "../tasks/home-row.js";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list.js";
 import { INBOX_HOLDER, type InboxListed, NEEDS_YOU } from "../tasks/inbox-model.js";
 import { agentEndMark } from "../tasks/tab-look.js";
-import { readAgentById } from "../tasks/use-coding-agents.js";
+import { readAgentById } from "../tasks/use-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";

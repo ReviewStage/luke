@@ -17,7 +17,7 @@ import { taskCards } from "../desktop/side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { focusRestOn } from "../testing/hint-rest.js";
-import { codingAgentsControl, pushedPage } from "../testing/tasks-control.js";
+import { agentsControl, pushedPage } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
 import { AgentTab, type BriefTask, type TranscriptCards } from "./agent-tab.js";
 import { TOOL_TARGET } from "./tool-call-model.js";
@@ -182,7 +182,7 @@ function runningTab() {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   const controlOf = (otherTitle: string) =>
-    codingAgentsControl({
+    agentsControl({
       agents: [AGENT, listed("agent-7", otherTitle)],
       transcripts,
     });
@@ -345,7 +345,7 @@ test("a page that adds a call to a running turn draws that call alone, the calls
         AtomRegistry.make(),
         createElement(AgentTab, {
           agent: AGENT,
-          control: codingAgentsControl({ agents: [AGENT], transcripts }),
+          control: agentsControl({ agents: [AGENT], transcripts }),
           shown: true,
           cards,
           onOpenSubagent: () => undefined,

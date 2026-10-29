@@ -22,10 +22,10 @@ import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { DraftMark } from "../draft-mark.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { AgentCard, tasklessRowSubject } from "../tasks/agent-ref.js";
-import { RENAME_FAILED } from "../tasks/coding-agent-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
-import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
+import { type AgentsControl, readAgentById } from "../tasks/use-agents.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type MenuEntry, rowMenu } from "./action-menu.js";
 import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
@@ -93,7 +93,7 @@ function SidebarAgentCard({
   agents,
 }: {
   agent: TasklessAgent;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
 }): React.JSX.Element {
   return <AgentCard subject={tasklessRowSubject(agent, agents)} models={agents.models} />;
 }
@@ -116,7 +116,7 @@ export function SidebarAgent({
 }: {
   agent: TasklessAgent;
   /** The window's agent control, whose archive and rename act on any agent by its id. */
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** Whether this agent's page is the one standing. */
   current: boolean;
   /** Whether its turn ended while the developer was not looking at it: main's unseen dot, which a mark by hand adds to. */

@@ -282,7 +282,7 @@ test("the funnel and reach read each row's count and its share of the base", () 
   ]);
   expect(listRows(page, "Feature reach")).toEqual([
     "Tasks & plans | 12 | 100%",
-    "Coding agents | 9 | 75%",
+    "Agents | 9 | 75%",
     "Inbox | 6 | 50%",
     "Integration connected | 4 | 33%",
     "Automations | 1 | 8%",

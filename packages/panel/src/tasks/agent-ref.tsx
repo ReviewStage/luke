@@ -23,14 +23,6 @@ import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref.js";
 import type { HeldTranscripts } from "../desktop/strip-tabs.js";
 import { useMemberDirectory } from "../member-directory.js";
 import {
-  AgentTabCard,
-  type CardFoot,
-  type CardReading,
-  cardCorner,
-  heldLatest,
-  lastFinished,
-} from "./agent-tab-card.js";
-import {
   agentActor,
   agentName,
   agentStateWords,
@@ -38,10 +30,18 @@ import {
   archivedByReading,
   providerOf,
   teammateRef,
-} from "./coding-agent-model.js";
+} from "./agent-model.js";
+import {
+  AgentTabCard,
+  type CardFoot,
+  type CardReading,
+  cardCorner,
+  heldLatest,
+  lastFinished,
+} from "./agent-tab-card.js";
 import { MentionedAgentCard } from "./mentioned-agent-card.js";
 import { agentTranscript } from "./transcript-copy.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import { useOpenPlace } from "./use-open-link.js";
 
 /**
@@ -97,7 +97,7 @@ export function agentCardReading(
   label: string,
   held: HeldTranscripts,
   chosen: boolean,
-  agents: Pick<CodingAgentsControl, "me" | "pullRequests">,
+  agents: Pick<AgentsControl, "me" | "pullRequests">,
 ): () => CardReading {
   return () => {
     const { archivedAt } = agent;
@@ -168,7 +168,7 @@ export function lineSubject(
  */
 export function tasklessRowSubject(
   agent: TasklessAgent,
-  agents: Pick<CodingAgentsControl, "models" | "me" | "pullRequests">,
+  agents: Pick<AgentsControl, "models" | "me" | "pullRequests">,
 ): AgentSubject {
   const { automationId, pullRequest, ...rest } = agent;
   const summary: AgentSummary = automationId === null ? rest : { ...rest, automationId };
@@ -260,7 +260,7 @@ export type AgentLine = ChannelThreadAgent & {
  * name one agent two ways.
  */
 export function agentSubject(
-  agents: Pick<CodingAgentsControl, "agents" | "archived" | "models" | "me" | "pullRequests">,
+  agents: Pick<AgentsControl, "agents" | "archived" | "models" | "me" | "pullRequests">,
   agentId: string,
   held: HeldTranscripts,
   chosen: boolean,
@@ -284,7 +284,7 @@ export function agentSubject(
     choice: undefined,
     transcript: undefined,
   };
-  const name = line === undefined ? TAB_WORDS.CODING_AGENT : agentName(line, agents.models);
+  const name = line === undefined ? TAB_WORDS.AGENT : agentName(line, agents.models);
   const tile: Actor =
     line === undefined
       ? { kind: ACTOR_KIND.AGENT, name, provider: undefined, state: ACTOR_STATE.REST }

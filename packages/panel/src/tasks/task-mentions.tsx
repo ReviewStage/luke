@@ -15,7 +15,7 @@ import {
 import { useAct } from "../act.js";
 import type { LinkDrawer } from "../markdown-message.js";
 import type { MentionNode } from "../plan-editor/contract.js";
-import { agentActor, agentName } from "./coding-agent-model.js";
+import { agentActor, agentName } from "./agent-model.js";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
 import type {
   MentionAgentsReader,
@@ -23,7 +23,7 @@ import type {
   MentionablePage,
   MentionablePullRequest,
 } from "./mention-picker.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import { useOpenTask } from "./use-open-link.js";
 
 /**
@@ -180,7 +180,7 @@ const NO_AGENTS: readonly MentionableAgent[] = [];
  * the first.
  */
 export function mentionablePullRequests(
-  agents: Pick<CodingAgentsControl, "agents" | "archived" | "models" | "pullRequests">,
+  agents: Pick<AgentsControl, "agents" | "archived" | "models" | "pullRequests">,
 ): readonly MentionablePullRequest[] {
   const held = [...(agents.agents ?? []), ...(agents.archived ?? [])];
   const offered = new Set<string>();

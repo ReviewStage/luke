@@ -22,8 +22,8 @@ import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { agentActor } from "./agent-model.js";
 import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref.js";
-import { agentActor } from "./coding-agent-model.js";
 
 /**
  * agent-automation.test.ts -- an agent an automation's run started says so

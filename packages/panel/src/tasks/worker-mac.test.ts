@@ -7,7 +7,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentSubagentTab } from "./agent-tab.js";
 
 /**
@@ -42,7 +42,7 @@ afterEach(() => {
 
 /** Where the worker's tab says its Mac command ran once its page is read, as `reader` sees it. */
 async function workerTabFor(reader: string): Promise<string> {
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [AGENT],
     me: reader,
     transcripts: pushedTranscripts(() => [

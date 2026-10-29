@@ -31,7 +31,7 @@ import { Message, MessageContent, RECEIVED_MESSAGE_CLASS } from "../ai-elements/
 import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/plan.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { lineSender, providerOf, receivedLine } from "./coding-agent-model.js";
+import { lineSender, providerOf, receivedLine } from "./agent-model.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
 import { CopyMessageAction } from "./copy-message.js";
 import { linkChip } from "./mention-chip.js";
@@ -54,7 +54,7 @@ import {
 import { useMentionDoors } from "./task-mentions.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 import { TranscriptTool, TranscriptWords } from "./transcript-blocks.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import { useOpenPlace } from "./use-open-link.js";
 
 /**
@@ -121,7 +121,7 @@ const NO_AGENTS: readonly AgentSummary[] = [];
 export function replayPlace(input: {
   agent: AgentSummary;
   control: Pick<
-    CodingAgentsControl,
+    AgentsControl,
     "agents" | "archived" | "pullRequests" | "readPullRequest" | "readAgent" | "me"
   >;
   tile: ((agentId: string) => Actor | undefined) | undefined;
@@ -159,7 +159,7 @@ function unlistedActor(agentId: string, read: AgentSummary | undefined): Actor {
   return {
     kind: ACTOR_KIND.AGENT,
     agentId,
-    name: read?.title ?? TAB_WORDS.CODING_AGENT,
+    name: read?.title ?? TAB_WORDS.AGENT,
     provider: read === undefined ? undefined : providerOf(read.model),
     state: ACTOR_STATE.REST,
   };

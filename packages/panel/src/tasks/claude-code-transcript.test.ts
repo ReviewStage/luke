@@ -7,9 +7,9 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { agentUsageLine } from "./agent-model.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { newestTodos, taskTodos } from "./agent-todos.js";
-import { agentUsageLine } from "./coding-agent-model.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 
 /**

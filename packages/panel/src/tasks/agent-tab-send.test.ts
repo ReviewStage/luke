@@ -26,7 +26,7 @@ import {
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 
 /**
@@ -122,7 +122,7 @@ async function drawnTab(later: readonly AgentTranscriptMessage[], agent = AGENT_
     status: AGENT_STATUS.COMPLETED,
     title: null,
   });
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [agent],
     onMessage: (_agentId, text, clientKey) => {
       sent.push({ text, clientKey });

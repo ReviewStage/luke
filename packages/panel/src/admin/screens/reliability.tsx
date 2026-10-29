@@ -233,7 +233,7 @@ const FAILURE_STATS: readonly StatSpec<AdminReliability>[] = [
   },
   {
     key: "agent-runs",
-    label: () => "Coding-agent runs failed",
+    label: () => "Agent runs failed",
     value: ({ headline }) => formatPercent(share(headline.agentRuns), RATE_PLACES),
     hint: ({ headline, windowDays }) => ofHint(headline.agentRuns, "runs", windowDays),
   },
@@ -268,14 +268,14 @@ interface Breakdown {
 /** The two breakdowns, side by side in this order. */
 const BREAKDOWNS: readonly Breakdown[] = [
   {
-    title: "Coding-agent failures by class",
+    title: "Agent failures by class",
     series: AGENT_FAILURES_SERIES,
     rows: (reliability) =>
       reliability.agentFailures.map((row) => ({
         label: AGENT_FAILURE_LABEL[row.failure],
         counts: { count: row.count },
       })),
-    empty: "No coding-agent run failed in this window.",
+    empty: "No agent run failed in this window.",
   },
   {
     title: "Automation skips and failures by reason",
@@ -325,7 +325,7 @@ function AttentionNote({
       A broken key, integration, or GitHub installation fails the account's agents quietly. Last
       changed is when the newest broken row last changed: a key's last answer from its provider, or
       an integration's or installation's last update, which a sign-in retried and not finished also
-      moves. Agents failed counts the account's coding agents with a failed run in the last{" "}
+      moves. Agents failed counts the account's agents with a failed run in the last{" "}
       {ADMIN_ATTENTION_AGENT_DAYS} days.
       {attention !== undefined && attention.total > attention.accounts.length
         ? ` Only the ${formatCount(attention.accounts.length)} newest of ${formatCount(attention.total)} are listed.`

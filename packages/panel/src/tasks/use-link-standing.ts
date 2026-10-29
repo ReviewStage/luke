@@ -14,7 +14,7 @@ import * as Atom from "effect/reactivity/Atom";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./coding-agent-model.js";
+import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./agent-model.js";
 
 /**
  * use-link-standing.ts -- a GitHub pull request or issue a link in Luke's words names, as its chip says it: its key, its title, where it stands, who opened it, and a pull request's lines added and removed, read through the workspace's own GitHub App.

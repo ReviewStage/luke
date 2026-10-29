@@ -7,7 +7,7 @@ import { type Actor, type OriginAgent, originActor } from "@luke/ui/actor-model"
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback } from "react";
 import { appStateDerivedAtom } from "../use-app-state.js";
-import { agentActorState, providerOf } from "./coding-agent-model.js";
+import { agentActorState, providerOf } from "./agent-model.js";
 
 /**
  * use-task-origin.ts -- who made a task for its member, where they did not make it by hand: Luke on their call, a coding agent, or the automation whose run started it.

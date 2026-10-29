@@ -6,7 +6,7 @@
  * (`agentStartRequestFields`' `from`): a settled one whole, and the
  * reply a running turn is still writing as far as it stood when Fork was
  * pressed, by its steps and the words and calls of the last of them (`forkCutOf`). The draft that sends it holds
- * the fork beside its choices (`use-coding-agents.ts`), with the opening
+ * the fork beside its choices (`use-agents.ts`), with the opening
  * words of the message it was forked at, which its chip quotes. The
  * developer's words and files go with it as a note, as the Start takes
  * them, files riding a note of no words; an empty box forks alone. The way back is read
@@ -29,7 +29,7 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import type { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
 import { isRecord, isWireString, MESSAGE_ROLE } from "@luke/wire";
-import { AGENT_PART, choiceRequest } from "./coding-agent-model.js";
+import { AGENT_PART, choiceRequest } from "./agent-model.js";
 import { cardTitle } from "./tool-call-model.js";
 
 /** The type a call's part opens with, followed by the tool's name. */

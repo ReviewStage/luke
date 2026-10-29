@@ -765,7 +765,7 @@ function IntegrationRow({
         question={{
           title: `Disconnect ${name}?`,
           ...(bySignIn
-            ? { body: "Coding agents lose GitHub until you connect it again." }
+            ? { body: "Agents lose GitHub until you connect it again." }
             : several
               ? {
                   body: `Agents lose this account. Your other ${INTEGRATION_NAME[provider]} accounts stay connected.`,

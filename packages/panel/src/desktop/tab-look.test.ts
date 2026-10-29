@@ -27,7 +27,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 import { taskCardOf } from "./task-card.js";
 
@@ -156,7 +156,7 @@ async function mount(shown: { body?: string; tab?: SidePanelTab } = {}): Promise
       pages: [{ page: FUNNEL.id }],
     },
     pages: [FUNNEL],
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: [WORKING, DONE],
       agentIds: [WORKING.id, DONE.id],
       draft: { id: DRAFT, prompt: "", attachments: [], choice: undefined, disabledServers: [] },

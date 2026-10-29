@@ -24,7 +24,7 @@ import {
   useMinute,
 } from "@luke/ui";
 import { ChevronLeftIcon, ChevronRightIcon, GLYPH } from "@luke/ui/icons";
-import { AGENT_STATUS_TONE } from "../tasks/coding-agent-model.js";
+import { AGENT_STATUS_TONE } from "../tasks/agent-model.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
 

@@ -2,7 +2,7 @@ import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@luke/features/agent-
 import type { AgentRuntime, AgentSummary } from "@luke/features/agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { useRef, useState } from "react";
-import { chooseFailureNote } from "./coding-agent-model.js";
+import { chooseFailureNote } from "./agent-model.js";
 
 /**
  * use-agent-model.ts -- the model chip under an agent's transcript as one control: the choice the chip shows, a change on its way, and why the last one did not take.

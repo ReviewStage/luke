@@ -71,7 +71,7 @@ function showerActor(
     kind: ACTOR_KIND.AGENT,
     agentId: shownBy.agentId,
     taskId: "taskId" in place ? place.taskId : undefined,
-    name: agents.get(shownBy.agentId) ?? TAB_WORDS.CODING_AGENT,
+    name: agents.get(shownBy.agentId) ?? TAB_WORDS.AGENT,
     provider: undefined,
     state: ACTOR_STATE.REST,
   };

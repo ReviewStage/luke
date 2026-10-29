@@ -9,10 +9,10 @@ import { MainTabContent } from "../desktop/main-tabs.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
+import { openingLineOf } from "./agent-model.js";
 import { NOTHING_HELD } from "./agent-ref.js";
 import { StartingAgentTab, type TranscriptCards } from "./agent-tab.js";
-import { openingLineOf } from "./coding-agent-model.js";
 
 /**
  * starting-agent-tab.test.ts -- the tab of an agent New task is still
@@ -59,8 +59,8 @@ test("an agent still starting draws the words it was started on as its first lin
 
 test("the column draws a Start still out on the plan as its agent's tab saying it is starting, under the press's key", async () => {
   fakeAppBridge({});
-  const base = codingAgentsControl();
-  const agents = codingAgentsControl({
+  const base = agentsControl();
+  const agents = agentsControl({
     agentIds: ["press-1"],
     start: { ...base.start, busy: true, pending: { key: "press-1", model: undefined } },
   });

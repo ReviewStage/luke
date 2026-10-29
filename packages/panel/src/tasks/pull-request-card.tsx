@@ -31,12 +31,12 @@ import {
 import { type ReactNode, useEffect } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, PROVENANCE_VERB, ProvenanceRow } from "../actor-ref.js";
 import { PULL_REQUEST_TAB } from "../desktop/pages-on-demand.js";
+import { pullRequestNumberLabel, pullRequestStateLabel } from "./agent-model.js";
 import { LinesChanged } from "./agent-published.js";
 import { AgentActorRef, type AgentSubject } from "./agent-ref.js";
-import { pullRequestNumberLabel, pullRequestStateLabel } from "./coding-agent-model.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { REVIEW_WORDS, useNamer } from "./pull-request-people.js";
-import type { HeldPeople } from "./use-coding-agents.js";
+import type { HeldPeople } from "./use-agents.js";
 import {
   PULL_REQUEST_MOMENT,
   type PullRequestMoment,

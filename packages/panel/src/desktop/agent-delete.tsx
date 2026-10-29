@@ -9,8 +9,8 @@ import {
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
-import { agentName } from "../tasks/coding-agent-model.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import { agentName } from "../tasks/agent-model.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import type { MenuAction } from "./action-menu.js";
 
 /**
@@ -23,7 +23,7 @@ import type { MenuAction } from "./action-menu.js";
  * what goes with it, and, for one not archived, saying an archive would keep
  * it out of the way instead. A refusal is said in the dialog, which stays;
  * a delete that landed takes the agent out of its list and says so in a
- * toast (`use-coding-agents.ts`), and the surface it was asked on closes its
+ * toast (`use-agents.ts`), and the surface it was asked on closes its
  * tab or its page (`onDeleted`).
  */
 
@@ -53,7 +53,7 @@ export interface AgentDelete {
  */
 export function useAgentDelete(
   agent: Pick<AgentSummary, "id" | "title" | "automationName" | "model" | "archivedAt">,
-  agents: Pick<CodingAgentsControl, "onDelete" | "models">,
+  agents: Pick<AgentsControl, "onDelete" | "models">,
   input: { readonly shown: boolean; readonly onDeleted?: (() => void) | undefined },
 ): AgentDelete {
   const { shown, onDeleted } = input;

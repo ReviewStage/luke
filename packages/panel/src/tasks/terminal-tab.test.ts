@@ -38,7 +38,7 @@ import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { onPhone } from "../testing/phone-tab.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { TerminalCardFoot, TerminalStanding } from "./terminal-shells.js";
 import { TerminalTab } from "./terminal-tab.js";
 import { OpenLinkProvider } from "./use-open-link.js";
@@ -287,7 +287,7 @@ async function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const agents = codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
+  const agents = agentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
   const registry = AtomRegistry.make();
   before?.(registry);
   const wrapped = (tab: React.ReactElement) =>
@@ -1494,7 +1494,7 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const agents = codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
+  const agents = agentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
   const registry = AtomRegistry.make();
   const tab = createElement(TerminalTab, {
     agentId: AGENT.id,

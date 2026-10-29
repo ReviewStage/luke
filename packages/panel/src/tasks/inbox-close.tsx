@@ -18,7 +18,7 @@ import type { ActHandle } from "../act.js";
 import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter, withoutPicks } from "../composer-drafts.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { messageFailureWords } from "./coding-agent-model.js";
+import { messageFailureWords } from "./agent-model.js";
 import { cardTitle } from "./tool-call-model.js";
 
 /**

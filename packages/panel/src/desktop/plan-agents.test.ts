@@ -11,7 +11,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import type { MainTab } from "../tasks/use-main-tabs.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { PlanAgents } from "./plan-agents.js";
 
 /**
@@ -67,7 +67,7 @@ afterEach(() => {
 /** The list over `agents`, `NEWEST` holding a merged pull request; every agent and pull request it opens recorded. */
 function mount(agents: readonly AgentSummary[]) {
   const opened: { agents: string[]; pullRequests: string[] } = { agents: [], pullRequests: [] };
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents,
     agentIds: agents.map((each) => each.id),
     models: [],

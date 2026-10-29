@@ -31,7 +31,7 @@ import {
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
-import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { TabSwitcher } from "./tab-switcher.js";
 
 /**
@@ -352,7 +352,7 @@ test("a task's card says the task and its agent's tab by the names they go by no
   });
   const named = (title: string | undefined, name = DOCUMENT_TASK.name) => ({
     tasks: [{ ...DOCUMENT_TASK, name }],
-    agents: codingAgentsControl({ agents: title === undefined ? [] : [agent(title)] }),
+    agents: agentsControl({ agents: title === undefined ? [] : [agent(title)] }),
   });
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, named("Token refresh"), column));
   press();

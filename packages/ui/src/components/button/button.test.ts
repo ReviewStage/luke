@@ -248,9 +248,9 @@ test("a labelled button given a label is named by it, its words within it, and b
     createElement(
       "div",
       null,
-      createElement(Button, { label: "Start a coding agent", children: "Start" }),
+      createElement(Button, { label: "Start an agent", children: "Start" }),
       createElement(Button, {
-        label: "Start a coding agent",
+        label: "Start an agent",
         busy: true,
         busyLabel: "Starting",
         children: "Start",
@@ -263,7 +263,7 @@ test("a labelled button given a label is named by it, its words within it, and b
   ]);
 
   expect(said).toEqual([
-    ["Start a coding agent", "Start"],
+    ["Start an agent", "Start"],
     ["Starting", "Start"],
   ]);
   expect(said[0]?.[0]).toContain(said[0]?.[1]);

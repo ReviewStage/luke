@@ -21,7 +21,7 @@ import { ChartEmpty, ChartFrame, ChartFrameSkeleton, SeriesLegend } from "./char
 /** The three rates, in the order the legend names them. */
 const FAILURE_RATES_CHART = {
   lukeTurns: { label: "Luke turns", color: "var(--luke-color-chart-1)" },
-  agentRuns: { label: "Coding-agent runs", color: "var(--luke-color-chart-2)" },
+  agentRuns: { label: "Agent runs", color: "var(--luke-color-chart-2)" },
   automationRuns: { label: "Automation runs", color: "var(--luke-color-chart-3)" },
 } satisfies ChartConfig;
 

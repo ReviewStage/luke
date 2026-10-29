@@ -25,7 +25,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 
 /**
@@ -132,7 +132,7 @@ async function drawnTab(answer: (index: number) => Promise<AgentPartView>) {
       return answer(payload.index);
     },
   });
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [AGENT],
     me: DEAN.userId,
     transcripts: pushedTranscripts(() => [

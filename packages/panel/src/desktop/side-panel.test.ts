@@ -14,7 +14,7 @@ import { createRoot } from "react-dom/client";
 import { test } from "vitest";
 import { agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { PullRequestCard } from "../tasks/pull-request-card.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import { PULL_REQUEST_VIEW, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -62,7 +62,7 @@ const SECOND = agent("9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32", "Invite fixes", 2);
 const THIRD = agent("1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c", "Expiry job", 3);
 
 /** The task's agents, the first two on one pull request and the third on its own. */
-function agents(): CodingAgentsControl {
+function agents(): AgentsControl {
   const shared = pullRequest(41, "Teammate invitations");
   return {
     ...tasksControl().agents,

@@ -13,7 +13,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
-import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab.js";
 import { agentForkDoors, ForkProvider } from "./fork-action.js";
 import type { AgentFork } from "./fork-model.js";
@@ -77,7 +77,7 @@ function drawn(input: {
   const forks: AgentFork[] = [];
   const opened: ToolTarget[] = [];
   const agent = input.agent ?? summary(SOURCE);
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: input.listed ?? [agent],
     archived: input.archivedAgents ?? [],
     onUnarchive: input.taskArchived === true ? () => undefined : undefined,
@@ -242,7 +242,7 @@ async function forkedAtInTab(
 ): Promise<readonly Omit<AgentFork, "agentId" | "opening">[]> {
   fakeAppBridge({});
   const agent = summary(SOURCE, { status, brief: AGENT_BRIEF.PROMPT });
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [agent],
     transcripts: pushedTranscripts(() => [
       { messages: [...messages], cursor: "2:0", status, title: null },

@@ -407,7 +407,7 @@ export function originActor(
     kind: ACTOR_KIND.AGENT,
     ...(origin.agentId === undefined ? undefined : { agentId: origin.agentId }),
     ...(agent?.taskId === undefined ? undefined : { taskId: agent.taskId }),
-    name: agent?.name ?? TAB_WORDS.CODING_AGENT,
+    name: agent?.name ?? TAB_WORDS.AGENT,
     provider: agent?.provider,
     state: agent?.state ?? ACTOR_STATE.REST,
   };
@@ -456,7 +456,7 @@ export function editActor(
       return {
         kind: ACTOR_KIND.AGENT,
         ...(edit.agentId === undefined ? undefined : { agentId: edit.agentId }),
-        name: edit.label ?? TAB_WORDS.CODING_AGENT,
+        name: edit.label ?? TAB_WORDS.AGENT,
         provider: agent?.provider,
         state: agent?.state ?? ACTOR_STATE.REST,
       };

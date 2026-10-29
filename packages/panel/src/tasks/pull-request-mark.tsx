@@ -10,7 +10,7 @@ import {
   STATUS_TONE,
   type StatusTone,
 } from "@luke/ui";
-import { pullRequestNumberLabel, pullRequestPillLabel } from "./coding-agent-model.js";
+import { pullRequestNumberLabel, pullRequestPillLabel } from "./agent-model.js";
 
 /**
  * pull-request-mark.tsx -- a pull request's mark wherever the window draws one: GitHub's glyph for where it stands, in GitHub's colour for it, whatever its checks say.

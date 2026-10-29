@@ -15,7 +15,7 @@ import {
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { HarnessMark } from "../harness-marks.js";
-import { agentUsageLine, choiceLabel, planPayerOf, providerOf } from "./coding-agent-model.js";
+import { agentUsageLine, choiceLabel, planPayerOf, providerOf } from "./agent-model.js";
 import { ModelLabel } from "./model-label.js";
 import { ModelMenu, settledChoice } from "./model-menu.js";
 import type { AgentModelControl } from "./use-agent-model.js";

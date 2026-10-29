@@ -15,7 +15,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
@@ -24,7 +24,7 @@ import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js"
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { onSideBundles, unlandedBundles } from "../testing/side-bundles.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 // Note that a Pull request tab is loaded as the side panel loads it, on first use
 // (`pages-on-demand.ts`), so the module is read here first and its load settles
 // within the test's own ticks.
@@ -102,7 +102,7 @@ async function settle(): Promise<void> {
  */
 async function mountEveryTab(
   chosen: { main: MainTab; side: SidePanelTab },
-  pullRequests: CodingAgentsControl["pullRequests"] = new Map(),
+  pullRequests: AgentsControl["pullRequests"] = new Map(),
 ): Promise<HTMLElement> {
   const control = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
@@ -125,7 +125,7 @@ async function mountEveryTab(
       tab: chosen.side,
     },
     pages: [{ id: PAGE_ID, title: "Invite flow", version: 1, at: 1 }],
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: [AGENT],
       agentIds: [AGENT.id],
       pullRequests,

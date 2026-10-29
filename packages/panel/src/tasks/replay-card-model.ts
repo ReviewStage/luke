@@ -20,8 +20,8 @@ import {
 import { CALL_KIND, CALL_WORDS, type CallKind } from "@luke/features/turn-rows";
 import { isRecord, valueFromJsonText, type WireValue } from "@luke/wire";
 import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
+import { AGENT_PART, agentParts, isTaskCall, messageWords } from "./agent-model.js";
 import { foldTaskCall, NO_TASKS, type TaskFold, todosOf } from "./agent-todos.js";
-import { AGENT_PART, agentParts, isTaskCall, messageWords } from "./coding-agent-model.js";
 import { type DrawnCall, drawnCall } from "./native-tool-calls.js";
 import {
   type CalledAgent,

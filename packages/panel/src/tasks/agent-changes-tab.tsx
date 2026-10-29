@@ -71,6 +71,7 @@ import {
   FILE_NOTE_LINE,
 } from "../diff-view/contract.js";
 import { usePhoneRoom } from "../stage-room.js";
+import { agentStillWriting } from "./agent-model.js";
 import {
   type ChangesList,
   FileHead,
@@ -104,7 +105,6 @@ import {
   wholeable,
 } from "./changes-model.js";
 import { ChangesStrip } from "./changes-strip.js";
-import { agentStillWriting } from "./coding-agent-model.js";
 import {
   type CommentDraft,
   type CommentDrafts,
@@ -142,7 +142,7 @@ import { useOpenFileTab } from "./open-file-tab.js";
 import { usePullRequestNumber } from "./pull-request-number.js";
 import { PullRequestWriteNote } from "./pull-request-writes.js";
 import { landable, type ThreadLanding, ThreadLandingProvider } from "./thread-reveal.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
 
@@ -1715,7 +1715,7 @@ export interface ChangesReads {
  */
 export function useChangesReads(
   agentId: string,
-  control: CodingAgentsControl,
+  control: AgentsControl,
   shown: boolean,
 ): ChangesReads {
   const status = control.agents?.find((each) => each.id === agentId)?.status;
@@ -1783,7 +1783,7 @@ export function AgentChangesTab({
   overscroll,
 }: {
   agentId: string;
-  control: CodingAgentsControl;
+  control: AgentsControl;
   /** Whether the panel is on screen, which is when the tab reads. */
   shown: boolean;
   /** The task's repository, which the agent works in, and whose files a gap between hunks is read from; none opens no gap. */

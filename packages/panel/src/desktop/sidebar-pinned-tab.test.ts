@@ -19,7 +19,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
 
 /**
@@ -375,7 +375,7 @@ describe("a pinned Changes tab's card", () => {
     return {
       ...base,
       activeTaskId: TASK.id,
-      agents: codingAgentsControl({ agents, pullRequests: new Map([[AGENT, read]]) }),
+      agents: agentsControl({ agents, pullRequests: new Map([[AGENT, read]]) }),
     };
   };
 

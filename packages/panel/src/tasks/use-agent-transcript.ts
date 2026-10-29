@@ -21,7 +21,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import { askAct } from "../act.js";
 import { jsonBytes, PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
-import { type AgentRun, agentStillWriting } from "./coding-agent-model.js";
+import { type AgentRun, agentStillWriting } from "./agent-model.js";
 
 /**
  * use-agent-transcript.ts -- one agent's transcript, or one of its workers', or a task's planning worker's, as its tab draws it, pushed to the window page by page while the tab is on screen.

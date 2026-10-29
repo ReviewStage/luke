@@ -92,22 +92,6 @@ import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import {
-  AgentPicturesProvider,
-  CallPictures,
-  MessageFileChips,
-  ShownPictures,
-  useAgentPictureDoor,
-} from "./agent-pictures.js";
-import { AgentPlace } from "./agent-place.js";
-import { type PublishedDoors, PublishedRow } from "./agent-published.js";
-import { SendingAgent } from "./agent-ref.js";
-import type { AgentServersControl } from "./agent-servers.js";
-import type { HeldTranscript } from "./agent-tab-card.js";
-import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
-import { AgentTabSkeleton, ComposerSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
-import { dockedTodos, newestTodos, taskTodos, todosOfPart } from "./agent-todos.js";
-import { ArchivedComposerNote } from "./archived-note.js";
-import {
   AGENT_PART,
   type AgentPart,
   type AgentPartCut,
@@ -157,7 +141,23 @@ import {
   workerLines,
   workerStatusOf,
   workerToolState,
-} from "./coding-agent-model.js";
+} from "./agent-model.js";
+import {
+  AgentPicturesProvider,
+  CallPictures,
+  MessageFileChips,
+  ShownPictures,
+  useAgentPictureDoor,
+} from "./agent-pictures.js";
+import { AgentPlace } from "./agent-place.js";
+import { type PublishedDoors, PublishedRow } from "./agent-published.js";
+import { SendingAgent } from "./agent-ref.js";
+import type { AgentServersControl } from "./agent-servers.js";
+import type { HeldTranscript } from "./agent-tab-card.js";
+import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
+import { AgentTabSkeleton, ComposerSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
+import { dockedTodos, newestTodos, taskTodos, todosOfPart } from "./agent-todos.js";
+import { ArchivedComposerNote } from "./archived-note.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
 import { ContinueAgent, ContinuedComposerNote, ContinuedTrail } from "./continue-agent.js";
 import { CopyMessageAction } from "./copy-message.js";
@@ -226,7 +226,7 @@ import { type AgentModelControl, useAgentModel } from "./use-agent-model.js";
 import { useAgentPullRequest } from "./use-agent-pull-request.js";
 import { useAgentServers } from "./use-agent-servers.js";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import { useKnownNames, useTaskStatus } from "./use-known-names.js";
 import { useOpenLink } from "./use-open-link.js";
 import { type CutBody, useWholePart, useWholePartDoor, WholePartsProvider } from "./whole-parts.js";
@@ -2720,7 +2720,7 @@ function AgentTabView({
 interface AgentTabDoors {
   /** The automation's run that started the agent, as its page reads it; none on a plan's tab. */
   run?: AgentOrigin | undefined;
-  control: CodingAgentsControl;
+  control: AgentsControl;
   /** Whether the tab is on screen: the task's column showing it, on the Tasks tab. */
   shown: boolean;
   /** Opens one of the agent's workers in a tab of the side panel's own, by the call that started it. */
@@ -3071,7 +3071,7 @@ export function AgentSubagentTab({
   /** Who handed the worker its task, named under its card: the agent that delegated it, which opens its tab; none where the panel names nobody. */
   sender?: ReactNode;
   status: AgentStatus;
-  control: CodingAgentsControl;
+  control: AgentsControl;
   shown: boolean;
   /** A page said where the worker stands now. */
   onStatus: (status: AgentStatus) => void;

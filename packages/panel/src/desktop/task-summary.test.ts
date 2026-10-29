@@ -25,7 +25,7 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platfo
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
-import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import type { HeldTranscripts } from "./strip-tabs.js";
 import { taskCardOf } from "./task-card.js";
 import {
@@ -127,7 +127,7 @@ function mount(
   const opened: string[] = [];
   const base = tasksControl();
   const tasks = tasksControl({
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: [AGENT],
       agentIds: [AGENT.id],
       models: [],

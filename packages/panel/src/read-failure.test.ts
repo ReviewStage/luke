@@ -27,7 +27,7 @@ import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { followedInboxes } from "./testing/followed-inboxes.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl } from "./testing/tasks-control.js";
+import { agentsControl, tasksControl } from "./testing/tasks-control.js";
 
 /**
  * A read that did not land says so alike on every surface that reads: the
@@ -221,7 +221,7 @@ test("a side panel tab whose read failed says so alike, and Retry reads them aga
   const page = await mount(
     createElement(ChangesTabReading, {
       agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-      control: codingAgentsControl({ readChanges }),
+      control: agentsControl({ readChanges }),
       shown: true,
       repository: null,
       tree: { open: false, onToggle: ignore },

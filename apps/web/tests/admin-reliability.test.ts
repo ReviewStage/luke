@@ -189,8 +189,8 @@ test("each rate reads as a share with what it is a share of", async () => {
   const { page } = await openReliability(reliability());
 
   expect(cardOf(page, "Luke turns failed")).toBe("Luke turns failed1.4%412 of 29,880 turns");
-  expect(cardOf(page, "Coding-agent runs failed")).toBe(
-    "Coding-agent runs failed6.8%68 of 1,000 runs",
+  expect(cardOf(page, "Agent runs failed")).toBe(
+    "Agent runs failed6.8%68 of 1,000 runs",
   );
   expect(cardOf(page, "Abandoned by the sweep")).toBe(
     "Abandoned by the sweep37turns past their bound",

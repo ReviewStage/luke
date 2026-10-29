@@ -74,7 +74,7 @@ import {
   startFailureNote,
   withAgent,
   withAgentRun,
-} from "./coding-agent-model.js";
+} from "./agent-model.js";
 import { type AgentFork, continueFork, forkStart } from "./fork-model.js";
 import {
   type ByPullRequestTab,
@@ -111,7 +111,7 @@ const NO_KEYWORDS: readonly string[] = [];
 /** How long a read of the models may stay out before it is said as failed, past the host's own ten-second bound on the call it makes. */
 const MODELS_READ_BOUND_MS = 15_000;
 /**
- * use-coding-agents.ts -- the open task's coding agents as one control: the agents and their status, a Start, a draft agent started on a prompt, the Stop, a message to one, a change of one's model, and the models the menus offer.
+ * use-agents.ts -- the open task's coding agents as one control: the agents and their status, a Start, a draft agent started on a prompt, the Stop, a message to one, a change of one's model, and the models the menus offer.
  *
  * The agents are read when a task opens, again after a Start or a Stop,
  * and as the task's column's "+" opens, and never on a clock; an agent's status moves between those reads only
@@ -196,7 +196,7 @@ export interface HeldPeople {
 }
 
 /** Everything the "+" menu, the tabs, and the agent tab draw and press. */
-export interface CodingAgentsControl {
+export interface AgentsControl {
   /** The signed-in account's id, whose own agents carry no "Started by"; none while signed out, or for an identity stored without one. */
   me: string | undefined;
   /** The open task's agents in the order started, an archived one left out, or nothing before the first read lands. */
@@ -759,7 +759,7 @@ export function withPendingAgents<A extends NamedAgent>(
   return list.map((agent) => pendingAgent(agent, titles.get(agent.id), archives.get(agent.id)));
 }
 
-export function useCodingAgents(input: {
+export function useAgents(input: {
   acts: Pick<ActHandle, "act">;
   /** The open task, or none. */
   taskId: string | undefined;
@@ -799,7 +799,7 @@ export function useCodingAgents(input: {
   mintKey?: () => string;
   /** The device the open task runs its agents on, which a refused Start names; none for the cloud. */
   device?: RefusingDevice | undefined;
-}): CodingAgentsControl {
+}): AgentsControl {
   const { taskId, agentId, repository } = input;
   const { act } = input.acts;
   const mintKey = input.mintKey ?? (() => crypto.randomUUID());
@@ -1701,7 +1701,7 @@ export function useCodingAgents(input: {
     ByPullRequestTab<AgentPullRequest>
   >(() => new Map());
   const numberedAsks = useRef(new Map<string, Map<number, number>>());
-  const readNumberedPullRequest = useCallback<CodingAgentsControl["readNumberedPullRequest"]>(
+  const readNumberedPullRequest = useCallback<AgentsControl["readNumberedPullRequest"]>(
     (agentId, number) => {
       const ofAgent = numberedAsks.current.get(agentId) ?? new Map<number, number>();
       numberedAsks.current.set(agentId, ofAgent);
@@ -1730,7 +1730,7 @@ export function useCodingAgents(input: {
     () => new Map(),
   );
   const changesAsked = useRef(new Map<string, number>());
-  const readChanges = useCallback<CodingAgentsControl["readChanges"]>(
+  const readChanges = useCallback<AgentsControl["readChanges"]>(
     (agentId, number) => {
       // Note that another pull request's people are not this agent's, so they are never kept beside it.
       if (number !== undefined) {
@@ -1757,7 +1757,7 @@ export function useCodingAgents(input: {
     [act],
   );
 
-  const readChapters = useCallback<CodingAgentsControl["readChapters"]>(
+  const readChapters = useCallback<AgentsControl["readChapters"]>(
     (agentId, number) =>
       act(ACT_KIND.CHAPTERS_READ, pullRequestAsked(agentId, number)).catch(
         (): PullRequestChaptersAnswerView => CHAPTERS_UNANSWERED,
@@ -1765,7 +1765,7 @@ export function useCodingAgents(input: {
     [act],
   );
 
-  const generateChapters = useCallback<CodingAgentsControl["generateChapters"]>(
+  const generateChapters = useCallback<AgentsControl["generateChapters"]>(
     (agentId, number) =>
       act(ACT_KIND.CHAPTERS_GENERATE, pullRequestAsked(agentId, number)).catch(
         (): PullRequestChaptersAnswerView => CHAPTERS_UNANSWERED,
@@ -1773,29 +1773,29 @@ export function useCodingAgents(input: {
     [act],
   );
 
-  const readOverviewPullRequest = useCallback<CodingAgentsControl["readOverviewPullRequest"]>(
+  const readOverviewPullRequest = useCallback<AgentsControl["readOverviewPullRequest"]>(
     (agentId, number) =>
       act(ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST, pullRequestAsked(agentId, number)),
     [act],
   );
 
-  const readReviewOptions = useCallback<CodingAgentsControl["readReviewOptions"]>(
+  const readReviewOptions = useCallback<AgentsControl["readReviewOptions"]>(
     (agentId) => act(ACT_KIND.AGENTS_REVIEW_OPTIONS, { agentId }),
     [act],
   );
 
-  const readOverviewChecks = useCallback<CodingAgentsControl["readOverviewChecks"]>(
+  const readOverviewChecks = useCallback<AgentsControl["readOverviewChecks"]>(
     (agentId, number) => act(ACT_KIND.AGENTS_OVERVIEW_CHECKS, pullRequestAsked(agentId, number)),
     [act],
   );
 
-  const readOverviewConversation = useCallback<CodingAgentsControl["readOverviewConversation"]>(
+  const readOverviewConversation = useCallback<AgentsControl["readOverviewConversation"]>(
     (agentId, number) =>
       act(ACT_KIND.AGENTS_OVERVIEW_CONVERSATION, pullRequestAsked(agentId, number)),
     [act],
   );
 
-  const readPullRequestViewed = useCallback<CodingAgentsControl["readPullRequestViewed"]>(
+  const readPullRequestViewed = useCallback<AgentsControl["readPullRequestViewed"]>(
     (agentId, number) =>
       act(ACT_KIND.AGENTS_PULL_REQUEST_VIEWED, pullRequestAsked(agentId, number)),
     [act],

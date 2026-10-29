@@ -13,11 +13,11 @@ import {
   Tooltip,
 } from "@luke/ui";
 import { sameTab } from "@luke/ui/tab-strip-model";
+import { agentStillWriting, pullRequestNumberLabel } from "../tasks/agent-model.js";
 import { type AgentSubject, agentSubject } from "../tasks/agent-ref.js";
-import { agentStillWriting, pullRequestNumberLabel } from "../tasks/coding-agent-model.js";
 import { PullRequestCard, peopleOf } from "../tasks/pull-request-card.js";
 import { PullRequestMark, pullRequestMarkState } from "../tasks/pull-request-mark.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import { openerOf } from "../tasks/use-link-standing.js";
 import type { MainTabsControl } from "../tasks/use-main-tabs.js";
 import { SUMMARY_GLYPH } from "./agent-archive.js";
@@ -111,7 +111,7 @@ function PlanAgentRow({
 }: {
   entry: AddEntry;
   pullRequest: AgentPullRequest | undefined;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   held: HeldTranscripts;
   main: Pick<MainTabsControl, "tab" | "onChoose">;
   onOpenPullRequest: () => void;
@@ -159,7 +159,7 @@ export function PlanAgents({
   main,
   onOpenPullRequest,
 }: {
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** What the tabs hold, which each row's card reads as its tab's does. */
   held: HeldTranscripts;
   /** The column's chosen tab, whose agent's card follows its run, and how a tab of the column is opened. */

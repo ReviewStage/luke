@@ -25,11 +25,11 @@ import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
+import { agentName } from "../tasks/agent-model.js";
 import { agentCardReading } from "../tasks/agent-ref.js";
 import { AgentTab, StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabCard } from "../tasks/agent-tab-card.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
-import { agentName } from "../tasks/coding-agent-model.js";
 import { DraftAgentTab } from "../tasks/draft-agent-tab.js";
 import { agentForkDoors, ForkProvider } from "../tasks/fork-action.js";
 import type { AgentFork } from "../tasks/fork-model.js";
@@ -37,7 +37,7 @@ import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { ToolTarget } from "../tasks/tool-call-model.js";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import type { MainTab, MainTabsControl } from "../tasks/use-main-tabs.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type AgentTerminalDoors, useAgentActions } from "./agent-actions.js";
@@ -84,7 +84,7 @@ import { TabStrip } from "./tab-strip.js";
  * draft's tab, named New agent as the "+" row that opens it is, stands after
  * the agents until its first message starts the agent, and
  * closing it lets the draft go at once, a toast's Undo bringing it back with
- * its words and files where it held any (`use-coding-agents.ts`). A task with no other tab standing shows a
+ * its words and files where it held any (`use-agents.ts`). A task with no other tab standing shows a
  * draft's (`use-main-tabs.ts`), so a new agent is the developer's to start
  * from its composer. Every tab wears its kind's look (`tab-look.tsx`), and an
  * agent's or the draft's, while its box holds words and another tab is
@@ -111,7 +111,7 @@ export const ROW_COUNT =
 export const AGENTS_SECTION = "Agents";
 
 /** The "+" menu's row that opens a draft agent, which no agent's id spells. */
-const NEW_AGENT_ROW = "new-coding-agent";
+const NEW_AGENT_ROW = "new-agent";
 
 /** What the row that opens a draft says while a Start is out. */
 const NEW_AGENT_STARTING = "Starting…";
@@ -194,7 +194,7 @@ export function AgentMenuTab({
   onShown,
 }: {
   agent: AgentSummary;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   look: TabLook;
   doors: TabDoors;
   shown: boolean;
@@ -265,7 +265,7 @@ interface DrawnTab {
  */
 function agentTabs(input: {
   main: MainTabsControl;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   unread: readonly StripTab[];
   views: TabViews;
   /** The started agents whose boxes hold a draft (`useDraftedAgents`). */
@@ -353,7 +353,7 @@ function agentTabs(input: {
  */
 export function agentEntries(
   main: Pick<MainTabsControl, "tab" | "onChoose">,
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   held?: HeldTranscripts,
 ): AddEntry[] {
   return (agents.agents ?? []).map((agent) => {
@@ -408,7 +408,7 @@ export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
  * Picking it opens the side panel's tab where it was closed and chooses it,
  * through `onPick`.
  */
-export function inboxEntries(agents: CodingAgentsControl, onPick: () => void): AddEntry[] {
+export function inboxEntries(agents: AgentsControl, onPick: () => void): AddEntry[] {
   // An archived agent's items still stand, so the row stands while the task holds any agent.
   if ((agents.heldIds?.length ?? 0) === 0) return [];
   return [inboxEntry(onPick, 0)];
@@ -421,7 +421,7 @@ export function inboxEntries(agents: CodingAgentsControl, onPick: () => void): A
  */
 function addEntries(
   main: MainTabsControl,
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   held: HeldTranscripts,
 ): AddEntry[] {
   const { start } = agents;
@@ -479,7 +479,7 @@ export function MainTabStrip({
 }: {
   task: TaskSummary;
   main: MainTabsControl;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** The agents that ended while no one was looking, each in semibold until shown. */
   unread: readonly StripTab[];
   views: TabViews;
@@ -607,7 +607,7 @@ export function MainTabStrip({
 }
 
 /** What an agent's or the draft's tab is called to a reader of the column. */
-export function mainTabLabel(tab: MainTab, agents: CodingAgentsControl): string | undefined {
+export function mainTabLabel(tab: MainTab, agents: AgentsControl): string | undefined {
   if (isDraftTab(tab)) return tabLook({ kind: TAB_KIND.DRAFT }).label;
   const agent = agents.agents?.find((each) => each.id === tab.agent);
   return agent === undefined ? undefined : agentName(agent, agents.models);
@@ -635,7 +635,7 @@ export function MainTabContent({
   onContinue,
 }: {
   tab: MainTab;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** Whether the column is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;
   views: TabViews;

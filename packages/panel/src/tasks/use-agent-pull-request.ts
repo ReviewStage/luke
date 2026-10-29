@@ -11,7 +11,7 @@ import { keepIdentity } from "@luke/wire";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { agentStillWriting, PUBLISHED_REREAD_MS } from "./coding-agent-model.js";
+import { agentStillWriting, PUBLISHED_REREAD_MS } from "./agent-model.js";
 
 /**
  * use-agent-pull-request.ts -- what one agent published, as its tab draws it: read when the tab shows, again as its transcript lands pages, and once more as the agent ends.

@@ -20,7 +20,7 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platfo
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import {
-  codingAgentsControl,
+  agentsControl,
   pushedTranscripts,
   tasksControl,
   UNPINNED_SUMMARY,
@@ -106,7 +106,7 @@ async function mount(input: {
       tab: input.side,
       onChoose: (tab) => chosen.push(tab),
     },
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: [AGENT],
       agentIds: [AGENT.id],
       me: input.reader,

@@ -160,15 +160,15 @@ export const CALL_WORDS = {
   [CALL_KIND.WORKER]: { verb: "Asked the worker", code: false },
   [CALL_KIND.WORKER_WAIT]: { verb: "Waited for the worker", code: false },
   [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped subagent", code: false },
-  [CALL_KIND.LIST_AGENTS]: { verb: "Listed the coding agents", code: false },
-  [CALL_KIND.READ_AGENT]: { verb: "Read the coding agent", code: false },
-  [CALL_KIND.MESSAGE_AGENT]: { verb: "Messaged the coding agent", code: false },
-  [CALL_KIND.START_AGENT]: { verb: "Started a coding agent", code: false },
-  [CALL_KIND.ARCHIVE_AGENT]: { verb: "Archived the coding agent", code: false },
-  [CALL_KIND.UNARCHIVE_AGENT]: { verb: "Unarchived the coding agent", code: false },
+  [CALL_KIND.LIST_AGENTS]: { verb: "Listed the agents", code: false },
+  [CALL_KIND.READ_AGENT]: { verb: "Read the agent", code: false },
+  [CALL_KIND.MESSAGE_AGENT]: { verb: "Messaged the agent", code: false },
+  [CALL_KIND.START_AGENT]: { verb: "Started an agent", code: false },
+  [CALL_KIND.ARCHIVE_AGENT]: { verb: "Archived the agent", code: false },
+  [CALL_KIND.UNARCHIVE_AGENT]: { verb: "Unarchived the agent", code: false },
   [CALL_KIND.LIST_MODELS]: { verb: "Listed the models", code: false },
-  [CALL_KIND.STOP_AGENT]: { verb: "Stopped the coding agent", code: false },
-  [CALL_KIND.UPDATE_AGENT]: { verb: "Changed the coding agent", code: false },
+  [CALL_KIND.STOP_AGENT]: { verb: "Stopped the agent", code: false },
+  [CALL_KIND.UPDATE_AGENT]: { verb: "Changed the agent", code: false },
   [CALL_KIND.READ_TASK]: { verb: "Read the task", code: false },
   [CALL_KIND.CREATE_SECTION]: { verb: "Made the section", code: false },
   [CALL_KIND.DELETE_SECTION]: { verb: "Deleted the section", code: false },
@@ -491,9 +491,7 @@ function foldedSummary({ calls, subagents, codingAgents, messages }: Held): stri
   const line = [
     ...(calls > 0 ? [countWords(calls, { one: "tool call", many: "tool calls" })] : []),
     ...(subagents > 0 ? [countWords(subagents, { one: "subagent", many: "subagents" })] : []),
-    ...(codingAgents > 0
-      ? [countWords(codingAgents, { one: "coding agent", many: "coding agents" })]
-      : []),
+    ...(codingAgents > 0 ? [countWords(codingAgents, { one: "agent", many: "agents" })] : []),
     ...(messages > 0 ? [countWords(messages, { one: "message", many: "messages" })] : []),
   ];
   return line.join(", ");

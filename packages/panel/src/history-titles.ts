@@ -16,7 +16,7 @@ import {
 import { mainTabLabel } from "./desktop/main-tabs.js";
 import type { StepTitle } from "./navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
-import { agentName } from "./tasks/coding-agent-model.js";
+import { agentName } from "./tasks/agent-model.js";
 import type { MainTab } from "./tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB_KIND, type SidePanelTab } from "./tasks/use-side-panel.js";
 import type { TasksControl } from "./tasks/use-tasks-tab.js";
@@ -105,7 +105,7 @@ function sideTabLabel(tab: SidePanelTab, taskId: string, tasks: StepNameTasks): 
 function shownSideTabLabel(tab: SidePanelTab, taskId: string, tasks: StepNameTasks): string {
   const named = sideTabLabel(tab, taskId, tasks);
   if (named !== undefined) return named;
-  return isPageTab(tab) ? PAGE_WORDS : TAB_WORDS.CODING_AGENT;
+  return isPageTab(tab) ? PAGE_WORDS : TAB_WORDS.AGENT;
 }
 
 /** The parts of the Tasks tab a step's name reads. */

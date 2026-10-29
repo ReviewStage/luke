@@ -20,10 +20,10 @@ import { FindScope } from "../find-in-tab.js";
 import { FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { codingAgentsControl, pushedPage } from "../testing/tasks-control.js";
+import { agentsControl, pushedPage } from "../testing/tasks-control.js";
 import { AgentTab, type TranscriptCards } from "./agent-tab.js";
 import type { TranscriptFollower } from "./use-agent-transcript.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 
 /**
  * agent-tab-virtual.test.ts -- a long agent transcript draws only the rows
@@ -169,7 +169,7 @@ async function scrollTo(box: HTMLElement, top: number): Promise<void> {
 
 /** Draws the agent's tab over `control`, inside `wrap` where one is handed, and waits for its first page. */
 async function drawTab(
-  control: CodingAgentsControl,
+  control: AgentsControl,
   wrap: (tab: ReactElement) => ReactElement = (tab) => tab,
   cards?: TranscriptCards,
 ) {
@@ -202,9 +202,7 @@ function drawnRows(container: HTMLElement): string[] {
 
 test("a transcript of two thousand messages opens on its newest and draws a bounded number of rows", async () => {
   const { follower } = following(page(messages(0, 2_000)));
-  const { container } = await drawTab(
-    codingAgentsControl({ agents: [AGENT], transcripts: follower }),
-  );
+  const { container } = await drawTab(agentsControl({ agents: [AGENT], transcripts: follower }));
   const rows = drawnRows(container);
   assert.ok(rows.length > 0, "rows are drawn");
   assert.ok(rows.length <= 20, `${rows.length} rows are drawn`);
@@ -233,7 +231,7 @@ test("⌘F finds words in a row the log has not drawn, scrolls the log to it, an
   held[7] = message(7, "The lantern is lit in the seventh reply.");
   const { follower } = following(page(held));
   const { container, box } = await drawTab(
-    codingAgentsControl({ agents: [AGENT], transcripts: follower }),
+    agentsControl({ agents: [AGENT], transcripts: follower }),
     (tab) => createElement(FindScope, { active: true, subject: { agent: AGENT_ID } }, tab),
   );
   const { writes } = layOut(box);
@@ -275,7 +273,7 @@ test("a running turn of a thousand parts draws only the pieces near its view, an
     status: AGENT_STATUS.RUNNING,
   });
   const { container, box } = await drawTab(
-    codingAgentsControl({
+    agentsControl({
       agents: [{ ...AGENT, status: AGENT_STATUS.RUNNING }],
       transcripts: follower,
     }),
@@ -334,7 +332,7 @@ test("⌘F counts a line the voice said over a long turn's first piece after tha
     page([message(0), turn, ...reached, said("said-1", "The run is done.")]),
   );
   const { container } = await drawTab(
-    codingAgentsControl({ agents: [AGENT], transcripts: follower }),
+    agentsControl({ agents: [AGENT], transcripts: follower }),
     (tab) => createElement(FindScope, { active: true, subject: { agent: AGENT_ID } }, tab),
   );
   assert.ok(
@@ -377,7 +375,7 @@ test("⌘F counts a match in a closed call's answer far up the log, steps to it,
   };
   const { follower } = following(page(held));
   const { container, box } = await drawTab(
-    codingAgentsControl({ agents: [AGENT], transcripts: follower }),
+    agentsControl({ agents: [AGENT], transcripts: follower }),
     (tab) => createElement(FindScope, { active: true, subject: { agent: AGENT_ID } }, tab),
   );
   layOut(box);
@@ -418,7 +416,7 @@ async function farTally(far: AgentTranscriptMessage, query: string) {
   held[7] = far;
   const { follower } = following(page(held));
   const { container, box } = await drawTab(
-    codingAgentsControl({ agents: [AGENT], transcripts: follower }),
+    agentsControl({ agents: [AGENT], transcripts: follower }),
     (tab) => createElement(FindScope, { active: true, subject: { agent: AGENT_ID } }, tab),
   );
   layOut(box);
@@ -477,7 +475,7 @@ test("⌘F finds a word on a long fence's 55th line, past its cut, and opens the
     page([message(0), message(1, `The block:\n\n\`\`\`ts\n${fence}\n\`\`\`\n`)]),
   );
   const { container, box } = await drawTab(
-    codingAgentsControl({ agents: [AGENT], transcripts: follower }),
+    agentsControl({ agents: [AGENT], transcripts: follower }),
     (tab) => createElement(FindScope, { active: true, subject: { agent: AGENT_ID } }, tab),
   );
   layOut(box);
@@ -516,7 +514,7 @@ test("older messages put before the first under a long log leave the row the rea
         : Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not here." }),
   });
   const { container, box } = await drawTab(
-    codingAgentsControl({ agents: [AGENT], transcripts: follower }),
+    agentsControl({ agents: [AGENT], transcripts: follower }),
   );
   layOut(box);
   // The log stands at its newest line, and the reader scrolls up near its top, onto the second message.
@@ -570,7 +568,7 @@ test("the log draws while the agent's pull request is still read, and its dock l
     } | null;
   }>();
   const { container } = await drawTab(
-    codingAgentsControl({
+    agentsControl({
       agents: [AGENT],
       transcripts: follower,
       readPullRequest: published.read,

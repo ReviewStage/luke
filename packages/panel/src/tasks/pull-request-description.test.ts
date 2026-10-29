@@ -33,7 +33,7 @@ import { installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { AgentPullRequestTab } from "./agent-pull-request-tab.js";
 import { PULL_REQUEST_VIEW } from "./use-side-panel.js";
 
@@ -160,7 +160,7 @@ async function settle(): Promise<void> {
 
 /** The agent's Pull request tab, its reads answering the description as GitHub holds it, which the member may edit or not. */
 async function drawTab(canEditDescription = true): Promise<HTMLElement> {
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
     models: [],

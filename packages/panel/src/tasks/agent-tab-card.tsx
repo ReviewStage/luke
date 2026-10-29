@@ -34,7 +34,7 @@ import {
   agentStillWriting,
   isDelegation,
   pullRequestNumberLabel,
-} from "./coding-agent-model.js";
+} from "./agent-model.js";
 import { ModelLabel } from "./model-label.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { delegationView } from "./tool-call-model.js";

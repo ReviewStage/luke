@@ -31,12 +31,12 @@ import {
   Inline,
   MoreButton,
   SELECT_BOX_PLACE,
+  SETTINGS_SECTION_FRAME,
   SearchField,
   SearchIcon,
   type SelectionAct,
   SelectionBar,
   SelectionRegion,
-  SETTINGS_SECTION_FRAME,
   SettingsLine,
   SettingsSection,
   SkeletonRegion,
@@ -147,7 +147,7 @@ const FORMER_WORDS = "Former members";
 
 /** What the page says the memories are for, and who shares them. */
 function noteFor(workspace: Workspace): string {
-  return `Luke's coding agents keep what you settle in ${workspace.name} and recall it in later tasks.`;
+  return `Luke's agents keep what you settle in ${workspace.name} and recall it in later tasks.`;
 }
 
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */

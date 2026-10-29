@@ -21,7 +21,7 @@ import {
 } from "@luke/features/integration-row-wire";
 import { INTEGRATION_STATUS_WORDS } from "@luke/features/integration-status-words";
 import { STATUS_TONE, type StatusTone } from "@luke/ui";
-import { PULL_REQUEST_STATE_LABEL } from "../tasks/coding-agent-model.js";
+import { PULL_REQUEST_STATE_LABEL } from "../tasks/agent-model.js";
 import { PULL_REQUEST_TONE } from "../tasks/pull-request-mark.js";
 
 /** The state each pull request the admin pages draw stands in; a draft is one of the open. */

@@ -25,7 +25,7 @@ import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { ChangesTabReading } from "../testing/changes-tab.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { PullRequestCard, peopleOf } from "./pull-request-card.js";
 
@@ -126,7 +126,7 @@ async function draw(element: ReactElement): Promise<HTMLElement> {
 
 /** The plan's agents, the one whose pull request it is among them, its changes naming the people given. */
 function controlNaming(people: AgentChangesPeople) {
-  return codingAgentsControl({
+  return agentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
     models: [],

@@ -146,7 +146,7 @@ import { TAB_KIND, tabLook } from "./tab-look.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { cardTitle } from "./tool-call-model.js";
 import { INERT_LINK_CLASS, TranscriptWords } from "./transcript-blocks.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import { opensAsLink } from "./use-open-link.js";
 import { type PendingInboxReply, pendingReplyOn, type TaskInboxControl } from "./use-task-inbox.js";
 
@@ -1297,7 +1297,7 @@ export function InboxPane({
   item: InboxItem;
   /** The live read of the item's task, or of its agent with no task, which answers it and holds its draft. */
   control: TaskInboxControl;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   doors: InboxPaneDoors;
   /** Whether the list stands alone in the item's place. */
   hidden: boolean;

@@ -24,7 +24,7 @@ import {
   inboxCounts,
   listedItems,
 } from "./inbox-model.js";
-import { useCodingAgents } from "./use-coding-agents.js";
+import { useAgents } from "./use-agents.js";
 import { useHeldInboxList } from "./use-held-inbox-list.js";
 import {
   agentHoldings,
@@ -149,7 +149,7 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
       : undefined;
   const taskId = chosenTask?.id;
   const chosenAgentId = asked !== undefined && "agentId" in asked ? asked.agentId : undefined;
-  const agents = useCodingAgents({
+  const agents = useAgents({
     acts: { act },
     taskId,
     ...(chosenAgentId === undefined ? undefined : { agentId: chosenAgentId }),

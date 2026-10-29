@@ -110,8 +110,8 @@ const FIXTURE_MODE: Atom.Atom<boolean> = Atom.map(
 
 /** The agents main says ended unseen. */
 const UNSEEN_AGENTS: Atom.Atom<readonly string[]> = Atom.map(
-  APP_SLICE.CODING_AGENTS,
-  (codingAgents) => codingAgents?.unseen ?? NO_UNSEEN_AGENTS,
+  APP_SLICE.AGENTS,
+  (agents) => agents?.unseen ?? NO_UNSEEN_AGENTS,
 );
 
 /** Whether this window stands in full screen. */

@@ -297,10 +297,10 @@ test("the support sections say what the account did and what broke, by the servi
     ]),
   );
   expect(page.textContent).toContain("Tasks created · 30 days74");
-  expect(page.textContent).toContain("Coding agents · 30 days405% failed");
+  expect(page.textContent).toContain("Agents · 30 days405% failed");
   expect(page.textContent).toContain("Pull requests merged · 30 days12of 17 opened");
 
-  const agents = rows(page, "The account's newest coding agents");
+  const agents = rows(page, "The account's newest agents");
   expect(agents).toEqual([
     "Oct 14, 8:05 AM UTC|acme/relay|anthropic/claude-opus-5.5 · high|Finished|Merged",
     "Oct 13, 4:40 PM UTC|acme/web|openai/gpt-5.5 · medium · standard window|Failedprovider_key|—",
@@ -313,10 +313,10 @@ test("the support sections say what the account did and what broke, by the servi
     "Provider key|openai|quota_exceeded|Oct 13, 4:41 PM UTC",
     "Connection|linear|Connected|Sep 2, 12:00 AM UTC",
   ]);
-  expect(page.textContent).toContain("Coding agents start on anthropic/claude-opus-5.5 · high.");
+  expect(page.textContent).toContain("Agents start on anthropic/claude-opus-5.5 · high.");
   expect(page.textContent).toContain("Experiments:Memory");
   expect(rows(page, "The account's recent failures")).toEqual([
-    "Oct 13, 4:42 PM UTC|Coding agent failed|provider_key",
+    "Oct 13, 4:42 PM UTC|Agent failed|provider_key",
     "Oct 13, 4:41 PM UTC|Provider key · openai|quota_exceeded",
   ]);
 });
@@ -346,11 +346,11 @@ test("an account with nothing to support from says so in each section", async ()
   );
 
   expect(page.textContent).toContain("last seen never");
-  expect(page.textContent).toContain("Coding agents · 30 days0none started");
-  expect(page.textContent).toContain("No coding agent started yet.");
+  expect(page.textContent).toContain("Agents · 30 days0none started");
+  expect(page.textContent).toContain("No agent started yet.");
   expect(page.textContent).toContain("In no workspace.");
   expect(page.textContent).toContain("No provider key or connection.");
-  expect(page.textContent).toContain("Coding agents start on the catalog's default.");
+  expect(page.textContent).toContain("Agents start on the catalog's default.");
   expect(page.textContent).toContain("No experiments turned on.");
   expect(page.textContent).toContain("Nothing failed in this window.");
 });

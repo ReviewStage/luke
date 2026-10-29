@@ -35,7 +35,7 @@ import {
   threadLineOf,
   turnStretches,
   workerLines,
-} from "./coding-agent-model.js";
+} from "./agent-model.js";
 import {
   leftOutLine,
   replayCount,
