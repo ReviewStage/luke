@@ -113,8 +113,8 @@ import { taskCardOf } from "./task-card.js";
  * list (`inbox-pane.tsx`) shows it as a thread, answered in place, on its
  * task's own held read, which stands in for the list's read of that task
  * so an answer shows at once. Nothing is chosen until a row is pressed or a
- * link asks for an item, the pane saying meanwhile how many threads the list
- * holds (`InboxPaneEmpty`), so nothing is read by the Inbox opening. The pane's crumbs open
+ * link asks for an item, the pane saying meanwhile how to choose one
+ * (`InboxPaneEmpty`), so nothing is read by the Inbox opening. The pane's crumbs open
  * the task or the agent's tab, leaving the Inbox; what the item opens that
  * a task's side panel draws opens in that panel beside it instead, standing
  * for the chosen item's task (`use-tasks-tab.ts`): a code block's Open its
@@ -614,7 +614,6 @@ export function DesktopInbox({
                 {chosen === undefined ? (
                   <section
                     className={INBOX_VIEW_ITEMS}
-                    aria-label="Inbox"
                     hidden={
                       missing || chosenFailed
                         ? columns.shown === INBOX_COLUMNS.LIST

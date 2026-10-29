@@ -28,6 +28,7 @@ import {
   type InboxDirection,
   type InboxListed,
   type InboxListView,
+  inboxEnds,
   inboxSteps,
   nextNeedingYou,
 } from "./inbox-model.js";
@@ -42,7 +43,7 @@ import { cardTitle } from "./tool-call-model.js";
  * wrapping round. The item read keeps its place among the steps where the
  * filter draws it no row, once it is answered, so they still reach the rows
  * either side; the pager then counts nothing, there being no row to count it
- * as. K and J are offered only while the Inbox is on screen, so
+ * as. With nothing chosen, J chooses the first row and K the last. K and J are offered only while the Inbox is on screen, so
  * a page drawn over it, a full-screen side panel or Settings, keeps them. K and J
  * choose the item above and below wherever the Inbox stands, as Linear's
  * Inbox has them: split, they move the chosen row and the item beside it;
@@ -202,7 +203,7 @@ export interface InboxPaging {
   readonly direction: InboxDirection;
 }
 
-/** The chosen item's place among the rows drawn and the steps either side of it, which keep it in its place where it has no row, K and J offered while the Inbox is on screen and each has somewhere to go, and the way the last of them went; no pager where the steps do not hold the chosen item. */
+/** The chosen item's place among the rows drawn and the steps either side of it, which keep it in its place where it has no row, K and J offered while the Inbox is on screen and each has somewhere to go, the last row and the first while nothing is chosen, and the way the last of them went; no pager where the steps do not hold the chosen item. */
 export function useInboxPager(
   steps: InboxListView,
   rows: InboxListView,
@@ -213,8 +214,10 @@ export function useInboxPager(
   const [direction, setDirection] = useState<InboxDirection>(INBOX_DIRECTION.DOWN);
   const at = inboxSteps(steps, chosen, place.folded);
   const row = inboxSteps(rows, chosen, place.folded);
-  const previous = at?.previous;
-  const next = at?.next;
+  // Note that with nothing chosen J chooses the first row and K the last, so the empty pane's "step with J K" holds.
+  const ends = chosen === undefined ? inboxEnds(steps, place.folded) : undefined;
+  const previous = at === undefined ? ends?.last : at.previous;
+  const next = at === undefined ? ends?.first : at.next;
   const onPrevious =
     previous === undefined
       ? undefined
