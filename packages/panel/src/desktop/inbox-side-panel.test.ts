@@ -163,18 +163,18 @@ const follows = followedInboxes(() => ({ items: [ITEM] }));
 
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   switch (request.kind) {
-    case ACT_KIND.CODING_AGENTS_INBOX_READ_STATE:
+    case ACT_KIND.AGENTS_INBOX_READ_STATE:
       readMarks.push(`${request.payload.unread ? "unread" : "read"}:${request.payload.itemId}`);
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
         value: { id: request.payload.itemId, unread: request.payload.unread },
       });
-    case ACT_KIND.CODING_AGENTS_LIST:
+    case ACT_KIND.AGENTS_LIST:
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
         value: { agents: [ARCHIVED, AGENT] },
       });
-    case ACT_KIND.CODING_AGENTS_PULL_REQUEST:
+    case ACT_KIND.AGENTS_PULL_REQUEST:
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
         value: {

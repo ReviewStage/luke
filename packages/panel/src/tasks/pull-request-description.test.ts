@@ -129,7 +129,7 @@ beforeEach(() => {
   fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
-    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
+    [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
       changes.push(request);
       if (
         changeAnswer.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE &&

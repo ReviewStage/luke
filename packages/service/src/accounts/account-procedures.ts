@@ -154,7 +154,7 @@ const forgetAnalytics = /* @__PURE__ */ Effect.fn("web/forgetAnalytics")(functio
  * account (`offeredToAccount`): a choice it does not offer is a bad request, and a catalog the instance
  * cannot read is an outage the caller may retry.
  */
-const acceptedCodingAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
+const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: AccountProcedureSeams,
   userId: string,
   value: UnparsedWireValue,
@@ -256,7 +256,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
         write.linkOpen = linkOpen;
       }
       if (body.codingAgent !== undefined) {
-        write.codingAgent = yield* acceptedCodingAgent(seams, context.userId, body.codingAgent);
+        write.codingAgent = yield* acceptedAgentChoice(seams, context.userId, body.codingAgent);
       }
       if (body.chaptersModel !== undefined) {
         if (!isChaptersModel(body.chaptersModel)) {

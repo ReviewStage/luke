@@ -25,7 +25,7 @@ import { AGENT_TOOL, type AgentTool, toolsOf } from "../agent-runtime/tools.js";
  * threads it posts to its workspace's channels (`inbox.ts`), the pull
  * request the service opens for it (`pull-request.ts`), its reach to the
  * other coding agents of its workspace, a message to one among it
- * (`../coding-agent-tools.ts`, `agent-message.ts`), the load of one of its
+ * (`../agent-tools.ts`, `agent-message.ts`), the load of one of its
  * repository's skills (`skills.ts`), the pages it shows the developer
  * (`../page-tool.ts`), and eve's own durable `sleep`, which it waits on its
  * checks or a deploy with. The worker's own rows name

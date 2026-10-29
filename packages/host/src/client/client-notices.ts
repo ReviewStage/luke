@@ -29,10 +29,10 @@ const MAC_COMMAND_ASK_NOTICE = {
 /** The host's methods the notices read and refresh through. */
 type NoticeHost = Pick<
   HostOperator,
-  | "codingAgentList"
-  | "codingAgentPage"
-  | "codingAgentAccountInboxFollow"
-  | "codingAgentAccountInboxUnfollow"
+  | "agentList"
+  | "agentPage"
+  | "agentAccountInboxFollow"
+  | "agentAccountInboxUnfollow"
   | "onAccountInboxChanged"
   | "onAccountChanged"
   | "tasksRefresh"
@@ -66,8 +66,8 @@ function accountInboxOf(host: NoticeHost): Stream.Stream<AgentAccountInboxAnswer
         Effect.sync(() => host.onAccountInboxChanged((answer) => Queue.offerUnsafe(queue, answer))),
         (unsubscribe) => Effect.sync(unsubscribe),
       );
-      yield* Effect.acquireRelease(host.codingAgentAccountInboxFollow(), () =>
-        host.codingAgentAccountInboxUnfollow(),
+      yield* Effect.acquireRelease(host.agentAccountInboxFollow(), () =>
+        host.agentAccountInboxUnfollow(),
       );
     }),
   );
@@ -105,7 +105,7 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     );
   };
   const notices = yield* createAgentNotices({
-    onUnseenChanged: (unseen) => state.update({ codingAgents: { unseen } }),
+    onUnseenChanged: (unseen) => state.update({ agents: { unseen } }),
     onPanelFocusChanged,
     signedInAs: () => accountKey(state.snapshot().account),
     accountId: () => {

@@ -261,7 +261,7 @@ const pinPullRequestAtom = Atom.family((agentId: string) =>
   Atom.setIdleTTL(
     rendererRuntime.atom(
       Effect.flatMap(
-        Effect.tryPromise(() => askAct(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId })),
+        Effect.tryPromise(() => askAct(ACT_KIND.AGENTS_PULL_REQUEST, { agentId })),
         (answer) =>
           "failure" in answer
             ? Effect.fail(answer.failure)

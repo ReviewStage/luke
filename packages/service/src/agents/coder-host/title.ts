@@ -441,7 +441,7 @@ export function titleInboxThread(
  * operator is never titled, since it goes by Luke wherever it is named and
  * a title would leak through every read that takes the plain title.
  */
-export function titleCodingAgent(
+export function titleAgent(
   model: LanguageModel | undefined,
   target: ConversationTarget,
   agent: Agent,

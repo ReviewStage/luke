@@ -13,7 +13,7 @@ import { Duration } from "effect";
 import { expect, test } from "vitest";
 import { TURN_FAILURE, TURN_STATUS } from "../../core.js";
 import { CODER } from "./bounds.js";
-import { codingAgentFailureOf, codingAgentStatusOf, codingAgentSummary } from "./status.js";
+import { agentFailureOf, agentStatusOf, agentSummary } from "./status.js";
 
 /**
  * status.test.ts -- how long a line of the developer's awaiting its turn
@@ -52,8 +52,7 @@ function turn(times: {
 test("a line sent to an idle agent reads it running for the grace its turn opens in, and failed past it, unanswered", () => {
   const settled = turn({ queuedAt: 2_000, startedAt: 2_500, settledAt: 3_000 });
   const awaitingLineAt = new Date(10_000);
-  const at = (now: number) =>
-    codingAgentStatusOf(settled, { createdAt: STARTED, now, awaitingLineAt });
+  const at = (now: number) => agentStatusOf(settled, { createdAt: STARTED, now, awaitingLineAt });
   expect(at(10_000 + LINE_GRACE_MS)).toBe(AGENT_STATUS.RUNNING);
   expect(at(10_001 + LINE_GRACE_MS)).toBe(AGENT_STATUS.FAILED);
 });
@@ -61,7 +60,7 @@ test("a line sent to an idle agent reads it running for the grace its turn opens
 test("a line sent before the first turn reads the agent failed past the grace rather than running", () => {
   const awaitingLineAt = new Date(2_000);
   const now = 2_001 + LINE_GRACE_MS;
-  expect(codingAgentStatusOf(undefined, { createdAt: STARTED, now, awaitingLineAt })).toBe(
+  expect(agentStatusOf(undefined, { createdAt: STARTED, now, awaitingLineAt })).toBe(
     AGENT_STATUS.FAILED,
   );
 });
@@ -70,7 +69,7 @@ test("a line sent while a turn runs reads the agent running however long the tur
   const running = turn({ queuedAt: 2_000, startedAt: 2_500 });
   const awaitingLineAt = new Date(3_000);
   const now = 3_000 + 10 * LINE_GRACE_MS;
-  expect(codingAgentStatusOf(running, { createdAt: STARTED, now, awaitingLineAt })).toBe(
+  expect(agentStatusOf(running, { createdAt: STARTED, now, awaitingLineAt })).toBe(
     AGENT_STATUS.RUNNING,
   );
 });
@@ -79,7 +78,7 @@ test("a line's grace counts from when the turn it was sent during ended, since n
   const settled = turn({ queuedAt: 2_000, startedAt: 2_500, settledAt: 2_500 + LINE_GRACE_MS });
   const awaitingLineAt = new Date(3_000);
   const now = 3_000 + LINE_GRACE_MS;
-  expect(codingAgentStatusOf(settled, { createdAt: STARTED, now, awaitingLineAt })).toBe(
+  expect(agentStatusOf(settled, { createdAt: STARTED, now, awaitingLineAt })).toBe(
     AGENT_STATUS.RUNNING,
   );
 });
@@ -87,7 +86,7 @@ test("a line's grace counts from when the turn it was sent during ended, since n
 test("a line older than the newest turn's queueing that the turn never took reads the agent as that turn ended", () => {
   const settled = turn({ queuedAt: 4_000, startedAt: 4_500, settledAt: 9_000 });
   const awaitingLineAt = new Date(3_000);
-  expect(codingAgentStatusOf(settled, { createdAt: STARTED, now: 9_001, awaitingLineAt })).toBe(
+  expect(agentStatusOf(settled, { createdAt: STARTED, now: 9_001, awaitingLineAt })).toBe(
     AGENT_STATUS.COMPLETED,
   );
 });
@@ -95,8 +94,7 @@ test("a line older than the newest turn's queueing that the turn never took read
 test("a line sent while the newest turn was queued, and never taken, reads the agent failed past the grace from that turn's end", () => {
   const settled = turn({ queuedAt: 4_000, startedAt: 6_000, settledAt: 9_000 });
   const awaitingLineAt = new Date(5_000);
-  const at = (now: number) =>
-    codingAgentStatusOf(settled, { createdAt: STARTED, now, awaitingLineAt });
+  const at = (now: number) => agentStatusOf(settled, { createdAt: STARTED, now, awaitingLineAt });
   expect(at(9_000 + LINE_GRACE_MS)).toBe(AGENT_STATUS.RUNNING);
   expect(at(9_001 + LINE_GRACE_MS)).toBe(AGENT_STATUS.FAILED);
 });
@@ -118,9 +116,9 @@ test("a prompt the provider refused as longer than the window reads as a context
   );
   const overloaded = failedOnModel("MODEL_CALL_FAILED [statusCode] Overloaded");
 
-  expect(codingAgentFailureOf(refused)).toBe(AGENT_FAILURE.CONTEXT_OVERFLOW);
-  expect(codingAgentFailureOf(openAi)).toBe(AGENT_FAILURE.CONTEXT_OVERFLOW);
-  expect(codingAgentFailureOf(overloaded)).toBe(AGENT_FAILURE.MODEL);
+  expect(agentFailureOf(refused)).toBe(AGENT_FAILURE.CONTEXT_OVERFLOW);
+  expect(agentFailureOf(openAi)).toBe(AGENT_FAILURE.CONTEXT_OVERFLOW);
+  expect(agentFailureOf(overloaded)).toBe(AGENT_FAILURE.MODEL);
 });
 
 test("a local agent's summary names its Mac and when it last beat; an agent in a sandbox names none", () => {
@@ -155,7 +153,7 @@ test("a local agent's summary names its Mac and when it last beat; an agent in a
   };
   const now = 100_000;
   const seen = (lastSeenAt: number) =>
-    codingAgentSummary(
+    agentSummary(
       line,
       { turn: undefined, awaitingLineAt: undefined },
       now,

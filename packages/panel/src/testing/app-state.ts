@@ -48,7 +48,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     },
     audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
     tasks: IDLE_TASKS_VIEW,
-    codingAgents: { unseen: [] },
+    agents: { unseen: [] },
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], agents: [], failedRuns: [] },
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },

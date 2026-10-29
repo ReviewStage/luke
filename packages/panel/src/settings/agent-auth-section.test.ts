@@ -90,9 +90,9 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
   sent.push(request);
   const subscriptions = held.subscriptions ?? [];
   switch (request.kind) {
-    case ACT_KIND.CODING_AGENTS_MODELS:
+    case ACT_KIND.AGENTS_MODELS:
       return Promise.resolve(done({ models: [] }));
-    case ACT_KIND.CODING_AGENTS_DEFAULT_READ:
+    case ACT_KIND.AGENTS_DEFAULT_READ:
       return Promise.resolve(done({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
     case ACT_KIND.CHAPTERS_MODEL_READ:
       return Promise.resolve(done({ model: CHAPTERS_MODEL.HAIKU }));

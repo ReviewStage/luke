@@ -255,7 +255,7 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
           }
         : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
           ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
-          : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+          : request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST
             ? {
                 status: FAKE_ANSWER.DONE,
                 value: {
@@ -965,7 +965,7 @@ function agentsListed(container: HTMLElement): [string, string][] {
 /** The workspace lists the list read, by whether each asked for the archived agents. */
 function workspaceReads(): unknown[] {
   return told
-    .filter((each) => each.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST)
+    .filter((each) => each.kind === ACT_KIND.AGENTS_WORKSPACE_LIST)
     .map((each) => each.payload);
 }
 
@@ -996,7 +996,7 @@ function listNote(container: HTMLElement): { words: string; retry: HTMLButtonEle
 }
 
 test("an @ whose read of the workspace's agents failed says they could not be read, with Retry, never that none match, and Retry reads them again", async () => {
-  refusing.add(ACT_KIND.CODING_AGENTS_WORKSPACE_LIST);
+  refusing.add(ACT_KIND.AGENTS_WORKSPACE_LIST);
   const { container } = await workspaceBox();
 
   typeInComposer(container, "See @");

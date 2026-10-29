@@ -66,12 +66,12 @@ import {
 import { heldUntil } from "../../http/held-read.js";
 import { ModelCatalog, type OfferedModel } from "../../providers/model-catalog.js";
 import { CODER } from "./bounds.js";
-import { codingAgentContextOf, contextWindowOf } from "./context.js";
+import { agentContextOf, contextWindowOf } from "./context.js";
 import {
   type AgentStanding,
-  codingAgentFailureOf,
-  codingAgentRunStartedAt,
-  codingAgentStatusOf,
+  agentFailureOf,
+  agentRunStartedAt,
+  agentStatusOf,
   ranDirectlyFolderOf,
   statusClockEdge,
 } from "./status.js";
@@ -210,10 +210,10 @@ const statusNow = (target: ConversationTarget, { createdAt, blank }: AgentStart)
     const now = yield* Clock.currentTimeMillis;
     const turn = turns.get(target.conversationId);
     const awaitingLineAt = awaiting.get(target.conversationId);
-    const status = codingAgentStatusOf(turn, { createdAt, now, awaitingLineAt, blank });
-    const runStartedAt = codingAgentRunStartedAt(turn, { createdAt, now, awaitingLineAt });
+    const status = agentStatusOf(turn, { createdAt, now, awaitingLineAt, blank });
+    const runStartedAt = agentRunStartedAt(turn, { createdAt, now, awaitingLineAt });
     const failed = status === AGENT_STATUS.FAILED;
-    const failureReason = failed ? codingAgentFailureOf(turn) : undefined;
+    const failureReason = failed ? agentFailureOf(turn) : undefined;
     const folder = failed ? ranDirectlyFolderOf(turn) : undefined;
     const ranDirectly = folder === undefined ? undefined : { folder };
     const graceEdge = statusClockEdge(turn, { createdAt, now, awaitingLineAt, blank });
@@ -246,7 +246,7 @@ const windowListed = (offered: readonly OfferedModel[], modelId: string) => {
 const contextOf = (held: Option.Option<HeldContext>, offered: readonly OfferedModel[]) =>
   Option.isNone(held) || !windowListed(offered, held.value.model)
     ? undefined
-    : codingAgentContextOf(
+    : agentContextOf(
         held.value,
         contextWindowOf(offered, held.value.model, held.value.contextWindow),
       );
@@ -260,7 +260,7 @@ interface JournalTurn {
 /**
  * Each turn whose journal is among the rows, by the turn: when it began,
  * its start or its queueing before eve started it, which is what the
- * working line counted from while it ran (`codingAgentRunStartedAt`), and
+ * working line counted from while it ran (`agentRunStartedAt`), and
  * what it ran on and spent as its row recorded them (`turn-record.ts`).
  */
 const journalTurnsOf = (userId: string, records: readonly StoredMessageRecord[]) => {
@@ -432,7 +432,7 @@ const subagentStandingsOf = (
     const now = yield* Clock.currentTimeMillis;
     return delegations.map((each) => ({
       callId: each.callId,
-      status: codingAgentStatusOf(turns.get(each.childConversationId), {
+      status: agentStatusOf(turns.get(each.childConversationId), {
         createdAt: each.createdAt,
         now,
       }),

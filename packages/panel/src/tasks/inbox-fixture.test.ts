@@ -170,7 +170,7 @@ it.effect("the Inbox profile takes a read mark, so no toast says a mark was refu
     const itemId = "00000000-0000-4000-8000-000000000001";
 
     assert.deepEqual(
-      fixture.fixtureActAnswer(run, ACT_KIND.CODING_AGENTS_INBOX_READ_STATE, {
+      fixture.fixtureActAnswer(run, ACT_KIND.AGENTS_INBOX_READ_STATE, {
         itemId,
         unread: false,
       }),
@@ -178,7 +178,7 @@ it.effect("the Inbox profile takes a read mark, so no toast says a mark was refu
     );
     // Two of the staged items are unread.
     assert.deepEqual(
-      fixture.fixtureActAnswer(run, ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, { itemIds: [] }),
+      fixture.fixtureActAnswer(run, ACT_KIND.AGENTS_INBOX_READ_ALL, { itemIds: [] }),
       { answer: { marked: 2 } },
     );
   }),
@@ -193,7 +193,7 @@ it.effect("any other profile leaves main's document as it is, and stages no Inbo
 
     assert.equal(fixture.fixtureAppState(tasks), tasks);
     assert.equal(
-      fixture.fixtureActAnswer(tasks.run, ACT_KIND.CODING_AGENTS_INBOX_FOLLOW, {
+      fixture.fixtureActAnswer(tasks.run, ACT_KIND.AGENTS_INBOX_FOLLOW, {
         kind: INBOX_SCOPE_KIND.PLAN,
         id: FIXTURE_IDS.TASK,
       }),

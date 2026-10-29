@@ -511,7 +511,7 @@ test("older messages put before the first under a long log leave the row the rea
   });
   fakeActs({
     act: (request) =>
-      request.kind === ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER
+      request.kind === ACT_KIND.AGENTS_TRANSCRIPT_OLDER
         ? handed.then(() => ({ status: FAKE_ANSWER.DONE, value: { messages: messages(90, 100) } }))
         : Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not here." }),
   });

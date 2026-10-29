@@ -80,7 +80,7 @@ export function useAgentPictureDoor(agentId: string, callId?: string): AgentPict
   const { act } = useAct();
   const read = useCallback(
     (_owner: string, pictureId: string) =>
-      act(ACT_KIND.CODING_AGENTS_PICTURE, {
+      act(ACT_KIND.AGENTS_PICTURE, {
         agentId,
         pictureId,
         ...(callId === undefined ? undefined : { callId }),

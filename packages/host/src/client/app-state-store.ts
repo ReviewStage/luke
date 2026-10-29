@@ -190,7 +190,7 @@ export function initialAppState(
     update: idleUpdateSnapshot(config.appVersion, installSupported),
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
     tasks: IDLE_TASKS_VIEW,
-    codingAgents: { unseen: [] },
+    agents: { unseen: [] },
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], agents: [], failedRuns: [] },
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },

@@ -27,10 +27,10 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
+import { composeAgents } from "./compose-agents.js";
 import { composeAutomations } from "./compose-automations.js";
 import { composeChannels } from "./compose-channels.js";
 import { composeChatGptSignIn } from "./compose-chatgpt-sign-in.js";
-import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeInstalledSkills } from "./compose-installed-skills.js";
 import { composeIntegrations } from "./compose-integrations.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
@@ -73,7 +73,7 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.SETTINGS,
   HOST_CONCERN.ACCOUNT,
   HOST_CONCERN.TASKS,
-  HOST_CONCERN.CODING_AGENTS,
+  HOST_CONCERN.AGENTS,
   HOST_CONCERN.AUTOMATIONS,
   HOST_CONCERN.CHANNELS,
   HOST_CONCERN.INTEGRATIONS,
@@ -135,7 +135,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       credential: account.credential,
       sessionCredential: account.sessionCredential,
     });
-    const codingAgentClient = new HostedAgentClient({
+    const agentClient = new HostedAgentClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       credential: account.credential,
     });
@@ -167,7 +167,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         },
       ),
     });
-    const codingAgents = yield* composeCodingAgents({
+    const agents = yield* composeAgents({
       kernel,
       account,
       accountId,
@@ -177,7 +177,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           ? { userId: signedIn.id, name: signedIn.name ?? signedIn.email }
           : undefined;
       },
-      client: codingAgentClient,
+      client: agentClient,
       listed: tasks.listed,
       writeAgent: tasks.writeAgent,
     });
@@ -250,7 +250,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           ),
           // Note that the account's devices are read where a Start reads them, so this Mac's setup is the one Runs on shows.
           deviceSetup: (deviceId) =>
-            Effect.map(codingAgentClient.models(), (answer) => {
+            Effect.map(agentClient.models(), (answer) => {
               if ("failure" in answer) return Option.none();
               // Note that a device the answer does not list has no setup to say, which reads as nothing failed.
               const device = answer.macs?.find((each) => each.deviceId === deviceId);
@@ -280,7 +280,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       ? yield* composeChatGptSignIn({
           kernel,
           account,
-          client: codingAgentClient,
+          client: agentClient,
           openConsent: (yield* SignInConsent).open,
         })
       : { ...unavailableConcern(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN), reset: Effect.void };
@@ -302,7 +302,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const closeCapabilities = Effect.gen(function* () {
       yield* account.forgetAccess;
       yield* tasks.reset;
-      yield* codingAgents.reset;
+      yield* agents.reset;
       yield* automations.reset;
       yield* channels.reset;
       yield* terminals.reset;
@@ -335,7 +335,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.SETTINGS]: settings,
       [HOST_CONCERN.ACCOUNT]: account,
       [HOST_CONCERN.TASKS]: tasks,
-      [HOST_CONCERN.CODING_AGENTS]: codingAgents,
+      [HOST_CONCERN.AGENTS]: agents,
       [HOST_CONCERN.AUTOMATIONS]: automations,
       [HOST_CONCERN.CHANNELS]: channels,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
