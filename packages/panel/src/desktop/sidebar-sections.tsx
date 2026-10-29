@@ -37,7 +37,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { FolderOutputIcon, GLYPH, MailOpenIcon } from "@luke/ui/icons";
-import { TASK_ROW, type TaskRow, taskRowKey } from "@luke/ui/task-list-model";
+import { type DrawnTaskRow, TASK_ROW, type TaskRow, taskRowKey } from "@luke/ui/task-list-model";
 import {
   memberSection,
   placeAllWrites,
@@ -54,6 +54,7 @@ import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { undoToast, useToast } from "../toast.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
+import { movedBeside, siblingsAt, useNestedRows } from "./nested-rows.js";
 import { type RowPlace, RowPlaced, useRowMoveKeys, withRowMoves } from "./row-moves.js";
 import { SectionIconPicker, sectionGlyph } from "./section-icon-picker.js";
 import { foldedCount, SIDEBAR_SECTION_SLOT, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
@@ -366,8 +367,10 @@ interface SectionContext {
   readonly inSight: boolean;
   readonly folded: (sectionId: string) => boolean;
   readonly onToggle: (sectionId: string) => void;
-  /** A task's row or an agent's, as it stands in any list of the sidebar. */
-  readonly row: (row: TaskRow) => React.JSX.Element;
+  /** Whether a task's child tasks stand open under its row, folded until first opened. */
+  readonly opened: (taskId: string) => boolean;
+  /** A task's row or an agent's, as it stands in any list of the sidebar, at the depth it stands nested at. */
+  readonly row: (row: DrawnTaskRow) => React.JSX.Element;
   /** Hears a row let go over another zone: a section by its id, Tasks, or Pinned. */
   readonly onDropRow: (row: TaskRow, zone: string, at: number) => void;
   /** Hears a row lifted into a drag and that drag ended, while which an empty Pinned stands to take it. */
@@ -467,7 +470,10 @@ function sectionActionGroups(
 /**
  * A section's rows as drawn open or folded: open, every row, dragged among
  * its own and out of it; folded, only the open one, which a drop over lands
- * on top of rather than among.
+ * on top of rather than among. A task's child tasks in the section stand
+ * nested under it (`nested-rows.ts`), so a row moves among its siblings as
+ * they are drawn, its child tasks with it, and never out from under its
+ * parent.
  */
 function SectionRows({
   drawn,
@@ -480,26 +486,42 @@ function SectionRows({
   rows: readonly TaskRow[];
   folded: boolean;
 }): React.JSX.Element {
+  const nested = useNestedRows(rows, context.opened, context.current);
+  const storedAt = (at: number) => {
+    const held = nested[at];
+    return held === undefined ? -1 : drawn.rows.indexOf(held.row);
+  };
+  // Note that a move lands the row's entry beside its sibling's, which alone orders the two as they are drawn.
+  const besideSibling = (from: number, beside: number | undefined) => {
+    if (beside === undefined) return;
+    context.tasks.onWriteSections(placeWritesWithin(drawn, storedAt(from), storedAt(beside)));
+  };
   const move = folded
     ? undefined
-    : (from: number, to: number) =>
-        context.tasks.onWriteSections(placeWritesWithin(drawn, from, to));
+    : (from: number, to: number) => besideSibling(from, movedBeside(nested, from, to));
   const drag = useRowDrag(move, {
     onDropOut: (from, zone, at) => {
-      const row = rows[from];
-      if (row !== undefined) context.onDropRow(row, zone, at);
+      const held = nested[from];
+      if (held !== undefined) context.onDropRow(held.row, zone, at);
     },
     onCarried: context.onCarried,
   });
   const keys = useRowMoveKeys(move);
   // Note that a row on its way out has no place among the rows a drag or a menu moves.
-  const shown = useLeaving(rows, taskRowKey);
-  const listedAt = new Map(rows.map((row, at) => [taskRowKey(row), at]));
+  const shown = useLeaving(nested, ({ row }) => taskRowKey(row));
+  const listedAt = new Map(nested.map(({ row }, at) => [taskRowKey(row), at]));
   const placeOf = (key: string) => {
     const at = listedAt.get(key);
-    return move === undefined || at === undefined
-      ? undefined
-      : { at, count: rows.length, onMove: move };
+    if (move === undefined || at === undefined) return undefined;
+    const siblings = siblingsAt(nested, at);
+    return {
+      at: siblings.indexOf(at),
+      count: siblings.length,
+      onMove: (from: number, to: number) => {
+        const moved = siblings[from];
+        if (moved !== undefined) besideSibling(moved, siblings[to]);
+      },
+    };
   };
   return (
     <Stack
@@ -511,9 +533,9 @@ function SectionRows({
       onPointerDown={drag}
       {...keys}
     >
-      {shown.map(({ key, value: row }) => (
+      {shown.map(({ key, value: held }) => (
         <RowPlaced key={key} place={placeOf(key)}>
-          {context.row(row)}
+          {context.row(held)}
         </RowPlaced>
       ))}
     </Stack>

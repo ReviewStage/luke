@@ -1,6 +1,7 @@
 import { SELECTION_WORDS } from "@luke/features/words";
 import {
   type ComponentType,
+  type CSSProperties,
   createContext,
   type FocusEventHandler,
   type KeyboardEvent,
@@ -17,7 +18,7 @@ import {
   useRef,
 } from "react";
 import { cssCustomProperties } from "../../css.js";
-import { ChevronRightIcon } from "../../face/glyphs.js";
+import { ChevronRightIcon, FoldChevronIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
 import { useClipped } from "../../use-clipped.js";
 import { BUTTON_SIZE } from "../button/button.js";
@@ -124,6 +125,18 @@ export type { ListSelection } from "../selection/list-selection.js";
  * (`hint`), as a Button's hint hangs: the app's own tooltip, handed the
  * words to raise and the press it wraps, whose pointer and focus handlers
  * land on the press itself.
+ *
+ * A row may stand nested under another (`depth`), in by one glyph and its
+ * gap for each level, so its glyph stands under the name of the row above
+ * it, as a sidebar's nested place stands; and a row with rows nested under
+ * it folds them (`fold`), whose holder keeps whether they stand open and
+ * draws them, or not, after it. Its chevron is a control of its own beside
+ * the press, as its acts are, never inside it, named by what it folds and
+ * saying whether they stand open in `aria-expanded`, and the row's leading
+ * mark gives way to it while the pointer rests on the row or the keyboard
+ * is on the chevron, as a group's head gives its glyph way (`GroupHeader`),
+ * standing at rest on a screen with no hover. → and ← pressed on the row
+ * open and fold them, as a tree's keys do.
  *
  * A row may carry attachments (`attachments`), what its thing holds drawn
  * small on a line of their own under its description, as a mail app shows
@@ -238,6 +251,14 @@ export type ListRowHint = ComponentType<{
   children: ReactElement<ListRowHintProps>;
 }>;
 
+/** The rows nested under a row, which it folds: whether they stand open, what hears a press asking for the other, and the words its chevron is named by. */
+export interface ListRowFold {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  /** What the fold holds, said as the chevron's name ("Child tasks of Ship the release"). */
+  readonly label: string;
+}
+
 /** How a list stands: its rows apart on the ground, or edge to edge in a card. */
 export const LIST_VARIANT = {
   PLAIN: "plain",
@@ -276,9 +297,20 @@ export type ListRowInk = (typeof LIST_ROW_INK)[keyof typeof LIST_ROW_INK];
 const LIST_CLASS =
   "luke-list flex list-none flex-col gap-list-gap p-0 data-[variant=card]:gap-0 data-[variant=card]:overflow-hidden data-[variant=card]:rounded-control data-[variant=card]:border data-[variant=card]:border-border data-[variant=card]:bg-surface";
 
-/** The row: a grid of five tracks, its parts centred on its middle, in the text's ink. */
+/** The row: a grid of five tracks, its parts centred on its middle, in the text's ink, in by a nest for each level it stands nested at. */
 const ROW_CLASS =
-  "luke-list-row grid min-w-0 grid-cols-list-row items-center font-sans text-foreground transition-[background-color] duration-(--luke-duration-hover) ease-plain";
+  "luke-list-row grid min-w-0 grid-cols-list-row items-center ms-list-row-nest font-sans text-foreground transition-[background-color] duration-(--luke-duration-hover) ease-plain";
+
+/**
+ * The fold's chevron, a control of its own standing over the leading mark's
+ * cell, past the press's inset, beside the press rather than in it; its
+ * place past the inset and its reveal are `list-row.css`'s.
+ */
+const FOLD_CLASS =
+  "luke-list-row-fold col-[leading] row-1 z-1 m-0 grid size-control-icon cursor-press place-items-center justify-self-start rounded-control border-0 bg-transparent p-0 text-muted-foreground";
+
+/** Which way a key asks a row's fold to stand: → open, ← folded. */
+const FOLD_KEY_OPENS: Readonly<Record<string, boolean>> = { ArrowRight: true, ArrowLeft: false };
 
 /** The press spans the mark, the words, and the end, its parts standing in the row's own tracks. */
 const MAIN_CLASS =
@@ -363,6 +395,25 @@ const ListVariantContext = createContext<ListVariant>(LIST_VARIANT.PLAIN);
 
 /** The act of a row that offers no swipe. */
 const NO_ACT = (): void => undefined;
+
+/** The custom properties a row's sheet reads: how deep it stands, and where a swipe has carried it. */
+function rowProperties(
+  depth: number,
+  swiped: ReturnType<typeof useRowSwipe>["view"] | undefined,
+): CSSProperties | undefined {
+  const nest = depth === 0 ? {} : { "--luke-list-row-depth": depth };
+  const swipe =
+    swiped === undefined
+      ? {}
+      : {
+          "--luke-list-row-swipe": `${swiped.offset}px`,
+          "--luke-list-row-swipe-label": `${swiped.label.offset}px`,
+          "--luke-list-row-swipe-shown": swiped.label.opacity,
+        };
+  return depth === 0 && swiped === undefined
+    ? undefined
+    : cssCustomProperties({ ...nest, ...swipe });
+}
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(words: ReactNode): boolean {
@@ -478,6 +529,8 @@ export function ListRow({
   onKeyDown,
   menu,
   swipe,
+  depth = 0,
+  fold,
 }: {
   /** A mark before the title (an avatar, a status's glyph), drawn as decoration. */
   leading?: ReactNode;
@@ -540,6 +593,10 @@ export function ListRow({
   menu?: ListRowMenu | undefined;
   /** The row's one swipe right; none where it offers none. */
   swipe?: ListRowSwipe | undefined;
+  /** How deep it stands nested under other rows: 0, at the top, unless said. */
+  depth?: number | undefined;
+  /** The rows nested under it, which it folds; none where it holds none. */
+  fold?: ListRowFold | undefined;
 }): React.JSX.Element {
   const swiped = useRowSwipe(swipe?.label, swipe?.onAct ?? NO_ACT);
   // The press hands the row's ref its element, and the link menu the address it opens.
@@ -558,6 +615,14 @@ export function ListRow({
     [ref, linkAddress],
   );
   const titleId = useId();
+  // Note that → and ← are the row's only while they would move its fold, so a list walking its rows along them still hears the rest.
+  const foldKeys = (event: KeyboardEvent<HTMLElement>) => {
+    if (fold === undefined) return;
+    const asked = FOLD_KEY_OPENS[event.key];
+    if (asked === undefined || asked === fold.open) return;
+    event.preventDefault();
+    fold.onOpenChange(asked);
+  };
   // Note that a row's menu is headed, as a phone's sheet, by the row's own mark and words, where its owner names no subject and its title is plain: its description under it, else what it belongs to.
   const named = plainWords(title);
   const subject =
@@ -699,13 +764,30 @@ export function ListRow({
         if (choosable && selecting.press(selectKey, event)) return;
         onPress(event);
       }}
-      onKeyDown={onKeyDown}
+      onKeyDown={(event) => {
+        foldKeys(event);
+        onKeyDown?.(event);
+      }}
     >
       {face}
     </button>
   ) : undefined;
   const row = (
     <>
+      {fold === undefined ? null : (
+        <button
+          type="button"
+          className={FOLD_CLASS}
+          aria-label={fold.label}
+          aria-expanded={fold.open}
+          onClick={pulseOnPress(() => fold.onOpenChange(!fold.open), pressPulse)}
+        >
+          {/* Note that the chevron turns on the one turn every fold makes (`disclosure.css`). */}
+          <span className="luke-disclosure-turn" data-open={fold.open}>
+            <FoldChevronIcon />
+          </span>
+        </button>
+      )}
       {press === undefined ? (
         <div className={MAIN_CLASS} aria-current={current}>
           {face}
@@ -763,6 +845,7 @@ export function ListRow({
         data-ink={ink}
         data-menu-open={menuOpen || rowMenu.open ? "true" : undefined}
         data-swipe={swipe === undefined ? undefined : view.state}
+        data-depth={depth === 0 ? undefined : depth}
         data-armed={view.armed ? "true" : undefined}
         onKeyDown={rowMenu.onKeyDown}
         {...withContextMenu(
@@ -776,12 +859,8 @@ export function ListRow({
               onPointerUp: item.onPointerUp,
               onPointerCancel: item.onPointerCancel,
               onClickCapture: item.onClickCapture,
-              style: cssCustomProperties({
-                "--luke-list-row-swipe": `${view.offset}px`,
-                "--luke-list-row-swipe-label": `${view.label.offset}px`,
-                "--luke-list-row-swipe-shown": view.label.opacity,
-              }),
             })}
+        style={rowProperties(depth, swipe === undefined ? undefined : view)}
       >
         {swipe === undefined ? (
           row

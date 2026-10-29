@@ -537,6 +537,57 @@ test("a key pressed on a row reaches its handler", () => {
   expect(heard).toEqual(["key j"]);
 });
 
+/** A parent row folding the rows nested under it, what was pressed listed after it. */
+function Folding(): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [heard, setHeard] = useState<string[]>([]);
+  const child = createElement(ListRow, {
+    key: "child",
+    title: "Child",
+    depth: 1,
+    onPress: ignore,
+  });
+  return createElement(
+    "div",
+    null,
+    createElement(List, {
+      label: "Tasks",
+      children: [
+        createElement(ListRow, {
+          key: "parent",
+          title: "Parent",
+          onPress: () => setHeard((all) => [...all, "open parent"]),
+          fold: {
+            open,
+            onOpenChange: (asked: boolean) => {
+              setOpen(asked);
+              setHeard((all) => [...all, asked ? "unfold" : "fold"]);
+            },
+            label: "Child tasks of Parent",
+          },
+        }),
+        ...(open ? [child] : []),
+      ],
+    }),
+    createElement("output", null, heard.join(",")),
+  );
+}
+
+test("a row's fold is a control beside its press, saying whether its rows stand open, pressed without opening the row, and moved by → and ← on the row", () => {
+  const container = draw(createElement(Folding));
+  const fold = button(container, "Child tasks of Parent");
+  expect(fold.closest("button")?.parentElement?.closest("button")).toBeNull();
+  expect(fold.getAttribute("aria-expanded")).toBe("false");
+  press(fold);
+  expect(fold.getAttribute("aria-expanded")).toBe("true");
+  expect(button(container, "Child").closest("li")).not.toBeNull();
+  act(() => button(container, "Parent").focus());
+  key("ArrowRight");
+  key("ArrowLeft");
+  expect(fold.getAttribute("aria-expanded")).toBe("false");
+  expect(container.querySelector("output")?.textContent).toBe("unfold,fold");
+});
+
 test("a row that opens nothing hears no keys, not even its acts'", () => {
   const heard: string[] = [];
   const container = draw(

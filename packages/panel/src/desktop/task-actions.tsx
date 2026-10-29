@@ -20,6 +20,7 @@ import {
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
+  type ListRowFold,
   type MenuRow,
   nextRowOrHead,
   OneLine,
@@ -776,6 +777,8 @@ export function SidebarTask({
   at = task.updatedAt,
   repository,
   faces = EVERY_FACE,
+  depth,
+  fold,
   onOpen,
 }: {
   tasks: TasksControl;
@@ -794,6 +797,10 @@ export function SidebarTask({
   repository?: string | undefined;
   /** Which faces the row may wear (`rowFaceOf`): a group by assignee, or a filter by assignee, says the one it names instead. */
   faces?: RowFaces;
+  /** How deep the row stands nested under its parent tasks: at the top unless said. */
+  depth?: number | undefined;
+  /** The child tasks nested under the row, which it folds; none where the list holds none. */
+  fold?: ListRowFold | undefined;
   onOpen: () => void;
 }): React.JSX.Element {
   const rename = useInlineRename(task.id, tasks.onRenameTask);
@@ -898,6 +905,8 @@ export function SidebarTask({
                   }
                 : { ...chosenRowMenu("Task", chosen, tasks.shown), openRequest: statusAsked }
           }
+          depth={depth}
+          fold={fold}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={
             rename.editing ? null : (
