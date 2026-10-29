@@ -43,9 +43,17 @@
     // which turbo hashes with the task, so each shard caches on its own.
     "test:vitest": {
       "dependsOn": ["^transit"],
+      // Whether the React Compiler trial compiles (`scripts/lib/react-compiler.mjs`).
+      "env": ["LUKE_REACT_COMPILER"],
       // The sequencer that cuts a shard's files is read from outside the
       // workspace, and a shard's pass is only true of the files it was cut.
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/lib/test-shards.mjs"],
+      // The React Compiler trial's transform is read from there too, and a
+      // pass is only true of the code it compiled.
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/scripts/lib/test-shards.mjs",
+        "$TURBO_ROOT$/scripts/lib/react-compiler.mjs"
+      ],
       "outputs": []
     },
     // The whole-repository checks each read every file in one program, so

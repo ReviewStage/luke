@@ -1,5 +1,6 @@
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vitest/config";
+import { reactCompilerVite } from "../../scripts/lib/react-compiler.mjs";
 import { DurationSharding } from "../../scripts/lib/test-shards.mjs";
 import { redirectOf } from "./scripts/build-table.mjs";
 
@@ -28,7 +29,9 @@ const PANEL_STYLESHEETS =
   /\/panel\/src\/styles\/[a-z-]+\.css(?:\?raw)?$|\/ui\/src\/(?:styles|tokens\/tokens)\.css\?inline$|\/panel\/src\/testing\/tailwind\.css\?inline$/;
 
 export default defineConfig({
-  plugins: [panelRedirects, tailwindcss()],
+  // The React Compiler trial, so the tests draw what the bundles ship
+  // (`scripts/lib/react-compiler.mjs`).
+  plugins: [reactCompilerVite(), panelRedirects, tailwindcss()],
   test: {
     name: "panel",
     include: ["src/**/*.test.ts"],

@@ -14,6 +14,11 @@ import {
 } from "@luke/panel/build-table";
 import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
 import { build } from "esbuild";
+import {
+  compileReact,
+  inReactCompilerScope,
+  REACT_COMPILER_SCOPE,
+} from "../../../scripts/lib/react-compiler.mjs";
 import { replayProjectKeyDefine, signingModeDefine } from "./package-config.mjs";
 import { tailwindPlugin } from "./tailwind.mjs";
 
@@ -79,6 +84,21 @@ const lucideWholeOnDemand = {
       loader: "js",
       resolveDir: path.dirname(args.path),
     }));
+  },
+};
+
+// The React Compiler trial (`scripts/lib/react-compiler.mjs`): each module of
+// the panel and `@luke/ui` is read through the compiler and handed back to
+// esbuild as TypeScript, its source map inline, which esbuild follows.
+const reactCompiler = {
+  name: "react-compiler",
+  setup(build) {
+    build.onLoad({ filter: REACT_COMPILER_SCOPE }, async (args) => {
+      if (!inReactCompilerScope(args.path)) return undefined;
+      const source = await fs.readFile(args.path, "utf8");
+      const { code } = await compileReact(source, args.path, { inlineMap: true });
+      return { contents: code, loader: args.path.endsWith(".tsx") ? "tsx" : "ts" };
+    });
   },
 };
 
@@ -227,7 +247,13 @@ const rendererBuild = build({
   jsx: "automatic",
   minify: true,
   conditions: ["production"],
-  plugins: [panelRedirects, lucideWholeOnDemand, sideStylesheetsLinked, ...sentryPlugins()],
+  plugins: [
+    panelRedirects,
+    lucideWholeOnDemand,
+    sideStylesheetsLinked,
+    reactCompiler,
+    ...sentryPlugins(),
+  ],
   // Every map is written beside its file and named by none: the maps stay
   // out of the app (`electron-builder-config.mjs`), so a comment would point
   // at a file that is not there. The upload finds each by `<file>.map`.

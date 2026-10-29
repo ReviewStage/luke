@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { reactCompilerVite } from "../../scripts/lib/react-compiler.mjs";
 import { panelBuild } from "./scripts/panel-build";
 import { siteMarkdown } from "./scripts/site-markdown";
 
@@ -21,7 +22,9 @@ const WEB_DEPLOYMENT_DEFINES = {
 
 export default defineConfig({
   define: WEB_DEPLOYMENT_DEFINES,
-  plugins: [react(), tailwindcss(), ...panelBuild(), siteMarkdown()],
+  // The React Compiler trial reads the panel's and `@luke/ui`'s modules before
+  // Vite's own JSX transform (`scripts/lib/react-compiler.mjs`).
+  plugins: [reactCompilerVite(), react(), tailwindcss(), ...panelBuild(), siteMarkdown()],
   build: {
     // Vite's own gzip report is only a cost to every build.
     reportCompressedSize: false,

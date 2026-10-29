@@ -29,6 +29,7 @@
     "probe:claude-code": "pnpm --filter @luke/claude-code-probe probe",
     "probe:codex": "tsx tools/codex-probe/src/cli.ts",
     "probe:codex:sign-in": "tsx tools/codex-probe/src/cli.ts sign-in",
+    "react-compiler:report": "node scripts/react-compiler-report.mjs",
     "release:macos": "./scripts/release-macos.sh",
     "start": "pnpm --filter @luke/desktop start",
     "test": "node scripts/turbo.mjs run test:vitest --concurrency=1",
@@ -38,7 +39,9 @@
     "*.{js,jsx,mjs,ts,tsx,json,md,css}": "biome check --write --no-errors-on-unmatched"
   },
   "devDependencies": {
+    "@babel/core": "7.29.7",
     "@biomejs/biome": "2.5.8",
+    "babel-plugin-react-compiler": "1.0.0",
     "effect": "catalog:",
     "husky": "9.1.7",
     "knip": "6.35.1",
