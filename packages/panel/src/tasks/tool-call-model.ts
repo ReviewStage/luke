@@ -88,7 +88,7 @@ export interface ToolCallView {
   readonly kind: CallKind;
   /** The thing the call was done to, after its kind's verb. */
   readonly subject: string;
-  /** For a call that read, wrote, or edited files, their paths as the call named them, in order, which its row names by the first one's chip. */
+  /** For a call that read, wrote, or edited files in the task's checkout, their paths as the call named them, in order, which its row names by the first one's chip; none for a patch of a checkout its root names. */
   readonly files?: readonly string[];
   /** For a read of a web page, its whole address, which its row names by its website chip. */
   readonly page?: string;
@@ -120,14 +120,25 @@ function stripAnsi(text: string): string {
 }
 
 /** A patch header naming a file, as `apply_patch` spells one. */
-const PATCH_FILE_HEADER = /^\*\*\* (?:Add|Update|Delete|Move to) File: (.+)$/u;
+const PATCH_FILE_HEADER = /^\*\*\* (?:Add|Update|Delete) File: (.+)$/u;
 
-/** The files a patch touches, in the order its headers name them. */
+/** The header that moves the file the header before it names, as `apply_patch` spells it. */
+const PATCH_MOVE_HEADER = /^\*\*\* Move to: (.+)$/u;
+
+/**
+ * The files a patch touches, in the order its headers name them. Note that
+ * a file it moves is named where it moved to, in its old path's place,
+ * because the old path names nothing once the patch is applied.
+ */
 function patchPaths(patchText: string): readonly string[] {
-  return patchText.split("\n").flatMap((line) => {
-    const match = PATCH_FILE_HEADER.exec(line.trimEnd());
-    return match?.[1] === undefined ? [] : [match[1]];
-  });
+  const paths: string[] = [];
+  for (const line of patchText.split("\n")) {
+    const moved = PATCH_MOVE_HEADER.exec(line.trimEnd())?.[1];
+    if (moved !== undefined && paths.length > 0) paths[paths.length - 1] = moved;
+    const named = PATCH_FILE_HEADER.exec(line.trimEnd())?.[1];
+    if (named !== undefined) paths.push(named);
+  }
+  return paths;
 }
 
 /** Where a value is drawn as JSON, how it reads: pretty-printed, a string as it is. */
@@ -1018,11 +1029,12 @@ const AGENT_TOOL_VIEWS = {
   [AGENT_TOOL.GREP]: READ_SEARCH,
   [AGENT_TOOL.APPLY_PATCH]: ({ input, output }) => {
     const patchText = stringAt(input, "patchText") ?? "";
-    const files = patchPaths(patchText);
+    const paths = patchPaths(patchText);
     return {
       kind: CALL_KIND.EDIT,
-      subject: pathsSubject(files),
-      files,
+      subject: pathsSubject(paths),
+      // Note that a patch whose root names a checkout may name another than the task's, so its files name none of the task's.
+      files: stringAt(input, "root") === undefined ? paths : [],
       input: { kind: TOOL_BLOCK.PATCH, text: patchText },
       output: output === undefined ? undefined : patchOutput(output),
     };
