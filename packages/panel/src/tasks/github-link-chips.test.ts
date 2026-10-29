@@ -408,9 +408,9 @@ test("where the workspace has no GitHub App installed, nothing is asked and the 
   );
 });
 
-test("a pull request's or an issue's address no GitHub App answers for is called by its key, `#42` in the plan's repository and `ledger#5` in another, and a link with a label of its own keeps it", async () => {
+test("a pull request's or an issue's address no GitHub App answers for is called by its key, `#42` in the plan's repository and `ledger#5` in another, and a link with a label of its own keeps it, bar one written as its number and title, which says its number", async () => {
   const { container } = await drawn(
-    `${MERGED}, [the expiry change](${MERGED}), ${ELSEWHERE}, and ${OPEN_ISSUE}.`,
+    `${MERGED}, [the expiry change](${MERGED}), [@#42 Expire old invitations](${MERGED}), ${ELSEWHERE}, and ${OPEN_ISSUE}.`,
     ACME,
   );
 
@@ -418,7 +418,7 @@ test("a pull request's or an issue's address no GitHub App answers for is called
     [...container.querySelectorAll("[data-mention-ref] .luke-inline-ref-label")].map(
       (label) => label.textContent,
     ),
-    ["#42", "the expiry change", "ledger#5", "#7"],
+    ["#42", "the expiry change", "#42", "ledger#5", "#7"],
   );
 });
 
