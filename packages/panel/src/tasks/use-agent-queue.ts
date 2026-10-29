@@ -19,10 +19,10 @@ import type { AgentComposerControl } from "./use-agent-composer.js";
  * use-agent-queue.ts -- an agent's queue as its tab draws and changes it: the messages queued behind its turn, in the order they go, and the one door every change goes through.
  *
  * The queue is read live with the transcript, whose every page carries it
- * (`use-agent-transcript.ts`), so a change shows as the next page lands;
- * nothing here polls. A new order is drawn at once, before that page, so a
- * dropped row never springs back to where it stood, and lets go as the
- * page carrying the queue it changed lands. Every change is one act
+ * (`use-agent-transcript.ts`); nothing here polls. A change shows before
+ * that page: a message queued is drawn at the queue's end as it goes, a new
+ * order at once, so a dropped row never springs back to where it stood,
+ * and the queue a change answered stands until the next page lands. Every change is one act
  * (`codingAgents.queue`), and each is the same however often it is sent: a
  * queued message names its own key, and every other change names the
  * message it changes, so a retried press never doubles.
@@ -49,23 +49,44 @@ export interface AgentQueueControl {
 
 export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): AgentQueueControl {
   const { act } = useAct();
+  const [answered, setAnswered] = useState<{
+    readonly over: AgentQueue | undefined;
+    readonly queue: AgentQueue;
+  }>();
+  const [going, setGoing] = useState<readonly QueuedMessage[]>([]);
   const [moved, setMoved] = useState<{
     readonly over: AgentQueue | undefined;
     readonly order: readonly string[];
   }>();
-  const held = queue?.messages ?? [];
-  // Note that a new order stands only over the queue it was made from, so the next page lets it go.
-  const order = moved !== undefined && moved.over === queue ? moved.order : undefined;
+  const page = useRef(queue);
+  page.current = queue;
+  // Note that what a change answered stands only over the page it was answered on, so the next page lets it go.
+  const shown = answered !== undefined && answered.over === queue ? answered.queue : queue;
+  const held = [...(shown?.messages ?? []), ...going];
+  const order = moved !== undefined && moved.over === shown ? moved.order : undefined;
   const messages =
     order === undefined ? held : order.flatMap((id) => held.filter((message) => message.id === id));
-  const change = (next: AgentQueueChange) =>
-    act(ACT_KIND.CODING_AGENTS_QUEUE, { agentId, change: next }).catch(() => UNANSWERED);
+  const change = (next: AgentQueueChange) => {
+    // A message queued is drawn at the queue's end, under its own key, until the queue answers with it.
+    const queued =
+      next.change === QUEUE_CHANGE.ADD
+        ? { id: next.clientKey, text: next.text, queuedBy: "" }
+        : undefined;
+    if (queued !== undefined) setGoing((was) => [...was, queued]);
+    return act(ACT_KIND.CODING_AGENTS_QUEUE, { agentId, change: next })
+      .catch(() => UNANSWERED)
+      .then((answer) => {
+        if ("queue" in answer) setAnswered({ over: page.current, queue: answer.queue });
+        if (queued !== undefined) setGoing((was) => was.filter((message) => message !== queued));
+        return answer;
+      });
+  };
   const move = (from: number, to: number) => {
     const ids = messages.map((message) => message.id);
     const [taken] = ids.splice(from, 1);
     if (taken === undefined) return;
     ids.splice(to, 0, taken);
-    setMoved({ over: queue, order: ids });
+    setMoved({ over: shown, order: ids });
     void change({ change: QUEUE_CHANGE.REORDER, order: ids });
   };
   const remove = (message: QueuedMessage) =>
@@ -75,7 +96,7 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
           ? { status: ACTION_RESULT_STATUS.REJECTED, reason: DELETE_REFUSED }
           : { status: ACTION_RESULT_STATUS.ACCEPTED },
     );
-  return { messages, paused: queue?.paused, change, move, remove };
+  return { messages, paused: shown?.paused, change, move, remove };
 }
 
 /** The box's words and files kept aside while it holds a queued message's words being edited. */
@@ -169,10 +190,16 @@ export function useQueueEditing(
         text: composer.draft,
         attachments: composer.attachments,
       };
-      setStashed({ ...kept, id: message.id });
+      const stash = { ...kept, id: message.id };
+      setStashed(stash);
       composer.setDraft(message.text);
       composer.setAttachments(() => []);
-      void change({ change: QUEUE_CHANGE.HOLD, messageId: message.id, held: true });
+      // A message the queue would not hold, already on its way, is no longer the box's to edit.
+      void change({ change: QUEUE_CHANGE.HOLD, messageId: message.id, held: true }).then(
+        (answer) => {
+          if ("failure" in answer && held.current === message.id) giveBack(stash);
+        },
+      );
     },
     save: () => {
       if (stashed === undefined) return;

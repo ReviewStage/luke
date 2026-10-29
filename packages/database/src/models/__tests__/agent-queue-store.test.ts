@@ -13,13 +13,14 @@ import { codingAgent } from "../../schemas/coding-agent.js";
 import { turns } from "../../schemas/storage.js";
 import { getTestDB, startTask } from "../../testing/index.js";
 import {
+  claimQueueHead,
   dropQueuedMessage,
   editQueuedMessage,
   holdQueuedMessage,
   pauseAgentQueue,
   queueAgentMessage,
-  queueHead,
   readAgentQueue,
+  releaseQueuedMessage,
   reorderAgentQueue,
   resumeAgentQueue,
   takeQueuedMessage,
@@ -32,7 +33,8 @@ import { createCodingAgent } from "../coding-agent-store.js";
  * repeat under its key queued once; edited, put in a new order, and taken
  * out; paused only over messages and resumed, the last message going taking
  * the pause with it; its head handed on only while unpaused, passing over a
- * message being edited until its edit ends or lapses; and no account
+ * message being edited until its edit ends or lapses; a message claimed to
+ * send out of every member's change, one at a time; and no account
  * reads or writes the queue of an agent it does not reach. Synthetic
  * accounts and agents throughout.
  */
@@ -110,19 +112,25 @@ it.layer(getTestDB())("an agent's queue", (it) => {
           because: QUEUE_PAUSE.REFUSED,
           refusal: "agent-plan-limit-reached",
         });
-        assert.ok(Option.isNone(yield* queueHead(agentId)), "a paused queue hands on nothing");
+        assert.ok(Option.isNone(yield* claimQueueHead(agentId)), "a paused queue hands on nothing");
 
         assert.deepEqual(yield* resumeAgentQueue(userId, agentId), Option.some(true));
-        const head = Option.getOrThrow(yield* queueHead(agentId));
+        // The head claimed and let go of, as a refused send lets it go, so each claim below reads it afresh.
+        const claimed = Effect.fn(function* () {
+          const head = Option.getOrThrow(yield* claimQueueHead(agentId));
+          yield* releaseQueuedMessage(agentId, head.id);
+          return head;
+        });
+        const head = yield* claimed();
         assert.equal(head.text, "First");
         // A message being edited is passed over, keeping its place, until its edit ends or lapses.
         yield* holdQueuedMessage(userId, agentId, head.id, true);
-        assert.equal(Option.getOrThrow(yield* queueHead(agentId)).text, "Second");
+        assert.equal((yield* claimed()).text, "Second");
         yield* holdQueuedMessage(userId, agentId, head.id, false);
-        assert.equal(Option.getOrThrow(yield* queueHead(agentId)).text, "First");
+        assert.equal((yield* claimed()).text, "First");
         yield* holdQueuedMessage(userId, agentId, head.id, true);
         yield* TestClock.adjust(Duration.millis(LINE_GRACE_MILLIS));
-        assert.equal(Option.getOrThrow(yield* queueHead(agentId)).text, "First");
+        assert.equal((yield* claimed()).text, "First");
         yield* dropQueuedMessage(agentId, head.id);
         yield* pauseAgentQueue(agentId, QUEUE_PAUSE.TURN_FAILED);
         const [last] = Option.getOrThrow(yield* readAgentQueue(userId, agentId)).messages;
@@ -130,6 +138,51 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         yield* takeQueuedMessage(userId, agentId, last.id);
         const emptied = Option.getOrThrow(yield* readAgentQueue(userId, agentId));
         assert.deepEqual(emptied, { messages: [], paused: undefined });
+      }),
+  );
+
+  it.effect(
+    "a message claimed to send is out of every member's change, one goes at a time, and a claim cut off lapses",
+    () =>
+      Effect.gen(function* () {
+        const { userId, agentId } = yield* openAccount;
+        yield* queueAgentMessage(userId, agentId, { clientKey: randomUUID(), text: "First" });
+        yield* queueAgentMessage(userId, agentId, { clientKey: randomUUID(), text: "Second" });
+        const sending = Option.getOrThrow(yield* claimQueueHead(agentId));
+        assert.equal(sending.text, "First");
+        assert.ok(Option.isNone(yield* claimQueueHead(agentId)), "one message goes at a time");
+
+        // Its member, editing it as it goes, changes nothing of it.
+        assert.deepEqual(
+          yield* holdQueuedMessage(userId, agentId, sending.id, true),
+          Option.some(false),
+        );
+        assert.deepEqual(
+          yield* editQueuedMessage(userId, agentId, sending.id, "First, reworded"),
+          Option.some(false),
+        );
+        assert.deepEqual(
+          yield* takeQueuedMessage(userId, agentId, sending.id),
+          Option.some(Option.none()),
+        );
+        const [, second] = Option.getOrThrow(yield* readAgentQueue(userId, agentId)).messages;
+        assert.ok(second !== undefined);
+        assert.deepEqual(
+          yield* reorderAgentQueue(userId, agentId, [second.id, sending.id]),
+          Option.some(false),
+          "a new order cannot place the message being sent",
+        );
+        assert.deepEqual(yield* reorderAgentQueue(userId, agentId, [second.id]), Option.some(true));
+
+        // A send cut off before it answered is sent again once its claim lapses.
+        yield* TestClock.adjust(Duration.millis(LINE_GRACE_MILLIS));
+        assert.equal(Option.getOrThrow(yield* claimQueueHead(agentId)).id, sending.id);
+        yield* releaseQueuedMessage(agentId, sending.id);
+        assert.deepEqual(
+          yield* editQueuedMessage(userId, agentId, sending.id, "First, reworded"),
+          Option.some(true),
+          "a message let go of is its member's to edit again",
+        );
       }),
   );
 

@@ -4,8 +4,12 @@
  * What a member reads or writes of the queue is gated by whether they reach
  * the agent (`agentReachableBy`), so no account lists, queues on, edits, puts
  * in order, or resumes another's queue it could not message. What the
- * service does at the agent's turn's end (`queueHead`, `dropQueuedMessage`,
- * `pauseAgentQueue`) acts for the agent and names no member.
+ * service does at the agent's turn's end (`claimQueueHead`,
+ * `dropQueuedMessage`, `releaseQueuedMessage`, `pauseAgentQueue`) acts for
+ * the agent and names no member. A message the hand-off claimed to send is
+ * the hand-off's alone: no member's edit, hold, delete, steer, or new order
+ * reaches it, and no window lists it, since its line is on its way into the
+ * transcript.
  *
  * Every write that draws a place, or puts the queue in a new order, holds
  * the agent's queue lock until it commits, so two queued at once each draw
@@ -20,7 +24,7 @@ import { AGENT_QUEUE_BOUNDS, QUEUE_PAUSE, type QueuePause } from "@luke/features
 import { LINE_GRACE_MILLIS } from "@luke/features/coding-agent-status";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { TURN_STATUS } from "@luke/wire";
-import { and, asc, count, eq, exists, inArray, max, sql } from "drizzle-orm";
+import { and, asc, count, eq, exists, inArray, isNull, lte, max, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
@@ -39,9 +43,10 @@ const QueuedRowSchema = Schema.Struct({
   text: Schema.String,
   attachments: Schema.NullOr(Schema.Array(Schema.Unknown)),
   heldUntil: Schema.NullOr(Schema.Date),
+  claimedAt: Schema.NullOr(Schema.Date),
 });
 
-/** One queued message: its words and files, the member who queued it, the key it goes under, and until when an edit holds it out of the hand-off. */
+/** One queued message: its words and files, the member who queued it, the key it goes under, until when an edit holds it out of the hand-off, and when the hand-off claimed it to send. */
 export interface QueuedMessageRow {
   readonly id: string;
   readonly userId: string;
@@ -49,6 +54,7 @@ export interface QueuedMessageRow {
   readonly text: string;
   readonly attachments: readonly CodingAgentAttachment[];
   readonly heldUntil: Date | undefined;
+  readonly claimedAt: Date | undefined;
 }
 
 /** Why a queue stands paused, and what refused a hand-off where one did. */
@@ -82,7 +88,20 @@ const PauseRowSchema = Schema.Struct({
 function messageOf(row: typeof QueuedRowSchema.Type): QueuedMessageRow {
   // SAFETY: the column is written only from a message request's files, which their schema read.
   const attachments = (row.attachments ?? []) as readonly CodingAgentAttachment[];
-  return { ...row, attachments, heldUntil: row.heldUntil ?? undefined };
+  return {
+    ...row,
+    attachments,
+    heldUntil: row.heldUntil ?? undefined,
+    claimedAt: row.claimedAt ?? undefined,
+  };
+}
+
+/** The rows no send stands claimed on at `now`: never claimed, or claimed by a send cut off a line's grace ago. */
+function unclaimedAt(now: Date) {
+  return or(
+    isNull(queuedMessage.claimedAt),
+    lte(queuedMessage.claimedAt, new Date(now.getTime() - LINE_GRACE_MILLIS)),
+  );
 }
 
 const findReached = SqlSchema.findAll({
@@ -110,6 +129,7 @@ const findMessages = SqlSchema.findAll({
           text: queuedMessage.text,
           attachments: queuedMessage.attachments,
           heldUntil: queuedMessage.heldUntil,
+          claimedAt: queuedMessage.claimedAt,
         })
         .from(queuedMessage)
         .where(eq(queuedMessage.agentId, agentId))
@@ -180,7 +200,13 @@ const updateText = SqlSchema.findAll({
       db
         .update(queuedMessage)
         .set({ text, heldUntil: null, updatedAt: now })
-        .where(and(eq(queuedMessage.agentId, agentId), eq(queuedMessage.id, messageId)))
+        .where(
+          and(
+            eq(queuedMessage.agentId, agentId),
+            eq(queuedMessage.id, messageId),
+            unclaimedAt(now),
+          ),
+        )
         .returning({ id: queuedMessage.id }),
     ),
 });
@@ -198,8 +224,31 @@ const updateHold = SqlSchema.findAll({
       db
         .update(queuedMessage)
         .set({ heldUntil, updatedAt: now })
-        .where(and(eq(queuedMessage.agentId, agentId), eq(queuedMessage.id, messageId)))
+        .where(
+          and(
+            eq(queuedMessage.agentId, agentId),
+            eq(queuedMessage.id, messageId),
+            unclaimedAt(now),
+          ),
+        )
         .returning({ id: queuedMessage.id }),
+    ),
+});
+
+/** A message claimed by the hand-off to send at `now`, or let go of (`claimedAt` null) where its send was refused. */
+const updateClaim = SqlSchema.void({
+  Request: Schema.Struct({
+    agentId: Schema.String,
+    messageId: Schema.String,
+    claimedAt: Schema.NullOr(Schema.Date),
+    now: Schema.Date,
+  }),
+  execute: ({ agentId, messageId, claimedAt, now }) =>
+    Database.use((db) =>
+      db
+        .update(queuedMessage)
+        .set({ claimedAt, updatedAt: now })
+        .where(and(eq(queuedMessage.agentId, agentId), eq(queuedMessage.id, messageId))),
     ),
 });
 
@@ -225,14 +274,25 @@ const updatePosition = SqlSchema.void({
     ),
 });
 
+/** A message deleted; where `unclaimedAt` names a time, only one no send stood claimed on then, as a member's delete or steer takes. */
 const deleteMessage = SqlSchema.findAll({
-  Request: Schema.Struct({ agentId: Schema.String, messageId: Schema.String }),
+  Request: Schema.Struct({
+    agentId: Schema.String,
+    messageId: Schema.String,
+    unclaimedAt: Schema.NullOr(Schema.Date),
+  }),
   Result: QueuedRowSchema,
-  execute: ({ agentId, messageId }) =>
+  execute: ({ agentId, messageId, unclaimedAt: now }) =>
     Database.use((db) =>
       db
         .delete(queuedMessage)
-        .where(and(eq(queuedMessage.agentId, agentId), eq(queuedMessage.id, messageId)))
+        .where(
+          and(
+            eq(queuedMessage.agentId, agentId),
+            eq(queuedMessage.id, messageId),
+            now === null ? undefined : unclaimedAt(now),
+          ),
+        )
         .returning({
           id: queuedMessage.id,
           userId: queuedMessage.userId,
@@ -240,6 +300,7 @@ const deleteMessage = SqlSchema.findAll({
           text: queuedMessage.text,
           attachments: queuedMessage.attachments,
           heldUntil: queuedMessage.heldUntil,
+          claimedAt: queuedMessage.claimedAt,
         }),
     ),
 });
@@ -441,7 +502,8 @@ export function takeQueuedMessage(
     agentId,
     Effect.gen(function* () {
       if (!(yield* reaches(userId, agentId))) return Option.none();
-      const [taken] = yield* deleteMessage({ agentId, messageId });
+      const now = yield* DateTime.nowAsDate;
+      const [taken] = yield* deleteMessage({ agentId, messageId, unclaimedAt: now });
       yield* deletePauseIfEmpty({ agentId });
       return Option.some(Option.map(Option.fromNullishOr(taken), messageOf));
     }),
@@ -462,14 +524,16 @@ export function reorderAgentQueue(
     agentId,
     Effect.gen(function* () {
       if (!(yield* reaches(userId, agentId))) return Option.none();
-      const standing = new Set((yield* findMessages({ agentId })).map((row) => row.id));
+      const now = yield* DateTime.nowAsDate;
+      // Note that a message claimed to send is in no member's order, as no window lists it.
+      const rows = (yield* findMessages({ agentId })).map(messageOf);
+      const standing = new Set(rows.filter((row) => !claimedAt(row, now)).map((row) => row.id));
       const named = new Set(order);
       const same =
         named.size === order.length &&
         named.size === standing.size &&
         order.every((id) => standing.has(id));
       if (!same) return Option.some(false);
-      const now = yield* DateTime.nowAsDate;
       for (const [position, messageId] of order.entries()) {
         yield* updatePosition({ agentId, messageId, position, now });
       }
@@ -506,22 +570,49 @@ export function pauseAgentQueue(
 }
 
 /**
- * The message the agent's queue hands on next: its first that no edit holds,
- * where it stands unpaused. Note that a message being edited is passed over
- * rather than holding the queue, and keeps its place for once its edit ends.
+ * The message the agent's queue hands on next, claimed to send: its first
+ * that no edit holds, where it stands unpaused and no send of it stands
+ * claimed already. The claim is taken under the queue lock, so a member's
+ * edit or delete lands before it or is refused after it, and two hand-offs
+ * at once claim one message between them. Note that a message being edited
+ * is passed over rather than holding the queue, and keeps its place for
+ * once its edit ends.
  */
-export function queueHead(agentId: string): AgentQueueEffect<Option.Option<QueuedMessageRow>> {
+export function claimQueueHead(agentId: string): AgentQueueEffect<Option.Option<QueuedMessageRow>> {
+  return underQueueLock(
+    agentId,
+    Effect.gen(function* () {
+      const queue = yield* agentQueueNow(agentId);
+      const now = yield* DateTime.nowAsDate;
+      if (queue.paused !== undefined) return Option.none();
+      if (queue.messages.some((message) => claimedAt(message, now))) return Option.none();
+      const head = queue.messages.find((message) => !heldAt(message, now));
+      if (head === undefined) return Option.none();
+      yield* updateClaim({ agentId, messageId: head.id, claimedAt: now, now });
+      return Option.some({ ...head, claimedAt: now });
+    }),
+  );
+}
+
+/** A claimed message let go of, its send refused, so it stands queued in its place again. */
+export function releaseQueuedMessage(agentId: string, messageId: string): AgentQueueEffect<void> {
   return Effect.gen(function* () {
-    const queue = yield* agentQueueNow(agentId);
-    if (queue.paused !== undefined) return Option.none();
     const now = yield* DateTime.nowAsDate;
-    return Option.fromNullishOr(queue.messages.find((message) => !heldAt(message, now)));
+    yield* updateClaim({ agentId, messageId, claimedAt: null, now });
   });
 }
 
 /** Whether an edit holds the message out of the hand-off at `now`. */
 export function heldAt(message: QueuedMessageRow, now: Date): boolean {
   return message.heldUntil !== undefined && message.heldUntil.getTime() > now.getTime();
+}
+
+/** Whether a send stands claimed on the message at `now`, one cut off lapsing as a hold does. */
+export function claimedAt(message: QueuedMessageRow, now: Date): boolean {
+  return (
+    message.claimedAt !== undefined &&
+    message.claimedAt.getTime() > now.getTime() - LINE_GRACE_MILLIS
+  );
 }
 
 const findUnpausedQueues = SqlSchema.findAll({
@@ -575,6 +666,9 @@ export function unpausedQueues(
 export function dropQueuedMessage(agentId: string, messageId: string): AgentQueueEffect<void> {
   return underQueueLock(
     agentId,
-    Effect.andThen(deleteMessage({ agentId, messageId }), deletePauseIfEmpty({ agentId })),
+    Effect.andThen(
+      deleteMessage({ agentId, messageId, unclaimedAt: null }),
+      deletePauseIfEmpty({ agentId }),
+    ),
   );
 }

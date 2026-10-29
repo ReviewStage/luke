@@ -62,6 +62,7 @@ import { BranchChip, type PublishedDoors } from "./agent-published.js";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers.js";
 import { AttachFilesButton, type AttachPicker } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
+import { agentStillWriting } from "./coding-agent-model.js";
 import { ComposerField } from "./composer-field.js";
 import { useComposerPickers } from "./composer-pickers.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
@@ -552,7 +553,7 @@ export function AgentComposer({
   // While a turn runs and the box holds a message it may go two ways; holding ⌘ says on Send which a send takes.
   const queues =
     queueing !== undefined &&
-    status === CODING_AGENT_STATUS.RUNNING &&
+    agentStillWriting(status) &&
     !empty &&
     !held &&
     !files.reading &&
@@ -809,7 +810,7 @@ export function AgentComposer({
       >
         {editingQueued ? (
           <Banner
-            look={BANNER_LOOK.STRIP}
+            look={BANNER_LOOK.INSET}
             glyph={<GLYPH.RENAME />}
             actions={
               <Button

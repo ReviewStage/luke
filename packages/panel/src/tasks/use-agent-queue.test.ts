@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { QUEUE_CHANGE } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
@@ -14,9 +15,10 @@ import { type QueueEditing, useAgentQueue, useQueueEditing } from "./use-agent-q
 
 /**
  * The message box's part in an agent's queue when the queue refuses it: a
- * message the queue did not take comes back into the box, and an edit the
+ * message the queue did not take comes back into the box, an edit the
  * queue did not save stays open with its new words, so a refusal never
- * loses what was typed.
+ * loses what was typed, and an edit of a message the queue would not hold,
+ * already on its way, closes and gives the box back.
  */
 
 const ignore = () => undefined;
@@ -50,12 +52,18 @@ async function settle(): Promise<void> {
   });
 }
 
+/** The changes the service refuses; it answers every other with an empty queue. */
+let refused: ReadonlySet<string> = new Set();
+
 beforeEach(async () => {
   fakeAppBridge({});
-  // The service refuses every change to the queue.
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_QUEUE]: () =>
-      Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    [ACT_KIND.CODING_AGENTS_QUEUE]: ({ change }) =>
+      Promise.resolve(
+        refused.has(change.change)
+          ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+          : { queue: { messages: [] } },
+      ),
   });
   const container = document.createElement("div");
   document.body.append(container);
@@ -73,6 +81,7 @@ afterEach(() => {
 });
 
 test("a message the queue refused comes back into the box it was queued from", async () => {
+  refused = new Set([QUEUE_CHANGE.ADD]);
   act(() => now().composer.setDraft("Please update the tests"));
   act(() => now().editing.queue());
   await settle();
@@ -81,6 +90,7 @@ test("a message the queue refused comes back into the box it was queued from", a
 });
 
 test("an edit the queue refused to save stays open with its new words, the box's own still kept aside", async () => {
+  refused = new Set([QUEUE_CHANGE.EDIT]);
   act(() => now().composer.setDraft("my own words"));
   act(() => now().editing.edit({ id: "m1", text: "Run tests", queuedBy: "user-1" }));
   act(() => now().composer.setDraft("Run tests and fix failures"));
@@ -90,5 +100,15 @@ test("an edit the queue refused to save stays open with its new words, the box's
   assert.equal(now().editing.editing, "m1");
   assert.equal(now().composer.draft, "Run tests and fix failures");
   act(() => now().editing.cancel());
+  assert.equal(now().composer.draft, "my own words");
+});
+
+test("an edit of a message the queue would not hold, already on its way, closes and gives the box back", async () => {
+  refused = new Set([QUEUE_CHANGE.HOLD]);
+  act(() => now().composer.setDraft("my own words"));
+  act(() => now().editing.edit({ id: "m1", text: "Run tests", queuedBy: "user-1" }));
+  await settle();
+
+  assert.equal(now().editing.editing, undefined);
   assert.equal(now().composer.draft, "my own words");
 });

@@ -24,7 +24,10 @@ import { codingAgent } from "./coding-agent.js";
  * once. `user_id` is the member who queued it, whose message it goes as.
  * `held_until` is how long a member's edit of it holds it out of the
  * hand-off, which passes over it meanwhile; null while nobody edits it, and
- * lapsed once an edit left open has stood that long.
+ * lapsed once an edit left open has stood that long. `claimed_at` is when
+ * the hand-off took it to send, after which no member's edit, delete, or
+ * new order reaches it and no window lists it; null until then, and lapsed
+ * as a hold does, so a send cut off is sent again under its key.
  */
 export const queuedMessage = pgTable(
   "queued_message",
@@ -42,6 +45,7 @@ export const queuedMessage = pgTable(
     /** The files that go with the words, as the message request carried them; null where none did. */
     attachments: jsonb("attachments").$type<readonly CodingAgentAttachment[]>(),
     heldUntil: timestamptz("held_until"),
+    claimedAt: timestamptz("claimed_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

@@ -35,6 +35,7 @@
 
 import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
 import {
+  claimedAt,
   editQueuedMessage,
   holdQueuedMessage,
   QUEUE_OUTCOME,
@@ -444,7 +445,11 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
         case QUEUE_CHANGE.STEER: {
           // Steered, the message goes now, into the turn under way or as the next where none runs, and leaves the queue once it went.
           const queue = yield* found(readAgentQueue(userId, agent.id));
-          const message = queue.messages.find((each) => each.id === body.messageId);
+          const now = yield* DateTime.nowAsDate;
+          // Note that a message the hand-off claimed is already on its way, so it is no member's to steer.
+          const message = queue.messages.find(
+            (each) => each.id === body.messageId && !claimedAt(each, now),
+          );
           if (message === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
           yield* sendQueued(eve, agent, message);
           break;

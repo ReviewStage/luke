@@ -3,9 +3,11 @@
  *
  * A message queued behind the agent's running turn waits in the store,
  * unsent (`@luke/database/models/agent-queue-store`). Once nothing runs, the
- * first one goes as its member's own message, under its own send key, so a
- * hand-off repeated sends it once (`steer.ts`'s repeat), and it opens the
- * next turn; it leaves the queue only once it went. A hand-off the service
+ * first one is claimed, which takes it off every window's queue and out of
+ * reach of a member's edit, and goes as its member's own message, under its
+ * own send key, so a hand-off repeated sends it once (`steer.ts`'s repeat),
+ * and it opens the next turn; it leaves the queue only once it went. A
+ * hand-off the service
  * refuses keeps the message, pausing the queue under the refusal, since
  * nobody watches it go to say why it did not. The agent is at work while a
  * turn runs or a message sent to it still awaits its turn, and then nothing
@@ -19,11 +21,13 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type AgentQueueRead,
   agentQueueNow,
+  claimedAt,
+  claimQueueHead,
   dropQueuedMessage,
   heldAt,
   pauseAgentQueue,
   type QueuedMessageRow,
-  queueHead,
+  releaseQueuedMessage,
   unpausedQueues,
 } from "@luke/database/models/agent-queue-store";
 import {
@@ -76,11 +80,12 @@ export function queueEveFor(reach: EveReach, request: Request, requester: string
         });
 }
 
-/** The queue as a transcript carries it at `now`: its messages, which of them an edit holds, and its pause; nothing while none is queued. */
+/** The queue as a transcript carries it at `now`: its messages but the one being sent, which of them an edit holds, and its pause; nothing while none is queued. */
 export function wireQueue(read: AgentQueueRead, now: Date): AgentQueue | undefined {
-  if (read.messages.length === 0) return undefined;
+  const queued = read.messages.filter((message) => !claimedAt(message, now));
+  if (queued.length === 0) return undefined;
   return {
-    messages: read.messages.map((message) => ({
+    messages: queued.map((message) => ({
       id: message.id,
       text: message.text,
       queuedBy: message.userId,
@@ -153,9 +158,11 @@ export const sendQueued = Effect.fn("web/sendQueued")(function* (
 
 /**
  * The agent's queue handed on where the agent stands idle and the queue
- * unpaused: its first message sent as the next turn. A refusal keeps the
- * message and pauses the queue under it, and any failure is logged rather
- * than answered, since whoever's act set this off is not waiting on it.
+ * unpaused: its first message claimed and sent as the next turn. A refusal
+ * lets the message go back to its place and pauses the queue under it, and
+ * any failure is logged rather than answered, since whoever's act set this
+ * off is not waiting on it. A send cut off before it answered leaves its
+ * claim to lapse, after which the next hand-off sends it again under its key.
  */
 export const handOnQueue = Effect.fn("web/handOnQueue")(function* (
   eveFor: QueueEve,
@@ -163,12 +170,15 @@ export const handOnQueue = Effect.fn("web/handOnQueue")(function* (
 ) {
   const step = Effect.gen(function* () {
     if (yield* hostedStoreOrUnavailable(atWork(agent))) return;
-    const head = yield* hostedStoreOrUnavailable(queueHead(agent.id));
+    const head = yield* hostedStoreOrUnavailable(claimQueueHead(agent.id));
     if (Option.isNone(head)) return;
     yield* sendQueued(eveFor, agent, head.value).pipe(
       Effect.catch((refusal: HostedRefusal) =>
         hostedStoreOrUnavailable(
-          pauseAgentQueue(agent.id, QUEUE_PAUSE.REFUSED, refusal.error as HostedApiError),
+          Effect.andThen(
+            releaseQueuedMessage(agent.id, head.value.id),
+            pauseAgentQueue(agent.id, QUEUE_PAUSE.REFUSED, refusal.error as HostedApiError),
+          ),
         ),
       ),
     );

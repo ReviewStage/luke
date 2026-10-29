@@ -9,7 +9,7 @@ import {
   readAccountPreferences,
   writeAccountPreferences,
 } from "@luke/database/models/account-store";
-import { type QueuedMessageRow, queueHead } from "@luke/database/models/agent-queue-store";
+import { claimQueueHead, type QueuedMessageRow } from "@luke/database/models/agent-queue-store";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import {
   createAutomation,
@@ -5397,7 +5397,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const eve = fakeEve();
         const { handedOn, queued, stored } = yield* queuedBehindEndedTurn(eve, ["First", "Second"]);
         // Both hand-offs read the head before either sent it, as two racing at one end do.
-        const head = Option.getOrThrow(yield* queueHead(stored.id));
+        const head = Option.getOrThrow(yield* claimQueueHead(stored.id));
 
         yield* handedOn(head);
         yield* handedOn(head);

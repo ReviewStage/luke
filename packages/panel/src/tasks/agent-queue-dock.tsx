@@ -53,6 +53,7 @@ const WORDS = {
   STOPPED: "Queue paused because you interrupted",
   TURN_FAILED: "Queue paused because the turn failed",
   REFUSED: "Queue paused: the next message could not be sent",
+  PAUSED: "Queue paused",
 } as const;
 
 /** What asking to delete a queued message says. */
@@ -78,7 +79,7 @@ function pausedWords(paused: QueuePaused): string {
   if (paused.because === QUEUE_PAUSE.STOPPED) return WORDS.STOPPED;
   if (paused.because === QUEUE_PAUSE.TURN_FAILED) return WORDS.TURN_FAILED;
   const why = paused.refusal === undefined ? undefined : REFUSAL_WORDS[paused.refusal];
-  return why === undefined ? WORDS.REFUSED : `${WORDS.REFUSED}: ${why}`;
+  return why === undefined ? WORDS.REFUSED : `${WORDS.PAUSED}: ${why}`;
 }
 
 /** The dock: the paused header where the queue stands paused, then a row per queued message. */
@@ -117,7 +118,7 @@ export function AgentQueueDock({
     <div className={`agent-queue-dock ${COMPOSER_DOCK_CLASS}`}>
       {paused === undefined ? null : (
         <Banner
-          look={BANNER_LOOK.STRIP}
+          look={BANNER_LOOK.INSET}
           tone={paused.because === QUEUE_PAUSE.REFUSED ? STATUS_TONE.DANGER : STATUS_TONE.NEUTRAL}
           glyph={<PauseIcon />}
           actions={

@@ -1749,6 +1749,11 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .agent-queue-lead {
   display: inline-flex;
 }
+/* Note that the row sizes only a glyph that is its leading mark itself, so the two inside this one take the same size. */
+.agent-queue-lead > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
 .agent-queue-lead > :last-child,
 li:is(:hover, [data-dragging]) .agent-queue-lead > :first-child,
 [data-lifted] .agent-queue-lead > :first-child {
