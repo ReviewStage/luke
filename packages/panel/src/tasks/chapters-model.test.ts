@@ -94,12 +94,12 @@ const OTHER: Chapter = {
   risk: null,
 };
 
-/** A read answering the pull request at `HEAD`, its newest chapters as given. */
+/** A read answering the pull request's newest chapters as given. */
 function answering(
   chapters: PullRequestChaptersState,
   generatable = true,
 ): PullRequestChaptersAnswerView {
-  return { pullRequest: { number: 42, headSha: HEAD, generatable, chapters } };
+  return { pullRequest: { number: 42, generatable, chapters } };
 }
 
 /** Ready chapters made for `headSha`. */
@@ -173,9 +173,15 @@ test("this window's own Generate stands over whatever the read last said, timed 
   assert.deepEqual(shown, { kind: CHAPTERS_SHOWN.GENERATING, startedAt: 9_000, ours: true });
 });
 
-test("chapters made for an older head are stale, those for the head now are not, and Other changes is read last wherever it was put", () => {
-  const current = chaptersShown(answering(ready(HEAD, [OTHER, FIRST, SECOND])), false, undefined);
-  const older = chaptersShown(answering(ready(OLDER, [FIRST])), false, undefined);
+test("chapters made for an older head than the tab holds are stale, those for the head now are not, and Other changes is read last wherever it was put", () => {
+  const now = { pullRequest: HEAD, files: HEAD };
+  const current = chaptersShown(
+    answering(ready(HEAD, [OTHER, FIRST, SECOND])),
+    false,
+    undefined,
+    now,
+  );
+  const older = chaptersShown(answering(ready(OLDER, [FIRST])), false, undefined, now);
 
   assert.equal(current.kind, CHAPTERS_SHOWN.READY);
   assert.equal(older.kind, CHAPTERS_SHOWN.READY);
@@ -186,6 +192,19 @@ test("chapters made for an older head are stale, those for the head now are not,
     current.chapters.map((each) => each.title),
     ["Read the store", "Write the store", "Other changes"],
   );
+});
+
+test("chapters are stale where the files drawn are of another push than they were made for, or name no head, whatever the pull request's head", () => {
+  const stale = (files: string | undefined) => {
+    const shown = chaptersShown(answering(ready(HEAD, [FIRST])), false, undefined, {
+      pullRequest: undefined,
+      files,
+    });
+    return shown.kind === CHAPTERS_SHOWN.READY && shown.stale;
+  };
+
+  assert.equal(stale("c".repeat(40)), true);
+  assert.equal(stale(undefined), true);
 });
 
 test("a chapter is viewed once every file it holds is, so a file two chapters share is viewed in both; one holding no file is never viewed", () => {

@@ -208,12 +208,12 @@ const CONVERSATION: AgentOverviewConversation = {
   earlier: 0,
 };
 
-/** The read answering the pull request at `HEAD` with these newest chapters. */
+/** The read answering these newest chapters. */
 function answering(
   chapters: PullRequestChaptersState,
   generatable = true,
 ): PullRequestChaptersAnswerView {
-  return { pullRequest: { number: 42, headSha: HEAD, generatable, chapters } };
+  return { pullRequest: { number: 42, generatable, chapters } };
 }
 
 /** Ready chapters made for `headSha`, "Other changes" put first, as no reader reads it. */
@@ -330,6 +330,8 @@ interface Answers {
   readonly generateChapters?: AgentsControl["generateChapters"];
   /** The files marked viewed on GitHub; the marks are unread where none are named. */
   readonly viewed?: readonly string[];
+  /** The head GitHub holds as each read of the overview and the files asks; theirs where none is named, the overview's merge box saying none. */
+  readonly head?: () => string;
 }
 
 /** The agent's control, its overview, files, and chapters answering as given. */
@@ -353,13 +355,35 @@ function controlAnswering(answers: Answers): AgentsControl {
         },
       ],
     ]),
-    readOverviewPullRequest: () => Promise.resolve({ pullRequest: PULL_REQUEST }),
+    readOverviewPullRequest: () =>
+      Promise.resolve({
+        pullRequest:
+          answers.head === undefined
+            ? PULL_REQUEST
+            : {
+                ...PULL_REQUEST,
+                merging: {
+                  methods: [],
+                  autoMergeAllowed: false,
+                  queue: false,
+                  queued: null,
+                  autoMerge: null,
+                  headSha: answers.head(),
+                  review: null,
+                  checks: CHECK_SUMMARY.PASSING,
+                },
+              },
+      }),
     readOverviewConversation: () => Promise.resolve({ pullRequest: CONVERSATION }),
     readOverviewChecks: () => Promise.resolve({ pullRequest: { checks: [] } }),
-    readChanges: () =>
-      Promise.resolve({
-        pullRequest: { url: PAGE, headSha: HEAD, truncated: false, files: FILES },
-      }),
+    readChanges: () => {
+      const head = answers.head?.() ?? HEAD;
+      // The older push's files hold none of the chapters' hunks, so drawing them under the chapters shows.
+      const files = head === HEAD ? FILES : [];
+      return Promise.resolve({
+        pullRequest: { url: PAGE, headSha: head, truncated: false, files },
+      });
+    },
     readPullRequestViewed: () =>
       Promise.resolve(
         answers.viewed === undefined
@@ -688,6 +712,35 @@ test("chapters made for an older head stand under a line saying new commits came
   act(() => button(tab, "Regenerate").click());
   await settle();
   assert.equal(generates, 1);
+});
+
+test("chapters a Generate made for a head pushed since the tab read the pull request draw their diff once the tab has read that head again", async () => {
+  let head = OLDER;
+  let generated = false;
+  const tab = await draw(
+    controlAnswering({
+      head: () => head,
+      readChapters: () =>
+        Promise.resolve(
+          answering(generated ? ready() : { status: PULL_REQUEST_CHAPTERS_STATE.NONE }),
+        ),
+      generateChapters: () => {
+        // A push the tab has not read yet, which the Generate tells the chapters for.
+        head = HEAD;
+        generated = true;
+        return Promise.resolve(answering(ready()));
+      },
+    }),
+  );
+
+  act(() => button(tab, "Generate chapters").click());
+  await settle();
+  assert.equal(heading(tab), "1. Read the expiry");
+  assert.doesNotMatch(
+    tab.querySelector(".luke-tab-notice")?.textContent ?? "",
+    /New commits since/u,
+  );
+  assert.notDeepEqual(listed(), [], "the chapter's diff is drawn from the files of its head");
 });
 
 test("a generation that failed says why with Retry, chapters someone else is making offer Refresh, and a deployment that cannot make them says so", async () => {

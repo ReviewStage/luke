@@ -228,6 +228,7 @@ import {
   chaptersModelAnswerViewSchema,
   type PullRequestChaptersAnswerView,
   type PullRequestChaptersParams,
+  type PullRequestChaptersReadParams,
   pullRequestChaptersAnswerViewSchema,
 } from "@luke/features/pull-request-chapters-view";
 import {
@@ -738,9 +739,9 @@ export interface HostOperator {
   onAutomationsChanged(listener: (followed: AutomationFollowed) => void): () => void;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
-  /** The workspace's newest chapters of one agent's pull request, with its head as GitHub holds it; or why there are none. */
+  /** The workspace's newest chapters of one agent's pull request by its number; or why there are none. */
   pullRequestChapters(
-    params: PullRequestChaptersParams,
+    params: PullRequestChaptersReadParams,
   ): Effect.Effect<PullRequestChaptersAnswerView>;
   /** One agent's pull request's chapters generated for its head, or the generation already under way; the chapters as they then stand, or why there are none. */
   pullRequestChaptersGenerate(
@@ -1931,7 +1932,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     pullRequestChapters: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS, pullRequestChaptersRead(params)),
+        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS, {
+          agentId: params.agentId,
+          number: params.number,
+        }),
         answerOf(pullRequestChaptersAnswerViewSchema, AGENT_UNANSWERED),
       ),
     pullRequestChaptersGenerate: (params) =>

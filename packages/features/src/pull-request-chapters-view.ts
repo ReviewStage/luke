@@ -41,6 +41,14 @@ export const pullRequestChaptersParamsSchema = EffectSchema.Struct({
 
 export type PullRequestChaptersParams = typeof pullRequestChaptersParamsSchema.Type;
 
+/** A read of a pull request's chapters, which names the number the tab's own read of it found. */
+export const pullRequestChaptersReadParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  number: githubPullRequestNumberSchema,
+});
+
+export type PullRequestChaptersReadParams = typeof pullRequestChaptersReadParamsSchema.Type;
+
 /** A pull request's chapters, as the panel hears a read or a Generate: the answer, or why there is none. */
 export const pullRequestChaptersAnswerViewSchema = EffectSchema.Union([
   pullRequestChaptersAnswerSchema,
