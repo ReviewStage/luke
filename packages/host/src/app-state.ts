@@ -421,13 +421,18 @@ export interface AppStateDelivery {
   readonly version: number;
   readonly entries: { readonly [Entry in AppStateEntry]?: AppStateSnapshot[Entry] };
   readonly gone?: readonly AppStateEntry[];
-  /** Each holder of the account's feed that moved since the window's last delivery, whole, one gone as none, in place of the feed's entry, where the window held its rows and still does. */
-  readonly inboxHolders?: AppInboxItems;
+  /** Each holder of the account's feed that moved since the window's last delivery, whole, one gone as null, in place of the feed's entry, where the window held its rows and still does. */
+  readonly inboxHolders?: AppInboxHolders;
 }
+
+/** The holders of the account's feed that moved, by kind: each whole, or null where it is gone, which an empty list is not. */
+type AppInboxHolders = {
+  readonly [Kind in InboxHolderKind]: Readonly<Record<string, readonly InboxItem[] | null>>;
+};
 
 /**
  * Each holder of the account's feed that moved from `sent` to `next`, one
- * gone as none; none where either holds no rows, which crosses whole, or
+ * gone as null; none where either holds no rows, which crosses whole, or
  * where none moved. Note that a change crosses as the holders it moved,
  * since the largest workspace's feed is megabytes and a change moves one
  * task's list.
@@ -435,7 +440,7 @@ export interface AppStateDelivery {
 function inboxHoldersPatch(
   sent: AppHostRead<AppInboxItems> | undefined,
   next: AppHostRead<AppInboxItems> | undefined,
-): AppInboxItems | undefined {
+): AppInboxHolders | undefined {
   const [before, after] = [sent?.rows, next?.rows];
   if (before === undefined || after === undefined) return undefined;
   const ofKind = (kind: InboxHolderKind) =>
@@ -445,7 +450,7 @@ function inboxHoldersPatch(
       ),
       ...Object.keys(before[kind])
         .filter((id) => !Object.hasOwn(after[kind], id))
-        .map((id) => [id, []]),
+        .map((id) => [id, null]),
     ]);
   const patch = {
     [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN),
@@ -459,13 +464,13 @@ function inboxHoldersPatch(
 /** The account's feed once `patch` lands on `held`: each holder moved laid in, keeping what of it did not move, each gone dropped, and every other the very list held. */
 function withInboxHolders(
   held: AppHostRead<AppInboxItems> | undefined,
-  patch: AppInboxItems,
+  patch: AppInboxHolders,
 ): AppHostRead<AppInboxItems> {
   const ofKind = (kind: InboxHolderKind) => {
     const next: Record<string, readonly InboxItem[]> = { ...held?.rows?.[kind] };
     for (const [id, items] of Object.entries(patch[kind])) {
       const was = next[id];
-      if (items.length === 0) Reflect.deleteProperty(next, id);
+      if (items === null) Reflect.deleteProperty(next, id);
       else next[id] = was === undefined ? items : keepIdentity(was, items);
     }
     return next;

@@ -114,7 +114,7 @@ describe("a delivery that crosses the wire", () => {
     assert.equal("settings" in withAppStateDelivery(held, delivered), false);
   });
 
-  test("crosses a change to one holder of the account's feed as that holder alone, every other holder's list kept the very one the window held", () => {
+  test("crosses a change to the account's feed as the holders it moved alone, a holder emptied kept as empty, every other holder's list kept the very one the window held", () => {
     const item = (id: string, title: string): InboxItem => ({
       id,
       agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
@@ -134,23 +134,27 @@ describe("a delivery that crosses the wire", () => {
         rows: { [INBOX_SCOPE_KIND.PLAN]: plans, [INBOX_SCOPE_KIND.AGENT]: {} },
       },
     });
+    const before = { quiet, moved: [item("moved", "Ship?")], emptied: [item("emptied", "Merge?")] };
     const held = withAppStateDelivery(
       fed({}),
-      acrossTheWire(appStateDelivery(undefined, fed({ quiet, moved: [item("moved", "Ship?")] }))),
+      acrossTheWire(appStateDelivery(undefined, fed(before))),
     );
-    const sent = fed({ quiet, moved: [item("moved", "Ship?")] });
-    const next = { ...fed({ quiet, moved: [item("moved", "Ship tonight?")] }), version: 2 };
+    const sent = fed(before);
+    const next = {
+      ...fed({ quiet, moved: [item("moved", "Ship tonight?")], emptied: [] }),
+      version: 2,
+    };
 
     const delivered = acrossTheWire(appStateDelivery(sent, next));
     const adopted = withAppStateDelivery(held, delivered);
 
     assert.deepEqual(Object.keys(delivered.entries), []);
-    assert.deepEqual(delivered.inboxHolders, {
-      [INBOX_SCOPE_KIND.PLAN]: { moved: [item("moved", "Ship tonight?")] },
-      [INBOX_SCOPE_KIND.AGENT]: {},
-    });
+    assert.deepEqual(Object.keys(delivered.inboxHolders?.[INBOX_SCOPE_KIND.PLAN] ?? {}), [
+      "moved",
+      "emptied",
+    ]);
     const plans = adopted[LIVE_READ.INBOX_ITEMS].rows?.[INBOX_SCOPE_KIND.PLAN];
     assert.equal(plans?.quiet, held[LIVE_READ.INBOX_ITEMS].rows?.[INBOX_SCOPE_KIND.PLAN].quiet);
-    assert.deepEqual(plans?.moved, [item("moved", "Ship tonight?")]);
+    assert.deepEqual(plans, { quiet, moved: [item("moved", "Ship tonight?")], emptied: [] });
   });
 });
