@@ -94,11 +94,11 @@ function chip(host: HTMLElement, label: string): HTMLButtonElement {
   return found ?? assert.fail(`no ${label} chip`);
 }
 
-/** The Auto-merge switch a task's head draws. */
-function autoMerge(host: HTMLElement): HTMLElement {
+/** The switch a task's head draws under `label`. */
+function switchNamed(host: HTMLElement, label: string): HTMLElement {
   return (
-    host.querySelector<HTMLElement>('[role="switch"][aria-label="Auto-merge"]') ??
-    assert.fail("no Auto-merge switch")
+    host.querySelector<HTMLElement>(`[role="switch"][aria-label="${label}"]`) ??
+    assert.fail(`no ${label} switch`)
   );
 }
 
@@ -143,14 +143,14 @@ test("a pilot task's Auto-merge switch is on while it merges on green, and a pre
   const sent: TaskStanding[] = [];
   const pilot: Task = { ...TASK, mode: TASK_MODE.PILOT };
   const on = drawn(pilot, (standing) => sent.push(standing));
-  const merging = autoMerge(on);
+  const merging = switchNamed(on, "Auto-merge");
   assert.equal(merging.getAttribute("aria-checked"), "true");
   act(() => merging.click());
 
   const off = drawn({ ...pilot, mergePolicy: MERGE_POLICY.HOLD }, (standing) =>
     sent.push(standing),
   );
-  const holding = autoMerge(off);
+  const holding = switchNamed(off, "Auto-merge");
   assert.equal(holding.getAttribute("aria-checked"), "false");
   act(() => holding.click());
 
@@ -159,6 +159,26 @@ test("a pilot task's Auto-merge switch is on while it merges on green, and a pre
     { mergePolicy: MERGE_POLICY.MERGE_ON_GREEN },
   ]);
   assert.equal(drawn(TASK, () => undefined).querySelector('[role="switch"]'), null);
+});
+
+test("a top pilot task's Running switch reads off where the task names none, and a press sends the other side", () => {
+  const sent: TaskStanding[] = [];
+  const pilot: Task = { ...TASK, mode: TASK_MODE.PILOT };
+  const stopped = switchNamed(
+    drawn(pilot, (standing) => sent.push(standing)),
+    "Running",
+  );
+  assert.equal(stopped.getAttribute("aria-checked"), "false");
+  act(() => stopped.click());
+
+  const running = switchNamed(
+    drawn({ ...pilot, running: true }, (standing) => sent.push(standing)),
+    "Running",
+  );
+  assert.equal(running.getAttribute("aria-checked"), "true");
+  act(() => running.click());
+
+  assert.deepEqual(sent, [{ running: true }, { running: false }]);
 });
 
 test("a status picked from the menu, opened by its chip or by S, is handed to the page, and the one standing is not picked again", () => {

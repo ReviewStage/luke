@@ -44,7 +44,7 @@ import { memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
 import { Picker } from "../settings/picker-row.js";
 import { useExperiment } from "../use-app-state.js";
-import { mergePolicySwitchOf } from "./merge-policy-switch.js";
+import { mergePolicySwitchOf, runningSwitchOf } from "./pilot-switches.js";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip.js";
 import { TaskRunsOnChip } from "./runs-on.js";
 import { TaskBlockAdd, TaskBlockLines, type TaskBlocksDoor } from "./task-blocks.js";
@@ -65,7 +65,8 @@ import { TaskBlockAdd, TaskBlockLines, type TaskBlocksDoor } from "./task-blocks
  * Change repository opens the same way; and, while local agents are on, a
  * fifth for where its agents run (`runs-on.tsx`); on a pilot tree's top
  * task, an Auto-merge switch for its merge policy, merge on green while on and
- * hold every PR while off (`merge-policy-switch.ts`); and last, where the page hands their door,
+ * hold every PR while off, and a Running switch, which lets the tree's agents
+ * work while on and stops them while off (`pilot-switches.ts`); and last, where the page hands their door,
  * Add relation, with the task's blocks on a line of their own under the chips
  * (`task-blocks.tsx`). A pick is handed back for the page to send;
  * without a door to send it, as on an archived task, the chips only say.
@@ -353,7 +354,7 @@ function TaskStatusPicker({
  * repository's where the page hands the chip's doors, with the service's
  * refusal of the last pick beside it, and where its agents run while the
  * Local agents experiment is on and the member has a device or the task
- * runs on one, and the merge-policy switch on a pilot tree's top task. A
+ * runs on one, and the Auto-merge and Running switches on a pilot tree's top task. A
  * task from a service before statuses draws none of the
  * standing chips, and still its repository's, which does not wait on them,
  * since the plan's menu leaves Change repository to the chip.
@@ -388,6 +389,7 @@ export function TaskStandingChips({
   );
   if (!standing && repository === undefined) return null;
   const mergePolicy = standing ? mergePolicySwitchOf(task) : undefined;
+  const running = standing ? runningSwitchOf(task) : undefined;
   const runsOnDrawn =
     standing &&
     localAgents &&
@@ -457,6 +459,14 @@ export function TaskStandingChips({
             onChange={(on) =>
               onSet?.({ mergePolicy: on ? MERGE_POLICY.MERGE_ON_GREEN : MERGE_POLICY.HOLD })
             }
+          />
+        )}
+        {running === undefined ? null : (
+          <LabeledSwitch
+            label="Running"
+            checked={running}
+            disabled={onSet === undefined}
+            onChange={(on) => onSet?.({ running: on })}
           />
         )}
         {blocks?.onChange === undefined ? null : (

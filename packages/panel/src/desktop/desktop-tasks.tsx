@@ -803,18 +803,16 @@ function PlanDocument({
     ],
   );
   // The task's agents head its plan, a row opening its agent in this column
-  // as its tab does, under a pilot's breakdown where one waits for the go.
+  // as its tab does, under a pilot's breakdown where one waits for Running.
   const { tasks: allTasks } = tasks;
   const openTask = useSteadyDoor(tasks.onSelect);
   const planAgents = useMemo(
     () => (
       <>
-        {opened === undefined || workspace === undefined ? null : (
+        {opened === undefined ? null : (
           <PlanBreakdown
             task={opened}
             tasks={allTasks}
-            agents={agents}
-            place={{ workspace, repository: opened.repository }}
             workspaceName={workspaceName}
             onOpenTask={openTask}
           />
@@ -829,7 +827,6 @@ function PlanDocument({
     ),
     [
       opened,
-      workspace,
       allTasks,
       workspaceName,
       openTask,
