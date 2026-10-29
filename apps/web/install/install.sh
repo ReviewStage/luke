@@ -60,6 +60,11 @@ SMOLVM_SHA256_ARM64="baea200aea86c405e31afd3a6f278b3bcf6370ea252d35e66b90ba3e849
 SMOLVM_URL_X64="https://github.com/smol-machines/smolvm/releases/download/v1.32.3/smolvm-1.32.3-linux-x86_64.tar.gz"
 SMOLVM_URL_ARM64="https://github.com/smol-machines/smolvm/releases/download/v1.32.3/smolvm-1.32.3-linux-arm64.tar.gz"
 SANDBOX_IMAGE="ghcr.io/reviewstage/luke-sandbox:ea78580d96ce7256@sha256:f6ff07bdc663c9173a856a713e4caa02a725eedd3da4aed0029c662e3b0b33a5"
+# The most smolvm's seed folder may hold, handed to every smolvm run as the
+# daemon hands it (SMOLVM_SEED_CAP in pins.ts): about three seeds of the image.
+# smolvm evicts the least recently used seed no machine uses once it builds one
+# past it, of any image, so another image the user ran may be pulled again.
+SMOLVM_SEED_MAX_BYTES="9663676416"
 
 ORIGIN="https://tryluke.dev"
 HOST_USER="luke-host"
@@ -271,6 +276,7 @@ smolvm_exec() {
   fi
   cd "$HOST_HOME" && exec runuser -u "$HOST_USER" -- env \
     -u XDG_DATA_HOME -u XDG_CACHE_HOME -u XDG_CONFIG_HOME HOME="$HOST_HOME" \
+    SMOLVM_IMAGE_SEED_MAX_BYTES="$SMOLVM_SEED_MAX_BYTES" \
     $limit "$SMOLVM" "$@"
 }
 
