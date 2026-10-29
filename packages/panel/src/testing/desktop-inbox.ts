@@ -45,7 +45,12 @@ import {
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxTask, AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
+import type {
+  AppInboxAgentHolding,
+  AppInboxTask,
+  AppInboxTaskHolding,
+  AppInboxTasklessItem,
+} from "@luke/host/app-state";
 import { AGENT_INBOX_ACT_KIND } from "@luke/host/contract";
 import { isTranscriptTab } from "@luke/ui/tab-strip-model";
 import type { TaskMark } from "@luke/ui/tasks-model";
@@ -90,7 +95,7 @@ import { followedInboxes } from "./followed-inboxes.js";
 import { restOn } from "./hint-rest.js";
 import { relayout } from "./resize-observer.js";
 import { installScrollIntoView } from "./scroll-into-view.js";
-import { tasksControl, waitingOf } from "./tasks-control.js";
+import { agentHoldingsOf, tasksControl, waitingOf } from "./tasks-control.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
@@ -300,8 +305,11 @@ class InboxWorld {
   setInboxOpen: (open: boolean) => void = () => undefined;
   /** Chooses an item from outside the list, as a notification's click does. */
   chooseFromOutside: (chosen: InboxChoice) => void = () => undefined;
-  /** Moves main's read of what waits on the agents with no task, as main does when an item opens or is answered. */
-  setTaskless: (taskless: readonly AppInboxTasklessItem[]) => void = () => undefined;
+  /** Moves main's read of what waits on the agents with no task, and of the agents holding items, those it names unless given, as main does when an item opens or is answered. */
+  setTaskless: (
+    taskless: readonly AppInboxTasklessItem[],
+    agents?: readonly AppInboxAgentHolding[],
+  ) => void = () => undefined;
   /** Whether an agent's own inbox read answers that it could not be read. */
   agentReadFails = false;
   /** Whether the account's feed answers that it is not answering, rather than with every task's items. */
@@ -603,7 +611,7 @@ const MAIN_WAITING: readonly AppInboxTask[] = [
   { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
 ];
 
-/** The account's feed of every item, as the host streams it: each task's items whole, then nothing more until the window lets it go. */
+/** The account's feed of every item, as the host streams it: each task's and each agent with no task's items whole, then nothing more until the window lets it go. */
 const ACCOUNT_FEED: Pick<FakeActPort, typeof AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW> = {
   [AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
     let sent = false;
@@ -617,10 +625,16 @@ const ACCOUNT_FEED: Pick<FakeActPort, typeof AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT
       if (world.feedRefused) {
         return { done: false, value: { failure: AGENT_CALL_FAILURE.UNANSWERED } };
       }
-      const scopes = [...world.inboxes].map(([id, items]) => ({
-        scope: { kind: INBOX_SCOPE_KIND.PLAN, id },
-        items,
-      }));
+      const scopes = [
+        ...[...world.inboxes].map(([id, items]) => ({
+          scope: { kind: INBOX_SCOPE_KIND.PLAN, id },
+          items,
+        })),
+        ...[...world.agentInboxes].map(([id, items]) => ({
+          scope: { kind: INBOX_SCOPE_KIND.AGENT, id },
+          items,
+        })),
+      ];
       return { done: false, value: { whole: true, scopes } };
     };
     return Promise.resolve(
@@ -648,6 +662,7 @@ export function mount(
     chosen: firstChosen,
     windowRoot = false,
     accountFeed = false,
+    agents: firstAgents = agentHoldingsOf(firstTaskless),
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
@@ -672,6 +687,8 @@ export function mount(
     windowRoot?: boolean;
     /** Whether the account's feed of every item answers, pushing each task's items as the service answers a read of it. */
     accountFeed?: boolean;
+    /** Main's first word of the agents with no task holding items; those the items given name where none are given. */
+    agents?: readonly AppInboxAgentHolding[];
   } = {},
 ) {
   // Note that the host's inbox streams are answered beside whatever acts the test answers by now.
@@ -706,8 +723,10 @@ export function mount(
       pushAgain();
     };
     const [taskless, setWaiting] = useState(firstTaskless);
-    world.setTaskless = (next) => {
+    const [agents, setAgents] = useState(firstAgents);
+    world.setTaskless = (next, holding = agentHoldingsOf(next)) => {
       setWaiting(next);
+      setAgents(holding);
       pushAgain();
     };
     world.setTasks = setListed;
@@ -725,6 +744,7 @@ export function mount(
       inbox: waiting,
       inboxTasks: holding,
       inboxTaskless: taskless,
+      inboxAgents: agents,
       inboxView: {
         open: inboxOpen,
         chosen,

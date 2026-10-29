@@ -24,6 +24,7 @@ import type { HeldTranscripts } from "../desktop/strip-tabs.js";
 import { useMemberDirectory } from "../member-directory.js";
 import {
   AgentTabCard,
+  type CardFoot,
   type CardReading,
   cardCorner,
   heldLatest,
@@ -122,6 +123,7 @@ export function agentCardReading(
         }),
       startedBy: teammateRef(agent.startedBy, agents.me),
       automationId: agent.automationId,
+      startedAt: agent.createdAt,
       tile: agentActor(agent, label),
       pullRequest: agents.pullRequests.get(agent.id),
       archivedBy:
@@ -298,8 +300,8 @@ export function AgentCard({
 }: {
   subject: AgentSubject;
   models: readonly CatalogModel[] | undefined;
-  /** One line under a rule, said by a place naming the agent off its task's page: the task it works on. */
-  foot?: React.ReactNode;
+  /** One row at the foot, said by a place naming the agent off its task's page: the task it works on. */
+  foot?: CardFoot | undefined;
 }): React.JSX.Element {
   return <AgentTabCard name={subject.name} models={models ?? []} read={subject.read} foot={foot} />;
 }

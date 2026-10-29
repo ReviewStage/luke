@@ -191,7 +191,7 @@ export function initialAppState(
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
     tasks: IDLE_TASKS_VIEW,
     agents: { unseen: [] },
-    inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [] },
+    inbox: { waiting: [], tasks: [], taskless: [], automations: [], agents: [], failedRuns: [] },
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     network: { online: true },

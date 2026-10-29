@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { GAP, LAYOUT_ELEMENT, Stack } from "../layout/layout.js";
 import { useLinkAddress } from "../menu/link-address.js";
@@ -20,7 +20,10 @@ import { Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
  * age, how it ended, or how many wait. A role, an owner, or a source is no
  * corner's; it joins the line under the name. Under the head stand its notes, read whole
  * and so wrapped to three lines, or one line faded at its end, and a rule
- * before what a card lists under it.
+ * before what a card lists under it. A card that counts things lists its
+ * figures under that rule as a receipt does, each label muted at the card's
+ * edge and its figure at the other in tabular numbers, a caption's size on a
+ * caption's tight line, so a column of counts reads at a glance.
  *
  * A card's rows are set as a menu's rows are: a glyph on the head's glyph
  * column, words on one line fading out where cut short, and what stands at
@@ -28,7 +31,9 @@ import { Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
  * the subject lives or who made it; a row of a list under a rule (`LINE`)
  * names one of the things the subject holds. Either is a button where a
  * press opens what it names and text where nothing does, in the same place
- * either way, washed under the pointer as a menu row is. A list names every
+ * either way, washed under the pointer as a menu row is; text that hangs a
+ * card of its own is still a stop the keyboard rests on, so the card opens on
+ * focus as it does from a control (`HOVER_CARD_ROW_FOCUS`). A list names every
  * thing it holds, never a count of the rest: past a few rows' height it
  * scrolls within the card, fading at the edge where more stands
  * (`HoverCardScroll`), so whatever the subject holds can be reached.
@@ -81,12 +86,16 @@ const RULE = "luke-hover-card-rule m-0 h-px w-full flex-none border-0 bg-border"
 const ROW =
   "luke-hover-card-row group/row -mx-2 box-border flex h-menu-row w-[calc(100%+--spacing(4))] min-w-0 items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-2 py-0 text-left text-body leading-[inherit] text-foreground transition-colors duration-(--luke-duration-hover) ease-motion-exit data-[look=detail]:text-caption data-[look=detail]:leading-[inherit] data-[look=detail]:text-muted-foreground";
 const ROW_PRESS =
-  "[font-family:inherit] [font-style:inherit] [font-weight:inherit] cursor-press hover:bg-fill-strong focus-visible:bg-fill-strong focus-visible:outline-none";
+  "[font-family:inherit] [font-style:inherit] [font-weight:inherit] cursor-press hover:bg-fill-strong";
+const ROW_FOCUS = "focus-visible:bg-fill-strong focus-visible:outline-none";
 const ROW_GLYPH =
   "luke-hover-card-row-glyph inline-flex w-menu-glyph flex-none justify-center [&>:not(.luke-avatar,:has(.luke-avatar))]:size-menu-glyph group-data-[look=detail]/row:[&>img]:size-hover-card-glyph";
 const ROW_LABEL = "luke-hover-card-row-label min-w-0 flex-1 overflow-hidden whitespace-nowrap";
 const ROW_END =
   "luke-hover-card-row-end flex-none whitespace-nowrap text-caption leading-[inherit] text-muted-foreground tabular-nums";
+const FIGURES = "luke-hover-card-figures m-0 flex flex-col gap-list-gap text-caption";
+const FIGURE =
+  "luke-hover-card-figure flex justify-between gap-control-gap [&_dd]:m-0 [&_dd]:tabular-nums [&_dt]:text-muted-foreground";
 const SCROLL = "luke-hover-card-scroll -mx-2 flex max-h-hover-card-list flex-col";
 const SCROLL_BODY = "luke-hover-card-scroll-body px-2";
 
@@ -102,6 +111,12 @@ const LAST_NOTE_WIDTH = "80%";
 /** The data attributes a card's root carries, which name the card for a test or a capture. */
 type HoverCardMarks = { readonly [mark: `data-${string}`]: string | undefined };
 
+/** One of a card's figures: what it counts, and the count as the card says it. */
+export interface HoverCardFigure {
+  readonly label: string;
+  readonly figure: ReactNode;
+}
+
 /** How a card's row is set: a quieter line under its name, or a row of a list under a rule. */
 export const HOVER_CARD_ROW_LOOK = {
   DETAIL: "detail",
@@ -109,6 +124,25 @@ export const HOVER_CARD_ROW_LOOK = {
 } as const;
 
 export type HoverCardRowLook = (typeof HOVER_CARD_ROW_LOOK)[keyof typeof HOVER_CARD_ROW_LOOK];
+
+/**
+ * Whether a row that opens nothing takes the keyboard's focus: text Tab
+ * walks past, or a stop Tab rests on, washed as a pressed row is under the
+ * keyboard, so a card hung from it (`Tooltip`) opens on focus as it does
+ * from a control. A row with a press is a button and takes focus either way.
+ */
+export const HOVER_CARD_ROW_FOCUS = {
+  NONE: "none",
+  STOP: "stop",
+} as const;
+
+export type HoverCardRowFocus = (typeof HOVER_CARD_ROW_FOCUS)[keyof typeof HOVER_CARD_ROW_FOCUS];
+
+/** What a row hands on to a hint hung from it, its handlers and its description among them. */
+type HoverCardRowAnchor = Omit<
+  HTMLAttributes<HTMLElement>,
+  "className" | "style" | "children" | "role" | "tabIndex"
+>;
 
 /** A card's root: its parts in a column, one gap apart. */
 export function HoverCard({
@@ -242,16 +276,45 @@ export function HoverCardRule(): React.JSX.Element {
   return <hr className={RULE} />;
 }
 
-/** A row of a card: its glyph, its words on one line, and what stands at its end; a button where a press opens what it names. */
+/** What a card counts, under a rule and named by `label`: each figure's label muted at the card's edge and its figure at the other, in tabular numbers. */
+export function HoverCardFigures({
+  label,
+  figures,
+}: {
+  label: string;
+  figures: readonly HoverCardFigure[];
+}): React.JSX.Element {
+  return (
+    <dl className={FIGURES} aria-label={label}>
+      {figures.map((figure) => (
+        <div key={figure.label} className={FIGURE}>
+          <dt>{figure.label}</dt>
+          <dd>{figure.figure}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/**
+ * A row of a card: its glyph, its words on one line, and what stands at its
+ * end; a button where a press opens what it names, and otherwise text, which
+ * `focus` makes a stop the keyboard rests on. What else it is handed, a hint's
+ * handlers and description, it hands on to the row.
+ */
 export function HoverCardRow({
   look = HOVER_CARD_ROW_LOOK.LINE,
+  focus = HOVER_CARD_ROW_FOCUS.NONE,
   glyph,
   label,
   end,
   onPress,
   linkHref,
+  ...anchor
 }: {
   look?: HoverCardRowLook;
+  /** Whether a row that opens nothing takes the keyboard's focus, so a card hung from it opens on focus. */
+  focus?: HoverCardRowFocus;
   glyph: ReactNode;
   label: ReactNode;
   /** What stands muted at the row's end: a size, a time, or a mark. */
@@ -260,7 +323,7 @@ export function HoverCardRow({
   onPress?: (() => void) | undefined;
   /** The address its press opens, where it opens one, which a right-click offers as a link's (`useLinkAddress`). */
   linkHref?: string | undefined;
-}): React.JSX.Element {
+} & HoverCardRowAnchor): React.JSX.Element {
   const linkAddress = useLinkAddress(linkHref);
   const row = (
     <>
@@ -271,14 +334,23 @@ export function HoverCardRow({
       {end === undefined ? null : <span className={ROW_END}>{end}</span>}
     </>
   );
+  if (onPress === undefined && focus === HOVER_CARD_ROW_FOCUS.STOP) {
+    return (
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: the row's words hang a card, which the keyboard opens only from a stop it rests on, as a tooltip's trigger takes focus.
+      <span {...anchor} className={`${ROW} ${ROW_FOCUS}`} data-look={look} tabIndex={0}>
+        {row}
+      </span>
+    );
+  }
   return onPress === undefined ? (
-    <span className={ROW} data-look={look}>
+    <span {...anchor} className={ROW} data-look={look}>
       {row}
     </span>
   ) : (
     <button
+      {...anchor}
       type="button"
-      className={`${ROW} ${ROW_PRESS}`}
+      className={`${ROW} ${ROW_PRESS} ${ROW_FOCUS}`}
       data-look={look}
       ref={linkAddress}
       onClick={pulseOnPress(onPress, PRESS_PULSE.QUIET)}

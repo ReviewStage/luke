@@ -2,6 +2,7 @@ import {
   agoText,
   callHeading,
   momentText,
+  provenanceText,
   sinceText,
   workingTime,
 } from "@luke/features/time-format";
@@ -32,6 +33,8 @@ export const TIME_LOOK = {
   SINCE: "since",
   /** A line's words: "5m ago". */
   AGO: "ago",
+  /** A provenance row's: the line's words inside a week, "3d ago", then the day, "Oct 12". */
+  PROVENANCE: "provenance",
   /** A call's day and clock: "Today, 3:42 PM". */
   DAY: "day",
   /** The moment in full: "Oct 14, 2026, 3:42 PM". */
@@ -62,6 +65,8 @@ function wordsOf(look: TimeLook, at: number, now: number): string {
       return sinceText(at, now);
     case TIME_LOOK.AGO:
       return agoText(at, now);
+    case TIME_LOOK.PROVENANCE:
+      return provenanceText(at, now);
     case TIME_LOOK.DAY:
       return callHeading(at, now);
     case TIME_LOOK.MOMENT:

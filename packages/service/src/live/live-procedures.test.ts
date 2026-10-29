@@ -192,6 +192,7 @@ it.layer(getTestDB())("the account's live reads", (it) => {
       const answer = Schema.decodeUnknownSync(accountInboxLiveAnswerSchema)(polled.body);
       assert.equal(answer.url, LIVE_POLL_URL);
       assert.deepEqual(Object.keys(answer.queries).toSorted(), [
+        "agents",
         "automations",
         "failedRuns",
         "items",

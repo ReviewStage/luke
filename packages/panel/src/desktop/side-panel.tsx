@@ -279,10 +279,10 @@ const NO_PAGES: readonly PageLine[] = [];
 
 /**
  * What the panel stands beside: a plan's page, whose panel holds every kind
- * of tab, or the page of an agent no plan holds, whose panel holds that
- * agent's workers, its Pull request, and its Terminal, and no plan's Call,
- * files, or pages. A tab of an agent's page is pinned on the agent, as a
- * plan's page's is on the plan. Beside the window's Inbox it stands for the
+ * of tab, or an agent's own page, whose panel holds that agent's workers,
+ * its Pull request, its Terminal, and its own Inbox, and no plan or comments,
+ * which are a task's alone. A tab of an agent's page is pinned where the
+ * sidebar draws it, on the agent or on its task (`pinOn`). Beside the window's Inbox it stands for the
  * chosen item's task, holding what the item opened there, the task's
  * files, pages, and Pull requests, and none of the kinds its page draws
  * from what it holds, the fixed three and Terminal; nor is a tab of it
@@ -315,10 +315,13 @@ const NO_KINDS: readonly FixedSidePanelTab[] = [];
 /** No Terminal tab, as the Inbox's panel draws. */
 const NO_TERMINALS: readonly TerminalStripTab[] = [];
 
+/** An agent's page's one fixed kind: its own Inbox, the plan's and its comments' being a task's alone. */
+const AGENT_KINDS: readonly FixedSidePanelTab[] = [SIDE_PANEL_TAB.INBOX];
+
 /** The fixed kinds each holder's panel offers. */
 const HOLDER_KINDS = {
   [SIDE_PANEL_HOLDER.TASK]: SIDE_PANEL_TABS,
-  [SIDE_PANEL_HOLDER.AGENT]: NO_KINDS,
+  [SIDE_PANEL_HOLDER.AGENT]: AGENT_KINDS,
   [SIDE_PANEL_HOLDER.INBOX]: NO_KINDS,
 } as const satisfies Record<SidePanelHolder, readonly FixedSidePanelTab[]>;
 

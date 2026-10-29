@@ -17,7 +17,7 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
 import { askAct } from "../act.js";
-import { CreatedByRow } from "../actor-ref.js";
+import { PROVENANCE_VERB, ProvenanceRow } from "../actor-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
@@ -95,7 +95,7 @@ function channelCorner(channel: Channel | ArchivedChannel, now: number): ReactNo
   return latest === undefined ? undefined : <Time at={latest} now={now} hint={false} />;
 }
 
-/** Who made a channel and when, as the members around it name them (`CreatedByRow`). */
+/** Who made a channel and when, as the members around it name them (`ProvenanceRow`). */
 function CreatedBy({
   userId,
   name,
@@ -107,7 +107,14 @@ function CreatedBy({
   at: number;
   now: number;
 }): React.JSX.Element {
-  return <CreatedByRow actor={usePerson({ userId, name })} at={at} now={now} />;
+  return (
+    <ProvenanceRow
+      verb={PROVENANCE_VERB.CREATED}
+      actor={usePerson({ userId, name })}
+      at={at}
+      now={now}
+    />
+  );
 }
 
 /** A channel's card as the members around it name its maker; waiting while they are read. */

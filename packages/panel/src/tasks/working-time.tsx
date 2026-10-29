@@ -60,7 +60,7 @@ export function WorkingTime({
 /**
  * The quiet line a finished turn ends on: how long it worked and when it
  * ended, hanging the turn's card while the pointer rests anywhere on it
- * (`turn-card.tsx`): what it ran on, when it began and ended in full, how
+ * (`turn-card.tsx`): what it ran on, when it ran and for how long, how
  * it ended, and its tokens, as far as its row recorded them. Note that the
  * line is only as wide as its words, so the card answers the words and not
  * the empty column beside them, and that it stands inside its message, so
@@ -86,7 +86,15 @@ export function WorkedFor({
   return (
     <Tooltip
       label={text}
-      card={<TurnCard startedAt={startedAt} endedAt={endedAt} record={record} models={models} />}
+      card={
+        <TurnCard
+          startedAt={startedAt}
+          endedAt={endedAt}
+          now={now}
+          record={record}
+          models={models}
+        />
+      }
     >
       <p className={`${STATUS_LINE_CLASS} mt-control-gap mb-0 w-fit tabular-nums`} data-worked="">
         <span data-worked-length="">

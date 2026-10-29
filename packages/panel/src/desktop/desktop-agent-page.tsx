@@ -1,3 +1,4 @@
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import {
   AGENT_BOUNDS,
   AGENT_KIND,
@@ -9,6 +10,7 @@ import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import type { MentionLines } from "@luke/features/mention-link";
 import { readingWords } from "@luke/features/words";
+import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ERROR_STATE_PLACEMENT,
@@ -28,6 +30,7 @@ import {
   Toolbar,
   type ToolbarPlace,
   useMenu,
+  useMinute,
 } from "@luke/ui";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
 import { isAgentTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
@@ -45,6 +48,8 @@ import { agentSubject } from "../tasks/agent-ref.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import { peopleOf } from "../tasks/changes-card.js";
 import { agentName } from "../tasks/coding-agent-model.js";
+import { UNREAD_FILE } from "../tasks/inbox-code-card.js";
+import { agentHolder, inboxAgentOf, taskHolder } from "../tasks/inbox-model.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
 import {
@@ -64,7 +69,8 @@ import {
   openPullRequestsHere,
   useReadLinkOpener,
 } from "../tasks/use-open-link.js";
-import { type PinHolder, PULL_REQUEST_VIEW } from "../tasks/use-side-panel.js";
+import { type PinHolder, PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
+import { useTaskInbox } from "../tasks/use-task-inbox.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu } from "./action-menu.js";
@@ -84,6 +90,7 @@ import {
 } from "./automation-agent-run.js";
 import { AgentPane } from "./main-tabs.js";
 import { PhoneBack, PhoneHead, phoneBar } from "./phone-head.js";
+import { type InboxItemAsk, SideInboxTab } from "./side-inbox-tab.js";
 import {
   COLUMN,
   SIDE_PANEL_HOLDER,
@@ -96,6 +103,7 @@ import {
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
 import { useTabViews } from "./strip-tabs.js";
 import { tabCard } from "./tab-card.js";
+import { taskCardOf } from "./task-card.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
 
 /**
@@ -115,8 +123,8 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * them, though he works in no repository; a skill a message names is its
  * chip, which opens the skill's `SKILL.md` on GitHub, as a file it names does, since no
  * File tab reads a repository no plan names; and a dictation listens for its repository and
- * its title. A row of its inbox calls opens the window's Inbox, since the
- * agent's items stand there and no plan's Inbox tab does. Beside it stands
+ * its title. A row of its inbox calls opens the panel's Inbox tab, which
+ * lists the agent's own items as a task's lists its agents'. Beside it stands
  * the window's side panel, held by the agent while its page stands
  * (`use-plans-tab.ts`): a delegation's row opens its worker there, and its
  * pull request's chip its pull request, as on a task, and its toggle,
@@ -397,6 +405,9 @@ export function DesktopAgentPage({
   );
   const { act } = useAct();
   const views = useTabViews();
+  // The item an inbox call's row asked the panel's Inbox tab for, until the tab opens it.
+  const [inboxAsk, setInboxAsk] = useState<InboxItemAsk | undefined>(undefined);
+  const inboxAsked = useCallback(() => setInboxAsk(undefined), []);
   const { sidePanel } = tasks;
   const drawing = useSidePanelDrawing(sidePanel);
   const { onArea, focus, setFocus } = useColumnFocus();
@@ -486,7 +497,11 @@ export function DesktopAgentPage({
   // Note that an inbox call and a page are the rows of a coding agent's own that open a tab, and a task's archive the one
   // that opens another task, as the sidebar opens it, a worker's opening through its delegation.
   const openTarget = useSteadyDoor((target: ToolTarget) => {
-    if (target.kind === TOOL_TARGET.INBOX) tasks.inboxView.onOpen();
+    if (target.kind === TOOL_TARGET.INBOX) {
+      if (target.key !== undefined) setInboxAsk({ taskId: agentId, key: target.key, agentId });
+      sidePanel.onChoose(SIDE_PANEL_TAB.INBOX);
+      setFocus(COLUMN.SIDE);
+    }
     if (target.kind === TOOL_TARGET.TASK) tasks.onShowTask(target.task);
     // An agent's chip, such as one it was continued or forked to, opens that agent's own page.
     if (target.kind === TOOL_TARGET.AGENT) tasks.agentView.onOpen(target.agent);
@@ -552,6 +567,24 @@ export function DesktopAgentPage({
         : { workspaceId, repository: agentRepository },
     [workspaceId, agentRepository],
   );
+  // The agent's own Inbox, followed by its own scope while the page stands, as a task's is by its plan's, which the panel's Inbox tab draws.
+  const inbox = useTaskInbox({
+    taskId: agentId,
+    kind: INBOX_SCOPE_KIND.AGENT,
+    draftTask: agent?.planId ?? null,
+    shown: tasks.shown,
+    onScreen: tasks.inboxShown === agentId,
+    waiting: false,
+    readerId: tasks.me,
+    agents: control,
+  });
+  // The panel is told what waits once each read lands, so an item the reader has not seen opens the Inbox tab, as on a task.
+  const waiting = useMemo(() => inbox.board.open.map((item) => item.id), [inbox.board.open]);
+  const { onInboxRead } = sidePanel;
+  useEffect(() => {
+    if (inbox.read) onInboxRead(agentId, waiting);
+  }, [agentId, inbox.read, waiting, onInboxRead]);
+  const now = useMinute();
   // A file a mention names opens in the panel beside the agent, its lines at the commit the mention pins them to.
   const openMentionedFile = useSteadyDoor((path: string, lines: MentionLines | undefined) =>
     lines === undefined
@@ -689,6 +722,47 @@ export function DesktopAgentPage({
       </div>
     );
   }
+  // The Inbox tab lists the agent's items under its task where the window lists it, as the task's own tab would, and under the agent otherwise.
+  const inboxTask = planId === null ? undefined : tasks.tasks.find((each) => each.id === planId);
+  const inboxHolder =
+    inboxTask === undefined
+      ? agentHolder(inboxAgentOf({ ...agent, repository: agentRepository, workspaceId }))
+      : taskHolder(inboxTask);
+  const inboxAutomation = agent.automationId ?? null;
+  const inboxBody = (
+    <SideInboxTab
+      holder={inboxHolder}
+      workspaceId={workspaceId}
+      inbox={inbox}
+      agents={control}
+      readerId={tasks.me}
+      shown={tasks.shown && sidePanel.open}
+      ask={inboxAsk?.taskId === agentId ? inboxAsk : undefined}
+      onAsked={inboxAsked}
+      doors={{
+        // The holder's crumb opens the agent's task, or the automation that started it.
+        onOpenHolder:
+          inboxTask !== undefined
+            ? () => tasks.onShowTask(inboxTask.id)
+            : inboxAutomation === null
+              ? undefined
+              : () => openAutomation(inboxAutomation),
+        taskCard: inboxTask === undefined ? undefined : taskCardOf(tasks, inboxTask, now),
+        // The page's own agent stands in its column already, leaving a draft shown there for it.
+        onOpenAgent: (other) =>
+          other === agentId ? setDrafting(undefined) : tasks.agentView.onOpen(other),
+        // A code card reads its lines through the agent's repository and opens its file as the panel's preview.
+        code:
+          repositoryPlace === undefined
+            ? { repository: null, readFile: UNREAD_FILE, onOpenFile: () => undefined }
+            : {
+                repository: repositoryPlace.repository,
+                readFile: (window) => act(ACT_KIND.TASKS_FILE, { ...repositoryPlace, ...window }),
+                onOpenFile: sidePanel.onPreviewFile,
+              },
+      }}
+    />
+  );
   return (
     <LinkWorkspaceProvider value={listed?.slug ?? workspaceId}>
       {/* Note that the words are of the agent's workspace by its id, because one with no slug is named by its id in the slug's place, which no chip's provider read can find it by. */}
@@ -760,6 +834,7 @@ export function DesktopAgentPage({
                           repository={agentRepository ?? null}
                           repositoryPlace={repositoryPlace}
                           pages={tasks.agentView.pages}
+                          inbox={{ body: inboxBody, board: inbox.board, drafted: inbox.drafted }}
                           agents={control}
                           openAgents={openAgents}
                           shownAgent={shown ? agentId : undefined}

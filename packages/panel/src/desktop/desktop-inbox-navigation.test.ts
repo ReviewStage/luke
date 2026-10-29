@@ -390,9 +390,12 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
   const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the agent's page hangs the page's own card");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Flake ledger");
-  assert.equal(
-    card.querySelector(".luke-hover-card-sub")?.textContent,
-    "Version 3 · Shown by Sweep the flaky tests",
+  assert.deepEqual(
+    [
+      card.querySelector(".luke-hover-card-sub")?.textContent,
+      card.querySelector(".luke-hover-card-row")?.textContent,
+    ],
+    ["Version 3", "Shown by Sweep the flaky tests"],
   );
   assert.equal(
     card.querySelector(".luke-page-thumb-frame")?.getAttribute("src"),
@@ -517,7 +520,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   );
   assert.match(
     hoveredCard(mark, "[data-inbox-row-card]") ?? "",
-    /^Nightly flake sweep.*Sweep the flaky tests$/su,
+    /^Quarantine the flaky test\?.*Nightly flake sweep.*Sweep the flaky tests$/su,
   );
 
   act(() => rowNamed(page, "Quarantine the flaky test?").click());
@@ -648,6 +651,25 @@ test("an agent with no plan whose waiting items move, one answered on another Ma
   await settle();
 
   assert.ok(listed(page).includes("Skip the slow suite?"), listed(page).join(" | "));
+});
+
+test("an agent with no plan whose items are all settled stays listed under the automation that started it, as main lists it holding them", async () => {
+  const settled = { ...SECOND_ASK, status: INBOX_STATUS.ANSWERED };
+  world.agentInboxes = new Map([[SECOND_AGENT, [settled]]]);
+  const { id: _id, title: _title, postedAt: _postedAt, ...agent } = waitingTaskless(settled);
+  const { page } = mount([], {
+    windowRoot: true,
+    accountFeed: true,
+    agents: [{ ...agent, items: 1, toDo: 0 }],
+  });
+  await settle();
+
+  const rows = listed(page);
+  assert.equal(
+    rows[rows.indexOf("# Nightly flake sweep") + 1],
+    "Skip the slow suite?",
+    rows.join(" | "),
+  );
 });
 
 test("a read of an agent with no plan that fails is said with Retry, which reads it again though it was read before", async () => {

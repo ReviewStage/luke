@@ -229,6 +229,7 @@ function mount(
       inboxWaiting: held.inboxWaiting,
       inboxTasks: held.inboxTasks,
       inboxTaskless: [],
+      inboxAgents: [],
       failedRuns: [],
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,

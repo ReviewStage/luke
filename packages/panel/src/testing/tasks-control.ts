@@ -6,7 +6,11 @@ import {
 } from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
-import type { AppInboxWaitingItem } from "@luke/host/app-state";
+import type {
+  AppInboxAgentHolding,
+  AppInboxTasklessItem,
+  AppInboxWaitingItem,
+} from "@luke/host/app-state";
 import { NO_TASK_SECTIONS } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -202,8 +206,39 @@ export function codingAgentsControl(
 }
 
 /**
+ * Each agent the open items of agents with no task name, once, as main lists
+ * the agents holding items: how many of them it holds, how many ask, and
+ * when the latest changed, named as its latest item names it.
+ */
+export function agentHoldingsOf(
+  taskless: readonly AppInboxTasklessItem[],
+): readonly AppInboxAgentHolding[] {
+  const held = new Map<string, AppInboxAgentHolding>();
+  for (const entry of taskless) {
+    const was = held.get(entry.agentId);
+    const latest = was !== undefined && was.updatedAt > entry.updatedAt ? was : entry;
+    held.set(entry.agentId, {
+      agentId: entry.agentId,
+      ...(latest.agentKind === undefined ? undefined : { agentKind: latest.agentKind }),
+      agentTitle: latest.agentTitle,
+      agentModel: latest.agentModel,
+      automationId: latest.automationId,
+      automationName: latest.automationName,
+      repository: latest.repository,
+      ...(latest.workspaceId === undefined ? undefined : { workspaceId: latest.workspaceId }),
+      items: (was?.items ?? 0) + 1,
+      toDo: (was?.toDo ?? 0) + (entry.asking === false ? 0 : 1),
+      updatedAt: latest.updatedAt,
+    });
+  }
+  return [...held.values()];
+}
+
+/**
  * A signed-in Tasks tab on screen with no task open and no tasks, every
- * press ignored, bound for whichever task it is given as open.
+ * press ignored, bound for whichever task it is given as open; the agents
+ * holding items, where none are given, those its open items of agents with
+ * no task name (`agentHoldingsOf`), as main lists both from one read.
  */
 export function tasksControl(overrides: Partial<TasksControl> = {}): TasksControl {
   return {
@@ -425,5 +460,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       guard: (leave) => leave,
     },
     ...overrides,
+    inboxAgents: overrides.inboxAgents ?? agentHoldingsOf(overrides.inboxTaskless ?? []),
   };
 }
