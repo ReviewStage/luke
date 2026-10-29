@@ -3,7 +3,6 @@ import { index, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type { OperatorNoticeKind } from "../storage-vocabulary.js";
 import { timestamptz } from "./_helpers.js";
 import { agentTable } from "./agent.js";
-import { task } from "./task.js";
 
 /**
  * operator-notice.ts -- what an operator is told of its member's agents on its next turn, and when a failure last woke it.
@@ -31,8 +30,6 @@ export const operatorNotice = pgTable(
     agentId: uuid("agent_id")
       .notNull()
       .references(() => agentTable.id, { onDelete: "cascade" }),
-    /** The agent's task as the event was once written; written and read no more, since a notice's link names the agent, and dropped by a later deployment. */
-    taskId: uuid("task_id").references(() => task.id, { onDelete: "set null" }),
     /** When the latest event this row stands for happened: a repeat while unread moves it. */
     at: timestamptz("at").notNull(),
     /** When the operator's desk handed the row; null while unread. */
