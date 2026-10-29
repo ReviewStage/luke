@@ -4,7 +4,14 @@ import { it } from "@effect/vitest";
 import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
-import { PLAN_ACTOR, TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
+import {
+  MERGE_POLICY,
+  PLAN_ACTOR,
+  TASK_MODE,
+  TASK_PRIORITY,
+  TASK_STATUS,
+  type TaskSummary,
+} from "@luke/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
@@ -430,7 +437,7 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
   );
 
   it.effect(
-    "a plan's header names where it stands and whose it is to every member, follows its status, and names nothing to an account outside it or for a plan that is none",
+    "a plan's header names where it stands and whose it is to every member, follows its status and merge policy, and names nothing to an account outside it or for a plan that is none",
     () =>
       Effect.gen(function* () {
         const { dean, charles, taskId } = yield* openSharedTask;
@@ -443,6 +450,9 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           repository: null,
           status: TASK_STATUS.TODO,
           runsOn: TASK_RUNS_IN_CLOUD,
+          parentTaskId: null,
+          mode: TASK_MODE.AGENT,
+          mergePolicy: MERGE_POLICY.MERGE_ON_GREEN,
         };
 
         assert.deepEqual(yield* readTaskHeader(dean, taskId), Option.some(started));
@@ -450,9 +460,16 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
         assert.deepEqual(yield* readTaskHeader(stranger, taskId), Option.none());
         assert.deepEqual(yield* readTaskHeader(dean, randomUUID()), Option.none());
 
-        yield* updateTask(dean, taskId, { status: TASK_STATUS.IN_PROGRESS });
+        yield* updateTask(dean, taskId, {
+          status: TASK_STATUS.IN_PROGRESS,
+          mergePolicy: MERGE_POLICY.HOLD,
+        });
         const header = Option.getOrThrow(yield* readTaskHeader(charles, taskId));
-        assert.deepEqual(header, { ...started, status: TASK_STATUS.IN_PROGRESS });
+        assert.deepEqual(header, {
+          ...started,
+          status: TASK_STATUS.IN_PROGRESS,
+          mergePolicy: MERGE_POLICY.HOLD,
+        });
         // The header agrees with the whole read on everything it answers.
         const whole = Option.getOrThrow(yield* readTask(charles, taskId));
         assert.deepEqual(header, {
@@ -462,6 +479,9 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           repository: whole.task.repository,
           status: whole.task.status,
           runsOn: TASK_RUNS_IN_CLOUD,
+          parentTaskId: null,
+          mode: whole.task.mode,
+          mergePolicy: whole.task.mergePolicy,
         });
       }),
   );
