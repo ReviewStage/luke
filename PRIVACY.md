@@ -510,8 +510,14 @@ task, and at once with your account. A save that fails leaves the agent's
 folder as it is, and a file already encrypted waits in Luke's own folder on
 your Mac, outside every folder the machine sees, until it uploads or a later
 turn's save replaces it; a state over 500 MB is not saved, and the reason is
-said in plain words. Luke's log on your Mac names each
-save's size, digest, generation, and how long it took, never what it holds.
+said in plain words. A turn that finds none of the agent's work on your Mac
+brings its newest save back: your Mac downloads it into Luke's own folder,
+outside every folder the machine sees, checks its size and digest, decrypts it
+into the agent's folder, where the agent's machine unpacks it, and deletes
+both files once it has; a restore that fails deletes nothing, is said in plain
+words, and is tried again with the agent's next message. Luke's log on your
+Mac names each save's and each restore's size, digest, generation, and how
+long it took, never what it holds.
 For now the agent's folder stays on your Mac between turns, saved or not. To
 run them, the app downloads smolvm from its GitHub release once, keeps it in
 Luke's own folder on your Mac only once it matches the checksum Luke pins,

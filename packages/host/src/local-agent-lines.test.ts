@@ -15,7 +15,7 @@
 
 import assert from "node:assert/strict";
 import { createDecipheriv, createHash } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
@@ -25,21 +25,23 @@ import {
   DEVICE_ARCH,
   DEVICE_CAPABILITY,
   DEVICE_ISOLATION,
+  DEVICE_LAUNCH_REFUSAL,
   DEVICE_PLATFORM,
   type DeviceAgentLine,
   deviceAgentLayout,
 } from "@luke/features/device-agent-wire";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { ConfigProvider, Deferred, Duration, Effect, Exit, Layer } from "effect";
+import { ConfigProvider, Deferred, Duration, Effect, Exit, Layer, Option, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
+import { LAUNCH_NOTE, unrestoredNote, unsavedNote } from "./local-agent-first-lines.js";
 import { type AgentSave, readLocalAgentState } from "./local-agent-state.js";
-import { sealAgentState } from "./node/agent-state-seal.js";
+import { openAgentState, sealAgentState } from "./node/agent-state-seal.js";
 import { fakeSandbox, VM_EXEC } from "./testing/fake-sandbox.js";
-import { type Script, scriptedSpawner } from "./testing/scripted-spawner.js";
+import { type Script, type ScriptedSpawner, scriptedSpawner } from "./testing/scripted-spawner.js";
 
 const SERVICE = "https://luke.test";
 const AGENT_ID = "6f1c2a4e-0b7d-4c55-9a3e-2d8f61b0c9a1";
@@ -147,6 +149,7 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script, vmLe
         worktreeScript: () => "exit 0",
         unsavedWorkScript: unsavedWork === undefined ? undefined : () => UNSAVED_WORK_SCRIPT,
         stateSealed: () => Effect.die("this device saves no state"),
+        stateOpened: () => Effect.die("this device restores no state"),
       }),
     );
     const composer = yield* composeLocalAgents({
@@ -258,6 +261,41 @@ const PACK_BYTES = "a pack of the agent's state\n";
 const BASE = "1".repeat(40);
 const OVER_CAP =
   "the agent's state holds 612.0 MB, over the 500.0 MB a pack may hold. Its largest parts: home/.claude/projects (600.0 MB).";
+/** The platform's script that makes the agent's repository, named so the scripted spawner answers it. */
+const WORKTREE_SCRIPT = "make-the-agents-repository";
+/** A launch's first lines that continue a Claude Code session: its config, then the developer's message. */
+const RESUMING_LINES = [
+  { harness: "claude_code", resume: "session-fixture", firstSequence: 0 },
+  { type: "message", content: [{ type: "text", text: "Go on with the relay." }] },
+]
+  .map((line) => `${JSON.stringify(line)}\n`)
+  .join("");
+
+/** `PACK_BYTES` sealed under the agent's key as its save sealed it, in a folder under `root`: the bundle, its size and its digest, as Luke's store keeps them. */
+const savedBundle = (root: string) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const folder = path.join(root, "saved");
+    const from = path.join(folder, "state.pack");
+    const to = path.join(folder, "bundle");
+    yield* fileSystem.makeDirectory(folder, { recursive: true });
+    yield* fileSystem.writeFileString(from, PACK_BYTES);
+    const { bytes, sha256 } = yield* sealAgentState({ from, within: folder, to, key: STATE_KEY });
+    return { contents: yield* fileSystem.readFile(to), bytes, sha256 };
+  });
+
+/** The lines the runner was handed first on its stdin, as the device wrote them, each read as JSON. */
+const firstLinesOf = (spawned: ScriptedSpawner["spawned"]) =>
+  Effect.gen(function* () {
+    const stdin = spawned.find((each) => each.program === "/opt/luke/launch")?.stdin;
+    assert.ok(typeof stdin === "object" && "stream" in stdin && typeof stdin.stream === "object");
+    const first = Option.getOrThrow(yield* Stream.runHead(stdin.stream));
+    return new TextDecoder()
+      .decode(first)
+      .split("\n")
+      .filter((line) => line.length > 0)
+      .map((line) => JSON.parse(line));
+  });
 
 /** The bundle's bytes opened as a restore opens them: a version byte, a 12-byte nonce, the pack, and a 16-byte tag. */
 function opened(bundle: Uint8Array): string {
@@ -285,12 +323,19 @@ function opened(bundle: Uint8Array): string {
  * `uploadsRefused` says before it takes one. The device's state holds the
  * agent's record given from before, and a bundle of the agent's with no
  * record naming it where `strayBundle` says, as a run that could not write
- * its record leaves one. With what happened in order (the VM's state
+ * its record leaves one. Where `restore` says, the launch names generation
+ * 1 of the agent's saved state, a repository's at `BASE`, whose bundle the
+ * store answers, into a folder the device holds none of, and the VM's
+ * restore answers as the script given, or reads the pack and succeeds;
+ * where `halfRestored` says, the agent's folder holds the checkout a restore
+ * that never finished made.
+ * With what happened in order (the bundle's download, the VM's state
  * commands, its delete, the uploads and the commits), the bodies the
- * service took, the bytes the store took, the folder, the device's record
- * of the agent's saves, what waits for the launch's settle and for the
- * device's first beat, and whether the device has said a save landed,
- * which it says once it has recorded it.
+ * service took, the settles, the bytes the store took, the packs the VM's
+ * restores read, what the repository's script was asked for, the processes
+ * spawned, the folder, the device's record of the agent's saves, what waits
+ * for the launch's settle and for the device's first beat, and whether the
+ * device has said a save landed, which it says once it has recorded it.
  */
 const saving = (
   options: {
@@ -299,10 +344,15 @@ const saving = (
     readonly launches?: "none" | "replaced";
     readonly record?: AgentSave;
     readonly strayBundle?: true;
+    readonly restore?: { readonly run?: Script };
+    readonly halfRestored?: true;
+    /** The launch's first lines; `{}` where not given. */
+    readonly stdin?: string;
   } = {},
 ) =>
   Effect.gen(function* () {
     const root = yield* temporaryDirectoryScoped("luke-agent-saves-");
+    const saved = options.restore === undefined ? undefined : yield* savedBundle(root);
     const home = path.join(root, "home");
     const stateRoot = path.join(root, "state");
     const bundle = path.join(stateRoot, "agent-state", AGENT_ID);
@@ -315,10 +365,17 @@ const saving = (
       yield* fileSystem.writeFileString(path.join(stateRoot, "local-agents.json"), state);
     }
     if (options.strayBundle === true) yield* fileSystem.writeFileString(bundle, "sealed");
+    if (options.halfRestored === true) {
+      yield* fileSystem.makeDirectory(path.join(layout.checkoutPath, ".git"), { recursive: true });
+      yield* fileSystem.writeFileString(path.join(layout.checkoutPath, "notes.md"), "restored\n");
+    }
     const happened: string[] = [];
     const saves: unknown[] = [];
     const commits: unknown[] = [];
     const uploads: Uint8Array[] = [];
+    const settles: unknown[] = [];
+    const restoredPacks: string[] = [];
+    const worktrees: { readonly worktree: string; readonly base?: string | undefined }[] = [];
     const reported: string[] = [];
     const launches =
       options.launches === "none"
@@ -333,6 +390,13 @@ const saving = (
     let linesRead = 0;
     const fetchLike = async (url: string | URL | Request, init?: RequestInit) => {
       const { host, pathname } = new URL(String(url));
+      if (host === "store.test" && pathname.startsWith("/read/")) {
+        happened.push("download");
+        // Note that the bundle is copied into a buffer of its own, which a response body takes.
+        return new Response(saved?.contents.slice() ?? null, {
+          status: saved === undefined ? 404 : 200,
+        });
+      }
       if (host === "store.test") {
         uploads.push(new Uint8Array(await new Response(init?.body).arrayBuffer()));
         happened.push("upload");
@@ -354,12 +418,32 @@ const saving = (
                 repository: null,
                 startBranch: null,
                 firstSequence: 0,
+                ...(saved === undefined
+                  ? {}
+                  : { repository: "acme/app", startBranch: "luke/fix-relay", stateGeneration: 1 }),
               },
             },
-            secrets: { env: { LUKE_RUNNER_TOKEN: `runner-${body.id}` }, stdin: "{}\n" },
+            secrets: {
+              env: { LUKE_RUNNER_TOKEN: `runner-${body.id}` },
+              stdin: options.stdin ?? "{}\n",
+              ...(saved === undefined
+                ? {}
+                : {
+                    state: {
+                      generation: 1,
+                      url: "https://store.test/read/1",
+                      expiresAt: Date.UTC(2026, 9, 29, 21),
+                      bytes: saved.bytes,
+                      sha256: saved.sha256,
+                      baseCommit: BASE,
+                      key: STATE_KEY,
+                    },
+                  }),
+            },
           });
         case HOSTED_SERVICE_PATH.DEVICE_AGENT_LINES:
           if (init?.method === "POST") {
+            settles.push(body);
             if (body.id === launches.at(-1)?.id) Deferred.doneUnsafe(launchSettled, Exit.void);
             return json({ done: true });
           }
@@ -380,6 +464,8 @@ const saving = (
           happened.push("commit");
           commits.push(body);
           return json({ generation: commits.length });
+        case HOSTED_SERVICE_PATH.RUNNER_TOKEN:
+          return json({ githubToken: "ghs_fixture" });
         default:
           return held();
       }
@@ -389,6 +475,14 @@ const saving = (
       if (program === "/bin/bash" && args[0] === "-l") {
         return { stdout: "/usr/bin:/bin", exitCode: 0 };
       }
+      if (program === "/bin/bash" && args[1] === WORKTREE_SCRIPT) {
+        return {
+          exitCode: 0,
+          until: Effect.sync(() => {
+            mkdirSync(path.join(layout.checkoutPath, ".git"), { recursive: true });
+          }),
+        };
+      }
       if (program === "/opt/luke/launch") {
         return launches.length > 1 && args[0] === `runner-${LAUNCH.id}`
           ? { exitCode: 143, until: Deferred.await(signal) }
@@ -397,6 +491,14 @@ const saving = (
       if (program !== VM_EXEC) return undefined;
       const action = args[3];
       if (action !== undefined) happened.push(action);
+      if (action === "restore") {
+        return (
+          options.restore?.run ?? {
+            exitCode: 0,
+            until: Effect.sync(() => void restoredPacks.push(readFileSync(pack, "utf8"))),
+          }
+        );
+      }
       if (action !== "pack") return { exitCode: 0 };
       return (
         options.pack ?? {
@@ -439,8 +541,12 @@ const saving = (
         deviceArch: DEVICE_ARCH.X64,
         deviceIsolation: DEVICE_ISOLATION.SANDBOX,
         deviceCapabilities: [DEVICE_CAPABILITY.DISCARD, DEVICE_CAPABILITY.AGENT_STATE],
-        worktreeScript: () => "exit 0",
+        worktreeScript: (input) => {
+          worktrees.push(input);
+          return WORKTREE_SCRIPT;
+        },
         stateSealed: sealAgentState,
+        stateOpened: openAgentState,
       }),
     );
     const composer = yield* composeLocalAgents({
@@ -463,7 +569,11 @@ const saving = (
       happened,
       saves,
       commits,
+      settles,
       uploads,
+      restoredPacks,
+      worktrees,
+      spawned: spawner.spawned,
       layout,
       bundle,
       saveRecord,
@@ -605,6 +715,131 @@ it.effect(
           [null, 1],
         );
         assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, generation: 2 });
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a launch that finds none of the agent's work on the device restores its saved generation, the repository made at its base and the pack opened under its key, before its runner starts, told it is on a fresh machine",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { happened, saves, restoredPacks, worktrees, spawned, layout, launchSettled } =
+          yield* saving({ restore: {}, stdin: RESUMING_LINES });
+        yield* launchSettled;
+
+        const steps = spawned.flatMap((each) =>
+          each.program === VM_EXEC
+            ? [each.args[3] ?? ""]
+            : each.program === "/opt/luke/launch"
+              ? ["runner"]
+              : [],
+        );
+        assert.deepEqual(steps, ["restore", "runner", "pack", "verify"]);
+        assert.deepEqual(happened, [
+          "download",
+          "restore",
+          "pack",
+          "verify",
+          "deleted",
+          "upload",
+          "commit",
+        ]);
+        assert.deepEqual(restoredPacks, [PACK_BYTES]);
+        assert.deepEqual(
+          worktrees.map(({ worktree, base }) => ({ worktree, base })),
+          [{ worktree: layout.checkoutPath, base: BASE }],
+        );
+        // Note that the turn's save starts from the generation restored, so the record named it once the restore landed.
+        assert.deepEqual(saves, [{ deviceId: DEVICE_ID, agentId: AGENT_ID, fromGeneration: 1 }]);
+        const [config, message] = yield* firstLinesOf(spawned);
+        assert.equal(config.resume, "session-fixture");
+        assert.ok(message.content[0].text.includes(LAUNCH_NOTE.RESTORED));
+        assert.deepEqual(message.content[1], { type: "text", text: "Go on with the relay." });
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a restore that fails settles its launch unstarted in plain words, starts no runner, saves nothing, and deletes nothing, so the next launch restores again",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { happened, saves, settles, spawned, layout, saveRecord, launchSettled } =
+          yield* saving({
+            restore: {
+              run: {
+                stderr: "agent-runner state: the pack's parts do not match its manifest\n",
+                exitCode: 1,
+              },
+            },
+            stdin: RESUMING_LINES,
+          });
+        yield* launchSettled;
+
+        assert.deepEqual(settles, [
+          {
+            deviceId: DEVICE_ID,
+            id: LAUNCH.id,
+            exitCode: 1,
+            refusal: DEVICE_LAUNCH_REFUSAL.STATE_NOT_RESTORED,
+          },
+        ]);
+        assert.deepEqual(happened, ["download", "restore", "deleted"]);
+        assert.ok(!spawned.some((each) => each.program === "/opt/luke/launch"));
+        assert.deepEqual(saves, []);
+        const fileSystem = yield* FileSystem.FileSystem;
+        assert.equal(yield* fileSystem.exists(path.join(layout.checkoutPath, ".git")), true);
+        assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, generation: 1, restoring: 1 });
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a launch whose saved state expired, finding none of the agent's work, starts with no session, told so and why its last save failed",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { happened, spawned, launchSettled } = yield* saving({
+          stdin: RESUMING_LINES,
+          record: { userId: DEVICE_ID, unsaved: { why: OVER_CAP } },
+        });
+        yield* launchSettled;
+
+        const [config, message] = yield* firstLinesOf(spawned);
+        assert.equal(config.harness, "claude_code");
+        assert.equal(config.resume, undefined);
+        assert.ok(message.content[0].text.includes(LAUNCH_NOTE.EXPIRED));
+        assert.ok(message.content[0].text.includes(unsavedNote(OVER_CAP)));
+        assert.deepEqual(message.content[1], { type: "text", text: "Go on with the relay." });
+        assert.ok(!happened.includes("download"));
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a launch whose saved state expired after a restore that never finished sets what the restore made aside, untouched, and starts on a fresh checkout, told where it is",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { happened, spawned, layout, saveRecord, launchSettled } = yield* saving({
+          stdin: RESUMING_LINES,
+          record: { userId: DEVICE_ID, generation: 1, restoring: 1 },
+          halfRestored: true,
+        });
+        yield* launchSettled;
+
+        const aside = path.join(layout.folder, "unrestored", "1");
+        const fileSystem = yield* FileSystem.FileSystem;
+        assert.equal(yield* fileSystem.readFileString(path.join(aside, "notes.md")), "restored\n");
+        assert.equal(yield* fileSystem.exists(path.join(layout.checkoutPath, "notes.md")), false);
+        const [config, message] = yield* firstLinesOf(spawned);
+        assert.equal(config.resume, undefined);
+        assert.ok(message.content[0].text.includes(LAUNCH_NOTE.EXPIRED));
+        assert.ok(message.content[0].text.includes(unrestoredNote(aside)));
+        // Note that the fresh checkout is the agent's own from here, so its turn's end saves it.
+        assert.ok(happened.includes("pack"));
+        assert.equal((yield* saveRecord)?.restoring, undefined);
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );

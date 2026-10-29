@@ -47,6 +47,7 @@ import {
   DEVICE_CAPABILITY,
   DEVICE_LAUNCH_REFUSAL,
   type DeviceAgentLaunchSecrets,
+  type DeviceLaunchRefusal,
   deviceAgentLaunchPayloadSchema,
   deviceAgentLayout,
 } from "@luke/features/device-agent-wire";
@@ -530,31 +531,31 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
         }),
     );
 
+    /** A local agent's launch claimed with a turn queued, then settled unstarted by its device with the refusal given: the agent, and its turn as the store reads it after. */
+    const refusedTurn = (refusal: DeviceLaunchRefusal) =>
+      Effect.gen(function* () {
+        const opened = yield* openLocalAgent;
+        const { userId, deviceId, agent } = opened;
+        const launch = yield* launched(opened);
+        yield* claimedDeviceAgentLine(userId, deviceId, launch.handle.command);
+        const writer = yield* storeWriter({ tools: {} });
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(
+          { userId, conversationId: agent.conversationId },
+          { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+        );
+        yield* settledDeviceAgentLine(userId, deviceId, launch.handle.command, 1, refusal);
+        const turn = (yield* latestTurnsOfReached([agent.conversationId])).get(
+          agent.conversationId,
+        );
+        return { agent, turn };
+      });
+
     it.effect(
       "a launch its Mac settled unstarted because the agent ran directly on it settles the turn as a session that ended, naming the folder its work is still in",
       () =>
         Effect.gen(function* () {
-          const opened = yield* openLocalAgent;
-          const { userId, deviceId, agent } = opened;
-          const launch = yield* launched(opened);
-          yield* claimedDeviceAgentLine(userId, deviceId, launch.handle.command);
-          const writer = yield* storeWriter({ tools: {} });
-          const turnId = randomUUID();
-          yield* writer.enqueueTurn(
-            { userId, conversationId: agent.conversationId },
-            { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
-          );
-
-          yield* settledDeviceAgentLine(
-            userId,
-            deviceId,
-            launch.handle.command,
-            1,
-            DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY,
-          );
-          const turn = (yield* latestTurnsOfReached([agent.conversationId])).get(
-            agent.conversationId,
-          );
+          const { agent, turn } = yield* refusedTurn(DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY);
 
           assert.equal(turn?.status, TURN_STATUS.FAILED);
           assert.equal(turn?.failure, TURN_FAILURE.SESSION_ENDED);
@@ -562,6 +563,17 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             ranDirectlyFolderOf(turn),
             deviceAgentLayout(DEVICE_LAYOUT.home, agent.id).checkoutPath,
           );
+        }),
+    );
+    it.effect(
+      "a launch its device settled unstarted because the agent's saved state could not be restored fails the turn as one its next message tries again after, never as a session that ended",
+      () =>
+        Effect.gen(function* () {
+          const { turn } = yield* refusedTurn(DEVICE_LAUNCH_REFUSAL.STATE_NOT_RESTORED);
+
+          assert.equal(turn?.status, TURN_STATUS.FAILED);
+          assert.equal(turn?.failure, TURN_FAILURE.MODEL);
+          assert.equal(ranDirectlyFolderOf(turn), undefined);
         }),
     );
     it.effect(

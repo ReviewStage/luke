@@ -239,6 +239,7 @@ const following = (input: {
         worktreeScript: () => "exit 0",
         unsavedWorkScript: input.checksUnsavedWork === true ? () => UNSAVED_WORK_SCRIPT : undefined,
         stateSealed: () => Effect.die("this device saves no state"),
+        stateOpened: () => Effect.die("this device restores no state"),
       }),
     );
     const composer = yield* composeLocalAgents({

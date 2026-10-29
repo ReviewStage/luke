@@ -175,11 +175,32 @@ export function claimedDeviceAgentLine(
 /** Where an agent's newest launch put its checkout, as its line's payload names it; nothing where it names none this service reads. */
 const decodeLaunchPayload = Schema.decodeUnknownOption(deviceAgentLaunchPayloadSchema);
 
-/** Why a launch its device refused to start failed, kept on the turn: the words of the refusal, and the folder the agent's work is still in. */
-function refusalDetail(refusal: DeviceLaunchRefusal, checkoutPath: string | undefined): string {
+/** What the turn of an agent whose device could not bring its saved state back records. */
+const STATE_NOT_RESTORED_DETAIL =
+  "the agent's device could not bring back its saved work, and deleted nothing; its next message tries again";
+
+/**
+ * How a launch its device refused to start fails its turn: the words kept
+ * on it, with the folder the agent's work is still in where it ran
+ * directly on its Mac, and whether that is a session that ended, which only
+ * a new agent goes on from, or a failure its next message tries again
+ * after, as a runner lost is.
+ */
+function refusedTurn(
+  refusal: DeviceLaunchRefusal,
+  checkoutPath: string | undefined,
+): {
+  readonly detail: string;
+  readonly failure: typeof TURN_FAILURE.MODEL | typeof TURN_FAILURE.SESSION_ENDED;
+} {
   switch (refusal) {
     case DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY:
-      return `${RAN_DIRECTLY_DETAIL}${checkoutPath ?? ""}`;
+      return {
+        detail: `${RAN_DIRECTLY_DETAIL}${checkoutPath ?? ""}`,
+        failure: TURN_FAILURE.SESSION_ENDED,
+      };
+    case DEVICE_LAUNCH_REFUSAL.STATE_NOT_RESTORED:
+      return { detail: STATE_NOT_RESTORED_DETAIL, failure: TURN_FAILURE.MODEL };
   }
 }
 
@@ -190,9 +211,10 @@ function refusalDetail(refusal: DeviceLaunchRefusal, checkoutPath: string | unde
  * ended, as when the app quit or the Mac's switch went off mid-turn, is
  * settled lost (`settleRunnerLostTurns`) and the agent offers Continue
  * rather than running until `TURN_ABANDON`. A launch the Mac settled unstarted
- * because the agent can never run there again (`refusal`) settles its turn
- * as a session that ended, so the agent reads as one only a new agent goes
- * on from. A turn the runner ended itself
+ * with why (`refusal`) settles its turn in the refusal's words: as a session
+ * that ended where the agent can never run there again, so the agent reads
+ * as one only a new agent goes on from, and as a failure otherwise, which
+ * its next message launches again after. A turn the runner ended itself
  * is already settled, and is left as it stands. An older launch a newer one
  * replaced settles nothing of the newer one's turn.
  *
@@ -226,21 +248,24 @@ export function settledDeviceAgentLine(
     if (Option.isNone(agent)) return true;
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const now = yield* Clock.currentTimeMillis;
-    yield* refusal === undefined
-      ? settleRunnerLostTurns(writer, agent.value.conversationId, now)
-      : settleRunnerLostTurns(
-          writer,
-          agent.value.conversationId,
-          now,
-          refusalDetail(
-            refusal,
-            Option.getOrUndefined(
-              Option.map(decodeLaunchPayload(newest.value.payload), (each) => each.checkoutPath),
-            ),
-          ),
-          undefined,
-          TURN_FAILURE.SESSION_ENDED,
-        );
+    if (refusal === undefined) {
+      yield* settleRunnerLostTurns(writer, agent.value.conversationId, now);
+      return true;
+    }
+    const { detail, failure } = refusedTurn(
+      refusal,
+      Option.getOrUndefined(
+        Option.map(decodeLaunchPayload(newest.value.payload), (each) => each.checkoutPath),
+      ),
+    );
+    yield* settleRunnerLostTurns(
+      writer,
+      agent.value.conversationId,
+      now,
+      detail,
+      undefined,
+      failure,
+    );
     return true;
   });
 }
