@@ -15,6 +15,7 @@ import {
 } from "@luke/features/automation-view";
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { momentText } from "@luke/features/time-format";
 import { REFRESH_FAILED_WORDS } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
@@ -262,6 +263,11 @@ function useRunNow(automationId: string): { readonly running: boolean; readonly 
             words: RUN_REFUSAL_WORDS[answer.failure],
             tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
+            failure: {
+              surface: FAILURE_SURFACE.AUTOMATION_RUN,
+              cause: answer,
+              about: { automationId },
+            },
           });
         }
       });

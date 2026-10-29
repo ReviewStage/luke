@@ -1,4 +1,5 @@
 import type { AgentStatus, AgentSummary } from "@luke/features/agent-wire";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
   IconButton,
@@ -640,13 +641,18 @@ export type TranscriptCopier = (read: TranscriptRead) => (copy: TranscriptCopy) 
 export function useTranscriptCopier(): TranscriptCopier {
   const copyWithToast = useCopyToast();
   const toast = useToast();
-  const unread = () =>
-    toast({ words: TRANSCRIPT_UNREAD_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+  const unread = (cause: unknown) =>
+    toast({
+      words: TRANSCRIPT_UNREAD_NOTE,
+      tone: STATUS_TONE.DANGER,
+      hold: TOAST_HOLD.FAILED,
+      failure: { surface: FAILURE_SURFACE.TRANSCRIPT_COPY, cause },
+    });
   return (read) => (copy) => {
     read().then(
       (transcript) =>
         transcript === undefined
-          ? unread()
+          ? unread(FAILURE_CONDITION.UNREAD)
           : copyWithToast(transcriptMarkdown(transcript, copy), TRANSCRIPT_COPIED_NOTE),
       unread,
     );

@@ -12,7 +12,9 @@ import {
   claimAgentRunnerLease,
   releaseAgentRunnerLease,
 } from "@luke/database/models/agent-runner-lease";
+import { failureKind } from "@luke/runtime/effect";
 import { Clock, Data, Duration, Effect, Option } from "effect";
+import { agentLogIds } from "./agent-log.js";
 import { CODER } from "./bounds.js";
 
 /** Another call held the agent's runner lease for as long as a call waits on it. */
@@ -47,10 +49,14 @@ const claimRunnerLease = (
     }
   });
 
-/** The lease let go, where the holder still holds it; a release that fails leaves it to lapse at its `HOLD`. */
+/** The lease let go, where the holder still holds it; a release that fails leaves it to lapse at its `HOLD`, said in the log naming the agent. */
 const released = (agentId: string, holder: string) =>
   releaseAgentRunnerLease(agentId, holder).pipe(
-    Effect.catch((failure) => Effect.logWarning(`a runner lease was not let go: ${failure._tag}`)),
+    Effect.catch((failure) =>
+      Effect.logWarning(`a runner lease was not let go: ${failureKind(failure)}`).pipe(
+        Effect.annotateLogs(agentLogIds({ id: agentId })),
+      ),
+    ),
   );
 
 /**

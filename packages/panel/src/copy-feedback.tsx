@@ -9,15 +9,10 @@
  * instead.
  */
 
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { STATUS_TONE } from "@luke/ui";
 import { appPlatform } from "./app-platform.js";
 import { TOAST_HOLD, useToast } from "./toast.js";
-
-/** How a copy ended: the clipboard took it, or refused it. */
-const COPY_STATE = {
-  COPIED: "copied",
-  FAILED: "failed",
-} as const;
 
 /** What every item that copies a Luke link is called, wherever it stands, and what its toast says once the clipboard took it. */
 export const LINK_COPY = {
@@ -57,16 +52,6 @@ async function pngBase64Of(url: string): Promise<string> {
   return canvas.toDataURL("image/png").replace(/^data:image\/png;base64,/u, "");
 }
 
-/** What the clipboard's answer to a copy comes to: taken, or refused. */
-function copyAnswer(
-  copying: Promise<void>,
-): Promise<typeof COPY_STATE.COPIED | typeof COPY_STATE.FAILED> {
-  return copying.then(
-    () => COPY_STATE.COPIED,
-    () => COPY_STATE.FAILED,
-  );
-}
-
 /** The copy act a `@luke/ui` copy button is handed: the words on the shell's clipboard, a refusal rejecting. */
 export function copyThroughShell(words: string): Promise<void> {
   return appPlatform().copyText(words);
@@ -98,13 +83,20 @@ function useMenuCopy(): (copying: () => Promise<void>, label: string) => void {
   return (copying, label) => {
     latestMenuCopy += 1;
     const press = latestMenuCopy;
-    copyAnswer(copying()).then((answer) => {
-      if (press !== latestMenuCopy) return;
-      show(
-        answer === COPY_STATE.COPIED
-          ? { words: label, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE }
-          : { words: COPY_FAILED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED },
-      );
-    });
+    copying().then(
+      () => {
+        if (press !== latestMenuCopy) return;
+        show({ words: label, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
+      },
+      (cause: unknown) => {
+        if (press !== latestMenuCopy) return;
+        show({
+          words: COPY_FAILED_NOTE,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.COPY, cause },
+        });
+      },
+    );
   };
 }

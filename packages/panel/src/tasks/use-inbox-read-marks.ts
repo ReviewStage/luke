@@ -1,5 +1,6 @@
 import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
+import { FAILURE_SURFACE, type FailureAbout } from "@luke/features/shown-failure";
 import { countWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -72,7 +73,13 @@ export function useInboxReadMarks({
 }): InboxReadMarks {
   const toast = useToast();
   const refused = useCallback(
-    (words: string) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
+    (words: string, cause: unknown, about: FailureAbout) =>
+      toast({
+        words,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: { surface: FAILURE_SURFACE.INBOX_MARK, cause, about },
+      }),
     [toast],
   );
   const onMark = useCallback(
@@ -81,10 +88,12 @@ export function useInboxReadMarks({
         .catch(() => UNANSWERED)
         .then((answer) => {
           if (!("failure" in answer)) return true;
-          if (saying?.quiet !== true) refused(markedNote(unread, 0, 1));
+          if (saying?.quiet !== true) {
+            refused(markedNote(unread, 0, 1), answer, { inboxItemId: item.id, workspaceId });
+          }
           return false;
         }),
-    [act, refused],
+    [act, workspaceId, refused],
   );
   const onMarkAll = useCallback(
     (items: readonly InboxItem[]) => {
@@ -96,7 +105,8 @@ export function useInboxReadMarks({
       })
         .catch(() => UNANSWERED)
         .then((answer) => {
-          if ("failure" in answer) refused(markedNote(false, 0, itemIds.length));
+          if ("failure" in answer)
+            refused(markedNote(false, 0, itemIds.length), answer, { workspaceId });
         });
     },
     [act, workspaceId, refused],

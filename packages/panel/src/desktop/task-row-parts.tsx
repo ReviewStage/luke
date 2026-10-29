@@ -1,3 +1,4 @@
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   TASK_PRIORITY,
   TASK_PRIORITY_ORDER,
@@ -117,7 +118,16 @@ export function useStandingDoor(
     void tasks.onSetTaskStanding(task.id, standing, named).then((kept) => {
       if (kept) return;
       onRefused?.();
-      toast({ words: UNCHANGED_LINE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      toast({
+        words: UNCHANGED_LINE,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: {
+          surface: FAILURE_SURFACE.TASK_STANDING,
+          cause: FAILURE_CONDITION.NOT_KEPT,
+          about: { taskId: task.id, workspaceId: task.workspaceId },
+        },
+      });
     });
   };
 }

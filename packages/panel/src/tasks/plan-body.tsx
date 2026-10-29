@@ -8,6 +8,7 @@ import {
 } from "@luke/features/mention-link";
 import type { PlanCommentThread } from "@luke/features/plan-comment-wire";
 import { type PlanSection, planSections } from "@luke/features/plan-document";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   PLAN_ACTOR,
   type PlanLastEdit,
@@ -1239,7 +1240,17 @@ export const PlanBody = memo(function PlanBody({
   // A tick or a date that did not save goes back, and says so here, since nothing beside the box or the chip does.
   const toast = useToast();
   const sayNotSaved = useCallback(
-    () => toast({ words: PLAN_NOT_SAVED, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
+    (taskId: string) =>
+      toast({
+        words: PLAN_NOT_SAVED,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: {
+          surface: FAILURE_SURFACE.PLAN_SAVE,
+          cause: FAILURE_CONDITION.NOT_KEPT,
+          about: { taskId },
+        },
+      }),
     [toast],
   );
   // The plan as drawn last, which a tick waiting its turn and a date read as the picker closes are written over.
@@ -1266,7 +1277,7 @@ export const PlanBody = memo(function PlanBody({
       return savedOver(queue, save, now, { base, value }, value);
     });
     return sent.then((saved) => {
-      if (!saved) sayNotSaved();
+      if (!saved) sayNotSaved(pressedOn);
       return saved;
     });
   };
@@ -1301,7 +1312,7 @@ export const PlanBody = memo(function PlanBody({
                 return savedOver(queue, save, now, { base, value }, kept);
               });
               sent.then((saved) => {
-                if (!saved) sayNotSaved();
+                if (!saved) sayNotSaved(pickedOn);
               });
             },
           }

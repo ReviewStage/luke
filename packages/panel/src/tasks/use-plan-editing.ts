@@ -20,6 +20,7 @@ import {
   leavingSave,
   pendingSave,
 } from "@luke/features/plan-edit-model";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TasksEditAnswer } from "@luke/features/tasks-view";
 import { STATUS_TONE } from "@luke/ui";
 import { Duration, Effect } from "effect";
@@ -146,6 +147,18 @@ function keepLeft(left: LeftTask, now: DocumentEditor, saving: symbol): void {
     subject: taskId,
     persists: true,
     action: { label: conflict ? LEFT_UNSAVED.KEEP_MINE : LEFT_UNSAVED.RETRY, onPress: press },
+    failure: conflict
+      ? {
+          surface: FAILURE_SURFACE.PLAN_SAVE,
+          cause: FAILURE_CONDITION.CONFLICT,
+          about: { taskId },
+          refused: true,
+        }
+      : {
+          surface: FAILURE_SURFACE.PLAN_SAVE,
+          cause: FAILURE_CONDITION.NOT_KEPT,
+          about: { taskId },
+        },
   });
 }
 

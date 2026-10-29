@@ -1,3 +1,4 @@
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
@@ -125,7 +126,12 @@ function ResetPageButton({
     );
     return writes.reset(asked, unseen).then((result) => {
       if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-        toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+        toast({
+          words: result.reason,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.SETTINGS_RESET, cause: result },
+        });
         return result;
       }
       // Note that a kept row never enters the Undo, because another window may have changed it since this page read it.
@@ -135,7 +141,12 @@ function ResetPageButton({
       const undo = () =>
         writeBack(writes, held).then((taken) => {
           if (taken) return;
-          toast({ words: UNDO_REFUSED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+          toast({
+            words: UNDO_REFUSED_NOTE,
+            tone: STATUS_TONE.DANGER,
+            hold: TOAST_HOLD.FAILED,
+            failure: { surface: FAILURE_SURFACE.SETTINGS_RESET, cause: FAILURE_CONDITION.NOT_KEPT },
+          });
         });
       toast(undoToast(RESET_NOTES[asked], undo));
       return result;

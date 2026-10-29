@@ -17,6 +17,7 @@ import {
   withoutAccessTokens,
 } from "@luke/features/sentry-breadcrumbs";
 import { SENTRY_TRACES_SAMPLE_RATE } from "@luke/features/sentry-tracing";
+import { sendShownFailure } from "@luke/features/shown-failure";
 import { appStateNow } from "@luke/panel/use-app-state";
 import {
   browserTracingIntegration,
@@ -24,6 +25,7 @@ import {
   captureMessage,
   getClient,
   init,
+  logger,
   startBrowserTracingPageLoadSpan,
   withStreamedSpan,
 } from "@sentry/browser";
@@ -100,9 +102,11 @@ function accountId(): string | undefined {
  * breadcrumb or an event that names an access token is dropped whole, and
  * so is a span that names one as it starts, while every span sent has its
  * addresses scrubbed (`@luke/features/sentry-breadcrumbs`). Each page load
- * and navigation is named by the kind of place it opens, never its path.
- * Each event and log line names the account signed in as it leaves, by its
- * id alone, as Sentry's user (`@luke/features/sentry-account`).
+ * and navigation is named by the kind of place it opens, never its path. A
+ * failure the panel showed is sent as a log line, and as an issue besides
+ * where nothing named it (`@luke/features/shown-failure`). Each event and log
+ * line names the account signed in as it leaves, by its id alone, as
+ * Sentry's user (`@luke/features/sentry-account`).
  */
 export function initWebSentry(build: WebSentryBuild): WebSentry {
   init({
@@ -132,5 +136,6 @@ export function initWebSentry(build: WebSentryBuild): WebSentry {
     reportRefusal: (directive, origin) => {
       captureMessage(`Content-Security-Policy refused ${directive} to ${origin}`, "warning");
     },
+    reportShownFailure: (report) => sendShownFailure({ captureException, logger }, report),
   };
 }

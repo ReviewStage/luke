@@ -14,12 +14,14 @@ import {
   withoutAccessTokens,
 } from "@luke/features/sentry-breadcrumbs";
 import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@luke/features/sentry-tracing";
+import { sendShownFailure } from "@luke/features/shown-failure";
 import { appStateNow } from "@luke/panel/use-app-state";
 import {
   browserTracingIntegration,
   captureException,
   eventLoopBlockIntegration,
   init,
+  logger,
   startInactiveSpan,
   startNewTrace,
   withStreamedSpan,
@@ -54,6 +56,10 @@ const PANEL_SPAN_OP = "ui.panel";
  * The DSN, release, and environment are main's, which every renderer event
  * goes through, and its reports reach main as requests of their own, which
  * are never traced (`sentryTracesRequest`).
+ *
+ * A failure the panel showed is sent as a Sentry log line, and as an issue
+ * besides where nothing named it (`@luke/features/shown-failure`); the
+ * window's logs reach Sentry through main, as its events do.
  *
  * Main names the signed-in account as its SDK's user, which every event the
  * window sends through it takes; a log line the window sends leaves with the
@@ -104,5 +110,7 @@ export function initDesktopSentry(options: DesktopSentryOptions): DesktopSentry 
         recorded.end(new Date(span.endedAt));
       });
     },
+    // A log line through main, which sends what the window logs, and an issue where nothing named it.
+    reportShownFailure: (report) => sendShownFailure({ captureException, logger }, report),
   };
 }

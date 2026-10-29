@@ -1,4 +1,5 @@
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   TERMINAL_CONNECTION,
   TERMINAL_FLOW,
@@ -324,8 +325,14 @@ export function useTerminalSession(
   const [shell, setShell] = useState<string | undefined>(undefined);
   const show = useToast();
   const failedToast = useCallback(
-    (words: string) => show({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
-    [show],
+    (words: string, cause: unknown) =>
+      show({
+        words,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: { surface: FAILURE_SURFACE.TERMINAL_CREATE, cause, about: { agentId } },
+      }),
+    [show, agentId],
   );
   // Note that the close is read through a ref, because the tab hands a new one each render.
   const gone = useRef(onGone);
@@ -472,8 +479,8 @@ export function useTerminalSession(
       }
       onChoose(made.terminal.id);
       await reread();
-    } catch {
-      failedToast(SHELL_FAILED.CREATE);
+    } catch (cause) {
+      failedToast(SHELL_FAILED.CREATE, cause);
     }
   }, [act, agentId, enter, failedToast, onChoose, reread]);
 

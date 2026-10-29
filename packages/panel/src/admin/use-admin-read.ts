@@ -1,4 +1,5 @@
 import { ADMIN_REFUSED, type AdminQuery, type AdminReadProcedure } from "@luke/features/admin-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { STATUS_TONE } from "@luke/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { showToast, TOAST_HOLD } from "../toast.js";
@@ -365,13 +366,18 @@ class AdminWriteChain {
         this.intents.delete(id);
         const landed = await this.attempt(id, want);
         if (this.signal.aborted) return;
-        if (landed) {
+        if (landed === true) {
           this.draw(id, want);
           continue;
         }
         // Note that a refusal is said even when a newer press is queued, because
         // that one's own answer says nothing of this one's.
-        showToast({ words: this.failed, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+        showToast({
+          words: this.failed,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.ADMIN_WRITE, cause: landed },
+        });
         if (!this.intents.has(id)) this.draw(id, !want);
       }
     } finally {
@@ -379,11 +385,12 @@ class AdminWriteChain {
     }
   }
 
-  private async attempt(id: string, want: boolean): Promise<boolean> {
+  /** Whether the write landed, true, or what stood in its place: false where it was declined, or what it threw. */
+  private async attempt(id: string, want: boolean): Promise<unknown> {
     try {
       return await this.send(id, want, this.signal);
-    } catch {
-      return false;
+    } catch (error) {
+      return error;
     }
   }
 }

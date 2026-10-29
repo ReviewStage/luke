@@ -9,7 +9,8 @@
  *   rejects it with the sentence the host drew, for the caller to show.
  * - `pressAct` (`press`): a person pressed something and nothing reads the
  *   answer. A refusal, or any other failure, raises a FAILED toast carrying
- *   the act's own refusal sentence, so a press never fails silently.
+ *   the act's own refusal sentence, so a press never fails silently, and
+ *   reports it, by the act's kind and the ids its payload names.
  * - `tellAct` (`tell`): a report nobody pressed, such as a browser view let
  *   go or a refresh after a turn. It stays quiet whatever comes back,
  *   because a toast nobody asked for is noise.
@@ -18,6 +19,7 @@
  * pressed anything.
  */
 
+import { FAILURE_SURFACE, failureAboutOf } from "@luke/features/shown-failure";
 import { ACT_UNREACHED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -34,6 +36,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { ORPCError } from "@orpc/client";
 import { useMemo } from "react";
 import { actPort } from "./app-bridge.js";
+import type { ShownFailure } from "./failure-report.js";
 import { loadedTasksFixture } from "./tasks/tasks-fixture-loader.js";
 import { showToast, TOAST_HOLD } from "./toast.js";
 import { appStateNow } from "./use-app-state.js";
@@ -108,7 +111,7 @@ async function portAct(
     return await call(payload);
   } catch (error) {
     if (error instanceof ORPCError && error.code === ACT_ERROR.REFUSED) {
-      throw new ActRefusal(error.message);
+      throw new ActRefusal(error.message, { cause: error });
     }
     // Note that the failure's own text goes to the log, where a fault is diagnosed, and never to a person.
     console.error(`The act ${kind} failed on its way to the service.`, error);
@@ -146,12 +149,18 @@ function actFailureWords(error: unknown): string {
 }
 
 /**
- * Says an act's failure in a FAILED toast: a refusal in its own words, and
- * any other failure in the one fixed sentence. A press that must also undo
- * what it drew before the answer (`askAct`'s caller) says its failure here.
+ * Says an act's failure in a FAILED toast, which reports it: a refusal in its
+ * own words, and any other failure in the one fixed sentence. A press that
+ * must also undo what it drew before the answer (`askAct`'s caller) says its
+ * failure here.
  */
-export function toastActFailure(error: unknown): void {
-  showToast({ words: actFailureWords(error), tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+export function toastActFailure(failure: ShownFailure): void {
+  showToast({
+    words: actFailureWords(failure.cause),
+    tone: STATUS_TONE.DANGER,
+    hold: TOAST_HOLD.FAILED,
+    failure,
+  });
 }
 
 /**
@@ -164,7 +173,16 @@ export function pressAct<Kind extends PortActKind>(
   kind: Kind,
   ...[payload]: ActArguments<Kind>
 ): Promise<void> {
-  return performAct(kind, payload).then(() => undefined, toastActFailure);
+  return performAct(kind, payload).then(
+    () => undefined,
+    (cause: unknown) =>
+      toastActFailure({
+        surface: FAILURE_SURFACE.ACT,
+        act: kind,
+        cause,
+        about: failureAboutOf(payload),
+      }),
+  );
 }
 
 /**

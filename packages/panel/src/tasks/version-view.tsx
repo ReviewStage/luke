@@ -1,3 +1,4 @@
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { dayAndTimeText, momentText } from "@luke/features/time-format";
 import { readFailedWords } from "@luke/features/words";
 import {
@@ -270,7 +271,14 @@ export function useVersionRestore(
       restoring.current = false;
       setBusy(false);
       if (result.status === ACTION_RESULT_STATUS.ACCEPTED) onRestored();
-      else toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      else {
+        toast({
+          words: result.reason,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.PLAN_RESTORE, cause: result },
+        });
+      }
     });
   };
   return { busy, onRestore };
@@ -295,6 +303,7 @@ export function sayRestored(
         if (undone) return;
         toast({
           words: RESTORE_UNDO_REFUSED_NOTE,
+          failure: { surface: FAILURE_SURFACE.PLAN_RESTORE, cause: FAILURE_CONDITION.NOT_KEPT },
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
         });

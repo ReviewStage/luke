@@ -64,9 +64,13 @@
  *
  * Every call answers in eve's outcomes, so a caller holds one interface
  * whichever runtime answers. What fails here (the machine, the store, GitHub, a
- * missing credential or snapshot) answers `failed`, with the reason in the
- * log by its kind alone; a launch refused for the account's plan says which
- * way its plan failed. Nothing is retried.
+ * missing credential or snapshot) answers `failed`, said once in the log as an
+ * error naming the agent, in the failure's own words, Vercel's answer for a
+ * sandbox's, and reported where no named refusal explains it (`agent-log.ts`);
+ * a launch refused for the account's plan says which way its plan failed.
+ * A launch past its Start's answer says each step it reaches, and one that
+ * fails, dies, or is interrupted there is the agent's failed turn, with why.
+ * Nothing is retried.
  */
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -108,9 +112,10 @@ import {
 } from "@luke/database/models/runner-line-store";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
-import { causeKind } from "@luke/runtime/effect";
+import { TURN_FAILURE } from "@luke/features/turn-run";
+import { causeKind, failureKind } from "@luke/runtime/effect";
 import type { UserContent } from "ai";
-import { Clock, Context, DateTime, Duration, Effect, Option } from "effect";
+import { Cause, Clock, Context, Data, DateTime, Duration, Effect, Option, Ref } from "effect";
 import { TURN_ORIGIN } from "../../core.js";
 import type { HostedEnvironment } from "../../environment.js";
 import {
@@ -139,7 +144,6 @@ import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import {
   AgentMachine,
   type AgentMachineService,
-  describeFailure,
   type FoundPlace,
   LaunchRefused,
   type MachineLayout,
@@ -163,7 +167,8 @@ import {
   SandboxUnavailable,
   sessionEnding,
 } from "../vercel-sandbox-api.js";
-import { CODER } from "./bounds.js";
+import { agentFailureSaid, agentLogIds, keptFailureWords, runningLogId } from "./agent-log.js";
+import { CODER, CODER_REFUSAL } from "./bounds.js";
 import { agentRepositoryToken, CheckoutRefused, type CheckoutServices } from "./checkout.js";
 import { nativeSkillFiles } from "./native-skills.js";
 import type { RunnerBundle } from "./runner-bundle.js";
@@ -524,6 +529,60 @@ function failedStatus(failure: { readonly _tag: string }): number {
     : FAILED_STATUS.UNAVAILABLE;
 }
 
+/** A launch past its Start's answer that died, or was interrupted, rather than failing: what ended it, by its kind alone. */
+class LaunchCut extends Data.TaggedError("LaunchCut")<{
+  readonly kind: string;
+  readonly interrupted: boolean;
+}> {}
+
+/** A launch's cause past its Start's answer as the failure it is written as: the failure where one failed it, else what cut it off. */
+function launchFailureOf(cause: Cause.Cause<{ readonly _tag: string }>): { readonly _tag: string } {
+  return Option.getOrElse(
+    Cause.findErrorOption(cause),
+    () => new LaunchCut({ kind: causeKind(cause), interrupted: Cause.hasInterruptsOnly(cause) }),
+  );
+}
+
+/**
+ * A failure in the words a line and a turn's record keep: a refusal's
+ * reason, with what the sandbox's run threw where it threw; a sandbox's own
+ * words (Vercel's call, its status, and its error's code and message); what
+ * cut a launch off; and the kind alone for any other.
+ */
+function failureWords(failure: { readonly _tag: string }): string {
+  if (failure instanceof LaunchRefused) return failure.reason;
+  if (failure instanceof CheckoutRefused) {
+    return failure.detail === undefined ? failure.reason : `${failure.reason} ${failure.detail}`;
+  }
+  if (failure instanceof LaunchCut) {
+    return failure.interrupted ? "the launch was interrupted" : `the launch died: ${failure.kind}`;
+  }
+  return failure instanceof SandboxUnavailable ? failure.message : failureKind(failure);
+}
+
+/** The failure's kind, as its line's `reason` annotation and its report name it. */
+function kindOf(failure: { readonly _tag: string }): string {
+  return failure instanceof LaunchCut ? failure.kind : failureKind(failure);
+}
+
+/**
+ * Whether a failure is a named outcome the developer is told as such, which
+ * is logged and never reported: the account's plan or key refused, its
+ * device removed or away, the repository its workspace no longer reaches,
+ * or the image still being prepared, which a Start is made again for.
+ */
+function namedOutcome(failure: { readonly _tag: string }): boolean {
+  if (failure instanceof ImagePreparing) return true;
+  if (failure instanceof CheckoutRefused) return failure.reason === CODER_REFUSAL.NOT_REACHABLE;
+  return (
+    failure instanceof LaunchRefused &&
+    (failure.planRefusal !== undefined ||
+      failure.keyRefusal !== undefined ||
+      failure.deviceRemoved === true ||
+      failure.deviceAway === true)
+  );
+}
+
 /** The sessions for one account on the harness given, over the calling fiber's services. */
 export const runnerSessions = <
   E extends { readonly _tag: string },
@@ -574,7 +633,7 @@ export const runnerSessions = <
       (files.length === 0 ? Effect.void : machine.writeFiles(place, files)).pipe(
         Effect.catch((failure) =>
           Effect.logWarning(
-            `The installed skills of a ${harness.name} agent were not written: ${describeFailure(failure)}`,
+            `The installed skills of a ${harness.name} agent were not written: ${keptFailureWords(failureWords(failure))}`,
           ),
         ),
       );
@@ -721,7 +780,9 @@ export const runnerSessions = <
         // never failing the launch that already runs.
         yield* replaceAgentWakeups(agent.id, []).pipe(
           Effect.catch((failure) =>
-            Effect.logWarning(`a relaunched agent's wakeups were not handed back: ${failure._tag}`),
+            Effect.logWarning(
+              `a relaunched agent's wakeups were not handed back: ${failureKind(failure)}`,
+            ),
           ),
         );
       });
@@ -797,12 +858,22 @@ export const runnerSessions = <
     const filesWritten = (place: MachinePlace, message: RunnerMessage) =>
       message.files.length === 0 ? Effect.void : machine.writeFiles(place, message.files);
 
-    /** A failure as the log says it and the caller reads it: a refusal's reason, a sandbox's own words, the kind alone for any other. */
+    /**
+     * A failure as the log says it and the caller reads it, in its own words
+     * (`failureWords`): said once as an error, since the caller refuses what
+     * was asked, and reported where no named refusal explains it
+     * (`agentFailureSaid`); an image still being prepared, which the caller
+     * asks again for, is a warning.
+     */
     const failed = (call: string) => (failure: { readonly _tag: string }) =>
       Effect.as(
-        Effect.logWarning(
-          `A ${harness.name} ${call} failed: ${failure instanceof LaunchRefused ? failure.reason : describeFailure(failure)}`,
-        ),
+        failure instanceof ImagePreparing
+          ? Effect.logWarning(`A ${harness.name} ${call} waits on its image being prepared`)
+          : agentFailureSaid(
+              `A ${harness.name} ${call} failed: ${keptFailureWords(failureWords(failure))}`,
+              kindOf(failure),
+              !namedOutcome(failure),
+            ),
         {
           outcome: EVE_SEND_OUTCOME.FAILED,
           status: failedStatus(failure),
@@ -827,7 +898,9 @@ export const runnerSessions = <
     /** A cancel's or a reset's failure, as the log says it: a sandbox's own words, the kind alone for any other. */
     const unavailable = (call: string) => (failure: { readonly _tag: string }) =>
       Effect.as(
-        Effect.logWarning(`A ${harness.name} ${call} failed: ${describeFailure(failure)}`),
+        Effect.logWarning(
+          `A ${harness.name} ${call} failed: ${keptFailureWords(failureWords(failure))}`,
+        ),
         {
           outcome: "failed" as const,
           status: failedStatus(failure),
@@ -844,7 +917,8 @@ export const runnerSessions = <
      * beside the opening, and the deepen and the skills' upload run beside
      * the launch's own uploads. A place whose launch failed is thrown away
      * again by the machine, since no conversation records the session that
-     * would find it.
+     * would find it. `sandboxOpened` runs once the place stands, before the
+     * launch.
      */
     const openedPlace = (
       agent: Agent,
@@ -854,6 +928,7 @@ export const runnerSessions = <
       credential: HarnessLaunch,
       waitOnImage: boolean,
       queuedFirst?: OpenedLine,
+      sandboxOpened: Effect.Effect<void> = Effect.void,
     ) =>
       Effect.gen(function* () {
         const target: ConversationTarget = { userId, conversationId: agent.conversationId };
@@ -869,19 +944,25 @@ export const runnerSessions = <
             ),
           },
           (opened, skills) =>
-            launch(
-              agent,
-              { name: opened.name, running: opened.place, session: sessionId },
-              layout,
-              first,
-              undefined,
-              credential,
-              Effect.all([opened.finishCheckout, writeInstalledSkills(opened.place, skills)], {
-                concurrency: "unbounded",
-                discard: true,
-              }),
-              queuedFirst,
-            ),
+            Effect.andThen(
+              Effect.andThen(
+                Effect.logInfo(`A ${harness.name} launch opened its sandbox`),
+                sandboxOpened,
+              ),
+              launch(
+                agent,
+                { name: opened.name, running: opened.place, session: sessionId },
+                layout,
+                first,
+                undefined,
+                credential,
+                Effect.all([opened.finishCheckout, writeInstalledSkills(opened.place, skills)], {
+                  concurrency: "unbounded",
+                  discard: true,
+                }),
+                queuedFirst,
+              ),
+            ).pipe(Effect.annotateLogs(runningLogId(opened.place.running))),
         );
       });
 
@@ -1042,22 +1123,24 @@ export const runnerSessions = <
             // renewal that fails, or outlasts `CODER.CREDENTIAL_RENEWAL`, is logged and the message
             // stands, since the runner already took it, and a send answered failed, or past the
             // store's dispatch deadline, would record no line for it; the next message renews it.
-            const renewed = yield* renewCredential(target, agent, runnerPlace).pipe(
-              Effect.timeoutOption(CODER.CREDENTIAL_RENEWAL),
-              Effect.catch((failure) =>
-                Effect.as(
-                  Effect.logWarning(
-                    `A ${harness.name} runner's credential was not renewed: ${describeFailure(failure)}`,
+            yield* Effect.gen(function* () {
+              const renewed = yield* renewCredential(target, agent, runnerPlace).pipe(
+                Effect.timeoutOption(CODER.CREDENTIAL_RENEWAL),
+                Effect.catch((failure) =>
+                  Effect.as(
+                    Effect.logWarning(
+                      `A ${harness.name} runner's credential was not renewed: ${keptFailureWords(failureWords(failure))}`,
+                    ),
+                    Option.some(undefined),
                   ),
-                  Option.some(undefined),
                 ),
-              ),
-            );
-            if (Option.isNone(renewed)) {
-              yield* Effect.logWarning(
-                `A ${harness.name} runner's credential renewal outlasted its bound and was given up`,
               );
-            }
+              if (Option.isNone(renewed)) {
+                yield* Effect.logWarning(
+                  `A ${harness.name} runner's credential renewal outlasted its bound and was given up`,
+                );
+              }
+            }).pipe(Effect.annotateLogs(runningLogId(runnerPlace.running)));
             yield* handed(SERVER_HANDOFF_PATH.WARM);
             return accepted;
           }
@@ -1268,42 +1351,98 @@ export const runnerSessions = <
       });
 
     /**
-     * A launch that failed past its Start's answer: said in the log, and
-     * written as the agent's first turn, queued and settled failed as a turn
-     * whose runner was lost is (`settleRunnerLostTurns`), with why, so the
-     * agent reads failed at once rather than starting until its grace runs
-     * out. The line the Start wrote stands. A write that fails is logged.
+     * A launch that failed past its Start's answer, or died or was
+     * interrupted there: said once as an error with the agent's ids and why,
+     * and reported where no named refusal explains it (`agentFailureSaid`);
+     * then written as the agent's first turn, queued and settled failed as a
+     * turn whose runner was lost is (`settleRunnerLostTurns`), with why, so
+     * the agent reads failed at once rather than starting until its grace
+     * runs out. The line the Start wrote stands. A write that fails is logged.
      */
-    const launchFailed = (agent: Agent) => (failure: { readonly _tag: string }) =>
+    const launchFailed =
+      (agent: Agent, sessionId: string) => (failure: { readonly _tag: string }) =>
+        Effect.gen(function* () {
+          const words = keptFailureWords(failureWords(failure));
+          // The turn's failure is the one `settleRunnerLostTurns` writes below.
+          yield* agentFailureSaid(
+            `A ${harness.name} launch failed after its Start: ${words}`,
+            kindOf(failure),
+            !namedOutcome(failure),
+            TURN_FAILURE.MODEL,
+          );
+          const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+          const turnId = randomUUID();
+          yield* writer.enqueueTurn(
+            { userId, conversationId: agent.conversationId },
+            { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+          );
+          // The checkout's own sentence names GitHub or the sandbox (`status.ts`'s `FAILURE_WORDS`);
+          // any other failure, a missing snapshot among them, reads as the sandbox's, with its reason,
+          // and a sandbox's failure with Vercel's own answer after the sentence the status reads it by.
+          const detail =
+            failure instanceof CheckoutRefused
+              ? words
+              : failure instanceof LaunchRefused
+                ? `${REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE}: ${failure.reason}`
+                : `${REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE} ${words}`;
+          yield* settleRunnerLostTurns(
+            writer,
+            agent.conversationId,
+            yield* Clock.currentTimeMillis,
+            detail,
+          );
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning(`A failed launch's turn was not written: ${causeKind(cause)}`),
+          ),
+          Effect.annotateLogs(agentLogIds(agent, sessionId)),
+        );
+
+    /**
+     * The launch a Start's open hands on past its answer, under the agent's
+     * runner lease, each step said in the log as it is reached (begun, its
+     * sandbox opened, its runner started), so a launch cut off where nothing
+     * can say so, its function frozen or ended under it, is known by the last
+     * step it reached. One that fails or dies takes its first message back
+     * and is written as the agent's failed turn (`launchFailed`), and so is
+     * one interrupted before its sandbox opened, in a finalizer the
+     * interruption cannot cut short. Note that one interrupted once its
+     * sandbox opened is said and reported alone, its first message and its
+     * turns left as they stand, because its runner may already have started
+     * and taken the message, and a failed turn would be written over its work.
+     */
+    const launchedAfterStart = <R>(
+      agent: Agent,
+      sessionId: string,
+      launching: (
+        sandboxOpened: Effect.Effect<void>,
+      ) => Effect.Effect<void, { readonly _tag: string }, R>,
+      withdrawn: Effect.Effect<void, never, DatabaseServices>,
+    ) =>
       Effect.gen(function* () {
-        yield* Effect.logWarning(
-          `A ${harness.name} launch failed after its Start: ${failure instanceof LaunchRefused ? failure.reason : describeFailure(failure)}`,
+        const opened = yield* Ref.make(false);
+        const failedWith = (cause: Cause.Cause<{ readonly _tag: string }>) =>
+          Effect.andThen(withdrawn, launchFailed(agent, sessionId)(launchFailureOf(cause)));
+        const interrupted = Effect.flatMap(Ref.get(opened), (up) =>
+          up
+            ? agentFailureSaid(
+                `A ${harness.name} launch was interrupted after its sandbox opened, so its runner may run`,
+                causeKind(Cause.interrupt()),
+                true,
+              )
+            : failedWith(Cause.interrupt()),
         );
-        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-        const turnId = randomUUID();
-        yield* writer.enqueueTurn(
-          { userId, conversationId: agent.conversationId },
-          { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+        return yield* Effect.gen(function* () {
+          yield* Effect.logInfo(`A ${harness.name} launch began after its Start`);
+          yield* holdingRunner(agent.id, launching(Ref.set(opened, true)));
+          yield* Effect.logInfo(`A ${harness.name} launch started its runner`);
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Cause.hasInterruptsOnly(cause) ? Effect.failCause(cause) : failedWith(cause),
+          ),
+          Effect.onInterrupt(() => interrupted),
         );
-        // The checkout's own sentence names GitHub or the sandbox (`status.ts`'s `FAILURE_WORDS`);
-        // any other failure, a missing snapshot among them, reads as the sandbox's, with its reason.
-        const detail =
-          failure instanceof CheckoutRefused
-            ? failure.reason
-            : failure instanceof LaunchRefused
-              ? `${REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE}: ${failure.reason}`
-              : REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE;
-        yield* settleRunnerLostTurns(
-          writer,
-          agent.conversationId,
-          yield* Clock.currentTimeMillis,
-          detail,
-        );
-      }).pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning(`A failed launch's turn was not written: ${causeKind(cause)}`),
-        ),
-      );
+      }).pipe(Effect.annotateLogs(agentLogIds(agent, sessionId)));
 
     /**
      * A message queued while another call held the lease handed on once that
@@ -1325,6 +1464,92 @@ export const runnerSessions = <
         return false;
       });
 
+    /**
+     * A message to the session for the agent its conversation is, as `send`
+     * hands it on: held behind the agent's runner lease, or queued at once
+     * where the lease is another call's, as `send` says. `answersFirst` says
+     * whether work may run past the request's answer.
+     */
+    const sentTo = (
+      agent: Agent,
+      sessionId: string,
+      message: EveMessage<Turn>,
+      answersFirst: boolean,
+    ) =>
+      Effect.gen(function* () {
+        const layout = yield* machine.layout(agent);
+        const sent = messageLine(message, layout);
+        const queues = layout.linesRead && sent.files.length === 0 && answersFirst;
+        const handed = yield* (
+          queues
+            ? holdingRunnerIfFree(agent.id, sendHolding(sessionId, message, layout, sent))
+            : Effect.map(
+                holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent)),
+                Option.some,
+              )
+        ).pipe(
+          Effect.catchIf(
+            (failure) => failure instanceof ImagePreparing && answersFirst,
+            () =>
+              Effect.as(
+                afterResponse(
+                  `A ${harness.name} relaunch`,
+                  Effect.flatMap(AgentSandboxImage, (image) => Effect.ignore(image.prepared)).pipe(
+                    Effect.andThen(
+                      Effect.retry(
+                        holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent)),
+                        IMAGE_READY,
+                      ),
+                    ),
+                    Effect.catch(launchFailed(agent, sessionId)),
+                  ),
+                ),
+                Option.some({
+                  outcome: EVE_SEND_OUTCOME.ACCEPTED,
+                  sessionId,
+                  deliveryId: sent.line.uuid,
+                } as const),
+              ),
+          ),
+        );
+        if (Option.isSome(handed)) return handed.value;
+        // A session another agent's place stands for has ended for this one, as `sendHolding`
+        // answers it. Note that no place at all is no answer yet, because a Start's launch still
+        // opening its sandbox holds the lease, which is the very case this queue is for.
+        const found = yield* firstPlace(machine, sessionId);
+        if (Option.isSome(found) && found.value.agentId !== agent.id) {
+          return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
+        }
+        // The harness's lines are read as `sendHolding` reads them, so a plan refused now refuses
+        // the message, and where a runner is recorded they go ahead of it for that runner's launch,
+        // so a change of model since it launched holds; a launch still opening its sandbox reads
+        // the agent's model as it starts, and is queued the message alone for whichever launch runs.
+        // Note that the runner's repository credential is not renewed for this message, as
+        // `sendHolding` renews it, because the lease is another call's; it lives an hour, and the
+        // next message renews it. The message is queued as the developer's words alone, since
+        // the turn's own words (`openedLine`) are marked handed only once a runner took them, and
+        // no runner may take this line: they go ahead of the next message handed over instead.
+        // Its hand-on waits as long as a lease can stand, so it outlasts the launch it is behind.
+        const ahead = yield* harness.ahead(agent);
+        const recorded = Option.isSome(found) ? found.value.runner : undefined;
+        yield* recorded === undefined
+          ? queued(agent, ANY_LAUNCH, [sent.line])
+          : queued(agent, recorded.mark.firstSequence, [...ahead.lines, sent.line]);
+        yield* afterResponse(
+          `A ${harness.name} hand-on`,
+          holdingRunner(
+            agent.id,
+            handedOn(sessionId, agent, sent.line.uuid),
+            CODER.RUNNER_LEASE.HOLD,
+          ),
+        );
+        return {
+          outcome: EVE_SEND_OUTCOME.ACCEPTED,
+          sessionId,
+          deliveryId: sent.line.uuid,
+        } as const;
+      });
+
     const sessions: NativeSessions<Turn> = {
       // An open answers once the plan's credential is read, so a plan refused or at its limit is
       // refused at once, as before; the sandbox, the checkout, and the launch run past the answer of
@@ -1333,40 +1558,54 @@ export const runnerSessions = <
       // services for that. On a machine whose runner reads its lines, the first message is queued
       // before the answer, so no message sent after it can be read ahead of it; the launch's own
       // queue of it finds it queued under its id, and a message sent meanwhile is queued behind it.
+      // Every line it says, past the answer included, names the agent; one that fails before the agent
+      // is read names its conversation.
       open: (message) =>
         Effect.gen(function* () {
           const after = yield* Effect.serviceOption(AfterResponse);
           return yield* Effect.gen(function* () {
             const agent = yield* agentOf(message.conversationId);
-            const credential = yield* harness.launch(agent);
-            const layout = yield* machine.layout(agent);
             const sessionId = sessionIdOf(harness.sessionPrefix, yield* Clock.currentTimeMillis);
-            const first = messageLine(message, layout);
-            const withdrawn = layout.linesRead
-              ? Effect.ignore(withdrawRunnerLine(userId, agent.id, first.line.uuid))
-              : Effect.void;
-            const opened = layout.linesRead
-              ? yield* openedLine(agent, sessionId, first, true)
-              : undefined;
-            if (opened !== undefined) yield* queued(agent, ANY_LAUNCH, [opened.line]);
-            // Note that a launch that failed takes its first message back, as its turn reads failed,
-            // and so does an open that fails once it queued it, which answers failed.
-            yield* Effect.gen(function* () {
+            return yield* Effect.gen(function* () {
+              const credential = yield* harness.launch(agent);
+              const layout = yield* machine.layout(agent);
+              const first = messageLine(message, layout);
+              const withdrawn = layout.linesRead
+                ? Effect.ignore(withdrawRunnerLine(userId, agent.id, first.line.uuid))
+                : Effect.void;
+              const opened = layout.linesRead
+                ? yield* openedLine(agent, sessionId, first, true)
+                : undefined;
+              if (opened !== undefined) yield* queued(agent, ANY_LAUNCH, [opened.line]);
+              // Note that a launch that failed takes its first message back, as its turn reads failed,
+              // and so does an open that fails once it queued it, which answers failed.
               yield* afterResponse(
                 `A ${harness.name} launch`,
-                holdingRunner(
-                  agent.id,
-                  openedPlace(agent, sessionId, layout, first, credential, true, opened),
-                ).pipe(
-                  Effect.catch((failure) =>
-                    Effect.andThen(withdrawn, launchFailed(agent)(failure)),
-                  ),
+                launchedAfterStart(
+                  agent,
+                  sessionId,
+                  (sandboxOpened) =>
+                    openedPlace(
+                      agent,
+                      sessionId,
+                      layout,
+                      first,
+                      credential,
+                      true,
+                      opened,
+                      sandboxOpened,
+                    ),
+                  withdrawn,
                 ),
-              );
-            }).pipe(Effect.onError(() => withdrawn));
-            return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId } as const;
+              ).pipe(Effect.onError(() => withdrawn));
+              return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId } as const;
+            }).pipe(
+              Effect.catch(failed("open")),
+              Effect.annotateLogs(agentLogIds(agent, sessionId)),
+            );
           }).pipe(
             Effect.catch(failed("open")),
+            Effect.annotateLogs(agentLogIds({ conversationId: message.conversationId })),
             Effect.provideContext(
               Option.isSome(after) ? Context.add(context, AfterResponse, after.value) : context,
             ),
@@ -1384,86 +1623,20 @@ export const runnerSessions = <
       // Start's launch holds it while its sandbox comes up: it is queued at once, read by the runner
       // that call leaves running, and handed on past the answer where none does (`deliverWaiting`).
       // Note that one naming files waits as before, since they are written into a running place.
+      // Every line it says, past the answer included, names the agent where it was read, and its
+      // conversation and session where it was not.
       send: (sessionId, message) =>
         Effect.gen(function* () {
           const after = yield* Effect.serviceOption(AfterResponse);
           return yield* Effect.gen(function* () {
             const agent = yield* agentOf(message.conversationId);
-            const layout = yield* machine.layout(agent);
-            const sent = messageLine(message, layout);
-            const queues = layout.linesRead && sent.files.length === 0 && Option.isSome(after);
-            const handed = yield* (
-              queues
-                ? holdingRunnerIfFree(agent.id, sendHolding(sessionId, message, layout, sent))
-                : Effect.map(
-                    holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent)),
-                    Option.some,
-                  )
-            ).pipe(
-              Effect.catchIf(
-                (failure) => failure instanceof ImagePreparing && Option.isSome(after),
-                () =>
-                  Effect.as(
-                    afterResponse(
-                      `A ${harness.name} relaunch`,
-                      Effect.flatMap(AgentSandboxImage, (image) =>
-                        Effect.ignore(image.prepared),
-                      ).pipe(
-                        Effect.andThen(
-                          Effect.retry(
-                            holdingRunner(agent.id, sendHolding(sessionId, message, layout, sent)),
-                            IMAGE_READY,
-                          ),
-                        ),
-                        Effect.catch(launchFailed(agent)),
-                      ),
-                    ),
-                    Option.some({
-                      outcome: EVE_SEND_OUTCOME.ACCEPTED,
-                      sessionId,
-                      deliveryId: sent.line.uuid,
-                    } as const),
-                  ),
-              ),
+            return yield* sentTo(agent, sessionId, message, Option.isSome(after)).pipe(
+              Effect.catch(failed("send")),
+              Effect.annotateLogs(agentLogIds(agent, sessionId)),
             );
-            if (Option.isSome(handed)) return handed.value;
-            // A session another agent's place stands for has ended for this one, as `sendHolding`
-            // answers it. Note that no place at all is no answer yet, because a Start's launch still
-            // opening its sandbox holds the lease, which is the very case this queue is for.
-            const found = yield* firstPlace(machine, sessionId);
-            if (Option.isSome(found) && found.value.agentId !== agent.id) {
-              return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
-            }
-            // The harness's lines are read as `sendHolding` reads them, so a plan refused now refuses
-            // the message, and where a runner is recorded they go ahead of it for that runner's launch,
-            // so a change of model since it launched holds; a launch still opening its sandbox reads
-            // the agent's model as it starts, and is queued the message alone for whichever launch runs.
-            // Note that the runner's repository credential is not renewed for this message, as
-            // `sendHolding` renews it, because the lease is another call's; it lives an hour, and the
-            // next message renews it. The message is queued as the developer's words alone, since
-            // the turn's own words (`openedLine`) are marked handed only once a runner took them, and
-            // no runner may take this line: they go ahead of the next message handed over instead.
-            // Its hand-on waits as long as a lease can stand, so it outlasts the launch it is behind.
-            const ahead = yield* harness.ahead(agent);
-            const recorded = Option.isSome(found) ? found.value.runner : undefined;
-            yield* recorded === undefined
-              ? queued(agent, ANY_LAUNCH, [sent.line])
-              : queued(agent, recorded.mark.firstSequence, [...ahead.lines, sent.line]);
-            yield* afterResponse(
-              `A ${harness.name} hand-on`,
-              holdingRunner(
-                agent.id,
-                handedOn(sessionId, agent, sent.line.uuid),
-                CODER.RUNNER_LEASE.HOLD,
-              ),
-            );
-            return {
-              outcome: EVE_SEND_OUTCOME.ACCEPTED,
-              sessionId,
-              deliveryId: sent.line.uuid,
-            } as const;
           }).pipe(
             Effect.catch(failed("send")),
+            Effect.annotateLogs(agentLogIds({ conversationId: message.conversationId }, sessionId)),
             Effect.provideContext(
               Option.isSome(after) ? Context.add(context, AfterResponse, after.value) : context,
             ),
@@ -1496,11 +1669,14 @@ export const runnerSessions = <
             const launch = "launch" in cancelled ? cancelled.launch : undefined;
             yield* afterResponse(
               `A ${harness.name} Stop's force`,
-              forcedStop(sessionId, turnId, agent.value, launch),
+              forcedStop(sessionId, turnId, agent.value, launch).pipe(
+                Effect.annotateLogs(agentLogIds(agent.value, sessionId)),
+              ),
             );
             return { outcome: cancelled.outcome } as const;
           }).pipe(
             Effect.catch(unavailable("cancel")),
+            Effect.annotateLogs(agentLogIds({}, sessionId)),
             Effect.provideContext(
               Option.isSome(after) ? Context.add(context, AfterResponse, after.value) : context,
             ),
@@ -1525,7 +1701,11 @@ export const runnerSessions = <
           return retired === 0
             ? ({ outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const)
             : ({ outcome: EVE_RESET_OUTCOME.RESET } as const);
-        }).pipe(Effect.catch(unavailable("reset")), Effect.provideContext(context)),
+        }).pipe(
+          Effect.catch(unavailable("reset")),
+          Effect.annotateLogs(agentLogIds({}, sessionId)),
+          Effect.provideContext(context),
+        ),
 
       halt: (sessionId, conversationId) =>
         Effect.gen(function* () {
@@ -1535,10 +1715,13 @@ export const runnerSessions = <
         }).pipe(
           Effect.catch((failure) =>
             Effect.as(
-              Effect.logWarning(`A ${harness.name} halt failed: ${describeFailure(failure)}`),
+              Effect.logWarning(
+                `A ${harness.name} halt failed: ${keptFailureWords(failureWords(failure))}`,
+              ),
               false,
             ),
           ),
+          Effect.annotateLogs(agentLogIds({ conversationId }, sessionId)),
           Effect.provideContext(context),
         ),
 
@@ -1548,17 +1731,19 @@ export const runnerSessions = <
         Effect.gen(function* () {
           const agent = yield* agentOf(conversationId);
           return yield* holdingRunner(agent.id, deliverWaitingHolding(sessionId, agent)).pipe(
-            Effect.catch((failure) => Effect.as(launchFailed(agent)(failure), false)),
+            Effect.catch((failure) => Effect.as(launchFailed(agent, sessionId)(failure), false)),
+            Effect.annotateLogs(agentLogIds(agent, sessionId)),
           );
         }).pipe(
           Effect.catch((failure) =>
             Effect.as(
               Effect.logWarning(
-                `A ${harness.name} hand-on of waiting lines failed: ${describeFailure(failure)}`,
+                `A ${harness.name} hand-on of waiting lines failed: ${keptFailureWords(failureWords(failure))}`,
               ),
               false,
             ),
           ),
+          Effect.annotateLogs(agentLogIds({ conversationId }, sessionId)),
           Effect.provideContext(context),
         ),
 
@@ -1571,10 +1756,13 @@ export const runnerSessions = <
         }).pipe(
           Effect.catch((failure) =>
             Effect.as(
-              Effect.logWarning(`A ${harness.name} model change failed: ${failure._tag}`),
+              Effect.logWarning(
+                `A ${harness.name} model change failed: ${keptFailureWords(failureWords(failure))}`,
+              ),
               RUNNER_CHOICE.FAILED,
             ),
           ),
+          Effect.annotateLogs(agentLogIds({ conversationId }, sessionId)),
           Effect.provideContext(context),
         ),
     };
