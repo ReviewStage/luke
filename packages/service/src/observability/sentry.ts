@@ -39,7 +39,12 @@ import {
   scrubbedUrl,
 } from "@luke/features/sentry-addresses";
 import * as Sentry from "@sentry/effect";
-import { addBreadcrumb, type ErrorEvent, type EventHint } from "@sentry/effect/server";
+import {
+  addBreadcrumb,
+  type ErrorEvent,
+  type EventHint,
+  SentryEffectExternalSpanLayer,
+} from "@sentry/effect/server";
 import { Effect, ErrorReporter, Exit, Layer, Logger, Predicate, References, Tracer } from "effect";
 
 export const SENTRY_ENVIRONMENT = {
@@ -299,9 +304,22 @@ export function sentryOptions(): SentryOptions {
   };
 }
 
-/** Effect's spans as Sentry spans, and Effect's metrics as Sentry's, as the guide's v4 snippet installs them. */
+/**
+ * Effect's spans as Sentry spans, and Effect's metrics as Sentry's, as the
+ * guide's v4 snippet installs them, with a span whose parent is a caller's
+ * (`Tracer.externalSpan`, a request's `traceparent`) continuing the caller's
+ * trace.
+ *
+ * Note that the external span layer is needed, because without it Sentry's
+ * tracer passes over an external parent and starts a trace of its own, so a
+ * server span would name a trace id the caller never saw. With it, Sentry
+ * continues the trace as its own propagation does: the caller's trace id,
+ * and the caller's sampling flag, so an unsampled call stays a span that
+ * records nothing but whose trace id its log lines and issues still carry.
+ */
 const sentryTelemetry = Layer.mergeAll(
   Layer.succeed(Tracer.Tracer, Sentry.SentryEffectTracer),
+  SentryEffectExternalSpanLayer,
   Sentry.SentryEffectMetricsLayer,
 );
 
