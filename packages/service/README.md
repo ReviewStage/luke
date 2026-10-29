@@ -1365,7 +1365,7 @@ resets the chosen model and the Start menu never touches the settings. A
 it (below): a model it does not offer or an effort that model does not list
 is `invalid-request`, and a catalog the instance cannot read is `unavailable`.
 The store keeps the columns on `account_preference`, and
-reads a half-written pair as the default; `coding_agent_context_window` is
+reads a half-written pair as the default; `agent_context_window` is
 null for the model's whole window (migration 0077). `updated_at` is the preferences
 part's own instant, nullable since migration 0062 and left null by a write
 that carries only `codingAgent`: the desktop reads the answer's `updatedAt`

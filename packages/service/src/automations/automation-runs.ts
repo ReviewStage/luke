@@ -438,7 +438,7 @@ const steerClaimed = Effect.fnUntraced(function* (
   yield* attachRunAgent(run.id, agentId);
   const outcome: AutomationRunOutcome = {
     status: AUTOMATION_RUN_STATUS.STARTED,
-    codingAgentId: agentId,
+    agentId: agentId,
   };
   return outcome;
 });
@@ -460,13 +460,13 @@ const workingAgents = Effect.fnUntraced(function* (automation: Automation, now: 
     ...started.filter((agent) =>
       Option.match(target, {
         onNone: () => true,
-        onSome: (held) => agent.codingAgentId !== held.id,
+        onSome: (held) => agent.agentId !== held.id,
       }),
     ),
     ...Option.match(target, {
       onNone: () => [],
       onSome: (held) => [
-        { codingAgentId: held.id, conversationId: held.conversationId, createdAt: held.createdAt },
+        { agentId: held.id, conversationId: held.conversationId, createdAt: held.createdAt },
       ],
     }),
   ];
@@ -648,7 +648,7 @@ const startClaimed = Effect.fnUntraced(function* (
     yield* attachRunAgent(run.id, start.success.agent.id);
     const outcome: AutomationRunOutcome = {
       status: AUTOMATION_RUN_STATUS.STARTED,
-      codingAgentId: start.success.agent.id,
+      agentId: start.success.agent.id,
     };
     return outcome;
   }

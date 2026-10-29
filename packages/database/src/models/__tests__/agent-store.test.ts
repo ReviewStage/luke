@@ -1324,10 +1324,7 @@ const pinReadBy = (userId: string, agentId: string) =>
 
 const pinnedOnes = (agentId: string) =>
   Database.use((db) =>
-    db
-      .select({ userId: agentPin.userId })
-      .from(agentPin)
-      .where(eq(agentPin.codingAgentId, agentId)),
+    db.select({ userId: agentPin.userId }).from(agentPin).where(eq(agentPin.agentId, agentId)),
   );
 
 it.layer(getTestDB())("an agent's pin", (it) => {
@@ -2359,7 +2356,7 @@ it.layer(getTestDB())("the coding-agent store's delete of an agent", (it) => {
         const pins = yield* db
           .select({ userId: agentPin.userId })
           .from(agentPin)
-          .where(eq(agentPin.codingAgentId, agentId));
+          .where(eq(agentPin.agentId, agentId));
         const [stamped] = yield* db
           .select({ deletedAt: conversations.deletedAt })
           .from(conversations)
