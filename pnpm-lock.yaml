@@ -1037,6 +1037,9 @@ importers:
       '@luke/settings':
         specifier: workspace:*
         version: link:../settings
+      '@luke/ui':
+        specifier: workspace:*
+        version: link:../ui
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
@@ -1147,6 +1150,12 @@ importers:
       '@effect/atom-react':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(react@19.2.8)(scheduler@0.27.0)
+      '@json-render/core':
+        specifier: 0.21.3
+        version: 0.21.3(zod@4.5.4)
+      '@json-render/react':
+        specifier: 0.21.3
+        version: 0.21.3(react@19.2.8)(zod@4.5.4)
       '@luke/brand':
         specifier: workspace:*
         version: link:../brand
@@ -1204,6 +1213,9 @@ importers:
       tailwind-merge:
         specifier: 3.7.0
         version: 3.7.0
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
@@ -2538,6 +2550,16 @@ packages:
   '@js-temporal/polyfill@0.5.1':
     resolution: {integrity: sha512-hloP58zRVCRSpgDxmqCWJNlizAlUgJFqG2ypq79DCvyv9tHjRYMDOcPFjzfl/A1/YxDvRCZz8wvZvmapQnKwFQ==}
     engines: {node: '>=12'}
+
+  '@json-render/core@0.21.3':
+    resolution: {integrity: sha512-sgzPtRhRB5wkhrbLtPm9bAhna5Q0x/U0vUpb3S/VEutouWEvvZRebHhpM5XiEjRM5Shv4W70VMZ8pGcGcz7j+A==}
+    peerDependencies:
+      zod: ^4.0.0
+
+  '@json-render/react@0.21.3':
+    resolution: {integrity: sha512-+/i0vPRQ164KzvNdPpQleLp+WjfRS2zYRIujLbRZUEmqiQb+WtEi1i9tZMYL/dRFOUzeNveu421KDzI11Wounw==}
+    peerDependencies:
+      react: ^19.2.3
 
   '@malept/cross-spawn-promise@2.0.0':
     resolution: {integrity: sha512-1DpKU0Z5ThltBwjNySMC14g0CkbyhCaz9FkhxqNsZI6uAPJXFS8cMXlBKo26FJ8ZuW6S9GCMcR9IO5k2X5/9Fg==}
@@ -9067,6 +9089,17 @@ snapshots:
   '@js-temporal/polyfill@0.5.1':
     dependencies:
       jsbi: 4.3.2
+
+  '@json-render/core@0.21.3(zod@4.5.4)':
+    dependencies:
+      zod: 4.5.4
+
+  '@json-render/react@0.21.3(react@19.2.8)(zod@4.5.4)':
+    dependencies:
+      '@json-render/core': 0.21.3(zod@4.5.4)
+      react: 19.2.8
+    transitivePeerDependencies:
+      - zod
 
   '@malept/cross-spawn-promise@2.0.0':
     dependencies:

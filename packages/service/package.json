@@ -246,6 +246,7 @@
     "@luke/features": "workspace:*",
     "@luke/runtime": "workspace:*",
     "@luke/settings": "workspace:*",
+    "@luke/ui": "workspace:*",
     "@luke/wire": "workspace:*",
     "@orpc/contract": "catalog:",
     "@orpc/experimental-effect": "catalog:",

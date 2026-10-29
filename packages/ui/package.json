@@ -65,6 +65,9 @@
     "./tasks-model": "./src/tasks-model.js",
     "./pending-values": "./src/pending-values.js",
     "./diagram-contract": "./src/diagram-contract.js",
+    "./luke-ui-catalog": "./src/luke-ui/luke-ui-catalog.js",
+    "./luke-ui-contract": "./src/luke-ui/luke-ui-contract.js",
+    "./luke-ui-spec": "./src/luke-ui/luke-ui-spec.js",
     "./person-page-model": "./src/person-page-model.js",
     "./tailwind/theme.css": "./src/tailwind/theme.css",
     "./tailwind/sources.css": "./src/tailwind/sources.css"
@@ -77,6 +80,8 @@
   "dependencies": {
     "@base-ui/react": "1.9.0",
     "@effect/atom-react": "catalog:",
+    "@json-render/core": "0.21.3",
+    "@json-render/react": "0.21.3",
     "@luke/brand": "workspace:*",
     "@luke/features": "workspace:*",
     "@luke/settings": "workspace:*",
@@ -95,7 +100,8 @@
     "recharts": "3.8.0",
     "remark-gfm": "4.0.1",
     "streamdown": "2.7.0",
-    "tailwind-merge": "3.7.0"
+    "tailwind-merge": "3.7.0",
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

@@ -66,6 +66,8 @@ import { ACT_KIND } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
 import { FIXTURE_IDS, FIXTURE_PAGE } from "@luke/host/fixture-stage";
+import { STATUS_TONE } from "@luke/ui";
+import { LUKE_UI_COMPONENT, LUKE_UI_LANGUAGE } from "@luke/ui/luke-ui-contract";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { AsyncIteratorClass } from "@orpc/client";
 import { longRunPicture, longRunStream } from "./agent-long-run-fixture.js";
@@ -288,6 +290,54 @@ const ASK: AgentTranscriptMessage = {
   sentAt: STARTED_AT,
 };
 
+/**
+ * The pull request the agent opened, drawn as components in its last words
+ * (`@luke/ui/luke-ui-catalog`): a card with where it stands, its facts, and
+ * the files it changed.
+ */
+const SUMMARY_SPEC = {
+  root: "summary",
+  elements: {
+    summary: {
+      type: LUKE_UI_COMPONENT.CARD,
+      props: {
+        title: PULL_REQUEST.title,
+        status: { label: "Review asked", tone: STATUS_TONE.ATTENTION },
+      },
+      children: ["facts", "files"],
+    },
+    facts: {
+      type: LUKE_UI_COMPONENT.FACTS,
+      props: {
+        items: [
+          { label: "Pull request", value: `#${PULL_REQUEST.number}` },
+          { label: "Branch", value: PULL_REQUEST.head },
+          { label: "Tests", value: "1 passed" },
+        ],
+      },
+    },
+    files: {
+      type: LUKE_UI_COMPONENT.LIST,
+      props: {
+        label: "Files changed",
+        items: [
+          {
+            title: "src/members/invite.ts",
+            description: "Creates an invite and accepts it once",
+            status: { label: "Added", tone: STATUS_TONE.COMPLETE },
+          },
+          {
+            title: "src/db/schema/memberships.ts",
+            description: "A pending membership for an invited address",
+            meta: "+12 −2",
+            status: { label: "Changed", tone: STATUS_TONE.WORKING },
+          },
+        ],
+      },
+    },
+  },
+} as const;
+
 /** The agent's reads, its edit, its tests, and the pull request it opened, answering the ask. */
 const WORK: AgentTranscriptMessage = {
   id: "fixture-agent-work",
@@ -327,7 +377,10 @@ const WORK: AgentTranscriptMessage = {
     ),
     {
       type: "text",
-      text: `Opened #${PULL_REQUEST.number}. An invite expires after seven days, and a used or withdrawn link reads "This invite is no longer valid".`,
+      text: [
+        `Opened #${PULL_REQUEST.number}. An invite expires after seven days, and a used or withdrawn link reads "This invite is no longer valid".`,
+        `\`\`\`${LUKE_UI_LANGUAGE}\n${JSON.stringify(SUMMARY_SPEC, null, 2)}\n\`\`\``,
+      ].join("\n\n"),
     },
   ],
   startedAt: STARTED_AT,

@@ -1,5 +1,6 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { DiagramModule } from "@luke/ui/diagram-contract";
+import type { LukeUiModule } from "@luke/ui/luke-ui-contract";
 import { Effect } from "effect";
 import type * as AsyncResult from "effect/reactivity/AsyncResult";
 import type * as Atom from "effect/reactivity/Atom";
@@ -14,8 +15,9 @@ import type { TerminalModule } from "./terminal/contract.js";
  * bundle-loader.ts -- the bundles of the panel's own that are too large for the one every window parses, each imported the first time it is needed and kept for the window's life.
  *
  * The panel's editors (`plan-editor/`), a File tab's tree (`file-tree/`), a
- * Terminal tab's screen (`terminal/`), a plan's diagrams (`diagram/`), and a
- * Files changed diff (`diff-view/`) are each
+ * Terminal tab's screen (`terminal/`), a plan's diagrams (`diagram/`), a
+ * Files changed diff (`diff-view/`), and an agent's drawn components
+ * (`luke-ui/`) are each
  * reached through a dynamic `import()` of their entry, which the bundler splits off the bundle every window parses
  * and loads from wherever it put it, so nothing here names a file. Where a
  * bundle has a stylesheet, its entry imports it. A bundle that landed is
@@ -38,6 +40,7 @@ export interface SideBundleImporters {
   readonly terminal: BundleImporter<TerminalModule>;
   readonly diagram: BundleImporter<DiagramModule>;
   readonly diffView: BundleImporter<DiffViewModule>;
+  readonly lukeUi: BundleImporter<LukeUiModule>;
 }
 
 /** Each bundle of the panel's own, as the module its entry exports once imported, or why it could not be. */
@@ -59,6 +62,9 @@ export const DIFF_LOAD_FAILED = "The diff could not be shown.";
 /** What a fence says over its code where the diagram bundle failed to load, as it says where Mermaid refused the code. */
 export const DIAGRAM_REFUSED_LINE = "This diagram could not be drawn.";
 
+/** Why a fence an agent drew as components could not be, where its bundle failed to load; the fence shows its code. */
+const LUKE_UI_LOAD_FAILED = "These components could not be drawn.";
+
 /** Why each bundle could not be had, where its import failed. */
 const LOAD_FAILED = {
   planEditor: "The editor could not be loaded.",
@@ -66,6 +72,7 @@ const LOAD_FAILED = {
   terminal: TERMINAL_LOAD_FAILED,
   diagram: DIAGRAM_REFUSED_LINE,
   diffView: DIFF_LOAD_FAILED,
+  lukeUi: LUKE_UI_LOAD_FAILED,
 } as const satisfies { readonly [Bundle in keyof SideBundleImporters]: string };
 
 /** Each bundle's entry, imported where the bundler put it. */
@@ -75,6 +82,7 @@ const SIDE_BUNDLE_IMPORTERS: SideBundleImporters = {
   terminal: () => import("./terminal/index.js").then((entry) => entry.terminal),
   diagram: () => import("./diagram/index.js").then((entry) => entry.diagram),
   diffView: () => import("./diff-view/index.js").then((entry) => entry.diffView),
+  lukeUi: () => import("./luke-ui/index.js").then((entry) => entry.lukeUi),
 };
 
 /**
@@ -110,6 +118,7 @@ export function sideBundles(importers: Partial<SideBundleImporters> = {}): SideB
     terminal: bundleAtom(reach.terminal, LOAD_FAILED.terminal),
     diagram: bundleAtom(reach.diagram, LOAD_FAILED.diagram),
     diffView: bundleAtom(reach.diffView, LOAD_FAILED.diffView),
+    lukeUi: bundleAtom(reach.lukeUi, LOAD_FAILED.lukeUi),
   };
 }
 

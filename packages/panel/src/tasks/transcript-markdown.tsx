@@ -1,8 +1,11 @@
+import { useAtomValue } from "@effect/atom-react";
 import type { CodeLines } from "@luke/features/tasks-view";
 import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@luke/host/acts";
 import { CODE_CARD_TITLE, CODE_ROW, CodeCard, type CodeRow } from "@luke/ui";
 import { SUGGESTED_CHANGE_LANGUAGE } from "@luke/ui/github-html";
+import { LUKE_UI_LANGUAGE } from "@luke/ui/luke-ui-contract";
 import type { MarkdownComponents, MarkdownNodeProps } from "@luke/ui/markdown";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import {
   type ComponentProps,
   createContext,
@@ -12,6 +15,7 @@ import {
   useState,
 } from "react";
 import { type ActHandle, useAct } from "../act.js";
+import { useSideBundles } from "../bundle-loader.js";
 import { copyThroughShell } from "../copy-feedback.js";
 
 /**
@@ -35,7 +39,11 @@ import { copyThroughShell } from "../copy-feedback.js";
  * code, so a block drawn again, or twice, asks once. A block stands in
  * `@luke/ui`'s `CodeCard`, as every block of code in the window does, so
  * its header, its one Copy, its cut at 40 lines, and the screen recording's
- * leaving its lines out are the card's.
+ * leaving its lines out are the card's. A whole ```` ```luke-ui ```` block,
+ * a spec an agent wrote of components to draw, is drawn as those components
+ * once its bundle lands (`@luke/ui/luke-ui-spec`), and as its code card
+ * while it streams, while the bundle loads, and where the spec cannot be
+ * read.
  */
 
 /** What a block whose fence names no language is labelled. */
@@ -49,6 +57,9 @@ const SUGGESTION = {
 
 /** The language a diff is fenced in, whose rows are tinted by what they do. */
 const DIFF_LANGUAGE = "diff";
+
+/** The language a ```` ```luke-ui ```` block's code is coloured in, where it is drawn as code. */
+const LUKE_UI_CODE_LANGUAGE = "json";
 
 /** A diff's file header, `--- a/path` or `+++ b/path`: three marks, then a space or nothing. */
 const DIFF_HEADER = /^(?:---|\+\+\+)(?:\s|$)/u;
@@ -216,6 +227,18 @@ function addedText(rows: readonly Row[]): string {
 }
 
 /**
+ * A whole ```` ```luke-ui ```` block as the components its spec names,
+ * once the bundle that draws them lands, and as `card`, its code, until
+ * then, where the bundle failed, or where the spec cannot be read.
+ */
+function LukeUiBlock({ code, card }: { code: string; card: ReactNode }): ReactNode {
+  const bundle = useAtomValue(useSideBundles().lukeUi);
+  if (!AsyncResult.isSuccess(bundle)) return card;
+  const { LukeUiSpec } = bundle.value;
+  return <LukeUiSpec code={code} fallback={card} />;
+}
+
+/**
  * A fenced block as a `CodeCard`: its language in the header, which is
  * "text" for a fence that names none, over its lines, which keep whole and
  * scroll sideways inside the card rather than widening the transcript. A
@@ -238,10 +261,15 @@ function TranscriptCodeBlock({
   const whole =
     start === undefined || end === undefined || !fenceStillOpen(markdown.slice(start, end));
   const suggesting = language === SUGGESTION.LANGUAGE || language === SUGGESTED_CHANGE_LANGUAGE;
-  // Note that a suggestion names no language of its own to colour it in.
-  const lines = useColouredLines(language, code, whole && !suggesting);
+  const drawing = language === LUKE_UI_LANGUAGE;
+  // Note that a suggestion names no language of its own to colour it in, and a spec is JSON.
+  const lines = useColouredLines(
+    drawing ? LUKE_UI_CODE_LANGUAGE : language,
+    code,
+    whole && !suggesting,
+  );
   const rows = rowsOf(language, code);
-  return (
+  const card = (
     <CodeCard
       title={
         suggesting ? SUGGESTION.LABEL : language === "" ? PLAIN_LANGUAGE : language.toLowerCase()
@@ -254,6 +282,7 @@ function TranscriptCodeBlock({
       copy={copyThroughShell}
     />
   );
+  return drawing && whole ? <LukeUiBlock code={code} card={card} /> : card;
 }
 
 /**

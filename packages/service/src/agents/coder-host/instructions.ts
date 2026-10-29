@@ -17,6 +17,7 @@ import { DEVICE_ISOLATION, type DeviceIsolation } from "@luke/features/device-ag
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_ANSWER_LEAD, INBOX_MESSAGE_LEAD } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import { lukeUiPrompt } from "@luke/ui/luke-ui-catalog";
 import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
 import { SENDER_LABEL_LEAD } from "../attached-files.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
@@ -29,6 +30,9 @@ import { TODOS_TOOL } from "./todos.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 const AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
+
+/** How the agent draws a small UI in its message, as json-render writes it from the components' catalog (`@luke/ui/luke-ui-catalog`), whose fence the transcript draws with `@luke/ui`'s own. */
+const LUKE_UI_WORDS = lukeUiPrompt();
 
 /**
  * instructions.ts -- what a coding agent's session runs under.
@@ -971,7 +975,11 @@ ${sections.messages}
 
 ${namingWords(repository, taskLink)}
 
-Never print a credential, a token, or the contents of an environment file, in a message, a commit, or a pull request.`;
+Never print a credential, a token, or the contents of an environment file, in a message, a commit, or a pull request.
+
+## Drawing in your messages
+
+${LUKE_UI_WORDS}`;
 }
 
 /** What an agent's instructions are composed on beyond its row. */
