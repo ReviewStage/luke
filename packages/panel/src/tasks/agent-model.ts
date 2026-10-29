@@ -462,8 +462,7 @@ const SHARED_FAILURE_NOTE = {
     "The subscription paying for this agent has reached its usage limit. It waits until the limit resets.",
   [AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE]:
     "The subscription paying for this agent isn't eligible to run it.",
-  [AGENT_CALL_FAILURE.TREE_STOPPED]:
-    "Running is off for this task's tree. Switch Running on, on the top task, to start an agent here.",
+  [AGENT_CALL_FAILURE.TREE_STOPPED]: "Switch on Running on the top task to start agents here.",
 } as const;
 
 /** What a Start from an agent whose session has ended says. */
