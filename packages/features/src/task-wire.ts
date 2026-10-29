@@ -49,6 +49,8 @@ import { trimmedText } from "./text-schema.js";
  * by id.
  * A task is worked by its agents or by a pilot (`TASK_MODE`), which its
  * summary names.
+ * A task opened whole also names, by id, the tasks it waits on and the tasks
+ * that wait on it, as Linear's blocked-by and blocks.
  * The starting account and the conversation a task resumes in are the
  * service's own and never travel here.
  *
@@ -706,7 +708,7 @@ const planSectionEditSchema = EffectSchema.Struct({
 
 export type PlanSectionEdit = typeof planSectionEditSchema.Type;
 
-/** One task with its saved document, its newest revision, who last changed each section, and the saves coding agents made on it, oldest first. */
+/** One task with its saved document, its newest revision, who last changed each section, the saves coding agents made on it, oldest first, and the tasks it waits on and that wait on it. */
 export const taskSchema = EffectSchema.Struct({
   ...taskSummaryFields,
   document: planDocumentSchema,
@@ -722,6 +724,10 @@ export const taskSchema = EffectSchema.Struct({
       EffectSchema.isMaxLength(PLAN_SECTION_BOUNDS.MAX_SECTIONS),
     ),
   ),
+  /** The tasks this one waits on, by id, the earliest added first, each one the reader reaches; absent from a service before blocks. */
+  blockedBy: EffectSchema.optionalKey(EffectSchema.Array(wireUuidSchema)),
+  /** The tasks that wait on this one, on the same terms as `blockedBy`. */
+  blocks: EffectSchema.optionalKey(EffectSchema.Array(wireUuidSchema)),
 });
 
 export type Task = typeof taskSchema.Type;
