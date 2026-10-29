@@ -464,6 +464,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   let view: TasksView = idleView();
   let published: TasksView = view;
+  /**
+   * Every ask to change the task on screen, an open, a close, or a start
+   * that opens its task, counted as it arrives. Note that a start opens its
+   * task only while it is still the newest of them, because one answered
+   * after the developer went to another task would turn the window back.
+   */
+  let screenAsks = 0;
 
   function publish(): void {
     // Note that the view keeps the identity of what it shares with the one
@@ -1562,6 +1569,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (!gate()) return { opened: false };
         const { taskId } = read;
+        screenAsks += 1;
         // A press on the task already open, drawn or being read, asks nothing again.
         const status = view.document.status;
         if (
@@ -1945,6 +1953,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // showed.
     [GATEWAY_METHOD.TASKS_CLOSE]: () =>
       Effect.gen(function* () {
+        screenAsks += 1;
         yield* FiberHandle.clear(recordFollow);
         yield* serial(
           Effect.sync(() => {
@@ -1992,6 +2001,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         // Note that a start answers once the task is drawn open rather than once the list carries
         // it, because nothing draws its row from the answer, so a list from before the write only
         // lacks a row it has not drawn yet, and the window opens the task's agent at once.
+        screenAsks += 1;
+        const asked = screenAsks;
         return yield* serial(
           Effect.gen(function* () {
             const started = yield* served(client.create(request));
@@ -2002,6 +2013,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               );
             }
             const { task, agent } = started.answer;
+            const answer = carried<TasksStartAnswer>({
+              planId: task.id,
+              ...(agent === undefined ? undefined : { agentStart: agent }),
+            });
+            // A start the developer went on from, to another task or another start, opens nothing.
+            if (screenAsks !== asked) return answer;
             view = {
               ...withoutPages(view),
               activeTaskId: task.id,
@@ -2009,10 +2026,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             };
             publish();
             yield* openRecord(task.id);
-            return carried<TasksStartAnswer>({
-              planId: task.id,
-              ...(agent === undefined ? undefined : { agentStart: agent }),
-            });
+            return answer;
           }),
         );
       }),
