@@ -130,21 +130,25 @@ function tarHeader(name: string, type: string, size: number): Uint8Array {
   return header;
 }
 
-/** The commit as GitHub serves its archive: gzipped, the commit named in a pax global header, every file under one top folder. */
-function archiveOf(repository: FakeRepository, sha: string): Uint8Array<ArrayBuffer> {
+/** The commit as GitHub serves its archive: gzipped, the commit named in a pax global header, every file under one top folder but those `export-ignore` marks. */
+function archiveOf(
+  repository: FakeRepository,
+  sha: string,
+  exportIgnore = "\0",
+): Uint8Array<ArrayBuffer> {
   const tail = ` comment=${sha}\n`;
   let length = tail.length + 1;
   while (String(length).length + tail.length !== length)
     length = String(length).length + tail.length;
   const entries: [string, string, string][] = [
     ["pax_global_header", "g", `${length}${tail}`],
-    ...Object.entries(repository.commits.get(sha) ?? {}).map(
-      ([path, content]): [string, string, string] => [
+    ...Object.entries(repository.commits.get(sha) ?? {})
+      .filter(([path]) => !path.startsWith(exportIgnore))
+      .map(([path, content]): [string, string, string] => [
         `${repository.name}-${sha}/${path}`,
         "0",
         content,
-      ],
-    ),
+      ]),
   ];
   const blocks = entries.flatMap(([name, type, content]) => {
     const body = Buffer.from(content);
@@ -162,11 +166,12 @@ function archiveOf(repository: FakeRepository, sha: string): Uint8Array<ArrayBuf
  * (anonymously too where it is public), a ref's commit as its sha alone, a
  * tree, and a file's contents; and, where `archives` is set, a commit's
  * archive, from codeload for a public one and through the API for a
- * private one. A private one answers only the installation's token.
+ * private one, leaving out the folder `exportIgnore` names. A private one
+ * answers only the installation's token.
  */
 function repositoryScript(
   repository: FakeRepository,
-  options: { readonly archives?: boolean } = {},
+  options: { readonly archives?: boolean; readonly exportIgnore?: string } = {},
 ) {
   return (sent: SentToGitHub): Response | undefined => {
     const url = new URL(sent.url);
@@ -174,7 +179,7 @@ function repositoryScript(
     if (url.host === "codeload.github.com" && url.pathname.startsWith(codeload)) {
       const sha = commitOf(repository, decodeURIComponent(url.pathname.slice(codeload.length)));
       return options.archives === true && !repository.private && sha !== undefined
-        ? new Response(archiveOf(repository, sha))
+        ? new Response(archiveOf(repository, sha, options.exportIgnore))
         : notFound();
     }
     const base = `/repos/${repository.owner}/${repository.name}`;
@@ -188,7 +193,7 @@ function repositoryScript(
     if (tarball !== null) {
       const sha = commitOf(repository, decodeURIComponent(tarball[1] ?? ""));
       return options.archives === true && sha !== undefined
-        ? new Response(archiveOf(repository, sha))
+        ? new Response(archiveOf(repository, sha, options.exportIgnore))
         : notFound();
     }
     if (rest === "") {
@@ -345,10 +350,10 @@ function anonymousLimited(repository: (sent: SentToGitHub) => Response | undefin
       : repository(sent);
 }
 
-/** GitHub refusing every read of one file or tree as past its rate limit, so only an archive can serve a commit; any other request goes on to the repository. */
+/** GitHub refusing every read of one file as past its rate limit, so only an archive can serve a file's bytes; any other request goes on to the repository. */
 function perFileRefused(repository: (sent: SentToGitHub) => Response | undefined) {
   return (sent: SentToGitHub): Response | undefined =>
-    /\/(?:contents|git\/trees)\//u.test(new URL(sent.url).pathname)
+    /\/contents\//u.test(new URL(sent.url).pathname)
       ? Response.json(
           { message: "API rate limit exceeded" },
           { status: 403, headers: { "x-ratelimit-remaining": "0" } },
@@ -556,6 +561,49 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
             undefined,
             {},
             perFileRefused(repositoryScript(kit, { archives: true })),
+          ),
+        );
+        const text = "npx skills add acme/kit --skill review";
+
+        const previewed = sourcePreview(
+          yield* ask(`${SKILLS}/preview`, owner, preview(workspace, text)),
+        );
+        assert.deepEqual(
+          previewed.skills.map((skill) => skill.name),
+          ["release", "review"],
+        );
+        const [review] = readAnswer(
+          installedSkillInstallAnswerSchema,
+          201,
+          yield* ask(
+            SKILLS,
+            owner,
+            install({ workspaceId: workspace, scope: INSTALLED_SKILL_SCOPE.PERSONAL, text }),
+          ),
+        ).skills;
+        assert.ok(review);
+        assert.equal(yield* storedText(owner, review.id, "scripts/check.sh"), "echo check");
+      }),
+  );
+
+  it.effect(
+    "a skill the archive leaves out, as export-ignore does, is still found and installed from the tree",
+    () =>
+      Effect.gen(function* () {
+        const kit = fakeRepository("acme", "kit");
+        commitTo(kit, "main", {
+          "skills/review/SKILL.md": skillFile("review", "Review a pull request."),
+          "skills/review/scripts/check.sh": "echo check",
+          "skills/release/SKILL.md": skillFile("release", "Write release notes."),
+        });
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        const ask = yield* routes(
+          githubReaching(
+            [],
+            undefined,
+            {},
+            repositoryScript(kit, { archives: true, exportIgnore: "skills/review/" }),
           ),
         );
         const text = "npx skills add acme/kit --skill review";

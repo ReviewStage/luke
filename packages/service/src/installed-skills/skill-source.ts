@@ -16,16 +16,18 @@
  *
  * A preview or an install pins its ref by reading the commit whole from
  * its archive (`repository-archive.ts`), one download whatever the number
- * of skills, and answers every read at that commit from it; a commit
- * GitHub serves no archive of within its bounds is read file by file, one
- * request each, as every read was before.
+ * of skills, and answers every file read at that commit from it; the
+ * commit is still listed from its tree, and a file the archive lacks still
+ * read through the contents API, because an archive leaves out what
+ * `export-ignore` marks. A commit GitHub serves no archive of within its
+ * bounds is read file by file, one request each, as every read was before.
  *
  * Skill folders are found as the `skills` tool finds them in a repository
  * it was not told about (`skill-discovery.ts`), every copy of a name kept
  * for its `SKILL.md` to settle which stands (`skill-paste-install.ts`). The
- * whole commit is listed at once, from its archive or in one tree read,
- * which also gives every file's size, so a folder past a skill's bounds is
- * refused before any of its files is read.
+ * whole tree is listed in one read, which also gives every file's size,
+ * so a folder past a skill's bounds is refused before any of its files is
+ * read.
  *
  * A GitHub that does not answer, or answers past its rate limit, is
  * refused as unanswered; a repository nobody reaches as not reachable.
@@ -249,7 +251,14 @@ function archiveAt(repository: SkillRepository, sha: string): RepositoryArchive 
   return repository.archive?.sha === sha ? repository.archive : undefined;
 }
 
-/** One file of the commit as bytes, from its archive where the repository carries it; nothing where GitHub holds no regular file there or carries no bytes for it. */
+/**
+ * One file of the commit as bytes, from its archive where the repository
+ * carries one holding it, else through the contents API; nothing where
+ * GitHub holds no regular file there or carries no bytes for it. Note that
+ * a file the archive lacks is still asked of GitHub, because an archive
+ * leaves out what the repository's `.gitattributes` marks `export-ignore`,
+ * which the tree still lists.
+ */
 const commitFile = /* @__PURE__ */ Effect.fnUntraced(function* (
   repository: SkillRepository,
   sha: string,
@@ -259,8 +268,8 @@ const commitFile = /* @__PURE__ */ Effect.fnUntraced(function* (
   HostedRefusal,
   HttpClient.HttpClient | DatabaseServices
 > {
-  const archive = archiveAt(repository, sha);
-  if (archive !== undefined) return archive.files.get(path);
+  const archived = archiveAt(repository, sha)?.files.get(path);
+  if (archived !== undefined) return archived;
   const file = yield* onRepository(
     repository,
     readRepositoryFile(repository.bearer, repository, sha, path),
@@ -268,7 +277,12 @@ const commitFile = /* @__PURE__ */ Effect.fnUntraced(function* (
   return file.regular ? file.content : undefined;
 });
 
-/** Every regular file of the commit by its path and size, from its archive or one tree read; none where GitHub names no tree there. */
+/**
+ * Every file of the commit by its path and size, as one read of its tree
+ * lists it, whether or not the commit's archive was read; none where GitHub
+ * names no tree there. Note that the listing is never the archive's, which
+ * leaves out what `export-ignore` marks.
+ */
 const commitFiles = /* @__PURE__ */ Effect.fnUntraced(function* (
   repository: SkillRepository,
   sha: string,
@@ -277,10 +291,6 @@ const commitFiles = /* @__PURE__ */ Effect.fnUntraced(function* (
   HostedRefusal,
   HttpClient.HttpClient | DatabaseServices
 > {
-  const archive = archiveAt(repository, sha);
-  if (archive !== undefined) {
-    return [...archive.files].map(([name, bytes]) => ({ name, size: bytes.byteLength }));
-  }
   // Note that a commit's sha names its tree as a branch's name would, so the listing is of the pinned commit.
   const tree = yield* onRepository(
     repository,
