@@ -1,8 +1,9 @@
-import type { Agent } from "@luke/database/models/agent-store";
+import { type Agent, readTakeoverPilot } from "@luke/database/models/agent-store";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
 import {
   AGENT_BOUNDS,
+  AGENT_KIND,
   AGENT_MESSAGE_LEAD,
   AGENT_STATUS,
   agentMessageReplyLine,
@@ -49,7 +50,9 @@ import { agentLineSender, steerAgent } from "./steer.js";
  * stands in the two transcripts and nowhere else. It reaches any agent of the sender's
  * workspace, on any task, held to what a steer into it is held to; an
  * archived agent, one whose starter has left the workspace, or the sender
- * itself takes none.
+ * itself takes none, but that a message to a pilot a continue took over
+ * reaches the pilot that took over from it, where the agents it started
+ * now report.
  */
 
 /**
@@ -148,6 +151,25 @@ function messageLine(sender: Agent, senderMention: string, text: string): string
   return [head, text, agentMessageReplyLine(sender.id)].join("\n\n");
 }
 
+/**
+ * The agent a message to the target reaches: the target itself where it
+ * stands unarchived, and, for a pilot a continue took over and archived,
+ * the pilot that took over from it (`readTakeoverPilot`), so an agent it
+ * started still reaches its starter by the id it was told; none where no
+ * pilot of the workspace stands unarchived there, or the one that does is
+ * the sender.
+ */
+const receivingAgent = (userId: string, workspaceId: string, target: Agent, senderId: string) =>
+  Effect.gen(function* () {
+    if (target.archivedAt === null) return Option.some(target);
+    if (target.kind !== AGENT_KIND.PILOT) return Option.none<Agent>();
+    const pilot = yield* readTakeoverPilot(userId, target.id);
+    return Option.filter(
+      pilot,
+      (agent) => agent.organizationId === workspaceId && agent.id !== senderId,
+    );
+  });
+
 /** One call of `message_agent`: the words handed to another agent of the caller's workspace, or why nothing was sent. */
 export function runMessageAgent(
   call: AgentCall,
@@ -168,8 +190,9 @@ export function runMessageAgent(
       if (Option.isNone(workspace)) return agentToolRejected(MESSAGE_AGENT_REFUSAL.NO_AGENT);
       const found = yield* workspaceAgent(userId, workspace.value, agentId, sender.id);
       if (Option.isNone(found)) return agentToolRejected(MESSAGE_AGENT_REFUSAL.NO_AGENT);
-      const target = found.value;
-      if (target.archivedAt !== null) return agentToolRejected(MESSAGE_AGENT_REFUSAL.ARCHIVED);
+      const receiving = yield* receivingAgent(userId, workspace.value, found.value, sender.id);
+      if (Option.isNone(receiving)) return agentToolRejected(MESSAGE_AGENT_REFUSAL.ARCHIVED);
+      const target = receiving.value;
       // An agent runs as its starter, so one whose starter left the workspace hears nothing of it.
       if (!(yield* isWorkspaceMember(target.userId, workspace.value))) {
         return agentToolRejected(MESSAGE_AGENT_REFUSAL.STARTER_LEFT);
