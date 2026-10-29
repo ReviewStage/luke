@@ -904,7 +904,7 @@ it.effect(
     Effect.gen(function* () {
       const luke = fakeLuke();
       const { cli, write, run } = yield* launch(SHORT_TURN, luke);
-      yield* write(CONFIG);
+      yield* write({ ...CONFIG, deniedTools: ["Edit"] });
       yield* write(FIRST_MESSAGE);
       yield* Fiber.join(run);
 
@@ -927,7 +927,14 @@ it.effect(
       for (const tool of ["Glob", "Grep", "TaskCreate", "TaskUpdate"]) {
         assert.ok(options.allowedTools?.includes(tool), tool);
       }
-      for (const tool of ["ListAgents", "CronCreate", "PushNotification", "AskUserQuestion"]) {
+      // The built-ins every launch denies, and the one this agent's config denies beside them.
+      for (const tool of [
+        "ListAgents",
+        "CronCreate",
+        "PushNotification",
+        "AskUserQuestion",
+        "Edit",
+      ]) {
         assert.ok(options.disallowedTools?.includes(tool), tool);
       }
       const worker = options.agents?.worker;

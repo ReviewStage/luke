@@ -228,7 +228,7 @@ function queryOptions(
     allowDangerouslySkipPermissions: true,
     includePartialMessages: true,
     allowedTools: [...CLAUDE_CODE_TOOLS.ADDED],
-    disallowedTools: [...CLAUDE_CODE_TOOLS.DENIED],
+    disallowedTools: [...CLAUDE_CODE_TOOLS.DENIED, ...(config.deniedTools ?? [])],
     agents: { [CLAUDE_CODE_WORKER]: WORKER },
     // The CLI's environment is the runner's own and the image's tools'
     // (`SANDBOX_TOOL_ENV`), less the bearer, which only the runner uses; Node

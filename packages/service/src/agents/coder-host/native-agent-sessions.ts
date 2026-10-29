@@ -142,9 +142,11 @@ export function nativeAgentSessionsLayer(
             );
           }
           return Option.some(
-            claudeCodeSessions(optionsFor(account, origin, CODER_HARNESS.CLAUDE_CODE)).pipe(
-              Effect.provideContext(context),
-            ),
+            claudeCodeSessions({
+              ...optionsFor(account, origin, CODER_HARNESS.CLAUDE_CODE),
+              // Every agent has Claude Code's built-in tools as Luke's launch shapes them.
+              deniedTools: () => [],
+            }).pipe(Effect.provideContext(context)),
           );
         },
       };

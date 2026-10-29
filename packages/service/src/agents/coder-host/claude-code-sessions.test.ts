@@ -105,15 +105,9 @@ import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_SNAPSHOT } from "../repository-snapshot.js";
 import { deploymentOidcToken, SESSION_TAG } from "../vercel-sandbox-api.js";
 import { CODER } from "./bounds.js";
-import { claudeCodeSessions } from "./claude-code-sessions.js";
+import { type ClaudeCodeSessionsOptions, claudeCodeSessions } from "./claude-code-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
-import {
-  RUNNER_ENDED,
-  type RunnerSessionsOptions,
-  retireWarmRunner,
-  runnerEnded,
-  runnerIdled,
-} from "./runner-sessions.js";
+import { RUNNER_ENDED, retireWarmRunner, runnerEnded, runnerIdled } from "./runner-sessions.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
 import { agentFailureOf } from "./status.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -236,7 +230,7 @@ const openAgent = Effect.tap(openAgentWithoutPlan, ({ userId }) => savePlan(user
 
 /** The sessions for the account, the next event number read from the counter given. */
 function sessionsFor(userId: string, sequence: { next: number }) {
-  const options: RunnerSessionsOptions = {
+  const options: ClaudeCodeSessionsOptions = {
     userId,
     eventsUrl: EVENTS_URL,
     linesUrl: LINES_URL,
@@ -244,6 +238,7 @@ function sessionsFor(userId: string, sequence: { next: number }) {
     integrations: () => Effect.succeed([LINEAR_SERVER]),
     instructions: () => Effect.succeed(INSTRUCTIONS),
     nextSequence: () => Effect.sync(() => sequence.next),
+    deniedTools: () => [],
   };
   return claudeCodeSessions(options);
 }
@@ -2514,6 +2509,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           integrations: () => Effect.sync(() => handed.servers),
           instructions: () => Effect.succeed(INSTRUCTIONS),
           nextSequence: () => Effect.sync(() => sequence.next),
+          deniedTools: () => [],
         }).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
