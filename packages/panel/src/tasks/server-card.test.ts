@@ -36,7 +36,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -216,7 +216,7 @@ function agentTab(
   messages: readonly AgentTranscriptMessage[],
   agent: AgentSummary,
 ): Promise<HTMLElement> {
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [agent],
     transcripts: pushedTranscripts(() => [
       {

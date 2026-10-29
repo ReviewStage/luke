@@ -1,8 +1,8 @@
 import { CHECK_SUMMARY, type CheckSummary } from "@luke/features/agent-wire";
 import type { TaskPullRequestLine } from "@luke/features/task-wire";
 import { HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
+import { pullRequestNumberLabel, pullRequestStateLabel } from "../tasks/agent-model.js";
 import { LinesChanged } from "../tasks/agent-published.js";
-import { pullRequestNumberLabel, pullRequestStateLabel } from "../tasks/coding-agent-model.js";
 import { OpenedNote } from "../tasks/pull-request-card-notes.js";
 import { PullRequestMark } from "../tasks/pull-request-mark.js";
 import { openerOf } from "../tasks/use-link-standing.js";

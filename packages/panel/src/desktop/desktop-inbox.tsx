@@ -22,6 +22,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { agentName, messageFailureWords } from "../tasks/agent-model.js";
 import {
   ChannelMissing,
   ChannelsNotRead,
@@ -29,7 +30,6 @@ import {
   useChannelHead,
 } from "../tasks/channel-head.js";
 import { CHANNEL_SHOWN, channelShown, generalChannel } from "../tasks/channels-model.js";
-import { agentName, messageFailureWords } from "../tasks/coding-agent-model.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import {
   INBOX_COLUMNS,
@@ -59,6 +59,7 @@ import {
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import {
   openChannelThread,
   useArchivedChannels,
@@ -67,7 +68,6 @@ import {
   useInboxNarrowed,
   useThreadChannel,
 } from "../tasks/use-channels.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { type OpenHere, OpenHereProvider } from "../tasks/use-open-link.js";
@@ -707,7 +707,7 @@ function fileRef(path: string, lines: MentionLines | undefined): CodeRef {
  */
 function answerPlace(
   chosen: InboxListed,
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   tasks: TasksControl,
 ): TasklessPlace | undefined {
   const { holder } = chosen;
@@ -758,7 +758,7 @@ function InboxSidePanel({
   /** The workspace and repository the panel reads a file through where the item's agent is on no task. */
   repositoryPlace: PanelRepositoryPlace | undefined;
   pages: TasksControl["inboxView"]["pages"];
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   views: TabViews;
   /** What the item's box offers an `@`, which the composer of an agent's transcript beside it offers too. */
   mentions: TaskMentionsValue | undefined;

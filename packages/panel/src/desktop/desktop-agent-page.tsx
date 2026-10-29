@@ -41,10 +41,10 @@ import { FindScope } from "../find-in-tab.js";
 import { usePageWorkspace } from "../links-at-hand.js";
 import { MemberDirectory } from "../member-directory.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
+import { agentName } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import { peopleOf } from "../tasks/changes-card.js";
-import { agentName } from "../tasks/coding-agent-model.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
 import {
@@ -56,7 +56,7 @@ import {
 import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
-import { type CodingAgentsControl, useCodingAgents } from "../tasks/use-coding-agents.js";
+import { type AgentsControl, useAgents } from "../tasks/use-agents.js";
 import { WordsWorkspace } from "../tasks/use-link-standing.js";
 import {
   OpenHereProvider,
@@ -108,7 +108,7 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * its transcript, its composer, its model and servers, and what it
  * published, at the document's reading width, each through the same
  * control a plan's agents are driven by, here holding the one agent read by
- * its id (`use-coding-agents.ts`'s `agentId`). ⌘F finds in it as in a
+ * its id (`use-agents.ts`'s `agentId`). ⌘F finds in it as in a
  * plan's column. An `@` in its box offers its repository's files, its
  * skills, and the servers, read through its workspace since no plan names
  * them (`tasklessMentions`), and the workspace's agents, Luke's box among
@@ -193,7 +193,7 @@ function AgentPageBar({
 }: {
   tasks: TasksControl;
   agent: AgentSummary;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   shown: boolean;
   /** The places above the page, an automation's agent's alone: Automations and its automation (`automation-agent-run.tsx`). */
   trail: readonly ToolbarPlace[] | undefined;
@@ -395,7 +395,7 @@ export function DesktopAgentPage({
     setFocus(COLUMN.SIDE);
     sidePanel.onNewTab();
   });
-  const agents = useCodingAgents({
+  const agents = useAgents({
     acts: { act },
     taskId: undefined,
     agentId,

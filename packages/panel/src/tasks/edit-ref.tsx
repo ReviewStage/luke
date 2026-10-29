@@ -20,9 +20,9 @@ import { useMemo } from "react";
 import { ActorRef, LukeCard, PersonCard } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, type GlyphState } from "../state-glyph.js";
+import { agentGlyphState, agentName, providerOf } from "./agent-model.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
-import { agentGlyphState, agentName, providerOf } from "./coding-agent-model.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 
 /**
  * edit-ref.tsx -- who wrote a plan's edit, named on their own face wherever the window says it: the "Edited by" line over the plan, each section's byline, and the task's ⋯ menu.
@@ -48,10 +48,7 @@ const ACTOR_OF_GLYPH = {
 
 /** The task's coding agents, among which an agent's edit is found, and what opens one's tab where the place offers it. */
 export interface EditAgents {
-  readonly control: Pick<
-    CodingAgentsControl,
-    "agents" | "archived" | "models" | "me" | "pullRequests"
-  >;
+  readonly control: Pick<AgentsControl, "agents" | "archived" | "models" | "me" | "pullRequests">;
   readonly onOpen: ((agentId: string) => void) | undefined;
 }
 

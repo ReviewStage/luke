@@ -664,7 +664,7 @@ test("the thread names its agent as one button wherever it does, its message's c
   assert.deepEqual(asked.shownAgents, []);
 });
 
-test("an archived agent is still named by its name, its card saying it was archived, and an agent the plan does not list goes by Coding agent, its card saying it is not found; each opens its tab on its task, which shows the plan where its tab is gone, an agent the task does not list being drawn there alone", async () => {
+test("an archived agent is still named by its name, its card saying it was archived, and an agent the plan does not list goes by Agent, its card saying it is not found; each opens its tab on its task, which shows the plan where its tab is gone, an agent the task does not list being drawn there alone", async () => {
   world.listedAgents = [{ ...AGENT, status: AGENT_STATUS.CANCELLED, archivedAt: 4_000 }];
   let { page, asked } = mount([], { chosen: ON_THRESHOLD });
   await settle();
@@ -686,9 +686,9 @@ test("an archived agent is still named by its name, its card saying it was archi
   await settle();
   [named] = threadRefs(page);
   assert.ok(named, "the thread names an agent the plan does not list");
-  assert.equal(named.textContent, "Coding agent");
+  assert.equal(named.textContent, "Agent");
   reach(named);
-  assert.deepEqual(standingCard(), ["Coding agent", "Not found"]);
+  assert.deepEqual(standingCard(), ["Agent", "Not found"]);
   act(() => named.click());
   // An agent the task does not list, as an archived one, is drawn on its task alone, so its name goes there.
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);

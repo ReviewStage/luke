@@ -11,9 +11,9 @@ import {
   RowHintOptions,
   Tooltip,
 } from "@luke/ui";
-import { agentStillWriting, pullRequestNumberLabel } from "../tasks/coding-agent-model.js";
+import { agentStillWriting, pullRequestNumberLabel } from "../tasks/agent-model.js";
 import { PullRequestMark, pullRequestMarkState } from "../tasks/pull-request-mark.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import type { MainTabsControl } from "../tasks/use-main-tabs.js";
 import { SUMMARY_GLYPH } from "./agent-archive.js";
 import { agentEntries } from "./main-tabs.js";
@@ -120,7 +120,7 @@ export function PlanAgents({
   main,
   onOpenPullRequest,
 }: {
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** What the tabs hold, which each row's card reads as its tab's does. */
   held: HeldTranscripts;
   /** The column's chosen tab, whose agent's card follows its run, and how a tab of the column is opened. */

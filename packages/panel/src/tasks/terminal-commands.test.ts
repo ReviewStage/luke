@@ -23,7 +23,7 @@ import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js"
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
 import type { MainTab } from "./use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel.js";
@@ -142,7 +142,7 @@ async function mount(input: {
       lastTerminal: input.lastTerminal,
       onChoose: (tab) => shown.push(tab),
     },
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: input.agents === undefined ? undefined : [...input.agents],
       agentIds: input.agents?.map((each) => each.id),
       start: {
@@ -264,9 +264,9 @@ test("with no agent on the plan, the picker offers to start one", async () => {
   });
   await task.run(APP_COMMAND.NEW_TERMINAL);
   assert.deepEqual(picker()?.rows, [
-    { name: "Start a coding agent", detail: undefined, working: false, chosen: true },
+    { name: "Start an agent", detail: undefined, working: false, chosen: true },
   ]);
-  await picker()?.choose("Start a coding agent");
+  await picker()?.choose("Start an agent");
   assert.equal(started, 1);
   assert.deepEqual(task.shown, []);
 });
@@ -278,7 +278,7 @@ test("a Start the picker pressed that the service refused says why on the toast,
     started: () => ({ reason: FAILURE_REASON.CHOOSE_REPOSITORY, text: words, taskId: TASK.id }),
   });
   await task.run(APP_COMMAND.NEW_TERMINAL);
-  await picker()?.choose("Start a coding agent");
+  await picker()?.choose("Start an agent");
   await settle();
   const said = document.body.textContent ?? "";
   assert.ok(said.includes(words), "the toast says why");
@@ -440,13 +440,13 @@ test("where no agent can start, the picker says why beside the offer and starts 
   await task.run(APP_COMMAND.NEW_TERMINAL);
   assert.deepEqual(picker()?.rows, [
     {
-      name: "Start a coding agent",
+      name: "Start an agent",
       detail: "Choose a repository",
       working: false,
       chosen: false,
     },
   ]);
-  await picker()?.choose("Start a coding agent");
+  await picker()?.choose("Start an agent");
   assert.equal(started, 0);
 });
 

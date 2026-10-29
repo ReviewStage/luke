@@ -21,7 +21,7 @@ import { handState, signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import type { EditAgents } from "./edit-ref.js";
 import { PlanBody } from "./plan-body.js";
 import type { TaskLooks } from "./use-task-looks.js";
@@ -326,7 +326,7 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
     duringCall: false,
   });
   const agents: EditAgents = {
-    control: codingAgentsControl({ agents: [AGENT] }),
+    control: agentsControl({ agents: [AGENT] }),
     onOpen: (agentId) => opened.push(agentId),
   };
   const view = await draw(byAgent, { readerId: DEAN.userId, agents });
@@ -341,7 +341,7 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
 
   const unlisted = await draw(byAgent, {
     readerId: DEAN.userId,
-    agents: { ...agents, control: codingAgentsControl() },
+    agents: { ...agents, control: agentsControl() },
   });
   assert.equal(unlisted.querySelector(".plan-byline-edited [data-actor-ref]")?.tagName, "SPAN");
 });

@@ -15,7 +15,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ellipsized } from "../testing/action-label.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
@@ -308,7 +308,7 @@ function onTab(
     ...tasks,
     mainTabs: { ...tasks.mainTabs, tabs: [AGENT_TAB], tab },
     sidePanel: { ...tasks.sidePanel, ...sidePanel },
-    agents: codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] }),
+    agents: agentsControl({ agents: [AGENT], agentIds: [AGENT.id] }),
   };
 }
 

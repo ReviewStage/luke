@@ -68,11 +68,7 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useGitHubConnection } from "../github-connect.js";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
 import { useToast, useWithdrawToast } from "../toast.js";
-import {
-  PULL_REQUEST_STATE_LABEL,
-  queuedLabel,
-  REPOSITORY_UNREACHED_NOTE,
-} from "./coding-agent-model.js";
+import { PULL_REQUEST_STATE_LABEL, queuedLabel, REPOSITORY_UNREACHED_NOTE } from "./agent-model.js";
 import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark.js";
 import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js";
 import { useOpenWorkspaceGitHub } from "./repository-remedy.js";

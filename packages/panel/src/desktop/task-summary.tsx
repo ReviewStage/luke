@@ -40,12 +40,12 @@ import {
   useRef,
   useState,
 } from "react";
+import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import { peopleOf } from "../tasks/changes-card.js";
-import { RENAME_FAILED } from "../tasks/coding-agent-model.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
 import { openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { keptFlag, keptKey, useKept } from "../use-kept.js";
@@ -468,7 +468,7 @@ function countedEntry(
 /** `entries` under their headings in their order, each heading only where it has a row. */
 function sectionsOf<Entry extends AddEntry>(
   entries: readonly Entry[],
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
 ): SummarySection<Entry>[] {
   // Coding agents stands while only archived agents are left, so their fold has a heading.
   const archived = (agents.archived?.length ?? 0) > 0;
@@ -564,7 +564,7 @@ function AgentSummaryRow({
 }: {
   entry: SummaryEntry;
   agent: AgentSummary;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   shown: boolean;
   onPick: () => void;
 }) {
@@ -631,7 +631,7 @@ function SummaryList({
   onPicked,
 }: {
   sections: readonly SummarySection[];
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** Whether the summary is on screen, which a row's menu and its question stand on. */
   shown: boolean;
   onPicked?: () => void;
@@ -710,7 +710,7 @@ function SummaryCard({
   id: string;
   from: CardFrom;
   sections: readonly SummarySection[];
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   onDismiss: () => void;
   leaving: boolean;
   /** Hands the card's element to the hold that draws it through its exit. */

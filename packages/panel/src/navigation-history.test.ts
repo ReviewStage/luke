@@ -52,7 +52,7 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platfor
 import { handState } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
-import { codingAgentsControl, tasksControl } from "./testing/tasks-control.js";
+import { agentsControl, tasksControl } from "./testing/tasks-control.js";
 
 /** A place as the window's history holds it. */
 type HeldPlace = ReturnType<
@@ -915,7 +915,7 @@ test("Back's list names a task and its agent's tab by the names they go by now, 
     {
       ...open,
       tasks: [listedTask("Auth refactor")],
-      agents: codingAgentsControl({ agents: [openAgent("Token refresh")] }),
+      agents: agentsControl({ agents: [openAgent("Token refresh")] }),
     },
     memoryHistory(),
     namedAsShown,
@@ -943,7 +943,7 @@ test("Back's list names a renamed agent's tab by its name now beside a page's ta
       ...open,
       sidePanel: { ...open.sidePanel, strip: [page] },
       tasks: [listedTask("Auth refactor")],
-      agents: codingAgentsControl({ agents: [openAgent("Token refresh")] }),
+      agents: agentsControl({ agents: [openAgent("Token refresh")] }),
       pages: [{ id: page.page, title: "Notes", version: 1, at: 1 }],
     },
     memoryHistory(),

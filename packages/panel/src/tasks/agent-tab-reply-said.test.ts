@@ -16,7 +16,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { codingAgentsControl, pushedPage } from "../testing/tasks-control.js";
+import { agentsControl, pushedPage } from "../testing/tasks-control.js";
 import { AgentSubagentTab, AgentTab } from "./agent-tab.js";
 import type { TranscriptFollower } from "./use-agent-transcript.js";
 
@@ -106,7 +106,7 @@ async function runningTab(first: AgentMessagesAnswerView, worker = false, opened
       hear = undefined;
     };
   };
-  const control = codingAgentsControl({ agents: [AGENT], transcripts });
+  const control = agentsControl({ agents: [AGENT], transcripts });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   const registry = AtomRegistry.make();

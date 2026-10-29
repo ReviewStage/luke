@@ -11,7 +11,7 @@ import type { AgentServersControl } from "./agent-servers.js";
  * is the one the list then holds, so the switches read the list back off
  * the agent. A change the service refused is taken off the switches again,
  * which fall back to what the agent holds, and the list says why in a toast
- * (`use-coding-agents.ts`). An answer a later change overtook is let go.
+ * (`use-agents.ts`). An answer a later change overtook is let go.
  * Another agent's tab starts from nothing of this one's.
  */
 

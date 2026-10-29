@@ -8,10 +8,10 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { ARCHIVE_DRAWN } from "../tasks/use-coding-agents.js";
+import { ARCHIVE_DRAWN } from "../tasks/use-agents.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { ArchivedAgents } from "./agent-archive.js";
 
 /**
@@ -42,7 +42,7 @@ afterEach(() => {
 
 /** A summary's Archived fold, its one archived agent drawn over a registry of its own. */
 function drawArchived(): HTMLElement {
-  const agents = codingAgentsControl({
+  const agents = agentsControl({
     archived: [
       {
         id: "agent-8",
@@ -107,7 +107,7 @@ function archivedCardNotes(me: string | undefined, archivedBy: AgentArchivedBy):
   // Note that each draw unfolds Archived afresh, so the fold the last one kept is let go.
   window.localStorage.clear();
   const agents = {
-    ...codingAgentsControl({
+    ...agentsControl({
       archived: [
         {
           id: "agent-8",
@@ -181,7 +181,7 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
     let answer: () => void = () => undefined;
     let unarchives = 0;
     let drawn: string | undefined;
-    const agents = codingAgentsControl({
+    const agents = agentsControl({
       archived: [
         {
           id: "agent-8",

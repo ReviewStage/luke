@@ -58,7 +58,7 @@ import {
   unsearchedModels,
   windowLabel,
   windowOf,
-} from "../tasks/coding-agent-model.js";
+} from "../tasks/agent-model.js";
 import { useRepositoryRemedy } from "../tasks/repository-remedy.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { AgentAuthSection } from "./agent-auth-section.js";
@@ -68,7 +68,7 @@ import { PickerRow } from "./picker-row.js";
 import { SwitchRow } from "./switch-row.js";
 
 /**
- * coding-agents-page.tsx -- Settings › Agents: the one model and effort every agent starts on.
+ * agents-page.tsx -- Settings › Agents: the one model and effort every agent starts on.
  *
  * The page opens on one line of what it is for, then the harnesses' rows,
  * each saying how Claude Code or Codex is connected and opening the dialog
@@ -367,7 +367,7 @@ function DefaultRows({
 }
 
 /** The Default model group: the model, Fast, effort, and context rows, or why they cannot be drawn. */
-function CodingAgentsSection({
+function AgentsSection({
   signedIn,
   ownKeys,
   keysAnswered,
@@ -494,7 +494,7 @@ function CodingAgentsSection({
  * own key, so it reads them from the rows that change them rather than from
  * a read of its own that a save there would leave behind.
  */
-export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX.Element {
+export function AgentsPage({ signedIn }: { signedIn: boolean }): React.JSX.Element {
   const [ownKeys, setOwnKeys] = useState<ReadonlyMap<ModelProvider, ProviderKeyStatus>>();
   const [keysAnswered, setKeysAnswered] = useState(0);
   const onKeys = useCallback((keys: readonly ProviderKeySummary[]) => {
@@ -504,7 +504,7 @@ export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX
   return (
     <>
       <AgentAuthSection signedIn={signedIn} onKeys={onKeys} />
-      <CodingAgentsSection signedIn={signedIn} ownKeys={ownKeys} keysAnswered={keysAnswered} />
+      <AgentsSection signedIn={signedIn} ownKeys={ownKeys} keysAnswered={keysAnswered} />
       <ChaptersModelSection signedIn={signedIn} />
     </>
   );

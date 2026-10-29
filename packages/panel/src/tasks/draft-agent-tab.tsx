@@ -5,14 +5,14 @@ import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation.js";
 import { AgentComposer } from "./agent-composer.js";
+import { agentName, modelLabel } from "./agent-model.js";
 import type { TranscriptCards } from "./agent-tab.js";
 import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { ArchivedComposerNote } from "./archived-note.js";
-import { agentName, modelLabel } from "./coding-agent-model.js";
 import { ForkChip } from "./fork-action.js";
 import { forkChoice, startingWords } from "./fork-model.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
-import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentDraft, AgentsControl } from "./use-agents.js";
 import { WorkingLine } from "./working-time.js";
 
 /**
@@ -54,7 +54,7 @@ import { WorkingLine } from "./working-time.js";
  * not land leaves the line for the note and Retry under the box, the words
  * kept.
  *
- * A draft New task handed over (`use-coding-agents.ts`'s `onHandDraft`)
+ * A draft New task handed over (`use-agents.ts`'s `onHandDraft`)
  * is a task whose agent the service refused as New task started them
  * both: it holds the words, files, and model New task's box held, and why
  * (`refused`), which the tab shows under the box with Retry and what mends
@@ -91,7 +91,7 @@ export function DraftAgentTab({
   cards,
 }: {
   draft: AgentDraft;
-  control: CodingAgentsControl;
+  control: AgentsControl;
   /** The cards a fork's source chip hangs, as its tab's own chip does; none where the place draws none. */
   cards?: TranscriptCards | undefined;
 }): React.JSX.Element {

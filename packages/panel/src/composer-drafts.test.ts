@@ -59,7 +59,7 @@ import { onRegistry } from "./testing/copy-feedback.js";
 import { sidebarProps } from "./testing/desktop-sidebar.js";
 import { followedInboxes } from "./testing/followed-inboxes.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "./testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "./testing/tasks-control.js";
 
 /**
  * A draft as the developer meets it: words typed in one task's agent's box
@@ -185,7 +185,7 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
         tab: onTask ? undefined : agentTab,
         openAgents: [open.agent.id],
       },
-      agents: codingAgentsControl({
+      agents: agentsControl({
         agents: [open.agent],
         agentIds: [open.agent.id],
         onMessage: (agentId, text, clientKey, attachments) =>
@@ -649,7 +649,7 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
       tab: pin.tab,
       openAgents: [open.agent.id],
     },
-    agents: codingAgentsControl({ agents: [open.agent], agentIds: [open.agent.id] }),
+    agents: agentsControl({ agents: [open.agent], agentIds: [open.agent.id] }),
   });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -802,7 +802,7 @@ async function columnOn(
     },
     ...(side === undefined ? undefined : { sidePanel: inboxPanel(side) }),
     agents: {
-      ...codingAgentsControl({
+      ...agentsControl({
         agents: [agent],
         agentIds: [agent.id],
         inboxFollower: followedInboxes(() => ({ items: [approval(1)] })).follower,
@@ -988,7 +988,7 @@ async function inboxOn(item: InboxItem) {
     activeTaskId: INVITES.plan.id,
     region: { kind: DOCUMENT_REGION.READY, task: INVITES.plan },
     sidePanel: inboxPanel(SIDE_PANEL_TAB.INBOX),
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: [INVITES.agent],
       agentIds: [INVITES.agent.id],
       inboxFollower: main.follower,

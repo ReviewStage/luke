@@ -34,7 +34,7 @@ import {
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
@@ -180,7 +180,7 @@ async function drawnFor(
             : { status: FAKE_ANSWER.REFUSED, reason: "Not here." },
       ),
   });
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [agent],
     me: reader,
     transcripts: pushedTranscripts(() => [

@@ -156,6 +156,7 @@ import {
   useAgentRead,
   useChangesReads,
 } from "./agent-changes-tab.js";
+import { agentStillWriting, pullRequestNumberLabel } from "./agent-model.js";
 import {
   ANNOTATION_TONE,
   AnnotationCard,
@@ -166,7 +167,6 @@ import {
 } from "./annotation-card.js";
 import { threadPreview } from "./changes-model.js";
 import { type ChaptersRead, chaptersCount, useChaptersRead } from "./chapters-read.js";
-import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model.js";
 import {
   type ConversationFilters,
   type ConversationFiltersControl,
@@ -232,7 +232,7 @@ import {
 } from "./thread-reveal.js";
 import { type GitHubPictureDrawer, GitHubWords, TranscriptWords } from "./transcript-blocks.js";
 import { usePushedLineMoved } from "./use-agent-pull-request.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import {
   linkPressOf,
   type OpenHere,
@@ -2604,7 +2604,7 @@ interface AgentPullRequestTabProps {
   agentId: string;
   /** The pull request of the agent's repository the tab shows by its number, where it is not the one from the agent's branch (`pull-request-number.ts`); none shows the agent's own. */
   number?: number | undefined;
-  control: CodingAgentsControl;
+  control: AgentsControl;
   /** Whether the panel is on screen, which is when the tab reads. */
   shown: boolean;
   /** The plan's repository, whose files a gap between a diff's hunks is read from; none opens no gap. */

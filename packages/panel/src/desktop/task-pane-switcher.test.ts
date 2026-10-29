@@ -18,7 +18,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 import { TASK_PANE, taskPaneOf } from "./task-pane-switcher.js";
 
@@ -176,7 +176,7 @@ function mount(
                         tab: { agent: AGENT.id },
                         openAgents: [AGENT.id],
                       },
-                      agents: codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] }),
+                      agents: agentsControl({ agents: [AGENT], agentIds: [AGENT.id] }),
                     }
                   : undefined),
                 sidePanel: {

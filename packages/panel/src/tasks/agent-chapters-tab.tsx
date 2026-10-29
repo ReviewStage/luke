@@ -117,7 +117,7 @@ import type { ChaptersRead } from "./chapters-read.js";
 import { drawnIn, useFloatsOver } from "./drawn-in.js";
 import type { TreeShown } from "./file-view.js";
 import { TranscriptWords } from "./transcript-blocks.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 
 /**
  * agent-chapters-tab.tsx -- the Chapters view of an agent's Pull request tab (`agent-pull-request-tab.tsx`): its pull request's diff told as chapters to review in order, each read as its title, risk, and summary over its own hunks, drawn by Files changed's own list.
@@ -698,7 +698,7 @@ function ChaptersReading({
   lineComments,
 }: {
   agentId: string;
-  control: CodingAgentsControl;
+  control: AgentsControl;
   shown: boolean;
   repository: string | null;
   tree: TreeShown;
@@ -1083,7 +1083,7 @@ export function AgentChaptersTab({
   lineComments,
 }: {
   agentId: string;
-  control: CodingAgentsControl;
+  control: AgentsControl;
   /** Whether the view is on screen, which is when its time counts and its keys' sheet stands. */
   shown: boolean;
   repository: string | null;

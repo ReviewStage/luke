@@ -68,7 +68,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import type { ChangesReads, ChangesThreads } from "./agent-changes-tab.js";
@@ -151,7 +151,7 @@ let viewedReads = 0;
 /** What the next read of the marks waits on, where a test holds it; none answers at once. */
 let viewedHeld: Promise<void> | undefined;
 
-const control = codingAgentsControl({
+const control = agentsControl({
   agents: [AGENT],
   agentIds: [AGENT.id],
   models: [],
@@ -2283,7 +2283,7 @@ test("no file is read whole for an agent on no task, a head not named, or a task
     undefined,
     "another repository",
   );
-  const taskless = codingAgentsControl({
+  const taskless = agentsControl({
     agents: [{ ...AGENT, planId: null }],
     agentIds: [AGENT.id],
     models: [],

@@ -32,7 +32,7 @@ import {
   useInboxDrafts,
   withoutPicks,
 } from "../composer-drafts.js";
-import { messageFailureWords } from "./coding-agent-model.js";
+import { messageFailureWords } from "./agent-model.js";
 import { useInboxArrivals } from "./inbox-arrivals.js";
 import {
   awaitsNod,

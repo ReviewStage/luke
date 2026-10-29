@@ -18,12 +18,12 @@ import type { ActHandle } from "../act.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import {
+  type AgentsControl,
   ARCHIVE_DRAWN,
-  type CodingAgentsControl,
   MODELS_READ,
-  useCodingAgents,
+  useAgents,
   withPendingAgents,
-} from "./use-coding-agents.js";
+} from "./use-agents.js";
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -87,12 +87,12 @@ function mount(
   type Queued = WireBoundaryInput | Promise<WireBoundaryInput>;
   const answers = new Map<AnyKind, Queued[]>();
   let keys = 0;
-  let control: CodingAgentsControl | undefined;
+  let control: AgentsControl | undefined;
   let restand: ((next: Standing) => void) | undefined;
   function Probe() {
     const [held, setHeld] = useState(initial);
     restand = setHeld;
-    control = useCodingAgents({
+    control = useAgents({
       acts: {
         // SAFETY: the test scripts each kind's answer in that kind's own shape, whichever side carries it.
         act: ((kind: AnyKind, ...[payload]: WireBoundaryInput[]): Promise<WireBoundaryInput> => {
@@ -1300,7 +1300,7 @@ test("a delete that landed takes the agent out of the list, and a read already o
   tab.answer(ACT_KIND.AGENTS_DELETE, { deleted: true });
   await tab.mount();
 
-  let result: Awaited<ReturnType<CodingAgentsControl["onDelete"]>> | undefined;
+  let result: Awaited<ReturnType<AgentsControl["onDelete"]>> | undefined;
   await act(async () => {
     result = await tab.control().onDelete(AGENT);
   });

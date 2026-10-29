@@ -173,7 +173,7 @@ const WORKSPACE_STATS: readonly StatSpec<AdminWorkspaceList>[] = [
     value: ({ summary }) => formatCount(summary.sharedActiveWeek),
     hint: ({ summary }) =>
       `${formatPercent(summary.shared === 0 ? null : summary.sharedActiveWeek / summary.shared)} of shared`,
-    title: () => "A task or coding agent started, or a plan revised, in the last 7 UTC days",
+    title: () => "A task or agent started, or a plan revised, in the last 7 UTC days",
   },
   {
     key: "invites",

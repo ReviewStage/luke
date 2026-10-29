@@ -38,7 +38,7 @@ import { CircleXIcon, GitMergeIcon, TriangleAlertIcon, UserRoundIcon } from "luc
 import { type ReactNode, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { keptKey, useKept } from "../use-kept.js";
-import { queuedLabel } from "./coding-agent-model.js";
+import { queuedLabel } from "./agent-model.js";
 import { type PullRequestWrites, QUEUE_WARNING } from "./pull-request-writes.js";
 
 /**

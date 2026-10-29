@@ -54,9 +54,9 @@ import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { AgentPullRequestTab } from "./agent-pull-request-tab.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
 
 /**
@@ -326,15 +326,15 @@ afterEach(() => {
 
 /** How a test's control answers: the chapters' read and Generate, and the member's viewed marks. */
 interface Answers {
-  readonly readChapters?: CodingAgentsControl["readChapters"];
-  readonly generateChapters?: CodingAgentsControl["generateChapters"];
+  readonly readChapters?: AgentsControl["readChapters"];
+  readonly generateChapters?: AgentsControl["generateChapters"];
   /** The files marked viewed on GitHub; the marks are unread where none are named. */
   readonly viewed?: readonly string[];
 }
 
 /** The agent's control, its overview, files, and chapters answering as given. */
-function controlAnswering(answers: Answers): CodingAgentsControl {
-  return codingAgentsControl({
+function controlAnswering(answers: Answers): AgentsControl {
+  return agentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
     models: [],
@@ -377,7 +377,7 @@ function controlAnswering(answers: Answers): CodingAgentsControl {
 }
 
 /** The tab, holding the view its row chooses as the side panel does. */
-function Switching({ control, first }: { control: CodingAgentsControl; first: PullRequestView }) {
+function Switching({ control, first }: { control: AgentsControl; first: PullRequestView }) {
   const [view, setView] = useState<PullRequestView>(first);
   return createElement(AgentPullRequestTab, {
     agentId: AGENT.id,
@@ -398,7 +398,7 @@ async function settle(): Promise<void> {
 }
 
 /** Draws the agent's tab on its Chapters view, its reads landed. */
-async function draw(control: CodingAgentsControl): Promise<HTMLElement> {
+async function draw(control: AgentsControl): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   const tab = createElement(Switching, { control, first: PULL_REQUEST_VIEW.CHAPTERS });
@@ -635,7 +635,7 @@ function readyChapters(headSha: string): Extract<PullRequestChaptersState, { mod
   return chapters.status === PULL_REQUEST_CHAPTERS_STATE.READY ? chapters : assert.fail("ready");
 }
 
-function madeBy(model: string, headSha = HEAD): CodingAgentsControl {
+function madeBy(model: string, headSha = HEAD): AgentsControl {
   return controlAnswering({
     readChapters: () => Promise.resolve(answering({ ...readyChapters(headSha), model })),
   });

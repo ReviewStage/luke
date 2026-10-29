@@ -56,7 +56,7 @@ import {
   unreadOpeningLine,
   unreadSentLines,
   withAgentRun,
-} from "./coding-agent-model.js";
+} from "./agent-model.js";
 
 test("a model is named by the catalog where it has been read, else by its own id made readable, either way without Claude before its name", () => {
   const models = [

@@ -58,7 +58,7 @@ import { relayout } from "../testing/resize-observer.js";
 import { ToastHost } from "../toast.js";
 import "../file-tree/index.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
 const TASK: Task = {
@@ -138,7 +138,7 @@ test("a task with no agent tab draws a new agent's draft and no pane of start bu
             tabs: [{ draft: DRAFT_ID }],
             tab: { draft: DRAFT_ID },
           },
-          agents: codingAgentsControl({
+          agents: agentsControl({
             agentIds: [],
             draft: {
               id: DRAFT_ID,
@@ -218,7 +218,7 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
               strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
               tab: SIDE_PANEL_TAB.INBOX,
             },
-            agents: codingAgentsControl({
+            agents: agentsControl({
               agentIds: [agentId],
               inboxFollower: followedInboxes(() => ({ items: [] })).follower,
             }),
@@ -347,7 +347,7 @@ async function narrowTaskInbox(
               tab: SIDE_PANEL_TAB.INBOX,
             },
             me: reader.me,
-            agents: codingAgentsControl({
+            agents: agentsControl({
               agentIds: ["8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"],
               ...(reader.answerInbox === undefined
                 ? undefined
@@ -866,7 +866,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
               onPullRequestView: (tab, view) => opened.push({ agentId: tab.changes, view }),
               onPreview: (tab) => opened.push(tab),
             },
-            agents: codingAgentsControl({
+            agents: agentsControl({
               agents: [agent],
               archived: [archived],
               agentIds: [agent.id],

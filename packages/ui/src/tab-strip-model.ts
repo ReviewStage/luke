@@ -35,7 +35,7 @@ export const TAB_WORDS = {
   INBOX: "Inbox",
   THREAD: "Thread",
   NEW_AGENT: "New agent",
-  CODING_AGENT: "Coding agent",
+  AGENT: "Agent",
   PULL_REQUEST: "Pull request",
   TERMINAL: "Terminal",
   MAC_TERMINAL: "This Mac",

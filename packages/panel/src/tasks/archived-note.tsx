@@ -9,7 +9,7 @@ import {
 } from "@luke/ui";
 import { useState } from "react";
 import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
-import type { ArchivedByReading } from "./coding-agent-model.js";
+import type { ArchivedByReading } from "./agent-model.js";
 
 /**
  * archived-note.tsx -- what stands in a composer's place while the agent it writes to is archived.

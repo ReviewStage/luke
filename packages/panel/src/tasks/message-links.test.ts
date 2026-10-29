@@ -17,7 +17,7 @@ import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { AgentTab } from "./agent-tab.js";
@@ -88,7 +88,7 @@ async function drawn(
   const revealed: number[] = [];
   const registry = AtomRegistry.make();
   // Note that the transcript ends on a page with nothing on it, as an ended agent's does.
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [agent],
     transcripts: pushedTranscripts(
       () =>

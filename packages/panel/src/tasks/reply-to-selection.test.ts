@@ -27,7 +27,7 @@ import {
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentComposer } from "./agent-composer.js";
 import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab.js";
 import { ReplyToSelection } from "./reply-to-selection.js";
@@ -381,7 +381,7 @@ const AGENT: AgentSummary = {
 
 test("on the agent's tab, Reply quotes its words into the tab's own box, and stands while a message is out, since the box takes words", async () => {
   const sent: string[] = [];
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [AGENT],
     // The transcript ends on a page with nothing on it, as an ended agent's does.
     transcripts: pushedTranscripts(() => [

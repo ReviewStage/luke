@@ -17,7 +17,7 @@ import {
   SENT_LINE_STATE,
   type SentLine,
   unreadSentLines,
-} from "./coding-agent-model.js";
+} from "./agent-model.js";
 
 /**
  * use-agent-composer.ts -- the message box under an agent's transcript as one control: the words being written, the messages on their way, why the last one did not go, and the lines sent that the transcript has not read back.

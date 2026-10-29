@@ -15,7 +15,7 @@ import { afterEach, beforeAll, test, vi } from "vitest";
 import { ChangesTabReading } from "../testing/changes-tab.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 
 /**
  * The side panel's Changes tab at its narrowest, 280px, where it has no room
@@ -73,7 +73,7 @@ function unmountTabs(): void {
 
 /** An agent's Changes tab over its pull request's one file, a line removed and two added, with the tree beside every Changes tab held open as the panel holds it. */
 function drawChangesTab(): Promise<HTMLElement> {
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
     models: [],

@@ -38,7 +38,7 @@ import {
   unsearchedModels,
   windowLabel,
   windowOf,
-} from "./coding-agent-model.js";
+} from "./agent-model.js";
 import { useRepositoryRemedy } from "./repository-remedy.js";
 
 /**

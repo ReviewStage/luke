@@ -377,7 +377,7 @@ test("a mention of an agent the window lists not, laid in a message box as an In
         agentOf: () => ({
           actor: {
             kind: ACTOR_KIND.AGENT,
-            name: "Coding agent",
+            name: "Agent",
             provider: undefined,
             state: ACTOR_STATE.REST,
           },
@@ -410,7 +410,7 @@ test("a mention of its own task's agent whose tile the page knows no harness of 
         agentOf: () => ({
           actor: {
             kind: ACTOR_KIND.AGENT,
-            name: "Coding agent",
+            name: "Agent",
             provider: undefined,
             state: ACTOR_STATE.REST,
           },

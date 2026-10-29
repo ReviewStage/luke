@@ -89,6 +89,12 @@ import { panelTabPlace } from "../links-at-hand.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { centreWithin } from "../scroll-within.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
+import {
+  agentGlyphState,
+  agentName,
+  agentStateWords,
+  subagentActor,
+} from "../tasks/agent-model.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab.js";
 import {
@@ -112,12 +118,6 @@ import {
   useCloudBrowserDrafts,
   useCloudBrowserTabs,
 } from "../tasks/cloud-browser-tabs.js";
-import {
-  agentGlyphState,
-  agentName,
-  agentStateWords,
-  subagentActor,
-} from "../tasks/coding-agent-model.js";
 import { FileView, type TreeShown } from "../tasks/file-view.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
 import {
@@ -147,7 +147,7 @@ import {
   TRANSCRIPT_COPY,
   type TranscriptCopy,
 } from "../tasks/transcript-copy.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import { PullRequestsOnGitHub } from "../tasks/use-open-link.js";
 import {
   type DrawnTabs,
@@ -334,7 +334,7 @@ export function offeredPanelKinds(
 
 /** Whether a task's panel offers its Inbox: it holds an agent, an archived one among them, or already holds the tab, since only an agent posts. */
 export function inboxOffered(
-  agents: Pick<CodingAgentsControl, "heldIds">,
+  agents: Pick<AgentsControl, "heldIds">,
   panel: Pick<SidePanelControl, "tabs">,
 ): boolean {
   return (agents.heldIds?.length ?? 0) > 0 || panel.tabs.includes(SIDE_PANEL_TAB.INBOX);
@@ -456,7 +456,7 @@ const NO_OPEN_CHANGES: readonly ChangesStripTab[] = [];
  * agent is archived.
  */
 function everyTaskAgent(
-  agents: Pick<CodingAgentsControl, "agents" | "archived">,
+  agents: Pick<AgentsControl, "agents" | "archived">,
 ): readonly AgentSummary[] {
   const listed = agents.agents ?? [];
   // Note that an agent's own page lists its agent among `agents` archived or not, so each is taken once.
@@ -476,7 +476,7 @@ function everyTaskAgent(
  * and its tab be opened before an earlier one shares it.
  */
 function changesAgentOf(
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   agentId: string,
   open: readonly ChangesStripTab[],
 ): string {
@@ -502,7 +502,7 @@ function changesAgentOf(
  * same files. `open` is the Changes tabs open on the task.
  */
 export function changesOffers(
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   open: readonly ChangesStripTab[] = NO_OPEN_CHANGES,
 ): readonly ChangesOffer[] {
   const offered = new Set<string>();
@@ -527,7 +527,7 @@ export function changesOffers(
  * agent's read landed first. `open` is the Changes tabs open on the task.
  */
 export function changesTabOf(
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   agentId: string,
   open: readonly ChangesStripTab[],
   number?: number,
@@ -547,7 +547,7 @@ export function changesTabOf(
  */
 export function showPullRequest(
   panel: Pick<SidePanelControl, "changes" | "onPreview" | "onPullRequestView">,
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   agentId: string,
   view: PullRequestView,
   number?: number,
@@ -564,7 +564,7 @@ export function showPullRequest(
  * theirs themselves, hand none.
  */
 export interface PanelCards {
-  readonly agents: CodingAgentsControl;
+  readonly agents: AgentsControl;
   readonly held: HeldTranscripts;
   /** The open plan, or the agent on no task, whose pages a page row's card previews. */
   readonly pagePlace: PagePlace;
@@ -768,7 +768,7 @@ export function panelOffers(input: {
   holder: SidePanelHolder;
   taskId: string;
   panel: SidePanelControl;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   pages: readonly PageLine[];
   /** Adds a shell to an agent's sandbox; none where the platform runs no terminals. */
   onNewTerminal: ((agentId: string) => void) | undefined;
@@ -833,7 +833,7 @@ function planOf(input: {
 }
 
 /** A Pull request tab's look, named by its pull request's number and title as the task's agents last read it, wearing its mark for where it stands. */
-function changesLook(tab: ChangesStripTab, agents: CodingAgentsControl): KindLook {
+function changesLook(tab: ChangesStripTab, agents: AgentsControl): KindLook {
   return tabLook({ kind: TAB_KIND.CHANGES, pullRequest: pullRequestOfTab(agents, tab) });
 }
 
@@ -842,7 +842,7 @@ function changesLook(tab: ChangesStripTab, agents: CodingAgentsControl): KindLoo
  * would open its Terminal tab from the panel's own tab (`terminal-entry.ts`).
  */
 function terminalOffers(
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   panel: Pick<SidePanelControl, "tab" | "lastTerminal">,
 ): readonly TerminalOffer[] {
   const listed = agents.agents ?? [];
@@ -886,7 +886,7 @@ export interface DrawnTab {
 function stripTabs(input: {
   panel: SidePanelControl;
   unread: readonly StripTab[];
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   subagents: readonly DrawnSubagent[];
   files: readonly OpenFile[];
   changes: readonly ChangesStripTab[];
@@ -1177,7 +1177,7 @@ function PanelTabs({
   /** Whether the panel offers its keys: on screen, not on its way out, and holding the window's focus. */
   keys: boolean;
   unread: readonly StripTab[];
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** The open subagent tabs the task draws, in the strip's order. */
   subagents: readonly DrawnSubagent[];
   /** The open file tabs, in the strip's order. */
@@ -1592,7 +1592,7 @@ interface DelegationChoices {
 function delegationChoices(
   delegation: NonNullable<SubagentStripTab["delegation"]>,
   subagent: string,
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   held: HeldTranscripts,
 ): DelegationChoices {
   const parent = agents.agents?.find((agent) => agent.id === delegation.agent);
@@ -1609,7 +1609,7 @@ function delegationChoices(
  */
 function subagentCardReading(
   drawn: DrawnSubagent,
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   held: HeldTranscripts,
   chosen: boolean,
 ): () => CardReading {
@@ -1680,7 +1680,7 @@ export interface TaskCards {
  * it opens, so a kind added to `TOOL_TARGET` is a choice made here.
  */
 export function taskCards(input: {
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   held: HeldTranscripts;
   chosen: (tab: StripTab) => boolean;
   /** What the transcript stands on, its task or its agent on no task, which a page's row reads its card from and a plan's row names; none where its rows open neither. */
@@ -1756,7 +1756,7 @@ export function taskCards(input: {
 }
 
 /** An agent on the task as its tab names it; none for an agent the task does not list. */
-function taskAgentLabel(agents: CodingAgentsControl, agentId: string): string | undefined {
+function taskAgentLabel(agents: AgentsControl, agentId: string): string | undefined {
   const agent = agents.agents?.find((each) => each.id === agentId);
   return agent === undefined ? undefined : agentName(agent, agents.models);
 }
@@ -1808,7 +1808,7 @@ function TabContent({
   files: readonly OpenFile[];
   /** The plan's pages, which a page's tab draws its newest version of. */
   pages: readonly PageLine[];
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   standings: WorkerStandings;
   /** Whether the panel is on screen, so a subagent's tab knows to follow its transcript. */
   shown: boolean;
@@ -2292,7 +2292,7 @@ export function SidePanel({
   repositoryPlace?: PanelRepositoryPlace | undefined;
   /** The pages agents wrote for the plan, each by its newest version; none where it has none. */
   pages: readonly PageLine[] | undefined;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** The task's agents whose tabs stand open in the task's column, whose workers' tabs stand here; nothing while unread. */
   openAgents: readonly string[] | undefined;
   /** The agent whose tab follows its run in the plan's column, whose card previews its latest step (`followedAgent`); none while another tab is shown or the column is out of sight. */
@@ -2498,7 +2498,7 @@ export function SidePanel({
     tab === undefined
       ? undefined
       : isTranscriptTab(tab)
-        ? (taskAgentLabel(agents, tab.transcript) ?? TAB_WORDS.CODING_AGENT)
+        ? (taskAgentLabel(agents, tab.transcript) ?? TAB_WORDS.AGENT)
         : isSubagentTab(tab)
           ? subagents.find((each) => sameTab(each.tab, tab))?.label
           : isFileTab(tab)

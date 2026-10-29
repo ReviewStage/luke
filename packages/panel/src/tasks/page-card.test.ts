@@ -68,7 +68,7 @@ test("a version written while the card stands is hidden until it loads, never th
   assert.equal(preview()?.dataset.loaded, "true");
 });
 
-test("the head says who showed the version beside it, wherever the card hangs: Luke, an agent by the name the window holds, or a coding agent it holds none of, and nothing for a version from before", () => {
+test("the head says who showed the version beside it, wherever the card hangs: Luke, an agent by the name the window holds, or an agent it holds none of, and nothing for a version from before", () => {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -91,11 +91,6 @@ test("the head says who showed the version beside it, wherever the card hangs: L
       }),
       subOf(FUNNEL),
     ],
-    [
-      "Version 2 · Shown by Luke",
-      "Shown by Luke",
-      "Version 2 · Shown by a coding agent",
-      "Version 2",
-    ],
+    ["Version 2 · Shown by Luke", "Shown by Luke", "Version 2 · Shown by an agent", "Version 2"],
   );
 });

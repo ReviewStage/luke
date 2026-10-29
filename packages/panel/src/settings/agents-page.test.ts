@@ -31,7 +31,7 @@ import {
 } from "../testing/segmented.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
-import { CodingAgentsPage } from "./coding-agents-page.js";
+import { AgentsPage } from "./agents-page.js";
 
 /**
  * Settings › Coding agents' Default model over a bridge answering as the host
@@ -174,7 +174,7 @@ async function mount(): Promise<HTMLElement> {
         createElement(
           Fragment,
           null,
-          createElement(CodingAgentsPage, { signedIn: true }),
+          createElement(AgentsPage, { signedIn: true }),
           onRegistry(rendererRegistry, createElement(ToastHost)),
         ),
       ),
@@ -230,7 +230,7 @@ test("while the default and the keys are read, placeholder rows stand in each gr
   document.body.append(page);
   const root = createRoot(page);
   roots.push(root);
-  act(() => root.render(createElement(CodingAgentsPage, { signedIn: true })));
+  act(() => root.render(createElement(AgentsPage, { signedIn: true })));
 
   assert.deepEqual(placeholders(page), [
     ["Reading your keys", 2],

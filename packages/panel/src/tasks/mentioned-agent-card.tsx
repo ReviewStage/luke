@@ -16,7 +16,7 @@ import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { pullRequestAsked } from "./pull-request-number.js";
 import { TAB_KIND } from "./tab-look.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import { useKnownNames } from "./use-known-names.js";
 import { useOpenPlace } from "./use-open-link.js";
 
@@ -82,7 +82,7 @@ const UNREAD = undefined;
 type AgentsRead = readonly AgentSummary[] | typeof UNREAD;
 
 /** No pull request of another task's agents is held here. */
-const NO_PULL_REQUESTS: CodingAgentsControl["pullRequests"] = new Map();
+const NO_PULL_REQUESTS: AgentsControl["pullRequests"] = new Map();
 
 /** The agents one task holds, archived ones among them, as the service answered; nothing where it refused. */
 function taskAgents(taskId: string): Effect.Effect<AgentsRead> {

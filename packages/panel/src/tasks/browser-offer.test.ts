@@ -16,7 +16,7 @@ import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel.js";
 import { NO_LOOKS } from "./use-task-looks.js";
 
@@ -118,7 +118,7 @@ async function mount(
       },
       ...(strip === undefined ? undefined : { strip }),
     },
-    agents: codingAgentsControl({ agents, agentIds: agents.map((agent) => agent.id) }),
+    agents: agentsControl({ agents, agentIds: agents.map((agent) => agent.id) }),
   });
   act(() =>
     root.render(

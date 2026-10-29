@@ -27,7 +27,7 @@ import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { ChipCards } from "./chip-cards.js";
@@ -191,12 +191,12 @@ const SENT_CALLS: readonly {
 ];
 
 for (const call of SENT_CALLS) {
-  test(`${call.name}: its row folds what was sent open, and its chip, named as a coding agent where the place knows no name, opens the agent`, () => {
+  test(`${call.name}: its row folds what was sent open, and its chip, named as an agent where the place knows no name, opens the agent`, () => {
     const { container, opened } = drawn(assistant([toolPart(call.tool, call.input, call.output)]));
     const row = container.querySelector<HTMLElement>(`[data-call-id="call-${call.tool}"] summary`);
     assert.ok(row, "the row is a fold's line");
     const chip = row.querySelector<HTMLButtonElement>("button[data-tool-agent-ref]");
-    assert.equal(chip?.textContent, "Coding agent");
+    assert.equal(chip?.textContent, "Agent");
     assert.equal(container.querySelector("[data-opens]"), null, "no row is a button that opens");
     act(() => chip?.click());
     assert.deepEqual(opened, [call.target], "the chip opens the agent");
@@ -433,7 +433,7 @@ function cardOn(row: HTMLElement | null): readonly (string | boolean | null | un
 }
 
 test("in an agent's transcript, a call about an agent hangs that agent's tab's card, archived or not found as well, and a delegation's row its worker's", () => {
-  const agents = codingAgentsControl({
+  const agents = agentsControl({
     agents: [listedAgent("agent-7", "Invoice export")],
     archived: [
       listedAgent("agent-8", "Retry audit", {
@@ -491,13 +491,13 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
   const [archived, corner] = cardOn(row("read_coding_agent"));
   assert.equal(archived, "Retry audit");
   assert.match(String(corner), /^Archived · /u);
-  assert.deepEqual(cardOn(chip("start_coding_agent")), ["Coding agent", "Not found", false]);
+  assert.deepEqual(cardOn(chip("start_coding_agent")), ["Agent", "Not found", false]);
   assert.deepEqual(cardOn(row("delegate")), ["Audit the retry paths", undefined, true]);
 });
 
 test("in an agent's transcript, a call that folds open in place still hangs its agent's tab's card from the agent's chip", () => {
   const cards = taskCards({
-    agents: codingAgentsControl({ agents: [listedAgent("agent-7", "Invoice export")] }),
+    agents: agentsControl({ agents: [listedAgent("agent-7", "Invoice export")] }),
     held: NOTHING_HELD,
     chosen: () => false,
     pages: undefined,
@@ -543,7 +543,7 @@ test("in an agent's transcript, a call that folds open in place still hangs its 
 });
 
 test("a call about an agent names it by its chip in the place of the words, as its tab names it or its answer does, wearing the harness its answer's model runs in, a chip that opens the agent on a row that folds what was sent and is no target of its own on a row that opens it", () => {
-  const agents = codingAgentsControl({ agents: [listedAgent("agent-7", "Invoice export")] });
+  const agents = agentsControl({ agents: [listedAgent("agent-7", "Invoice export")] });
   const cards = taskCards({
     agents,
     held: NOTHING_HELD,
@@ -605,7 +605,7 @@ test("a call about an agent names it by its chip in the place of the words, as i
     "an agent the plan lists not wears the harness its answer's model runs in, Codex's here",
   );
   assert.equal(chip("start_agent"), undefined, "a start that names no agent yet keeps its words");
-  assert.equal(said("start_agent"), "Started a coding agent Ship the invoice export");
+  assert.equal(said("start_agent"), "Started an agent Ship the invoice export");
   const row = line("message_agent");
   assert.ok(row, "the message's row is drawn");
   act(() => row.querySelector<HTMLElement>("button[data-tool-agent-ref]")?.click());
@@ -764,7 +764,7 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
   });
   fakeAppPlatform({ ...QUIET_PANEL, pageFrameUrl });
   const cards = taskCards({
-    agents: codingAgentsControl({}),
+    agents: agentsControl({}),
     held: NOTHING_HELD,
     chosen: () => false,
     pages: { taskId },
@@ -830,7 +830,7 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
 
 test("a call about the plan or another task hangs that task's card as its Plan tab and sidebar row do, and a task the window lists not its name as the row says it", () => {
   const cards = taskCards({
-    agents: codingAgentsControl({}),
+    agents: agentsControl({}),
     held: NOTHING_HELD,
     chosen: () => false,
     pages: { taskId: "task-invoices" },

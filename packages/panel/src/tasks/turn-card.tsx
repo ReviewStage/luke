@@ -9,7 +9,7 @@ import { formatCount } from "@luke/features/number-format";
 import { spanText } from "@luke/features/time-format";
 import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule } from "@luke/ui";
 import { HarnessMark } from "../harness-marks.js";
-import { providerOf } from "./coding-agent-model.js";
+import { providerOf } from "./agent-model.js";
 import { ModelLabel } from "./model-label.js";
 
 /**

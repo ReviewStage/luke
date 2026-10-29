@@ -24,7 +24,7 @@ import {
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 
 /**
@@ -108,7 +108,7 @@ async function settle(): Promise<void> {
 async function drawnTab(holdSends = false) {
   fakeAppBridge({});
   const calls: string[] = [];
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [AGENT_SUMMARY],
     onRewind: (_agentId, messageId) => {
       calls.push(`rewind:${messageId}`);

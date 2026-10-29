@@ -27,7 +27,7 @@ import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-plat
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { CodingAgentsPage } from "./coding-agents-page.js";
+import { AgentsPage } from "./agents-page.js";
 
 /**
  * Settings › Agents' harnesses over a bridge answering as the service would:
@@ -171,9 +171,7 @@ async function mount(
   const root = createRoot(container);
   roots.push(root);
   act(() =>
-    root.render(
-      onRegistry(AtomRegistry.make(), createElement(CodingAgentsPage, { signedIn: true })),
-    ),
+    root.render(onRegistry(AtomRegistry.make(), createElement(AgentsPage, { signedIn: true }))),
   );
   await settle();
   return container;

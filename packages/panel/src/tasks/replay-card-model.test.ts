@@ -22,8 +22,8 @@ import { CALL_KIND } from "@luke/features/turn-rows";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { test } from "vitest";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
+import { messageWords } from "./agent-model.js";
 import { messageFileChips } from "./attached-file-chips.js";
-import { messageWords } from "./coding-agent-model.js";
 import {
   briefAgent,
   leftOutLine,

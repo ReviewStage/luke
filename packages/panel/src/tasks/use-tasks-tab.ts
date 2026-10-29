@@ -101,14 +101,6 @@ import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { APP_SETTINGS_VIEW, useAppSlice, useExperiment } from "../use-app-state.js";
 import {
-  CLOSED_TAB_STRIP,
-  type ClosedTab,
-  NO_CLOSED_TABS,
-  withClosedTab,
-  withUndrawnPassed,
-} from "./closed-tabs.js";
-import { useCloudBrowserDrafts, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
-import {
   agentName,
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
@@ -116,7 +108,15 @@ import {
   localAgentRefusalWords,
   openingLineOf,
   type SentLine,
-} from "./coding-agent-model.js";
+} from "./agent-model.js";
+import {
+  CLOSED_TAB_STRIP,
+  type ClosedTab,
+  NO_CLOSED_TABS,
+  withClosedTab,
+  withUndrawnPassed,
+} from "./closed-tabs.js";
+import { useCloudBrowserDrafts, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
 import type { MessageReveal } from "./message-links.js";
 import type { NewTaskPress } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
@@ -128,19 +128,19 @@ import type { FixturePlace } from "./tasks-fixture.js";
 import { loadedTasksFixture } from "./tasks-fixture-loader.js";
 import type { ThreadReveal } from "./thread-reveal.js";
 import {
+  type AgentsControl,
+  type ModelsRead,
+  readAgentById,
+  useAgents,
+  withPendingAgents,
+} from "./use-agents.js";
+import {
   chooseChannel,
   leaveChannel,
   listChannelWorkspace,
   openChannelThread,
   standChannelPlace,
 } from "./use-channels.js";
-import {
-  type CodingAgentsControl,
-  type ModelsRead,
-  readAgentById,
-  useCodingAgents,
-  withPendingAgents,
-} from "./use-coding-agents.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxPages } from "./use-inbox-pages.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
@@ -187,7 +187,7 @@ import { sayRestored } from "./version-view.js";
  * document page in every panel, and it stays open through a tab switch or a
  * collapse; only Escape, another task, a task started, archiving it, a delete, or a
  * sign-out leaves it. With none open, the tab is the home page. The open task's
- * coding agents are the tab's too (`use-coding-agents.ts`): read when the
+ * coding agents are the tab's too (`use-agents.ts`): read when the
  * task opens, started from the toolbar or the column's "+", and each drawn
  * on a tab of the task's column beside the task's own (`use-main-tabs.ts`),
  * their workers' in the side panel; New task's Agent mode starts the task
@@ -589,7 +589,7 @@ export interface TasksControl {
   /** The pages agents wrote for the open task, each by its newest version; absent with none. */
   pages: TasksView["pages"];
   /** The open task's coding agents: their tabs, the Start, and the Stop. */
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** The open plan's version history: whether it stands, its versions, the one drawn, and its restore. */
   history: VersionHistoryControl;
   /** Opens a task from a list, the drawer, or the Inbox: in a narrow room on its plan. */
@@ -1060,7 +1060,7 @@ export function useTasksTab(input: {
   /** Opens Settings on its Integrations page, where an agent's MCP server is connected. */
   onOpenIntegrations: () => void;
   /** Opens Settings on its Agents page at the provider's harness row, where the developer's key for it is. */
-  onOpenApiKeys: CodingAgentsControl["onOpenApiKeys"];
+  onOpenApiKeys: AgentsControl["onOpenApiKeys"];
   /** Opens Settings at the place the link names. */
   onOpenSettings: (link: SettingsLink) => void;
   /** The window's ask before leaving unsaved work, which guards every door here that moves the place. */
@@ -1222,7 +1222,7 @@ export function useTasksTab(input: {
     [openDocument, viewed.activeTaskId],
   );
   // A fixture's task lists its agents at the act door: none, but where an agent profile stages one (`tasks-fixture.ts`).
-  const agents = useCodingAgents({
+  const agents = useAgents({
     acts: input.acts,
     taskId: viewed.activeTaskId,
     repository:

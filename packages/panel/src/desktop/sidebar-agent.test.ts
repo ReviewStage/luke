@@ -14,11 +14,11 @@ import { act, createElement, Fragment, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { type AgentActions, agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 
@@ -101,10 +101,10 @@ afterEach(() => {
 /** The row of `agent`, drawn among the sidebar's tasks, whose archive is heard into `archives`. */
 function mount(
   agent: TasklessAgent,
-  pullRequests: CodingAgentsControl["pullRequests"] = new Map(),
+  pullRequests: AgentsControl["pullRequests"] = new Map(),
   unread = false,
 ): HTMLElement {
-  const agents = codingAgentsControl({
+  const agents = agentsControl({
     me: ME,
     pullRequests,
     onArchive: (agentId, archived) => {
@@ -288,7 +288,7 @@ test("a draft waiting in the agent's box marks its row with the Draft pencil whi
     const container = document.createElement("div");
     document.body.append(container);
     const held = createRoot(container);
-    const agents = codingAgentsControl({});
+    const agents = agentsControl({});
     act(() =>
       held.render(
         onRegistry(
@@ -488,7 +488,7 @@ function OfferedActions({
   agent: TasklessAgent;
   onActions: (actions: AgentActions) => void;
 }): null {
-  const actions = useAgentActions(agent, codingAgentsControl({}), {
+  const actions = useAgentActions(agent, agentsControl({}), {
     label: agent.title ?? "",
     shown: true,
     terminals: { onOpenTerminal: () => undefined },

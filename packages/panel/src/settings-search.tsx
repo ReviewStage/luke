@@ -265,7 +265,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           id: SETTINGS_SEARCH_ROW.CODING_AGENT_MODEL,
           label: "Default model",
           page: SETTINGS_VIEW.CODING_AGENTS,
-          haystack: ["Default model", "model coding agent claude gpt start"],
+          haystack: ["Default model", "model agent claude gpt start"],
         }
       : undefined,
     input.accountDrawn
@@ -273,7 +273,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           id: SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT,
           label: "Effort",
           page: SETTINGS_VIEW.CODING_AGENTS,
-          haystack: ["Effort", "default effort coding agent reasoning low medium high max"],
+          haystack: ["Effort", "default effort agent reasoning low medium high max"],
         }
       : undefined,
     input.accountDrawn
@@ -281,7 +281,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           id: SETTINGS_SEARCH_ROW.CODING_AGENT_FAST,
           label: "Fast",
           page: SETTINGS_VIEW.CODING_AGENTS,
-          haystack: ["Fast", "coding agent fast version speed quick model"],
+          haystack: ["Fast", "agent fast version speed quick model"],
         }
       : undefined,
     // The chapters model, which is the account's on the service: drawn once an account is signed in.

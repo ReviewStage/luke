@@ -23,7 +23,7 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NewTaskComposer } from "./new-task-composer.js";
-import { MODELS_READ, type ModelsRead } from "./use-coding-agents.js";
+import { MODELS_READ, type ModelsRead } from "./use-agents.js";
 import type { NewTaskStart } from "./use-tasks-tab.js";
 
 /**

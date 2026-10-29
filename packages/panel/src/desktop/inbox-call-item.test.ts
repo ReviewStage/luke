@@ -27,7 +27,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import {
-  codingAgentsControl,
+  agentsControl,
   pushedTranscripts,
   tasksControl,
   UNPINNED_SUMMARY,
@@ -157,7 +157,7 @@ async function mount(): Promise<HTMLElement> {
       strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
       tab: SIDE_PANEL_TAB.INBOX,
     },
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: [AGENT],
       agentIds: [AGENT.id, OTHER_AGENT],
       inboxFollower: inboxes.follower,

@@ -114,7 +114,7 @@ import {
 } from "./tool-call-model.js";
 
 /**
- * coding-agent-model.ts -- what the agent tabs, a Start, and an agent's transcript draw, decided from what the service answered.
+ * agent-model.ts -- what the agent tabs, a Start, and an agent's transcript draw, decided from what the service answered.
  *
  * Pure decisions over the wire's shapes: how an agent is named on its tab,
  * what its tab's glyph says of where it stands, what line ends a transcript whose turn failed
@@ -585,7 +585,7 @@ export function chooseFailureNote(failure: AgentCallFailure): string {
 }
 
 /** What the toast says when a Start the developer left the task behind did not start; the task's own note says why. */
-export const START_FAILED_AWAY = "The coding agent could not be started.";
+export const START_FAILED_AWAY = "The agent could not be started.";
 
 /** What the toast says when the service did not stop an agent. */
 export const STOP_FAILED = "The agent could not be stopped. Try again.";

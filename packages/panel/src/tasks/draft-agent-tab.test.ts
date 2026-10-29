@@ -42,11 +42,11 @@ import {
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
-import { startFailureNote } from "./coding-agent-model.js";
+import { agentsControl } from "../testing/tasks-control.js";
+import { startFailureNote } from "./agent-model.js";
 import { DraftAgentTab } from "./draft-agent-tab.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy.js";
-import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentDraft, AgentsControl } from "./use-agents.js";
 
 /**
  * A draft agent's first message through the bridge the host answers: a
@@ -143,12 +143,12 @@ function sentence(alert: Element | null): string | undefined {
 function mount(
   answers: (Failure | undefined)[],
   draft: AgentDraft = DRAFT,
-  extra: Partial<CodingAgentsControl> = {},
+  extra: Partial<AgentsControl> = {},
 ) {
   const starts: string[] = [];
   const links: SettingsLink[] = [];
   const settings = { integrationsOpened: false };
-  const control = codingAgentsControl({
+  const control = agentsControl({
     startPrompt: (_draftId, prompt) => {
       starts.push(prompt);
       return Promise.resolve(answers.shift());

@@ -27,7 +27,7 @@ import type { ReactNode } from "react";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { LINK_COPY } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction, rowMenu } from "../desktop/action-menu.js";
-import { checkoutCommand, publishedUrl, pullRequestStateWord } from "./coding-agent-model.js";
+import { checkoutCommand, publishedUrl, pullRequestStateWord } from "./agent-model.js";
 import { MentionChipCard } from "./mention-chip.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { useMentionDoors } from "./task-mentions.js";

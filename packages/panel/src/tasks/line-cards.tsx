@@ -3,7 +3,7 @@ import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { EventCard, type EventCardNote, SubjectLine, TEXT_LINK_LOOK, TextLink } from "@luke/ui";
 import type { GitHubLineMetadata, ThreadLineMetadata } from "@luke/wire";
 import { createContext, type ReactNode, useContext } from "react";
-import { githubLineHead } from "./coding-agent-model.js";
+import { githubLineHead } from "./agent-model.js";
 import { linkChip, type MentionDoors } from "./mention-chip.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";

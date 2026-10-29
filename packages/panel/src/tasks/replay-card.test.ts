@@ -26,7 +26,7 @@ import { afterEach, beforeAll, test } from "vitest";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab, type TranscriptCards } from "./agent-tab.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 import { OpenLinkProvider } from "./use-open-link.js";
@@ -127,7 +127,7 @@ async function drawn(
     },
     { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts: [{ type: "text", text: "On it." }] },
   ];
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [agent],
     // An agent's own page lists that agent alone, and reads any other by its id.
     archived: listed ? [source] : [],

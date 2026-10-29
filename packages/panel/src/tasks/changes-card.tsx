@@ -3,12 +3,12 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
 import { useEffect } from "react";
 import { PULL_REQUEST_TAB } from "../desktop/pages-on-demand.js";
+import { pullRequestNumberLabel } from "./agent-model.js";
 import { LinesChanged } from "./agent-published.js";
 import { AgentActorRef, type AgentSubject } from "./agent-ref.js";
-import { pullRequestNumberLabel } from "./coding-agent-model.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { OpenedBy, ReviewersLine } from "./pull-request-people.js";
-import type { HeldPeople } from "./use-coding-agents.js";
+import type { HeldPeople } from "./use-agents.js";
 import { openerOf } from "./use-link-standing.js";
 
 /**

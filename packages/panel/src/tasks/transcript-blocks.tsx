@@ -173,7 +173,7 @@ import { WorkingTime } from "./working-time.js";
  * transcript-blocks.tsx -- the one way a transcript's blocks are drawn, on a coding agent's tab and a subagent's alike.
  *
  * Each tab decides what its rows say from its own wire
- * (`coding-agent-model.ts` with `tool-call-model.ts`); how a block of each kind looks is decided here
+ * (`agent-model.ts` with `tool-call-model.ts`); how a block of each kind looks is decided here
  * once, over the AI Elements components (`../ai-elements/`): words as
  * markdown at the panel's scale with a web link opening in the browser, reasoning folded under one quiet line
  * previewing its words, a tool call as one collapsible row wearing its kind's icon and verb
@@ -1269,7 +1269,7 @@ const SENT_WORDS = {
 /** The agent a call that sent words names where the place knows it by no name yet, as a start the place has not listed: a coding agent, as its card names it. */
 const UNNAMED_AGENT: Actor = {
   kind: ACTOR_KIND.AGENT,
-  name: TAB_WORDS.CODING_AGENT,
+  name: TAB_WORDS.AGENT,
   provider: undefined,
   state: ACTOR_STATE.REST,
 };

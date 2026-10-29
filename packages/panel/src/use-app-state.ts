@@ -238,7 +238,7 @@ export const APP_SLICE = {
   UPDATE: sliceAtom("update"),
   AUDIO: sliceAtom("audio"),
   TASKS: sliceAtom("tasks"),
-  CODING_AGENTS: sliceAtom("agents"),
+  AGENTS: sliceAtom("agents"),
   INBOX: sliceAtom("inbox"),
   MAC_COMMANDS: sliceAtom("macCommands"),
   NOTIFICATIONS: sliceAtom("notifications"),

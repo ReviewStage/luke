@@ -7,13 +7,7 @@ import {
 } from "@luke/features/agent-wire";
 import { isRecord, isWireString, type WireValue } from "@luke/wire";
 import { TOOL_STATE } from "../ai-elements/tool.js";
-import {
-  AGENT_PART,
-  type AgentPart,
-  agentParts,
-  isTaskCall,
-  isTodos,
-} from "./coding-agent-model.js";
+import { AGENT_PART, type AgentPart, agentParts, isTaskCall, isTodos } from "./agent-model.js";
 import type { DrawnCall } from "./native-tool-calls.js";
 import { todosView } from "./tool-call-model.js";
 

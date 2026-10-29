@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { HarnessMark } from "../harness-marks.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph.js";
-import { agentGlyphState, providerOf } from "./coding-agent-model.js";
+import { agentGlyphState, providerOf } from "./agent-model.js";
 import { fileLook } from "./file-ref.js";
 import { PullRequestMark, type PullRequestMarked } from "./pull-request-mark.js";
 import { type FixedSidePanelTab, SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "./use-side-panel.js";
@@ -235,7 +235,7 @@ export function tabLook(subject: TabSubject): KindLook {
     case TAB_KIND.AGENT:
       return {
         icon: <AgentGlyph agent={subject.agent} />,
-        label: subject.name ?? TAB_WORDS.CODING_AGENT,
+        label: subject.name ?? TAB_WORDS.AGENT,
       };
     case TAB_KIND.SUBAGENT:
       return {

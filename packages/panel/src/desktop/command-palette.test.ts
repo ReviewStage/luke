@@ -76,7 +76,7 @@ import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { CommandPalette } from "./command-palette.js";
@@ -719,7 +719,7 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
           repository: null,
         },
       ],
-      agents: codingAgentsControl({
+      agents: agentsControl({
         agents: [
           {
             id: "agent-7",
@@ -774,7 +774,7 @@ test("an agent with no task hangs its card beside its row and is named as its ta
   };
   openPalette(
     tasksControl({
-      agents: codingAgentsControl({
+      agents: agentsControl({
         models: [
           {
             id: "anthropic/claude-opus-5.5",
@@ -824,7 +824,7 @@ test("an archived agent of the open task is still found, after the standing ones
           repository: null,
         },
       ],
-      agents: codingAgentsControl({
+      agents: agentsControl({
         agents: [agent("agent-7", "Invoice export")],
         archived: [{ ...agent("agent-8", "Refund export"), archivedAt: 3 }],
         agentIds: ["agent-7"],
@@ -889,7 +889,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
         repository: null,
       },
     ],
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: [
         {
           id: "agent-7",
@@ -976,7 +976,7 @@ test("an agent's Pull request row is named as its tab is, by its pull request's 
           repository: null,
         },
       ],
-      agents: codingAgentsControl({
+      agents: agentsControl({
         agents: [agent],
         agentIds: [agent.id],
         pullRequests: new Map([
@@ -1034,7 +1034,7 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
       ],
       region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, repository: "acme/relay" } },
       agentView: { ...control.agentView, agentId: "agent-page-1" },
-      agents: codingAgentsControl({
+      agents: agentsControl({
         agents: [agent],
         agentIds: [agent.id],
         pullRequests: new Map([
@@ -1106,7 +1106,7 @@ async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | und
     region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, repository: "acme/relay" } },
     inboxView: { ...base.inboxView, open: inbox !== undefined, chosen: inbox?.chosen },
     sidePanel: { ...base.sidePanel, onOpenFile: (ref) => opened.push(ref.path) },
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: [agent],
       agentIds: [agent.id],
       pullRequests: new Map([
@@ -1609,13 +1609,13 @@ test("a task Luke or a coding agent made says who in its detail and is found by 
     );
 
   assert.deepEqual(rows(), [
-    "Invite emails · relay · by Coding agent",
+    "Invite emails · relay · by Agent",
     "Audit log export · relay · by Luke",
     "Rate limits · relay",
   ]);
   assert.deepEqual(marks(), [null, null, null]);
-  type("coding agent");
-  assert.deepEqual(rows(), ["Invite emails · relay · by Coding agent"]);
+  type("agent");
+  assert.deepEqual(rows(), ["Invite emails · relay · by Agent"]);
 });
 
 /** Offers ⌘K's own Show my tasks, as the sidebar does while it would change the list, and records each run. */
@@ -1788,7 +1788,7 @@ const ON_AGENT_TAB: TasksControl = tasksControl({
     { id: "workspace-acme", name: "Acme", slug: "acme", role: WORKSPACE_ROLE.MEMBER, github: null },
   ],
   mainTabs: { ...tasksControl().mainTabs, tab: { agent: LINKED_AGENT } },
-  agents: codingAgentsControl({
+  agents: agentsControl({
     agents: [
       {
         id: LINKED_AGENT,
@@ -2480,7 +2480,7 @@ test('with a task open, ⌘K\'s "This task" lists its pages and a terminal for e
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
     pages: [{ id: "page-1", title: "Invite funnel", version: 1, at: 1 }],
     sidePanel: { ...base.sidePanel, onChoose: (tab) => chosen.push(tab) },
-    agents: codingAgentsControl({ agents: [agent], agentIds: [agent.id] }),
+    agents: agentsControl({ agents: [agent], agentIds: [agent.id] }),
   });
   handCapabilities(DESKTOP_CAPABILITIES);
   await paletteUnderState(tasks);
@@ -2743,7 +2743,7 @@ test("on a one-off agent's page, ⌘K's Archive agent archives it, and an archiv
       tasksControl({
         agentView: { agentId: agent.id, onOpen: () => undefined, onClose: () => undefined },
         listedAgents,
-        agents: codingAgentsControl({
+        agents: agentsControl({
           onArchive: (agentId, archived) => {
             asked.push(`${agentId}:${String(archived)}`);
             return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });

@@ -26,8 +26,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { composerEditor, editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
-import { AgentTab } from "./agent-tab.js";
+import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import {
   continuedByIds,
   endLineOffersContinue,
@@ -35,10 +34,11 @@ import {
   endLineReason,
   messageFailureWords,
   startFailureNote,
-} from "./coding-agent-model.js";
+} from "./agent-model.js";
+import { AgentTab } from "./agent-tab.js";
 import { ForkProvider } from "./fork-action.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
-import type { AgentContinuer } from "./use-coding-agents.js";
+import type { AgentContinuer } from "./use-agents.js";
 
 /**
  * continue-agent.test.ts -- an agent whose turn failed, or whose session
@@ -189,7 +189,7 @@ async function drawnTab(input: {
     continued.push({ agentId, note, attachments });
     return input.answer?.() ?? Promise.resolve(undefined);
   };
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [source, ...(input.others ?? [])],
     archived: input.archived ?? [],
     continueAgent: input.continues === false ? undefined : continueAgent,

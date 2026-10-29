@@ -170,9 +170,9 @@ import {
   type SettingsSearchInput,
   settingsSearchEntries,
 } from "../settings-search.js";
+import { agentName } from "../tasks/agent-model.js";
 import { AgentCard, agentSubject, NOTHING_HELD, tasklessRowSubject } from "../tasks/agent-ref.js";
 import { ChannelCard } from "../tasks/channel-card.js";
-import { agentName } from "../tasks/coding-agent-model.js";
 import { FileCard, fileLook } from "../tasks/file-ref.js";
 import { fileName } from "../tasks/file-ref-model.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
@@ -183,8 +183,8 @@ import { markReadItem, type OpenTaskRename, useTaskRenameOffer } from "../tasks/
 import { TaskKey } from "../tasks/task-standing.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { cardTitle } from "../tasks/tool-call-model.js";
+import { type AgentsControl, readAgentById } from "../tasks/use-agents.js";
 import { useChannels } from "../tasks/use-channels.js";
-import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
 import { SIDE_PANEL_TAB_KIND, type SidePanelControl } from "../tasks/use-side-panel.js";
@@ -1119,7 +1119,7 @@ function inboxRow(
   words: RowWords,
   seams: {
     readonly readerId: string | undefined;
-    readonly models: CodingAgentsControl["models"];
+    readonly models: AgentsControl["models"];
     readonly tokens: readonly string[];
     readonly now: number;
     readonly open: (listed: InboxListed) => void;
@@ -1588,7 +1588,7 @@ function OpenAgentArchive({
   asked,
 }: {
   agent: TasklessAgent;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   shown: boolean;
   /** How many times ⌘K asked for this agent, each new one run once. */
   asked: number;

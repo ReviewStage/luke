@@ -19,7 +19,7 @@ import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
@@ -138,7 +138,7 @@ function opened(input: {
       tab: { agent: AGENT.id },
       openAgents: input.listed ? [AGENT.id] : undefined,
     },
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: input.listed ? [AGENT] : undefined,
       agentIds: input.listed ? [AGENT.id] : undefined,
       transcripts: input.follower,

@@ -51,7 +51,7 @@ function PagePreview({ place, page }: CardPage): React.JSX.Element {
 /** What a page's card says of who showed its version where it names no agent by name. */
 const SHOWN_BY = {
   LUKE: "Shown by Luke",
-  AGENT: "Shown by a coding agent",
+  AGENT: "Shown by an agent",
 } as const;
 
 /** Who showed a page's version: Luke, or a coding agent by the name the window holds now; nothing for one shown before who showed it was kept. */
