@@ -2,7 +2,6 @@ import { QUEUE_PAUSE, type QueuedMessage, type QueuePaused } from "@luke/feature
 import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
   BANNER_LOOK,
-  Badge,
   Banner,
   BUTTON_SIZE,
   BUTTON_VARIANT,
@@ -27,20 +26,23 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useState } from "react";
 import { useRowDrag } from "../desktop/use-row-drag.js";
 import { COMPOSER_DOCK_CLASS } from "./agent-composer.js";
+import { SentWords } from "./skill-chip.js";
 
 /**
  * agent-queue-dock.tsx -- the messages queued behind an agent's running turn, docked over its message box, under its to-do list and its pull request.
  *
- * One row a message, its words on one line, fading out where they run
+ * One row a message, its words drawn as its bubble draws them once sent
+ * (`SentWords`), chips and all, on one line, fading out where they run
  * past it, leading with the queue's glyph, which gives way to the handle it
  * is dragged by as the row is hovered (`tasks.css`); on hover, Steer sends
  * it into the turn now, the pencil takes its words into the message box to
  * edit (`agent-composer.tsx`), and the trash deletes it, asking first, since
  * nothing brings its words and files back. The message being edited stays
- * in its place, marked so, with Cancel on its row, and the turn's end
- * passes over it. A message still landing, queued from this tab and not yet
- * the service's, and every row for a reader who did not start the agent,
- * take no press. A queue standing paused says why
+ * in its place, muted, with Cancel on its row, and the turn's end
+ * passes over it; one another window edits is muted and offers no press.
+ * A message still landing, queued from this tab and not yet the service's,
+ * and every row for a reader who did not start the agent, take no press.
+ * A queue standing paused says why
  * over its rows, after a Stop in the quiet tone and after a refusal in the
  * danger one, with Resume. Nothing is drawn while none is queued.
  */
@@ -51,7 +53,6 @@ const WORDS = {
   STEER: "Steer",
   EDIT: "Edit",
   DELETE: "Delete",
-  EDITING: "Editing",
   CANCEL: "Cancel",
   RESUME: "Resume",
   STOPPED: "Queue paused because you interrupted",
@@ -174,15 +175,12 @@ export function AgentQueueDock({
                     <GLYPH.DRAG_HANDLE />
                   </span>
                 }
-                title={<OneLine>{message.text}</OneLine>}
-                muted={edited || landing.has(message.id)}
-                meta={
-                  edited ? (
-                    <Badge tone={STATUS_TONE.WORKING} icon={<GLYPH.RENAME />}>
-                      {WORDS.EDITING}
-                    </Badge>
-                  ) : undefined
+                title={
+                  <OneLine words={message.text}>
+                    <SentWords text={message.text} line />
+                  </OneLine>
                 }
+                muted={edited || landing.has(message.id)}
                 actionsAt={mine ? LIST_ROW_ACTIONS.ALWAYS : LIST_ROW_ACTIONS.HOVER}
                 actions={
                   mine ? (
