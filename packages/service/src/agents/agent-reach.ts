@@ -23,7 +23,7 @@ import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { AGENT_MACHINE, AGENT_PAYER, type AgentPayer } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { Effect, Option } from "effect";
+import { Effect, Option, type Scope } from "effect";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -62,7 +62,7 @@ export interface ReachedAgent {
 export const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: AccountResolving,
   request: Request,
-): Effect.fn.Return<ReachedAgent, HostedRefusal, DatabaseServices> {
+): Effect.fn.Return<ReachedAgent, HostedRefusal, DatabaseServices | Scope.Scope> {
   const agentId = yield* uuidOf(request, AGENT_ID_QUERY);
   const userId = yield* resolvedUserId(seams, request);
   return yield* reachedAgentById(userId, agentId);

@@ -250,6 +250,9 @@ it.effect(
           "-c",
           "while true; do sleep 3600; done",
         ]);
+        // smolvm holds its seed folder to 9 GiB, about three seeds of the image, beside the device's own environment.
+        assert.equal(create?.env?.SMOLVM_IMAGE_SEED_MAX_BYTES, "9663676416");
+        assert.equal(create?.extendEnv, true);
         assert.ok(!credentials.startsWith(`${layout.folder}/`));
         const programs = spawned.map((each) => each.program);
         assert.ok(spawned.indexOf(create as Spawned) < spawned.findIndex(isRunner));

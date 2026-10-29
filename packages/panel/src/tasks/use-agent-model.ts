@@ -2,6 +2,7 @@ import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@luke/features/agent-
 import type { AgentRuntime, AgentSummary } from "@luke/features/agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { useRef, useState } from "react";
+import type { AgentActAnswer } from "../act.js";
 import { chooseFailureNote } from "./agent-model.js";
 
 /**
@@ -18,7 +19,7 @@ import { chooseFailureNote } from "./agent-model.js";
  */
 
 /** How a change is sent: the agent and the choice, answered as the view hears it. */
-export type ChoiceWriter = (agentId: string, choice: ModelChoice) => Promise<AgentAgentAnswer>;
+export type ChoiceWriter = (agentId: string, choice: ModelChoice) => Promise<AgentActAnswer>;
 
 /** Everything the chip draws and presses. */
 export interface AgentModelControl {

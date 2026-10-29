@@ -7,7 +7,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { STATUS_TONE } from "@luke/ui";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import type { ActHandle } from "../act.js";
+import { type ActHandle, KEPT, type Kept, notKept, unreachedAs } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
@@ -46,8 +46,8 @@ export interface MarkSaying {
 
 /** What the Inbox's read marks offer: the presses that mark. */
 export interface InboxReadMarks {
-  /** Marks one item read or unread; answers, once the mark went, whether the service took it, as a batch of marks counts what it refused. A refusal is toasted unless `saying` is quiet. */
-  readonly onMark: (item: InboxItem, unread: boolean, saying?: MarkSaying) => Promise<boolean>;
+  /** Marks one item read or unread; answers, once the mark went, whether the service took it, with what refused it where it did not, as a batch of marks counts what it refused. A refusal is toasted unless `saying` is quiet. */
+  readonly onMark: (item: InboxItem, unread: boolean, saying?: MarkSaying) => Promise<Kept>;
   /** Marks every item given that is unread as read, as the service marks the listed workspace's. */
   readonly onMarkAll: (items: readonly InboxItem[]) => void;
 }
@@ -61,7 +61,7 @@ export function markedNote(unread: boolean, landed: number, refused: number): st
 }
 
 /** What a mark the act channel refused hears, as the service not answering. */
-const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
+const unreached = unreachedAs(AGENT_CALL_FAILURE.UNANSWERED);
 
 /** The Inbox's read marks, sent through `act`; every item marked read in `workspaceId` where the Inbox lists one. */
 export function useInboxReadMarks({
@@ -83,15 +83,15 @@ export function useInboxReadMarks({
     [toast],
   );
   const onMark = useCallback(
-    (item: InboxItem, unread: boolean, saying?: MarkSaying): Promise<boolean> =>
+    (item: InboxItem, unread: boolean, saying?: MarkSaying): Promise<Kept> =>
       act(ACT_KIND.AGENTS_INBOX_READ_STATE, { itemId: item.id, unread })
-        .catch(() => UNANSWERED)
+        .catch(unreached)
         .then((answer) => {
-          if (!("failure" in answer)) return true;
+          if (!("failure" in answer)) return KEPT;
           if (saying?.quiet !== true) {
             refused(markedNote(unread, 0, 1), answer, { inboxItemId: item.id, workspaceId });
           }
-          return false;
+          return notKept(answer);
         }),
     [act, workspaceId, refused],
   );
@@ -103,7 +103,7 @@ export function useInboxReadMarks({
         ...(workspaceId === undefined ? undefined : { workspaceId }),
         itemIds,
       })
-        .catch(() => UNANSWERED)
+        .catch(unreached)
         .then((answer) => {
           if ("failure" in answer)
             refused(markedNote(false, 0, itemIds.length), answer, { workspaceId });

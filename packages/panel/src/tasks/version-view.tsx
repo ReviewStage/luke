@@ -1,4 +1,4 @@
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { dayAndTimeText, momentText } from "@luke/features/time-format";
 import { readFailedWords } from "@luke/features/words";
 import {
@@ -19,6 +19,7 @@ import {
 import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useRef, useState } from "react";
+import type { Kept } from "../act.js";
 import { PhoneHead } from "../desktop/phone-head.js";
 import { unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
@@ -294,7 +295,7 @@ export function useVersionRestore(
  */
 export function sayRestored(
   toast: (notice: ToastNotice) => void,
-  undo: (() => Promise<boolean>) | undefined,
+  undo: (() => Promise<Kept>) | undefined,
 ): void {
   if (undo === undefined) {
     toast({ words: VERSION_RESTORED_NOTE, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
@@ -303,10 +304,10 @@ export function sayRestored(
   toast(
     undoToast(VERSION_RESTORED_NOTE, () => {
       undo().then((undone) => {
-        if (undone) return;
+        if (undone.kept) return;
         toast({
           words: RESTORE_UNDO_REFUSED_NOTE,
-          failure: { surface: FAILURE_SURFACE.PLAN_RESTORE, cause: FAILURE_CONDITION.NOT_KEPT },
+          failure: { surface: FAILURE_SURFACE.PLAN_RESTORE, cause: undone.cause },
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
         });

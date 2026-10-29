@@ -1,4 +1,4 @@
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { DownloadIcon, type PaneBarMenu, STATUS_TONE } from "@luke/ui";
 import { FolderTreeIcon, GLYPH } from "@luke/ui/icons";
 import { appPlatform } from "../app-platform.js";
@@ -91,8 +91,8 @@ export function useFileMenu({
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
           failure: refused
-            ? { surface: FAILURE_SURFACE.FILE_READ, cause: FAILURE_CONDITION.REFUSED, refused }
-            : { surface: FAILURE_SURFACE.FILE_READ, cause: FAILURE_CONDITION.UNREAD },
+            ? { surface: FAILURE_SURFACE.FILE_READ, cause: whole.cause, refused }
+            : { surface: FAILURE_SURFACE.FILE_READ, cause: whole.cause },
         });
       }
     });

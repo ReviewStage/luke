@@ -25,7 +25,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "@effect/vitest";
-import { SANDBOX_IMAGE, SMOLVM_LINUX_PIN } from "@luke/agent-runner/pins";
+import { SANDBOX_IMAGE, SMOLVM_LINUX_PIN, SMOLVM_SEED_CAP } from "@luke/agent-runner/pins";
 
 const SCRIPT = join(import.meta.dirname, "../../../../apps/web/install/install.sh");
 const UNINSTALL_SCRIPT = join(import.meta.dirname, "../../../../apps/host/scripts/luke-host.sh");
@@ -203,6 +203,7 @@ describe("the host's install script", () => {
     expect(carried("SMOLVM_SHA256_X64")).toBe(SMOLVM_LINUX_PIN.SHA256.x64);
     expect(carried("SMOLVM_SHA256_ARM64")).toBe(SMOLVM_LINUX_PIN.SHA256.arm64);
     expect(carried("SANDBOX_IMAGE")).toBe(SANDBOX_IMAGE);
+    expect(carried("SMOLVM_SEED_MAX_BYTES")).toBe(String(SMOLVM_SEED_CAP.BYTES));
   });
 
   for (const [found, make] of [

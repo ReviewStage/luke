@@ -1,6 +1,6 @@
 import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { INBOX_STATUS, type InboxItem, type InboxStatus } from "@luke/features/inbox-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { countWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -15,7 +15,7 @@ import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Equal } from "effect";
 import { useCallback, useRef, useState } from "react";
-import type { ActHandle } from "../act.js";
+import { type ActHandle, KEPT, type Kept, notKept, unreachedAs } from "../act.js";
 import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter, withoutPicks } from "../composer-drafts.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { confirmFailure } from "../failure-report.js";
@@ -41,8 +41,8 @@ import { cardTitle } from "./tool-call-model.js";
  * open, and with the revision it was asked on once the agent changes it.
  */
 
-/** What a close the act channel refused hears, as the service not answering. */
-const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
+/** What a close the act channel refused hears, as the service not answering, with the error beneath. */
+const unreached = unreachedAs(AGENT_CALL_FAILURE.UNANSWERED);
 
 /**
  * What the close is called in a menu and on its question card's ×, which
@@ -66,11 +66,11 @@ interface CloseSaying {
 
 /**
  * Closes an open item without an answer, and answers once the service did
- * whether it was closed; a close of it already on its way answers as closed,
- * since that one answers its own press, and one of an item no longer open as
- * not.
+ * whether it was closed, with what refused it where it was not; a close of
+ * it already on its way answers as closed, since that one answers its own
+ * press, and one of an item no longer open as not.
  */
-export type InboxCloser = (item: InboxItem, saying?: CloseSaying) => Promise<boolean>;
+export type InboxCloser = (item: InboxItem, saying?: CloseSaying) => Promise<Kept>;
 
 /** A close's key and the revision it was made for, kept so a press again on the same item goes under the same key. */
 interface Attempt {
@@ -97,8 +97,10 @@ export function useInboxCloser({
   heard.current = onHeard;
   return useCallback(
     (item: InboxItem, saying?: CloseSaying) => {
-      if (out.current.has(item.id)) return Promise.resolve(true);
-      if (item.status !== INBOX_STATUS.OPEN) return Promise.resolve(false);
+      if (out.current.has(item.id)) return Promise.resolve(KEPT);
+      if (item.status !== INBOX_STATUS.OPEN) {
+        return Promise.resolve(notKept(FAILURE_CONDITION.GONE));
+      }
       const was = attempts.current.get(item.id);
       const key = was?.revision === item.revision ? was.key : crypto.randomUUID();
       attempts.current.set(item.id, { key, revision: item.revision });
@@ -120,14 +122,14 @@ export function useInboxCloser({
             },
           });
         }
-        return false;
+        return notKept(cause);
       };
       return act(ACT_KIND.AGENTS_INBOX_CLOSE, {
         itemId: item.id,
         revision: item.revision,
         clientKey: key,
       })
-        .catch(() => UNANSWERED)
+        .catch(unreached)
         .then((answer) => {
           out.current.delete(item.id);
           if ("failure" in answer) return say(messageFailureWords(answer.failure), answer);
@@ -144,7 +146,7 @@ export function useInboxCloser({
             );
           }
           if (item.needsReply) heard.current?.();
-          return true;
+          return KEPT;
         });
     },
     [act, toast, writer],

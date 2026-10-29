@@ -285,12 +285,12 @@ export function DesktopInbox({
     channels.onMove(started.id, into).then((refused) => {
       if (refused === undefined) return channels.onRefresh();
       toast({
-        words: refused,
+        words: refused.words,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
         failure: {
           surface: FAILURE_SURFACE.CHANNEL_MOVE,
-          cause: refused,
+          cause: refused.cause,
           about: { inboxItemId: started.id, agentId: started.agentId, channelId: into },
         },
       });

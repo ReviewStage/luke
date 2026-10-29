@@ -14,7 +14,7 @@ import { getTestDB, startTask } from "@luke/database/testing";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
-import { Duration, Effect, Option } from "effect";
+import { Duration, Effect, ErrorReporter, Layer, Option } from "effect";
 import { afterEach, vi } from "vitest";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { RUNNER_TAG } from "../agents/machine/vercel-machine.js";
@@ -68,8 +68,8 @@ function vercel(
   } = {},
 ) {
   const sandboxes: FakeSandbox[] = [];
-  /** The detached commands, by id, with their exit code, or null while they run. */
-  const commands = new Map<string, ReadCommand>();
+  /** The detached commands, by id, with their exit code, or null while they run, and what they printed on stderr. */
+  const commands = new Map<string, ReadCommand & { readonly stderr?: string }>();
   const stopped: string[] = [];
   const policies: string[] = [];
   const pagesListed: { status: string | null; sortBy: string | null; order: string | null }[] = [];
@@ -119,11 +119,14 @@ function vercel(
       }
       return Response.json({ session: { id: sessionId } });
     }
-    const command = /^cmd\/([^/]+)$/u.exec(rest);
+    const command = /^cmd\/([^/]+)(\/logs)?$/u.exec(rest);
     if (command !== null) {
       const found = commands.get(command[1] ?? "");
       if (found === undefined) return new Response(null, { status: 404 });
-      return commandRead(found, parsed, init, false);
+      if (command[2] === undefined) return commandRead(found, parsed, init, false);
+      const line =
+        found.stderr === undefined ? "" : JSON.stringify({ stream: "stderr", data: found.stderr });
+      return new Response(`${line}\n`, { headers: { "content-type": "application/x-ndjson" } });
     }
     assert.equal(rest, "network-policy", `an unexpected call: ${method} ${parsed.pathname}`);
     if (options.refusePolicy === true) return new Response(null, { status: 502 });
@@ -205,7 +208,7 @@ afterEach(() => {
 
 it.layer(getTestDB())("the native sandbox sweep", (it) => {
   it.effect(
-    "a runner that exited mid-turn has its turn settled failed and the projection's turn dropped, its sandbox stopped past the grace; a runner still up keeps its turn",
+    "a runner that exited mid-turn has its turn settled failed with its exit code and stderr and the projection's turn dropped, reported by its exit code alone, its sandbox stopped past the grace; a runner still up keeps its turn",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -228,13 +231,26 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
           .set({ nativeProjection: { session: "cli-session", turn: { id: lostTurn.id } } })
           .where(eq(conversations.id, crashed.conversationId));
         const api = vercel();
-        api.commands.set("cmd_killed", { id: "cmd_killed", exitCode: 137 });
+        api.commands.set("cmd_killed", {
+          id: "cmd_killed",
+          exitCode: 137,
+          stderr: "agent-runner: JavaScript heap out of memory\n",
+        });
         api.commands.set("cmd_running", { id: "cmd_running", exitCode: null });
         const dead = nativeSandbox(crashed.id, "cmd_killed");
         const alive = nativeSandbox(working.id, "cmd_running");
         api.sandboxes.push(dead, alive);
 
-        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+        const reported: Record<string, unknown>[] = [];
+        const reporter = ErrorReporter.layer([
+          ErrorReporter.make(({ attributes }) => {
+            reported.push({ ...attributes });
+          }),
+        ]);
+
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(
+          Effect.provide(Layer.merge(api.layer, reporter)),
+        );
 
         assert.deepEqual(outcome, {
           stopped: 0,
@@ -251,7 +267,14 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
             .where(eq(turns.conversationId, conversationId));
         const [settled] = yield* statusOf(crashed.conversationId);
         assert.equal(settled?.status, TURN_STATUS.FAILED);
-        assert.match(settled?.failureDetail ?? "", /runner stopped before its turn ended/u);
+        assert.equal(
+          settled?.failureDetail,
+          "the agent's runner stopped before its turn ended: exit 137, stderr: agent-runner: JavaScript heap out of memory",
+        );
+        // Note that the stderr stays in the turn's row: what is reported reaches Sentry.
+        assert.equal(reported.length, 1);
+        assert.equal(reported[0]?.exitCode, "137");
+        assert.ok(!JSON.stringify(reported).includes("heap out of memory"));
         assert.equal((yield* statusOf(working.conversationId))[0]?.status, TURN_STATUS.RUNNING);
         const [projection] = yield* db
           .select({ projection: conversations.nativeProjection })

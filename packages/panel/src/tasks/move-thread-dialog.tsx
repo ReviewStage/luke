@@ -16,6 +16,7 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useRef, useState } from "react";
 import { useFormDialog } from "../desktop/use-form-dialog.js";
 import { confirmFailure } from "../failure-report.js";
+import type { MoveRefused } from "./use-channels.js";
 
 /**
  * move-thread-dialog.tsx -- Move to channel, from an Inbox row's ⋯ with Channels on: the workspace's other open channels, one picked, and the thread moved there.
@@ -61,7 +62,7 @@ export function useMoveThreadDialog({
   /** Whether the Inbox is in sight, which the question goes with. */
   shown: boolean;
   /** Moves a thread into another open channel; what refused it, or none where it moved. */
-  onMove: (threadId: string, channelId: string) => Promise<string | undefined>;
+  onMove: (threadId: string, channelId: string) => Promise<MoveRefused | undefined>;
   onMoved: () => void;
 }): MoveThreadDoor {
   const [moving, setMoving] = useState<MovedThread | undefined>(undefined);
@@ -82,8 +83,13 @@ export function useMoveThreadDialog({
         return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
       }
       return onMove(moving.id, chosen.id).then((refused) => {
-        if (refused !== undefined)
-          return { status: ACTION_RESULT_STATUS.REJECTED, reason: refused };
+        if (refused !== undefined) {
+          return {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: refused.words,
+            cause: refused.cause,
+          };
+        }
         onMoved();
         return { status: ACTION_RESULT_STATUS.ACCEPTED };
       });

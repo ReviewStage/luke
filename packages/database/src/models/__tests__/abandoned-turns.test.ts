@@ -124,16 +124,16 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         const agent = yield* openAgentConversation;
         const running = yield* turnIn(writer, agent, TURN_STATUS.RUNNING);
         yield* holding(agent, running);
-        assert.equal(yield* lose(agent), 1);
+        assert.deepEqual(yield* lose(agent), [running]);
         assert.deepEqual(yield* newestTurnOf(agent), [TURN_STATUS.FAILED, TURN_FAILURE.MODEL]);
         assert.deepEqual(yield* projectionOf(agent), { session: "cli" });
-        assert.equal(yield* lose(agent), 0, "a second settle writes nothing");
+        assert.deepEqual(yield* lose(agent), [], "a second settle writes nothing");
 
         // A projection holding a turn other than the one settled keeps it.
         const other = yield* openAgentConversation;
         yield* turnIn(writer, other, TURN_STATUS.QUEUED);
         yield* holding(other, "a-newer-launch-turn");
-        assert.equal(yield* lose(other), 1);
+        assert.equal((yield* lose(other)).length, 1);
         assert.deepEqual(yield* projectionOf(other), {
           session: "cli",
           turn: { id: "a-newer-launch-turn" },
@@ -141,22 +141,22 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
 
         const idle = yield* openAgentConversation;
         yield* turnIn(writer, idle, TURN_STATUS.SETTLED);
-        assert.equal(yield* lose(idle), 0);
+        assert.deepEqual(yield* lose(idle), []);
         assert.deepEqual(yield* newestTurnOf(idle), [TURN_STATUS.SETTLED, null]);
 
-        // A turn a Stop was asked of ends cancelled, as the Stop asked.
+        // A turn a Stop was asked of ends cancelled, as the Stop asked, and is no failure the settle answers.
         const stopped = yield* openAgentConversation;
         const stoppedTurn = yield* turnIn(writer, stopped, TURN_STATUS.RUNNING);
         yield* writer.requestTurnCancel(stopped, {
           turnId: stoppedTurn,
           at: new Date(STARTED_AT + 5),
         });
-        assert.equal(yield* lose(stopped), 1);
+        assert.deepEqual(yield* lose(stopped), []);
         assert.deepEqual(yield* newestTurnOf(stopped), [TURN_STATUS.CANCELLED, null]);
 
         const brain = yield* openConversation(CONVERSATION_KIND.MAIN);
         yield* turnIn(writer, brain, TURN_STATUS.RUNNING);
-        assert.equal(yield* lose(brain), 0);
+        assert.deepEqual(yield* lose(brain), []);
         assert.deepEqual(yield* newestTurnOf(brain), [TURN_STATUS.RUNNING, null]);
       }),
   );
@@ -341,7 +341,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
           new Set(readBefore),
         );
 
-        assert.equal(settled, 1);
+        assert.deepEqual(settled, readBefore);
         assert.deepEqual(yield* runningTurnIds(agent.conversationId), [begunSince]);
       }),
   );

@@ -23,6 +23,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
+import { KEPT } from "../act.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -139,7 +140,7 @@ async function mountView(
       onSetTaskStanding: (taskId, standing, assigneeName) => {
         sent.push([taskId, standing]);
         named.push(assigneeName);
-        return Promise.resolve(true);
+        return Promise.resolve(KEPT);
       },
     });
     const frame = {

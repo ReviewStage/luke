@@ -10,7 +10,6 @@ import {
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCallFailure,
-  type AutomationRunView,
   type AutomationView,
 } from "@luke/features/automation-view";
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
@@ -64,7 +63,7 @@ import { ACTOR_KIND, actorName } from "@luke/ui/actor-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { BotIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useCallback, useState } from "react";
-import { useAct } from "../act.js";
+import { unreachedAs, useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
@@ -256,7 +255,7 @@ function useRunNow(automationId: string): { readonly running: boolean; readonly 
   const run = () => {
     setRunning(true);
     act(ACT_KIND.AUTOMATIONS_RUN, { automationId, idempotencyKey: crypto.randomUUID() })
-      .catch((): AutomationRunView => ({ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }))
+      .catch(unreachedAs(AUTOMATION_CALL_FAILURE.UNANSWERED))
       .then((answer) => {
         setRunning(false);
         if ("failure" in answer) {

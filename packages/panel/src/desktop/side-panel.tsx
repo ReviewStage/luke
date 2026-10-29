@@ -965,8 +965,8 @@ function stripTabs(input: {
         agentId: delegation.agent,
         callId: tab.subagent,
       }).then((messages) =>
-        messages === undefined
-          ? undefined
+        "unread" in messages
+          ? messages
           : agentTranscript({
               title: label,
               messages,

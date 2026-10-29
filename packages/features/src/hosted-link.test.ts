@@ -7,13 +7,14 @@ import {
   type RecordedRequest,
   recordingHttpClient,
 } from "@luke/wire/testing";
-import { Effect, Fiber } from "effect";
+import { Effect, Fiber, Random } from "effect";
 import { TestClock } from "effect/testing";
 import { accountBearer, CALL_FAULT, type CallCredential } from "./account-call.js";
 import {
   askHosted,
   HOSTED_DEADLINE,
   type HostedDeadline,
+  type HostedFailure,
   HostedRefused,
   HostedUnanswered,
   hostedClient,
@@ -55,6 +56,21 @@ function account(tokens: (string | undefined)[], holders: string[] = ["account-1
 function askModels(credential: CallCredential, deadline?: HostedDeadline) {
   const hosted = hostedClient({ baseUrl: `${BASE_URL}/`, credential });
   return askHosted(hosted.models.list, undefined, deadline);
+}
+
+/** A trace id as Effect's tracer mints one: 32 lowercase hex characters. */
+const TRACE_ID = /^[0-9a-f]{32}$/;
+
+/** The trace a failure travelled under, checked to be a trace id, since every ask mints its own. */
+function traceOf(failure: HostedFailure): string {
+  const traceId = failure.traceId ?? "";
+  assert.match(traceId, TRACE_ID);
+  return traceId;
+}
+
+/** A random draw that always lands on `value`, so an ask's sampling is decided by the test. */
+function drawing(value: number) {
+  return { nextDoubleUnsafe: () => value, nextIntUnsafe: () => 0 };
 }
 
 /** Lets the link's promise steps run until the client has been asked, so the deadline is armed before the clock moves. */
@@ -104,7 +120,10 @@ it.effect("a 401 whose renewal answers for another account is not retried under 
       ),
     );
 
-    assert.deepEqual(failure, new HostedUnanswered({ fault: CALL_FAULT.HOLDER_CHANGED }));
+    assert.deepEqual(
+      failure,
+      new HostedUnanswered({ fault: CALL_FAULT.HOLDER_CHANGED, traceId: traceOf(failure) }),
+    );
     assert.equal(recording.requests.length, 1);
   }),
 );
@@ -117,7 +136,10 @@ it.effect("a 401 that renewal cannot change stands as the refusal it is", () =>
       Effect.provide(askModels(account(["stale"])), recording.layer),
     );
 
-    assert.deepEqual(failure, new HostedRefused({ refusal: HOSTED_API_ERROR.INVALID_TOKEN }));
+    assert.deepEqual(
+      failure,
+      new HostedRefused({ refusal: HOSTED_API_ERROR.INVALID_TOKEN, traceId: traceOf(failure) }),
+    );
     assert.equal(recording.requests.length, 1);
   }),
 );
@@ -130,7 +152,10 @@ it.effect("a signed-out account asks nothing and fails as no credential", () =>
       Effect.provide(askModels(account([undefined])), recording.layer),
     );
 
-    assert.deepEqual(failure, new HostedUnanswered({ fault: CALL_FAULT.NO_CREDENTIAL }));
+    assert.deepEqual(
+      failure,
+      new HostedUnanswered({ fault: CALL_FAULT.NO_CREDENTIAL, traceId: traceOf(failure) }),
+    );
     assert.equal(recording.requests.length, 0);
   }),
 );
@@ -146,9 +171,14 @@ it.effect("a procedure is unanswered at the deadline its ask names, and not befo
     yield* TestClock.adjust("9 seconds");
     assert.equal(usual.pollUnsafe(), undefined, "still waiting short of the usual deadline");
     yield* TestClock.adjust("1 second");
+    const usualFailure = yield* Fiber.join(usual);
     assert.deepEqual(
-      yield* Fiber.join(usual),
-      new HostedUnanswered({ fault: CALL_FAULT.NETWORK, errorName: "TimeoutError" }),
+      usualFailure,
+      new HostedUnanswered({
+        fault: CALL_FAULT.NETWORK,
+        errorName: "TimeoutError",
+        traceId: traceOf(usualFailure),
+      }),
     );
 
     const heldSilent = recordingHttpClient(() => new Promise<Response>(() => undefined));
@@ -161,9 +191,14 @@ it.effect("a procedure is unanswered at the deadline its ask names, and not befo
     yield* TestClock.adjust("34 seconds");
     assert.equal(held.pollUnsafe(), undefined, "a held read outlasts the usual deadline");
     yield* TestClock.adjust("1 second");
+    const heldFailure = yield* Fiber.join(held);
     assert.deepEqual(
-      yield* Fiber.join(held),
-      new HostedUnanswered({ fault: CALL_FAULT.NETWORK, errorName: "TimeoutError" }),
+      heldFailure,
+      new HostedUnanswered({
+        fault: CALL_FAULT.NETWORK,
+        errorName: "TimeoutError",
+        traceId: traceOf(heldFailure),
+      }),
     );
   }),
 );
@@ -185,7 +220,54 @@ it.effect("a repository out of reach reaches the caller with why", () =>
       new HostedRefused({
         refusal: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
         data: { unreached },
+        traceId: traceOf(failure),
       }),
     );
   }),
+);
+
+it.effect("a server error the service declares no refusal for keeps its status and oRPC code", () =>
+  Effect.gen(function* () {
+    const recording = recordingHttpClient(() =>
+      jsonResponse(
+        { defined: false, code: "INTERNAL_SERVER_ERROR", message: "Internal server error" },
+        HTTP_STATUS.SERVER_ERROR,
+      ),
+    );
+
+    const failure = yield* Effect.flip(
+      Effect.provide(askModels(account(["token-1"])), recording.layer),
+    );
+
+    assert.deepEqual(
+      failure,
+      new HostedUnanswered({
+        status: HTTP_STATUS.SERVER_ERROR,
+        code: "INTERNAL_SERVER_ERROR",
+        traceId: traceOf(failure),
+      }),
+    );
+  }),
+);
+
+it.effect(
+  "an ask sends the trace its failure names, flagged unsampled where the draw says so",
+  () =>
+    Effect.gen(function* () {
+      const recording = recordingHttpClient(
+        () => new Response("", { status: HTTP_STATUS.SERVER_ERROR }),
+      );
+
+      const failure = yield* Effect.flip(
+        Effect.provide(askModels(account(["token-1"])), recording.layer).pipe(
+          Effect.provideService(Random.Random, drawing(0.99)),
+        ),
+      );
+
+      const [, traceId, , flags] = (recording.requests[0]?.headers.get("traceparent") ?? "").split(
+        "-",
+      );
+      assert.equal(traceId, traceOf(failure), "the server continues the trace the report names");
+      assert.equal(flags, "00", "an ask past the sample rate is sent unsampled, not untraced");
+    }),
 );

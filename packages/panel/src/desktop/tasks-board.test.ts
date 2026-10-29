@@ -24,6 +24,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { askKept } from "../act.js";
 import { runAppCommand } from "../app-commands.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -174,7 +175,7 @@ async function mountBoard(
     boardView: { open: true, onOpen: () => undefined, onClose: () => (closed += 1) },
     onSetTaskStanding: (taskId, standing) => {
       sent.push([taskId, standing]);
-      return Promise.resolve(keeps);
+      return askKept(Promise.resolve(keeps));
     },
     onRenameTask: (taskId, name) => {
       renamed.push([taskId, name]);

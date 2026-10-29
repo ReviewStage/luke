@@ -1,4 +1,4 @@
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
@@ -18,6 +18,7 @@ import { BUTTON_VARIANT, Button, IconButton, STATUS_TONE } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { KEPT, type Kept, notKept } from "../act.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import type { SettingsWrites } from "./writes.js";
 
@@ -69,20 +70,23 @@ function changedBy(
 /**
  * Writes each setting back as it stood, one after another so a chord
  * written back is checked against the one before it, answering whether
- * every write was taken.
+ * every write was taken, with what refused the one that was not.
  */
-function writeBack(writes: SettingsWrites, held: readonly HeldSetting[]): Promise<boolean> {
-  return held.reduce<Promise<boolean>>(
+function writeBack(writes: SettingsWrites, held: readonly HeldSetting[]): Promise<Kept> {
+  return held.reduce<Promise<Kept>>(
     (before, [field, value]) =>
       before.then((taken) =>
-        taken
-          ? writes.setting(field, value).then(
-              (result) => result.status === ACTION_RESULT_STATUS.ACCEPTED,
-              () => false,
-            )
-          : false,
+        taken.kept
+          ? writes
+              .setting(field, value)
+              .then(
+                (result) =>
+                  result.status === ACTION_RESULT_STATUS.ACCEPTED ? KEPT : notKept(result),
+                notKept,
+              )
+          : taken,
       ),
-    Promise.resolve(true),
+    Promise.resolve(KEPT),
   );
 }
 
@@ -140,12 +144,12 @@ function ResetPageButton({
       );
       const undo = () =>
         writeBack(writes, held).then((taken) => {
-          if (taken) return;
+          if (taken.kept) return;
           toast({
             words: UNDO_REFUSED_NOTE,
             tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
-            failure: { surface: FAILURE_SURFACE.SETTINGS_RESET, cause: FAILURE_CONDITION.NOT_KEPT },
+            failure: { surface: FAILURE_SURFACE.SETTINGS_RESET, cause: taken.cause },
           });
         });
       toast(undoToast(RESET_NOTES[asked], undo));

@@ -6,7 +6,8 @@
  * `ErrorReporter`, with the tracer, the logger, and the metrics layer. This
  * module does the same but for the reporter and the logger, which are its own
  * (`sentryErrorReporter`, `sentryLogger`), so a report's ids land as tags its
- * issue is searched by and a log line keeps its annotations. The web
+ * issue is searched by, a log line keeps its annotations, and both name the
+ * account they were made for as Sentry's user (`ACCOUNT_KEY`). The web
  * functions take all of it, with the process's uncaught-exception and
  * unhandled-rejection handlers the Effect SDK leaves out, and send what they
  * queued after each answer (`sentryReportedFetch`), because Vercel may freeze
@@ -39,7 +40,12 @@ import {
   scrubbedUrl,
 } from "@luke/features/sentry-addresses";
 import * as Sentry from "@sentry/effect";
-import { addBreadcrumb, type ErrorEvent, type EventHint } from "@sentry/effect/server";
+import {
+  addBreadcrumb,
+  type ErrorEvent,
+  type EventHint,
+  SentryEffectExternalSpanLayer,
+} from "@sentry/effect/server";
 import { Effect, ErrorReporter, Exit, Layer, Logger, Predicate, References, Tracer } from "effect";
 
 export const SENTRY_ENVIRONMENT = {
@@ -299,11 +305,38 @@ export function sentryOptions(): SentryOptions {
   };
 }
 
-/** Effect's spans as Sentry spans, and Effect's metrics as Sentry's, as the guide's v4 snippet installs them. */
+/**
+ * Effect's spans as Sentry spans, and Effect's metrics as Sentry's, as the
+ * guide's v4 snippet installs them, with a span whose parent is a caller's
+ * (`Tracer.externalSpan`, a request's `traceparent`) continuing the caller's
+ * trace.
+ *
+ * Note that the external span layer is needed, because without it Sentry's
+ * tracer passes over an external parent and starts a trace of its own, so a
+ * server span would name a trace id the caller never saw. With it, Sentry
+ * continues the trace as its own propagation does: the caller's trace id,
+ * and the caller's sampling flag, so an unsampled call stays a span that
+ * records nothing but whose trace id its log lines and issues still carry.
+ */
 const sentryTelemetry = Layer.mergeAll(
   Layer.succeed(Tracer.Tracer, Sentry.SentryEffectTracer),
+  SentryEffectExternalSpanLayer,
   Sentry.SentryEffectMetricsLayer,
 );
+
+/**
+ * The annotation, or a report's attribute, that names the Luke account a
+ * request or a run was made for, by its id: set where a request's caller is
+ * resolved (`http/http-effect.ts`, `orpc/base.ts`) and where a run reads its
+ * agent's or turn's row. Sentry is handed it as its user's id
+ * (`SENTRY_USER_ID`), never as a tag or an attribute of its own, so an
+ * account's every issue and log line are found under that user; nothing else
+ * of the account, no email, name, or login, is among what is annotated.
+ */
+const ACCOUNT_KEY = "userId";
+
+/** The attribute a Sentry log line names its user by, as the SDK's own scope would write it. */
+const SENTRY_USER_ID = "user.id";
 
 /** What every log line this logger sends is marked with, as Sentry's own Effect logger marks its lines. */
 const LOG_ORIGIN = { "sentry.origin": "auto.log.effect" } as const;
@@ -331,8 +364,9 @@ function foldedLogMessage(message: unknown): string {
 /**
  * Every Effect log line as a Sentry log, for the runtime's logger set beside
  * the JSON one: at its level, with the fiber's log annotations as its
- * attributes, so a line can be found in Sentry by the ids it was logged with.
- * `beforeSendLog` scrubs them as it scrubs every log's.
+ * attributes, so a line can be found in Sentry by the ids it was logged with,
+ * and the account it was logged for as its user's id rather than an
+ * attribute of its own. `beforeSendLog` scrubs them as it scrubs every log's.
  *
  * Note that this replaces `Sentry.SentryEffectLogger`, because that one sends
  * the message alone and drops the annotations. The line still reaches its
@@ -343,8 +377,14 @@ function foldedLogMessage(message: unknown): string {
 export const sentryLogger: Logger.Logger<unknown, void> = Logger.make(
   ({ fiber, logLevel, message }) => {
     if (logLevel === "All" || logLevel === "None") return;
-    const annotations = fiber.getRef(References.CurrentLogAnnotations);
-    SENTRY_LOG_METHOD[logLevel](foldedLogMessage(message), { ...annotations, ...LOG_ORIGIN });
+    const { [ACCOUNT_KEY]: account, ...annotations } = fiber.getRef(
+      References.CurrentLogAnnotations,
+    );
+    SENTRY_LOG_METHOD[logLevel](foldedLogMessage(message), {
+      ...annotations,
+      ...(Predicate.isString(account) ? { [SENTRY_USER_ID]: account } : undefined),
+      ...LOG_ORIGIN,
+    });
   },
 );
 
@@ -367,14 +407,22 @@ const TAG_VALUE_MAX_LENGTH = 200;
  * A report's attributes as an issue carries them: those it is searched by as
  * tags where they are a string, a number, or a boolean, the rest as extra data. Note that a tag's value is cut to Sentry's
  * limit, because a longer one is dropped whole, and the whole value then stays
- * in the extra data.
+ * in the extra data. The account is its user, as the report's own attribute
+ * or, where it names none, as the annotation of the fiber that reported it,
+ * so a failure met under a request or a run names the account it was for
+ * without each report saying so.
  */
-function reportContext(attributes: Readonly<Record<string, unknown>>): {
+function reportContext(
+  { [ACCOUNT_KEY]: reported, ...attributes }: Readonly<Record<string, unknown>>,
+  annotations: Readonly<Record<string, unknown>>,
+): {
   tags: Record<string, string>;
   extra: Record<string, unknown>;
+  user?: { id: string };
 } {
   const tags: Record<string, string> = {};
   const extra: Record<string, unknown> = {};
+  const account = Predicate.isString(reported) ? reported : annotations[ACCOUNT_KEY];
   for (const [name, value] of Object.entries(attributes)) {
     // Note that only a primitive becomes a tag, and nothing is serialized here, because a
     // cyclic or BigInt value would throw and lose the report; Sentry normalizes extra data.
@@ -388,7 +436,7 @@ function reportContext(attributes: Readonly<Record<string, unknown>>): {
       if (text.length > TAG_VALUE_MAX_LENGTH) extra[name] = value;
     }
   }
-  return { tags, extra };
+  return { tags, extra, ...(Predicate.isString(account) ? { user: { id: account } } : undefined) };
 }
 
 /**
@@ -398,12 +446,12 @@ function reportContext(attributes: Readonly<Record<string, unknown>>): {
  * by `reportContext`: Sentry's own reporter sends all of them as extra data,
  * which an issue cannot be searched by.
  */
-const sentryErrorReporter = ErrorReporter.make(({ error, severity, attributes }) => {
+const sentryErrorReporter = ErrorReporter.make(({ error, severity, attributes, fiber }) => {
   Sentry.captureException(error, {
     mechanism: { type: "auto.function.effect.error_reporter", handled: false },
     captureContext: {
       level: severity === "Fatal" || severity === "Warn" ? SEVERITY_LEVEL[severity] : "error",
-      ...reportContext(attributes),
+      ...reportContext(attributes, fiber.getRef(References.CurrentLogAnnotations)),
     },
   });
 });
