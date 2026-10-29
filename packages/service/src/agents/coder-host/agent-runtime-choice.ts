@@ -33,9 +33,8 @@
  * Where the agent runs is chosen beside it (`agentMachineChoice`): a Vercel
  * Sandbox, or, where the Start names one of the starter's Macs, that Mac, on
  * the same runtime and payer a cloud agent would run on. Its Macs are offered
- * (`macOffers`) only to an account with the `local-agents` experiment on,
- * each that beat within `THIS_MAC.FRESH`, and the agent is pinned to the one
- * the Start named, once it is checked to be among them. A local agent runs
+ * (`macOffers`) each that beat within `THIS_MAC.FRESH`, and the agent is
+ * pinned to the one the Start named, once it is checked to be among them. A local agent runs
  * Claude Code, or Codex on a Mac that registered a Codex it checked; one on
  * Codex on a Mac with none, or on no harness at all, is refused by name. A
  * local agent whose Mac is signed in to the model's harness itself, Claude
@@ -46,7 +45,6 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { accountExperimentOn } from "@luke/database/models/account-store";
 import { type Device, devicesSeenSince } from "@luke/database/models/device-store";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import {
@@ -73,7 +71,6 @@ import {
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
 import type { TaskRunsOnRequest } from "@luke/features/task-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { Clock, Data, Duration, Effect, Option, type Redacted, Result } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import type { StoreFailure } from "../../http/store-failure.js";
@@ -365,8 +362,7 @@ export const localAgentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(functio
  * offer them: each device it registered, the latest beat first, with its
  * kind and last beat, so a device away now is offered but drawn away, and
  * the providers an agent on it runs that the account can pay for
- * (`paidMacProviders`), or that its own harness login pays for, where the
- * account has the `local-agents` experiment on; none otherwise. Only one
+ * (`paidMacProviders`), or that its own harness login pays for. Only one
  * that beat within `THIS_MAC.FRESH` takes a task's Runs on or an agent
  * (`freshOffer`).
  * Note that every one is offered by name rather than one as This Mac,
@@ -376,7 +372,6 @@ export const localAgentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(functio
 export const macOffers = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
 ): Effect.fn.Return<readonly MacOffer[], StoreFailure, DatabaseServices> {
-  if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) return [];
   const registered = yield* devicesSeenSince(userId, new Date(0));
   if (registered.length === 0) return [];
   const paid = yield* paidMacProviders(userId);
@@ -429,9 +424,6 @@ export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   runtime: ConversationRuntime,
 ): Effect.fn.Return<AgentMachineChoice, StoreFailure | LocalAgentRefused, DatabaseServices> {
   if (asked.machine !== AGENT_MACHINE.DEVICE) return IN_A_SANDBOX;
-  if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) {
-    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.OFF });
-  }
   if (runtime !== CONVERSATION_RUNTIME.CLAUDE_CODE && runtime !== CONVERSATION_RUNTIME.CODEX) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.NO_HARNESS });
   }
@@ -453,8 +445,8 @@ export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
  * Where a task of the account's runs its agents, as a request to set it
  * asks: the cloud, or one of the account's own devices that beat within
  * `THIS_MAC.FRESH` and runs some model's harness; refused by name
- * otherwise: the experiment off, and a device that is another account's,
- * was never registered, or is away, as away. The device the task keeps is
+ * otherwise: a device that is another account's, was never registered, or
+ * is away, as away. The device the task keeps is
  * checked again as each agent starts (`agentMachineChoice`), since it may
  * be away by then or not run that agent's model.
  */
@@ -463,9 +455,6 @@ export const taskRunsOnChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   asked: TaskRunsOnRequest,
 ): Effect.fn.Return<AgentMachineChoice, StoreFailure | LocalAgentRefused, DatabaseServices> {
   if (asked.machine === AGENT_MACHINE.VERCEL) return IN_A_SANDBOX;
-  if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) {
-    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.OFF });
-  }
   const offer = yield* freshOffer(userId, asked.deviceId);
   if (offer === undefined) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.MAC_AWAY });
@@ -487,9 +476,9 @@ export const taskRunsOnChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
  * (`RunsOnPickRemoved`) where it was removed since, rather than run in the
  * cloud. Note that, unlike a Start's choice, a device that is away is taken,
  * because making the task starts nothing, and a Start on it while it is
- * still away is refused by name (`agentMachineChoice`); and that with the
- * experiment off, or no device left at all, none is offered, so the cloud is
- * the only place there is, New task draws no Runs on to pick it with, and a
+ * still away is refused by name (`agentMachineChoice`); and that with no
+ * device left at all, none is offered, so the cloud is the only place there
+ * is, New task draws no Runs on to pick it with, and a
  * pick kept from before stands unread.
  */
 export const agentMadeRunsOn = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -502,7 +491,6 @@ export const agentMadeRunsOn = /* @__PURE__ */ Effect.fnUntraced(function* (
   const pick = yield* readRunsOnPick(userId);
   if (Option.isNone(pick) || pick.value.machine === AGENT_MACHINE.VERCEL) return undefined;
   const kept = pick.value.deviceId;
-  if (!(yield* accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS))) return undefined;
   const offers = yield* macOffers(userId);
   if (offers.length === 0) return undefined;
   const offered = offers.find((each) => each.deviceId === kept);

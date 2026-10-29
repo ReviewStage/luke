@@ -179,16 +179,13 @@ test("an experiment is found by its name, what it brings, and what other apps ca
   for (const query of ["threads by topic", "a stream your agents post to"]) {
     assert.deepEqual(experimentalFound(query, true), ["Channels"], query);
   }
-  for (const query of ["Local agents", "in a worktree"]) {
-    assert.deepEqual(experimentalFound(query, true), ["Local agents"], query);
-  }
   for (const query of ["operator", "steers them"]) {
     assert.deepEqual(experimentalFound(query, true), ["Luke, your operator"], query);
   }
   for (const query of ["Experimental", "beta", "labs"]) {
     assert.deepEqual(
       experimentalFound(query, true),
-      ["Pilot", "Local agents", "Channels", "Memory", "Luke, your operator"],
+      ["Pilot", "Channels", "Memory", "Luke, your operator"],
       query,
     );
   }

@@ -476,8 +476,8 @@ earlier in its life is not tracked, and its snapshot stays until Vercel lets
 it expire. The sandbox of each session a task's own Luke ran, before tasks
 lost him, is deleted the same way, shortly after his conversation is removed.
 
-**A local agent on your Mac.** For the accounts in the early test of local
-agents, an agent you start on This Mac runs Claude Code, or Codex for a
+**A local agent on your Mac.** Once you turn on This Mac in Settings ›
+Hosts, an agent you start on This Mac runs Claude Code, or Codex for a
 GPT model, on your Mac, each in a virtual machine of its own (smolvm) that sees
 only that agent's folder, and its transcript, its events, and the files its
 tools read still reach our service as any agent's do. It runs on the
@@ -518,12 +518,17 @@ both files once it has; a restore that fails deletes nothing, is said in plain
 words, and is tried again with the agent's next message. Luke's log on your
 Mac names each save's and each restore's size, digest, generation, and how
 long it took, never what it holds.
-For now the agent's folder stays on your Mac between turns, saved or not. To
-run them, the app downloads smolvm from its GitHub release once, keeps it in
-Luke's own folder on your Mac only once it matches the checksum Luke pins,
-checks the files it runs against those checksums again before each use, and
-pulls the public sandbox image our hosts run. An agent that ran directly on
-your Mac before this is not started again; continue it into a new agent.
+For now the agent's folder stays on your Mac between turns, saved or not.
+Nothing of this happens until you turn This Mac on. Turning it on registers a
+login item that runs Luke's host program, `luke-host`, on your Mac at each
+login, whether the app is open or not, and the app keeps it registered from
+then on; removing This Mac in Settings › Hosts stops its agents, and it runs
+none until you turn it on again. To run them, `luke-host` downloads smolvm
+from its GitHub release once, keeps it in Luke's own folder on your Mac only
+once it matches the checksum Luke pins, checks the files it runs against those
+checksums again before each use, and pulls the public sandbox image our hosts
+run. An agent that ran directly on your Mac before this is not started again;
+continue it into a new agent.
 
 **A local agent on a host.** A host is your own Linux server that you add
 to Luke to run your agents, as This Mac does. It has no git login of yours, so

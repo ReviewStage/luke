@@ -479,8 +479,6 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
 
 /** Why a start on a device refused it, in words the calling model can act on: by what the device refused it for, bar another member's device, which names whose it is (`notOwnerWords`). */
 const LOCAL_AGENT_REFUSAL_WORDS = {
-  [LOCAL_AGENT_REFUSAL.OFF]:
-    "Not started: this task runs its agents on a device, and Local agents is off for the member you start for. Ask them to turn it on, or to change where the task runs.",
   [LOCAL_AGENT_REFUSAL.MAC_AWAY]:
     "Not started: the device this task runs its agents on is away, asleep or with Luke closed, so it cannot take an agent. Try again once it is back, or ask the member to change where the task runs.",
   [LOCAL_AGENT_REFUSAL.CODEX]:

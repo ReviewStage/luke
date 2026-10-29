@@ -4,11 +4,9 @@ import {
   DEVICE_STANDING,
   type DeviceStanding,
 } from "@luke/features/agent-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { Badge, STATUS_TONE, useSecond, VISUALLY_HIDDEN_UNDER, VisuallyHidden } from "@luke/ui";
 import { GLYPH, LaptopIcon } from "@luke/ui/icons";
 import { presenceStanding, useDevicePresence } from "../device-presence.js";
-import { useExperiment } from "../use-app-state.js";
 
 /**
  * agent-place.tsx -- the chip an agent's message box wears saying where the agent runs: its device by name, or the cloud.
@@ -29,8 +27,7 @@ import { useExperiment } from "../use-app-state.js";
  * read does not name is a teammate's, which the window cannot speak for, so
  * its label is its name alone. Nothing is drawn for an agent on a device the
  * service no longer names, since it is neither in the cloud nor anywhere that
- * can be named, or while the local agents experiment is off, like every Runs on
- * surface. In a card too narrow for its words, where the branch's chip draws
+ * can be named. In a card too narrow for its words, where the branch's chip draws
  * its mark alone too, the badge draws its glyph alone and keeps the words for
  * a reader, rather than wrapping them a letter to a line.
  */
@@ -52,8 +49,6 @@ export function AgentPlace({
 }: {
   agent: Pick<AgentSummary, "mac" | "machine">;
 }): React.JSX.Element | null {
-  const on = useExperiment(EXPERIMENT.LOCAL_AGENTS);
-  if (!on) return null;
   if (agent.machine !== AGENT_MACHINE.DEVICE) return <CloudBadge />;
   if (agent.mac === undefined) return null;
   return <MacBadge mac={agent.mac} />;

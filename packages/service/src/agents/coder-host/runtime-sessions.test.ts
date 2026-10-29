@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   type Agent,
   createAgent,
@@ -44,7 +43,6 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
@@ -1272,13 +1270,12 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start on a task that runs on one of its starter's devices runs only with the experiment on and that device there lately, pinned to it on the model's harness, paid for by its own login to it where it has one, a plan in Luke or none; Codex on a device with none checked, the experiment off, or the device gone or away is refused by name and leaves no agent",
+      "a Start on a task that runs on one of its starter's devices runs only with that device there lately, pinned to it on the model's harness, paid for by its own login to it where it has one, a plan in Luke or none; Codex on a device with none checked, or the device gone or away, is refused by name and leaves no agent",
       () =>
         Effect.gen(function* () {
           const cases = [
             {
-              name: "on, a Mac there, Claude",
-              on: true,
+              name: "a Mac there, Claude",
               mac: true,
               chatGpt: "none",
               model: "anthropic/claude-opus-5.5",
@@ -1287,7 +1284,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "no plan saved in Luke, the Mac signed in to Claude Code",
-              on: true,
               mac: true,
               plan: false,
               signedIn: { claudeCode: true },
@@ -1298,7 +1294,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "a GPT model on a Mac that checked a Codex, the ChatGPT plan saved in Luke",
-              on: true,
               mac: true,
               codex: true,
               chatGpt: "signed_in",
@@ -1308,7 +1303,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "a GPT model, nothing of OpenAI's saved in Luke, the Mac signed in to Codex",
-              on: true,
               mac: true,
               codex: true,
               signedIn: { codex: true },
@@ -1319,7 +1313,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "another Mac of the account signed in to Claude Code, the named one not",
-              on: true,
               mac: true,
               otherSignedIn: true,
               chatGpt: "none",
@@ -1328,16 +1321,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               runs: ["claude_code", AGENT_PAYER.CLAUDE_SUBSCRIPTION],
             },
             {
-              name: "the experiment off",
-              on: false,
-              mac: true,
-              chatGpt: "none",
-              model: "anthropic/claude-opus-5.5",
-              refused: LOCAL_AGENT_REFUSAL.OFF,
-            },
-            {
               name: "the task's device gone",
-              on: true,
               mac: false,
               chatGpt: "none",
               model: "anthropic/claude-opus-5.5",
@@ -1345,7 +1329,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "the task's device registered, but away",
-              on: true,
               mac: true,
               away: true,
               chatGpt: "none",
@@ -1354,7 +1337,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "a GPT model on a Mac that checked no Codex",
-              on: true,
               mac: true,
               chatGpt: "signed_in",
               model: "openai/gpt-5.5",
@@ -1362,7 +1344,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
             {
               name: "the task's device there, but still getting ready",
-              on: true,
               mac: true,
               setup: DEVICE_SETUP.PREPARING,
               chatGpt: "none",
@@ -1374,11 +1355,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             const plan = !("plan" in each) || each.plan;
             const signedIn = "signedIn" in each ? each.signedIn : {};
             const { owner, workspaceId } = yield* openStarter(plan, each.chatGpt);
-            if (each.on) {
-              yield* writeAccountPreferences(owner, {
-                experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
-              });
-            }
             const deviceId = randomUUID();
             if (each.mac) {
               yield* registerDevice(owner, {
@@ -1452,9 +1428,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
       () =>
         Effect.gen(function* () {
           const { owner, workspaceId } = yield* openStarter(true);
-          yield* writeAccountPreferences(owner, {
-            experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
-          });
           const deviceId = randomUUID();
           yield* registerDevice(owner, {
             id: deviceId,
@@ -1636,9 +1609,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           ] as const;
           for (const each of cases) {
             const { owner } = yield* openStarter(each.plan, each.chatGpt);
-            yield* writeAccountPreferences(owner, {
-              experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
-            });
             yield* registerDevice(owner, {
               id: randomUUID(),
               name: "Studio",
@@ -1663,9 +1633,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
       () =>
         Effect.gen(function* () {
           const { owner } = yield* openStarter(true, "none");
-          yield* writeAccountPreferences(owner, {
-            experiments: { [EXPERIMENT.LOCAL_AGENTS]: true },
-          });
           const id = randomUUID();
           const offered = Effect.map(
             macOffers(owner).pipe(Effect.provide(Layer.mergeAll(environment(), runtimes().native))),

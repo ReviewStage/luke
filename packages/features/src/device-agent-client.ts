@@ -41,8 +41,8 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
  * the bearer is read fresh per attempt and a 401 is renewed and retried
  * once. No call fails: a held read the service did not answer is nothing,
  * which the caller asks again after a pause; a claim refused is
- * `DEVICE_AGENT_NOT_CLAIMED` (another claim took it, its caller withdrew it,
- * or the account's experiment is off) and one unanswered nothing; a
+ * `DEVICE_AGENT_NOT_CLAIMED` (another claim took it, or its caller withdrew
+ * it) and one unanswered nothing; a
  * register, a settle, or an answer not taken is false, and a beat or a
  * read of the live agents not taken is nothing. A save of an agent's
  * state, or its commit, refused says whether a newer save made it stale,
@@ -193,7 +193,7 @@ type OwnEnrollingMachine = Required<Omit<OwnDeviceEnrollRequest, "deviceId">>;
 export const OWN_ENROLL_OUTCOME = {
   /** The service converted the device in place and answered its device secret, this once. */
   ENROLLED: "enrolled",
-  /** The account holds no device of that id, or has the Local agents experiment off. */
+  /** The account holds no device of that id. */
   NOT_FOUND: "not-found",
   /** The service refused the enroll for any other reason, its slug kept. */
   REFUSED: "refused",

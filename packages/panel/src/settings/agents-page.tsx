@@ -76,9 +76,8 @@ import { SwitchRow } from "./switch-row.js";
  * each saying how Claude Code or Codex is connected and opening the dialog
  * that connects it with a plan or an API key (`agent-auth-section.tsx`),
  * then this file's Default model, then the model a Generate chapters runs
- * on (`chapters-model-section.tsx`), then the page's schema rows, Run agents
- * on this Mac among them while local agents are on. The harnesses and the Default model
- * share the one read of the keys, so a
+ * on (`chapters-model-section.tsx`), then the page's schema rows. The
+ * harnesses and the Default model share the one read of the keys, so a
  * key saved or removed above is what the model row says at once. The default model's one value is the account's, kept
  * on the service beside the settings preferences and written by this page
  * and by a Start that named a model alike, so the page reads it afresh as it
