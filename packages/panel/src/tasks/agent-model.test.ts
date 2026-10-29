@@ -753,6 +753,16 @@ test("a message to an agent whose device is away says it is offline, in the word
   );
 });
 
+test("a message Luke heard nothing back on says to try again in the Inbox, which draws no Retry, and its words alone beside the composer's Retry", () => {
+  assert.deepEqual(
+    [
+      messageFailureWords(AGENT_CALL_FAILURE.UNANSWERED),
+      messageFailureNote({ failure: AGENT_CALL_FAILURE.UNANSWERED }, null).text,
+    ],
+    ["Luke didn't hear back. Try again.", "Luke didn't hear back."],
+  );
+});
+
 test("a Start another member's device refused names the device and its owner and offers no way out the reader cannot take, and says the same, unnamed, where the service named neither", () => {
   const refused = (refusedDevice?: { name: string; owner?: string }) =>
     startFailureNote(
