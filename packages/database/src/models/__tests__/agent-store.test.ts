@@ -1430,6 +1430,28 @@ it.layer(getTestDB())("an agent's pin", (it) => {
     }),
   );
 
+  it.effect("a member who cannot see the agent's task can neither pin it nor unpin it", () =>
+    Effect.gen(function* () {
+      const starter = yield* openAccount;
+      const teammate = yield* openAccount;
+      const workspace = yield* openWorkspace(starter);
+      yield* joinWorkspace(workspace, teammate);
+      // A task on its starter's own token, which a teammate does not see.
+      const task = yield* createTask(starter, {
+        organizationId: workspace,
+        name: "Billing",
+        repository: "acme/relay",
+        githubAccess: GITHUB_ACCESS.TOKEN,
+      });
+      const { agentId } = yield* tasklessAgent(starter, workspace, { taskId: task.id });
+      yield* pinAgent(starter, agentId, true);
+
+      assert.ok(Option.isNone(yield* pinAgent(teammate, agentId, true)));
+      assert.ok(Option.isNone(yield* pinAgent(teammate, agentId, false)));
+      assert.deepEqual(yield* pinnedOnes(agentId), [{ userId: starter }]);
+    }),
+  );
+
   it.effect("an agent's pins go with the agent, and an account's with the account", () =>
     Effect.gen(function* () {
       const { dean, charles, agentId } = yield* openSharedAgent;

@@ -541,7 +541,8 @@ export function MainTabStrip({
       chosen: entry.look.selected,
       onClose: entry.close,
       onCloseOthers: closeOthersOf(entry),
-      pin: agent === undefined ? undefined : pinDoor(agent.id),
+      // Note that an archived agent offers no pin, as its sidebar row does none, since no pin of it is drawn until it comes back.
+      pin: agent === undefined || agent.archivedAt !== undefined ? undefined : pinDoor(agent.id),
       copyLink: linked === undefined ? undefined : copyLink(linked),
     };
   };

@@ -193,6 +193,30 @@ test("a Changes tab pins to the sidebar, keeps its pin across a launch, and take
   assert.deepEqual(second.control().changes, [{ changes: AGENT }]);
 });
 
+test("a tab pinned on an agent's own page keeps its pin across a launch, under a key of its own an earlier version's record leaves alone", () => {
+  const first = launch({ task: AGENT, taskAgents: [AGENT] });
+  act(() => first.control().onPin({ agent: AGENT }, { changes: AGENT }, "#88 Quarantine"));
+  act(() => first.control().onPin({ task: TASK }, { changes: OTHER_AGENT }, "#42 Invites"));
+  first.quit();
+  const { pins, agentPins } = JSON.parse(window.localStorage.getItem("luke.sidePanel") ?? "{}");
+  assert.deepEqual(
+    [
+      pins.map((pin: { task?: string }) => pin.task),
+      agentPins.map((pin: { agent?: string }) => pin.agent),
+    ],
+    [[TASK], [AGENT]],
+  );
+
+  const second = launch({ task: TASK, taskAgents: [OTHER_AGENT] });
+  assert.deepEqual(
+    second.control().pins.map(({ tab, label, at: _at, ...holder }) => ({ ...holder, tab, label })),
+    [
+      { task: TASK, tab: { changes: OTHER_AGENT }, label: "#42 Invites" },
+      { agent: AGENT, tab: { changes: AGENT }, label: "#88 Quarantine" },
+    ],
+  );
+});
+
 test("a file's pin opens its tab on the pin's task after a launch, which keeps no file's tab", () => {
   const file = "src/invites/accept.ts";
   const first = launch({ task: TASK, taskAgents: [] });

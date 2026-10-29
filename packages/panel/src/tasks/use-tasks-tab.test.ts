@@ -2781,7 +2781,7 @@ const readAgentPin = Schema.decodeUnknownOption(
   }),
 );
 
-test("an agent's tab an earlier version pinned on this Mac becomes the agent's own pin on the account, where it was dragged, once the list names the agent, and leaves this Mac only once that pin landed", async () => {
+test("an agent's tab an earlier version pinned on this Mac becomes the agent's own pin on the account, where it was dragged, once the list followed live names its task, and leaves this Mac only once that pin landed, the service reads no such agent, or the account already pinned it", async () => {
   const kept = () =>
     window.localStorage.setItem(
       "luke.sidePanel",
@@ -2798,37 +2798,54 @@ test("an agent's tab an earlier version pinned on this Mac becomes the agent's o
     tab.payloads
       .filter((each) => each.kind === ACT_KIND.AGENTS_PIN)
       .map((each) => Option.getOrUndefined(readAgentPin(each.payload)));
-  const naming = { ...listRead([listed()]), taskAgents: [RUNNING_AGENT] };
+  const live = { ...listRead([listed()]), taskAgents: [RUNNING_AGENT] };
+  const carriedPin = [{ agent: AGENT_ID, task: TASK.id, position: "a3" }];
+  /** A launch over the kept pin, the service answering its pin as `answer` does. */
+  const launch = async (
+    tasks: TasksView,
+    answer: () => Promise<PortActResult<typeof ACT_KIND.AGENTS_PIN>>,
+  ) => {
+    kept();
+    const tab = mount({ shown: true, tasks }, { [ACT_KIND.AGENTS_PIN]: answer });
+    await settle();
+    return tab;
+  };
 
-  kept();
-  const landed = mount(
-    { shown: true, tasks: listRead([listed()]) },
-    { [ACT_KIND.AGENTS_PIN]: () => Promise.resolve({ agent: RUNNING_AGENT }) },
-  );
-  await settle();
-  assert.deepEqual(asked(landed), [], "an agent the list does not name yet is asked nothing");
-  landed.stand({ tasks: naming });
+  const pending = Promise.withResolvers<PortActResult<typeof ACT_KIND.AGENTS_PIN>>();
+  const landed = await launch(listRead([listed()]), () => pending.promise);
+  assert.deepEqual(asked(landed), [], "nothing is asked before the list is followed live");
+  landed.stand({ tasks: live });
   await settle();
   assert.deepEqual(asked(landed), [{ agentId: AGENT_ID, pinned: true, position: "a3" }]);
+  assert.deepEqual(landed.control().sidePanel.carried, carriedPin, "kept while its pin is out");
+  assert.equal(storedPins().length, 1);
+  await act(async () => pending.resolve({ agent: RUNNING_AGENT }));
   assert.deepEqual(landed.control().sidePanel.carried, []);
   assert.deepEqual(storedPins(), [], "nor does it stay on this Mac");
   closeWindow();
 
-  kept();
-  const refused = mount(
-    { shown: true, tasks: naming },
-    {
-      [ACT_KIND.AGENTS_PIN]: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND }),
-    },
+  const refused = await launch(live, () =>
+    Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
   );
-  await settle();
   assert.equal(asked(refused).length, 1);
   assert.deepEqual(
     refused.control().sidePanel.carried,
-    [{ agent: AGENT_ID, task: TASK.id, position: "a3" }],
+    carriedPin,
     "a refused pin keeps the tab's for the next launch",
   );
-  assert.equal(storedPins().length, 1);
+  closeWindow();
+
+  const gone = await launch(live, () => Promise.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND }));
+  assert.deepEqual(gone.control().sidePanel.carried, [], "an agent the service reads none of");
+  closeWindow();
+
+  const already = await launch(
+    { ...live, taskAgentPins: [{ agentId: AGENT_ID, taskId: TASK.id, pinnedAt: 5 }] },
+    () => Promise.resolve({ agent: RUNNING_AGENT }),
+  );
+  assert.deepEqual(asked(already), [], "an agent already pinned is asked nothing");
+  assert.deepEqual(already.control().sidePanel.carried, []);
+  assert.deepEqual(storedPins(), []);
 });
 
 /** A start's agent, read back where it names one. */

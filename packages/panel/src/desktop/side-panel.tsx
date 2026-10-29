@@ -298,12 +298,6 @@ export const SIDE_PANEL_HOLDER = {
 
 export type SidePanelHolder = (typeof SIDE_PANEL_HOLDER)[keyof typeof SIDE_PANEL_HOLDER];
 
-/** What a tab of the panel is pinned on: the agent an agent's page holds the panel under, or the task; none beside the Inbox, which is no holder's page. */
-function pinHolderOf(holder: SidePanelHolder, id: string): PinHolder | undefined {
-  if (holder === SIDE_PANEL_HOLDER.INBOX) return undefined;
-  return holder === SIDE_PANEL_HOLDER.AGENT ? { agent: id } : { task: id };
-}
-
 /** What the panel's pages and cloud Browser tabs stand on: the agent an agent's page holds the panel under, else the task. */
 function holderPlaceOf(holder: SidePanelHolder, id: string): PagePlace {
   return holder === SIDE_PANEL_HOLDER.AGENT ? { agentId: id } : { taskId: id };
@@ -1151,6 +1145,7 @@ function PanelTabs({
   panel,
   holder,
   taskId,
+  pinOn,
   task,
   keys,
   unread,
@@ -1180,6 +1175,8 @@ function PanelTabs({
   holder: SidePanelHolder;
   /** The open task, which a tab's pin is of. */
   taskId: string;
+  /** What an agent's page's tab is pinned on; none where it offers no pin. */
+  pinOn: PinHolder | undefined;
   /** The task's name and status, which its Plan tab wears; none where they are not known. */
   task: PlanStanding | undefined;
   /** Whether the panel offers its keys: on screen, not on its way out, and holding the window's focus. */
@@ -1291,7 +1288,13 @@ function PanelTabs({
   useAppCommand(APP_COMMAND.OPEN_ON_GITHUB, openOnGitHub, FOCUSED_OFFER);
   // Note that the Plan tab offers no pin of its own: the task's Pin, in its document menu, is what pins the task to the sidebar.
   const pinOf = ({ tab, look }: DrawnTab): TabPin | undefined => {
-    const on = pinHolderOf(holder, taskId);
+    // A task's page pins on the task; an agent's page pins where the sidebar draws the pin, as its page says; the Inbox's, nowhere.
+    const on: PinHolder | undefined =
+      holder === SIDE_PANEL_HOLDER.TASK
+        ? { task: taskId }
+        : holder === SIDE_PANEL_HOLDER.AGENT
+          ? pinOn
+          : undefined;
     if (on === undefined || tab === SIDE_PANEL_TAB.PLAN || !isPinnable(tab)) return undefined;
     const pinned = panel.pins.some((pin) => sameHolder(pin, on) && sameTab(pin.tab, tab));
     return {
@@ -2268,6 +2271,7 @@ export function SidePanel({
   unread,
   holder,
   taskId,
+  pinOn,
   repository,
   repositoryPlace,
   pages,
@@ -2294,6 +2298,13 @@ export function SidePanel({
   holder: SidePanelHolder;
   /** The plan the panel stands beside, or the agent where it stands beside the agent's own page. */
   taskId: string;
+  /**
+   * What a tab of an agent's own page is pinned on: the agent while the
+   * sidebar lists it standing, where the pin is drawn, or the task of an
+   * agent on one; none for an archived agent, whose page offers no pin, and
+   * beside a task's page or the Inbox, whose holder decides it.
+   */
+  pinOn?: PinHolder | undefined;
   /** The task's repository, `owner/name`, or none before one is chosen. */
   repository: string | null;
   /** Where the panel stands for no task, an agent's page or an Inbox item of an agent on none: the workspace and repository its File tabs read through; none beside a task, or where no repository is known. */
@@ -2584,6 +2595,7 @@ export function SidePanel({
         <PanelTabs
           panel={panel}
           holder={holder}
+          pinOn={pinOn}
           taskId={taskId}
           keys={keys && focused}
           unread={unread}

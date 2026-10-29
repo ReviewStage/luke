@@ -1577,11 +1577,15 @@ it; the coder agent reads the row at every step (`apps/dev/agent.ts`'s
 mid-turn is the next step's and an idle agent's next turn takes it. It
 refuses an agent of a workspace the account is not in as not found and a model or effort the
 catalog does not offer as `invalid-request`, and leaves the account's
-default as it was. The same PATCH taking `{ pinned }` pins the agent for the
-asking member alone, or unpins it (`pinAgent`): a pin is the account's
-own row of `agent_pin`, as a task's is of `plan_pin`, kept from the first
-pin's instant and gone with the agent or the account, and the plan list's
-`planlessAgents` answer it as `pinnedAt` only where the reader holds one.
+default as it was. The same PATCH taking `{ pinned }` pins the agent, on a
+task or on none, for the asking member alone, or unpins it (`pinAgent`),
+gated as the member's read of the agent is (`agentVisibleTo`), its task's
+reach among it, so an agent they cannot see is neither pinned nor unpinned:
+a pin is the account's own row of `agent_pin`, as a task's is of
+`plan_pin`, kept from the first pin's instant and gone with the agent or the
+account; the plan list's `planlessAgents` answer it as `pinnedAt` only where
+the reader holds one, and its live follow carries the reader's pins of
+agents on a task as `taskAgentPins`.
 `POST /api/agents/{id}/stop` is eve's cancel of the turn under way, named by
 eve's own id on the row, then the row's stamp; the service's hook stops the
 sandbox as the cancelled turn ends, and anything the agent pushed stays.

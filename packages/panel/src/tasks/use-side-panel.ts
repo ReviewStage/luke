@@ -396,8 +396,8 @@ const agentHolderPinSchema = Schema.Struct({
   position: Schema.optionalKey(Schema.String),
 });
 
-/** A tab pinned to the sidebar as it is kept: on a task, or on an agent's own page. */
-const pinnedTabSchema = Schema.Union([taskPinSchema, agentHolderPinSchema]);
+/** A tab pinned to the sidebar as it is kept: on a task, under `pins`, or on an agent's own page, under `agentPins`. */
+type KeptPin = typeof taskPinSchema.Type | typeof agentHolderPinSchema.Type;
 
 /** A tab of a kind the sidebar holds a pin of, of today's kinds. */
 export type PinnableTab = Exclude<typeof pinnableTabSchema.Type, RetiredSidePanelTab>;
@@ -519,10 +519,15 @@ interface TaskTabs {
  * The fixed tabs in the order a task no tab was moved on draws them, which
  * an earlier version's drags set for every task, the chosen tab, each
  * task's own choices of fixed tab, by task id, and the tabs pinned to the
- * sidebar, newest pinned first. Note that `tabs`
+ * sidebar, newest pinned first: those on a task under `pins`, and those
+ * on an agent's own page under `agentPins`. Note that `tabs`
  * once held only the open fixed tabs, so what an earlier version kept reads
  * as an order with the kinds it closed last, and that a record with no
  * `pins` is one from before them, whose strip pins are read in their place.
+ * Note too that a pin on an agent is kept under a key of its own, because an
+ * earlier version reading the record, as one a rollback launches does, reads
+ * every pin under `pins` as a task's, and would let go of the whole record,
+ * open tabs and width among it, over one it could not read.
  */
 const sidePanelStateSchema = Schema.Struct({
   open: Schema.Boolean,
@@ -530,7 +535,8 @@ const sidePanelStateSchema = Schema.Struct({
   tab: Schema.optional(anyTabSchema),
   width: Schema.Number,
   tasks: Schema.optional(Schema.Record(Schema.String, taskTabsSchema)),
-  pins: Schema.optional(Schema.Array(pinnedTabSchema)),
+  pins: Schema.optional(Schema.Array(taskPinSchema)),
+  agentPins: Schema.optional(Schema.Array(agentHolderPinSchema)),
 });
 
 export type SidePanelState = typeof sidePanelStateSchema.Type;
@@ -596,7 +602,6 @@ const earlierSidePanelSchema = Schema.Struct({
 /** A pin as it is read: one written before tasks had their name names its task `plan`. */
 const keptPinSchema = Schema.Union([
   taskPinSchema,
-  agentHolderPinSchema,
   taskPinSchema.mapFields(({ task: _task, ...fields }) => ({ ...fields, plan: Schema.String })),
 ]);
 
@@ -1705,12 +1710,12 @@ function stripPins(
 }
 
 /** Whether a kept pin is of an agent's tab, which the account pins now. */
-function carriedPin(pin: typeof pinnedTabSchema.Type): pin is CarriedPin {
+function carriedPin(pin: KeptPin): pin is CarriedPin {
   return "task" in pin && isAgentTab(pin.tab);
 }
 
 /** A kept pin of today's kinds as the hook holds it, on its holder; none for an agent's, or a retired kind's. */
-function heldPin(pin: typeof pinnedTabSchema.Type): PinnedTab[] {
+function heldPin(pin: KeptPin): PinnedTab[] {
   const { tab } = pin;
   if (isAgentTab(tab) || !currentPin(tab)) return [];
   const { label, at, position } = pin;
@@ -1726,7 +1731,10 @@ function heldPin(pin: typeof pinnedTabSchema.Type): PinnedTab[] {
  */
 function settled(state: SidePanelState): HeldState {
   const { tab } = state;
-  const pins = state.pins ?? stripPins(state.tasks ?? {});
+  const pins: readonly KeptPin[] = [
+    ...(state.pins ?? stripPins(state.tasks ?? {})),
+    ...(state.agentPins ?? []),
+  ];
   return {
     ...state,
     // The plan's tab leads, since a kept order from before it stood here holds it nowhere.
@@ -1744,7 +1752,7 @@ function settled(state: SidePanelState): HeldState {
     macTerminals: [],
     previews: {},
     tasks: currentTasks(state.tasks),
-    pins: pins.flatMap(heldPin),
+    pins: pins.flatMap(heldPin).toSorted((a, b) => b.at - a.at),
     carried: pins.filter(carriedPin),
   };
 }
@@ -1803,10 +1811,17 @@ function stored(state: HeldState): SidePanelState {
     tabs: state.tabs,
     width: state.width,
     tasks: storedTasks(state.tasks),
-    pins: [...state.pins, ...state.carried],
+    pins: [
+      ...state.pins.flatMap((pin): (typeof taskPinSchema.Type)[] => ("task" in pin ? [pin] : [])),
+      ...state.carried,
+    ],
   };
+  const agentPins = state.pins.flatMap((pin): (typeof agentHolderPinSchema.Type)[] =>
+    "agent" in pin ? [pin] : [],
+  );
+  const withAgents = agentPins.length === 0 ? kept : { ...kept, agentPins };
   const tab = state.tab;
-  return tab !== undefined && keptChoice(tab) ? { ...kept, tab } : kept;
+  return tab !== undefined && keptChoice(tab) ? { ...withAgents, tab } : withAgents;
 }
 
 /** What storage holds under the key, or nothing where it refuses the read. */

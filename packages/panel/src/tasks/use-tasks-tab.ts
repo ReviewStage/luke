@@ -977,6 +977,16 @@ const NO_IDS: readonly string[] = [];
 /** No agent with no plan, before the list carries any. */
 const NO_TASKLESS_AGENTS: readonly TasklessAgent[] = [];
 
+/** How an agent's pin asked of the service landed: written, refused, of an agent the service reads none of, or never asked, the account having changed while it waited its turn. */
+const AGENT_PIN_ASKED = {
+  CHANGED: "changed",
+  REFUSED: "refused",
+  GONE: "gone",
+  UNASKED: "unasked",
+} as const;
+
+type AgentPinAsked = (typeof AGENT_PIN_ASKED)[keyof typeof AGENT_PIN_ASKED];
+
 /** No agent on a plan, the same array every render, while the list is not followed live. */
 const NO_TASK_AGENTS: readonly AgentSummary[] = [];
 
@@ -1505,42 +1515,6 @@ export function useTasksTab(input: {
       });
     }
   }, [sidePanel.pins, tasks.tasks, onUnpin]);
-  // An agent's tab an earlier version pinned on this Mac becomes the agent's
-  // own pin on the account, standing where it was dragged, as a Plan tab's
-  // becomes its task's above: once the list names the agent, and let go of
-  // here only once the account's pin landed, so a refusal, or an agent the
-  // list does not name yet, keeps it for a later try, drawn nowhere. An
-  // agent already pinned only lets it go. Each agent is asked once a launch.
-  const carriedAsked = useRef(new Set<string>());
-  const { carried, onCarried } = sidePanel;
-  const { taskAgents = NO_TASK_AGENTS, taskAgentPins = NO_TASK_AGENT_PINS } = tasks;
-  useEffect(() => {
-    if (fixture !== undefined) return;
-    for (const pin of carried) {
-      if (carriedAsked.current.has(pin.agent)) continue;
-      const listed =
-        taskAgents.some((agent) => agent.id === pin.agent) ||
-        (tasklessAgents ?? []).some((agent) => agent.id === pin.agent);
-      if (!listed) continue;
-      carriedAsked.current.add(pin.agent);
-      const pinned =
-        taskAgentPins.some((each) => each.agentId === pin.agent) ||
-        (tasklessAgents ?? []).some(
-          (agent) => agent.id === pin.agent && agent.pinnedAt !== undefined,
-        );
-      if (pinned) {
-        onCarried(pin.agent);
-        continue;
-      }
-      const placed = pin.position === undefined ? {} : { position: pin.position };
-      act(ACT_KIND.AGENTS_PIN, { agentId: pin.agent, pinned: true, ...placed }).then(
-        (answer) => {
-          if ("agent" in answer) onCarried(pin.agent);
-        },
-        () => undefined,
-      );
-    }
-  }, [fixture, carried, taskAgents, taskAgentPins, tasklessAgents, onCarried, act]);
   // Main hears which agent's tab, or which task's Inbox, is on screen, and
   // neither while the tab is away, the version history stands in the task's
   // place, the side panel fills the window over the column, or the column
@@ -1841,8 +1815,8 @@ export function useTasksTab(input: {
   };
 
   // Each agent's pins in flight, the newest last, which the next waits on,
-  // each answering whether it landed, or nothing where it was never asked.
-  const agentPinFlights = useRef(new Map<string, Promise<boolean | undefined>>());
+  // each answering how it landed, or nothing where it was never asked.
+  const agentPinFlights = useRef(new Map<string, Promise<unknown>>());
   // The account signed in now, which a pin waiting its turn must still be pressed under.
   const accountNow = useRef(input.account);
   accountNow.current = input.account;
@@ -1855,22 +1829,38 @@ export function useTasksTab(input: {
   // of order would leave standing the one not pressed last. One still
   // waiting when the account changes is never asked, since a pin is its
   // presser's own and would land on whoever signed in since.
-  const pinAgent = (agentId: string, pinned: boolean) => {
-    if (fixture !== undefined) return;
+  const askAgentPin = (
+    agentId: string,
+    pinned: boolean,
+    position?: string,
+  ): Promise<AgentPinAsked> => {
     const flights = agentPinFlights.current;
     const pressedBy = input.account;
-    const asked = (flights.get(agentId) ?? Promise.resolve(true)).then(() =>
-      accountNow.current === pressedBy
-        ? act(ACT_KIND.AGENTS_PIN, { agentId, pinned }).then(
-            (answer) => "agent" in answer,
-            () => false,
-          )
-        : undefined,
+    const placed = position === undefined ? {} : { position };
+    const asked = (flights.get(agentId) ?? Promise.resolve()).then(
+      (): Promise<AgentPinAsked> | AgentPinAsked =>
+        accountNow.current === pressedBy
+          ? act(ACT_KIND.AGENTS_PIN, { agentId, pinned, ...placed }).then(
+              (answer) =>
+                "agent" in answer
+                  ? AGENT_PIN_ASKED.CHANGED
+                  : answer.failure === AGENT_CALL_FAILURE.NOT_FOUND
+                    ? AGENT_PIN_ASKED.GONE
+                    : AGENT_PIN_ASKED.REFUSED,
+              () => AGENT_PIN_ASKED.REFUSED,
+            )
+          : AGENT_PIN_ASKED.UNASKED,
     );
     flights.set(agentId, asked);
-    asked.then((changed) => {
+    asked.then(() => {
       if (flights.get(agentId) === asked) flights.delete(agentId);
-      if (changed !== false) return;
+    });
+    return asked;
+  };
+  const pinAgent = (agentId: string, pinned: boolean) => {
+    if (fixture !== undefined) return;
+    askAgentPin(agentId, pinned).then((asked) => {
+      if (asked === AGENT_PIN_ASKED.CHANGED || asked === AGENT_PIN_ASKED.UNASKED) return;
       toast({
         words: pinned ? AGENT_PIN_FAILED_NOTES.PIN : AGENT_PIN_FAILED_NOTES.UNPIN,
         tone: STATUS_TONE.DANGER,
@@ -1878,6 +1868,43 @@ export function useTasksTab(input: {
       });
     });
   };
+
+  // An agent's tab an earlier version pinned on this Mac becomes the agent's
+  // own pin on the account, standing where it was dragged, as a Plan tab's
+  // becomes its task's: once the list followed live names the task it was
+  // pinned on, asked after that agent's pins already in flight, so an Unpin
+  // pressed at launch is not undone by it. It leaves this Mac only once the
+  // account's pin landed, or once the service says it reads no such agent,
+  // archived ones among those it reads, so one deleted since is let go and a
+  // refusal keeps it for a later launch, drawn nowhere. An agent the account
+  // already pinned only lets it go. Each agent is asked once a launch.
+  const carriedAsked = useRef(new Set<string>());
+  const { carried, onCarried } = sidePanel;
+  const { taskAgents, taskAgentPins = NO_TASK_AGENT_PINS } = tasks;
+  const askCarried = useRef(askAgentPin);
+  askCarried.current = askAgentPin;
+  useEffect(() => {
+    if (fixture !== undefined || taskAgents === undefined) return;
+    for (const pin of carried) {
+      if (carriedAsked.current.has(pin.agent)) continue;
+      if (!tasks.tasks.some((task) => task.id === pin.task)) continue;
+      carriedAsked.current.add(pin.agent);
+      const pinned =
+        taskAgentPins.some((each) => each.agentId === pin.agent) ||
+        (tasklessAgents ?? []).some(
+          (agent) => agent.id === pin.agent && agent.pinnedAt !== undefined,
+        );
+      if (pinned) {
+        onCarried(pin.agent);
+        continue;
+      }
+      askCarried.current(pin.agent, true, pin.position).then((asked) => {
+        if (asked === AGENT_PIN_ASKED.CHANGED || asked === AGENT_PIN_ASKED.GONE) {
+          onCarried(pin.agent);
+        }
+      });
+    }
+  }, [fixture, carried, tasks.tasks, taskAgents, taskAgentPins, tasklessAgents, onCarried]);
 
   // A fixture's pins are moved nowhere, as they are pinned nowhere. Each pin
   // a drop gave a place is asked of the service, which main draws at once: a
@@ -3387,7 +3414,7 @@ export function useTasksTab(input: {
     onWriteSections: writeSections,
     onPinAgent: pinAgent,
     taskAgentPins,
-    taskAgents,
+    taskAgents: taskAgents ?? NO_TASK_AGENTS,
     onMovePins: movePins,
     onDeleteTask: deleteTask,
     back,
