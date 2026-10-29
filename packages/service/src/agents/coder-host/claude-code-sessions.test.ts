@@ -102,6 +102,7 @@ import { RUNNER_TAG, vercelMachineLayer } from "../machine/vercel-machine.js";
 import { NATIVE_TEMPLATE } from "../native-sandbox-template.js";
 import { DESK_LEAD } from "../operator-desk.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
+import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { REPOSITORY_SNAPSHOT } from "../repository-snapshot.js";
 import { deploymentOidcToken, SESSION_TAG } from "../vercel-sandbox-api.js";
 import { CODER } from "./bounds.js";
@@ -370,6 +371,13 @@ const newestTurn = (agent: Agent) =>
     const turn = turns.get(agent.conversationId);
     return { status: turn?.status, failure: agentFailureOf(turn) };
   });
+
+/** Why the agent's newest turn failed, as its record keeps it. */
+const newestFailureDetail = (agent: Agent) =>
+  Effect.map(
+    latestTurnsOfReached([agent.conversationId]),
+    (turns) => turns.get(agent.conversationId)?.failureDetail,
+  );
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -2818,6 +2826,80 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           status: TURN_STATUS.FAILED,
           failure: AGENT_FAILURE.SANDBOX,
         });
+        assert.equal(
+          yield* newestFailureDetail(agent),
+          `${REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE} Vercel Sandbox stdin answered 400: stdin_refused: the command's stdin was refused`,
+        );
+      }),
+  );
+
+  it.effect(
+    "a checkout whose sandbox command Vercel never answered keeps the checkout's sentence and Vercel's answer after it",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { agent, sessions } = yield* repositoryAgent(api, ownInstallation());
+        api.hooks.onRun = () => Promise.reject(new Error("socket hang up"));
+
+        yield* sessions.open(message(agent, "Push a branch."));
+
+        const detail = (yield* newestFailureDetail(agent)) ?? "";
+        assert.ok(
+          detail.startsWith(`${REPOSITORY_REFUSAL.CHECKOUT_FAILED} Vercel Sandbox cmd`),
+          detail,
+        );
+        assert.ok(detail.includes("socket hang up"), detail);
+      }),
+  );
+
+  it.effect(
+    "a launch past its Start that dies or is interrupted reads as the agent's failed turn, saying what cut it off",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const dying = runnerSandboxApi();
+        const died = yield* openAgent;
+        const diedKept = keptAfterResponse();
+        const diedSessions = yield* sessionsFor(died.userId, { next: 0 }).pipe(
+          Effect.provide(
+            Layer.merge(
+              services(dying),
+              Layer.succeed(RunnerBundle, { contents: Effect.die(new TypeError("unreadable")) }),
+            ),
+          ),
+        );
+        const holding = runnerSandboxApi();
+        const cut = yield* openAgent;
+        const cutKept = keptAfterResponse();
+        const cutSessions = yield* sessionsFor(cut.userId, { next: 0 }).pipe(
+          Effect.provide(services(holding)),
+        );
+        // The runner's start is held and never let through, so the launch is interrupted there.
+        const started = gate();
+        holding.hooks.onStart = started.pass;
+
+        yield* diedSessions.open(message(died.agent, "Go.")).pipe(Effect.provide(diedKept.layer));
+        yield* diedKept.run;
+        yield* cutSessions.open(message(cut.agent, "Go.")).pipe(Effect.provide(cutKept.layer));
+        const launching = yield* Effect.forkChild(cutKept.run);
+        yield* Effect.promise(() => started.arrived);
+        yield* Fiber.interrupt(launching);
+
+        for (const { agent } of [died, cut]) {
+          assert.deepEqual(yield* newestTurn(agent), {
+            status: TURN_STATUS.FAILED,
+            failure: AGENT_FAILURE.SANDBOX,
+          });
+        }
+        assert.equal(
+          yield* newestFailureDetail(died.agent),
+          `${REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE} the launch died: TypeError`,
+        );
+        assert.equal(
+          yield* newestFailureDetail(cut.agent),
+          `${REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE} the launch was interrupted`,
+        );
       }),
   );
 

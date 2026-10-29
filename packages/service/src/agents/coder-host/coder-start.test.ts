@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
-import { listAgents, readAgent } from "@luke/database/models/agent-store";
+import { listAgents, readAgent, readAgentByKey } from "@luke/database/models/agent-store";
 import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
 import { createTask, readTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
@@ -17,7 +17,7 @@ import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire
 import { TASK_MODE, TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { and, eq, isNotNull } from "drizzle-orm";
-import { Effect, Layer, Option, Result } from "effect";
+import { Deferred, Effect, Fiber, Layer, Option, Result } from "effect";
 import { MESSAGE_ROLE } from "../../core.js";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
@@ -49,7 +49,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * agent and opens nothing again; a member who did not make the workspace
  * starts one as well, an account outside it starts nothing, and a
  * repository the workspace's installation does not reach is refused before
- * eve is asked. An agent started on a task moves it into progress from the
+ * eve is asked, and a Start whose session never opened leaves no agent. An agent started on a task moves it into progress from the
  * backlog or to do, and on a task worked in pilot mode the first is its pilot,
  * refused to an account with Pilot off. eve is a fake at the client's boundary, GitHub a script,
  * the catalog fixed, and the store PGlite. Synthetic accounts and words
@@ -59,7 +59,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_REPOSITORY = `${RELAY.owner}/${RELAY.name}`;
 /** One installation for each test's workspace, since one installation connects to one workspace and the suite's tests share a database. */
-const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 8 }, (_, index) => ({
+const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 9 }, (_, index) => ({
   id: 8_000 + index,
   login: RELAY.owner,
   accountId: 80_000 + index,
@@ -82,7 +82,7 @@ function fakeEve() {
     cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.RESET }),
   };
-  return { opened, eve: Effect.succeed(sessions) };
+  return { opened, sessions, eve: Effect.succeed(sessions) };
 }
 
 /** What a Start reaches beside the store: GitHub reaching the repository, and the catalog. */
@@ -233,6 +233,37 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
 
         assert.ok(Result.isFailure(refused));
         assert.deepEqual(opened, []);
+      }),
+  );
+
+  it.effect(
+    "a Start whose session never opened, eve not reached or the Start cut short before eve took its first message, leaves no agent behind",
+    () =>
+      Effect.gen(function* () {
+        const { owner, workspaceId } = yield* openConnectedWorkspace;
+        const unreached = workspaceAsk(workspaceId);
+        const refused = yield* Effect.result(
+          startAgent(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE), owner, unreached).pipe(
+            Effect.provide(services),
+          ),
+        );
+        const reached = yield* Deferred.make<void>();
+        const hanging: AgentSessions = {
+          ...fakeEve().sessions,
+          open: () => Effect.andThen(Deferred.succeed(reached, undefined), Effect.never),
+        };
+        const cut = workspaceAsk(workspaceId);
+        const starting = yield* startAgent(Effect.succeed(hanging), owner, cut).pipe(
+          Effect.provide(services),
+          Effect.forkChild,
+        );
+        yield* Deferred.await(reached);
+        yield* Fiber.interrupt(starting);
+
+        assert.ok(Result.isFailure(refused));
+        assert.equal(refused.failure, HOSTED_REFUSAL.UNAVAILABLE);
+        assert.ok(Option.isNone(yield* readAgentByKey(owner, unreached.idempotencyKey)));
+        assert.ok(Option.isNone(yield* readAgentByKey(owner, cut.idempotencyKey)));
       }),
   );
 
