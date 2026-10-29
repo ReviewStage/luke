@@ -5962,7 +5962,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.match(
           part.text,
           new RegExp(
-            `another coding agent of your workspace on the task "Billing", "[^"]+" \\(id \`${onBilling.agent.id}\`\\)`,
+            `another agent of your workspace on the task "Billing", "[^"]+" \\(id \`${onBilling.agent.id}\`\\)`,
             "u",
           ),
         );
@@ -5971,7 +5971,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           new RegExp(`on no task, "[^"]+" \\(id \`${oneOff.agent.id}\`\\)`, "u"),
         );
         assert.equal(part.text.match(/To message it, call `message_agent`/gu)?.length, 2);
-        assert.match(part.text, /The coding agent "Stranger": not found in your workspace\./u);
+        assert.match(part.text, /The agent "Stranger": not found in your workspace\./u);
         assert.ok(!part.text.includes(`id \`${foreign.agent.id}\``), part.text);
       }),
   );
@@ -9653,7 +9653,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
 
         assert.match(
           preamble,
-          /It never made a branch of its own: it took up the work of the coding agent/u,
+          /It never made a branch of its own: it took up the work of the agent/u,
         );
         assert.ok(preamble.includes(`(agent id ${source.id})`));
         assert.ok(preamble.includes(`git switch '${PUBLISHED.branch}'`));

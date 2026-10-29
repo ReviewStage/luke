@@ -54,7 +54,7 @@ function writerName(entry: PlanCommentThread["entries"][number]): string {
     case PLAN_COMMENT_ACTOR.LUKE:
       return "Luke";
     case PLAN_COMMENT_ACTOR.AGENT:
-      return "A coding agent";
+      return "An agent";
     case PLAN_COMMENT_ACTOR.MEMBER:
       return entry.writer.by?.name ?? "A former member";
   }

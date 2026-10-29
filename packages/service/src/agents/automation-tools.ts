@@ -137,7 +137,7 @@ export const AUTOMATION_TOOL_REFUSAL = {
     "would fire it. A workspace owner or admin installs it in Workspace settings › " +
     "Integrations › Sentry; make it once that is done.",
   NO_AGENT:
-    "Not run: no coding agent of your workspace has that agentId to hand each run to; " +
+    "Not run: no agent of your workspace has that agentId to hand each run to; " +
     `${AGENT_TOOL.LIST_AGENTS} names them, or leave agentId out for a new agent each run.`,
   WORKSPACE_SCOPE:
     "Not run: this is the developer's personal workspace, where every automation is theirs " +
@@ -151,7 +151,7 @@ export const AUTOMATION_TOOL_REFUSAL = {
   NOT_RUNNABLE:
     "Not run: the developer you work for may read that automation but not run it. A personal " +
     "automation is its creator's to run, and a workspace's every member's.",
-  NO_SERVICE: "Not run: this deployment cannot reach the coding agents' service.",
+  NO_SERVICE: "Not run: this deployment cannot reach the agents' service.",
   UNAVAILABLE:
     "Not run: the automations could not be written just now. The call may be made again.",
 } as const;
@@ -168,7 +168,7 @@ const NAME = describeWire(
 
 const PROMPT = describeWire(
   automationActionSchema.fields.prompt,
-  "What each run's new coding agent is told to do, as its first message, at most " +
+  "What each run's new agent is told to do, as its first message, at most " +
     `${AUTOMATION_BOUNDS.MAX_PROMPT_CHARS} characters: whole and standing alone, since no one ` +
     "watches a run and, unless agentId is set, it remembers no run before it. Luke adds a line beneath it saying what " +
     "fired the run.",
@@ -325,7 +325,7 @@ export const LIST_AUTOMATIONS_TOOL = {
     "when it is next due, its newest run, and whether the developer made it. Name an " +
     "automationId to read that one whole, its prompt in full and its newest runs, each with why " +
     "it was skipped or failed and the agent it started. An automation fires on a schedule, a " +
-    "GitHub event, a webhook, or a Sentry event, and starts a coding agent on its prompt, as " +
+    "GitHub event, a webhook, or a Sentry event, and starts an agent on its prompt, as " +
     "its creator. Answers `accepted` with them, or `rejected` and why.",
   inputSchema: LIST_AUTOMATIONS_INPUT,
 } as const;
@@ -334,7 +334,7 @@ export const CREATE_AUTOMATION_TOOL = {
   name: AGENT_TOOL.CREATE_AUTOMATION,
   description:
     "Make an automation in your workspace for the developer you work for, as the automations " +
-    "page would: each time its trigger fires, Luke starts a coding agent on its prompt, in its " +
+    "page would: each time its trigger fires, Luke starts an agent on its prompt, in its " +
     "repositories, on its creator's keys and connections, with no task and no one watching, or " +
     "hands the run to the one agent named. It is on as it is made, and runs as the developer. " +
     "One fired by Sentry needs Luke's Sentry integration installed on the workspace first. " +
@@ -374,7 +374,7 @@ export const RUN_AUTOMATION_TOOL = {
   description:
     `Run an automation of your workspace now, by its id as ${AGENT_TOOL.LIST_AUTOMATIONS} ` +
     "answered it, as its Run now on the automations page would: one run, whatever its trigger, " +
-    "through the same guards a firing takes, starting its coding agent on its prompt as a " +
+    "through the same guards a firing takes, starting its agent on its prompt as a " +
     "scheduled run would, or handing it to the one agent it names. Run one when the developer " +
     "asks for it, such as to try an automation just made, never otherwise on your own. Answers " +
     "`accepted` with the run, started with its agent or skipped or failed and why, or " +

@@ -16,7 +16,7 @@ import { delegationRecord } from "../../session-prompt.js";
  */
 export default defineAgent({
   description:
-    "Do one read-only job in the coding agent's checkout or working folder: search, read files, run commands that change nothing from a shell with no network, read the web, and answer whole.",
+    "Do one read-only job in the delegating agent's checkout or working folder: search, read files, run commands that change nothing from a shell with no network, read the web, and answer whole.",
   defaultTools: false,
   tool: false,
   model: defineDynamic({
