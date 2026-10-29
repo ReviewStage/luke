@@ -39,7 +39,7 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
 /**
  * use-inbox-listing.ts -- the window's Inbox read once: every item of every
  * task of the listed workspace that holds one, and every agent with no task
- * that waits, as its list lists them under the view the developer chose, and
+ * that holds one, as its list lists them under the view the developer chose, and
  * the item chosen, read live through its holder's own read.
  *
  * The window's Inbox page reads it for its list and the item beside it
@@ -128,10 +128,11 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     [inboxTasks, listedTasks],
   );
   const waitingTaskless = tasks.inboxTaskless;
+  const agentsHolding = tasks.inboxAgents;
   const read = useHolderInboxItems(
     useMemo(
-      () => [...taskHoldings(holdings), ...agentHoldings(waitingTaskless)],
-      [holdings, waitingTaskless],
+      () => [...taskHoldings(holdings), ...agentHoldings(agentsHolding)],
+      [holdings, agentsHolding],
     ),
   );
   const readTasks = read.current[INBOX_SCOPE_KIND.PLAN];
@@ -193,13 +194,13 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
           ),
         }
       : read.items;
-  // An agent with no plan that a link names, none of whose items waits any longer, is grouped by its own read, which the account's list of waiting agents leaves out, in its own workspace's list alone.
+  // An agent with no plan that a link names, which main does not list as holding items yet, is grouped by its own read, in its own workspace's list alone.
   const pageAgent = agents.agents?.[0] ?? agents.archived?.[0];
   const settledAgent =
     chosenAgentId !== undefined &&
     holdsLive &&
     pageAgent !== undefined &&
-    !waitingTaskless.some((each) => each.agentId === chosenAgentId)
+    !agentsHolding.some((each) => each.agentId === chosenAgentId)
       ? [
           inboxAgentOf({
             ...pageAgent,
@@ -212,7 +213,7 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
   const everyChannel: readonly InboxGroup[] = inboxGroups(held, {
     tasks: holdings,
     listed: tasks.tasks,
-    agents: [...waitingTaskless, ...settledAgent],
+    agents: [...agentsHolding, ...settledAgent],
     workspaceId: tasks.workspace?.id,
   });
   const standing =

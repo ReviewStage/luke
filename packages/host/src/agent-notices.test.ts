@@ -71,6 +71,7 @@ function fixture() {
   const waiting: (readonly AppInboxTask[])[] = [];
   const holding: (readonly AppInboxTaskHolding[])[] = [];
   const taskless: AppInboxSlice["taskless"][] = [];
+  const agents: AppInboxSlice["agents"][] = [];
   const failedRuns: AppInboxSlice["failedRuns"][] = [];
   let inboxAnswers: Queue.Queue<AgentAccountInboxAnswerView> | undefined;
   let accounts: Queue.Queue<string | undefined> | undefined;
@@ -110,6 +111,7 @@ function fixture() {
         waiting.push(next.waiting);
         holding.push(next.tasks);
         taskless.push(next.taskless);
+        agents.push(next.agents);
         failedRuns.push(next.failedRuns);
       },
       report: () => undefined,
@@ -140,6 +142,7 @@ function fixture() {
     waiting,
     holding,
     taskless,
+    agents,
     badges,
     failedRuns,
     /** The signed-in account's id as its identity now holds it: none for one stored without it. */
@@ -526,6 +529,9 @@ it.effect.each([
   }),
 );
 /** An item of an agent with no task waiting on the developer, as the account's inbox read carries it. */
+/** An agent with no task a teammate started. */
+const TEAMMATES_AGENT = "a1b2c3d4-0000-4000-8000-0000000000aa";
+
 function tasklessItem(id: string, patch: Partial<AccountTasklessEntry> = {}): AccountTasklessEntry {
   return {
     id,
@@ -554,11 +560,19 @@ it.effect(
 
       f.answerInbox({
         items: [waitingItem(ITEM_A)],
-        planless: [tasklessItem(ITEM_B, { updatedAt: READ_AT + 1, workspaceId: "workspace-acme" })],
+        planless: [
+          tasklessItem(ITEM_B, { updatedAt: READ_AT + 1, workspaceId: "workspace-acme" }),
+          // A teammate's agent's question, which waits on the teammate.
+          tasklessItem(ITEM_C, {
+            agentId: TEAMMATES_AGENT,
+            startedBy: "user-sam",
+            workspaceId: "workspace-acme",
+          }),
+        ],
         automations: [
           {
             automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
-            items: 1,
+            items: 2,
             updatedAt: READ_AT + 1,
           },
         ],
@@ -574,8 +588,16 @@ it.effect(
       );
       assert.deepEqual(
         f.taskless.at(-1)?.map((item) => item.workspaceId),
-        ["workspace-acme"],
-        "the window is told whose workspace's list the item stands in",
+        ["workspace-acme", "workspace-acme"],
+        "the window is told whose workspace's list each item stands in",
+      );
+      assert.deepEqual(
+        f.agents.at(-1)?.map((held) => [held.agentId, held.items, held.toDo, held.updatedAt]),
+        [
+          [AGENT_ID, 1, 1, READ_AT + 1],
+          [TEAMMATES_AGENT, 1, 0, READ_AT],
+        ],
+        "a service before the agents holding items leaves the window to list each agent its open items name, counting only the questions that wait on the reader",
       );
     }),
 );

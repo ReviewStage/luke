@@ -18,6 +18,7 @@ function card(fastRefused?: boolean): string {
     createElement(TurnCard, {
       startedAt: STARTED_AT,
       endedAt: ENDED_AT,
+      now: ENDED_AT,
       record: {
         model: "anthropic/claude-opus-5.5-fast",
         effort: "high",
@@ -29,7 +30,7 @@ function card(fastRefused?: boolean): string {
 }
 
 test("a turn Anthropic refused a fast step of says it ran at standard speed, and another turn says nothing of speed", () => {
-  assert.match(card(true), /Fast wasn&#x27;t available, so this ran at standard speed/u);
+  assert.match(card(true), /Fast wasn&#x27;t available, so this ran at standard speed\./u);
   assert.doesNotMatch(card(), /standard speed/u);
   assert.doesNotMatch(card(false), /standard speed/u);
 });
@@ -39,11 +40,12 @@ test("a turn that ran out of time says Failed and why, never Abandoned", () => {
     createElement(TurnCard, {
       startedAt: STARTED_AT,
       endedAt: ENDED_AT,
+      now: ENDED_AT,
       record: { model: "anthropic/claude-opus-5.5", effort: "high", ending: "abandoned" },
       models: [],
     }),
   );
   assert.match(html, /Failed/u);
-  assert.match(html, /it ran out of time/u);
+  assert.match(html, /Ran out of time\./u);
   assert.doesNotMatch(html, /Abandoned/u);
 });
