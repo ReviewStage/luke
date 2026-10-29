@@ -604,9 +604,12 @@ function ItemRow({
  * read as the same item under a holder of the same fields.
  */
 function sameRowDraw(a: ItemRowProps, b: ItemRowProps): boolean {
-  return sameFieldsBy(a, b, {
-    listed: (ours, theirs) => ours.item === theirs.item && sameShape(ours.holder, theirs.holder, 2),
-  });
+  return sameFieldsBy(a, b, { listed: sameListed });
+}
+
+/** Whether two listed items draw alike: the same item, under a holder of the same fields. */
+function sameListed(a: InboxListed, b: InboxListed): boolean {
+  return a.item === b.item && sameShape(a.holder, b.holder, 2);
 }
 
 type ItemRowProps = Parameters<typeof ItemRow>[0];
@@ -1519,6 +1522,79 @@ function drawnItems(view: InboxListView, folded: (key: string) => boolean): read
   return keyed.flatMap(({ key, items }) => (folded(key) ? [] : items));
 }
 
+/** What stands the list's rows where they are: its items in their order and groups, the groups folded, and whether each row draws its second line and its media. */
+interface RowsLaidOut {
+  readonly view: InboxListView;
+  readonly folded: readonly string[];
+  readonly line: boolean;
+  readonly previews: boolean;
+}
+
+/** The keys of the list's groups folded, in their order; none for a list in one run. */
+function foldedKeys(view: InboxListView, folded: (key: string) => boolean): readonly string[] {
+  if (view.grouping === INBOX_GROUPING.NONE) return [];
+  const keyed: readonly { readonly key: string }[] = view.groups;
+  return keyed.flatMap(({ key }) => (folded(key) ? [key] : []));
+}
+
+/** Whether two lists draw the same rows under the same heads: the same items in the same order, each group headed alike. */
+function sameListView(a: InboxListView, b: InboxListView): boolean {
+  if (a.readerId !== b.readerId) return false;
+  if (a.grouping === INBOX_GROUPING.NONE || b.grouping === INBOX_GROUPING.NONE) {
+    return a.grouping === b.grouping && sameRun(listedItems(a), listedItems(b));
+  }
+  const ours: readonly { readonly items: readonly InboxListed[] }[] = a.groups;
+  const theirs: readonly { readonly items: readonly InboxListed[] }[] = b.groups;
+  return (
+    a.grouping === b.grouping &&
+    ours.length === theirs.length &&
+    ours.every((group, at) => {
+      const other = theirs[at];
+      return (
+        other !== undefined &&
+        sameRun(group.items, other.items) &&
+        sameShape({ ...group, items: [] }, { ...other, items: [] }, 3)
+      );
+    })
+  );
+}
+
+/** Whether two runs of rows list the same items in the same order. */
+function sameRun(a: readonly InboxListed[], b: readonly InboxListed[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((listed, at) => {
+      const other = b[at];
+      return other !== undefined && sameListed(listed, other);
+    })
+  );
+}
+
+/** Whether two layouts of the rows stand them alike, so a commit between them moves no row. */
+function sameLaidOut(a: RowsLaidOut, b: RowsLaidOut): boolean {
+  return (
+    a.line === b.line &&
+    a.previews === b.previews &&
+    sameShape(a.folded, b.folded, 0) &&
+    sameListView(a.view, b.view)
+  );
+}
+
+/**
+ * The layout of the rows as last drawn while a render leaves it as it stood
+ * (`sameLaidOut`), else as it is now. Note that this is what the list's
+ * motion is handed, because it measures every row before and after a commit
+ * whose value moved, and the list is built anew on every render.
+ */
+function useRowsLaidOut(laidOut: RowsLaidOut): RowsLaidOut {
+  const held = useRef(laidOut);
+  const steady = sameLaidOut(held.current, laidOut) ? held.current : laidOut;
+  useLayoutEffect(() => {
+    held.current = steady;
+  });
+  return steady;
+}
+
 /** A group's key, by which it leaves the list (`ListMotion`). */
 function groupKey({ key }: { readonly key: string }): string {
   return key;
@@ -1617,6 +1693,13 @@ export function InboxList({
   // Note that only the window's Inbox shows its rows' media, as its view's menu chooses; a task's own shows none.
   // The reads hold the pictures of the items listed alone, and none while the rows show no media.
   const previews = head.view?.choices.mediaPreviews === true;
+  // Note that the motion replays a commit only where the rows stand otherwise, never one that drew them where they stood.
+  const laidOut = useRowsLaidOut({
+    view,
+    folded: foldedKeys(view, (key) => head.view?.folds.folded(key) ?? false),
+    line: head.view?.choices.secondLine !== false,
+    previews,
+  });
   const mediaReads = useRowMediaReads(
     previews ? listedItems(view).map(({ item }) => item.id) : NO_ITEMS,
   );
@@ -1765,7 +1848,7 @@ export function InboxList({
       style={{ width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
       <ListHead head={head} readerId={readerId} />
-      <ListMotion root={bodyRef} change={view} reading={reading}>
+      <ListMotion root={bodyRef} change={laidOut} reading={reading}>
         <SelectionRegion id={regionId} selection={{ selected: picked, onChange: setPicked }}>
           <ScrollArea fade={SCROLL_FADE.START}>{body}</ScrollArea>
         </SelectionRegion>
