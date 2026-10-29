@@ -22,6 +22,7 @@ import {
   type TaskRunsOn,
   type TaskStatus,
   type TaskSummary,
+  taskModeSchema,
   taskPrioritySchema,
   taskStatusSchema,
   UNKNOWN_AGENT_LABEL,
@@ -261,6 +262,7 @@ const TASK_SUMMARY_COLUMNS = {
   machine: task.machine,
   deviceId: task.deviceId,
   parentTaskId: task.parentTaskId,
+  mode: task.mode,
   completedAt: task.completedAt,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -290,6 +292,7 @@ const TaskSummaryRowSchema = Schema.Struct({
   machine: MachineSchema,
   deviceId: Schema.NullOr(Schema.String),
   parentTaskId: Schema.NullOr(Schema.String),
+  mode: taskModeSchema,
   completedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -641,6 +644,7 @@ function summaryOf(
       : { assignee: { userId: row.assigneeId, name: assignee } }),
     ...runsOnOf(row, names, devices),
     ...(row.parentTaskId === null ? undefined : { parentTaskId: row.parentTaskId }),
+    mode: row.mode,
   };
 }
 
