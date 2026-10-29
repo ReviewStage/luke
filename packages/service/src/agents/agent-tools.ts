@@ -421,6 +421,9 @@ export const START_AGENT_REFUSAL = {
     "Not started: that task is worked in pilot mode and has no pilot, so this agent would be its " +
     "pilot, and Pilot is off for the member you start for. Ask them to turn it on in Settings › " +
     "Experimental.",
+  STARTER_CONTINUE:
+    "Not started: you can't continue the agent that started you, since the agents it started would " +
+    "report to a pilot you started; tell its starter, or ask a member to continue it.",
   SOURCE_RUNNING:
     "Not started: that agent is still starting or working, and a continue would take over work " +
     "it is still doing. Wait until it ends, message it, or fork it at a messageId to try another " +
@@ -1674,7 +1677,7 @@ function ownPlaceOf(
     : { taskId: null, organizationId, repository };
 }
 
-/** Why a start's input asks for nothing that can start, read before anything is: a repository for an agent that lands on a task or with its source, a source with a prompt or a branch, or a coding agent continuing itself. */
+/** Why a start's input asks for nothing that can start, read before anything is: a repository for an agent that lands on a task or with its source, a source with a prompt or a branch, or a coding agent continuing itself or the agent that started it. */
 function startInputRefusal(
   caller: AgentCaller,
   start: typeof START_AGENT_CALL.Type,
@@ -1689,8 +1692,12 @@ function startInputRefusal(
   if (prompt !== undefined || start.branch !== undefined) {
     return START_AGENT_REFUSAL.FROM_WITH_PROMPT;
   }
-  const self = from.agentId === caller.agent.id;
-  return self && from.messageId === undefined ? START_AGENT_REFUSAL.SELF_CONTINUE : undefined;
+  if (from.messageId !== undefined) return undefined;
+  if (from.agentId === caller.agent.id) return START_AGENT_REFUSAL.SELF_CONTINUE;
+  // Note that a continue of the starter would record the caller as the new agent's starter and, for a pilot, move the caller under it, so each would name the other.
+  return from.agentId === caller.agent.startedByAgentId
+    ? START_AGENT_REFUSAL.STARTER_CONTINUE
+    : undefined;
 }
 
 /**
