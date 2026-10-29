@@ -1,12 +1,12 @@
 import { RUN_EVENT, RUN_STATUS, TURN_FAILURE } from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_STATUS } from "@luke/wire";
-import { and, asc, eq, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, lt, notInArray, or } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
-import { CONVERSATION_KIND } from "../storage-vocabulary.js";
+import { AGENT_CONVERSATION_KINDS } from "../storage-vocabulary.js";
 import { dropNativeProjectionTurns } from "./native-projection-store.js";
 import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
 
@@ -106,11 +106,11 @@ const abandonedTurns = SqlSchema.findAll({
             isNull(conversations.deletedAt),
             or(
               and(
-                ne(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+                notInArray(conversations.kind, AGENT_CONVERSATION_KINDS),
                 lt(turns.startedAt, request.startedBefore),
               ),
               and(
-                eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+                inArray(conversations.kind, AGENT_CONVERSATION_KINDS),
                 lt(turns.startedAt, request.codingAgentStartedBefore),
               ),
               and(
@@ -147,7 +147,7 @@ const endedSessionTurns = SqlSchema.findAll({
         .where(
           and(
             eq(conversations.runtimeSessionId, request.runtimeSessionId),
-            eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+            inArray(conversations.kind, AGENT_CONVERSATION_KINDS),
             isNull(conversations.deletedAt),
             inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
           ),
@@ -186,7 +186,7 @@ const agentRunningTurns = SqlSchema.findAll({
         .where(
           and(
             eq(turns.conversationId, conversationId),
-            eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+            inArray(conversations.kind, AGENT_CONVERSATION_KINDS),
             isNull(conversations.deletedAt),
             inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
           ),

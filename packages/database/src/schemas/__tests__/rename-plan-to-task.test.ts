@@ -7,6 +7,7 @@ import { Database } from "../../core/query.js";
 import { createAgent, readAgent } from "../../models/agent-store.js";
 import { createTask, readTask } from "../../models/task-store.js";
 import {
+  agentTablesRename,
   getTestDB,
   migrationStatements,
   RENAME_PLAN_TO_TASK,
@@ -65,9 +66,11 @@ it.layer(getTestDB())("the migration that names a plan's row a task", (it) => {
         const sql = yield* SqlClient.SqlClient;
         const { userId, taskId, agentId } = yield* openTask;
         const renames = replayable(yield* migrationStatements(RENAME_PLAN_TO_TASK));
+        const agentTables = yield* agentTablesRename();
 
         // The database as it stood before the migration, with no sync capture yet, written to as an earlier build wrote it.
         for (const statement of syncCaptureTakenOff()) yield* sql.unsafe(statement);
+        for (const statement of agentTables.back) yield* sql.unsafe(statement);
         for (const statement of [...renames].reverse()) yield* sql.unsafe(undoneRename(statement));
         yield* sql.unsafe(`UPDATE "plan" SET name = 'Written before' WHERE id = '${taskId}'`);
         yield* sql.unsafe(
@@ -75,6 +78,7 @@ it.layer(getTestDB())("the migration that names a plan's row a task", (it) => {
         );
 
         for (const statement of renames) yield* sql.unsafe(statement);
+        for (const statement of agentTables.forward) yield* sql.unsafe(statement);
 
         const task = Option.getOrThrow(yield* readTask(userId, taskId));
         const agent = Option.getOrThrow(yield* readAgent(userId, agentId));

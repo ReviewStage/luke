@@ -22,7 +22,7 @@
  *
  * Two machines answer it: Vercel Sandbox (`vercel-machine.ts`) and the
  * starter's Mac (`device-machine.ts`), which the agent's row picks between
- * (`coding_agent.machine`, `agent-machines.ts`).
+ * (`agent.machine`, `agent-machines.ts`).
  *
  * A place is named by Luke's own runtime session id, which the conversation
  * records and every machine can find its place by, and by where the session

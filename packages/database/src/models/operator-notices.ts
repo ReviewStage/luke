@@ -2,7 +2,7 @@
  * operator-notices.ts -- the notices an operator reads of its member's agents on its next turn, and the hour a failure's wake holds.
  *
  * A member's operator watches their own agents of its workspace, every
- * `coding_agent` of the operator's workspace and member but an operator,
+ * `agent` row of the operator's workspace and member but an operator,
  * those the operator started among them and a teammate's never, through
  * notices (`../schemas/operator-notice.ts`). A notice is written only where
  * that member has a standing operator, in the one statement that finds it,
