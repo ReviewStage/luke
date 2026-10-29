@@ -85,7 +85,9 @@ import {
   type AssigneeGroup,
   agentRow,
   assigneeGroups,
+  type ChildTaskCount,
   type CreatorGroup,
+  childTaskCounts,
   creatorGroups,
   drawnGrouping,
   drawnTaskRows,
@@ -411,6 +413,8 @@ interface RowContext {
   readonly onCarried: (carried: boolean) => void;
   /** An agent's Move to section, as a task's menu offers it; none for an archived agent. */
   readonly sectionEntry: (agent: TasklessAgent) => MenuEntry | undefined;
+  /** How many of a task's child tasks are finished, of all of them, which its row says; none for a task with none. */
+  readonly childCount: (taskId: string) => ChildTaskCount | undefined;
   /** Whether a task's child tasks stand open under its row, folded until first opened. */
   readonly opened: (taskId: string) => boolean;
   /** Opens a task's child tasks under its row where they stand folded, and folds them where they stand open. */
@@ -513,6 +517,7 @@ function TaskRows({
             faces={faces}
             depth={held.depth}
             fold={childTasksFold(held, context.onFoldTask)}
+            childCount={context.childCount(row.task.id)}
             onOpen={() => context.onOpen(row.task.id)}
           />
         ) : (
@@ -2051,6 +2056,8 @@ function SidebarColumn({
     ]);
   };
   const { chosen } = overlay;
+  // Note that the count reads every listed task, not the rows the view draws, which hides the finished ones by default.
+  const childCounts = useMemo(() => childTaskCounts(tasks.listed.tasks), [tasks.listed.tasks]);
   const context: RowContext = {
     tasks,
     current,
@@ -2089,6 +2096,7 @@ function SidebarColumn({
             sectionDialogs.askNew,
           )
         : undefined,
+    childCount: (taskId) => childCounts.get(taskId),
     opened: folds.taskOpened,
     onFoldTask: folds.toggleTask,
   };
@@ -2370,6 +2378,7 @@ function SidebarColumn({
                             faces={context.faces}
                             depth={held.depth}
                             fold={childTasksFold(held, folds.toggleTask)}
+                            childCount={context.childCount(row.task.id)}
                             onOpen={() => context.onOpen(row.task.id)}
                           />
                         ) : (

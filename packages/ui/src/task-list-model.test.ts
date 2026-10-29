@@ -11,6 +11,7 @@ import {
   agentRow,
   assigneeGroups,
   type CreatorGroup,
+  childTaskCounts,
   createdByOnly,
   creatorGroups,
   drawnGrouping,
@@ -503,4 +504,22 @@ test("a parent folded shut draws none of its child tasks but the open one and th
 test("a child task whose parent the list leaves out stands at the top", () => {
   const filtered = TREE.filter((each) => each.name !== "parent");
   expect(drawnNames(filtered, ["child"])).toEqual(["child", "  grandchild", "sibling", "other"]);
+});
+
+test("a parent counts its direct child tasks that are done or canceled, of all its children, and not theirs", () => {
+  const withStatus = (name: string, parent: string | undefined, status: TaskStatus) => ({
+    ...childTask(name, 1, parent),
+    status,
+  });
+  const counts = childTaskCounts([
+    withStatus("parent", undefined, TASK_STATUS.IN_PROGRESS),
+    withStatus("shipped", "parent", TASK_STATUS.DONE),
+    withStatus("cut", "parent", TASK_STATUS.CANCELED),
+    withStatus("working", "parent", TASK_STATUS.IN_PROGRESS),
+    withStatus("waiting", "parent", TASK_STATUS.TODO),
+    withStatus("grandchild", "working", TASK_STATUS.DONE),
+  ]);
+  expect(counts.get("parent")).toEqual({ finished: 2, total: 4 });
+  expect(counts.get("working")).toEqual({ finished: 1, total: 1 });
+  expect(counts.has("shipped")).toBe(false);
 });
