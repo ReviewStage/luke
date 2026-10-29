@@ -203,21 +203,16 @@ test("an open item's ⋯ menu in the pane's bar, and the × on its question's ca
   );
 });
 
-test("an open item's row offers Resolve without answering beside its mark and last in its right-click menu, each asking first; a settled item's row offers neither", async () => {
+test("an open item's row offers Resolve without answering last in its menu, asking first; a settled item's row offers none", async () => {
   const { page } = mount();
   await settle();
   const sent = takenCloses();
   const threshold = "Alert at 80%?";
   const retry = "How is a failed email retried?";
-  const hoverClose = (title: string) =>
-    rowNamed(page, title)
-      .closest("li")
-      ?.querySelector<HTMLButtonElement>(
-        '.luke-list-row-actions button[aria-label="Resolve without answering"]',
-      );
-
-  assert.equal(hoverClose(retry), null, "a settled row offers no Close");
-  assert.ok(!rowMenu(page, retry).includes("Resolve without answering"));
+  assert.ok(
+    !rowMenu(page, retry).includes("Resolve without answering"),
+    "a settled row offers no Close",
+  );
   act(() =>
     document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
   );
@@ -234,11 +229,15 @@ test("an open item's row offers Resolve without answering beside its mark and la
   await settle();
   assert.deepEqual(sent, [], "Cancel closes nothing");
 
-  act(() => (hoverClose(threshold) ?? assert.fail("an open row offers Close")).click());
+  rowMenu(page, threshold);
+  act(() => menuItem("Resolve without answering").click());
   await settle();
   await confirmClose();
   assert.deepEqual(sent, [{ itemId: THRESHOLD.id, revision: THRESHOLD.revision }]);
-  assert.equal(hoverClose(threshold), null, "the closed row offers Close no longer");
+  assert.ok(
+    !rowMenu(page, threshold).includes("Resolve without answering"),
+    "the closed row offers Close no longer",
+  );
 });
 
 test("a close taken lets go of the item's draft, though another item is chosen", async () => {
