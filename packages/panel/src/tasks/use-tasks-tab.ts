@@ -1394,8 +1394,15 @@ export function useTasksTab(input: {
     inboxChosen !== undefined && "taskId" in inboxChosen ? inboxChosen.taskId : undefined;
   const inboxAgent =
     inboxChosen !== undefined && "agentId" in inboxChosen ? inboxChosen.agentId : undefined;
+  // Note that an item of an agent on no task opens that agent's own pages beside it (`inbox-panel-link.ts`).
   const inboxPages = useInboxPages(
-    inboxView === undefined || inboxTask === undefined ? undefined : { taskId: inboxTask },
+    inboxView === undefined
+      ? undefined
+      : inboxTask !== undefined
+        ? { taskId: inboxTask }
+        : inboxAgent !== undefined
+          ? { agentId: inboxAgent }
+          : undefined,
   );
   // An agent on no task shows its pages on itself, which its page's panel draws as a task's draws its own.
   const agentPages = useInboxPages(
