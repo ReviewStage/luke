@@ -341,6 +341,21 @@ describe("the host's install script", () => {
     }
   });
 
+  it("refuses a Mac's install, before it swaps anything, while the running LaunchAgent will not stop", () => {
+    const bin = folder();
+    writeFileSync(join(bin, "launchctl"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    const answer = sh(["-c", `. "${SCRIPT}"; stop_launch_agent 501`], {
+      LUKE_HOST_INSTALL_LIBRARY: "1",
+      LUKE_HOST_MAC_STOP_WAIT_SECONDS: "0",
+      PATH: `${bin}:${process.env.PATH}`,
+    });
+
+    expect(answer.status).toBe(1);
+    expect(answer.stderr).toContain(
+      "Could not stop Luke host for this account, so nothing was changed",
+    );
+  });
+
   for (const [user, session, started] of [
     ["logged in", 0, true],
     ["logged out", 113, false],
