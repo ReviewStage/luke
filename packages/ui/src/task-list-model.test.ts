@@ -506,6 +506,16 @@ test("a child task whose parent the list leaves out stands at the top", () => {
   expect(drawnNames(filtered, ["child"])).toEqual(["child", "  grandchild", "sibling", "other"]);
 });
 
+test("a pinned child task stands at the top, never under its parent, its own child tasks still under it", () => {
+  const pinned = { ...childTask("child", 30, "parent"), pinnedAt: 1 };
+  expect(
+    drawnNames(
+      [childTask("parent", 40), pinned, childTask("grandchild", 20, "child")],
+      ["parent", "child"],
+    ),
+  ).toEqual(["parent", "child", "  grandchild"]);
+});
+
 test("a parent counts its direct child tasks that are done or canceled, of all its children, and not theirs", () => {
   const withStatus = (name: string, parent: string | undefined, status: TaskStatus) => ({
     ...childTask(name, 1, parent),

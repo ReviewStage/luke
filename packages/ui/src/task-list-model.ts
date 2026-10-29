@@ -414,9 +414,9 @@ interface TaskRowNode {
   readonly children: readonly TaskRowNode[];
 }
 
-/** The parent a row stands under where `rows` holds it: a task's parent task; none for an agent, a task at the top, or one naming itself. */
+/** The parent a row stands under where `rows` holds it: a task's parent task; none for an agent, a task at the top, one naming itself, or a pinned one, which stands on its own pin. */
 function parentIn(row: TaskRow, held: ReadonlySet<string>): string | undefined {
-  if (row.kind !== TASK_ROW.TASK) return undefined;
+  if (row.kind !== TASK_ROW.TASK || row.task.pinnedAt !== undefined) return undefined;
   const { id, parentTaskId } = row.task;
   return parentTaskId !== undefined && parentTaskId !== id && held.has(parentTaskId)
     ? parentTaskId
