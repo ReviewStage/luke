@@ -3,7 +3,7 @@ import { Effect, Option, Path, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 
 /**
- * local-agent-state.ts -- what a machine keeps of its local agents between runs (`local-agents.json` in its state): the device id each account registered under, the launches no exit has settled yet, and how each agent has run there; read and written alike by the follower (`compose-local-agents.ts`) and by This Mac's turn-on (`compose-this-mac-host.ts`).
+ * local-agent-state.ts -- what a machine keeps of its local agents between runs (`local-agents.json` in its state): the device id each account registered under, the launches no exit has settled yet, how each agent has run there, and the agents whose folders a discard kept; read and written alike by the follower (`compose-local-agents.ts`) and by This Mac's turn-on (`compose-this-mac-host.ts`).
  *
  * The follower holds the state while it follows and writes it whole; This
  * Mac's turn-on, in the app, reads and changes it in place, never while the
@@ -23,7 +23,10 @@ const STATE_FILE = "local-agents.json";
  * settle of, each with the agent whose VM it ran in, absent from a launch
  * kept before it, and, on a device whose agents may have run directly on it
  * (`formerlyDirect`), how each agent has run here, in a VM or directly,
- * absent from a state file from before it.
+ * absent from a state file from before it; and the agents the service no
+ * longer lists whose folders a discard kept for work in them, which the
+ * follower never checks again while they stand, absent from a state file
+ * from before it.
  */
 const LocalAgentStateSchema = Schema.Struct({
   devices: Schema.Record(Schema.String, Schema.String),
@@ -37,6 +40,7 @@ const LocalAgentStateSchema = Schema.Struct({
   modes: Schema.optionalKey(
     Schema.Record(Schema.String, Schema.Literals(Object.values(DEVICE_ISOLATION))),
   ),
+  kept: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
 export type LocalAgentState = typeof LocalAgentStateSchema.Type;

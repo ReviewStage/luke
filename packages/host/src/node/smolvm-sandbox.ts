@@ -288,6 +288,29 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
       Effect.orElseSucceed(() => Option.none<{ state: string; image: string | null }>()),
     );
 
+  /** The names of every machine smolvm keeps, one a line (`machine ls -q`); none where it could not list them in time. */
+  const machinesListed = Effect.scoped(
+    Effect.gen(function* () {
+      const started = spawned(["machine", "ls", "-q"]);
+      const handle = yield* ChildProcess.make(started.command, [...started.args], {
+        stdin: "ignore",
+        stderr: "ignore",
+      });
+      const printed = yield* Stream.mkString(Stream.decodeText(handle.stdout));
+      if (Number(yield* handle.exitCode) !== 0) return Option.none<readonly string[]>();
+      return Option.some<readonly string[]>(
+        printed
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0),
+      );
+    }),
+  ).pipe(
+    Effect.timeoutOption(STOP_TIMEOUT),
+    Effect.map(Option.flatten),
+    Effect.orElseSucceed(() => Option.none<readonly string[]>()),
+  );
+
   /** Whether a `smolvm` command ran and exited 0. */
   const succeeded = (args: readonly string[], within: Duration.Input) =>
     Effect.map(
@@ -525,17 +548,42 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
         );
       }),
 
+    // Note that a delete smolvm refused counts as gone only where it no longer lists the machine, as for one that never stood, and the credentials go only once the machine has, since it reads them.
     deleted: (agentId) =>
       Effect.gen(function* () {
-        if (!AGENT_ID.test(agentId)) return;
+        if (!AGENT_ID.test(agentId)) return false;
         const name = machineOf(agentId);
         yield* ran(["machine", "stop", "--name", name], STOP_TIMEOUT);
-        yield* ran(["machine", "delete", "--name", name, "-f"], STOP_TIMEOUT);
+        const gone =
+          (yield* succeeded(["machine", "delete", "--name", name, "-f"], STOP_TIMEOUT)) ||
+          Option.exists(yield* machinesListed, (names) => !names.includes(name));
+        if (!gone) return false;
         const fileSystem = yield* FileSystem.FileSystem;
-        yield* Effect.ignore(
-          fileSystem.remove(credentialsOf(agentId).folder, { recursive: true, force: true }),
-        );
+        return yield* fileSystem
+          .remove(credentialsOf(agentId).folder, { recursive: true, force: true })
+          .pipe(
+            Effect.as(true),
+            Effect.orElseSucceed(() => false),
+          );
       }),
+
+    held: Effect.gen(function* () {
+      const machines = yield* machinesListed;
+      if (Option.isNone(machines)) return Option.none<ReadonlySet<string>>();
+      const fileSystem = yield* FileSystem.FileSystem;
+      const credentials = yield* fileSystem
+        .readDirectory([options.stateRoot, CREDENTIALS_FOLDER].join("/"))
+        .pipe(Effect.orElseSucceed((): readonly string[] => []));
+      const prefix = machineOf("");
+      return Option.some<ReadonlySet<string>>(
+        new Set([
+          ...machines.value.flatMap((name) =>
+            name.startsWith(prefix) ? [name.slice(prefix.length)] : [],
+          ),
+          ...credentials.filter((name) => AGENT_ID.test(name)),
+        ]),
+      );
+    }),
 
     githubToken: (agentId, token) =>
       Effect.gen(function* () {

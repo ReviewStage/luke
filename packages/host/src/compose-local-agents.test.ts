@@ -218,6 +218,7 @@ const followingDevice = (
       requests: () => Effect.never,
       claimRequest: () => Effect.succeed({ claimed: false as const }),
       answerRequest: () => Effect.succeed(true),
+      liveAgents: () => Effect.succeed(undefined),
       githubToken: (agentId: string) =>
         Effect.sync(() => {
           asked.push(agentId);
