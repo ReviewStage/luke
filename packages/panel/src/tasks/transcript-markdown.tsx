@@ -13,6 +13,7 @@ import {
 } from "react";
 import { type ActHandle, useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
+import { FileTypeIcon } from "./file-type-icon.js";
 
 /**
  * transcript-markdown.tsx -- a transcript's code and tables: a fenced block drawn in the window's one code card, a table as a quiet grid, and an inline span on a subtle fill.
@@ -46,6 +47,40 @@ const SUGGESTION = {
   LANGUAGE: "suggestion",
   LABEL: "Suggested change",
 } as const;
+
+/** A language's name as a reader says it, by the extension its files are written with. */
+const LANGUAGE_NAMES: Readonly<Record<string, string>> = {
+  ts: "TypeScript",
+  tsx: "TypeScript",
+  js: "JavaScript",
+  jsx: "JavaScript",
+  py: "Python",
+  sh: "Shell",
+  bash: "Shell",
+  zsh: "Shell",
+  rb: "Ruby",
+  rs: "Rust",
+  go: "Go",
+  json: "JSON",
+  yaml: "YAML",
+  yml: "YAML",
+  css: "CSS",
+  html: "HTML",
+  sql: "SQL",
+  md: "Markdown",
+  diff: "Diff",
+};
+
+/** The extension a language named in full is written with, which its name and file icon are found by. */
+const LANGUAGE_EXTENSION: Readonly<Record<string, string>> = {
+  typescript: "ts",
+  javascript: "js",
+  python: "py",
+  rust: "rs",
+  shell: "sh",
+  ruby: "rb",
+  markdown: "md",
+};
 
 /** The language a diff is fenced in, whose rows are tinted by what they do. */
 const DIFF_LANGUAGE = "diff";
@@ -216,8 +251,10 @@ function addedText(rows: readonly Row[]): string {
 }
 
 /**
- * A fenced block as a `CodeCard`: its language in the header, which is
- * "text" for a fence that names none, over its lines, which keep whole and
+ * A fenced block as a `CodeCard`: its language in the header, by the name
+ * a reader says it by after its file icon ("TypeScript"), its id where it
+ * is one this file has no name for, and "text" for a fence that names
+ * none, over its lines, which keep whole and
  * scroll sideways inside the card rather than widening the transcript. A
  * ```suggestion block, a change suggested to the lines a review comment is
  * on, is headed as GitHub heads one, its lines drawn as rows on the added
@@ -241,12 +278,14 @@ function TranscriptCodeBlock({
   // Note that a suggestion names no language of its own to colour it in.
   const lines = useColouredLines(language, code, whole && !suggesting);
   const rows = rowsOf(language, code);
+  const id = language.toLowerCase();
+  const extension = LANGUAGE_EXTENSION[id] ?? id;
+  const name = suggesting ? undefined : LANGUAGE_NAMES[extension];
   return (
     <CodeCard
-      title={
-        suggesting ? SUGGESTION.LABEL : language === "" ? PLAIN_LANGUAGE : language.toLowerCase()
-      }
-      titleIs={suggesting ? CODE_CARD_TITLE.WORDS : CODE_CARD_TITLE.NAME}
+      glyph={name === undefined ? undefined : <FileTypeIcon name={`code.${extension}`} />}
+      title={suggesting ? SUGGESTION.LABEL : (name ?? (id === "" ? PLAIN_LANGUAGE : id))}
+      titleIs={suggesting || name !== undefined ? CODE_CARD_TITLE.WORDS : CODE_CARD_TITLE.NAME}
       code={rows === undefined ? code : rows.map((row) => row.text).join("\n")}
       lines={lines}
       rows={rows?.map((row) => row.kind)}
