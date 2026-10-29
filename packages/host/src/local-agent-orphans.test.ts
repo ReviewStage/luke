@@ -1,5 +1,5 @@
 /**
- * local-agent-orphans.test.ts -- the follower letting go of what a device holds for agents the service no longer lists there: an agent's VM, credentials and folder removed once two successful reads in a row leave it out, never on a read that was not answered, never under a runner or a launch still kept, never anything not named as an agent's, a Mac's folder with unsaved work kept once and never checked again, at most five a pass, and a VM whose delete failed tried again, failures taking turns under the cap, and a pass that died never the last.
+ * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, keeping nothing past an agent's warm window: a saved folder let go of once its window ends and an unsaved one kept; a VM a run left deleted; an agent two answered reads in a row leave out removed whole where its state is saved, and kept where it is not; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a Mac's folder with unsaved work kept once and never checked again, and a pass that died never the last.
  *
  * The follower runs the real smolvm sandbox over a fake `smolvm` that keeps
  * its machines in a set, on a real temporary folder, against a fake service
@@ -22,7 +22,7 @@ import {
 } from "@luke/features/device-agent-wire";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { ConfigProvider, Deferred, Duration, Effect, Exit, Layer } from "effect";
+import { ConfigProvider, Deferred, Duration, Effect, Exit, Layer, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
@@ -40,11 +40,19 @@ const NOT_FOUND = {
   stderr: '{"error":{"code":"NOT_FOUND","message":"vm not found"}}\n',
 };
 
+/** When a saved agent's last turn ended, the clock starting at 0: late enough that no test outlasts its window. */
+const ENDED_IN_WINDOW = Duration.toMillis(Duration.hours(1));
+/** When a saved agent's last turn ended, past its 15 minutes' window as the clock starts. */
+const ENDED_PAST_WINDOW = -Duration.toMillis(Duration.minutes(16));
+
 const AGENT = {
   ORPHAN: "6f1c2a4e-0b7d-4c55-9a3e-2d8f61b0c9a1",
   LIVE: "9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d",
   RUNNING: "1b2c3d4e-5f60-4718-9a2b-3c4d5e6f7a8b",
   LAUNCH_KEPT: "2c3d4e5f-6071-4829-8b3c-4d5e6f7a8b9c",
+  UNSAVED: "3d4e5f60-7182-4930-9c4d-5e6f7a8b9c0d",
+  OTHER_INSTALL: "4e5f6071-8293-4a41-8d5e-6f7a8b9c0d1e",
+  RECENT: "5f607182-93a4-4b52-9e6f-7a8b9c0d1e2f",
 } as const;
 
 /** An id for the `index`th of many agents. */
@@ -65,15 +73,20 @@ interface Held {
 
 /**
  * The follower on a host, or a Mac where `unsavedWork` names what its check
- * prints, with what `held` lays out, its live-agents read answering `reads`
- * one after another, and smolvm refusing each delete `deleteFails` says, by
- * the machine and how many times it was asked to delete it.
- * `launches` hands launch lines whose runners run until the test ends, and
- * `keptLaunches` are kept from a run that ended, whose settles the service
- * refuses.
+ * prints, with what `held` lays out, every agent of it recorded as this
+ * machine's but those `unowned` names, another install's, and each saved,
+ * its last turn ended at `endedAt` says or within its window, but those
+ * `unsaved` names; its live-agents read answering `reads` one after another,
+ * and smolvm refusing each delete `deleteFails` says, by the machine and how
+ * many times it was asked to delete it. `launches` hands launch lines whose
+ * runners run until the test ends, and `keptLaunches` are kept from a run
+ * that ended, whose settles the service refuses.
  */
 const following = (input: {
   readonly held: Held;
+  readonly unowned?: readonly string[];
+  readonly unsaved?: readonly string[];
+  readonly endedAt?: Readonly<Record<string, number>>;
   readonly reads: readonly (readonly string[] | undefined)[];
   readonly unsavedWork?: string;
   readonly deleteFails?: (machine: string, attempt: number) => boolean;
@@ -86,7 +99,6 @@ const following = (input: {
     const root = yield* temporaryDirectoryScoped("luke-agent-orphans-");
     const home = `${root}/home`;
     const stateRoot = `${root}/state`;
-    const agentsRoot = `${home}/.luke/agents`;
     const credentialsOf = (agentId: string) => `${stateRoot}/sandboxes/${agentId}`;
     const machines = new Set<string>();
     for (const agentId of [...(input.held.whole ?? []), ...(input.held.vmOnly ?? [])]) {
@@ -100,15 +112,32 @@ const following = (input: {
     for (const agentId of [...(input.held.whole ?? []), ...(input.held.folderOnly ?? [])]) {
       mkdirSync(deviceAgentLayout(home, agentId).checkoutPath, { recursive: true });
     }
-    if (input.keptLaunches !== undefined) {
-      writeFileSync(
-        `${stateRoot}/local-agents.json`,
-        JSON.stringify({
-          devices: { [USER_ID]: "device-1" },
-          launches: input.keptLaunches.map((launch) => ({ userId: USER_ID, ...launch })),
-        }),
-      );
-    }
+    const owned = [
+      ...(input.held.whole ?? []),
+      ...(input.held.vmOnly ?? []),
+      ...(input.held.folderOnly ?? []),
+    ].filter((agentId) => !(input.unowned ?? []).includes(agentId));
+    mkdirSync(`${stateRoot}/owned-agents`, { recursive: true });
+    for (const agentId of owned) writeFileSync(`${stateRoot}/owned-agents/${agentId}`, "");
+    const saves = Object.fromEntries(
+      owned.map((agentId) => [
+        agentId,
+        {
+          userId: USER_ID,
+          generation: 1,
+          endedAt: input.endedAt?.[agentId] ?? ENDED_IN_WINDOW,
+          ...((input.unsaved ?? []).includes(agentId) ? { unsaved: {} } : {}),
+        },
+      ]),
+    );
+    writeFileSync(
+      `${stateRoot}/local-agents.json`,
+      JSON.stringify({
+        devices: { [USER_ID]: "device-1" },
+        launches: (input.keptLaunches ?? []).map((launch) => ({ userId: USER_ID, ...launch })),
+        saves,
+      }),
+    );
 
     const deletes = new Map<string, number>();
     const signalled = Deferred.makeUnsafe<void>();
@@ -191,10 +220,10 @@ const following = (input: {
     let listings = 0;
     const sandbox = {
       ...vm.sandbox,
-      held: Effect.suspend(() =>
+      machines: Effect.suspend(() =>
         input.firstListingDies === true && listings++ === 0
           ? Effect.die(new Error("the listing broke"))
-          : vm.sandbox.held,
+          : vm.sandbox.machines,
       ),
     };
     const reported: string[] = [];
@@ -220,6 +249,7 @@ const following = (input: {
         unsavedWorkScript: input.unsavedWork === undefined ? undefined : () => UNSAVED_WORK_SCRIPT,
         stateSealed: () => Effect.die("this device saves no state"),
         stateOpened: () => Effect.die("this device restores no state"),
+        diskFree: () => Effect.succeed(Option.none()),
       }),
     );
     const composer = yield* composeLocalAgents({
@@ -240,7 +270,7 @@ const following = (input: {
     const passed = (count: number) =>
       Effect.gen(function* () {
         for (const gate of gates.slice(0, count)) Deferred.doneUnsafe(gate, Exit.void);
-        // Note that two passes stand ten minutes apart, and each round moves the clock a second.
+        // Note that two passes stand five minutes apart, and each round moves the clock a second.
         for (let round = 0; round < 20 * 60 * count && reads <= count; round += 1) {
           yield* TestClock.adjust(Duration.seconds(1));
           for (let turn = 0; turn < 4; turn += 1) yield* Effect.yieldNow;
@@ -255,8 +285,6 @@ const following = (input: {
       folder: existsSync(deviceAgentLayout(home, agentId).folder),
     });
 
-    const deletesAsked = () =>
-      spawner.spawned.filter((each) => each.program === SMOLVM && each.args[1] === "delete");
     const checksRun = () =>
       spawner.spawned.filter((each) => each.args.includes(UNSAVED_WORK_SCRIPT)).length;
     const machineCommands = (agentId: string) =>
@@ -266,13 +294,11 @@ const following = (input: {
 
     return {
       home,
-      agentsRoot,
       stateRoot,
       machines,
       reported,
       passed,
       holdsOf,
-      deletesAsked,
       checksRun,
       machineCommands,
       keptRecorded,
@@ -283,21 +309,24 @@ const NOTHING = { vm: false, credentials: false, folder: false };
 const EVERYTHING = { vm: true, credentials: true, folder: true };
 
 it.effect(
-  "an agent left out of two reads in a row has its VM, credentials and folder removed, but not after one, and a listed agent is left be",
+  "an agent left out of two reads in a row is removed whole, but not after one, while a listed agent stays and one whose state is not saved keeps its folder",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const device = yield* following({
-          held: { whole: [AGENT.ORPHAN, AGENT.LIVE] },
+          held: { whole: [AGENT.ORPHAN, AGENT.LIVE], folderOnly: [AGENT.UNSAVED] },
+          unsaved: [AGENT.UNSAVED],
           reads: [[AGENT.LIVE], [AGENT.LIVE]],
         });
         yield* device.passed(1);
 
-        assert.deepEqual(device.holdsOf(AGENT.ORPHAN), EVERYTHING);
+        assert.equal(device.holdsOf(AGENT.ORPHAN).folder, true);
         yield* device.passed(2);
 
         assert.deepEqual(device.holdsOf(AGENT.ORPHAN), NOTHING);
-        assert.deepEqual(device.holdsOf(AGENT.LIVE), EVERYTHING);
+        assert.equal(device.holdsOf(AGENT.LIVE).folder, true);
+        assert.equal(device.holdsOf(AGENT.UNSAVED).folder, true);
+        assert.deepEqual(device.keptRecorded(), [AGENT.UNSAVED]);
         assert.ok(device.reported.some((line) => line.endsWith(AGENT.ORPHAN)));
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
@@ -307,12 +336,12 @@ it.effect("a read the service did not answer removes nothing and counts for noth
   Effect.scoped(
     Effect.gen(function* () {
       const device = yield* following({
-        held: { whole: [AGENT.ORPHAN] },
+        held: { folderOnly: [AGENT.ORPHAN] },
         reads: [[], undefined, []],
       });
       yield* device.passed(2);
 
-      assert.deepEqual(device.holdsOf(AGENT.ORPHAN), EVERYTHING);
+      assert.equal(device.holdsOf(AGENT.ORPHAN).folder, true);
       // Note that the read before the unanswered one still counts, so the next answered read is the second in a row.
       yield* device.passed(3);
 
@@ -357,22 +386,19 @@ it.effect("an agent whose runner runs, or whose launch is still kept, is left be
 );
 
 it.effect(
-  "a Mac's folder whose check finds unsaved work is kept, its VM deleted, recorded, and never checked again",
+  "a Mac's folder whose state is not saved and whose check finds unsaved work is kept, recorded, and never checked again",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const device = yield* following({
           held: { whole: [AGENT.ORPHAN] },
+          unsaved: [AGENT.ORPHAN],
           reads: [[], [], [], []],
           unsavedWork: "it has changes not committed\n",
         });
         yield* device.passed(2);
 
-        assert.deepEqual(device.holdsOf(AGENT.ORPHAN), {
-          vm: false,
-          credentials: false,
-          folder: true,
-        });
+        assert.deepEqual(device.holdsOf(AGENT.ORPHAN), { ...NOTHING, folder: true });
         assert.deepEqual(device.keptRecorded(), [AGENT.ORPHAN]);
         assert.equal(device.checksRun(), 1);
         const before = device.machineCommands(AGENT.ORPHAN);
@@ -402,56 +428,69 @@ it.effect("a pass lets go of five agents at most, and the next pass of the rest"
 );
 
 it.effect(
-  "a folder or a machine not named as an agent's is never touched, and a VM with no folder and a folder with no VM are both removed",
+  "another install's agent keeps its folder and machine through every pass, while this machine's are removed",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const device = yield* following({
           held: {
+            whole: [AGENT.OTHER_INSTALL],
             vmOnly: [agentNumbered(1)],
             folderOnly: [agentNumbered(2)],
-            otherMachines: ["devbox", "luke-scratch", `other-${AGENT.ORPHAN}`],
+            otherMachines: ["devbox"],
           },
+          unowned: [AGENT.OTHER_INSTALL],
           reads: [[], []],
         });
-        mkdirSync(`${device.agentsRoot}/notes`, { recursive: true });
-        mkdirSync(`${device.agentsRoot}/${AGENT.ORPHAN}-copy`, { recursive: true });
-        mkdirSync(`${device.stateRoot}/sandboxes/scratch`, { recursive: true });
         yield* device.passed(2);
 
+        assert.deepEqual(device.holdsOf(AGENT.OTHER_INSTALL), EVERYTHING);
         assert.deepEqual(device.holdsOf(agentNumbered(1)), NOTHING);
         assert.deepEqual(device.holdsOf(agentNumbered(2)), NOTHING);
-        assert.deepEqual(
-          [...device.machines].sort(),
-          ["devbox", "luke-scratch", `other-${AGENT.ORPHAN}`].sort(),
-        );
-        assert.equal(existsSync(`${device.agentsRoot}/notes`), true);
-        assert.equal(existsSync(`${device.agentsRoot}/${AGENT.ORPHAN}-copy`), true);
-        assert.equal(existsSync(`${device.stateRoot}/sandboxes/scratch`), true);
-        assert.deepEqual(
-          device.deletesAsked().map((each) => each.args[3]),
-          [`luke-${agentNumbered(1)}`, `luke-${agentNumbered(2)}`],
-        );
+        assert.deepEqual([...device.machines].sort(), ["devbox", `luke-${AGENT.OTHER_INSTALL}`]);
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );
 
 it.effect(
-  "an agent whose VM smolvm would not delete has it deleted again the next pass",
+  "a saved folder whose last turn ended over the window before is let go of, while one within it and an unsaved one stay",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const listed = [AGENT.ORPHAN, AGENT.RECENT, AGENT.UNSAVED];
+        const device = yield* following({
+          held: { folderOnly: listed },
+          unsaved: [AGENT.UNSAVED],
+          endedAt: {
+            [AGENT.ORPHAN]: ENDED_PAST_WINDOW,
+            [AGENT.UNSAVED]: ENDED_PAST_WINDOW,
+            [AGENT.RECENT]: 0,
+          },
+          reads: [listed],
+        });
+        yield* device.passed(1);
+
+        assert.equal(device.holdsOf(AGENT.ORPHAN).folder, false);
+        assert.equal(device.holdsOf(AGENT.RECENT).folder, true);
+        assert.equal(device.holdsOf(AGENT.UNSAVED).folder, true);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a listed agent's VM a run left standing is deleted by a pass, and its folder stays",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const device = yield* following({
-          held: { whole: [AGENT.ORPHAN] },
-          reads: [[], [], []],
+          held: { whole: [AGENT.LIVE] },
+          reads: [[AGENT.LIVE]],
+          // Note that the delete as the gate opens fails, so the VM stands when the first pass runs.
           deleteFails: (_machine, attempt) => attempt === 1,
         });
-        yield* device.passed(2);
+        yield* device.passed(1);
 
-        assert.deepEqual(device.holdsOf(AGENT.ORPHAN), { ...NOTHING, vm: true });
-        yield* device.passed(3);
-
-        assert.deepEqual(device.holdsOf(AGENT.ORPHAN), NOTHING);
+        assert.deepEqual(device.holdsOf(AGENT.LIVE), { ...NOTHING, folder: true });
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );
@@ -460,7 +499,7 @@ it.effect("a pass that died is reported, and the passes after it still run", () 
   Effect.scoped(
     Effect.gen(function* () {
       const device = yield* following({
-        held: { whole: [AGENT.ORPHAN] },
+        held: { folderOnly: [AGENT.ORPHAN] },
         reads: [[], []],
         firstListingDies: true,
       });
@@ -471,29 +510,4 @@ it.effect("a pass that died is reported, and the passes after it still run", () 
       assert.ok(device.reported.some((line) => line.includes("failed")));
     }),
   ).pipe(Effect.provide(NodeFileSystem.layer)),
-);
-
-it.effect(
-  "agents whose removal keeps failing take turns under the cap, so one that would now go is never starved by five that never will",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const agents = Array.from({ length: 6 }, (_, index) => agentNumbered(index + 1));
-        const last = agents[5] ?? "";
-        const device = yield* following({
-          held: { whole: agents },
-          reads: [[], [], [], [], []],
-          // Note that five never delete, and the sixth fails once, on the pass it is first tried.
-          deleteFails: (machine, attempt) => machine !== `luke-${last}` || attempt === 1,
-        });
-        yield* device.passed(4);
-
-        assert.equal(device.holdsOf(last).vm, true);
-        // Note that it waits one pass behind the one left out of the last, then goes first.
-        yield* device.passed(5);
-
-        assert.deepEqual(device.holdsOf(last), NOTHING);
-        assert.ok(agents.slice(0, 5).every((agentId) => device.holdsOf(agentId).vm));
-      }),
-    ).pipe(Effect.provide(NodeFileSystem.layer)),
 );

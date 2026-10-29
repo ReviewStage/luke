@@ -316,6 +316,8 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
     Effect.gen(function* () {
       const started = spawned(["machine", "ls", "-q"]);
       const handle = yield* ChildProcess.make(started.command, [...started.args], {
+        env: started.env,
+        extendEnv: true,
         stdin: "ignore",
         stderr: "ignore",
       });
@@ -585,23 +587,15 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
         return gone;
       }),
 
-    held: Effect.gen(function* () {
-      const machines = yield* machinesListed;
-      if (Option.isNone(machines)) return Option.none<ReadonlySet<string>>();
-      const fileSystem = yield* FileSystem.FileSystem;
-      const credentials = yield* fileSystem
-        .readDirectory([options.stateRoot, CREDENTIALS_FOLDER].join("/"))
-        .pipe(Effect.orElseSucceed((): readonly string[] => []));
-      const prefix = machineOf("");
-      return Option.some<ReadonlySet<string>>(
-        new Set([
-          ...machines.value.flatMap((name) =>
-            name.startsWith(prefix) ? [name.slice(prefix.length)] : [],
-          ),
-          ...credentials.filter((name) => AGENT_ID.test(name)),
-        ]),
-      );
-    }),
+    machines: Effect.map(
+      machinesListed,
+      Option.map((names): ReadonlySet<string> => {
+        const prefix = machineOf("");
+        return new Set(
+          names.flatMap((name) => (name.startsWith(prefix) ? [name.slice(prefix.length)] : [])),
+        );
+      }),
+    ),
 
     githubToken: (agentId, token) =>
       Effect.gen(function* () {

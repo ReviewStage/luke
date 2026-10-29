@@ -32,14 +32,15 @@ const OWNED_FOLDER = "owned-agents";
 /**
  * A sealed bundle of an agent's state this device has not yet had
  * committed, kept in its state (`local-agent-saves.ts`) and tried again on
- * the beat: the launch line of the turn it holds the end of, the generation
+ * the beat: the launch line of the turn it holds the end of, none for a
+ * save a sweep made of a folder no turn's end saved, the generation
  * its save starts from, none where the agent had none, the commit its work
  * applies to, the bundle's size and SHA-256, and the last path the service
  * granted for it, when (epoch milliseconds), and whether its upload landed
  * there. No URL, key, or byte of the bundle.
  */
 const PendingSaveSchema = Schema.Struct({
-  lineId: Schema.String,
+  lineId: Schema.optionalKey(Schema.String),
   fromGeneration: Schema.NullOr(Schema.Int),
   baseCommit: Schema.NullOr(Schema.String),
   bytes: Schema.Int,
@@ -64,10 +65,13 @@ export type PendingSave = typeof PendingSaveSchema.Type;
  * committed, where one is; and the generation a restore into its folder
  * began from and has not finished (`restoring`), while which the folder
  * holds none of the agent's work as it stands, so a launch restores it
- * again rather than going on from it, and no turn's end saves it. An
- * agent's folder is saved only where its record names neither `unsaved`
- * nor `pending`: a sweep keeps the folder of one that is unsaved or has a
- * bundle waiting, and of one with no record, which never saved.
+ * again rather than going on from it, and no turn's end saves it; and when
+ * the agent's last turn here ended (`endedAt`, epoch milliseconds), absent
+ * from a record from before it. An agent's folder is saved only where its
+ * record names a generation and none of `unsaved`, `pending` and
+ * `restoring` (`savedSince`): a sweep keeps the folder of one that is
+ * unsaved, has a bundle waiting, or a restore unfinished, and of one with no
+ * record, which never saved.
  */
 const AgentSaveSchema = Schema.Struct({
   userId: Schema.String,
@@ -75,12 +79,27 @@ const AgentSaveSchema = Schema.Struct({
   unsaved: Schema.optionalKey(Schema.Struct({ why: Schema.optionalKey(Schema.String) })),
   pending: Schema.optionalKey(PendingSaveSchema),
   restoring: Schema.optionalKey(Schema.Int),
+  endedAt: Schema.optionalKey(Schema.Int),
 });
 
 export type AgentSave = typeof AgentSaveSchema.Type;
 
 /** The most characters of why an agent's save failed that its record keeps. */
 export const UNSAVED_WHY_CHARACTERS = 300;
+
+/**
+ * Since when the agent's folder has stood saved, by its record: the end of
+ * its last turn here (epoch milliseconds), or long since, at 0, for a record
+ * from before that was kept; none where its folder holds anything Luke's
+ * store does not, or it has no record.
+ */
+export function savedSince(save: AgentSave | undefined): Option.Option<number> {
+  if (save?.generation === undefined) return Option.none();
+  if (save.unsaved !== undefined || save.pending !== undefined || save.restoring !== undefined) {
+    return Option.none();
+  }
+  return Option.some(save.endedAt ?? 0);
+}
 
 /**
  * The state: the device id each account registered under, the launches

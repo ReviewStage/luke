@@ -40,7 +40,7 @@ export function fakeSandbox(ready: LocalAgentSandbox["ready"] = () => Effect.voi
     signalled: (agentId) => Effect.sync(() => void signalled.push(agentId)),
     deleted: (agentId) => Effect.sync(() => deleted.push(agentId)).pipe(Effect.as(true)),
     // Note that a fake VM lists nothing, so no suite's follower lets go of an agent unless it says so.
-    held: Effect.succeed(Option.none()),
+    machines: Effect.succeed(Option.none()),
     githubToken: (_agentId, token) => Effect.sync(() => tokens.push(token)),
     deviceGit: () => ({}),
   };
