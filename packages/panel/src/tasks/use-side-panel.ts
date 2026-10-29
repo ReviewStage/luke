@@ -702,6 +702,9 @@ function clampWidth(width: number): number {
  */
 export type TaskHolds = Partial<Record<FixedSidePanelTab, boolean | undefined>>;
 
+/** What an agent's own page holds of the fixed kinds: its Inbox, which it may always draw, its agent being the one that posts; the plan and its comments are a task's alone. */
+export const AGENT_PAGE_HOLDS: TaskHolds = { [SIDE_PANEL_TAB.INBOX]: true };
+
 /** The open task as the panel draws its fixed tabs: its id, none while no task is open, and what it holds. */
 export interface OpenTask {
   id: string | undefined;

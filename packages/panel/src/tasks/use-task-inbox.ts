@@ -415,6 +415,8 @@ export function useTaskInbox(input: {
   taskId: string | undefined;
   /** Whose inbox `taskId` names: a task's, unless it is one agent's with no task. */
   kind?: AgentInboxScope["kind"] | undefined;
+  /** The task an agent's inbox keeps its cards' drafts under, where the agent works on one, so its task's own Inbox reads the same drafts; none for a task's inbox, which keeps them under its own. */
+  draftTask?: string | null | undefined;
   /** Whether the window shows the tasks. */
   shown: boolean;
   /** Whether this Inbox is the one on screen, which says what lands in it (`inbox-arrivals.ts`); none where it is not. */
@@ -455,7 +457,8 @@ export function useTaskInbox(input: {
   // The cards' drafts, kept apart from the hook so another tab's or page's reading of the inbox
   // shares them, under the plan, or under none where the inbox is an agent's with no plan.
   const ownTask = kind === INBOX_SCOPE_KIND.PLAN ? taskId : undefined;
-  const draftsOn = ownTask ?? null;
+  // Note that one agent's inbox keeps them under its plan where it has one, as its task's Inbox does.
+  const draftsOn = ownTask ?? input.draftTask ?? null;
   // Note that an agent with no plan is the planId its inbox is read by.
   const readAgent = kind === INBOX_SCOPE_KIND.AGENT ? taskId : undefined;
   const drafts = useInboxDrafts(draftsOn);

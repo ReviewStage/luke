@@ -3,7 +3,6 @@ import type { Channel } from "@luke/features/channel-wire";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND, type MentionLines } from "@luke/features/mention-link";
 import type { CodeRef } from "@luke/features/task-wire";
-import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { backToWords, readFailedWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
@@ -30,7 +29,7 @@ import {
   useChannelHead,
 } from "../tasks/channel-head.js";
 import { CHANNEL_SHOWN, channelShown, generalChannel } from "../tasks/channels-model.js";
-import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
+import { type InboxCodeDoors, UNREAD_FILE } from "../tasks/inbox-code-card.js";
 import {
   INBOX_COLUMNS,
   INBOX_VIEW,
@@ -157,10 +156,6 @@ const ITEM_NOT_READ = readFailedWords("this item");
 
 /** What leads back to the list from a missing item's notice, where the Inbox shows one column. */
 const BACK_TO_INBOX = backToWords("inbox");
-
-/** The code of an item whose agent's repository is not known yet reads no file, there being no repository to read it through. */
-const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
-  Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
 
 const _nothing = (): void => undefined;
 
