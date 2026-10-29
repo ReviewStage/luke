@@ -142,7 +142,9 @@ import { ChosenTasksContext, chosenRowMenu } from "./tasks-selection.js";
  * name where the door draws it: the sidebar's row turns into a field, and
  * the Plan tab's ⋯ puts the caret in the plan's own title. Version history
  * opens the plan's versions over the whole window, opening the task first
- * where it is not the open one, the one item that moves it. Pin moves the
+ * where it is not the open one, the one item that moves it. New child task
+ * opens New task's card for a child of the task, in its workspace and
+ * repository (`new-task-composer.tsx`). Pin moves the
  * task in the sidebar at once and is undone from the same menu. A pick in
  * Status sets the task there, said in a toast whose Undo puts back the
  * status it stood at, asking nothing, since no status stops an agent; a
@@ -385,7 +387,7 @@ export type TaskMenuSurface = (typeof TASK_MENU_SURFACE)[keyof typeof TASK_MENU_
  * One task's actions in the groups a rule divides, offering only those that
  * apply to it now, for the surface that offers them. A row's menu holds
  * Copy link; then Rename, Version history, and Mark as unread or read; then
- * Status, Priority, and Assignee; then Pin, Move to section, and Move to
+ * Status, Priority, and Assignee; then New child task; then Pin, Move to section, and Move to
  * workspace where the task may be moved; then the repository changed from
  * any row and Open on GitHub where it has one. The Plan tab's document
  * menu leads with Copy plan, since Copy formats the document drawn, and
@@ -428,6 +430,11 @@ function taskActionGroups(
   const lettered = drawn || doors.rowKeys;
   const read: MenuAction[] = task === undefined ? [] : [markReadItem(doors.read, lettered)];
   const rename = renameTaskItem(doors.rename);
+  const child = commandAction(
+    PANEL_COMMAND.NEW_CHILD_TASK,
+    () => tasks.onNewChildTask(taskId),
+    drawn,
+  );
   const versions = versionHistoryItem(() => tasks.history.onOpen(taskId), drawn);
   const section: MenuEntry[] = doors.section === undefined ? [] : [doors.section];
   const change = commandAction(
@@ -452,6 +459,7 @@ function taskActionGroups(
       ? [
           [...copy, ...link],
           [rename, versions, ...read],
+          [child],
           [...pinAction(tasks, task, lettered), ...section, ...move],
           open,
           [remove],
@@ -460,6 +468,7 @@ function taskActionGroups(
           link,
           [rename, versions, ...read],
           [...doors.standing],
+          [child],
           [...pinAction(tasks, task, lettered), ...section, ...move],
           [change, ...open],
           [remove],
