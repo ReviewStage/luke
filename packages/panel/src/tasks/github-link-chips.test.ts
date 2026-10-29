@@ -557,7 +557,7 @@ test("a pull request's and an issue's cards say who opened them, as the workspac
   assert.deepEqual(cardNotes(pullRequest), [
     "+120 −30 in 4 files · 7 comments · 1 commit",
     "main ← invite-expiry",
-    "Opened by octo-dev · merged 2h ago",
+    "Opened by octo-dev",
   ]);
   assert.deepEqual(cardNotes(opened), ["relay#7 · Open", "Opened by octo-dev"]);
   assert.deepEqual(cardNotes(shelved), ["relay#9 · Not planned"]);
@@ -630,7 +630,7 @@ test("a pull request's link standing alone in words drawn as a document is a row
   assert.deepEqual(cardNotes(row), [
     "+120 −30 in 4 files · 7 comments · 1 commit",
     "main ← invite-expiry",
-    "Opened by octo-dev · merged 2h ago",
+    "Opened by octo-dev",
   ]);
 });
 

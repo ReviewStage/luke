@@ -26,9 +26,10 @@ import {
   LAYOUT_ELEMENT,
   TIME_LOOK,
   Time,
+  useMinute,
 } from "@luke/ui";
 import { type ReactNode, useEffect } from "react";
-import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, ActorRef, PROVENANCE_VERB, ProvenanceRow } from "../actor-ref.js";
 import { PULL_REQUEST_TAB } from "../desktop/pages-on-demand.js";
 import { LinesChanged } from "./agent-published.js";
 import { AgentActorRef, type AgentSubject } from "./agent-ref.js";
@@ -62,7 +63,7 @@ import {
  * stand as inline code, `main ← fix`, and every label as a badge wearing
  * a dot of its own colour, since GitHub lets a label be any colour, a
  * dark one among them, which the card's words could not be read in. Who
- * opened it is a quieter row under the notes, their face as its glyph,
+ * opened it is the provenance row every card draws, their face as its glyph,
  * "Opened by octo-dev · 3d ago", and where one of the window's agents
  * opened it a second row, "By Invite flow", names the agent by its tile,
  * which hangs the agent's card and opens its tab. Its reviewers, where
@@ -77,13 +78,6 @@ const CHECKS_WORDS = {
   [CHECK_SUMMARY.FAILING]: "Checks failing",
   [CHECK_SUMMARY.NONE]: undefined,
 } as const satisfies Record<CheckSummary, string | undefined>;
-
-/** How the row naming who opened it says the moment after them. */
-const MOMENT_WORDS = {
-  [PULL_REQUEST_MOMENT.OPENED]: "",
-  [PULL_REQUEST_MOMENT.MERGED]: "merged ",
-  [PULL_REQUEST_MOMENT.CLOSED]: "closed ",
-} as const satisfies Record<PullRequestMoment, string>;
 
 /** The moment a pull request's state names: merged once merged, closed once closed, and opened while open or a draft. */
 const MOMENT_OF_STATE = {
@@ -205,11 +199,14 @@ function SizeNote({
 }
 
 /**
- * Who opened a pull request or a GitHub issue, as a quieter row under the
- * card's notes: their face as its glyph, their name as the window names a
- * GitHub account (a member's own where it is linked to one, else their
- * avatar), which hangs their card, and how long ago it last moved after
- * them where the card says it, "Opened by octo-dev · merged 2h ago".
+ * Who opened a pull request or a GitHub issue, as every card's provenance
+ * row says it (`ProvenanceRow`): their face as its glyph, their name as the
+ * window names a GitHub account (a member's own where it is linked to one,
+ * else their avatar), which hangs their card, and how long ago it was
+ * opened where the service said so, "Opened by octo-dev · 3d ago". Note
+ * that the time is the opening alone: once it merged or closed, the age the
+ * service answers is the merge's or the close's, which the head's corner
+ * says beside the state, so the row names the opener and no time.
  */
 export function OpenedByRow({
   opener,
@@ -219,27 +216,18 @@ export function OpenedByRow({
   when?: StandingPullRequest["when"];
 }): React.JSX.Element {
   const actor = useNamer()(opener);
+  const now = useMinute();
   return (
-    <HoverCardRow
-      look={HOVER_CARD_ROW_LOOK.DETAIL}
-      glyph={<ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
-      label={
-        <>
-          {"Opened by "}
-          <ActorRef actor={actor} sentence nameOnly />
-          {when === undefined ? null : (
-            <>
-              {`${SEPARATOR}${MOMENT_WORDS[when.moment]}`}
-              <Time at={when.at} look={TIME_LOOK.AGO} hint={false} />
-            </>
-          )}
-        </>
-      }
+    <ProvenanceRow
+      verb={PROVENANCE_VERB.OPENED}
+      actor={actor}
+      at={when?.moment === PULL_REQUEST_MOMENT.OPENED ? when.at : undefined}
+      now={now}
     />
   );
 }
 
-/** The agent whose pull request it is, as a quieter row: its tile as the glyph, "By" and its name, which hang the agent's card and open its tab. */
+/** The agent whose pull request it is, as a quieter row in the provenance row's shape: its tile as the glyph, "By" and its name, which hang the agent's card and open its tab. Note that it is no `ProvenanceRow`, since no verb of that row's reads as a bare "By". */
 function ByAgentRow({ agent }: { agent: PullRequestAgent }): React.JSX.Element {
   return (
     <HoverCardRow
