@@ -19,11 +19,12 @@ import { useRef } from "react";
 import { ChannelCard } from "../tasks/channel-card.js";
 import { useChannelMenu } from "../tasks/channel-menu.js";
 import { CHANNEL_SECTIONS, channelSections, channelUnread } from "../tasks/channels-model.js";
+import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import type { ChannelsControl } from "../tasks/use-channels.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { useArchivedChannelsDialog } from "./archived-channels-dialog.js";
 import { useChannelDialog } from "./channel-dialog.js";
-import { FOR_YOU_NOUN } from "./places-waiting.js";
+import { groupCount } from "./sidebar-fold.js";
 
 /**
  * sidebar-channels.tsx -- the channels under the sidebar's Inbox row while Channels is on, each a filter of the Inbox, and the questions that make, edit, and archive one (STAG-547).
@@ -31,7 +32,7 @@ import { FOR_YOU_NOUN } from "./places-waiting.js";
  * The rows stand in under the Inbox's name (`SidebarFilters`), the
  * workspace's standing channels first and its project channels after them,
  * as `channelSections` orders them. A row is the channel's glyph and name,
- * and at its end how many of its threads For you lists, in the unread dot's
+ * and at its end how many of its threads Needs you lists, in the unread dot's
  * blue; its name stands in the unread weight while something
  * was posted in it since the reader last looked (`channelUnread`). Resting
  * on a row hangs the channel's card beside it after the hint's wait, as
@@ -99,8 +100,7 @@ function ChannelRow({
           current={current ? NAV_CURRENT.PAGE : undefined}
           unread={channelUnread(channel)}
           count={{
-            value: waiting,
-            noun: FOR_YOU_NOUN,
+            ...groupCount(waiting, NEEDS_YOU.COUNT),
             tone: NAV_COUNT_TONE.UNREAD,
           }}
           contextMenu={menu.contextMenu(ellipsis)}

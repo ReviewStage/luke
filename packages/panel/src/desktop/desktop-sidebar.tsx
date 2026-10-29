@@ -143,6 +143,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { agentName } from "../tasks/agent-model.js";
 import { CHANNEL_SHOWN, channelShown } from "../tasks/channels-model.js";
+import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { useChannelPlace, useChannels, useInboxNarrowed } from "../tasks/use-channels.js";
 import { useHeldOrder } from "../tasks/use-held-order.js";
 import {
@@ -168,12 +169,12 @@ import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { childTasksFold, storedSlot, useNestedRows } from "./nested-rows.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
-import { FOR_YOU_NOUN, useChannelWaiting, useInboxWaiting } from "./places-waiting.js";
+import { useChannelWaiting, useInboxWaiting } from "./places-waiting.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SidebarChannels } from "./sidebar-channels.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
-import { type CountNoun, foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
+import { type CountNoun, foldedCount, groupCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { SidebarFoot } from "./sidebar-foot.js";
 import { SidebarLuke } from "./sidebar-luke.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
@@ -1474,7 +1475,7 @@ function ListSkeleton(): React.JSX.Element {
 
 /**
  * The Inbox's row, last of the rows heading the list and drawn as they are:
- * the tray, its name, and how many threads For you lists at its end
+ * the tray, its name, and how many threads Needs you lists at its end
  * (`useInboxWaiting`), in even figures and the unread dot's blue, and
  * nothing at none. Its chord takes the count's place
  * while the row is hovered or reached from the keyboard, as New task's and
@@ -1497,8 +1498,7 @@ function SidebarInboxRow({
       icon={<InboxIcon />}
       current={current ? NAV_CURRENT.PAGE : undefined}
       count={{
-        value: waiting,
-        noun: FOR_YOU_NOUN,
+        ...groupCount(waiting, NEEDS_YOU.COUNT),
         tone: NAV_COUNT_TONE.UNREAD,
       }}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}

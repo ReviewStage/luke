@@ -219,7 +219,7 @@ test("the Inbox's list says its feed could not be read as the sidebar does, and 
     }),
   );
   const failure = readFailure(page);
-  assertSaidAlike(failure, "Some items could not be read.");
+  assertSaidAlike(failure, "The inbox could not be read.");
   failure.retry();
   await settle();
   assert.equal(page.querySelector('[role="alert"]'), null, "the read landed, so nothing fails");
@@ -302,7 +302,7 @@ test("an Inbox whose task list could not be read says so, never that nothing nee
   });
   const page = await mount(createElement(DesktopInbox, { tasks }));
   const failure = readFailure(page);
-  assertSaidAlike(failure, "Some items could not be read.");
+  assertSaidAlike(failure, "The inbox could not be read.");
   assert.doesNotMatch(page.textContent ?? "", /Nothing needs you/u);
   assert.equal(page.querySelector('[role="status"]'), null, "no loading placeholder");
   failure.retry();

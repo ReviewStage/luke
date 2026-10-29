@@ -47,6 +47,7 @@ import {
   repositoryPinSchema,
   taskAgentPinSchema,
   taskAssigneeIdSchema,
+  taskBlockRequestSchema,
   taskCreateRequestSchema,
   taskFileRefusalSchema,
   taskFileRequestSchema,
@@ -334,6 +335,14 @@ export const tasksMoveParamsSchema = EffectSchema.Struct({
 
 export type TasksMoveParams = typeof tasksMoveParamsSchema.Type;
 
+/** One block of a task added or taken away, as the window asks it: the task, and the change the service takes. */
+export const tasksBlockParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  block: taskBlockRequestSchema,
+});
+
+export type TasksBlockParams = typeof tasksBlockParamsSchema.Type;
+
 /** Why a task call answered nothing a window can draw. */
 export const TASK_CALL_FAILURE = {
   /** The call never reached an answer: no credential, the network, a refusal, a shape not read. */
@@ -413,6 +422,31 @@ export const tasksMoveAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksMoveAnswer = typeof tasksMoveAnswerSchema.Type;
+
+/** Why a block change wrote nothing a call's other reasons do not say: it would close a cycle. */
+export const TASK_BLOCK_FAILURE = {
+  CYCLE: "block-cycle",
+} as const;
+
+/** Why a block change wrote nothing: the service did not answer, a task is not the account's or not of the workspace, or it would close a cycle. */
+const BLOCK_CALL_FAILURES = [
+  TASK_CALL_FAILURE.UNANSWERED,
+  TASK_CALL_FAILURE.NOT_FOUND,
+  TASK_BLOCK_FAILURE.CYCLE,
+] as const;
+
+export type BlockCallFailure = (typeof BLOCK_CALL_FAILURES)[number];
+
+/** A task's block changed, as the window hears it: the task's blocks as they then stand, or why it is unchanged. */
+export const tasksBlockAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    blockedBy: EffectSchema.Array(EffectSchema.String),
+    blocks: EffectSchema.Array(EffectSchema.String),
+  }),
+  EffectSchema.Struct({ failure: EffectSchema.Literals(BLOCK_CALL_FAILURES) }),
+]);
+
+export type TasksBlockAnswer = typeof tasksBlockAnswerSchema.Type;
 
 /** The developer's edit of a task's document, as the window asks it saved: the task, and the edit as the service takes it. */
 export const tasksEditParamsSchema = EffectSchema.Struct({
