@@ -18,7 +18,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
-import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
+import { fakeAppPlatform } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -38,16 +38,12 @@ declare global {
 beforeAll(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   installScrollIntoView();
-  fakeAppPlatform({ assetBase: () => "https://luke.test/", ...copyingInto(copied) });
+  fakeAppPlatform({ assetBase: () => "https://luke.test/" });
 });
-
-/** What the window's clipboard took, in order. */
-const copied: string[] = [];
 
 const roots: Root[] = [];
 
 afterEach(() => {
-  copied.length = 0;
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
 });
@@ -93,14 +89,6 @@ test("Add hosts shows the token in its command and sends the service only the to
   assert.ok(token !== undefined, "the dialog's command carries the token");
   assert.deepEqual(sent, [{ tokenHash: createHash("sha256").update(token).digest("hex") }]);
   assert.ok(!JSON.stringify(sent).includes(token), "nothing sent carries the token");
-
-  const copy = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
-    (each) => each.textContent === "Copy agent prompt",
-  );
-  assert.ok(copy !== undefined, "the dialog offers the agent prompt");
-  await act(async () => copy.click());
-  assert.equal(copied.length, 1);
-  assert.ok(copied[0]?.includes(`--token ${token}`), "the prompt carries the install command");
 });
 
 it.effect(

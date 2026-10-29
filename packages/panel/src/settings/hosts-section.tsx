@@ -4,8 +4,6 @@ import {
   HOST_WIRE,
   type Host,
   hostInstallCommand,
-  hostInstallLoopCommand,
-  hostSetupPrompt,
   hostUpgradeCommand,
 } from "@luke/features/host-wire";
 import { agoText, momentText } from "@luke/features/time-format";
@@ -46,7 +44,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Base64Url, Hex } from "effect/encoding";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
-import { copyThroughShell, useCopyToast } from "../copy-feedback.js";
+import { copyThroughShell } from "../copy-feedback.js";
 import { DEVICE_PLATFORM_NAME } from "../device-platform.js";
 import {
   type PresenceBook,
@@ -88,9 +86,8 @@ import {
  * Add hosts mints an install token here, in the window, and hands the
  * service its SHA-256 alone, so the token never leaves the window that
  * shows it: it stands in this section's state while the dialog is open,
- * inside the install command, its loop for many servers, and the setup prompt
- * a coding agent follows to install them, and is gone once the dialog closes.
- * Revoke this command stops new servers enrolling with it, and none it
+ * inside the install command the member runs on each host, and is gone once
+ * the dialog closes. Revoke this command stops new servers enrolling with it, and none it
  * already enrolled. The section stands nowhere while the local agents
  * experiment is off, which hosts sit behind as This Mac does, and neither
  * does its page (`settings-rows.ts`'s `PAGE_EXPERIMENT`).
@@ -122,10 +119,7 @@ const WORDS = {
   UPGRADE_NEEDED: "Upgrade needed",
   UPGRADE_TITLE: "Run this on the host to upgrade it",
   MAC_UPGRADE: "Update the Luke app on this Mac to upgrade it.",
-  INSTALL_TITLE: "Run this as root on each host",
-  LOOP_TITLE: "Or on many servers at once",
-  COPY_PROMPT: "Copy agent prompt",
-  PROMPT_COPIED: "Agent prompt copied",
+  INSTALL_TITLE: "Run this on each host",
   REVOKE: "Revoke this command",
 } as const;
 
@@ -257,7 +251,7 @@ function HostRow({
   );
 }
 
-/** The dialog Add hosts opens: the install command and its loop, each with the token in it, shown this once, and Revoke. */
+/** The dialog Add hosts opens: the install command with the token in it, shown this once, and Revoke. */
 function AddHostsDialog({
   shown,
   onRevoke,
@@ -268,7 +262,6 @@ function AddHostsDialog({
   onClose: () => void;
 }): React.JSX.Element {
   const revoking = useConfirmDialog({ subject: true, surfaceOpen: true }, onRevoke);
-  const copyPrompt = useCopyToast();
   return (
     <Dialog
       open
@@ -291,23 +284,6 @@ function AddHostsDialog({
             code={hostInstallCommand(shown.installScriptUrl, shown.installToken)}
             copy={copyThroughShell}
           />
-          <CodeCard
-            title={WORDS.LOOP_TITLE}
-            titleIs={CODE_CARD_TITLE.WORDS}
-            code={hostInstallLoopCommand(shown.installScriptUrl, shown.installToken)}
-            copy={copyThroughShell}
-          />
-          <Button
-            variant={BUTTON_VARIANT.PRIMARY}
-            onClick={() =>
-              copyPrompt(
-                hostSetupPrompt(shown.installScriptUrl, shown.installToken, shown.expiresAt),
-                WORDS.PROMPT_COPIED,
-              )
-            }
-          >
-            {WORDS.COPY_PROMPT}
-          </Button>
         </Stack>
       </div>
       <ConfirmDialog
