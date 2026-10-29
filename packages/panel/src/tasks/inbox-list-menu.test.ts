@@ -212,17 +212,6 @@ test("a row's ⋯ takes the keyboard's focus, is described by the item's title, 
   expect(opened).toEqual([]);
 });
 
-test("a row's mail button names U only on the chosen item, the one U acts on", () => {
-  mount(VIEW.items[1]?.item.id);
-  const rows = [...document.querySelectorAll<HTMLElement>(".luke-list-row")];
-  const mail = (row: HTMLElement | undefined) =>
-    row?.querySelector("button[aria-label^='Mark as']")?.getAttribute("aria-keyshortcuts");
-
-  expect(rows.length).toBe(2);
-  expect(mail(rows[0])).toBeNull();
-  expect(mail(rows[1])).toBeTruthy();
-});
-
 test("a finger's list standing alone draws no row open at rest, its chosen row still the one U acts on", () => {
   vi.spyOn(window, "matchMedia").mockImplementation(
     (query) =>
@@ -236,7 +225,10 @@ test("a finger's list standing alone draws no row open at rest, its chosen row s
   mount(VIEW.items[0]?.item.id, INBOX_COLUMNS.LIST);
 
   expect(document.querySelector('[aria-current="page"]')).toBeNull();
+  act(() => moreOf(firstRow()).click());
   expect(
-    firstRow().querySelector("button[aria-label^='Mark as']")?.getAttribute("aria-keyshortcuts"),
-  ).toBeTruthy();
+    menuItems()
+      .find((words) => words.startsWith("Mark as"))
+      ?.endsWith("U"),
+  ).toBe(true);
 });
