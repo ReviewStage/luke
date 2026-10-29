@@ -56,6 +56,7 @@ import {
   inboxReadStateSchema,
   inboxStartRequestSchema,
 } from "./inbox-wire.js";
+import { lukeToolsAnswerSchema } from "./luke-tools-wire.js";
 import { memoriesAnswerSchema, memoryIdSchema } from "./memory-wire.js";
 import { modelChoiceSchema, modelProviderSchema, modelsAnswerSchema } from "./models-wire.js";
 import {
@@ -569,6 +570,11 @@ export const agentOverviewConversationAnswerViewSchema = EffectSchema.Union([
 
 export type AgentOverviewConversationAnswerView =
   typeof agentOverviewConversationAnswerViewSchema.Type;
+
+/** Which of Luke's own tools an agent is offered and where its `run_on_mac` stands, as the window hears it: the answer, or why there is none. */
+export const agentLukeToolsAnswerViewSchema = EffectSchema.Union([lukeToolsAnswerSchema, failed]);
+
+export type AgentLukeToolsAnswerView = typeof agentLukeToolsAnswerViewSchema.Type;
 
 /** What the reviewer and label pickers of an agent's Pull request tab offer, as the window hears it: the labels, users, and teams, or why there is no answer. */
 export const agentReviewOptionsAnswerViewSchema = EffectSchema.Union([

@@ -83,6 +83,7 @@ import {
   START_NOTE_HEADING,
   stepsBytes,
 } from "@luke/features/agent-replay";
+import { AGENT_TOOL } from "@luke/features/agent-tools";
 import {
   AGENT_ARCHIVER,
   AGENT_ATTACHMENT_TYPE,
@@ -123,6 +124,7 @@ import {
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
 import { keptPictureIdOf } from "@luke/features/conversation-picture-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import {
   INBOX_ANSWER_LEAD,
   INBOX_APPROVAL_OPTION,
@@ -144,6 +146,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { transcriptNowAnswerSchema } from "@luke/features/live-wire";
+import { lukeToolsAnswerSchema } from "@luke/features/luke-tools-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
@@ -283,6 +286,8 @@ const AGENT_STARTS = "/api/agents/agents";
 const WORKSPACE_STARTS = "/api/workspaces/agents";
 const AGENT = "/api/agents/agent";
 const AGENT_INBOX = "/api/agents/{id}/inbox";
+/** Luke's own tools an agent is offered and where its `run_on_mac` stands, as its MCP popover reads them. */
+const AGENT_LUKE_TOOLS = "/api/agents/luke-tools";
 const WORKSPACE_AGENTS = "/api/agents";
 /** The overview's three reads, each its own route. */
 const AGENT_OVERVIEW = [
@@ -537,6 +542,7 @@ const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/agents/messages-newest", (id: string) => `/api/agents/${id}/messages/newest`],
   ["/api/agents/changes", (id: string) => `/api/agents/${id}/changes`],
   ["/api/agents/review-options", (id: string) => `/api/agents/${id}/review-options`],
+  ["/api/agents/luke-tools", (id: string) => `/api/agents/${id}/luke-tools`],
   ["/api/agents/pull-request", (id: string) => `/api/agents/${id}/pull-request`],
   ["/api/agents/pull-request-action", (id: string) => `/api/agents/${id}/pull-request/action`],
   ["/api/agents/pull-request-viewed", (id: string) => `/api/agents/${id}/pull-request/viewed`],
@@ -5593,6 +5599,36 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         assert.deepEqual(
           outside,
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent's Luke tools read for its starter, and as not found for a member who reaches the agent but not its task",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
+        yield* joinWorkspace(task.workspaceId, other);
+        // The task is seen on its starter's own token, which the teammate holds none of, while the agent is seen through the App.
+        yield* Database.use((db) =>
+          db
+            .update(taskTable)
+            .set({ githubAccess: GITHUB_ACCESS.TOKEN })
+            .where(eq(taskTable.id, task.id)),
+        );
+
+        const read = readAnswer(
+          lukeToolsAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_LUKE_TOOLS, owner, { id: agent.id })),
+        );
+        const teammate = yield* ask(request(AGENT_LUKE_TOOLS, other, { id: agent.id }));
+
+        assert.ok(read.tools.includes(AGENT_TOOL.RUN_ON_MAC));
+        assert.deepEqual(
+          teammate,
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
       }),

@@ -2876,6 +2876,7 @@ function AgentTabBody({
     agent,
     write: control.onSwitchServers,
     onOpenSettings: control.onOpenIntegrations,
+    me: control.me,
   });
   const { published } = useAgentPullRequest({
     agentId: agent.id,

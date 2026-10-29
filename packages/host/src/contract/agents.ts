@@ -23,6 +23,7 @@ import {
   agentGitHubImageViewSchema,
   agentListAnswerViewSchema,
   agentListParamsSchema,
+  agentLukeToolsAnswerViewSchema,
   agentMessageParamsSchema,
   agentMessagesAnswerViewSchema,
   agentMessagesParamsSchema,
@@ -205,6 +206,11 @@ export const agentActsContract = {
   )
     .input(exactInput(agentPullRequestParamsSchema))
     .output(EffectSchema.flip(agentReviewOptionsAnswerViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_LUKE_TOOLS]: actProcedure(
+    "Could not read the agent's Luke tools on this system.",
+  )
+    .input(exactInput(agentPullRequestParamsSchema))
+    .output(EffectSchema.flip(agentLukeToolsAnswerViewSchema)),
   [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]: actProcedure(
     "Could not read the pull request's checks on this system.",
   )

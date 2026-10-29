@@ -47,6 +47,7 @@ import {
   startBrief,
 } from "../agent-wire.js";
 import { githubRepositoryFullNameSchema } from "../github-repositories-wire.js";
+import { lukeToolsAnswerSchema } from "../luke-tools-wire.js";
 import { modelChoiceSchema } from "../models-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import {
@@ -240,6 +241,11 @@ export const agentsContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/review-options` }))
     .input(idParams)
     .output(EffectSchema.flip(agentReviewOptionsAnswerSchema)),
+  /** Which of Luke's own tools one agent is offered, and whether its `run_on_mac` would run now, as its MCP popover reads them. */
+  lukeTools: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/luke-tools` }))
+    .input(idParams)
+    .output(EffectSchema.flip(lukeToolsAnswerSchema)),
   /** One agent's stopped sandbox resumed, on the developer's click. */
   sandboxResume: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${AGENT_PATH}/sandbox/resume` }))
