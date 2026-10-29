@@ -393,12 +393,15 @@ export function DesktopAgentPage({
     setFocus(COLUMN.SIDE);
     sidePanel.onNewTab();
   });
+  // An agent of a task, an archived one opened here among them, offers what that task's mode lets it.
+  const listedPlanId = tasks.liveAgents?.find((each) => each.id === agentId)?.planId;
   const agents = useAgents({
     acts: { act },
     taskId: undefined,
     agentId,
     repository: null,
     listedAgents: tasks.liveAgents,
+    mode: tasks.tasks.find((each) => each.id === listedPlanId)?.mode,
     onOpenIntegrations: tasks.agents.onOpenIntegrations,
     onOpenApiKeys: tasks.agents.onOpenApiKeys,
     // An agent a Continue or a Fork started opens on its own page, as a Start's tab opens on a task.

@@ -217,7 +217,7 @@ export interface AgentsControl {
   readModels: () => void;
   /** Reads the account's default now, for a menu opening or the Settings page. */
   readDefault: () => Promise<AgentDefaultAnswer>;
-  /** How the open task is worked, which says what its members start of their own (`startsOwnAgents`); none where no task is open, or before the task list names it. */
+  /** How the open task, or the page's agent's task, is worked, which says what its members start of their own (`startsOwnAgents`); none for an agent of no task, or before the task list names it. */
   mode: TaskMode | undefined;
   /** The open task's draft agent; nothing while it has none. */
   draft: AgentDraft | undefined;
@@ -645,7 +645,7 @@ export function useAgents(input: {
   agentId?: string | undefined;
   /** The open task's repository, or null while it names none. */
   repository: string | null;
-  /** How the open task is worked; none where no task is open, or before the task list names it. */
+  /** How the open task, or the page's agent's task, is worked; none for an agent of no task, or before the task list names it. */
   mode?: TaskMode | undefined;
   /**
    * Every agent the task list followed live carries, on a task or with
@@ -1532,7 +1532,7 @@ export function useAgents(input: {
     origin: ours(list) ? list.origin : undefined,
     agentIds,
     heldIds: standing?.map((agent) => agent.id),
-    mode: taskId === undefined ? undefined : input.mode,
+    mode: input.mode,
     draft,
     onNewDraft,
     onForkDraft,
