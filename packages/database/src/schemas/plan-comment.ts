@@ -7,8 +7,8 @@ import type {
 import { sql } from "drizzle-orm";
 import { index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
+import { agentTable } from "./agent.js";
 import { user } from "./auth.js";
-import { codingAgent } from "./coding-agent.js";
 import { task } from "./task.js";
 
 /**
@@ -73,12 +73,12 @@ export const planComment = pgTable(
     /** The member who wrote it, or whose turn Luke or the agent wrote it on; null once their account is gone. */
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     /** The coding agent that wrote it; null for a member's or Luke's, and once the agent is gone. */
-    agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
+    agentId: uuid("agent_id").references(() => agentTable.id, { onDelete: "set null" }),
     /** A comment's words; null for a line of what happened. */
     words: text("words"),
     /** Who an ask sent the thread to, Luke or a coding agent; null for any other entry. */
     askedActor: text("asked_actor").$type<PlanCommentActor>(),
-    askedAgentId: uuid("asked_agent_id").references(() => codingAgent.id, {
+    askedAgentId: uuid("asked_agent_id").references(() => agentTable.id, {
       onDelete: "set null",
     }),
     /** The key the member's client wrote it under; null for an agent's. */

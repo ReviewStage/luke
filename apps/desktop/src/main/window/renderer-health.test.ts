@@ -147,7 +147,7 @@ it.effect("a panel that closes while it still does not answer is reported as not
 
 it.effect("a window's working set is noted once as it crosses its bound, and never under it", () =>
   Effect.gen(function* () {
-    windows.push(new FakeWindow(4201, "index.html"), new FakeWindow(4202, "voice.html"));
+    windows.push(new FakeWindow(4201, "index.html"), new FakeWindow(4202, "index.html"));
     metrics.set(4201, 1.2 * KILOBYTES_PER_GIGABYTE);
     metrics.set(4202, 0.3 * KILOBYTES_PER_GIGABYTE);
     const noted: WorkingSetCrossing[] = [];

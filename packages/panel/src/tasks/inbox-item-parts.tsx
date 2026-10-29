@@ -31,6 +31,7 @@ import {
   HoverCardNote,
   HoverCardRow,
   HoverCardRule,
+  HoverCardSkeleton,
   INLINE_REF_LOOK,
   InlineRef,
   STATUS_TONE,
@@ -40,6 +41,7 @@ import {
   Text,
   Time,
   VisuallyHidden,
+  WingFace,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName, personActor } from "@luke/ui/actor-model";
 import {
@@ -59,11 +61,13 @@ import { DraftMark } from "../draft-mark.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { agentStillWriting, providerOf } from "./agent-model.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
-import { AutomationChipCard, ChipCardSkeleton, TaskChipCard } from "./chip-cards.js";
-import { agentStillWriting, providerOf } from "./coding-agent-model.js";
+import { AutomationChipCard, TaskChipCard } from "./chip-cards.js";
 import { HOME_ROW_META } from "./home-row.js";
+import { fillInWords, WRITE_AN_ANSWER } from "./inbox-ask-words.js";
 import {
+  holderAutomationId,
   holderName,
   INBOX_HOLDER,
   INBOX_LINE,
@@ -72,12 +76,14 @@ import {
   type InboxLineKind,
   type InboxListed,
   inboxCardThread,
+  inboxLineKind,
   inboxSettledStanding,
   inboxSettledWords,
   inboxShownTicks,
   itemWorkspaceId,
   NEEDS_YOU,
   needsYou as needsYouOf,
+  operatorHolder,
   RECOMMENDED,
   readersItem,
 } from "./inbox-model.js";
@@ -142,19 +148,9 @@ function itemSubject(
   models: readonly CatalogModel[] | undefined,
   readerId: string | undefined,
 ): AgentSubject | undefined {
-  if (holder.kind === INBOX_HOLDER.AUTOMATION) {
-    const line = holder.agents.get(agentId);
-    return line === undefined
-      ? undefined
-      : tasklessSubject(
-          {
-            title: line.agentTitle,
-            model: line.agentModel,
-            automationId: line.automationId,
-            automationName: holder.automationId === null ? undefined : holder.name,
-          },
-          models,
-        );
+  if (holder.kind === INBOX_HOLDER.AGENT) {
+    const { agent } = holder;
+    return agent.agentId !== agentId ? undefined : tasklessSubject(agent, models);
   }
   const line = holder.task.agents?.agents.find((each) => each.id === agentId);
   return line === undefined ? undefined : lineSubject(line, models, readerId);
@@ -220,6 +216,15 @@ export function inboxLineGlyph(kind: InboxLineKind): React.JSX.Element | null {
   }
 }
 
+/**
+ * An item's own glyph, as its chip wears it and its card leads with it:
+ * what it asks, as its row's second line leads with it (`inboxLineGlyph`),
+ * or the thread's glyph where it asks nothing.
+ */
+export function inboxItemGlyph(item: InboxItem): React.JSX.Element {
+  return inboxLineGlyph(inboxLineKind(item)) ?? <GLYPH.THREAD />;
+}
+
 /** Where an item stands, as its row's card says it under its title. */
 function standingWords(item: InboxItem, needsYou: boolean, starter: Actor | undefined): string {
   if (needsYou) return NEEDS_YOU.LABEL;
@@ -232,10 +237,10 @@ function standingWords(item: InboxItem, needsYou: boolean, starter: Actor | unde
 /**
  * An Inbox row's card, hung beside the row as a sidebar task's row hangs
  * its task's, so the row's tile hangs none of its own: the card of the
- * thread. It leads with what holds it, a task as its key and its chip,
- * which wears its status, or an automation by its name, as a task's card
- * leads with where it stands; then the item's title and when it last moved; where it stands,
- * waiting on the reader, on a teammate, or settled;
+ * thread. It leads with the item's glyph, what it asks as its chip wears
+ * it, its title, where it stands, waiting on the reader, on a teammate, or
+ * settled, and when it last moved; then what holds it, a task as its key
+ * and its chip, which wears its status, or an automation by its name;
  * the ask in full while one waits, every option with the recommended one
  * marked or every step as the reader's draft ticks it, or how it ended; and
  * the agent's latest words, three lines at most. The agent that asked
@@ -267,8 +272,8 @@ export function InboxItemCard({
   const working = line !== undefined && agentStillWriting(line.status);
   return (
     <HoverCard data-inbox-row-card="">
-      <HolderLine holder={holder} workspaceId={itemWorkspaceId(holder, item.agentId)} />
       <HoverCardHead
+        glyph={inboxItemGlyph(item)}
         name={cardTitle(item.title)}
         sub={
           <>
@@ -278,6 +283,7 @@ export function InboxItemCard({
         }
         corner={<Time at={item.updatedAt} now={now} hint={false} />}
       />
+      <HolderDetail holder={holder} workspaceId={itemWorkspaceId(holder)} />
       {thread.ask === undefined ? (
         settled === undefined ? null : (
           <HoverCardRow
@@ -313,13 +319,15 @@ export function InboxItemCard({
 const WORKSPACES = Atom.map(APP_SLICE.TASKS, (tasks) => tasks?.workspaces);
 
 /**
- * What holds an item, as its card leads with it, on one line: a task by its
- * key, as the task's own card leads with it (`TaskKey`), and by its chip
- * as a mention of it is drawn (`HolderRef`), which wears the task's status
- * as its mark, so the card says no status in words; an automation, or the
- * agents no automation names, by their chip alone.
+ * What holds an item, as its card says it under the head, a quieter row
+ * on the name's column: a task by its key, as the task's own card says it
+ * (`TaskKey`), and by its chip as a mention of it is drawn (`HolderRef`),
+ * which wears the task's status as its mark, so the card says no status in
+ * words; an automation, or the agents no automation names, by their chip
+ * alone. Note that the row wears no glyph of its own, because the chip
+ * already leads with the holder's.
  */
-function HolderLine({
+function HolderDetail({
   holder,
   workspaceId,
 }: {
@@ -332,12 +340,18 @@ function HolderLine({
       ? workspaces?.find((each) => each.id === holder.task.workspaceId)?.name
       : undefined;
   return (
-    <div className={cn(TASK_CARD_STANDING, "flex-nowrap text-caption-inline")} data-line="one">
-      {holder.kind === INBOX_HOLDER.TASK ? (
-        <TaskKey workspaceName={workspaceName} number={holder.task.number} />
-      ) : null}
-      <HolderRef holder={holder} workspaceId={workspaceId} />
-    </div>
+    <HoverCardRow
+      look={HOVER_CARD_ROW_LOOK.DETAIL}
+      glyph={null}
+      label={
+        <span className={cn(TASK_CARD_STANDING, "flex-nowrap")} data-holder-detail="">
+          {holder.kind === INBOX_HOLDER.TASK ? (
+            <TaskKey workspaceName={workspaceName} number={holder.task.number} />
+          ) : null}
+          <HolderRef holder={holder} workspaceId={workspaceId} />
+        </span>
+      }
+    />
   );
 }
 
@@ -357,9 +371,8 @@ function HolderRef({
   workspaceId: string | undefined;
 }): React.JSX.Element {
   const openPlace = useOpenPlace();
-  const known = useAutomation(
-    holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
-  );
+  const automationId = holderAutomationId(holder);
+  const known = useAutomation(automationId ?? undefined);
   const glyph = <HolderGlyph holder={holder} />;
   const name = holderName(holder);
   const fallback = (
@@ -374,17 +387,17 @@ function HolderRef({
         glyph={glyph}
         label={name}
         card={
-          holder.automationId === null ? undefined : workspaceId === undefined ? (
+          automationId === null ? undefined : workspaceId === undefined ? (
             // Note that an older service names no workspace for the item, so only a directory around the card can know the automation.
             known === undefined ? undefined : (
               <AutomationCard {...known} />
             )
           ) : (
             <AutomationChipCard
-              automationId={holder.automationId}
+              automationId={automationId}
               workspace={workspaceId}
               wordsWorkspaceId={workspaceId}
-              reading={<ChipCardSkeleton glyph={glyph} name={name} />}
+              reading={<HoverCardSkeleton glyph={glyph} name={name} />}
               fallback={fallback}
             />
           )
@@ -468,8 +481,8 @@ function CardAsk({
           glyph={<PenLineIcon />}
           label={
             ask.fields === undefined
-              ? "Write an answer"
-              : `Fill in ${ask.fields.map((field) => field.label).join(", ")}`
+              ? WRITE_AN_ANSWER
+              : fillInWords(ask.fields.map((field) => field.label))
           }
         />
       );
@@ -480,7 +493,7 @@ function CardAsk({
  * An item's task's status as its row wears it before its time: the
  * status's mark alone, small and quiet, as the task's sidebar row wears
  * it, so a Done task's item reads ✓ and a Canceled one's ×, its words said
- * to a reader and in the row's card (`HolderLine`). Note that it is drawn
+ * to a reader and in the row's card (`HolderDetail`). Note that it is drawn
  * whatever the status, an item of a finished task staying listed until it
  * is read or answered, and none for an agent with no task, nor for a task
  * from a service before statuses. A row that draws the status elsewhere, on
@@ -506,20 +519,21 @@ function TaskStatusChip({
 
 /**
  * A holder's glyph as a row's chip draws it: a task's status's mark, an
- * automation's clock tile, and the automation glyph for the agents no
- * automation names, as the holder's group header draws them.
+ * automation's clock tile, Luke's face for the member's operator, and the
+ * automation glyph for the agents no automation names, as the holder's
+ * group header draws them.
  */
 export function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
-  const known = useAutomation(
-    holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
-  );
+  const automationId = holderAutomationId(holder);
+  const known = useAutomation(automationId ?? undefined);
   if (holder.kind === INBOX_HOLDER.TASK) return <PlanGlyph status={holder.task.status} />;
-  if (holder.automationId === null) return <GLYPH.AUTOMATION />;
+  if (operatorHolder(holder)) return <WingFace />;
+  if (automationId === null) return <GLYPH.AUTOMATION />;
   return (
     <ActorMark
       actor={
         known === undefined
-          ? { kind: ACTOR_KIND.AUTOMATION, name: holder.name, state: ACTOR_STATE.REST }
+          ? { kind: ACTOR_KIND.AUTOMATION, name: holderName(holder), state: ACTOR_STATE.REST }
           : automationActor(known.automation)
       }
     />

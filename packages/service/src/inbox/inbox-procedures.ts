@@ -12,15 +12,16 @@
  * nothing changed since the reader's cursor, by the holds they always had
  * (`agents/coder-host/inbox-page.ts`), and answer as one JSON body when the
  * inbox moves or the hold ends. An item's attachment is bytes, not JSON, and
- * stays on the agents' group (`agents/coding-agents-app.ts`).
+ * stays on the agents' group (`agents/agents-app.ts`).
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { type Agent, readAgent, readVisibleAgent } from "@luke/database/models/agent-store";
 import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
+import type { AgentAttachment } from "@luke/features/agent-wire";
 import {
   INBOX_ASK_STATUS,
   INBOX_CURSOR_START,
@@ -43,7 +44,6 @@ import { MESSAGE_CHANNEL, THREAD_LINE_EVENT, type ThreadLineMetadata } from "@lu
 import type { LanguageModel } from "ai";
 import { Effect, Option } from "effect";
 import { type AccountResolving, controlsAgent } from "../agents/agent-reach.js";
-import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { ownKeyOf } from "../agents/coder-host/account-keys.js";
 import {
   accountInboxPast,
@@ -51,10 +51,11 @@ import {
   taskInboxPast,
 } from "../agents/coder-host/inbox-page.js";
 import { titleModel } from "../agents/coder-host/model.js";
-import { steerCodingAgent } from "../agents/coder-host/steer.js";
+import { steerAgent } from "../agents/coder-host/steer.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import { titleInboxThread } from "../agents/coder-host/title.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { afterResponse } from "../http/after-response.js";
@@ -126,7 +127,7 @@ const productionTitleModel: InboxTitleModelOf = (userId, preferred) =>
 const retitled = (
   seams: InboxProcedureSeams,
   userId: string,
-  agent: CodingAgent,
+  agent: Agent,
   item: InboxItem,
   text: string,
 ) =>
@@ -203,16 +204,16 @@ const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   message: {
     readonly text: string;
     readonly clientKey: string;
-    readonly attachments: readonly CodingAgentAttachment[];
+    readonly attachments: readonly AgentAttachment[];
   },
   counted: Effect.Effect<void>,
 ) {
   const { text, clientKey, attachments } = message;
   const handedOver = Effect.gen(function* () {
-    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agentId));
+    const agent = yield* hostedStoreOrUnavailable(readAgent(userId, agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
     const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
-    yield* steerCodingAgent(eve, writer, userId, agent.value, {
+    yield* steerAgent(eve, writer, userId, agent.value, {
       text,
       attachments,
       clientKey,
@@ -321,7 +322,7 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
   sent: {
     readonly text: string;
     readonly clientKey: string;
-    readonly attachments: readonly CodingAgentAttachment[];
+    readonly attachments: readonly AgentAttachment[];
     readonly answers: InboxAnswers;
   },
 ) {
@@ -420,10 +421,10 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
     return { item: taken, taken: true, ...writtenIn };
   }
   const handedOver = Effect.gen(function* () {
-    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, taken.agentId));
+    const agent = yield* hostedStoreOrUnavailable(readAgent(userId, taken.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
     const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
-    yield* steerCodingAgent(eve, writer, userId, agent.value, {
+    yield* steerAgent(eve, writer, userId, agent.value, {
       text: inboxClosedMessage(taken),
       attachments: [],
       clientKey,
@@ -476,7 +477,7 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
   asked: {
     readonly text: string;
     readonly clientKey: string;
-    readonly attachments: readonly CodingAgentAttachment[];
+    readonly attachments: readonly AgentAttachment[];
     readonly answers?: InboxAnswers | undefined;
     readonly revision?: number | undefined;
   },
@@ -504,10 +505,10 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
       ? withdrawInboxMessage(userId, itemId, clientKey)
       : Effect.void;
   const handedOver = Effect.gen(function* () {
-    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, item.agentId));
+    const agent = yield* hostedStoreOrUnavailable(readAgent(userId, item.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
     const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
-    yield* steerCodingAgent(eve, writer, userId, agent.value, {
+    yield* steerAgent(eve, writer, userId, agent.value, {
       text: inboxThreadMessage(item, text),
       attachments,
       clientKey,
@@ -542,13 +543,13 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly title: string;
     readonly text: string;
     readonly clientKey: string;
-    readonly attachments: readonly CodingAgentAttachment[];
+    readonly attachments: readonly AgentAttachment[];
     /** Whether the member wrote the subject, where none stands for its message's first line until it is titled. */
     readonly titled: boolean;
   },
 ) {
   const { agentId, title, text, clientKey, attachments } = asked;
-  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agentId));
+  const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(userId, agentId));
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   if (!controlsAgent(userId, agent.value)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   const { userId: starterId, taskId } = agent.value;
@@ -571,7 +572,7 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
       : Effect.void;
   const handedOver = Effect.gen(function* () {
     const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
-    yield* steerCodingAgent(eve, writer, userId, agent.value, {
+    yield* steerAgent(eve, writer, userId, agent.value, {
       text: inboxThreadMessage(item, text),
       attachments,
       clientKey,
@@ -610,7 +611,11 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
     // Note that the query's `archived=include`, which an older build still sends, is taken and changes nothing: no task is archived any more, so there is none to list.
     account: signedIn.account.effect(function* ({ input, context }) {
       const after = input.after ?? INBOX_CURSOR_START;
-      return yield* hostedStoreOrUnavailable(accountInboxPast(context.userId, after));
+      const repositoryless =
+        input[ACCOUNT_INBOX_REPOSITORYLESS.QUERY] === ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE;
+      return yield* hostedStoreOrUnavailable(
+        accountInboxPast(context.userId, after, repositoryless),
+      );
     }),
     task: signedIn.task.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
@@ -621,7 +626,7 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
     }),
     agent: signedIn.agent.effect(function* ({ input, context }) {
       const agentId = yield* pathUuid(input.id);
-      const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
+      const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(context.userId, agentId));
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const after = input.after ?? INBOX_CURSOR_START;
       return yield* hostedStoreOrUnavailable(agentInboxPast(context.userId, agent.value.id, after));

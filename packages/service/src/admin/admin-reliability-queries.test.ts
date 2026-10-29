@@ -5,9 +5,9 @@ import { Database } from "@luke/database/core/query";
 import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
 import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
+import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
 import { automation, automationRun } from "@luke/database/schemas/automation";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { integrationConnection } from "@luke/database/schemas/integration";
 import { conversations, turns } from "@luke/database/schemas/storage";
@@ -23,6 +23,7 @@ import {
   ADMIN_METRICS_SCOPE,
   ADMIN_METRICS_WINDOW,
 } from "@luke/features/admin-wire";
+import { AGENT_FAILURE } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -33,14 +34,13 @@ import {
   type AutomationRunReason,
   type AutomationRunStatus,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_FAILURE } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
 import { TURN_ORIGIN } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { REPOSITORY_REFUSAL } from "../agents/repository-shell.js";
-import { BRAIN_REQUEST_FAILURE, DAY_MS, TURN_STATUS, type TurnStatus } from "../core.js";
+import { DAY_MS, TURN_FAILURE, TURN_STATUS, type TurnStatus } from "../core.js";
 import { buildAdminReliability } from "./admin-reliability.js";
 import { readAdminReliabilitySource } from "./admin-reliability-queries.js";
 
@@ -108,7 +108,7 @@ const openAgent = (userId: string, organizationId: string, createdAt: Date) =>
   Effect.gen(function* () {
     const conversationId = yield* openConversation(userId, CONVERSATION_KIND.CODING_AGENT);
     yield* Database.use((db) =>
-      db.insert(codingAgent).values({
+      db.insert(agentTable).values({
         organizationId,
         userId,
         conversationId,
@@ -169,26 +169,26 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
         }
         yield* endTurn(developer, main, TURN_STATUS.CANCELLED, at(16));
         yield* endTurn(developer, main, TURN_STATUS.FAILED, at(16), {
-          failure: BRAIN_REQUEST_FAILURE.MODEL,
+          failure: TURN_FAILURE.MODEL,
         });
         yield* endTurn(developer, main, TURN_STATUS.FAILED, at(17, 3), {
-          failure: BRAIN_REQUEST_FAILURE.ABANDONED,
+          failure: TURN_FAILURE.ABANDONED,
         });
         // Still running, and failed before the window opened: neither counts.
         yield* endTurn(developer, main, TURN_STATUS.RUNNING, null);
         yield* endTurn(developer, main, TURN_STATUS.FAILED, at(1), {
-          failure: BRAIN_REQUEST_FAILURE.MODEL,
+          failure: TURN_FAILURE.MODEL,
         });
 
         // A coding agent's runs: four of five failed, to the sandbox, the model, and two Starts that never ran.
         const agent = yield* openAgent(developer, workspace, at(14));
         yield* endTurn(developer, agent, TURN_STATUS.SETTLED, at(15));
         yield* endTurn(developer, agent, TURN_STATUS.FAILED, at(15), {
-          failure: BRAIN_REQUEST_FAILURE.MODEL,
+          failure: TURN_FAILURE.MODEL,
           failureDetail: `Sandbox: ${REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE}`,
         });
         yield* endTurn(developer, agent, TURN_STATUS.FAILED, at(16), {
-          failure: BRAIN_REQUEST_FAILURE.MODEL,
+          failure: TURN_FAILURE.MODEL,
           failureDetail: "the provider answered 500",
         });
         yield* openAgent(developer, workspace, at(15));
@@ -201,7 +201,7 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
         // A subagent's turn runs inside its agent's, so it counts toward neither rate.
         const subagent = yield* openConversation(developer, CONVERSATION_KIND.CHILD, agent);
         yield* endTurn(developer, subagent, TURN_STATUS.FAILED, at(16), {
-          failure: BRAIN_REQUEST_FAILURE.MODEL,
+          failure: TURN_FAILURE.MODEL,
         });
 
         // Automation runs: one of four settled failed and one was skipped; a queued one has not settled.
@@ -245,7 +245,7 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
         // The maintainer's own failed turn, which only the explicit ask for every account counts.
         const maintainerMain = yield* openConversation(maintainer, CONVERSATION_KIND.MAIN);
         yield* endTurn(maintainer, maintainerMain, TURN_STATUS.FAILED, at(16), {
-          failure: BRAIN_REQUEST_FAILURE.MODEL,
+          failure: TURN_FAILURE.MODEL,
         });
 
         const answer = yield* read(ADMIN_METRICS_SCOPE.NON_ADMINS);
@@ -260,9 +260,9 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
             left.failure.localeCompare(right.failure),
           ),
           [
-            { failure: CODING_AGENT_FAILURE.MODEL, count: 1 },
-            { failure: CODING_AGENT_FAILURE.NOT_STARTED, count: 2 },
-            { failure: CODING_AGENT_FAILURE.SANDBOX, count: 1 },
+            { failure: AGENT_FAILURE.MODEL, count: 1 },
+            { failure: AGENT_FAILURE.NOT_STARTED, count: 2 },
+            { failure: AGENT_FAILURE.SANDBOX, count: 1 },
           ],
         );
         assert.deepEqual(

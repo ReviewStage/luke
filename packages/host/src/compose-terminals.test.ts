@@ -590,9 +590,9 @@ it.effect(
     }),
 );
 
-const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const BROWSER_AGENT_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const TAB_ID = "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b";
-const VIEW = { connectionId: "view-1", taskId: TASK_ID, tabId: TAB_ID };
+const VIEW = { connectionId: "view-1", agentId: BROWSER_AGENT_ID, tabId: TAB_ID };
 
 /** What a live view's connection was handed up, in order: each text frame, then its close. */
 function liveEvents(events: readonly { kind: GatewayEventKind; payload: WireValue }[]) {
@@ -623,7 +623,7 @@ it.effect(
 
       assert.deepEqual(opened, [
         {
-          url: `wss://tryluke.test/api/browser/live?task=${TASK_ID}&tab=${TAB_ID}`,
+          url: `wss://tryluke.test/api/browser/live?agent=${BROWSER_AGENT_ID}&tab=${TAB_ID}`,
           headers: { authorization: "Bearer bearer-1" },
         },
       ]);

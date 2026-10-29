@@ -1,4 +1,4 @@
-import { CODING_AGENT_BOUNDS, type TasklessAgent } from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, type TasklessAgent } from "@luke/features/agent-wire";
 import { automationRun } from "@luke/features/model-label";
 import {
   InlineEdit,
@@ -18,22 +18,20 @@ import { agentRow, taskRowName } from "@luke/ui/task-list-model";
 import { useCallback, useMemo, useRef } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
-import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
+import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { DraftMark } from "../draft-mark.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { AgentCard, tasklessRowSubject } from "../tasks/agent-ref.js";
-import { RENAME_FAILED } from "../tasks/coding-agent-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
-import { markReadItem } from "../tasks/task-menu-items.js";
-import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
+import { type AgentsControl, readAgentById } from "../tasks/use-agents.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
-import { useCallingAgent } from "../use-voice-view.js";
-import { type MenuAction, type MenuEntry, rowMenu } from "./action-menu.js";
-import { rowDoors, useAgentActions } from "./agent-actions.js";
+import { type MenuEntry, rowMenu } from "./action-menu.js";
+import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
 import { useAgentReadMarks } from "./agent-read-marks.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
-import { type RowMark, RowMarks } from "./task-actions.js";
+import { type RowMark, RowMarks, useFocusedRowKeys } from "./task-actions.js";
 import { SIDEBAR_ROW_REPOSITORY, SIDEBAR_ROW_TIME } from "./task-card.js";
 
 /**
@@ -51,19 +49,20 @@ import { SIDEBAR_ROW_REPOSITORY, SIDEBAR_ROW_TIME } from "./task-card.js";
  * keyboard (`RowMarks`), as on a task's row, and rested on, the row hangs the
  * agent's card beside it, as its tab does on a task (`agent-ref.tsx`). A
  * press opens the agent's own page, and it reads in semibold while it ended
- * unseen, as its tab does, or while it is marked unread by hand. Its actions are one menu, opened alike by
- * the row's ⋯, a right-click, and the menu key, in a task's row's groups: Copy link and Rename, which turns
+ * unseen, as its tab does, or while it is marked unread by hand. Its actions are the agent's one menu
+ * (`agent-actions.tsx`'s `agentMenuGroups`), opened alike by
+ * the row's ⋯, a right-click, and the menu key: Copy link; Rename, which turns
  * the row into its name's field until the edit ends, the new name drawn at
  * once and a refused one saying so under the field it reopens, as a task's
- * row does, with Mark as unread
- * or Mark as read between them, through a task's marks (`agent-read-marks.ts`); then Pin or Unpin,
- * the reader's own, Archive, asked first while a teammate's agent works
- * (`agent-archive.tsx`), or Unarchive, and Move to section, the reader's
- * own sections, as a task's (`sidebar-sections.tsx`); and last and alone,
+ * row does, and Mark as unread
+ * or Mark as read, through a task's marks (`agent-read-marks.ts`); Pin or Unpin,
+ * the reader's own, and Move to section, the reader's
+ * own sections, as a task's (`sidebar-sections.tsx`); Archive, asked first while a teammate's agent works
+ * (`agent-archive.tsx`), or Unarchive; and last and alone,
  * Permanently delete, always asked first (`agent-delete.tsx`), which leaves
  * the agent's page where it is the one standing. Its agent's actions are the
  * ones its tab and its page offer (`useAgentActions`), but for those a row
- * leaves out by name (`NOT_ON_A_ROW`), and the row adds only its own: the
+ * leaves out by name (`NOT_ON_A_ROW`), and the row hands the builder only its own doors: the
  * read mark, the pin, and the section. An archived agent
  * offers neither a pin, a rename, nor a section, as an archived task. Note that the agent is read again
  * by its own id before it is archived unasked, because the row's status is
@@ -82,13 +81,6 @@ function starterOf(
   return teammateCreator({ createdBy: agent.startedBy, ownerId: agent.startedBy?.userId }, reader);
 }
 
-/** Pin or Unpin, whichever the agent is not yet, as a task's row offers them. */
-function pinItem(agent: TasklessAgent, onPin: (pinned: boolean) => void): MenuAction {
-  return agent.pinnedAt === undefined
-    ? commandAction(PANEL_COMMAND.PIN_AGENT, () => onPin(true), false)
-    : commandAction(PANEL_COMMAND.UNPIN_AGENT, () => onPin(false), false);
-}
-
 /**
  * The agent's card, as its tab hangs it on a task (`agent-ref.tsx`): its
  * name, where it stands and when it last moved, who started it, and its
@@ -101,7 +93,7 @@ function SidebarAgentCard({
   agents,
 }: {
   agent: TasklessAgent;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
 }): React.JSX.Element {
   return <AgentCard subject={tasklessRowSubject(agent, agents)} models={agents.models} />;
 }
@@ -124,7 +116,7 @@ export function SidebarAgent({
 }: {
   agent: TasklessAgent;
   /** The window's agent control, whose archive and rename act on any agent by its id. */
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** Whether this agent's page is the one standing. */
   current: boolean;
   /** Whether its turn ended while the developer was not looking at it: main's unseen dot, which a mark by hand adds to. */
@@ -149,11 +141,10 @@ export function SidebarAgent({
 }): React.JSX.Element {
   const reader = useMemberDirectory();
   const name = taskRowName(agentRow(agent));
-  const calling = useCallingAgent();
   const starter = starterOf(agent, face, reader);
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
-  // Note that the row's item is its press's parent, which its card counts as its control.
+  // Note that the row's item is its press's parent, whose keys it hears while focused.
   const hold = useCallback((press: HTMLElement | null) => {
     row.current = press;
     item.current = press?.parentElement ?? null;
@@ -168,32 +159,28 @@ export function SidebarAgent({
     { ...agents, readAgent: (agentId) => readAgentById(act, agentId) },
     { label: name, shown, terminals: { onOpenTerminal: undefined }, onDeleted },
   );
-  const { copyLink, onRename, archive, deletion } = rowDoors(actions.doors);
+  const { archive } = actions.doors;
   const archived = agent.archivedAt !== undefined;
   // A draft waiting in its box wears the pencil while its page is not the one open, as a task's row does.
   const drafted = useDraftedAgents().includes(agent.id) && !current;
   const { rename } = actions;
   const editing = rename?.editing ?? false;
   const endedByKey = useRefocusAfterEdit(editing, row);
-  const renameItem: MenuAction | undefined =
-    onRename === undefined ? undefined : commandAction(PANEL_COMMAND.RENAME, onRename, false);
-  const pin = onPin === undefined ? undefined : pinItem(agent, onPin);
-  // Note that the row lays the agent's actions out in a task's row's groups, its own items among them.
-  const groups: MenuEntry[][] = [
-    [
-      ...(copyLink === undefined ? [] : [copyLink]),
-      markReadItem({ unread: isUnread, onMark: (next) => reads.mark(agent, next) }),
-      ...(renameItem === undefined ? [] : [renameItem]),
-    ],
-    [
-      ...(pin === undefined ? [] : [pin]),
-      ...(archive === undefined ? [] : [archive]),
-      ...(section === undefined ? [] : [section]),
-    ],
-    ...(deletion === undefined ? [] : [[deletion]]),
-  ].filter((group) => group.length > 0);
-  // Note that the row's buttons say Pin and Archive as a task's do, running what the menu's items run.
   const pinned = agent.pinnedAt !== undefined;
+  useFocusedRowKeys(
+    item,
+    () => reads.mark(agent, !isUnread),
+    onPin === undefined ? undefined : () => onPin(!pinned),
+  );
+  // The agent's menu over the doors a row has, its own read mark, pin, and section among them.
+  const groups: MenuEntry[][] = agentMenuGroups({
+    ...rowDoors(actions.doors),
+    read: { unread: isUnread, onMark: (next) => reads.mark(agent, next) },
+    agentPin: onPin === undefined ? undefined : { pinned, onToggle: () => onPin(!pinned) },
+    section,
+    rowKeys: true,
+  });
+  // Note that the row's buttons say Pin and Archive as a task's do, running what the menu's items run.
   const marks: RowMark[] = [
     ...(onPin === undefined
       ? []
@@ -223,7 +210,7 @@ export function SidebarAgent({
   const card = useMemo(() => <SidebarAgentCard agent={agent} agents={agents} />, [agent, agents]);
   return (
     <>
-      <RowHintOptions card={card} cardBeside cardRegion={item}>
+      <RowHintOptions card={card}>
         <ListRow
           ref={hold}
           motionKey={agent.id}
@@ -231,8 +218,7 @@ export function SidebarAgent({
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
             <span className="sidebar-agent-glyph inline-flex [--state-glyph-size:var(--spacing-luke-16)]">
-              {/* The live mark while a call into the agent stands, as its tab's glyph wears it on a task. */}
-              {tabLook({ kind: TAB_KIND.AGENT, name, agent, calling: calling === agent.id }).icon}
+              {tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon}
             </span>
           }
           title={
@@ -240,7 +226,7 @@ export function SidebarAgent({
               <InlineEdit
                 value={rename.asked ?? name}
                 label="Agent name"
-                maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+                maxLength={AGENT_BOUNDS.MAX_TITLE_CHARS}
                 editing
                 onEnd={(edit) => {
                   endedByKey(edit.byKey);

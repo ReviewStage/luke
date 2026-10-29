@@ -16,23 +16,20 @@ import {
   GITHUB_INSTALLATION_STATUS,
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
-import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { WORKSPACE_NAME } from "@luke/database/models/workspace-store";
+import { agentTable } from "@luke/database/schemas/agent";
 import { invitation, member, organization, user } from "@luke/database/schemas/auth";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { task } from "@luke/database/schemas/task";
-import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import {
   ADMIN_METRICS_SCOPE,
   ADMIN_WORKSPACES_KIND,
   type AdminMetricsScope,
   type AdminWorkspacesKind,
 } from "@luke/features/admin-wire";
-import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import {
   and,
@@ -110,7 +107,7 @@ function tasksSince(since: Date): SQL<number> {
 
 /** The workspace's coding agents started since the instant. */
 function agentsSince(since: Date): SQL<number> {
-  return sql<number>`(select count(*)::int from ${codingAgent} where ${and(eq(codingAgent.organizationId, organization.id), gte(codingAgent.createdAt, since))})`;
+  return sql<number>`(select count(*)::int from ${agentTable} where ${and(eq(agentTable.organizationId, organization.id), gte(agentTable.createdAt, since))})`;
 }
 
 /** Revisions written on the workspace's plans since the instant, by a member, Luke, or an agent alike. */
@@ -124,7 +121,7 @@ function revisionsSince(since: Date): SQL<number> {
  * request, which counts once.
  */
 function prsMergedSince(sinceMs: number): SQL<number> {
-  return sql<number>`(select count(distinct ${codingAgent.published} ->> 'url')::int from ${codingAgent} where ${eq(codingAgent.organizationId, organization.id)} and (${codingAgent.published} ->> 'mergedAt')::numeric >= ${sinceMs})`;
+  return sql<number>`(select count(distinct ${agentTable.published} ->> 'url')::int from ${agentTable} where ${eq(agentTable.organizationId, organization.id)} and (${agentTable.published} ->> 'mergedAt')::numeric >= ${sinceMs})`;
 }
 
 /** Whether the workspace saw a task, an agent, or a plan revision since the instant. */
@@ -273,39 +270,6 @@ const findInstallations = SqlSchema.findAll({
     ),
 });
 
-/** The statuses a workspace's integration row is shown under; a sign-in still under way is no connection yet. */
-const SHOWN_INTEGRATION_STATUSES = [
-  INTEGRATION_ROW_STATUS.CONNECTED,
-  INTEGRATION_ROW_STATUS.EXPIRED,
-] as const;
-
-const findIntegrations = SqlSchema.findAll({
-  Request: OrganizationIdsSchema,
-  Result: Schema.Struct({
-    organizationId: Schema.String,
-    provider: Schema.Literals(INTEGRATION_PROVIDER_LIST),
-    status: Schema.Literals(SHOWN_INTEGRATION_STATUSES),
-  }),
-  execute: (organizationIds) =>
-    Database.use((db) =>
-      db
-        .select({
-          organizationId: workspaceIntegrationConnection.organizationId,
-          provider: workspaceIntegrationConnection.provider,
-          status: workspaceIntegrationConnection.status,
-        })
-        .from(workspaceIntegrationConnection)
-        .where(
-          and(
-            inArray(workspaceIntegrationConnection.organizationId, [...organizationIds]),
-            inArray(workspaceIntegrationConnection.provider, [...INTEGRATION_PROVIDER_LIST]),
-            inArray(workspaceIntegrationConnection.status, [...SHOWN_INTEGRATION_STATUSES]),
-          ),
-        )
-        .orderBy(asc(workspaceIntegrationConnection.provider)),
-    ),
-});
-
 const findSharedSummary = SqlSchema.findOneOption({
   Request: Schema.Struct({ scope: ScopeSchema, since: Schema.Date }),
   Result: Schema.Struct({
@@ -364,25 +328,20 @@ const findInvitationCounts = SqlSchema.findAll({
 /** The per-workspace reads for the listed rows, or nothing to ask when no row was listed. */
 function readConnections(organizationIds: readonly string[]) {
   if (organizationIds.length === 0) {
-    return Effect.succeed([[], [], []] as const);
+    return Effect.succeed([[], []] as const);
   }
-  return Effect.all(
-    [
-      findOwners(organizationIds),
-      findInstallations(organizationIds),
-      findIntegrations(organizationIds),
-    ],
-    { concurrency: "unbounded" },
-  );
+  return Effect.all([findOwners(organizationIds), findInstallations(organizationIds)], {
+    concurrency: "unbounded",
+  });
 }
 
 /**
  * Reads the Workspaces tab: the headline counts over the shared workspaces
  * the scope keeps, whatever the kind and the search say, and the table's
  * rows under all three, cut at the bound while `total` counts every
- * workspace they keep. Each listed workspace's owners, installations, and
- * integrations ride reads of their own keyed on the listed ids, because a
- * join would fan the row's counts out across them.
+ * workspace they keep. Each listed workspace's owners and installations
+ * ride reads of their own keyed on the listed ids, because a join would fan
+ * the row's counts out across them.
  */
 export function readAdminWorkspacesSource(input: {
   now: number;
@@ -404,7 +363,7 @@ export function readAdminWorkspacesSource(input: {
       ],
       { concurrency: "unbounded" },
     );
-    const [owners, installations, integrations] = yield* readConnections(rows.map((row) => row.id));
+    const [owners, installations] = yield* readConnections(rows.map((row) => row.id));
 
     const totals = Option.getOrElse(summary, () => ({
       shared: 0,
@@ -426,10 +385,6 @@ export function readAdminWorkspacesSource(input: {
       installations: installations.map(({ organizationId, ...installation }) => ({
         organizationId,
         installation,
-      })),
-      integrations: integrations.map(({ organizationId, ...integration }) => ({
-        organizationId,
-        integration,
       })),
       summary: {
         ...totals,

@@ -17,14 +17,6 @@
  * then (`grantAccessToken`), so a caller that needs only to know a
  * connection stands, such as a native agent's listing of its tools, asks
  * Connect nothing.
- *
- * Linear is the one provider a workspace may connect for every member
- * (`linear-issues.ts`): where the conversation's plan or coding agent
- * belongs to a workspace whose Linear stands connected, every member's
- * Linear tools run on that grant, and an account's own is read only where
- * the workspace has none. An account past the first a turn was handed
- * before the workspace connected keeps its own grant, so a call that names
- * it never lands in the workspace's Linear.
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
@@ -33,27 +25,20 @@ import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
   INTEGRATION_NAME,
-  INTEGRATION_PROVIDER,
   type IntegrationProvider,
 } from "@luke/features/integration-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { Effect, Redacted, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
-import type { ConversationAdmission } from "../agents/brain-host/conversation.js";
+import type { ConversationAdmission } from "../agents/eve-host/conversation.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { GITHUB_GRANT_REFUSAL, githubSignInGrant } from "./github-integration.js";
 import {
   accountIntegrationConnect,
   INTEGRATION_CONNECT_FAILURE,
   IntegrationConnect,
-  WorkspaceLinearConnect,
 } from "./integration-connect.js";
 import { expireIntegrationConnection, readIntegrationConnection } from "./integration-store.js";
-import { LINEAR_READ_FAILURE, workspaceLinearToken } from "./linear-issues.js";
-import {
-  readConversationWorkspace,
-  readWorkspaceIntegration,
-} from "./workspace-integration-store.js";
 
 /** Why a provider's call ran nothing, in words the model can act on and say. */
 interface UnavailableSentences {
@@ -62,7 +47,6 @@ interface UnavailableSentences {
   readonly NOT_CONFIGURED: string;
   readonly UNREACHABLE: string;
   readonly NO_ACCOUNT: string;
-  readonly WORKSPACE_EXPIRED: string;
 }
 
 /** One provider's fixed sentences, which are the whole of what a refused call says. */
@@ -77,7 +61,6 @@ export function integrationUnavailable(provider: IntegrationProvider): Unavailab
     NOT_CONFIGURED: `${name} is not set up on this deployment of Luke; carry on without it.`,
     UNREACHABLE: `Luke could not reach ${name}'s sign-in service just now. Try once more later, or carry on without it.`,
     NO_ACCOUNT: `This session stands for no account that can use ${name}.`,
-    WORKSPACE_EXPIRED: `The workspace's ${name} connection has expired. An owner or admin can connect it again in Luke's Settings › Workspace › Workspace connections; carry on without it.`,
   };
 }
 
@@ -132,8 +115,6 @@ export interface IntegrationAccountRef {
 export const INTEGRATION_GRANT_HOLDER = {
   /** The member's own account at the provider, held by Connect under the row's subject. */
   ACCOUNT: "account",
-  /** The workspace's own grant, held by Connect under the workspace's id. */
-  WORKSPACE: "workspace",
   /** The member's GitHub sign-in, which Connect holds nothing of. */
   SIGN_IN: "sign-in",
 } as const;
@@ -148,11 +129,6 @@ export type IntegrationGrantRef =
       readonly connectSubject: string;
     }
   | {
-      readonly holder: typeof INTEGRATION_GRANT_HOLDER.WORKSPACE;
-      readonly provider: IntegrationProvider;
-      readonly organizationId: string;
-    }
-  | {
       readonly holder: typeof INTEGRATION_GRANT_HOLDER.SIGN_IN;
       readonly provider: IntegrationProvider;
       readonly userId: string;
@@ -165,34 +141,8 @@ export type IntegrationGrantAnswer = Result.Result<IntegrationGrantRef, string>;
 type IntegrationTokenServices =
   | DatabaseServices
   | IntegrationConnect
-  | WorkspaceLinearConnect
   | GitHubApp
   | HttpClient.HttpClient;
-
-/**
- * The workspace's Linear grant for the conversation, where its plan or
- * coding agent belongs to a workspace whose Linear stands connected, or the
- * sentence saying it expired; nothing where the workspace has no Linear of
- * its own, so the account's own is read.
- */
-const workspaceGrant = /* @__PURE__ */ Effect.fnUntraced(function* (
-  provider: IntegrationProvider,
-  conversationId: string,
-) {
-  if (provider !== INTEGRATION_PROVIDER.LINEAR) return undefined;
-  const organizationId = yield* readConversationWorkspace(conversationId);
-  if (organizationId === undefined) return undefined;
-  const row = yield* readWorkspaceIntegration(organizationId, provider);
-  if (row?.status === INTEGRATION_ROW_STATUS.EXPIRED) {
-    return Result.fail(integrationUnavailable(provider).WORKSPACE_EXPIRED);
-  }
-  if (row?.status !== INTEGRATION_ROW_STATUS.CONNECTED) return undefined;
-  return Result.succeed<IntegrationGrantRef>({
-    holder: INTEGRATION_GRANT_HOLDER.WORKSPACE,
-    provider,
-    organizationId,
-  });
-});
 
 /**
  * The grant the account's token is read on, from the store alone: the
@@ -277,33 +227,6 @@ const accountToken = /* @__PURE__ */ Effect.fnUntraced(function* (
   });
 });
 
-/**
- * The workspace's Linear token on its grant, or the sentence saying why that
- * grant could not be used; nothing where the workspace's Linear was
- * disconnected since its grant was read, so the account's own is read.
- */
-const workspaceToken = /* @__PURE__ */ Effect.fnUntraced(function* (
-  provider: IntegrationProvider,
-  organizationId: string,
-) {
-  const read = yield* workspaceLinearToken(organizationId);
-  if (Result.isSuccess(read)) {
-    return Result.succeed({
-      token: Redacted.value(read.success.token),
-      expiresAt: read.success.expiresAt,
-    });
-  }
-  const sentences = integrationUnavailable(provider);
-  switch (read.failure) {
-    case LINEAR_READ_FAILURE.EXPIRED:
-      return Result.fail(sentences.WORKSPACE_EXPIRED);
-    case LINEAR_READ_FAILURE.NOT_CONNECTED:
-      return undefined;
-    default:
-      return Result.fail(sentences.UNREACHABLE);
-  }
-});
-
 /** Any read here failed with its sentence for unreachable, and one log line naming the failure's kind. */
 function orUnreachable<A>(
   provider: IntegrationProvider,
@@ -327,10 +250,7 @@ function orUnreachable<A>(
  * from the store alone so it asks Connect nothing. The Luke account is the
  * admitted caller, the member acting in the conversation, whoever opened
  * it, so a teammate's call runs on the teammate's own grant under the same
- * connection name, never the opener's. Linear is the one provider a
- * workspace may connect for every member: where the conversation belongs to
- * a workspace whose Linear stands connected, the provider's own name runs on
- * that grant.
+ * connection name, never the opener's.
  */
 export function integrationGrant(
   account: IntegrationAccountRef,
@@ -344,63 +264,25 @@ export function integrationGrant(
       if (Result.isFailure(admitted)) {
         return Result.fail(integrationUnavailable(provider).NO_ACCOUNT);
       }
-      // Note that the workspace's grant answers the provider's own name alone, so an account past the first a turn was handed keeps its own.
-      const workspace =
-        account.connectionName === provider
-          ? yield* workspaceGrant(provider, admitted.success.target.conversationId)
-          : undefined;
-      if (workspace !== undefined) return workspace;
       return yield* accountGrant(account, admitted.success.caller);
     }),
   );
 }
 
-/** The token on one grant, or the sentence saying why there is none; nothing for a workspace grant disconnected since it was read. */
-function tokenOnGrant(
-  grant: IntegrationGrantRef,
-): Effect.Effect<IntegrationTokenAnswer | undefined, never, IntegrationTokenServices> {
-  switch (grant.holder) {
-    case INTEGRATION_GRANT_HOLDER.ACCOUNT:
-      return orUnreachable(grant.provider, accountToken(grant));
-    case INTEGRATION_GRANT_HOLDER.WORKSPACE:
-      return orUnreachable(grant.provider, workspaceToken(grant.provider, grant.organizationId));
-    case INTEGRATION_GRANT_HOLDER.SIGN_IN:
-      return orUnreachable(grant.provider, signedInToken(grant.provider, grant.userId));
-  }
-}
-
-/** A token read on a grant: what it answered, and the grant it was read on. */
-export interface GrantTokenRead {
-  readonly answer: IntegrationTokenAnswer;
-  readonly grant: IntegrationGrantRef;
-}
-
 /**
  * The token on the grant `integrationGrant` answered for the account, asked
  * for now, or the sentence saying why there is none; a store the read cannot
- * reach fails it like Connect being unreachable. Note that a workspace's
- * Linear disconnected between the two reads is read as a workspace with
- * none, so the grant is read again and the account's own token is asked
- * for, and the answer names the grant it came from.
+ * reach fails it like Connect being unreachable.
  */
 export function grantAccessToken(
-  account: IntegrationAccountRef,
-  admission: IntegrationAdmission,
   grant: IntegrationGrantRef,
-): Effect.Effect<GrantTokenRead, never, IntegrationTokenServices> {
-  const notConnected = integrationUnavailable(account.provider).NOT_CONNECTED;
-  return Effect.flatMap(tokenOnGrant(grant), (answer) => {
-    if (answer !== undefined) return Effect.succeed({ answer, grant });
-    return Effect.flatMap(integrationGrant(account, admission), (again) => {
-      if (Result.isFailure(again))
-        return Effect.succeed({ answer: Result.fail(again.failure), grant });
-      const next = again.success;
-      return Effect.map(tokenOnGrant(next), (read) => ({
-        answer: read ?? Result.fail(notConnected),
-        grant: next,
-      }));
-    });
-  });
+): Effect.Effect<IntegrationTokenAnswer, never, IntegrationTokenServices> {
+  switch (grant.holder) {
+    case INTEGRATION_GRANT_HOLDER.ACCOUNT:
+      return orUnreachable(grant.provider, accountToken(grant));
+    case INTEGRATION_GRANT_HOLDER.SIGN_IN:
+      return orUnreachable(grant.provider, signedInToken(grant.provider, grant.userId));
+  }
 }
 
 /**
@@ -412,15 +294,11 @@ export function grantAccessToken(
  */
 export function evictGrantToken(
   grant: IntegrationGrantRef,
-): Effect.Effect<void, never, IntegrationConnect | WorkspaceLinearConnect> {
+): Effect.Effect<void, never, IntegrationConnect> {
   switch (grant.holder) {
     case INTEGRATION_GRANT_HOLDER.ACCOUNT:
       return Effect.gen(function* () {
         yield* (yield* IntegrationConnect)[grant.provider].evict(grant.connectSubject);
-      });
-    case INTEGRATION_GRANT_HOLDER.WORKSPACE:
-      return Effect.gen(function* () {
-        yield* (yield* WorkspaceLinearConnect).evict(grant.organizationId);
       });
     case INTEGRATION_GRANT_HOLDER.SIGN_IN:
       return Effect.void;
@@ -440,7 +318,7 @@ export function integrationAccessToken(
     integrationGrant(account, admission),
     (grant): Effect.Effect<IntegrationTokenAnswer, never, IntegrationTokenServices> =>
       Result.isSuccess(grant)
-        ? Effect.map(grantAccessToken(account, admission, grant.success), (read) => read.answer)
+        ? grantAccessToken(grant.success)
         : Effect.succeed(Result.fail(grant.failure)),
   );
 }

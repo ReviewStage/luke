@@ -9,6 +9,7 @@ import {
   type ReactElement,
   type ReactNode,
   type RefCallback,
+  type RefObject,
   useCallback,
   useContext,
   useEffect,
@@ -61,6 +62,9 @@ export type { ListSelection } from "../selection/list-selection.js";
  * pressed on it through `onKeyDown`; a row that opens nothing takes no
  * focus, so its `ref` reaches its item, to scroll or measure, and it hears
  * no keys, which would only be its acts'.
+ *
+ * A row's own acts (`actions`) stand together as a group named by the
+ * row's title, so a reader hears which row's "Pin" or "Mark as read" it is.
  *
  * A row whose thing has acts of its own offers them as one menu (`menu`),
  * which every door to it opens alike: its ⋯ (`MoreButton`), the last of the
@@ -227,9 +231,10 @@ interface ListRowHintProps {
   onBlur?: FocusEventHandler<HTMLElement> | undefined;
 }
 
-/** The app's hint a row's press hangs: its words, and the press it wraps. */
+/** The app's hint a row's press hangs: its words, the row the press stands in, and the press it wraps. */
 export type ListRowHint = ComponentType<{
   label: string | undefined;
+  row: RefObject<HTMLElement | null>;
   children: ReactElement<ListRowHintProps>;
 }>;
 
@@ -540,9 +545,13 @@ export function ListRow({
   // The press hands the row's ref its element, and the link menu the address it opens.
   const linkAddress = useLinkAddress(linkHref);
   const pressElement = useRef<HTMLButtonElement | null>(null);
+  // Note that the row a hint hangs its card beside is the press's parent, the
+  // item or, on a row that swipes, the slide that carries its acts with it.
+  const rowElement = useRef<HTMLElement | null>(null);
   const pressRef = useCallback(
     (element: HTMLButtonElement | null) => {
       pressElement.current = element;
+      rowElement.current = element?.parentElement ?? null;
       ref?.(element);
       linkAddress(element);
     },
@@ -588,7 +597,7 @@ export function ListRow({
   const heading = (
     <span
       ref={titleMeasured}
-      id={offered ? titleId : undefined}
+      id={offered || said(actions) ? titleId : undefined}
       className="luke-list-row-title"
       data-overflow={String(titleClipped)}
     >
@@ -704,10 +713,20 @@ export function ListRow({
       ) : hint === undefined ? (
         press
       ) : (
-        <hint.Hint label={hint.label}>{press}</hint.Hint>
+        <hint.Hint label={hint.label} row={rowElement}>
+          {press}
+        </hint.Hint>
       )}
       {said(actions) ? (
-        <div className="luke-list-row-actions row-1 flex items-center gap-luke-4">{actions}</div>
+        // Note that the acts are a group named by the row's title, so a reader hears which row's "Pin" or "Mark as read" it is.
+        // biome-ignore lint/a11y/useSemanticElements: a row's acts are presses on its thing, not a form's fields, so they are no `<fieldset>`.
+        <div
+          role="group"
+          aria-labelledby={titleId}
+          className="luke-list-row-actions row-1 flex items-center gap-luke-4"
+        >
+          {actions}
+        </div>
       ) : null}
       {offered ? (
         <div className="luke-list-row-more row-1 flex items-center">

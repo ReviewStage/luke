@@ -1,5 +1,4 @@
-import type { BoardElement, DrawingElement } from "@luke/features/board-wire";
-import { CODING_AGENT_MACHINE, type CodingAgentMachine } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE, type AgentMachineKind } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
 import {
@@ -22,8 +21,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
+import { agentTable } from "./agent.js";
 import { organization, user } from "./auth.js";
-import { codingAgent } from "./coding-agent.js";
 import { device } from "./device.js";
 
 /**
@@ -85,7 +84,7 @@ export const task = pgTable(
       .notNull()
       .default(PLAN_ACTOR.DEVELOPER),
     /** The coding agent that made the task; null for any other maker, and once the agent's row is gone. */
-    creatorAgentId: uuid("creator_agent_id").references((): AnyPgColumn => codingAgent.id, {
+    creatorAgentId: uuid("creator_agent_id").references((): AnyPgColumn => agentTable.id, {
       onDelete: "set null",
     }),
     /** The saves coding agents made on the document, oldest first, the last fifty kept; empty until an agent saves. */
@@ -114,15 +113,12 @@ export const task = pgTable(
      */
     brief: text("brief"),
     /**
-     * Where the task's coding agents run (`CODING_AGENT_MACHINE`): a sandbox,
+     * Where the task's coding agents run (`AGENT_MACHINE`): a sandbox,
      * every task from before the column among them, or the device
      * `device_id` names. It decides where each agent started on the task
      * afterwards runs, and an agent keeps where it started.
      */
-    machine: text("machine")
-      .$type<CodingAgentMachine>()
-      .notNull()
-      .default(CODING_AGENT_MACHINE.VERCEL),
+    machine: text("machine").$type<AgentMachineKind>().notNull().default(AGENT_MACHINE.VERCEL),
     /**
      * The device a task that runs on one names, one of the member's who set
      * it, whose agents alone run there; null for a task in the cloud, and
@@ -172,30 +168,4 @@ export const taskNumberCounter = pgTable("task_number_counter", {
     .primaryKey()
     .references(() => organization.id, { onDelete: "cascade" }),
   lastNumber: integer("last_number").notNull(),
-});
-
-/**
- * A task's whiteboard: the Excalidraw scene the Tasks tab shows, with the
- * number of Luke's drawing it holds, and Luke's latest drawing with its own
- * number. A task has no row until its board is first drawn on, and reads as
- * an empty board until then. Beside them stands the scene as the Mac drew it,
- * a PNG, from the first save that held each new drawing of Luke's, which is
- * what the brain looks at (`look_at_board`). The Mac writes the scene and Luke writes the
- * drawing, each whole and each the last write winning (`board-store.ts`).
- * The row goes with its task.
- */
-export const taskBoard = pgTable("task_board", {
-  taskId: uuid("task_id")
-    .primaryKey()
-    .references(() => task.id, { onDelete: "cascade" }),
-  elements: jsonb("elements").$type<readonly BoardElement[]>().notNull().default(sql`'[]'::jsonb`),
-  /** The number of Luke's drawing the scene holds; 0 before it holds any. */
-  appliedDrawing: integer("applied_drawing").notNull().default(0),
-  /** Luke's latest drawing; null before he drew. */
-  drawing: jsonb("drawing").$type<readonly DrawingElement[]>(),
-  /** The latest drawing's number, one more for each drawing; 0 before he drew. */
-  drawingNumber: integer("drawing_number").notNull().default(0),
-  /** The scene drawn as a PNG, base64, by the Mac's first save to hold drawing `applied_drawing`; null before one. */
-  image: text("image"),
-  updatedAt: updatedAt(),
 });

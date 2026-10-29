@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_KIND, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND, AGENT_STATUS } from "@luke/features/agent-wire";
 import { type TaskSummary, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW, TASKS_READ } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
@@ -64,14 +64,14 @@ const TASK: TaskSummary = {
         title: "Wire the desktop",
         model: "anthropic/claude-opus-5.5",
         effort: "high",
-        status: CODING_AGENT_STATUS.COMPLETED,
+        status: AGENT_STATUS.COMPLETED,
       },
       {
         id: UNTITLED_AGENT,
         title: null,
         model: "anthropic/claude-opus-5.5",
         effort: "high",
-        status: CODING_AGENT_STATUS.RUNNING,
+        status: AGENT_STATUS.RUNNING,
       },
     ],
     pullRequestTotal: 0,
@@ -93,13 +93,13 @@ const STATE: AppStateSnapshot = stateWith(
       tasklessAgents: [
         {
           id: OPERATOR,
-          kind: CODING_AGENT_KIND.OPERATOR,
+          kind: AGENT_KIND.OPERATOR,
           planId: null,
           turnId: null,
           title: "Workspace questions",
           model: "openai/gpt-5.5",
           effort: "medium",
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           createdAt: AT,
           automationId: null,
           workspaceId: "workspace-acme",
@@ -115,13 +115,13 @@ const STATE: AppStateSnapshot = stateWith(
 
 /** The plan's page, whose heading was renamed after a section's link was written. */
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: TASK.name,
   workspace: "acme",
   repository: "acme/relay",
   text: () => "## Rollout plan\n\nStore first.\n",
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: { workspace: "acme", repository: "acme/relay" },
     anchors: new Set(["rollout-plan"]),
     onOpenTask: () => undefined,

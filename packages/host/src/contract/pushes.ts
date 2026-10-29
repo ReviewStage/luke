@@ -11,14 +11,10 @@
  */
 
 import { isLinkPlace, type ReadLink } from "@luke/features/link-grammar";
-import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
 import { type AppCommand, isAppCommand } from "@luke/settings/shortcuts";
-import { isVoiceCommand, type VoiceCommand } from "@luke/voice/voice-view";
-import { EXCESS_KEYS, isRecord, isWireString } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+import { isRecord, isWireString } from "@luke/wire";
 import { wireResult as result, type WireGuard, type WireGuardValue } from "@luke/wire/wire-guard";
 import { eventIterator, type } from "@orpc/contract";
-import { Result } from "effect";
 import { type AppStateDelivery, isAppStateDelivery } from "../app-state.js";
 import { actProcedure } from "./base.js";
 
@@ -26,12 +22,7 @@ import { actProcedure } from "./base.js";
 export const PUSH = {
   APP_STATE: "app:state",
   MENU_COMMAND: "app:menu-command",
-  VOICE_LIVE_SESSION_CHANGED: "app:voice-live-session-changed",
-  TASKS_TALK: "app:task-talk-forwarded",
-  SHOW_AGENT: "app:show-agent",
-  CALL_WINDOW_MOVED: "app:call-window-moved",
   SHOW_LINK: "app:show-link",
-  VOICE_COMMAND: "app:voice-command-forwarded",
 } as const;
 
 export type PushName = (typeof PUSH)[keyof typeof PUSH];
@@ -54,59 +45,12 @@ export const PUSH_GUARD = {
   /** A command chosen from the menu bar, for the focused window to run as its shortcut would. */
   [PUSH.MENU_COMMAND]: result<AppCommand>(isAppCommand),
   /**
-   * The host's word on its one live session, relayed to the voice window as
-   * the event it is: wanted asks the window to open a session muted for what
-   * Luke has to say, closing asks it to hang up, and a repeated wanted is a
-   * new ask a version of the document could not carry.
-   */
-  [PUSH.VOICE_LIVE_SESSION_CHANGED]: result<VoiceLiveSessionChanged>((value) =>
-    Result.isSuccess(
-      readEither(voiceLiveSessionChangedSchema, { excess: EXCESS_KEYS.DROP })(value),
-    ),
-  ),
-  /**
-   * An agent's Call press, forwarded by the main process to the voice window
-   * alone, carrying the agent pressed for and the task it is on where it is
-   * on one, and nothing else.
-   */
-  [PUSH.TASKS_TALK]: result<{ agentId: string; taskId?: string | undefined }>(
-    (value) =>
-      isRecord(value) &&
-      (value.taskId === undefined || isWireString(value.taskId)) &&
-      isWireString(value.agentId),
-  ),
-  /**
-   * The call card's way back to its agent pressed: the panel is to open the
-   * task on that agent's tab, or the agent's own page for an agent with no
-   * task. An event rather than a slice of the document, because a press is an
-   * ask the window answers once, not a state it bootstraps from.
-   */
-  [PUSH.SHOW_AGENT]: result<{ taskId: string | null; agentId: string }>(
-    (value) =>
-      isRecord(value) &&
-      (value.taskId === null || isWireString(value.taskId)) &&
-      isWireString(value.agentId),
-  ),
-  /**
-   * The floating call window moved under a pointer that did not: a drag of
-   * its own. The page is told so the hover its buttons were left with is not
-   * believed, since the engine keeps the hover the pointer had before.
-   */
-  [PUSH.CALL_WINDOW_MOVED]: result<void>((v) => v === undefined),
-  /**
    * A Luke link the system handed the app: the panel is to open the place it
    * names, in the workspace it was written under. An event, as a click is,
    * because it is an ask the window answers once.
    */
   [PUSH.SHOW_LINK]: result<ReadLink>(
     (value) => isRecord(value) && isWireString(value.workspace) && isLinkPlace(value.place),
-  ),
-  /**
-   * A panel's validated command, forwarded by the main process to the voice
-   * window alone, carrying the command and nothing else.
-   */
-  [PUSH.VOICE_COMMAND]: result<{ command: VoiceCommand }>(
-    (value) => isRecord(value) && isVoiceCommand(value.command),
   ),
 } as const satisfies { readonly [Name in PushName]: WireGuard<unknown> };
 
@@ -122,12 +66,7 @@ export type PushEvent = {
 export const PUSH_METHOD = {
   onAppState: PUSH.APP_STATE,
   onMenuCommand: PUSH.MENU_COMMAND,
-  onVoiceLiveSessionChanged: PUSH.VOICE_LIVE_SESSION_CHANGED,
-  onTasksTalk: PUSH.TASKS_TALK,
-  onShowAgent: PUSH.SHOW_AGENT,
-  onCallWindowMoved: PUSH.CALL_WINDOW_MOVED,
   onShowLink: PUSH.SHOW_LINK,
-  onVoiceCommand: PUSH.VOICE_COMMAND,
 } as const;
 
 export type PushMethod = keyof typeof PUSH_METHOD;

@@ -31,7 +31,7 @@
  * chosen in a File tab's tree would, a Settings page opens as the Settings
  * sidebar's row for it does, and a setting lands on its row as the settings
  * search does. The pages are the sidebar's own list, and a page found ranks
- * above every setting found, so "voice" offers the page before its rows. The
+ * above every setting found, so "appearance" offers the page before its rows. The
  * files are the open task's repository read whole in the one listing the File
  * tab's search reads, the first time a file is searched, and fuzzy-matched on
  * their paths.
@@ -43,8 +43,8 @@
  * task's name. One chosen opens in the Inbox, as its row there would.
  *
  * It is the nearest layer while it stands: no key pressed in it goes on to
- * the window, so Escape closes the palette and nothing else, a call's reply
- * included, and no chord changes what stands behind it. Closing hands focus
+ * the window, so Escape closes the palette and nothing else, and no chord
+ * changes what stands behind it. Closing hands focus
  * back to whatever had it, and only then runs what was chosen, so a command
  * acts from where the developer was, as its shortcut would have. It then
  * fades out as the dialog does.
@@ -55,8 +55,8 @@
  * each row's words instead.
  */
 
+import type { TasklessAgent } from "@luke/features/agent-wire";
 import type { Channel } from "@luke/features/channel-wire";
-import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { OPERATOR_NAME } from "@luke/features/model-label";
 import { formatCount } from "@luke/features/number-format";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
@@ -118,7 +118,7 @@ import {
   searchHit,
 } from "@luke/ui/search-score";
 import { type MatchRange, matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
-import { inTaskOrder } from "@luke/ui/tab-strip-model";
+import { inTaskOrder, isChangesTab } from "@luke/ui/tab-strip-model";
 import {
   agentRow,
   orderTaskRows,
@@ -170,9 +170,9 @@ import {
   type SettingsSearchInput,
   settingsSearchEntries,
 } from "../settings-search.js";
+import { agentName } from "../tasks/agent-model.js";
 import { AgentCard, agentSubject, NOTHING_HELD, tasklessRowSubject } from "../tasks/agent-ref.js";
 import { ChannelCard } from "../tasks/channel-card.js";
-import { agentName } from "../tasks/coding-agent-model.js";
 import { FileCard, fileLook } from "../tasks/file-ref.js";
 import { fileName } from "../tasks/file-ref-model.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
@@ -183,8 +183,8 @@ import { markReadItem, type OpenTaskRename, useTaskRenameOffer } from "../tasks/
 import { TaskKey } from "../tasks/task-standing.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { cardTitle } from "../tasks/tool-call-model.js";
+import { type AgentsControl, readAgentById } from "../tasks/use-agents.js";
 import { useChannels } from "../tasks/use-channels.js";
-import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
 import { SIDE_PANEL_TAB_KIND, type SidePanelControl } from "../tasks/use-side-panel.js";
@@ -195,12 +195,11 @@ import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
 } from "../tasks/use-workspace-members.js";
-import { useCapability, useExperiment, useExperimentChoices } from "../use-app-state.js";
+import { useCapability, useExperimentChoices } from "../use-app-state.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, inboxEntries } from "./main-tabs.js";
-import { useTasksWaiting } from "./places-waiting.js";
 import {
   ADD_SECTION,
   inboxOffered,
@@ -437,12 +436,13 @@ function escapeOnly(command: KeyedCommand): boolean {
   return APP_SHORTCUTS[command].chord.key === SHORTCUT_KEY.ESCAPE;
 }
 
-/** The commands the palette lists: the Keyboard shortcuts page's but the Esc-only, then the menu bar's own dialogs, then its own, the sidebar's view of its tasks. */
+/** The commands the palette lists: the Keyboard shortcuts page's but the Esc-only, then the menu bar's own chordless commands, then its own, the sidebar's view of its tasks. */
 const LISTED_COMMANDS: readonly AppCommand[] = [
   ...APP_SHORTCUT_GROUPS.flatMap((group) => group.commands).filter(
     (command) => !escapeOnly(command),
   ),
   APP_COMMAND.NEW_TERMINAL,
+  APP_COMMAND.MARK_TASK_DONE,
   APP_COMMAND.SEND_FEEDBACK,
   APP_COMMAND.SUGGEST_FEATURE,
   ...PALETTE_COMMANDS,
@@ -757,8 +757,7 @@ function taskDetail(
  * listed workspace's come first and every other workspace's tasks after
  * them, naming its workspace and found by its name, since opening one
  * switches the window to it. A task wears at its end who is on it and its
- * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowStatus`, its
- * questions waiting on the reader by `waitingOn`),
+ * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowStatus`),
  * leads with its key and says its repository by its name, as the Tasks
  * list's row does, and is found by its key, its assignee's name, and its
  * creator's, a key typed whole listing its task first. An agent opens on its own page, as its
@@ -772,7 +771,6 @@ function taskRows(
   openAgent: (agentId: string) => void,
   showAgent: TasksControl["onShowAgent"],
   originOf: (task: TaskSummary) => Actor | undefined,
-  waitingOn: ReadonlyMap<string, number>,
 ): readonly UndrawnRow[] {
   const listedId = tasks.workspace?.id;
   const carded = { ...tasks, onShowAgent: showAgent };
@@ -837,7 +835,7 @@ function taskRows(
         endMark: (
           <>
             {worn === undefined ? null : <AssigneeFaceMark face={worn} />}
-            <TaskRowStatus task={task} waiting={waitingOn.get(task.id) ?? 0} />
+            <TaskRowStatus task={task} />
           </>
         ),
         people: [...new Set([assignedTo, createdBy])].filter((name) => name !== null),
@@ -904,10 +902,9 @@ function shownOverHistory(tasks: TasksControl, show: () => void): void {
   show();
 }
 
-/** What the "+" rules read that only a hook can: the door a new shell is asked through where the platform runs terminals, and whether the Browser tab experiment is on. */
+/** What the "+" rules read that only a hook can: the door a new shell is asked through where the platform runs terminals. */
 interface PanelOfferDoors {
   readonly onNewTerminal: ((agentId: string) => void) | undefined;
-  readonly browsers: boolean;
 }
 
 /**
@@ -966,7 +963,6 @@ function agentRows(
         agents: tasks.agents,
         pages,
         onNewTerminal: doors.onNewTerminal,
-        browsers: doors.browsers,
         viewedAgent: undefined,
         plan: openPlanStanding(tasks),
         cards: {
@@ -1123,7 +1119,7 @@ function inboxRow(
   words: RowWords,
   seams: {
     readonly readerId: string | undefined;
-    readonly models: CodingAgentsControl["models"];
+    readonly models: AgentsControl["models"];
     readonly tokens: readonly string[];
     readonly now: number;
     readonly open: (listed: InboxListed) => void;
@@ -1180,26 +1176,48 @@ const PLACE_COMMANDS: ReadonlySet<AppCommand> = new Set([
  * something open takes it.
  */
 const OPEN_THING_COMMANDS: readonly AppCommand[] = [
-  APP_COMMAND.COPY_PLAN,
+  APP_COMMAND.COPY_CONTENT,
+  APP_COMMAND.COPY_FULL_TRANSCRIPT,
   APP_COMMAND.COMMENT_ON_SELECTION,
   APP_COMMAND.REPLY_TO_SELECTION,
   APP_COMMAND.MENTION_LINES,
   APP_COMMAND.INSERT_PICTURE,
-  APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
+  APP_COMMAND.TOGGLE_READ,
+  APP_COMMAND.OPEN_IN_TASK,
   APP_COMMAND.MARK_TASK_DONE,
 ];
+
+/**
+ * The commands a row of the open thing's own offers with its chord
+ * (`readMarkRows`, `taskPinRows`, `taskCommandRows`), so no run of commands
+ * lists them again: U, but the Inbox's, which only the run lists, P,
+ * Version history, and Open on GitHub.
+ */
+const OWN_ROW_COMMANDS: ReadonlySet<AppCommand> = new Set([
+  APP_COMMAND.PIN,
+  APP_COMMAND.VERSION_HISTORY,
+  APP_COMMAND.OPEN_ON_GITHUB,
+]);
+
+/** The open thing's commands as its run lists them: U only while the Inbox stands, whose chosen item no row of its own marks. */
+function openThingCommands(tasks: TasksControl): readonly AppCommand[] {
+  return OPEN_THING_COMMANDS.filter(
+    (command) => command !== APP_COMMAND.TOGGLE_READ || tasks.inboxView.open,
+  );
+}
 
 /** The open thing's Show terminal, listed beside its other Show rows. */
 const OPEN_THING_SHOW_COMMANDS: readonly AppCommand[] = [APP_COMMAND.SHOW_TERMINAL];
 
 /** The open thing's command that cannot be undone, which ends its commands as it ends the task's ⋯ menu. */
-const OPEN_THING_LAST_COMMANDS: readonly AppCommand[] = [APP_COMMAND.DELETE_TASK];
+const OPEN_THING_LAST_COMMANDS: readonly AppCommand[] = [APP_COMMAND.DELETE];
 
 /** Every command the open thing's runs name, which the window's run leaves out. */
 const OPEN_THING_ALL: ReadonlySet<AppCommand> = new Set([
   ...OPEN_THING_COMMANDS,
   ...OPEN_THING_SHOW_COMMANDS,
   ...OPEN_THING_LAST_COMMANDS,
+  ...OWN_ROW_COMMANDS,
 ]);
 
 /** The places ⌘K goes to, in the Keyboard shortcuts page's order, which it lists after the open thing's commands. */
@@ -1281,7 +1299,7 @@ function opensTaskItems(tasks: TasksControl): boolean {
 /**
  * Copy link to each thing the window can copy a link to now, the most
  * specific first (`links-at-hand.ts`), named by what it is and, where the
- * window holds it, its name; the first wears ⌥⌘C, which copies it.
+ * window holds it, its name; the first wears ⇧⌘C, which copies it.
  */
 function copyLinkRows(
   links: readonly LinkAtHand[],
@@ -1337,8 +1355,8 @@ function panelTabRows(
  * so, as the plan's menus offer it; none while no plan is looked at. Note
  * that a plan Settings or the Inbox covers is offered nothing, because the
  * row does not name the plan, and going back to it opens it, which takes
- * the mark back before it is ever seen. No chord reaches it, since Mail's
- * ⇧⌘U is Automations' here.
+ * the mark back before it is ever seen. It wears U, which marks the plan
+ * open while no sidebar row has the keyboard, as ⌘K's own field has it.
  */
 function readMarkRows(
   tasks: TasksControl,
@@ -1348,14 +1366,15 @@ function readMarkRows(
   if (tasks.region.kind !== DOCUMENT_REGION.READY) return [];
   const { task } = tasks.region;
   if (task.id !== reads.watched) return [];
-  const item = markReadItem({
-    unread: reads.markedUnread(task.id),
-    onMark: (unread) => reads.mark(task, unread),
-  });
+  const item = markReadItem(
+    { unread: reads.markedUnread(task.id), onMark: (unread) => reads.mark(task, unread) },
+    true,
+  );
   return [
     {
       icon: item.icon,
       label: item.label,
+      command: item.command,
       terms: [item.label],
       onChoose: () => choose(item.onSelect),
     },
@@ -1377,14 +1396,15 @@ function agentReadMarkRows(
   const { standing, archived } = tasks.listedAgents;
   const agent = [...standing, ...archived].find((each) => each.id === agentId);
   if (agent === undefined) return [];
-  const item = markReadItem({
-    unread: reads.markedUnread(agent.id),
-    onMark: (unread) => reads.mark(agent, unread),
-  });
+  const item = markReadItem(
+    { unread: reads.markedUnread(agent.id), onMark: (unread) => reads.mark(agent, unread) },
+    true,
+  );
   return [
     {
       icon: item.icon,
       label: item.label,
+      command: item.command,
       terms: [item.label],
       onChoose: () => choose(item.onSelect),
     },
@@ -1411,6 +1431,7 @@ function taskPinRows(
     {
       icon: item.icon,
       label,
+      command: item.command,
       terms: [label],
       onChoose: () => choose(() => tasks.onMarkTask(task.id, mark)),
     },
@@ -1437,6 +1458,7 @@ function agentPinRows(
     {
       icon: item.icon,
       label,
+      command: item.command,
       terms: [label],
       onChoose: () => choose(() => tasks.onPinAgent(agent.id, !pinned)),
     },
@@ -1448,15 +1470,19 @@ function agentPinRows(
  * (`task-actions.tsx`'s `taskActionGroups`): Rename where its page offers
  * the door its ⋯ asks, Version history, Cancel task on a task not already
  * canceled, Change repository, and Open on GitHub where it has a
- * repository; each runs what its menu item runs. None while no plan is
- * looked at. Note that Copy link, Mark as read, Pin, Mark done, and
- * Permanently delete are rows of their own.
+ * repository; each runs what its menu item runs, Version history and Open
+ * on GitHub wearing their chords, Open on GitHub only while ⇧⌘O opens the
+ * task's rather than the Pull request tab the panel's keys stand on
+ * (`pullRequestKeys`). None while no plan is looked at. Note
+ * that Copy link, Mark as read, Pin, Mark done, and Permanently delete are
+ * rows of their own.
  */
 function taskCommandRows(
   tasks: TasksControl,
   reads: ReadMarks,
   rename: OpenTaskRename | undefined,
   choose: (run: () => void) => void,
+  pullRequestKeys: boolean,
 ): readonly PaletteRow[] {
   const task = reads.watched === undefined ? undefined : taskOf(tasks, reads.watched);
   if (task === undefined) return [];
@@ -1479,8 +1505,49 @@ function taskCommandRows(
   ];
   return commands.map(({ item, run }) => {
     const label = commandWords(item, COMMAND_PLACE.PALETTE);
-    return { icon: item.icon, label, terms: [label], onChoose: () => choose(run) };
+    const chordElsewhere = pullRequestKeys && item === PANEL_COMMAND.OPEN_ON_GITHUB;
+    return {
+      icon: item.icon,
+      label,
+      command: chordElsewhere ? undefined : item.command,
+      terms: [label],
+      onChoose: () => choose(run),
+    };
   });
+}
+
+/**
+ * U and P on what is open, while no sidebar row has the keyboard, whose
+ * own answer over these (`useFocusedRowKeys`): the plan on screen, marked
+ * read or unread and pinned as its menus do, or the agent whose page
+ * stands, the pin only while it is not archived and is no Luke, whose row
+ * offers none. Note that the Inbox's U
+ * is its chosen item's (`use-inbox-read-marks.ts`), so nothing here stands
+ * while the Inbox does.
+ */
+function useOpenThingKeys(tasks: TasksControl, reads: ReadMarks, agentReads: AgentReadMarks): void {
+  const inbox = tasks.inboxView.open;
+  const task = inbox || reads.watched === undefined ? undefined : taskOf(tasks, reads.watched);
+  const agent = inbox ? undefined : openAgentOf(tasks);
+  const standing =
+    agent === undefined
+      ? undefined
+      : withoutLuke(tasks.listedAgents.standing).find((each) => each.id === agent.id);
+  const toggleRead =
+    task !== undefined
+      ? () => reads.mark(task, !reads.markedUnread(task.id))
+      : agent !== undefined
+        ? () => agentReads.mark(agent, !agentReads.markedUnread(agent.id))
+        : undefined;
+  const togglePin =
+    task !== undefined
+      ? () =>
+          tasks.onMarkTask(task.id, task.pinnedAt === undefined ? TASK_MARK.PIN : TASK_MARK.UNPIN)
+      : standing !== undefined
+        ? () => tasks.onPinAgent(standing.id, standing.pinnedAt === undefined)
+        : undefined;
+  useAppCommand(APP_COMMAND.TOGGLE_READ, toggleRead);
+  useAppCommand(APP_COMMAND.PIN, togglePin);
 }
 
 /** The agent on no task whose page stands, archived or not; none while no agent's page stands, or while Luke's does, who is not archived. */
@@ -1521,7 +1588,7 @@ function OpenAgentArchive({
   asked,
 }: {
   agent: TasklessAgent;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   shown: boolean;
   /** How many times ⌘K asked for this agent, each new one run once. */
   asked: number;
@@ -2043,7 +2110,6 @@ export function CommandPalette({
   // The listed workspace's members, read once for it, name a task's assignee by face.
   const membersRead = useWorkspaceMembersRead(tasks.workspace);
   const originOf = useTaskOrigin();
-  const waitingOn = useTasksWaiting(tasks);
   const { members } = membersRead;
   // Note that the tasks' rows are built once for what they say rather than on every render, and
   // only while a filter that lists them stands open, because a key, an arrow, or the pointer
@@ -2060,14 +2126,14 @@ export function CommandPalette({
             (id) => onTasks(() => tasks.agentView.onOpen(id)),
             (taskId, agentId) => onTasks(() => tasks.onShowAgent(taskId, agentId)),
             originOf,
-            waitingOn,
           )
         : [],
-    [tasksShown, listedTasks, members, onTasks, tasks, originOf, waitingOn],
+    [tasksShown, listedTasks, members, onTasks, tasks, originOf],
   );
   const reads = useReadMarks();
   const renameOffer = useTaskRenameOffer();
   const agentReads = useAgentReadMarks();
+  useOpenThingKeys(tasks, reads, agentReads);
   // The open agent's Archive, asked of `OpenAgentArchive` by the agent it was chosen for.
   const openAgent = openAgentOf(listedTasks);
   const [archiveAsks, setArchiveAsks] = useState<{ agentId: string; asked: number }>(
@@ -2082,7 +2148,6 @@ export function CommandPalette({
     onNewTerminal: useCapability(HOST_CAPABILITY.TERMINALS)
       ? (agentId) => openTerminal(agentId, TERMINAL_ASK.NEW)
       : undefined,
-    browsers: useExperiment(EXPERIMENT.BROWSER),
   };
   const taskId = tasks.activeTaskId;
   const repository = tasks.tasks.find((task) => task.id === taskId)?.repository ?? null;
@@ -2194,12 +2259,22 @@ export function CommandPalette({
     [PALETTE_FILTER.COMMANDS]: () => [
       [
         ...copyLinkRows(links.linksAt(fromPanel), (held) => choose(() => links.copy(held))),
-        ...actionRows(OPEN_THING_COMMANDS, runCommand, experiments),
+        ...actionRows(openThingCommands(tasks), runCommand, experiments),
         ...readMarkRows(tasks, reads, choose),
         ...agentReadMarkRows(listedTasks, agentReads, choose),
         ...taskPinRows(tasks, reads, choose),
         ...agentPinRows(listedTasks, choose),
-        ...taskCommandRows(tasks, reads, renameOffer, choose),
+        ...taskCommandRows(
+          tasks,
+          reads,
+          renameOffer,
+          choose,
+          // ⇧⌘O opens the Pull request tab's own while the keys were in the panel on it as ⌘K opened.
+          fromPanel &&
+            tasks.sidePanel.open &&
+            tasks.sidePanel.tab !== undefined &&
+            isChangesTab(tasks.sidePanel.tab),
+        ),
         ...agentArchiveRows(openAgent, askArchive, choose),
         ...panelTabRows(tasks, onTasks),
         ...actionRows(OPEN_THING_SHOW_COMMANDS, runCommand, experiments),

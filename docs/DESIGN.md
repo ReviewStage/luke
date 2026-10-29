@@ -239,10 +239,8 @@ the one stroke `glyphs.tsx` draws with, so the button sizes the glyph and
 never the glyph its button. A button floating over something that moves
 beneath it, the title bar over a sliding pane or the transcript's way back to
 its newest line, sets `--luke-button-ground` and fills over that rather than over
-what passes. What is not one of these is a row, a tab, or a round control and
-says why where it is drawn: the call bar's round mutes, its solid End call
-disc, and its start pill, and a tab's ×, which brightens
-without a fill. A chip, which names a value or a thing rather than an act, is
+what passes. What is not one of these is a row or a tab and says why where it
+is drawn, such as a tab's ×, which brightens without a fill. A chip, which names a value or a thing rather than an act, is
 `@luke/ui`'s Chip.
 
 The keyboard's ring is one rule in `base.css`. Every button, link, tab,
@@ -303,11 +301,11 @@ time the page opens rather than once.
 Three categories, and only the first is ever cut:
 
 - **Describes.** Restates the control, reassures, or explains the app to
-  itself. "Their volume dips while you and Luke are talking, and returns
-  after." under a switch reading *Quiet Music and Spotify*. Delete it. If the
-  line seems necessary, the label is what to fix.
+  itself. "Luke listens through the Mac's own microphone rather than
+  another." under a switch reading *Prefer the Mac's microphone*. Delete it.
+  If the line seems necessary, the label is what to fix.
 - **Instructs.** Tells the developer something they cannot act without.
-  "Talking uses the GPT Live API, which needs billing enabled." Nobody can
+  "With the lid shut, Luke uses the headset's microphone anyway." Nobody can
   guess that. Keep it.
 - **Reports state.** This is the row's content. "Version 0.2.0 is available to
   download." Keep it.
@@ -335,7 +333,7 @@ What follows from this everywhere else:
 - No marketing register on the surface. Luke is not selling to someone who has
   already installed him.
 
-Copy that reaches a model rather than the screen (the brain's own
+Copy that reaches a model rather than the screen (the agent's own
 instructions, the live session's instructions) obeys a different rule. Verbosity
 there is not slop, but a fact dropped from them is one Luke no longer has, so
 compress the prose and never drop the fact. One rule per line beats three

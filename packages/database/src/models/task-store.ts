@@ -1,10 +1,9 @@
-import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
 import {
-  CODING_AGENT_KIND,
-  CODING_AGENT_MACHINE,
-  type CodingAgentMachine,
+  AGENT_KIND,
+  AGENT_MACHINE,
+  type AgentMachineKind,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { agentName } from "@luke/features/model-label";
@@ -49,16 +48,13 @@ import {
   readConcurrency,
   type StoreFailure,
 } from "../core/query.js";
+import { agentTable } from "../schemas/agent.js";
 import { attachment } from "../schemas/attachment.js";
-import { automation } from "../schemas/automation.js";
-import { codingAgent } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
-import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { conversations } from "../schemas/storage.js";
 import { task, taskNumberCounter } from "../schemas/task.js";
 import { taskPin } from "../schemas/task-pin.js";
 import { taskSectionEntry } from "../schemas/task-section.js";
-import { voiceSessions } from "../schemas/voice.js";
 import { agentAutomationNameSql } from "./agent-name.js";
 import { ensureGeneralChannel } from "./channel-store.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -67,13 +63,6 @@ import { reopenTaskInboxItems, settleTaskInboxItems } from "./inbox-settle.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
 import { stampConversationsDeleted } from "./soft-delete.js";
-import {
-  linkTaskIssue,
-  listTaskIssues,
-  listTaskIssueTags,
-  type NewTaskIssueLink,
-  type TaskIssueLink,
-} from "./task-issue-store.js";
 import {
   isWorkspaceMember,
   reachableTask,
@@ -167,8 +156,6 @@ export interface StoredTask {
   readonly saved: boolean;
   /** Who last changed each section, by heading, as its revisions read (`readSectionWriters`). */
   readonly sectionWriters: readonly PlanSectionWriter[];
-  /** The external issues the task links, oldest linked first (`task-issue-store.ts`); none for a task that links none. */
-  readonly issueLinks: readonly TaskIssueLink[];
   /** The developer's own words about the task as they started it; nothing for a task started with none. */
   readonly brief: string | undefined;
   /** Where the task's agents run, as its row holds it, which a Start on it resolves its machine from. */
@@ -182,22 +169,20 @@ export interface StoredTask {
  * reads as none.
  */
 export interface TaskRunsOnWrite {
-  readonly machine: CodingAgentMachine;
+  readonly machine: AgentMachineKind;
   readonly deviceId: string | null;
 }
 
 /** Where a task's agents run where nothing named it: a sandbox. */
 export const TASK_RUNS_IN_CLOUD: TaskRunsOnWrite = {
-  machine: CODING_AGENT_MACHINE.VERCEL,
+  machine: AGENT_MACHINE.VERCEL,
   deviceId: null,
 };
 
 /**
  * A plan to start: the workspace it starts in, its name where one is given,
- * the repository it is about where one is chosen, the external issues it
- * links from the start, as the service read them, where any were picked. A plan started
- * with no name, or a blank one, stands as `UNTITLED_PLAN_NAME` until it is
- * renamed. A brief is the developer's own words about the task, kept as
+ * and the repository it is about where one is chosen. A plan started with no
+ * name, or a blank one, stands as `UNTITLED_PLAN_NAME` until it is renamed. A brief is the developer's own words about the task, kept as
  * written; a blank one is none.
  */
 export interface NewTask {
@@ -206,7 +191,6 @@ export interface NewTask {
   readonly repository?: string | null;
   /** How the repository was reached as it was named; the App's where none is named. */
   readonly githubAccess?: GitHubAccess;
-  readonly issueLinks?: readonly NewTaskIssueLink[];
   readonly brief?: string;
   /** Where the task stands as it starts; to do where none is named. */
   readonly status?: TaskStatus;
@@ -245,7 +229,7 @@ export interface TaskChanges {
 const GitHubAccessSchema = Schema.Literals(Object.values(GITHUB_ACCESS));
 
 /** Where a task's agents run, as its row holds it. */
-const MachineSchema = Schema.Literals(Object.values(CODING_AGENT_MACHINE));
+const MachineSchema = Schema.Literals(Object.values(AGENT_MACHINE));
 
 /** Who made a task, as its row holds it. */
 const TaskCreatorActorSchema = Schema.Literals([
@@ -421,7 +405,7 @@ const findAgentLabels = SqlSchema.findAll({
   Request: Schema.Struct({ taskId: Schema.String, agentIds: Schema.Array(Schema.String) }),
   Result: Schema.Struct({
     id: Schema.String,
-    kind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
+    kind: Schema.Literals(Object.values(AGENT_KIND)),
     model: Schema.String,
     title: Schema.NullOr(Schema.String),
     automationName: Schema.NullOr(Schema.String),
@@ -430,14 +414,14 @@ const findAgentLabels = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          id: codingAgent.id,
-          kind: codingAgent.kind,
-          model: codingAgent.model,
-          title: codingAgent.title,
-          automationName: agentAutomationNameSql(codingAgent),
+          id: agentTable.id,
+          kind: agentTable.kind,
+          model: agentTable.model,
+          title: agentTable.title,
+          automationName: agentAutomationNameSql(agentTable),
         })
-        .from(codingAgent)
-        .where(and(eq(codingAgent.taskId, taskId), inArray(codingAgent.id, agentIds))),
+        .from(agentTable)
+        .where(and(eq(agentTable.taskId, taskId), inArray(agentTable.id, agentIds))),
     ),
 });
 
@@ -481,7 +465,7 @@ function sectionEditOf(
     ...(writer.agentId === undefined ? undefined : { agentId: writer.agentId }),
     ...(writer.by === undefined ? undefined : { by: writer.by }),
     at,
-    duringCall: writer.duringCall === true,
+    duringCall: false,
   };
 }
 
@@ -508,15 +492,10 @@ function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
  * agents are read under. Its last edit is its newest revision, or, before its
  * history begins, the newest save a coding agent made. A task is saved once
  * a save has moved its last save past its start, which no creation and no
- * carrying over does. Its issue links are `issueLinks`, which a read that
- * answers the plan alone hands as none. The reads but the agents' labels,
- * which wait on the section writers, run together outside a transaction.
+ * carrying over does. The reads but the agents' labels, which wait on the
+ * section writers, run together outside a transaction.
  */
-function storedTaskOf(
-  userId: string,
-  row: TaskRow,
-  issueLinks: TaskStoreEffect<readonly TaskIssueLink[]> = listTaskIssues(userId, row.id),
-): TaskStoreEffect<StoredTask> {
+function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask> {
   return Effect.gen(function* () {
     const devices = yield* devicesOf([row]);
     const read = yield* Effect.all(
@@ -527,7 +506,6 @@ function storedTaskOf(
           Effect.map(agentLabelsOf(row, sectionWriters), (labels) => ({ sectionWriters, labels })),
         ),
         lastRevision: readLastEdit(row.id),
-        issueLinks,
       },
       { concurrency: yield* readConcurrency },
     );
@@ -554,16 +532,15 @@ function storedTaskOf(
       agentEdits,
       saved: row.updatedAt.getTime() > row.createdAt.getTime(),
       sectionWriters,
-      issueLinks: read.issueLinks,
       brief: row.brief ?? undefined,
       runsOn: { machine: row.machine, deviceId: row.deviceId },
     };
   });
 }
 
-/** The row's plan alone, as the reader reads it, for the reads and writes that answer one: its issue links are not read. */
+/** The row's plan alone, as the reader reads it, for the reads and writes that answer one. */
 function taskOf(userId: string, row: TaskRow): TaskStoreEffect<Task> {
-  return Effect.map(storedTaskOf(userId, row, Effect.succeed([])), (stored) => stored.task);
+  return Effect.map(storedTaskOf(userId, row), (stored) => stored.task);
 }
 
 /** The accounts a line of the list names: each row's owner, its assignee where it has one, and the owner of the device it runs on. */
@@ -583,7 +560,7 @@ function namedAccountsOf(
 function devicesOf(rows: readonly TaskSummaryRow[]): TaskStoreEffect<ReadonlyMap<string, Device>> {
   return devicesNamed(
     rows.flatMap((row) =>
-      row.machine === CODING_AGENT_MACHINE.VERCEL || row.deviceId === null ? [] : [row.deviceId],
+      row.machine === AGENT_MACHINE.VERCEL || row.deviceId === null ? [] : [row.deviceId],
     ),
   );
 }
@@ -598,12 +575,12 @@ function runsOnOf(
   names: ReadonlyMap<string, string>,
   devices: ReadonlyMap<string, Device>,
 ): { readonly runsOn?: TaskRunsOn } {
-  if (row.machine === CODING_AGENT_MACHINE.VERCEL) return {};
+  if (row.machine === AGENT_MACHINE.VERCEL) return {};
   const found = row.deviceId === null ? undefined : devices.get(row.deviceId);
   const owner = found === undefined ? undefined : names.get(found.userId);
   return {
     runsOn: {
-      machine: CODING_AGENT_MACHINE.DEVICE,
+      machine: AGENT_MACHINE.DEVICE,
       ...(found === undefined ? undefined : { deviceId: found.id }),
       ...(found === undefined || owner === undefined
         ? undefined
@@ -927,28 +904,6 @@ const removeTask = SqlSchema.findOneOption({
     ),
 });
 
-/**
- * The task's calls that have ended, and with them the words said on each,
- * which cascade with the session. A call still open is left to the sweep
- * (`purgeDeletedTaskCalls`), since the voice service still writes it and
- * the orphan sweep may still have to end it on Luke's key.
- */
-const removeEndedCalls = SqlSchema.void({
-  Request: TaskKeySchema,
-  execute: ({ userId, taskId }) =>
-    Database.use((db) =>
-      db
-        .delete(voiceSessions)
-        .where(
-          and(
-            eq(voiceSessions.userId, userId),
-            eq(voiceSessions.taskId, taskId),
-            isNotNull(voiceSessions.closedAt),
-          ),
-        ),
-    ),
-});
-
 /** The conversations of the task's coding agents, read before the delete cascades the rows that name them. */
 const findAgentConversations = SqlSchema.findAll({
   Request: TaskKeySchema,
@@ -956,9 +911,9 @@ const findAgentConversations = SqlSchema.findAll({
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
-        .select({ id: codingAgent.id, conversationId: codingAgent.conversationId })
-        .from(codingAgent)
-        .innerJoin(task, eq(task.id, codingAgent.taskId))
+        .select({ id: agentTable.id, conversationId: agentTable.conversationId })
+        .from(agentTable)
+        .innerJoin(task, eq(task.id, agentTable.taskId))
         .where(reachableTask(userId, taskId)),
     ),
 });
@@ -983,9 +938,8 @@ const nameUntitled = SqlSchema.findOneOption({
 
 /**
  * Starts a task under the account, in the workspace it was handed, as one
- * empty document, with the repository it was handed, and the issues it was
- * handed linked to it in the same transaction; it stands first in the
- * list. A plan handed no name, or a blank one, starts as
+ * empty document, with the repository it was handed; it stands first in
+ * the list. A plan handed no name, or a blank one, starts as
  * `UNTITLED_PLAN_NAME`.
  */
 /** A started task's row as it is inserted: its name, or Untitled, its plan's empty text, and its brief, or none for a blank one. */
@@ -1033,9 +987,8 @@ export interface TaskCommitted<A> {
 }
 
 /**
- * Starts a task as `insertOf` writes it, with the issues it was handed
- * linked in the same transaction; an assignee who is no member of its
- * workspace refuses it with `TaskAssigneeNotMember`, nothing written.
+ * Starts a task as `insertOf` writes it; an assignee who is no member of
+ * its workspace refuses it with `TaskAssigneeNotMember`, nothing written.
  */
 export function createTask(
   userId: string,
@@ -1065,21 +1018,7 @@ export function createTaskCommitted(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
-        for (const link of started.issueLinks ?? []) {
-          yield* linkTaskIssue(userId, row.id, link).pipe(
-            // A new task's links are its starter's few, each named once, so a refusal is the caller breaking its contract.
-            Effect.catchTags({
-              TaskIssuesFull: Effect.die,
-              TaskIssueLinked: Effect.die,
-            }),
-          );
-        }
-        // A task that links no issue reads none back.
-        const links = started.issueLinks === undefined || started.issueLinks.length === 0;
-        const stored = yield* links
-          ? storedTaskOf(userId, row, Effect.succeed([]))
-          : storedTaskOf(userId, row);
-        return { task: stored, txid };
+        return { task: yield* storedTaskOf(userId, row), txid };
       }),
     ),
   );
@@ -1093,7 +1032,7 @@ export function createTaskCommitted(
  */
 export function createTaskOnce(
   userId: string,
-  started: Omit<NewTask, "issueLinks"> & { readonly id: string; readonly text: string },
+  started: NewTask & { readonly id: string; readonly text: string },
 ): Effect.Effect<Option.Option<Task>, TaskStoreFailure | TaskAssigneeNotMember, DatabaseServices> {
   return Effect.gen(function* () {
     yield* assigneeAdmitted(started.assigneeId, started.organizationId);
@@ -1104,8 +1043,7 @@ export function createTaskOnce(
 }
 
 /**
- * Every task of every workspace the account is a member of, newest started first, without their documents,
- * each with the issues it links, read for the whole list at once.
+ * Every task of every workspace the account is a member of, newest started first, without their documents.
  * Nothing but starting a task moves the order: opening, reading, saving,
  * pinning, and settling one leave every row where it stood, and the order a
  * pin draws is the window's to draw from `pinPosition` and `pinnedAt`.
@@ -1115,20 +1053,14 @@ export function listTasks(userId: string): TaskStoreEffect<readonly TaskSummary[
     const rows = yield* findTasks({ userId });
     const devices = yield* devicesOf(rows);
     const names = yield* readAccountNames(namedAccountsOf(rows, devices));
-    const tags = yield* listTaskIssueTags(
-      userId,
-      rows.map((row) => row.id),
-    );
-    return rows.map((row) => {
-      const summary = summaryOf(
+    return rows.map((row) =>
+      summaryOf(
         row,
         row.pinnedAt === null ? null : { pinnedAt: row.pinnedAt, pinPosition: row.pinPosition },
         names,
         devices,
-      );
-      const issues = tags.get(row.id);
-      return issues === undefined ? summary : { ...summary, issues };
-    });
+      ),
+    );
   });
 }
 
@@ -1148,8 +1080,8 @@ export function readTask(
 
 /**
  * The task as `readTask` answers it to the window, without the rest the
- * service holds beside it, so its issue links are never read: what opening
- * a plan and answering one after a write need. Nothing for a task of a
+ * service holds beside it: what opening a plan and answering one after a
+ * write need. Nothing for a task of a
  * workspace the account is not in.
  */
 export function readTaskPlan(userId: string, taskId: string): TaskStoreEffect<Option.Option<Task>> {
@@ -1187,7 +1119,7 @@ export interface TaskHeader {
 
 /**
  * A task the account reaches, as `readTask` would answer it, in one
- * statement and without its plan, its history, or its issues: what a read
+ * statement and without its plan or its history: what a read
  * that only refuses a task, finds its workspace or its repository, or names
  * it needs. Nothing where the account reaches none.
  */
@@ -1300,32 +1232,6 @@ function pinAsAsked(
 }
 
 /**
- * The task's automations moved along with it: their workspace and their
- * repository follow the task's, so a task moved to another workspace, or
- * given another repository, leaves no automation naming the old one; one
- * moved into a personal workspace becomes personal, as everything there is.
- */
-const followingAutomations = SqlSchema.void({
-  Request: Schema.Struct({
-    taskId: Schema.String,
-    organizationId: Schema.String,
-    repository: Schema.NullOr(Schema.String),
-  }),
-  execute: ({ taskId, organizationId, repository }) =>
-    Database.use((db) =>
-      db
-        .update(automation)
-        .set({
-          organizationId,
-          repositories: repository === null ? [] : [repository],
-          // A personal workspace holds nothing shared, so an automation moved into one becomes its creator's.
-          scope: sql`case when exists (select 1 from ${personalWorkspace} where ${personalWorkspace.organizationId} = ${organizationId}) then ${AUTOMATION_SCOPE.PERSONAL} else ${automation.scope} end`,
-        })
-        .where(eq(automation.taskId, taskId)),
-    ),
-});
-
-/**
  * The task's agents and inbox moved along with it to another workspace, so
  * no row of the task's stays tied to the workspace it left, whose deletion
  * would otherwise take them with it. Note that the inbox's threads go to the
@@ -1351,7 +1257,7 @@ const followingAgentsAndInbox = Effect.fnUntraced(function* (
   now: Date,
 ) {
   yield* Database.use((db) =>
-    db.update(codingAgent).set({ organizationId }).where(eq(codingAgent.taskId, taskId)),
+    db.update(agentTable).set({ organizationId }).where(eq(agentTable.taskId, taskId)),
   );
   // A change naming the workspace the task stands in leaves its threads in their channels.
   const channel = moved ? { channelId: yield* ensureGeneralChannel(organizationId, now) } : {};
@@ -1385,14 +1291,14 @@ const lockStandingAgents = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          id: codingAgent.id,
-          conversationId: codingAgent.conversationId,
-          createdAt: codingAgent.createdAt,
-          blank: sql<boolean>`${codingAgent.planSnapshot} is null and ${codingAgent.prompt} is null`,
+          id: agentTable.id,
+          conversationId: agentTable.conversationId,
+          createdAt: agentTable.createdAt,
+          blank: sql<boolean>`${agentTable.planSnapshot} is null and ${agentTable.prompt} is null`,
         })
-        .from(codingAgent)
-        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
-        .where(and(eq(codingAgent.taskId, taskId), isNull(codingAgent.archivedAt)))
+        .from(agentTable)
+        .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))
+        .where(and(eq(agentTable.taskId, taskId), isNull(agentTable.archivedAt)))
         .orderBy(conversations.id)
         .for("update", { of: conversations }),
     ),
@@ -1498,13 +1404,6 @@ export function updateTaskCommitted<E = never, R = never>(
                 Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
               );
         const txid = written ?? Option.getOrUndefined(pinned)?.txid;
-        if (changes.organizationId !== undefined || changes.repository !== undefined) {
-          yield* followingAutomations({
-            taskId,
-            organizationId: row.organizationId,
-            repository: row.repository,
-          });
-        }
         if (changes.organizationId !== undefined) {
           yield* followingAgentsAndInbox(taskId, row.organizationId, moved, now);
           if (row.organizationId !== locked.value.organizationId) yield* leaveSections(taskId);
@@ -1624,13 +1523,13 @@ const findStandingPullRequestStates = SqlSchema.findAll({
   execute: ({ taskId }) =>
     Database.use((db) =>
       db
-        .select({ state: sql<string>`${codingAgent.published} ->> 'state'` })
-        .from(codingAgent)
+        .select({ state: sql<string>`${agentTable.published} ->> 'state'` })
+        .from(agentTable)
         .where(
           and(
-            eq(codingAgent.taskId, taskId),
-            isNull(codingAgent.archivedAt),
-            isNotNull(codingAgent.published),
+            eq(agentTable.taskId, taskId),
+            isNull(agentTable.archivedAt),
+            isNotNull(agentTable.published),
           ),
         ),
     ),
@@ -1721,8 +1620,8 @@ export function finishTaskWork<R = never>(
 }
 
 /**
- * Deletes the task, its document, and its ended calls with what was said on
- * them, and stamps its coding agents' conversations cleared; false where the account reached no such task. The agents'
+ * Deletes the task and its document, and stamps its coding agents'
+ * conversations cleared; false where the account reached no such task. The agents'
  * conversations are read before the delete, because the delete cascades
  * the agent rows that name them.
  *
@@ -1766,7 +1665,6 @@ export function deleteTaskCommitted(
         const conversationIds = agents.map((agent) => agent.conversationId);
         const removed = yield* removeTask({ userId, taskId });
         if (Option.isNone(removed)) return Option.none();
-        yield* removeEndedCalls({ userId, taskId });
         yield* stampConversationsDeleted(conversationIds);
         return Option.some({ txid: removed.value.txid });
       }),

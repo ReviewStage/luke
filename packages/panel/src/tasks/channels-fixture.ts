@@ -11,18 +11,20 @@
  */
 
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import {
+  AGENT_CALL_FAILURE,
+  type AgentAccountItems,
+  type AgentInboxChanged,
+  INBOX_SCOPE_KIND,
+} from "@luke/features/agent-view";
+import {
+  AGENT_KIND,
+  AGENT_STATUS,
+  type AgentSummary,
+  PULL_REQUEST_STATE,
+} from "@luke/features/agent-wire";
 import { AUTOMATION_FOLLOW, type AutomationListView } from "@luke/features/automation-view";
 import type { Channel, ChannelThread } from "@luke/features/channel-wire";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxChanged,
-  INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
-  PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
 import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ASK,
@@ -37,6 +39,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
+import { OPERATOR_NAME } from "@luke/features/model-label";
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import {
@@ -284,7 +287,7 @@ const TASKS: readonly TaskSeed[] = [
   },
 ];
 
-/** An agent no task holds and no automation started, which the Inbox lists under Other agents. */
+/** The reader's operator, Luke, an agent no task holds and no automation started, in no repository, which the Inbox lists under Luke. */
 interface StraySeed {
   readonly agentId: string;
   readonly agentTitle: string;
@@ -293,7 +296,7 @@ interface StraySeed {
 
 const STRAY: StraySeed = {
   agentId: AGENT.STRAY,
-  agentTitle: "Bump the Node image",
+  agentTitle: OPERATOR_NAME,
   owner: DEAN,
 };
 
@@ -644,7 +647,7 @@ const THREADS: ThreadSeed[] = [
           `![The update manifest as every Mac reads it](${inboxAttachmentAddress(
             {
               kind: LINK_PLACE.INBOX_ITEM,
-              planId: TASK.RELEASE,
+              agentId: seed(TASK.RELEASE).agentId,
               itemId: fixtureId("d4000004", 12),
             },
             RELEASE_PICTURE,
@@ -862,7 +865,7 @@ THREADS.push(
 /** A settled thread in the archived #launch-site, which its card counts and dates its corner by. */
 THREADS.push(
   thread(
-    21,
+    23,
     seed(TASK.RELEASE),
     CHANNEL.LAUNCH_SITE,
     "Shipped: the launch site is live",
@@ -985,7 +988,13 @@ function holdings(): readonly AppInboxTaskHolding[] {
     .toSorted((a, b) => b.updatedAt - a.updatedAt);
 }
 
-/** What waits on the reader, as main counts it. */
+/** The channel a thread lives in, as main's read names it, as a key to spread; none for a thread the fixture does not hold. */
+function channelOf(itemId: string): { readonly channelId: string } | undefined {
+  const channelId = THREADS.find((each) => each.item.id === itemId)?.channelId;
+  return channelId === undefined ? undefined : { channelId };
+}
+
+/** What waits on the reader, as main counts it, each item with the channel it lives in. */
 function waiting(): readonly AppInboxTask[] {
   return holdings().flatMap(({ taskId }) => {
     const open = itemsOf(taskId).filter(needsReader);
@@ -999,33 +1008,37 @@ function waiting(): readonly AppInboxTask[] {
               agentId,
               title,
               postedAt,
+              ...channelOf(id),
             })),
           },
         ];
   });
 }
 
-/** The stray agent's open threads, as main lists the items of agents with no task. */
+/** Luke's open threads, as main lists the items of agents with no task. */
 function taskless(): readonly AppInboxTasklessItem[] {
   return strayItems()
     .filter((each) => each.status === INBOX_STATUS.OPEN)
-    .map(({ id, agentId, title, postedAt }) => ({
+    .map(({ id, agentId, title, postedAt, updatedAt }) => ({
       id,
       agentId,
+      agentKind: AGENT_KIND.OPERATOR,
       title,
       postedAt,
+      updatedAt,
+      ...channelOf(id),
       agentTitle: STRAY.agentTitle,
       agentModel: MODEL,
       automationId: null,
       automationName: null,
-      repository: REPOSITORY,
+      repository: null,
       workspaceId: FIXTURE_IDS.WORKSPACE,
       startedBy: STRAY.owner.userId,
       waitsOn: STRAY.owner.userId,
     }));
 }
 
-const AGENTS: ReadonlyMap<string, CodingAgentSummary> = new Map(
+const AGENTS: ReadonlyMap<string, AgentSummary> = new Map(
   TASKS.map((task) => [
     task.id,
     {
@@ -1035,7 +1048,7 @@ const AGENTS: ReadonlyMap<string, CodingAgentSummary> = new Map(
       effort: "high",
       title: task.agentTitle,
       createdAt: LANDED - task.startedAgo,
-      status: task.done ? CODING_AGENT_STATUS.COMPLETED : CODING_AGENT_STATUS.RUNNING,
+      status: task.done ? AGENT_STATUS.COMPLETED : AGENT_STATUS.RUNNING,
       turnId: null,
       runStartedAt: LANDED - task.startedAgo,
       startedBy: task.owner,
@@ -1218,45 +1231,63 @@ function changed(channelId: string, change: (channel: ChannelSeed) => ChannelSee
 }
 
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
-  [ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: ({ kind, id }) => {
-    const pushed: CodingAgentInboxChanged["inbox"] = {
+  [ACT_KIND.AGENTS_INBOX_FOLLOW]: ({ kind, id }) => {
+    const pushed: AgentInboxChanged["inbox"] = {
       items: kind === INBOX_SCOPE_KIND.AGENT ? strayItems() : itemsOf(id),
     };
     return pushedOnce(pushed);
   },
-  [ACT_KIND.CODING_AGENTS_PAGE]: ({ agentId }) =>
+  // The account's feed of every item, which the window's Inbox draws from: each task's threads, and the stray agent's.
+  [ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
+    const taskIds = new Set(
+      THREADS.flatMap((each) => (each.taskId === undefined ? [] : [each.taskId])),
+    );
+    const pushed: AgentAccountItems = {
+      whole: true,
+      scopes: [
+        ...[...taskIds].map((id) => ({
+          scope: { kind: INBOX_SCOPE_KIND.PLAN, id },
+          items: itemsOf(id),
+        })),
+        { scope: { kind: INBOX_SCOPE_KIND.AGENT, id: STRAY.agentId }, items: strayItems() },
+      ],
+    };
+    return pushedOnce(pushed);
+  },
+  [ACT_KIND.AGENTS_PAGE]: ({ agentId }) =>
     agentId === STRAY.agentId
       ? {
           agent: {
             id: STRAY.agentId,
             planId: null,
+            kind: AGENT_KIND.OPERATOR,
             model: MODEL,
             effort: "high",
             title: STRAY.agentTitle,
             createdAt: LANDED - HOUR,
-            status: CODING_AGENT_STATUS.RUNNING,
+            status: AGENT_STATUS.RUNNING,
             turnId: null,
             runStartedAt: LANDED - HOUR,
             startedBy: STRAY.owner,
             automationId: null,
             workspaceId: FIXTURE_IDS.WORKSPACE,
-            repository: REPOSITORY,
+            repository: null,
           },
         }
-      : { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND },
-  [ACT_KIND.CODING_AGENTS_LIST]: ({ taskId }) => {
+      : { failure: AGENT_CALL_FAILURE.NOT_FOUND },
+  [ACT_KIND.AGENTS_LIST]: ({ taskId }) => {
     const agent = AGENTS.get(taskId);
     return { agents: agent === undefined ? [] : [agent] };
   },
   [ACT_KIND.AUTOMATIONS_FOLLOW]: (follow) =>
     pushedOnce(follow.kind === AUTOMATION_FOLLOW.WORKSPACE ? NO_AUTOMATIONS : { runs: [] }),
   [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => MEMBERS,
-  [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => ({ id: itemId, unread }),
-  [ACT_KIND.CODING_AGENTS_INBOX_MESSAGE]: ({ itemId, text, answers }) => {
+  [ACT_KIND.AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => ({ id: itemId, unread }),
+  [ACT_KIND.AGENTS_INBOX_MESSAGE]: ({ itemId, text, answers }) => {
     const item = replied(itemId, text, answers);
     return item === undefined ? { failure: "unanswered" } : { item };
   },
-  [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: () => longRunPicture(),
+  [ACT_KIND.AGENTS_INBOX_ATTACHMENT]: () => longRunPicture(),
   [ACT_KIND.TASKS_PULL_REQUEST]: ({ number }) =>
     number === RELEASE_PULL_REQUEST.number ? RELEASE_PULL_REQUEST : null,
   [ACT_KIND.CHANNELS_LIST]: () => channelsAnswer(),

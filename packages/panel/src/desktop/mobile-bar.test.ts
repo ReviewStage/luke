@@ -12,15 +12,15 @@ import { mobileBarShown } from "./mobile-bar.js";
 
 const CHOSEN = { taskId: "task-1", itemId: "item-1" } as const;
 
-/** A phone's window on the Inbox's place, its list asked for or not, an item chosen. */
-function onInbox(listed: boolean) {
+/** A phone's window on the Inbox's place, with an item chosen or none. */
+function onInbox(chosen: typeof CHOSEN | undefined) {
   const tasks = tasksControl();
-  return tasksControl({ inboxView: { ...tasks.inboxView, open: true, chosen: CHOSEN, listed } });
+  return tasksControl({ inboxView: { ...tasks.inboxView, open: true, chosen } });
 }
 
 test.each([
-  { on: "the list", listed: true, shown: true },
-  { on: "an item", listed: false, shown: false },
-])("the bar on $on stands: $shown", ({ listed, shown }) => {
-  assert.equal(mobileBarShown(SHELL_ROOM.NARROW, onInbox(listed)), shown);
+  { on: "the list", chosen: undefined, shown: true },
+  { on: "an item", chosen: CHOSEN, shown: false },
+])("the bar on $on stands: $shown", ({ chosen, shown }) => {
+  assert.equal(mobileBarShown(SHELL_ROOM.NARROW, onInbox(chosen)), shown);
 });

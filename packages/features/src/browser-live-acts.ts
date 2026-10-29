@@ -6,8 +6,8 @@
  * terminal. Its acts carry ids alone, never a frame, an address, or a title;
  * what the socket carries travels on one `MessagePort` per attached view,
  * posted by main to the panel that asked and to no other window, so nothing
- * the page shows enters app state, an act, a trace, or the voice window
- * (root `AGENTS.md`'s cloud browser line). The port is posted on its own
+ * the page shows enters app state, an act, or a trace (root `AGENTS.md`'s
+ * cloud browser line). The port is posted on its own
  * channel with a ticket naming the view the panel minted; the preload hands
  * it into the page the way Electron hands a port to an isolated world, and
  * the page reads it back by that channel. The web app opens the same socket
@@ -40,9 +40,9 @@ export const BROWSER_LIVE_ABNORMAL_CLOSE = 1006;
 /** The most characters one text frame the panel sends carries: an input message, well under it. */
 const BROWSER_LIVE_SEND_MAX_CHARS = 16_384;
 
-/** One cloud Browser tab of one task, as its live view names it. */
+/** One cloud Browser tab of one coding agent's browser, as its live view names it. */
 const browserLiveTargetSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
+  agentId: EffectSchema.NonEmptyString,
   tabId: EffectSchema.NonEmptyString,
 });
 
@@ -87,7 +87,7 @@ export type BrowserLivePortOutbound = typeof browserLivePortOutboundSchema.Type;
 /** The socket's path and query for one tab, which the desktop puts on the service's origin and the web on its own. */
 export function browserLivePath(target: BrowserLiveTarget): string {
   const query = new URLSearchParams({
-    [BROWSER_LIVE.QUERY.TASK]: target.taskId,
+    [BROWSER_LIVE.QUERY.AGENT]: target.agentId,
     [BROWSER_LIVE.QUERY.TAB]: target.tabId,
   });
   return `${BROWSER_LIVE.PATH}?${query.toString()}`;

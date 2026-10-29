@@ -17,7 +17,6 @@ import type {
   StoredSettingValue,
 } from "./schema-types.js";
 import { SETTING_ROWS, SETTINGS_PAGE, SETTINGS_RESET_SCOPE } from "./schema-types.js";
-import type { RuntimeStatus } from "./status.js";
 
 type GuardValue<Definition> = Definition extends {
   guard(value: UnparsedWireValue): SettingGuardResult<infer Value>;
@@ -60,7 +59,6 @@ export function isAppSettingField(value: UnparsedWireValue): value is AppSetting
  * device's own store.
  */
 export const ACCOUNT_PREFERENCE_FIELDS = [
-  APP_SETTING_SCHEMA.voice.field,
   APP_SETTING_SCHEMA.linkOpen.field,
 ] as const satisfies readonly AppSettingField[];
 
@@ -70,14 +68,13 @@ export type AccountPreferences = Partial<Pick<StoredAppSettings, AccountPreferen
 
 /**
  * The preferences the snapshot's shared `preferences` part carries, which a
- * write replaces whole. Note that `linkOpen` rides a part of its own beside
- * it, because a build from before it reads this part and writes it back
- * whole: a choice inside it would be refused by the older reader and cleared
- * by the older writer.
+ * write replaces whole: none since the voice went with calls, though the
+ * part stays on the wire, because v0.18.0 refuses a snapshot without it.
+ * Note that `linkOpen` rides a part of its own beside it, because a build
+ * from before it reads this part and writes it back whole: a choice inside
+ * it would be refused by the older reader and cleared by the older writer.
  */
-const SHARED_PREFERENCE_FIELDS = [
-  APP_SETTING_SCHEMA.voice.field,
-] as const satisfies readonly AccountPreferenceField[];
+const SHARED_PREFERENCE_FIELDS = [] as const satisfies readonly AccountPreferenceField[];
 
 const ACCOUNT_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(ACCOUNT_PREFERENCE_FIELDS);
 
@@ -170,7 +167,7 @@ export function accountPreferencesParts(preferences: AccountPreferences): Accoun
  * An account's preferences joined from the snapshot's parts: nothing where
  * the shared part is refused, and the link part passed over where it names
  * no choice this build knows, since a newer service's choice must not cost
- * this device the voice beside it.
+ * this device the shared part beside it.
  */
 export function accountPreferencesFromParts(
   snapshot: Record<string, UnparsedWireValue>,
@@ -188,7 +185,7 @@ export function accountPreferencesFromParts(
  * preferences stand in for it. The link part is written apart and never
  * cleared on the service, only chosen again, so one the snapshot holds is
  * taken either way, and a choice made on the web reaches a Mac before any
- * voice was synced; one it lacks was never written by anyone, so the
+ * shared part was written; one it lacks was never written by anyone, so the
  * device's own stands in for it, and a first choice made before the first
  * sync is kept to be written rather than merged away.
  */
@@ -223,7 +220,7 @@ export function accountPreferencesToWrite(
  * What a device pushes as one of its own preferences changes: what it
  * writes, less a link choice it has not changed since it last synced, since
  * the service may hold a newer one another device made meanwhile, which a
- * push of the voice beside it must not put back.
+ * push of the shared part beside it must not put back.
  */
 export function accountPreferencesToPush(
   local: AccountPreferences,
@@ -298,10 +295,7 @@ export function settingIdVisible(id: string, view: SettingsVisibility): boolean 
  */
 export interface SettingsRowsInput extends SettingsVisibility {
   /** The settings as they stand, and the experiments the account has on, which decide whether a gated feature's rows stand. */
-  settings: Pick<StoredAppSettings, AppSettingField> &
-    RuntimeStatus & {
-      experiments: ExperimentChoices;
-    };
+  settings: Pick<StoredAppSettings, AppSettingField> & { experiments: ExperimentChoices };
 }
 
 /** One row of a settings page, as the panel's own schema renderer draws it. */
@@ -386,11 +380,12 @@ export type SettingKeep = (typeof SETTING_KEEP)[keyof typeof SETTING_KEEP];
  */
 const SERVICE_KEEP_OF_PAGE = {
   [SETTINGS_PAGE.ACCOUNT]: SETTING_KEEP.ACCOUNT,
-  [SETTINGS_PAGE.VOICE]: null,
   [SETTINGS_PAGE.APPEARANCE]: null,
   [SETTINGS_PAGE.SHORTCUTS]: null,
   [SETTINGS_PAGE.MEMORY]: SETTING_KEEP.WORKSPACE,
-  [SETTINGS_PAGE.CODING_AGENTS]: SETTING_KEEP.ACCOUNT,
+  [SETTINGS_PAGE.AGENTS]: SETTING_KEEP.ACCOUNT,
+  // Note that Hosts stands under its title alone, with no line saying where it is kept.
+  [SETTINGS_PAGE.HOSTS]: null,
   [SETTINGS_PAGE.INTEGRATIONS]: SETTING_KEEP.ACCOUNT,
   [SETTINGS_PAGE.SKILLS]: SETTING_KEEP.ACCOUNT,
   [SETTINGS_PAGE.WORKSPACE]: SETTING_KEEP.WORKSPACE,

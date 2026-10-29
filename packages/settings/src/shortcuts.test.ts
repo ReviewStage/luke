@@ -125,7 +125,7 @@ test("no Chapters key is a Files changed key, whose list hears a press first and
   }
 });
 
-test("⇧⌘A, Archive's chord, runs Mark done, which still answers to the id the menu bar sent for Archive", () => {
+test("⇧⌘A runs nothing, and Mark done, chordless, still answers to the id the menu bar sent for Archive", () => {
   const press = {
     key: "a",
     code: "KeyA",
@@ -135,10 +135,8 @@ test("⇧⌘A, Archive's chord, runs Mark done, which still answers to the id th
     altKey: false,
   };
 
-  const command = commandForKey(KEYED_COMMANDS, press);
-
-  assert.equal(command, APP_COMMAND.MARK_TASK_DONE);
-  assert.equal(command === undefined ? undefined : appCommandLabel(command), "Mark done");
+  assert.equal(commandForKey(KEYED_COMMANDS, press), undefined);
+  assert.equal(appCommandLabel(APP_COMMAND.MARK_TASK_DONE), "Mark done");
   assert.ok(isAppCommand("archive-plan"));
   assert.equal(APP_COMMAND.MARK_TASK_DONE, "archive-plan");
 });
@@ -180,19 +178,19 @@ test("on a Mac, ⌘K opens the command palette and Ctrl+K, a field's caret move,
 
 test("where Command is Ctrl, AltGr, which Windows reports as Ctrl and Alt held, types its character rather than running a chord", () => {
   commandIsCtrl();
-  const copyLink = APP_SHORTCUTS[APP_COMMAND.COPY_LINK].chord;
+  const copyContent = APP_SHORTCUTS[APP_COMMAND.COPY_CONTENT].chord;
   const press = {
     key: "ć",
-    code: copyLink.key.code,
+    code: copyContent.key.code,
     ctrlKey: true,
     metaKey: false,
     altKey: true,
     shiftKey: false,
   };
 
-  assert.equal(shortcutMatches(copyLink, press), true, "Ctrl+Alt+C is Copy link");
+  assert.equal(shortcutMatches(copyContent, press), true, "Ctrl+Alt+C is Copy plan or transcript");
   assert.equal(
-    shortcutMatches(copyLink, { ...press, getModifierState: (key) => key === "AltGraph" }),
+    shortcutMatches(copyContent, { ...press, getModifierState: (key) => key === "AltGraph" }),
     false,
   );
 });
@@ -243,11 +241,11 @@ test("where Command is Ctrl, a chord is drawn and spelled for a reader with Ctrl
   commandIsCtrl();
   const palette = APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE].chord;
   const copyLink = APP_SHORTCUTS[APP_COMMAND.COPY_LINK].chord;
-  const copyPlan = APP_SHORTCUTS[APP_COMMAND.COPY_PLAN].chord;
+  const copyContent = APP_SHORTCUTS[APP_COMMAND.COPY_CONTENT].chord;
 
   assert.deepEqual(shortcutGlyphs(shortcutAccelerator(palette)), ["Ctrl", "K"]);
-  assert.deepEqual(shortcutGlyphs(shortcutAccelerator(copyLink)), ["Ctrl", "Alt", "C"]);
-  assert.deepEqual(shortcutGlyphs(shortcutAccelerator(copyPlan)), ["Ctrl", "Shift", "C"]);
+  assert.deepEqual(shortcutGlyphs(shortcutAccelerator(copyLink)), ["Ctrl", "Shift", "C"]);
+  assert.deepEqual(shortcutGlyphs(shortcutAccelerator(copyContent)), ["Ctrl", "Alt", "C"]);
   assert.deepEqual(shortcutGlyphs("CommandOrControl+Shift+Space"), ["Ctrl", "Shift", "Space"]);
   assert.equal(shortcutAria(palette), "Control+K");
   assert.equal(

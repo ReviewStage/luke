@@ -14,7 +14,7 @@ import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import type { VersionHistoryControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
-import { menuItems, pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
+import { pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { TaskVersionHistory } from "./desktop-version-history.js";
@@ -168,33 +168,27 @@ test("on a phone a revision's sections are headed by the way back to every versi
   assert.deepEqual(exits, ["sections"]);
 });
 
-test("on a phone a version is headed by the way back to the list, when it was saved, and a ⋯ holding Restore this version", () => {
+test("on a phone a version is headed by the way back to the list, when it was saved, and Restore this version as a button, never a ⋯ of one item", () => {
   const { view, exits } = drawn(SHELL_ROOM.NARROW, VIEWING_2);
 
   const head = readPhoneHead(view, "version");
-  assert.deepEqual([head.start, head.end], [["Versions"], ["Version actions"]]);
+  assert.deepEqual([head.start, head.end], [["Versions"], ["Restore this version"]]);
   assert.ok(head.title, "the moment it was saved is the title");
-  assert.ok(
-    ![...view.querySelectorAll("button")].some(
-      (each) => each.textContent === "Restore this version",
-    ),
-    "no Restore button in the header",
-  );
-  pressInPhoneHead(view, "version", "Version actions");
-  assert.deepEqual(menuItems(), [{ label: "Restore this version", disabled: false }]);
   pressInPhoneHead(view, "version", "Versions");
   assert.deepEqual(exits, ["list"]);
 });
 
-test("on a phone the newest version's restore stands unavailable in the ⋯, as its button does", () => {
+test("on a phone the newest version's Restore stands unavailable, as the wide bar's does", () => {
   const { view } = drawn(SHELL_ROOM.NARROW, {
     ...VIEWING_2,
     selected: 3,
     viewing: VIEWING_2.viewing && { ...VIEWING_2.viewing, line: line(3), current: true },
   });
 
-  pressInPhoneHead(view, "version", "Version actions");
-  assert.deepEqual(menuItems(), [{ label: "Restore this version", disabled: true }]);
+  const restore = [...view.querySelectorAll<HTMLButtonElement>("header.version-head button")].find(
+    (each) => each.textContent === "Restore this version",
+  );
+  assert.equal(restore?.getAttribute("aria-disabled") ?? String(restore?.disabled), "true");
 });
 
 test("a wide room keeps the versions' Back row and title and a version's Restore button, with no phone's header", () => {

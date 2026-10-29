@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentSubagentTab } from "./agent-tab.js";
 
 /**
@@ -20,14 +20,14 @@ import { AgentSubagentTab } from "./agent-tab.js";
 const DEAN = "user-dean";
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Invite flow",
   createdAt: 1_000,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
   startedBy: CHARLES,
 };
@@ -42,7 +42,7 @@ afterEach(() => {
 
 /** Where the worker's tab says its Mac command ran once its page is read, as `reader` sees it. */
 async function workerTabFor(reader: string): Promise<string> {
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [AGENT],
     me: reader,
     transcripts: pushedTranscripts(() => [
@@ -63,7 +63,7 @@ async function workerTabFor(reader: string): Promise<string> {
           },
         ],
         cursor: "1:0",
-        status: CODING_AGENT_STATUS.COMPLETED,
+        status: AGENT_STATUS.COMPLETED,
         title: null,
       },
     ]),
@@ -78,7 +78,7 @@ async function workerTabFor(reader: string): Promise<string> {
           agentId: AGENT.id,
           callId: "delegation-call",
           task: "Run the tests",
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           control,
           shown: true,
           onStatus: () => undefined,

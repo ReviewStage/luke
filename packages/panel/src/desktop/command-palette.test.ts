@@ -2,21 +2,21 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_CALL_FAILURE,
+  type AgentInboxChanged,
+  INBOX_SCOPE_KIND,
+} from "@luke/features/agent-view";
+import {
+  AGENT_KIND,
+  AGENT_STATUS,
+  CHECK_SUMMARY,
+  PULL_REQUEST_STATE,
+} from "@luke/features/agent-wire";
+import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxChanged,
-  INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
-import {
-  CHECK_SUMMARY,
-  CODING_AGENT_KIND,
-  CODING_AGENT_STATUS,
-  PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -76,7 +76,7 @@ import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { CommandPalette } from "./command-palette.js";
@@ -148,7 +148,6 @@ function openPalette(
         settings: {
           rows: {
             settings: settingsView(),
-            voiceControlsDrawn: true,
             accountDrawn: true,
             capabilities,
           },
@@ -198,7 +197,6 @@ function paletteOverTask(): (looked: typeof DOCUMENT_TASK | undefined) => void {
               settings: {
                 rows: {
                   settings: settingsView(),
-                  voiceControlsDrawn: true,
                   accountDrawn: true,
                   capabilities: DESKTOP_CAPABILITIES,
                 },
@@ -219,7 +217,8 @@ function markRows(): string[] {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
   });
   type("mark");
-  return rows().filter((row) => row.startsWith("Mark as"));
+  // Note that the Keyboard shortcuts page's own U row is found by the word too, and is no mark of the plan's.
+  return rows().filter((row) => row.startsWith("Mark as") && !row.endsWith("· Keyboard shortcuts"));
 }
 
 test("⌘K marks the task on screen unread and then read, and offers no mark for a task Settings or the Inbox covers", () => {
@@ -310,7 +309,6 @@ const SETTINGS_PAGES = [
   "Agents",
   "Integrations",
   "Skills",
-  "Voice",
   "Appearance",
   "This Mac",
   "Experimental",
@@ -340,20 +338,13 @@ test("the Settings filter lists Memory after Workspace only while the account ha
   assert.ok(!rows().includes("Memory"), "Memory off lists no Memory page");
 });
 
-test("on a platform without voice or Mac commands, the Settings filter lists neither page, and finds none of their rows", () => {
-  const offered = DESKTOP_CAPABILITIES.filter(
-    (each) => each !== HOST_CAPABILITY.VOICE && each !== HOST_CAPABILITY.MAC_COMMANDS,
-  );
-  const shown = SETTINGS_PAGES.filter((page) => page !== "Voice" && page !== "This Mac");
+test("on a platform without Mac commands, the Settings filter lists no This Mac page, and finds none of its rows", () => {
+  const offered = DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.MAC_COMMANDS);
+  const shown = SETTINGS_PAGES.filter((page) => page !== "This Mac");
   openPalette(undefined, undefined, undefined, offered);
   chooseFilter("Settings");
 
   assert.deepEqual(rows().slice(0, shown.length), shown);
-  type("Quiet Music and Spotify");
-  assert.equal(
-    rows().some((row) => row.includes("Quiet Music and Spotify")),
-    false,
-  );
   type("Let agents run commands on this Mac");
   assert.equal(
     rows().some((row) => row.includes("Let agents run commands")),
@@ -728,7 +719,7 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
           repository: null,
         },
       ],
-      agents: codingAgentsControl({
+      agents: agentsControl({
         agents: [
           {
             id: "agent-7",
@@ -737,7 +728,7 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
             effort: "high",
             title: "Invoice export",
             createdAt: 1,
-            status: CODING_AGENT_STATUS.RUNNING,
+            status: AGENT_STATUS.RUNNING,
             turnId: null,
           },
         ],
@@ -750,6 +741,7 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
   assert.deepEqual(rows(), [
     "Inbox · Billing usage alerts",
     "Invoice export · Billing usage alerts",
+    "New browser tab · Billing usage alerts",
   ]);
   const row = document.querySelectorAll<HTMLElement>('[role="option"]')[1];
   assert.ok(row, "the agent is listed");
@@ -773,7 +765,7 @@ test("an agent with no task hangs its card beside its row and is named as its ta
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     automationId: null,
     workspaceId: "workspace-1",
@@ -782,7 +774,7 @@ test("an agent with no task hangs its card beside its row and is named as its ta
   };
   openPalette(
     tasksControl({
-      agents: codingAgentsControl({
+      agents: agentsControl({
         models: [
           {
             id: "anthropic/claude-opus-5.5",
@@ -815,7 +807,7 @@ test("an archived agent of the open task is still found, after the standing ones
     effort: "high",
     title,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   });
   const base = tasksControl();
@@ -832,7 +824,7 @@ test("an archived agent of the open task is still found, after the standing ones
           repository: null,
         },
       ],
-      agents: codingAgentsControl({
+      agents: agentsControl({
         agents: [agent("agent-7", "Invoice export")],
         archived: [{ ...agent("agent-8", "Refund export"), archivedAt: 3 }],
         agentIds: ["agent-7"],
@@ -844,6 +836,7 @@ test("an archived agent of the open task is still found, after the standing ones
   assert.deepEqual(rows(), [
     "Inbox · Billing usage alerts",
     "Invoice export · Billing usage alerts",
+    "New browser tab · Billing usage alerts",
     "Refund export · Archived · Billing usage alerts",
   ]);
 
@@ -896,7 +889,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
         repository: null,
       },
     ],
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: [
         {
           id: "agent-7",
@@ -905,7 +898,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
           effort: "high",
           title: "Invoice export",
           createdAt: 1,
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           turnId: null,
           automationId: automation.id,
         },
@@ -926,7 +919,6 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
       settings: {
         rows: {
           settings: settingsView(),
-          voiceControlsDrawn: true,
           accountDrawn: true,
           capabilities: DESKTOP_CAPABILITIES,
         },
@@ -949,7 +941,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     assert.ok(row, "the agent is listed");
     restOn(row);
     const words = document.querySelector(
-      ".luke-tooltip-card .actor-words [data-actor-ref]",
+      ".luke-tooltip-card .luke-hover-card-row [data-actor-ref]",
     )?.textContent;
     act(() => root.unmount());
     document.body.innerHTML = "";
@@ -968,7 +960,7 @@ test("an agent's Pull request row is named as its tab is, by its pull request's 
     effort: "high",
     title: "Invoice export",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
   openPalette(
@@ -984,7 +976,7 @@ test("an agent's Pull request row is named as its tab is, by its pull request's 
           repository: null,
         },
       ],
-      agents: codingAgentsControl({
+      agents: agentsControl({
         agents: [agent],
         agentIds: [agent.id],
         pullRequests: new Map([
@@ -1022,7 +1014,7 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
     effort: "high",
     title: "Invoice export",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
   const control = tasksControl({});
@@ -1042,7 +1034,7 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
       ],
       region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, repository: "acme/relay" } },
       agentView: { ...control.agentView, agentId: "agent-page-1" },
-      agents: codingAgentsControl({
+      agents: agentsControl({
         agents: [agent],
         agentIds: [agent.id],
         pullRequests: new Map([
@@ -1094,7 +1086,7 @@ async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | und
     effort: "high",
     title: "Invoice export",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
   const opened: string[] = [];
@@ -1114,7 +1106,7 @@ async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | und
     region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, repository: "acme/relay" } },
     inboxView: { ...base.inboxView, open: inbox !== undefined, chosen: inbox?.chosen },
     sidePanel: { ...base.sidePanel, onOpenFile: (ref) => opened.push(ref.path) },
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: [agent],
       agentIds: [agent.id],
       pullRequests: new Map([
@@ -1279,7 +1271,7 @@ test("a task's row ends as its sidebar row does, who is on it then an agent at w
           title: "Alerts",
           model: "anthropic/claude-opus-5.5",
           effort: "high",
-          status: CODING_AGENT_STATUS.RUNNING,
+          status: AGENT_STATUS.RUNNING,
         },
       ],
       pullRequestTotal: 0,
@@ -1328,7 +1320,7 @@ test("an agent pressed on a task's card in ⌘K over Settings leaves the palette
                 title: "Invoice export",
                 model: "anthropic/claude-opus-5.5",
                 effort: "high",
-                status: CODING_AGENT_STATUS.RUNNING,
+                status: AGENT_STATUS.RUNNING,
               },
             ],
             pullRequestTotal: 0,
@@ -1617,13 +1609,13 @@ test("a task Luke or a coding agent made says who in its detail and is found by 
     );
 
   assert.deepEqual(rows(), [
-    "Invite emails · relay · by Coding agent",
+    "Invite emails · relay · by Agent",
     "Audit log export · relay · by Luke",
     "Rate limits · relay",
   ]);
   assert.deepEqual(marks(), [null, null, null]);
-  type("coding agent");
-  assert.deepEqual(rows(), ["Invite emails · relay · by Coding agent"]);
+  type("agent");
+  assert.deepEqual(rows(), ["Invite emails · relay · by Agent"]);
 });
 
 /** Offers ⌘K's own Show my tasks, as the sidebar does while it would change the list, and records each run. */
@@ -1685,11 +1677,12 @@ function itemChord(label: string): string | null {
   return item.querySelector(".luke-shortcut")?.textContent ?? null;
 }
 
-test("a task's command wears the same chord in ⌘K as in the open task's ⋯, ⌘K naming the task where the ⋯ says the verb alone", () => {
+test("a task's command wears the same chord in ⌘K as in the open task's Plan tab ⋯, ⌘K saying a chord several things share by its table's words, and Mark done wearing none", () => {
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
   });
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
@@ -1699,23 +1692,23 @@ test("a task's command wears the same chord in ⌘K as in the open task's ⋯, �
   );
   openPalette(tasks);
   type("permanently delete");
-  const deleteKeys = rowChord("Permanently delete task");
+  const deleteKeys = rowChord("Permanently delete");
   type("mark done");
   const doneKeys = rowChord("Mark done");
   type("copy plan");
-  const copyKeys = rowChord("Copy plan");
+  const copyKeys = rowChord("Copy plan or transcript");
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
   });
 
-  const more = host.querySelector<HTMLButtonElement>('[aria-label="Task actions"]');
-  assert.ok(more, "the task's ⋯ is drawn");
+  // The task's menu is its Plan tab's, in the side panel's bar; Mark done is the plan's status chip's there, and a row's.
+  const more = host.querySelector<HTMLButtonElement>(".side-panel-bar .toolbar-tab-actions button");
+  assert.ok(more, "the Plan tab's ⋯ is drawn");
   act(() => more.click());
   assert.equal(deleteKeys, "⌘⌫");
   assert.equal(itemChord("Permanently delete"), deleteKeys);
-  assert.equal(doneKeys, "⇧⌘A");
-  assert.equal(itemChord("Mark done"), doneKeys);
-  assert.equal(copyKeys, "⇧⌘C");
+  assert.equal(doneKeys, null);
+  assert.equal(copyKeys, "⌥⌘C");
   assert.equal(itemChord("Copy plan"), copyKeys);
 });
 
@@ -1795,7 +1788,7 @@ const ON_AGENT_TAB: TasksControl = tasksControl({
     { id: "workspace-acme", name: "Acme", slug: "acme", role: WORKSPACE_ROLE.MEMBER, github: null },
   ],
   mainTabs: { ...tasksControl().mainTabs, tab: { agent: LINKED_AGENT } },
-  agents: codingAgentsControl({
+  agents: agentsControl({
     agents: [
       {
         id: LINKED_AGENT,
@@ -1804,14 +1797,14 @@ const ON_AGENT_TAB: TasksControl = tasksControl({
         effort: "high",
         title: "Expire old invites",
         createdAt: 3,
-        status: CODING_AGENT_STATUS.RUNNING,
+        status: AGENT_STATUS.RUNNING,
         turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
       },
     ],
   }),
 });
 
-test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⌥⌘C, then to the task, and choosing one copies its link and says Link copied", async () => {
+test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⇧⌘C, then to the task, and choosing one copies its link and says Link copied", async () => {
   const copied = installClipboard();
   drawToasts();
   openPalette(ON_AGENT_TAB);
@@ -1826,14 +1819,12 @@ test("on a task's agent's tab, ⌘K offers Copy link to the agent, wearing ⌥�
     "Copy link to agent · Expire old invites",
     `Copy link to task · ${DOCUMENT_TASK.name}`,
   ]);
-  assert.equal(chord, "⌥⌘C");
-  assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}/agent/${LINKED_AGENT}`,
-  ]);
+  assert.equal(chord, "⇧⌘C");
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${LINKED_AGENT}`]);
   assert.equal(newestToastSays(), "Link copied");
 });
 
-test("⌥⌘C copies the link of what is open, the most specific first: the Inbox's item over the Inbox, an automation over the list, the task under its tabs", async () => {
+test("⇧⌘C copies the link of what is open, the most specific first: the Inbox's item over the Inbox, an automation over the list, the task under its tabs", async () => {
   const copied = installClipboard();
   const automationId = "6e2f3a4b-5c6d-4e7f-8a91-92a3b4c5d6e7";
   const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
@@ -1869,13 +1860,13 @@ test("⌥⌘C copies the link of what is open, the most specific first: the Inbo
   }
 
   assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}/agent/${LINKED_AGENT}`,
+    `https://tryluke.dev/acme/agent/${LINKED_AGENT}`,
     `https://tryluke.dev/acme/agent/${LINKED_AGENT}/inbox/${itemId}`,
     `https://tryluke.dev/acme/automation/${automationId}`,
   ]);
 });
 
-test("on an agent's page with a page it showed open in the panel, ⌥⌘C copies the page's link under the agent's while the panel fills the window, and the agent's own otherwise", async () => {
+test("on an agent's page with a page it showed open in the panel, ⇧⌘C copies the page's link under the agent's while the panel fills the window, and the agent's own otherwise", async () => {
   const copied = installClipboard();
   const pageId = "4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e7f";
   const listed = { workspaces: ON_AGENT_TAB.workspaces, workspace: ON_AGENT_TAB.workspaces[0] };
@@ -1905,7 +1896,7 @@ test("on an agent's page with a page it showed open in the panel, ⌥⌘C copies
   ]);
 });
 
-test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile and ⌥⌘C copies their page's link in the workspace it opened in", async () => {
+test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile and ⇧⌘C copies their page's link in the workspace it opened in", async () => {
   const copied = installClipboard();
   const [acme] = ON_AGENT_TAB.workspaces;
   openPalette(
@@ -1929,7 +1920,7 @@ test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile a
   assert.deepEqual(copied, ["https://tryluke.dev/acme/person/user-charles"]);
 });
 
-test("on the home page nothing has a link, so ⌥⌘C is not offered and ⌘K lists no Copy link", () => {
+test("on the home page nothing has a link, so ⇧⌘C is not offered and ⌘K lists no Copy link", () => {
   openPalette(tasksControl());
   type("copy link");
 
@@ -1940,7 +1931,7 @@ test("on the home page nothing has a link, so ⌥⌘C is not offered and ⌘K li
   assert.equal(appCommandOffered(APP_COMMAND.COPY_LINK), false);
 });
 
-test("with the side panel filling the window over an agent's tab, ⌥⌘C copies the panel's tab, which is what shows", async () => {
+test("with the side panel filling the window over an agent's tab, ⇧⌘C copies the panel's tab, which is what shows", async () => {
   const copied = installClipboard();
   openPalette(
     tasksControl({
@@ -1959,12 +1950,10 @@ test("with the side panel filling the window over an agent's tab, ⌥⌘C copies
   });
   await act(async () => undefined);
 
-  assert.deepEqual(copied, [
-    `https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}/agent/${LINKED_AGENT}/changes`,
-  ]);
+  assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${LINKED_AGENT}/changes`]);
 });
 
-test("⌘K pressed with the keyboard in the side panel offers its tab's link first, wearing ⌥⌘C, as ⌥⌘C there copies", () => {
+test("⌘K pressed with the keyboard in the side panel offers its tab's link first, wearing ⇧⌘C, as ⇧⌘C there copies", () => {
   const panel = document.body.appendChild(document.createElement("div"));
   panel.className = "side-panel";
   const field = panel.appendChild(document.createElement("button"));
@@ -1986,10 +1975,10 @@ test("⌘K pressed with the keyboard in the side panel offers its tab's link fir
       `Copy link to task · ${DOCUMENT_TASK.name}`,
     ],
   );
-  assert.equal(chord, "⌥⌘C");
+  assert.equal(chord, "⇧⌘C");
 });
 
-test("on an agent's page in another workspace than the one listed, ⌥⌘C names the agent's workspace, which the page read", async () => {
+test("on an agent's page in another workspace than the one listed, ⇧⌘C names the agent's workspace, which the page read", async () => {
   const copied = installClipboard();
   openPalette(
     tasksControl({
@@ -2218,7 +2207,7 @@ test("⌘K's Tasks lists the agents with no task among the tasks by their last a
     effort: "high",
     title,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     automationId: null,
     workspaceId: "workspace-1",
@@ -2270,7 +2259,7 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
     effort: "high",
     title: "Triage overnight issues",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     automationId: null,
     workspaceId: "workspace-1",
@@ -2310,7 +2299,7 @@ test("on a one-off agent's page, ⌘K marks the agent unread and then read, and 
     effort: "high",
     title: "Triage overnight issues",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     automationId: null,
     workspaceId: "workspace-1",
@@ -2319,7 +2308,7 @@ test("on a one-off agent's page, ⌘K marks the agent unread and then read, and 
   };
   const seen: string[] = [];
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_SEEN]: ({ agentId }) => {
+    [ACT_KIND.AGENTS_SEEN]: ({ agentId }) => {
       seen.push(agentId);
       return Promise.resolve(undefined);
     },
@@ -2336,7 +2325,9 @@ test("on a one-off agent's page, ⌘K marks the agent unread and then read, and 
       }),
     );
     type("mark");
-    return rows().filter((row) => row.startsWith("Mark as"));
+    return rows().filter(
+      (row) => row.startsWith("Mark as") && !row.endsWith("· Keyboard shortcuts"),
+    );
   };
 
   assert.deepEqual(draw(undefined), []);
@@ -2373,7 +2364,6 @@ function PinnableTask(): React.JSX.Element {
       settings: {
         rows: {
           settings: settingsView(),
-          voiceControlsDrawn: true,
           accountDrawn: true,
           capabilities: DESKTOP_CAPABILITIES,
         },
@@ -2399,7 +2389,7 @@ function pinRows(): string[] {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
   });
   type("pin");
-  return rows().filter((row) => /^(Pin|Unpin) /u.test(row));
+  return rows().filter((row) => /^(Pin|Unpin) task$/u.test(row));
 }
 
 test("with a task open, ⌘K offers Pin task, which pins it under Pinned and turns to Unpin task", () => {
@@ -2443,7 +2433,6 @@ async function paletteUnderState(tasks: TasksControl): Promise<void> {
           settings: {
             rows: {
               settings: settingsView(),
-              voiceControlsDrawn: true,
               accountDrawn: true,
               capabilities: DESKTOP_CAPABILITIES,
             },
@@ -2471,7 +2460,7 @@ test('with a task open, ⌘K\'s "This task" lists its pages and a terminal for e
     effort: "high",
     title: "Invoice export",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
   const chosen: unknown[] = [];
@@ -2491,7 +2480,7 @@ test('with a task open, ⌘K\'s "This task" lists its pages and a terminal for e
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
     pages: [{ id: "page-1", title: "Invite funnel", version: 1, at: 1 }],
     sidePanel: { ...base.sidePanel, onChoose: (tab) => chosen.push(tab) },
-    agents: codingAgentsControl({ agents: [agent], agentIds: [agent.id] }),
+    agents: agentsControl({ agents: [agent], agentIds: [agent.id] }),
   });
   handCapabilities(DESKTOP_CAPABILITIES);
   await paletteUnderState(tasks);
@@ -2572,7 +2561,6 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, Chang
             settings: {
               rows: {
                 settings: settingsView(),
-                voiceControlsDrawn: true,
                 accountDrawn: true,
                 capabilities: DESKTOP_CAPABILITIES,
               },
@@ -2598,6 +2586,57 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, Chang
     `repository:${task.id}`,
     `github:${task.id}`,
   ]);
+});
+
+test("⌘K opened with the keys on a Pull request tab leaves ⇧⌘O off the task's Open on GitHub, since the chord opens the pull request there", () => {
+  const task = { ...DOCUMENT_TASK, repository: "acme/relay" };
+  const base = tasksControl();
+  const tasks = tasksControl({
+    tasks: [task],
+    region: { kind: DOCUMENT_REGION.READY, task },
+    activeTaskId: task.id,
+    sidePanel: { ...base.sidePanel, open: true, tab: { changes: LINKED_AGENT } },
+  });
+  const panel = document.body.appendChild(document.createElement("div"));
+  panel.className = "side-panel";
+  panel.appendChild(document.createElement("button")).focus();
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          Fragment,
+          null,
+          createElement(Looker, { looked: task }),
+          createElement(WindowPalette, {
+            available: true,
+            tab: PANEL_TAB.TASKS,
+            onTabChange: () => undefined,
+            tasks,
+            settings: {
+              rows: {
+                settings: settingsView(),
+                accountDrawn: true,
+                capabilities: DESKTOP_CAPABILITIES,
+              },
+              capabilities: DESKTOP_CAPABILITIES,
+              onViewChange: () => undefined,
+            },
+            readFiles: () => Promise.reject(new Error("no repository is open")),
+          }),
+        ),
+      ),
+    ),
+  );
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K opens");
+  });
+  chooseFilter("Commands");
+  type("open on github");
+
+  assert.equal(rowChord("Open on GitHub"), null);
 });
 
 /** The open task's page in `room`, its panel on the plan, beside the palette, the plan looked at as the window's shell looks at it. */
@@ -2643,7 +2682,6 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
             settings: {
               rows: {
                 settings: settingsView(),
-                voiceControlsDrawn: true,
                 accountDrawn: true,
                 capabilities: DESKTOP_CAPABILITIES,
               },
@@ -2688,7 +2726,7 @@ test("on a one-off agent's page, ⌘K's Archive agent archives it, and an archiv
     effort: "high",
     title: "Triage overnight issues",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     automationId: null,
     workspaceId: "workspace-1",
@@ -2705,7 +2743,7 @@ test("on a one-off agent's page, ⌘K's Archive agent archives it, and an archiv
       tasksControl({
         agentView: { agentId: agent.id, onOpen: () => undefined, onClose: () => undefined },
         listedAgents,
-        agents: codingAgentsControl({
+        agents: agentsControl({
           onArchive: (agentId, archived) => {
             asked.push(`${agentId}:${String(archived)}`);
             return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
@@ -2757,7 +2795,7 @@ function servingLuke(agentId: string): SentPortAct[] {
   fakeActPortAnswering((request) => {
     sent.push(request);
     return Promise.resolve(
-      request.kind === ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR ? { agentId } : undefined,
+      request.kind === ACT_KIND.AGENTS_ENSURE_OPERATOR ? { agentId } : undefined,
     );
   });
   return sent;
@@ -2778,9 +2816,9 @@ test("⌘K's first entry is Ask Luke while the account has the operator on, whic
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           title: "Orla",
-          kind: CODING_AGENT_KIND.OPERATOR,
+          kind: AGENT_KIND.OPERATOR,
           createdAt: 1,
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           turnId: null,
           automationId: null,
           workspaceId: ACME.id,
@@ -2795,9 +2833,9 @@ test("⌘K's first entry is Ask Luke while the account has the operator on, whic
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           title: "Ines",
-          kind: CODING_AGENT_KIND.OPERATOR,
+          kind: AGENT_KIND.OPERATOR,
           createdAt: 0,
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           turnId: null,
           archivedAt: 1,
           automationId: null,
@@ -2845,7 +2883,7 @@ test("⌘K offers no Ask Luke and ensures nothing while the account has the oper
 
   assert.ok(!rows().includes("Ask Luke"));
   assert.deepEqual(
-    sent.filter((request) => request.kind === ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR),
+    sent.filter((request) => request.kind === ACT_KIND.AGENTS_ENSURE_OPERATOR),
     [],
   );
 });
@@ -2906,7 +2944,7 @@ const ASKER = {
   title: "Rotate secrets",
   model: "anthropic/claude-opus-4.5",
   effort: "high",
-  status: CODING_AGENT_STATUS.RUNNING,
+  status: AGENT_STATUS.RUNNING,
 } as const;
 
 /** A task holding Inbox items, its agent summed up so each item's tile names it. */
@@ -2964,7 +3002,7 @@ const PREVIEWS: InboxItem = {
 };
 
 /** The palette over a window whose listed workspace's task holds the items main pushes as `inbox` says, main's word of it last changed at `changed`, every Inbox item it opens recorded. */
-function paletteOverInbox(inbox: () => CodingAgentInboxChanged["inbox"], changed = 9_000) {
+function paletteOverInbox(inbox: () => AgentInboxChanged["inbox"], changed = 9_000) {
   const main = followedInboxes((scope) =>
     scope.kind === INBOX_SCOPE_KIND.PLAN && scope.id === ROTATION.id ? inbox() : undefined,
   );
@@ -3039,12 +3077,14 @@ test("choosing an Inbox item opens it in the Inbox, as a notification's would", 
 
   press("Use acme.dev for previews? · Billing usage alerts");
 
-  assert.deepEqual(opened, [{ taskId: ROTATION.id, itemId: PREVIEWS.id, opened: true }]);
+  assert.deepEqual(opened, [
+    { taskId: ROTATION.id, itemAgentId: PREVIEWS.agentId, itemId: PREVIEWS.id, opened: true },
+  ]);
   assert.equal(paletteShown(), false, "the palette closed");
 });
 
 test("an Inbox that could not be read says so, rather than that nothing matches", async () => {
-  paletteOverInbox(() => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+  paletteOverInbox(() => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
   chooseFilter("Inbox");
   await settle();
 
@@ -3125,7 +3165,7 @@ test("while main says a task's inbox changed later than its push, a query it doe
 });
 
 test("an Inbox that could not be read says so in the Inbox's own group, beside the rows other groups matched, and its Retry reads it again", async () => {
-  paletteOverInbox(() => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+  paletteOverInbox(() => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
 
   type("billing");
   await settle();

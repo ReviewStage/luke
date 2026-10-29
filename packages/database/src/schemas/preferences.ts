@@ -1,5 +1,5 @@
+import type { AgentMachineKind, ContextWindow } from "@luke/features/agent-wire";
 import type { ChaptersModelId } from "@luke/features/chapters-model-choice";
-import type { CodingAgentMachine, ContextWindow } from "@luke/features/coding-agent-wire";
 import type { LinkOpen } from "@luke/features/link-open";
 import type { ExperimentChoices } from "@luke/settings";
 import { jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
@@ -16,13 +16,12 @@ export const accountPreference = pgTable("account_preference", {
     .primaryKey()
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  voice: text("voice"),
   /**
    * Where the account's Luke links open (`@luke/features/link-open`); null
    * until the account chooses, which reads as the browser. A part of the
-   * snapshot of its own rather than the shared preferences beside `voice`,
-   * so a build that predates it, writing that part whole, never clears it;
-   * written alone, it moves no `updated_at`.
+   * snapshot of its own rather than the shared preferences, so a build that
+   * predates it, writing that part whole, never clears it; written alone, it
+   * moves no `updated_at`.
    */
   linkOpen: text("link_open").$type<LinkOpen>(),
   /**
@@ -60,7 +59,7 @@ export const accountPreference = pgTable("account_preference", {
    * since removed is still told apart from no pick at all. Written alone,
    * it moves no `updated_at`.
    */
-  runsOnMachine: text("runs_on_machine").$type<CodingAgentMachine>(),
+  runsOnMachine: text("runs_on_machine").$type<AgentMachineKind>(),
   runsOnDeviceId: uuid("runs_on_device_id"),
   createdAt: createdAt(),
   /**
@@ -68,7 +67,7 @@ export const accountPreference = pgTable("account_preference", {
    * coding-agent choice opened. The desktop reads the instant's presence as
    * a snapshot to apply over its own settings, so a row with none written
    * must answer none, or a never-synced Mac would take an empty snapshot
-   * over the voice it holds.
+   * over the settings it holds.
    */
   updatedAt: timestamptz("updated_at"),
 });

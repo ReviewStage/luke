@@ -151,7 +151,6 @@ import {
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { GLYPH } from "@luke/ui/icons";
 import { useDisclosure } from "@luke/ui/use-disclosure";
-import { useOptimisticSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
 import { HistoryIcon, PlayIcon, SaveIcon, ZapIcon } from "lucide-react";
@@ -278,8 +277,6 @@ export interface AutomationWrites {
   remove(automationId: string): Promise<AutomationDeletedView>;
   /** Mints a webhook's secret again, answering it once for this page to show. */
   newWebhookSecret(automationId: string): Promise<AutomationView>;
-  /** Reads the list again, as a Run now settling moves an automation's newest run. */
-  reload(): void;
 }
 
 /** The kinds of schedule as the picker offers them, in its order. */
@@ -370,7 +367,7 @@ const SAVE_REFUSAL_WORDS = {
 } as const satisfies Record<AutomationCallFailure, string>;
 
 /** Why a Run now did not start a run, as the line under the name says it. */
-const RUN_REFUSAL_WORDS = {
+export const RUN_REFUSAL_WORDS = {
   ...SAVE_REFUSAL_WORDS,
   [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Could not run it now. Try again.",
   [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
@@ -390,15 +387,11 @@ const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
 /**
  * An automation's on/off switch, the list row's and the editor's alike. It
- * flips at once, from a local value, and a write the service refuses puts it
- * back and says why in a FAILED toast, as a settings switch does; it never
- * rests for a write.
- *
- * Note that its writes go one at a time, because the service reads and writes
- * each request on its own, so two in flight could commit in either order and
- * leave the opposite of the last press. A press made while one is out waits for
- * it, only the newest waiting press is sent, and one that would only repeat
- * what the burst just sent is not.
+ * reads the automation as the host draws it, which a press turns at once and
+ * a write the service refuses turns back (`@luke/host`'s
+ * `automation-collections.ts`), and says why in a FAILED toast, as a settings
+ * switch does; it never rests for a write. Writes to one automation go to the
+ * service in the order pressed, which the host keeps.
  */
 export function AutomationSwitch({
   automation,
@@ -408,43 +401,19 @@ export function AutomationSwitch({
   write: (enabled: boolean) => Promise<AutomationView>;
 }): React.JSX.Element {
   const toast = useToast();
-  const tail = useRef<Promise<unknown>>(Promise.resolve());
-  const newest = useRef(0);
-  const sent = useRef<boolean | undefined>(undefined);
-  const send = (enabled: boolean, press: number): Promise<ActionResult> => {
-    if (press !== newest.current || sent.current === enabled) return Promise.resolve(ACCEPTED);
-    sent.current = enabled;
-    const settle = () => {
-      if (press === newest.current) sent.current = undefined;
-    };
-    return write(enabled).then(
-      (answer): ActionResult => {
-        const reason = toggleRefusal(answer, enabled);
-        if (reason !== undefined) sent.current = undefined;
-        settle();
-        return reason === undefined ? ACCEPTED : { status: ACTION_RESULT_STATUS.REJECTED, reason };
-      },
-      (error: unknown) => {
-        sent.current = undefined;
-        throw error;
-      },
-    );
+  const turn = (enabled: boolean) => {
+    write(enabled).then((answer) => {
+      const reason = toggleRefusal(answer, enabled);
+      if (reason !== undefined) {
+        toast({ words: reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      }
+    });
   };
-  const { value, run } = useOptimisticSettingWrite(
-    automation.enabled,
-    (enabled) => {
-      const press = ++newest.current;
-      const answered = tail.current.then(() => send(enabled, press));
-      tail.current = answered.catch(() => undefined);
-      return answered;
-    },
-    (words) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
-  );
   return (
     <Switch
-      checked={value}
-      label={value ? `Turn off ${automation.name}` : `Turn on ${automation.name}`}
-      onChange={run}
+      checked={automation.enabled}
+      label={automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`}
+      onChange={turn}
       {...NO_CONTEXT_MENU}
     />
   );
@@ -1022,16 +991,47 @@ function EditorTitle({
 /** What the editor's ⋯ is called. */
 const ACTIONS_THING = "Automation";
 
-/** The editor's ⋯: Copy link, the automation's, where the page hands down a workspace, and Delete, red, which asks first. */
+/** Run now, as an automation's row and its editor's ⋯ offer it, dimmed while one is out. */
+export function runNowAction(running: boolean, onRunNow: () => void): MenuAction {
+  return { label: "Run now", icon: <PlayIcon />, disabled: running, onSelect: onRunNow };
+}
+
+/**
+ * An automation's own acts, as its row and its editor's ⋯ offer them alike:
+ * Copy link, where the page hands down a workspace; Run now, where it can
+ * run; and Delete, red, which asks first, last and alone.
+ */
+export function automationActionGroups({
+  copyLink,
+  runNow,
+  onDelete,
+}: {
+  copyLink: MenuAction | undefined;
+  runNow: MenuAction | undefined;
+  onDelete: () => void;
+}): MenuAction[][] {
+  return [
+    copyLink === undefined ? [] : [copyLink],
+    runNow === undefined ? [] : [runNow],
+    [{ label: "Delete", icon: <GLYPH.DELETE />, onSelect: onDelete, danger: true }],
+  ].filter((group) => group.length > 0);
+}
+
+/** The editor's ⋯: the automation's own acts (`automationActionGroups`), under whatever a phone leads it with. */
 function AutomationActions({
   automation,
   onDelete,
+  running,
+  onRunNow,
   lead = [],
   heading,
 }: {
-  /** The automation, whose link and Delete the menu offers; none on a new automation's page, a phone's alone. */
+  /** The automation, whose link, Run now, and Delete the menu offers; none on a new automation's page, a phone's alone. */
   automation: AutomationSummary | undefined;
   onDelete: () => void;
+  /** Whether a Run now is out. */
+  running: boolean;
+  onRunNow: () => void;
   /** Groups over the automation's own, as a phone's ⋯ leads with the toolbar's acts (`EditorToolbar`); none elsewhere. */
   lead?: readonly MenuAction[][];
   /** Muted over the items: where the draft stands, on a phone. */
@@ -1039,16 +1039,14 @@ function AutomationActions({
 }): React.JSX.Element {
   const menu = useMenu(true);
   const linkItem = useCopyLinkItem();
-  const copyLink =
+  const own =
     automation === undefined
-      ? undefined
-      : linkItem({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
-  const remove: MenuAction = {
-    label: "Delete",
-    icon: <GLYPH.DELETE />,
-    onSelect: onDelete,
-    danger: true,
-  };
+      ? []
+      : automationActionGroups({
+          copyLink: linkItem({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id }),
+          runNow: runNowAction(running, onRunNow),
+          onDelete,
+        });
   return (
     <>
       <MoreButton thing={ACTIONS_THING} {...menu.trigger()} />
@@ -1057,11 +1055,7 @@ function AutomationActions({
           label={moreLabel(ACTIONS_THING)}
           menu={menu.drawn}
           heading={heading}
-          groups={[
-            ...lead,
-            ...(copyLink === undefined ? [] : [[copyLink]]),
-            ...(automation === undefined ? [] : [[remove]]),
-          ].filter((group) => group.length > 0)}
+          groups={[...lead, ...own].filter((group) => group.length > 0)}
           onClose={menu.close}
         />
       )}
@@ -1185,9 +1179,6 @@ function EditorToolbar({
           disabled: saving || !(automation === undefined || dirty),
           onSelect: onSave,
         },
-        ...(automation === undefined
-          ? []
-          : [{ label: "Run now", icon: <PlayIcon />, disabled: running, onSelect: onRunNow }]),
       ],
       automation === undefined
         ? []
@@ -1211,6 +1202,8 @@ function EditorToolbar({
           <AutomationActions
             automation={automation}
             onDelete={onDelete}
+            running={running}
+            onRunNow={onRunNow}
             lead={lead.filter((group) => group.length > 0)}
             heading={status}
           />
@@ -1248,7 +1241,12 @@ function EditorToolbar({
       {automation === undefined ? null : (
         <>
           <AutomationSwitch automation={automation} write={onToggle} />
-          <AutomationActions automation={automation} onDelete={onDelete} />
+          <AutomationActions
+            automation={automation}
+            onDelete={onDelete}
+            running={running}
+            onRunNow={onRunNow}
+          />
         </>
       )}
       {/* The Runs panel's toggle, the side panel's own button and chord at the window's top right; in a narrow room, the way to the runs' own screen. */}
@@ -1281,7 +1279,7 @@ const SENDER_CHOICES: readonly { value: GitHubSender; label: string; detail?: st
   {
     value: GITHUB_SENDER.LUKE_AGENTS,
     label: "From Luke's agents",
-    detail: "What Luke's coding agents open, as you or as the workspace's GitHub App.",
+    detail: "What Luke's agents open, as you or as the workspace's GitHub App.",
   },
   {
     value: GITHUB_SENDER.OTHER_BOTS,
@@ -2592,8 +2590,6 @@ export function AutomationEditor({
     setRefusal(undefined);
     runs.runNow().then((answer) => {
       setRunning(false);
-      // The automation's newest run moved, so the list it stands in is read again too.
-      writes.reload();
       if ("failure" in answer) setRefusal(RUN_REFUSAL_WORDS[answer.failure]);
     });
   };

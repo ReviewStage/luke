@@ -79,8 +79,12 @@ export const HOSTED_SERVICE_PATH = {
    * Realtime. `live-wire.ts` declares the answer.
    */
   LIVE_INBOX: "/api/live/inbox",
-  /** One task's whiteboard under `?id=`, sealed for following over Neon Realtime (GET): where it stands, or `not-found` or `unavailable`. */
-  LIVE_TASK_BOARD: "/api/live/task-board",
+  /**
+   * Every inbox item the account reaches, sealed for following over Neon
+   * Realtime (GET): where each stands, and those changed since `?since=`
+   * whole, or `unavailable`. `live-wire.ts` declares the answer.
+   */
+  LIVE_INBOX_ITEMS: "/api/live/inbox-items",
   /** One task's pages and calls under `?id=`, each part's mark sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
   LIVE_TASK_RECORD: "/api/live/task-record",
   /** One task's pages under `?id=`, each at its newest version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
@@ -91,6 +95,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_TASK_HISTORY: "/api/live/task-history",
   /** One task's Browser tabs under `?id=`, the agent's pointer on each among them, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
   LIVE_TASK_BROWSER_TABS: "/api/live/task-browser-tabs",
+  /** One coding agent's Browser tabs under `?id=`, on a task or on none, on the terms a task's are. */
+  LIVE_AGENT_BROWSER_TABS: "/api/live/agent-browser-tabs",
   /** One agent's transcript under `?id=`, or one of its workers' under `&call=`, sealed for following over Neon Realtime (GET): what its pages are read from, or `not-found` or `unavailable`. */
   LIVE_AGENT_TRANSCRIPT: "/api/live/agent-transcript",
   /** One task's inbox under `?id=`, sealed for following over Neon Realtime (GET): its open and latest settled items, or `not-found` or `unavailable`. */
@@ -120,7 +126,7 @@ export const HOSTED_SERVICE_PATH = {
    * the archived ones left out unless the query asks for them, narrowed to
    * one repository where the query names one (GET), what an automation's
    * Same agent and an `@` list's agents are chosen from; the plan list's
-   * answer (`coding-agent-wire.ts`).
+   * answer (`agent-wire.ts`).
    */
   AGENTS: "/api/agents",
   /**
@@ -245,6 +251,13 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_REPOSITORY_TREE: "/api/github/repositories/tree",
   /**
+   * A window of one file of a repository a workspace's installation
+   * reaches, as GitHub holds it now or at a commit (GET), named as
+   * `GITHUB_REPOSITORY_TREE` names it, its window queried as a plan's File
+   * tab queries its own; the answer is a plan's file's (`task-wire.ts`).
+   */
+  GITHUB_REPOSITORY_FILE: "/api/github/repositories/file",
+  /**
    * The skills a developer may choose of a repository a workspace's
    * installation reaches (GET), named as `GITHUB_REPOSITORY_TREE` names it;
    * the answer is a plan's skills' (`plan-wire.ts`).
@@ -266,14 +279,6 @@ export const HOSTED_SERVICE_PATH = {
    * to draw.
    */
   GITHUB_REPOSITORY_ISSUE: "/api/github/repositories/issue",
-  /**
-   * The issues of a repository a workspace's installation reaches, as New
-   * task's picker reads them (GET): named as `GITHUB_REPOSITORY_ISSUE` names
-   * one, with the words searched for or the number of the one asked; the
-   * answer is `github-repositories-wire.ts`'s, or why the installation
-   * reads none.
-   */
-  GITHUB_REPOSITORY_ISSUES: "/api/github/repositories/issues",
   /**
    * Sends the browser to GitHub to install the Luke GitHub App, or to change
    * which repositories it reaches (GET). GitHub returns the browser to
@@ -345,18 +350,6 @@ export const HOSTED_SERVICE_PATH = {
   /** A workspace's GitHub organization disconnected by an owner or admin (POST), answering the workspace. */
   WORKSPACE_GITHUB_DISCONNECT: "/api/workspaces/github/disconnect",
   /**
-   * Where an owner or admin connects Linear for a whole workspace (POST):
-   * answers Vercel Connect's sign-in address, which returns the browser to
-   * `/api/workspaces/linear/connected` (`linear-wire.ts`).
-   */
-  WORKSPACE_LINEAR_CONNECT: "/api/workspaces/linear/connect",
-  /** Where Vercel Connect returns the browser from a workspace's Linear sign-in (GET), which lands it on the integrations landing page. */
-  WORKSPACE_LINEAR_CONNECTED: "/api/workspaces/linear/connected",
-  /** A workspace's Linear disconnected by an owner or admin (POST), answering the workspace. */
-  WORKSPACE_LINEAR_DISCONNECT: "/api/workspaces/linear/disconnect",
-  /** The Linear issues a member of a workspace may start a plan from, or those a search matches (POST). */
-  WORKSPACE_LINEAR_ISSUES: "/api/workspaces/linear/issues",
-  /**
    * Where an owner or admin installs Luke's Sentry integration for a
    * workspace (POST): answers Sentry's install address, carrying a
    * single-use intent Sentry returns to `SENTRY_INSTALLED` with
@@ -398,17 +391,6 @@ export const HOSTED_SERVICE_PATH = {
   /** A pending invitation canceled by an owner or an admin (POST), answered with those still pending. */
   WORKSPACES_INVITATIONS_CANCEL: "/api/workspaces/invitations/cancel",
   WORKSPACES_INVITATION_OFFER: "/api/workspaces/invitations/offer",
-} as const;
-
-/**
- * Where the hosted voice service answers: a Vercel Function of the same
- * service, reached at `HOSTED_VOICE_SERVICE_ORIGIN`, the socket form of the
- * service's own origin. The path is a WebSocket upgrade; one connection
- * carries one session, or one attachment to a session that stands.
- */
-export const VOICE_SERVICE_PATH = {
-  /** A signed-in Mac's WebRTC voice session; the account bearer travels on the handshake. */
-  SESSIONS: "/api/voice/sessions",
 } as const;
 
 /** One of the account's automations: change it (PATCH) or delete it with its history (DELETE). */

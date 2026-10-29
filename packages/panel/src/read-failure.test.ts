@@ -2,10 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentChangesAnswerView,
-} from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE, type AgentChangesAnswerView } from "@luke/features/agent-view";
 import { PLAN_ACTOR, type PlanRevisionLine, type TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -30,7 +27,7 @@ import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { followedInboxes } from "./testing/followed-inboxes.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl } from "./testing/tasks-control.js";
+import { agentsControl, tasksControl } from "./testing/tasks-control.js";
 
 /**
  * A read that did not land says so alike on every surface that reads: the
@@ -41,7 +38,7 @@ import { codingAgentsControl, tasksControl } from "./testing/tasks-control.js";
  */
 
 const ignore = () => undefined;
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 const TASK: TaskSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -72,7 +69,7 @@ beforeEach(() => {
   fakeActPort({
     // Every followed inbox could not be read until the service answers again, then holds nothing.
     ...host.procedures,
-    [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }),
+    [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [] }),
     [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.resolve(answering ? { keys: [] } : UNANSWERED),
   });
 });
@@ -200,8 +197,7 @@ test("the Inbox's list says a plan it could not read as the sidebar does, and Re
           onChoose: ignore,
           onOpenItem: () => undefined,
           onOpenChannel: () => undefined,
-          listed: false,
-          onListed: ignore,
+          onClear: ignore,
           pages: undefined,
           onTaskAgents: () => undefined,
         },
@@ -218,14 +214,14 @@ test("the Inbox's list says a plan it could not read as the sidebar does, and Re
 
 test("a side panel tab whose read failed says so alike, and Retry reads them again", async () => {
   let reads = 0;
-  const readChanges = (): Promise<CodingAgentChangesAnswerView> => {
+  const readChanges = (): Promise<AgentChangesAnswerView> => {
     reads += 1;
     return Promise.resolve(reads === 1 ? UNANSWERED : { pullRequest: null });
   };
   const page = await mount(
     createElement(ChangesTabReading, {
       agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-      control: codingAgentsControl({ readChanges }),
+      control: agentsControl({ readChanges }),
       shown: true,
       repository: null,
       tree: { open: false, onToggle: ignore },
@@ -277,8 +273,7 @@ const INBOX_VIEW = {
   onChoose: ignore,
   onOpenItem: () => undefined,
   onOpenChannel: () => undefined,
-  listed: false,
-  onListed: ignore,
+  onClear: ignore,
   pages: undefined,
   onTaskAgents: () => undefined,
 } as const;
@@ -303,7 +298,7 @@ test("an Inbox whose task list could not be read says so, never that nothing nee
 
 const REVISION: PlanRevisionLine = {
   seq: 2,
-  lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 20, duringCall: true },
+  lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 20, duringCall: false },
   startedAt: 20,
   changes: 2,
 };

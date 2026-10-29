@@ -18,8 +18,7 @@ import type { InboxChannelHead } from "./inbox-list.js";
  * its list, its reading pane, and its keys are the Inbox's own; only its
  * head is the channel's. An archived channel opened from Browse archived
  * channels heads its list with when it was archived in its purpose's place
- * and Unarchive in New thread's, since a thread started there would land
- * in #general; a refusal stands under the head. Where the workspace's
+ * and Unarchive beside it; a refusal stands under the head. Where the workspace's
  * channels could not be read, the list's place says so with Retry rather
  * than standing a list narrowed to a channel it cannot name.
  */

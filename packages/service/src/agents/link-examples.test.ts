@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
+import { AGENT_BRIEF } from "@luke/features/agent-wire";
 import { LINK_PLACE, readLink } from "@luke/features/link-grammar";
 import { decodeMention, isMentionLabel, MENTION_KIND } from "@luke/features/mention-link";
 import { test } from "vitest";
@@ -59,7 +59,7 @@ function drawnAs(words: string): (string | undefined)[] {
 test("a coding agent is shown to name each kind as a mention Luke draws as its chip, its task's own under its task's link and only where it has a task, and one on no task its own pages under its own link", () => {
   const shared = [MENTION_KIND.FILE, MENTION_KIND.FILE, MENTION_KIND.LINK, MENTION_KIND.LINK];
   const own = [MENTION_KIND.TASK, MENTION_KIND.SECTION, MENTION_KIND.PAGE];
-  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+  for (const brief of Object.values(AGENT_BRIEF)) {
     for (const onTask of [true, false]) {
       const words = coderInstructions(REPOSITORY, brief, true, onTask ? TASK_ADDRESS : null);
       const told = words.slice(words.indexOf("## What your messages are"));
@@ -106,7 +106,7 @@ test("a coding agent is shown to name an MCP server as a mention Luke draws as i
   for (const onTask of [true, false]) {
     const words = coderInstructions(
       REPOSITORY,
-      CODING_AGENT_BRIEF.PROMPT,
+      AGENT_BRIEF.PROMPT,
       true,
       onTask ? TASK_ADDRESS : null,
     );
@@ -125,6 +125,6 @@ function datesIn(words: string): (string | undefined)[] {
 }
 
 test("a coding agent is shown a day, a time, and a range, each a date Luke draws as its chip", () => {
-  const words = coderInstructions(REPOSITORY, CODING_AGENT_BRIEF.PLAN, true, TASK_ADDRESS);
+  const words = coderInstructions(REPOSITORY, AGENT_BRIEF.PLAN, true, TASK_ADDRESS);
   assert.deepEqual(datesIn(words), [MENTION_KIND.DATE, MENTION_KIND.DATE, MENTION_KIND.DATE]);
 });

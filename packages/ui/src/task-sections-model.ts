@@ -1,11 +1,11 @@
 /**
  * task-sections-model.ts -- the sidebar's sections, their order, the tasks and agents each holds, and the writes a drag or a menu asks of them.
  *
- * Every function is pure over the account's sections as the service last
- * answered them (`@luke/features/task-section-wire`). A write the window
- * asked and the service has not yet answered is drawn by `applySectionWrite`
- * over what was read, so a drop lands where it was let go before the
- * service's word comes back. The sections stand in the order dragged, a
+ * Every function is pure over the account's sections as the host draws them
+ * (`@luke/features/task-section-wire`), a write the service has not yet
+ * answered among them (`@luke/features/task-section-writes`), so a drop
+ * lands where it was let go before the service's word comes back. The
+ * sections stand in the order dragged, a
  * section never dragged on top, newest made first, as Pinned's pins do
  * (`pin-order.ts`), and so do the rows in each, an agent with no task's
  * among the tasks' in the one order, as an agent's pin stands among the
@@ -19,45 +19,27 @@ import {
   pinPositionsForMove,
 } from "@luke/features/pin-order";
 import {
-  type AgentSectionEntry,
   TASK_SECTION_WRITE,
   type TaskSection,
   type TaskSectionEntry,
   type TaskSections,
   type TaskSectionWrite,
 } from "@luke/features/task-section-wire";
+import {
+  allEntries,
+  entryFor,
+  isAgentEntry,
+  keepsMember,
+  memberOf,
+  type SectionEntry,
+  type SectionMember,
+} from "@luke/features/task-section-writes";
 
 /** What a refused change to the sections says, the drag or the menu that asked having gone. */
 export const SECTION_WRITE_FAILED_NOTE = "Your sections could not be changed. Try again.";
 
 /** No sections and no tasks in any, as before the first read lands. */
 export const NO_TASK_SECTIONS: TaskSections = { sections: [], entries: [], agentEntries: [] };
-
-/** A row a section keeps: a task's entry, or an agent with no task's. */
-export type SectionEntry = TaskSectionEntry | AgentSectionEntry;
-
-/** Which row a write puts in a section: a task, or an agent with no task, named as a pin's move names one. */
-export interface SectionMember {
-  readonly agent: boolean;
-  readonly id: string;
-}
-
-/** Whether a section's row is an agent's. */
-export function isAgentEntry(entry: SectionEntry): entry is AgentSectionEntry {
-  return "agentId" in entry;
-}
-
-/** The row an entry keeps. */
-export function memberOf(entry: SectionEntry): SectionMember {
-  return isAgentEntry(entry)
-    ? { agent: true, id: entry.agentId }
-    : { agent: false, id: entry.taskId };
-}
-
-/** Whether an entry keeps the row named. */
-function keeps(entry: SectionEntry, member: SectionMember): boolean {
-  return isAgentEntry(entry) === member.agent && memberOf(entry).id === member.id;
-}
 
 /** The write that puts the row in a section at a place, or by its instant, or, under null, in none. */
 function placeWrite(
@@ -71,19 +53,6 @@ function placeWrite(
     : { kind: TASK_SECTION_WRITE.PLACE, taskId: member.id, sectionId, ...where };
 }
 
-/** An entry for the row, in the section, put there at `addedAt`. */
-function entryFor(
-  member: SectionMember,
-  sectionId: string,
-  addedAt: number,
-  position?: string,
-): SectionEntry {
-  const where = position === undefined ? undefined : { position };
-  return member.agent
-    ? { agentId: member.id, sectionId, addedAt, ...where }
-    : { taskId: member.id, sectionId, addedAt, ...where };
-}
-
 /** Where a section stands among the others. */
 const sectionPlace = (section: TaskSection): PinPlace => ({
   position: section.position,
@@ -95,97 +64,6 @@ const entryPlace = (entry: SectionEntry): PinPlace => ({
   position: entry.position,
   at: entry.addedAt,
 });
-
-/** Every entry of the state, the tasks' and the agents' alike. */
-function allEntries(state: TaskSections): SectionEntry[] {
-  return [...state.entries, ...state.agentEntries];
-}
-
-/** The state with its entries replaced, each kind back in its own list. */
-function withEntries(state: TaskSections, entries: readonly SectionEntry[]): TaskSections {
-  const tasks: TaskSectionEntry[] = [];
-  const agents: AgentSectionEntry[] = [];
-  for (const entry of entries) {
-    if (isAgentEntry(entry)) agents.push(entry);
-    else tasks.push(entry);
-  }
-  return { ...state, entries: tasks, agentEntries: agents };
-}
-
-/** A task or an agent put in a section, or moved within it, as the service would keep it. */
-function placed(
-  state: TaskSections,
-  member: SectionMember,
-  write: { readonly sectionId: string | null; readonly position?: string },
-  now: number,
-): TaskSections {
-  const { sectionId, position } = write;
-  const entries = allEntries(state);
-  const others = entries.filter((entry) => !keeps(entry, member));
-  if (sectionId === null) return withEntries(state, others);
-  if (!state.sections.some((section) => section.id === sectionId)) return state;
-  const standing = entries.find((entry) => keeps(entry, member));
-  const kept = standing?.sectionId === sectionId ? standing : undefined;
-  const where = position ?? kept?.position;
-  return withEntries(state, [...others, entryFor(member, sectionId, kept?.addedAt ?? now, where)]);
-}
-
-/**
- * The sections as the service will answer them once it has taken `write`,
- * made at `now`: a section made, edited, moved, or deleted with its
- * entries, or a task or an agent put in a section or in none. A write naming a section
- * the state does not hold changes nothing, as the service refuses it.
- */
-export function applySectionWrite(
-  state: TaskSections,
-  write: TaskSectionWrite,
-  now: number,
-): TaskSections {
-  switch (write.kind) {
-    case TASK_SECTION_WRITE.CREATE: {
-      if (state.sections.some((section) => section.id === write.id)) return state;
-      const { id, workspaceId, title, icon } = write;
-      const made: TaskSection = {
-        id,
-        workspaceId,
-        title,
-        createdAt: now,
-        ...(icon === undefined ? undefined : { icon }),
-      };
-      return { ...state, sections: [...state.sections, made] };
-    }
-    case TASK_SECTION_WRITE.EDIT:
-      return {
-        ...state,
-        sections: state.sections.map((section) => {
-          if (section.id !== write.id) return section;
-          const { icon: _, ...rest } = section;
-          return {
-            ...rest,
-            title: write.title,
-            ...(write.icon === null ? undefined : { icon: write.icon }),
-          };
-        }),
-      };
-    case TASK_SECTION_WRITE.MOVE:
-      return {
-        ...state,
-        sections: state.sections.map((section) =>
-          section.id === write.id ? { ...section, position: write.position } : section,
-        ),
-      };
-    case TASK_SECTION_WRITE.DELETE:
-      return {
-        sections: state.sections.filter((section) => section.id !== write.id),
-        entries: state.entries.filter((entry) => entry.sectionId !== write.id),
-        agentEntries: state.agentEntries.filter((entry) => entry.sectionId !== write.id),
-      };
-    case TASK_SECTION_WRITE.PLACE:
-      return placed(state, { agent: false, id: write.taskId }, write, now);
-    case TASK_SECTION_WRITE.PLACE_AGENT:
-      return placed(state, { agent: true, id: write.agentId }, write, now);
-  }
-}
 
 /** The workspace's sections, in the order the sidebar draws them. */
 export function workspaceSections(state: TaskSections, workspaceId: string): TaskSection[] {
@@ -202,7 +80,7 @@ export function sectionEntries(state: TaskSections): ReadonlyMap<string, TaskSec
 
 /** The section the row stands in, where it stands in one. */
 export function memberSection(state: TaskSections, member: SectionMember): string | undefined {
-  return allEntries(state).find((entry) => keeps(entry, member))?.sectionId;
+  return allEntries(state).find((entry) => keepsMember(entry, member))?.sectionId;
 }
 
 /** A section's entries, the tasks' and the agents' together, in the order the sidebar draws its rows. */
@@ -265,7 +143,7 @@ export function placeWrites(
   to: number,
   now: number,
 ): TaskSectionWrite[] {
-  const from = order.findIndex((entry) => keeps(entry, member));
+  const from = order.findIndex((entry) => keepsMember(entry, member));
   const at = Math.max(0, Math.min(to, order.length - (from < 0 ? 0 : 1)));
   if (from >= 0) return entryMoveWrites(order, sectionId, from, at);
   const moving = entryFor(member, sectionId, now);
@@ -292,7 +170,7 @@ export function placeAllWrites(
   now: number,
 ): TaskSectionWrite[] {
   let order = sectionOrder(state, sectionId).filter(
-    (entry) => !members.some((member) => keeps(entry, member)),
+    (entry) => !members.some((member) => keepsMember(entry, member)),
   );
   const writes: TaskSectionWrite[] = [];
   for (const member of [...members].reverse()) {
@@ -333,7 +211,7 @@ export function restoreWrites(
   const back = due.map((member) => {
     const from = memberSection(before, member);
     const was = from === undefined ? [] : sectionOrder(before, from);
-    return { member, from, was, at: was.findIndex((entry) => keeps(entry, member)) };
+    return { member, from, was, at: was.findIndex((entry) => keepsMember(entry, member)) };
   });
   // Note that each section's rows go back from the top down, so each lands under those put back before it.
   for (const { member, from, was, at } of back.sort((a, b) => a.at - b.at)) {
@@ -344,7 +222,7 @@ export function restoreWrites(
     const order = orders.get(from) ?? sectionOrder(current, from);
     const above = was
       .slice(0, at)
-      .filter((entry) => order.some((each) => keeps(each, memberOf(entry)))).length;
+      .filter((entry) => order.some((each) => keepsMember(each, memberOf(entry)))).length;
     const entry = entryFor(member, from, now);
     const positions = pinPositionsForInsert(order, entry, above, entryPlace);
     const next = [...order];

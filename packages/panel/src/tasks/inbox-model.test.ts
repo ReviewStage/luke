@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -20,9 +21,11 @@ import { TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { test } from "vitest";
+import { INBOX_MISSING } from "./inbox-ask-words.js";
 import {
   ANSWER_TONE,
   acknowledgedOnOpen,
+  agentGroups,
   asksNod,
   awaitsNod,
   CODE_READ,
@@ -32,13 +35,12 @@ import {
   doDecision,
   EMPTY_INBOX_DRAFT,
   EVERYONES,
-  firstChoice,
   holderName,
   INBOX_DIRECTION,
   INBOX_GROUPING,
+  INBOX_HOLDER,
   INBOX_LINE,
   INBOX_MEDIA,
-  INBOX_MISSING,
   INBOX_SHOW,
   INBOX_SORT,
   INBOX_STATUS_GROUP,
@@ -71,7 +73,6 @@ import {
   sentStamp,
   shownTicks,
   taskHolder,
-  tasklessGroups,
   waitsOnReader,
   withChoice,
   withDoPress,
@@ -305,50 +306,6 @@ test("a thread's form attaches its values to the reply as they are filled, with 
   });
 });
 
-test("what an answer lacks follows what it asks: a choice its pick, unless the developer's own words or files answer it, a form given nothing its first required field left empty in the form's order, and words their words; nothing once it lacks nothing", () => {
-  assert.deepEqual(inboxMissing(QUEUE, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
-  assert.deepEqual(inboxMissing(CHANNELS, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
-  assert.equal(inboxMissing(QUEUE, { ...EMPTY_INBOX_DRAFT, choices: ["Redis"] }), undefined);
-  assert.equal(inboxMissing(QUEUE, { ...EMPTY_INBOX_DRAFT, note: "Use SQS." }), undefined);
-  const files = [{ name: "trace.txt", mediaType: "text/plain", data: btoa("boom\n") }] as const;
-  assert.equal(inboxMissing(QUEUE, { ...EMPTY_INBOX_DRAFT, attachments: files }), undefined);
-
-  const rollout: InboxResponse = {
-    type: INBOX_RESPONSE.FORM,
-    fields: [
-      { type: INBOX_FIELD.TEXT, label: "Branch prefix" },
-      { type: INBOX_FIELD.SELECT, label: "Effort", required: true, options: ["high", "xhigh"] },
-      { type: INBOX_FIELD.TEXT, label: "Reviewer", required: true },
-      { type: INBOX_FIELD.BOOLEAN, label: "Post in #eng", required: true },
-    ],
-  };
-  assert.deepEqual(inboxMissing(rollout, EMPTY_INBOX_DRAFT), {
-    kind: INBOX_MISSING.FIELD,
-    label: "Effort",
-  });
-  assert.deepEqual(
-    inboxMissing(rollout, withValue(EMPTY_INBOX_DRAFT, "Reviewer", "  ")),
-    { kind: INBOX_MISSING.FIELD, label: "Effort" },
-    "blank words fill nothing",
-  );
-  const effort = withValue(EMPTY_INBOX_DRAFT, "Effort", "high");
-  assert.equal(
-    inboxMissing(rollout, effort),
-    undefined,
-    "a form filled in part lacks nothing, sending what was filled",
-  );
-  assert.equal(
-    inboxMissing(rollout, withValue(effort, "Reviewer", "Dean")),
-    undefined,
-    "a yes-or-no left alone is a no",
-  );
-
-  assert.deepEqual(inboxMissing(QUESTION, { ...EMPTY_INBOX_DRAFT, note: " " }), {
-    kind: INBOX_MISSING.WORDS,
-  });
-  assert.equal(inboxMissing(QUESTION, { ...EMPTY_INBOX_DRAFT, note: "Hello" }), undefined);
-});
-
 test("an option picked by its number is the one pick of a choice of one, picked again it stays; of a choice of several it joins the picks, and picked again it leaves them", () => {
   assert.deepEqual(
     withChoice({}, { ...EMPTY_INBOX_DRAFT, choices: ["Postgres"] }, "Redis").choices,
@@ -399,15 +356,45 @@ test("an approval and a task are answered by the decision the card holds, or a p
   });
 });
 
-test("an approval or a to-do lacks its decision until one is picked, and a note lacks nothing", () => {
-  const step: InboxResponse = { type: INBOX_RESPONSE.APPROVAL };
-  const task: InboxResponse = { type: INBOX_RESPONSE.TODO };
-  assert.deepEqual(inboxMissing(step, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
-  assert.deepEqual(inboxMissing(task, { ...EMPTY_INBOX_DRAFT, note: "Did half." }), {
-    kind: INBOX_MISSING.OPTION,
+test("what an empty box's answer lacks follows the open ask: a decide or a to-do an option, a form its first required field left empty in the form's order, and words their words; nothing once anything is filled, written, or attached, or where no ask waits", () => {
+  const decide = [asking({ type: INBOX_ASK.DECIDE, options: [{ label: "A" }, { label: "B" }] })];
+  assert.deepEqual(inboxMissing(decide, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
+  assert.equal(inboxMissing(decide, { ...EMPTY_INBOX_DRAFT, choices: ["B"] }), undefined);
+  assert.equal(
+    inboxMissing(decide, { ...EMPTY_INBOX_DRAFT, note: "Why not C?" }),
+    undefined,
+    "words alone are a plain reply",
+  );
+  const toDo = [asking({ type: INBOX_ASK.DO, steps: ["One", "Two"] })];
+  assert.deepEqual(inboxMissing(toDo, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
+
+  const rollout = [
+    asking({
+      type: INBOX_ASK.ANSWER,
+      fields: [
+        { type: INBOX_FIELD.TEXT, label: "Branch prefix" },
+        { type: INBOX_FIELD.BOOLEAN, label: "Post in #eng", required: true },
+        { type: INBOX_FIELD.SELECT, label: "Effort", required: true, options: ["high", "xhigh"] },
+        { type: INBOX_FIELD.TEXT, label: "Reviewer", required: true },
+      ],
+    }),
+  ];
+  assert.deepEqual(
+    inboxMissing(rollout, withValue(EMPTY_INBOX_DRAFT, "Reviewer", "  ")),
+    { kind: INBOX_MISSING.FIELD, label: "Effort" },
+    "blank words fill nothing, and a yes-or-no left alone is a no",
+  );
+  assert.equal(
+    inboxMissing(rollout, withValue(EMPTY_INBOX_DRAFT, "Branch prefix", "luke/")),
+    undefined,
+    "a form filled in part sends what was filled",
+  );
+
+  const words = [asking({ type: INBOX_ASK.ANSWER })];
+  assert.deepEqual(inboxMissing(words, { ...EMPTY_INBOX_DRAFT, note: " " }), {
+    kind: INBOX_MISSING.WORDS,
   });
-  assert.equal(inboxMissing(task, decided(INBOX_REPLY.DONE)), undefined);
-  assert.equal(inboxMissing({ type: INBOX_RESPONSE.NONE }, EMPTY_INBOX_DRAFT), undefined);
+  assert.equal(inboxMissing([], EMPTY_INBOX_DRAFT), undefined);
 });
 
 test("files attached alone answer an item in the developer's own words, and travel apart from the answer", () => {
@@ -450,7 +437,7 @@ const TASKS = [
 function drawn(view: InboxListView): readonly (string | readonly [string, readonly string[]])[] {
   if (view.grouping === INBOX_GROUPING.TASK) {
     return view.groups.map(
-      ({ holder, items }) => [holderName(holder), items.map((each) => each.id)] as const,
+      ({ holder, items }) => [holderName(holder), items.map(({ item }) => item.id)] as const,
     );
   }
   if (view.grouping === INBOX_GROUPING.PERSON) {
@@ -592,26 +579,6 @@ test("To do lists only what waits, and the item chosen where one is given, as th
   );
 });
 
-test("with nothing chosen, the first listed item that waits stands chosen, else the first listed, and nothing where nothing is listed", () => {
-  const all = { show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined } as const;
-  assert.equal(
-    firstChoice(inboxList(TASKS, { ...all, grouping: INBOX_GROUPING.TASK }))?.item.id,
-    "threshold",
-  );
-  assert.equal(
-    firstChoice(inboxList(TASKS, { ...all, grouping: INBOX_GROUPING.NONE }))?.item.id,
-    "expiry",
-  );
-  const settled = [
-    { holder: taskHolder(BILLING), items: [item({ id: "done", status: INBOX_STATUS.ANSWERED })] },
-  ];
-  assert.equal(
-    firstChoice(inboxList(settled, { ...all, grouping: INBOX_GROUPING.NONE }))?.item.id,
-    "done",
-  );
-  assert.equal(firstChoice(inboxList([], { ...all, grouping: INBOX_GROUPING.TASK })), undefined);
-});
-
 test("the next item that needs you follows the chosen one in the list's order, wrapping round to its top, never the chosen one itself, and none where nothing else needs you", () => {
   const newest = inboxList(TASKS, {
     grouping: INBOX_GROUPING.NONE,
@@ -733,7 +700,7 @@ test("an item waits on whoever the service says, its task's assignee, rather tha
   );
 });
 
-test("a task done or canceled hides none of its items: its open ones need you and its unread ones wait, To do listing and counting them as any task's, and one is the next", () => {
+test("a task done or canceled hides none of its items: its open ones need you, To do listing and counting them as any task's, and one is the next, while its unread settled ones are All's", () => {
   const finished = [
     {
       holder: taskHolder({ ...BILLING, status: TASK_STATUS.DONE }),
@@ -751,22 +718,21 @@ test("a task done or canceled hides none of its items: its open ones need you an
     },
   ];
   const counts = inboxCounts(finished, undefined);
-  assert.equal(counts[INBOX_SHOW.TO_DO], 4);
+  assert.equal(counts[INBOX_SHOW.TO_DO], 2);
   assert.equal(counts[INBOX_SHOW.ALL], 4);
   const view = { grouping: INBOX_GROUPING.NONE, readerId: undefined, chosen: undefined } as const;
   const toDo = inboxList(finished, { ...view, show: INBOX_SHOW.TO_DO });
-  assert.deepEqual(drawn(toDo), ["done-open", "canceled-open", "done-unread", "canceled-unread"]);
+  assert.deepEqual(drawn(toDo), ["done-open", "canceled-open"]);
   assert.equal(nextNeedingYou(toDo, "done-open", () => false)?.item.id, "canceled-open");
 });
 
-test("a teammate's open item is never the one chosen first nor the next that needs you, which go to the reader's own", () => {
+test("a teammate's open item is never the next that needs you, which goes to the reader's own", () => {
   const list = inboxList(SHARED, {
     grouping: INBOX_GROUPING.NONE,
     show: INBOX_SHOW.ALL,
     readerId: ME.userId,
     chosen: undefined,
   });
-  assert.equal(firstChoice(list)?.item.id, "mine-invites");
   assert.deepEqual(
     ["danas", "mine-invites", "unnamed"].map(
       (id) => nextNeedingYou(list, id, () => false)?.item.id,
@@ -818,7 +784,7 @@ const UNREAD_SHARED = SHARED.map(({ holder, items }) => ({
   ],
 }));
 
-test("To do lists the reader's own open items and their own unread ones, a settled thread written on again among them, never a teammate's however unread, and All lists every item; each counts its own", () => {
+test("To do lists the reader's own open items, read or not, never a settled one however unread nor a teammate's, and All lists every item; each counts its own", () => {
   const rows = (show: InboxShow) =>
     drawn(
       inboxList(UNREAD_SHARED, {
@@ -828,7 +794,7 @@ test("To do lists the reader's own open items and their own unread ones, a settl
         chosen: undefined,
       }),
     );
-  assert.deepEqual(rows(INBOX_SHOW.TO_DO), ["mine-followed", "mine-invites", "mine", "unnamed"]);
+  assert.deepEqual(rows(INBOX_SHOW.TO_DO), ["mine-invites", "mine", "unnamed"]);
   assert.deepEqual(rows(INBOX_SHOW.ALL), [
     "danas-answered",
     "danas",
@@ -839,23 +805,18 @@ test("To do lists the reader's own open items and their own unread ones, a settl
     "unnamed",
   ]);
   assert.deepEqual(inboxCounts(UNREAD_SHARED, ME.userId), {
-    [INBOX_SHOW.TO_DO]: 4,
+    [INBOX_SHOW.TO_DO]: 3,
     [INBOX_SHOW.ALL]: 7,
   });
 });
 
-test("the first item chosen and the next one reach the reader's own unread update as they reach what waits on them, and the item read keeps its place among the steps once To do leaves it out", () => {
+test("the next item reaches the reader's own unread update as it reaches what waits on them, and the item read keeps its place among the steps once To do leaves it out", () => {
   const all = inboxList(UNREAD_SHARED, {
     grouping: INBOX_GROUPING.NONE,
     show: INBOX_SHOW.ALL,
     readerId: ME.userId,
     chosen: undefined,
   });
-  assert.equal(
-    firstChoice(all)?.item.id,
-    "mine-followed",
-    "All chooses the reader's own unread update first, past a teammate's newer items",
-  );
   assert.equal(nextNeedingYou(all, "danas", () => false)?.item.id, "mine-followed");
   assert.equal(
     nextNeedingYou(all, "mine-followed", () => false)?.item.id,
@@ -1087,6 +1048,7 @@ function waitingTaskless(
     agentId,
     title: "Quarantine the flaky test?",
     postedAt: 1,
+    updatedAt: 1,
     agentTitle: null,
     agentModel: "anthropic/claude-opus-5.5",
     automationId: "automation-sweep",
@@ -1097,7 +1059,7 @@ function waitingTaskless(
   };
 }
 
-test("the items of agents with no plan stand under the automation that started them, the unnamed ones together, and only the listed workspace's", () => {
+test("each item of an agent with no plan is held by its agent, and a list grouped by task stands each agent under the automation that started it, the member's operator under Luke, the unnamed ones together, and only the listed workspace's", () => {
   // An item from a service before workspaces were named, which stands in every workspace's list.
   const { workspaceId: _unnamed, ...unnamedWorkspace } = waitingTaskless("agent-5", {
     automationId: "automation-old",
@@ -1106,32 +1068,56 @@ test("the items of agents with no plan stand under the automation that started t
   const waiting = [
     waitingTaskless("agent-1"),
     waitingTaskless("agent-2"),
+    // Started by hand, by no automation.
     waitingTaskless("agent-3", { automationId: null, automationName: null }),
     waitingTaskless("agent-4", { workspaceId: "workspace-beta" }),
     unnamedWorkspace,
+    waitingTaskless("agent-6", {
+      agentKind: AGENT_KIND.OPERATOR,
+      automationId: null,
+      automationName: null,
+      repository: null,
+    }),
   ];
   const read = new Map([
-    ["agent-1", [item({ id: "one", agentId: "agent-1" })]],
+    ["agent-1", [item({ id: "one", agentId: "agent-1", updatedAt: 60 })]],
     [
       "agent-2",
       [
-        item({ id: "two", agentId: "agent-2" }),
-        item({ id: "settled", agentId: "agent-2", status: INBOX_STATUS.ANSWERED }),
+        item({ id: "two", agentId: "agent-2", updatedAt: 50 }),
+        item({ id: "settled", agentId: "agent-2", status: INBOX_STATUS.ANSWERED, updatedAt: 10 }),
       ],
     ],
-    ["agent-3", [item({ id: "three", agentId: "agent-3" })]],
-    ["agent-4", [item({ id: "four", agentId: "agent-4" })]],
+    ["agent-3", [item({ id: "three", agentId: "agent-3", updatedAt: 40 })]],
+    ["agent-4", [item({ id: "four", agentId: "agent-4", updatedAt: 30 })]],
+    ["agent-5", [item({ id: "five", agentId: "agent-5", updatedAt: 25 })]],
+    ["agent-6", [item({ id: "six", agentId: "agent-6", updatedAt: 20 })]],
   ]);
+  const view = inboxList(agentGroups(waiting, read, "workspace-acme"), {
+    grouping: INBOX_GROUPING.TASK,
+    show: INBOX_SHOW.ALL,
+    chosen: undefined,
+    readerId: undefined,
+  });
 
+  assert.deepEqual(drawn(view), [
+    ["Nightly flake sweep", ["one", "two", "settled"]],
+    ["Other agents", ["three"]],
+    ["Old", ["five"]],
+    ["Luke", ["six"]],
+  ]);
   assert.deepEqual(
-    tasklessGroups(waiting, read, "workspace-acme").map(({ holder, items }) => [
-      holderName(holder),
-      items.map((each) => each.id),
+    listedItems(view).map(({ holder, item }) => [
+      item.id,
+      holder.kind === INBOX_HOLDER.AGENT ? holder.agent.agentId : undefined,
     ]),
     [
-      ["Nightly flake sweep", ["one", "two", "settled"]],
-      ["Other agents", ["three"]],
-      ["Old", []],
+      ["one", "agent-1"],
+      ["two", "agent-2"],
+      ["settled", "agent-2"],
+      ["three", "agent-3"],
+      ["five", "agent-5"],
+      ["six", "agent-6"],
     ],
   );
 });

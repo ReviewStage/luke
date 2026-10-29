@@ -1,4 +1,4 @@
-import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import type { TasklessAgent } from "@luke/features/agent-wire";
 import { agentName } from "@luke/features/model-label";
 import {
   TASK_STATUS,
@@ -149,10 +149,10 @@ function taskRowCreatorId(row: TaskRow): string | undefined {
  * The time a row shows and is ordered by: when it was started under
  * Created, else when it last saw activity, the later of its plan's last save
  * and its agents' last settled activity (`agents.activityAt`: one started,
- * handed a message, or a turn ended), so a task an agent is working through
- * stands with the tasks worked on lately, as "last activity" does in Linear
- * and Cursor. Neither moves while an agent's turn streams, so a row holds its
- * place while the agent works.
+ * or a turn ended), so a task an agent worked through stands with the tasks
+ * worked on lately, as "last activity" does in Linear and Cursor. Neither
+ * moves when an agent's turn starts or while it runs, so a row holds its
+ * place, and its time, while the agent works.
  */
 export function taskTime(task: TaskSummary, order: TaskOrder): number {
   if (order === TASK_ORDER.CREATED) return task.createdAt;

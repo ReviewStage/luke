@@ -2,15 +2,15 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_AUTHOR,
+  AGENT_STATUS,
+  type AgentChangesPeople,
+  type AgentSummary,
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
-  CODING_AGENT_AUTHOR,
-  CODING_AGENT_STATUS,
-  type CodingAgentChangesPeople,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
   REVIEW_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { Tooltip } from "@luke/ui";
@@ -18,23 +18,26 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { tabCard } from "../desktop/tab-card.js";
 import { MemberDirectory } from "../member-directory.js";
+import { TAB_KIND } from "../tasks/tab-look.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { ChangesTabReading } from "../testing/changes-tab.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
-import { ChangesCard, peopleOf } from "./changes-card.js";
+import { PullRequestCard, peopleOf } from "./pull-request-card.js";
 
 /**
- * pull-request-people.test.ts -- an agent's Changes card says who its pull
- * request names as every actor is drawn: a linked teammate as the member,
- * anyone else as themself on GitHub, a person's circle or an App's bot's
- * square, Luke's own App's bot among them; each reviewer's face wears where
- * they stand and hangs their card; the reviewers past the pile fold under
- * their count. Its Files changed view names nobody, since the Pull request
- * tab's header above it does. Synthetic people throughout.
+ * pull-request-people.test.ts -- an agent's pull request's card says who
+ * its pull request names as every actor is drawn: a linked teammate as the
+ * member, anyone else as themself on GitHub, a person's circle or an App's
+ * bot's square, Luke's own App's bot among them; each reviewer stands on a
+ * row of its own with where they stand at its end and hangs their card,
+ * every one of them listed, scrolling within the card. Its Files changed
+ * view names nobody, since the Pull request tab's header above it does.
+ * Synthetic people throughout.
  */
 
 const CHARLES: WorkspaceMember = {
@@ -45,14 +48,14 @@ const CHARLES: WorkspaceMember = {
 };
 const WORKSPACE = { id: "workspace-acme", memberCount: 2 };
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Expiry job",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 
@@ -61,7 +64,7 @@ const CHARLES_ON_GITHUB = { login: "charlespan", bot: false, userId: CHARLES.use
 const OCTOCAT = { login: "octocat", bot: false };
 const DEVIN = { login: "devin-ai-integration[bot]", bot: true };
 
-const PEOPLE: CodingAgentChangesPeople = {
+const PEOPLE: AgentChangesPeople = {
   author: LUKE_BOT,
   reviewers: [
     { by: CHARLES_ON_GITHUB, state: REVIEW_STATE.APPROVED },
@@ -122,8 +125,8 @@ async function draw(element: ReactElement): Promise<HTMLElement> {
 }
 
 /** The plan's agents, the one whose pull request it is among them, its changes naming the people given. */
-function controlNaming(people: CodingAgentChangesPeople) {
-  return codingAgentsControl({
+function controlNaming(people: AgentChangesPeople) {
+  return agentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
     models: [],
@@ -157,19 +160,36 @@ function hover(control: Element): void {
   restOn(control);
 }
 
-test("a Changes card says who opened the pull request and its reviewers by where each stands, each the actor they are to the reader", async () => {
-  const strip = await draw(
-    createElement(ChangesCard, {
-      subject: agentSubject(control, AGENT.id, NOTHING_HELD, false),
-      models: [],
-      pullRequest: PULL_REQUEST,
-      people: PEOPLE,
-      onOpenAgent: () => undefined,
-    }),
-  );
+/** The pull request's card as its Pull request tab hangs it, with the people its tab read, or none before it has. */
+function card(people: AgentChangesPeople | undefined): ReactElement {
+  const hung = tabCard({
+    kind: TAB_KIND.CHANGES,
+    subject: agentSubject(control, AGENT.id, NOTHING_HELD, false),
+    models: [],
+    pullRequest: PULL_REQUEST,
+    people,
+    onOpenAgent: () => undefined,
+  });
+  assert.ok(hung, "the tab hangs its pull request's card");
+  return hung;
+}
+
+/** Each row of the card's reviewers: the name said, the kind of actor named, whether a bot, and where they stand at the row's end. */
+function reviewerRows(within: ParentNode): (string | null | undefined)[][] {
+  return [...within.querySelectorAll('[aria-label="Reviewers"] > li')].map((row) => [
+    row.querySelector(".luke-inline-ref-label")?.textContent,
+    row.querySelector(".actor-mark")?.getAttribute("data-kind"),
+    row.querySelector(".actor-mark")?.getAttribute("data-bot") ?? null,
+    row.querySelector(".luke-hover-card-row-end")?.textContent,
+  ]);
+}
+
+test("a pull request's card says who opened it and lists its reviewers by where each stands, each the actor they are to the reader", async () => {
+  const strip = await draw(card(PEOPLE));
 
   const opener =
-    strip.querySelector(".actor-words [data-actor-ref]") ?? assert.fail("who opened it is named");
+    strip.querySelector(".luke-hover-card-row [data-actor-ref]") ??
+    assert.fail("who opened it is named");
   assert.deepEqual(
     [opener.querySelector(".luke-inline-ref-label")?.textContent, opener.getAttribute("data-kind")],
     ["luke-agent", "github"],
@@ -179,43 +199,25 @@ test("a Changes card says who opened the pull request and its reviewers by where
   const opened = document.querySelector('.luke-tooltip-card [data-actor-card="github"]');
   assert.match(opened?.textContent ?? "", /luke-agent.*GitHub App/u);
 
-  const reviewers =
-    strip.querySelector('[aria-label="Reviewers"]') ?? assert.fail("the reviewers stand");
-  const faces = [...reviewers.querySelectorAll<HTMLElement>(".actor-stack-face")];
-  assert.deepEqual(
-    faces.map((face) => [
-      face.getAttribute("aria-label"),
-      face.querySelector(".actor-mark")?.getAttribute("data-kind"),
-      face.querySelector(".actor-mark")?.getAttribute("data-bot") ?? null,
-      face.querySelector("[data-review-state]")?.getAttribute("data-review-state"),
-    ]),
-    [
-      ["Charles Pan · Approved", "person", null, "approved"],
-      ["octocat · Review requested", "github", null, "requested"],
-      ["devin-ai-integration · Commented", "github", "true", "commented"],
-      ["luke-agent · Commented", "github", "true", "commented"],
-    ],
-  );
-  hover(faces[1] ?? assert.fail("octocat's face"));
-  const card = document.querySelector('.luke-tooltip-card [data-actor-card="github"]');
-  assert.match(card?.textContent ?? "", /@octocat.*GitHub user.*Not in this workspace/u);
+  assert.deepEqual(reviewerRows(strip), [
+    ["Charles Pan", "person", null, "Approved"],
+    ["octocat", "github", null, "Review requested"],
+    ["devin-ai-integration", "github", "true", "Commented"],
+    ["luke-agent", "github", "true", "Commented"],
+  ]);
+  const [, octocat] = strip.querySelectorAll('[aria-label="Reviewers"] [data-actor-ref]');
+  hover(octocat ?? assert.fail("octocat's name"));
+  const hung = document.querySelector('.luke-tooltip-card [data-actor-card="github"]');
+  assert.match(hung?.textContent ?? "", /@octocat.*GitHub user.*Not in this workspace/u);
 });
 
 test("who opened the pull request is named alone, whoever the agent wrote as", async () => {
-  const opener = async (people: CodingAgentChangesPeople) => {
-    const card = await draw(
-      createElement(ChangesCard, {
-        subject: agentSubject(control, AGENT.id, NOTHING_HELD, false),
-        models: [],
-        pullRequest: PULL_REQUEST,
-        people,
-        onOpenAgent: () => undefined,
-      }),
-    );
-    const line = card.querySelector(".actor-words");
+  const opener = async (people: AgentChangesPeople) => {
+    const drawn = await draw(card(people));
+    const row = drawn.querySelector(".luke-hover-card-row");
     const named = [
-      line?.querySelector(".luke-inline-ref-label")?.textContent,
-      /as the GitHub App/u.test(line?.textContent ?? ""),
+      row?.querySelector(".luke-inline-ref-label")?.textContent,
+      /as the GitHub App/u.test(row?.textContent ?? ""),
     ];
     act(() => root?.unmount());
     document.body.innerHTML = "";
@@ -224,9 +226,9 @@ test("who opened the pull request is named alone, whoever the agent wrote as", a
 
   assert.deepEqual(
     [
-      await opener({ author: CHARLES_ON_GITHUB, writtenAs: CODING_AGENT_AUTHOR.DEVELOPER }),
-      await opener({ author: LUKE_BOT, writtenAs: CODING_AGENT_AUTHOR.APP_UNLINKED }),
-      await opener({ author: LUKE_BOT, writtenAs: CODING_AGENT_AUTHOR.DEVELOPER }),
+      await opener({ author: CHARLES_ON_GITHUB, writtenAs: AGENT_AUTHOR.DEVELOPER }),
+      await opener({ author: LUKE_BOT, writtenAs: AGENT_AUTHOR.APP_UNLINKED }),
+      await opener({ author: LUKE_BOT, writtenAs: AGENT_AUTHOR.DEVELOPER }),
     ],
     [
       ["Charles Pan", false],
@@ -236,27 +238,16 @@ test("who opened the pull request is named alone, whoever the agent wrote as", a
   );
 });
 
-test("a Changes card says who opened the pull request and its reviewers once its tab has read them, and neither before", async () => {
-  const subject = agentSubject(control, AGENT.id, NOTHING_HELD, false);
-  const card = (people: CodingAgentChangesPeople | undefined) =>
-    draw(
-      createElement(ChangesCard, {
-        subject,
-        models: [],
-        pullRequest: PULL_REQUEST,
-        people,
-        onOpenAgent: () => undefined,
-      }),
-    );
-  const unread = await card(undefined);
-  assert.equal(unread.querySelector(".actor-stack"), null);
+test("a pull request's tab card says who opened it and its reviewers once its tab has read them, and neither before", async () => {
+  const unread = await draw(card(undefined));
+  assert.equal(unread.querySelector('[aria-label="Reviewers"]'), null);
   assert.doesNotMatch(unread.textContent ?? "", /Opened by/u);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
-  const read = await card(PEOPLE);
+  const read = await draw(card(PEOPLE));
   assert.match(read.textContent ?? "", /Opened by luke-agent/u);
-  assert.equal(read.querySelectorAll('[aria-label="Reviewers"] .actor-stack-face').length, 4);
+  assert.equal(read.querySelectorAll('[aria-label="Reviewers"] > li').length, 4);
 });
 
 test("Files changed names nobody, with files or without, since the Pull request tab's header does", async () => {
@@ -292,94 +283,15 @@ test("a card says the people its tab read only for the pull request they were re
   assert.equal(peopleOf(undefined, PULL_REQUEST), undefined);
 });
 
-test("reviewers past the pile's last face are counted, and the count hangs a card naming each with where they stand", async () => {
-  const many = Array.from({ length: 6 }, (_, at) => ({
-    by: { login: `reviewer${at}`, bot: false },
-    state: at === 5 ? REVIEW_STATE.CHANGES_REQUESTED : REVIEW_STATE.APPROVED,
-  }));
-  const card = await draw(
-    createElement(ChangesCard, {
-      subject: agentSubject(control, AGENT.id, NOTHING_HELD, false),
-      models: [],
-      pullRequest: PULL_REQUEST,
-      people: { reviewers: many },
-      onOpenAgent: () => undefined,
-    }),
-  );
-  const more =
-    card.querySelector('[aria-label="Reviewers"] .actor-stack-more') ??
-    assert.fail("the rest are counted");
-  assert.equal(more.textContent, "+1");
-  assert.equal(more.getAttribute("aria-label"), "reviewer5 · Changes requested");
-  hover(more);
-  const rest = [
-    ...document.querySelectorAll('.luke-tooltip-card [data-actor-card="more"] .actor-more-row'),
-  ];
-  assert.deepEqual(
-    rest.map((row) => [
-      row.querySelector(".actor-mark")?.getAttribute("data-kind"),
-      row.lastElementChild?.textContent,
-    ]),
-    [["github", "reviewer5 · Changes requested"]],
-  );
-});
-
-test("the count's card naming many reviewers scrolls within itself and stands, and the window scrolling takes it down", async () => {
+test("a pull request's card hung over its tab lists every reviewer, scrolling within itself and standing, and the window scrolling takes it down", async () => {
   const many = Array.from({ length: 50 }, (_, at) => ({
     by: { login: `reviewer${at}`, bot: false },
     state: REVIEW_STATE.APPROVED,
   }));
-  const card = await draw(
-    createElement(ChangesCard, {
-      subject: agentSubject(control, AGENT.id, NOTHING_HELD, false),
-      models: [],
-      pullRequest: PULL_REQUEST,
-      people: { reviewers: many },
-      onOpenAgent: () => undefined,
-    }),
-  );
-  hover(
-    card.querySelector('[aria-label="Reviewers"] .actor-stack-more') ??
-      assert.fail("the rest are counted"),
-  );
-  const list = document.querySelector(
-    '.luke-tooltip-card [data-actor-card="more"] .actor-more-list',
-  );
-  assert.equal(list?.children.length, 45);
-  // Note that the list scrolls in the area it stands in.
-  act(() => {
-    list?.parentElement?.dispatchEvent(new Event("scroll"));
-  });
-  assert.ok(
-    document.querySelector('[data-actor-card="more"]'),
-    "scrolling the card's own list leaves it standing",
-  );
-  act(() => {
-    document.dispatchEvent(new Event("scroll"));
-  });
-  assert.equal(
-    document.querySelector('.luke-tooltip-card:not([data-leaving]) [data-actor-card="more"]'),
-    null,
-    "the window scrolling takes it down",
-  );
-});
-
-test("the count's card hung from a Changes card that itself hangs over its tab scrolls within itself, and both cards stand", async () => {
-  const many = Array.from({ length: 50 }, (_, at) => ({
-    by: { login: `reviewer${at}`, bot: false },
-    state: REVIEW_STATE.APPROVED,
-  }));
-  const changesCard = createElement(ChangesCard, {
-    subject: agentSubject(control, AGENT.id, NOTHING_HELD, false),
-    models: [],
-    pullRequest: PULL_REQUEST,
-    people: { reviewers: many },
-    onOpenAgent: () => undefined,
-  });
   const tab = await draw(
     createElement(Tooltip, {
       label: "Changes: Expiry job",
-      card: changesCard,
+      card: createElement(PullRequestCard, { pullRequest: PULL_REQUEST, reviewers: many }),
       children: createElement(
         "button",
         { type: "button", "aria-describedby": undefined },
@@ -388,19 +300,22 @@ test("the count's card hung from a Changes card that itself hangs over its tab s
     }),
   );
   hover(tab.querySelector("button") ?? assert.fail("the tab stands"));
-  hover(
-    document.querySelector('.luke-tooltip-card [aria-label="Reviewers"] .actor-stack-more') ??
-      assert.fail("the Changes card counts the rest"),
-  );
-  const list = document.querySelector(
-    '.luke-tooltip-card [data-actor-card="more"] .actor-more-list',
-  );
-  assert.ok(list, "the count's card hangs over the Changes card");
+  const list = document.querySelector('.luke-tooltip-card [aria-label="Reviewers"]');
+  assert.equal(list?.children.length, 50, "every reviewer is listed, none counted");
+  // Note that the list scrolls in the area it stands in.
   act(() => {
-    list.parentElement?.dispatchEvent(new Event("scroll"));
+    list?.closest(".luke-scroll-area")?.dispatchEvent(new Event("scroll"));
   });
   assert.ok(
-    document.querySelector('.luke-tooltip-card:not([data-leaving]) [data-actor-card="more"]'),
+    document.querySelector(".luke-tooltip-card:not([data-leaving]) [data-pull-request-card]"),
+    "scrolling the card's own list leaves it standing",
   );
-  assert.ok(document.querySelector(".luke-tooltip-card:not([data-leaving]) [data-tab-card]"));
+  act(() => {
+    document.dispatchEvent(new Event("scroll"));
+  });
+  assert.equal(
+    document.querySelector(".luke-tooltip-card:not([data-leaving]) [data-pull-request-card]"),
+    null,
+    "the window scrolling takes it down",
+  );
 });

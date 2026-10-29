@@ -1,5 +1,5 @@
 import { useAtom } from "@effect/atom-react";
-import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentPullRequest, AgentSummary } from "@luke/features/agent-wire";
 import {
   type DateSpan,
   dateChipText,
@@ -105,10 +105,10 @@ import {
 import { FileCard } from "./file-ref.js";
 import { fileFolder, fileName } from "./file-ref-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
+import { holderTaskId, type MentionHolder } from "./mention-holder.js";
 import { PageCard } from "./page-card.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { AgentMark, PlanGlyph } from "./tab-look.js";
-import { NO_TASK } from "./task-mentions.js";
 import { useTaskStatus } from "./use-known-names.js";
 
 /**
@@ -510,12 +510,12 @@ function pathRow(entry: RepositoryPath): MentionRow {
 
 /** The plan's rows: each section by its heading, a heading borne twice once for each section, then the plan itself, found by its name and its key; none where no plan stands. */
 function taskRows(
-  taskId: string,
+  taskId: string | undefined,
   taskName: string,
   key: string | undefined,
   text: string,
 ): MentionRow[] {
-  if (taskId === NO_TASK) return [];
+  if (taskId === undefined) return [];
   const headings = planSections(text).map((section) => section.heading);
   const anchors = sectionAnchors(headings);
   return [
@@ -542,25 +542,33 @@ function taskRows(
 }
 
 /**
- * Each of the plan's pages' rows, by its title, its version where it has
- * more than one and else how long ago it was written, as its card says
- * them, hanging that card; none where no plan stands.
+ * Each of the holder's pages' rows, the plan's or the agent's on no task,
+ * by its title, its version where it has more than one and else how long
+ * ago it was written, as its card says them, hanging that card; none where
+ * nothing holds the place.
  */
-function pageRows(taskId: string, pages: readonly MentionablePage[], now: number): MentionRow[] {
-  if (taskId === NO_TASK) return [];
+function pageRows(
+  holder: MentionHolder | undefined,
+  pages: readonly MentionablePage[],
+  now: number,
+): MentionRow[] {
+  if (holder === undefined) return [];
   return pages.map((page) => ({
-    mention: { kind: MENTION_KIND.PAGE, taskId: taskId, pageId: page.id },
+    mention:
+      "taskId" in holder
+        ? { kind: MENTION_KIND.PAGE, taskId: holder.taskId, pageId: page.id }
+        : { kind: MENTION_KIND.PAGE, agentId: holder.agentId, pageId: page.id },
     name: page.title,
     detail:
       page.version > 1 ? versionWords(page.version) : <Time at={page.at} now={now} hint={false} />,
     terms: page.title,
-    card: <PageCard place={{ taskId }} page={page} />,
+    card: <PageCard place={holder} page={page} />,
   }));
 }
 
 /** Each of the workspace's tasks' rows but the plan's own, by its name, its key beside it, found by either. */
 function workspaceTaskRows(
-  taskId: string,
+  taskId: string | undefined,
   workspace: Workspace | undefined,
   tasks: readonly TaskSummary[],
 ): MentionRow[] {
@@ -587,7 +595,7 @@ function workspaceTaskRows(
  * typed, and the agent whose box it is left out.
  */
 function agentRows(
-  taskId: string,
+  taskId: string | undefined,
   own: readonly MentionableAgent[],
   workspace: readonly MentionableAgent[],
   self: string | undefined,
@@ -596,18 +604,14 @@ function agentRows(
 ): MentionRow[] {
   const seen = new Set<string>(self === undefined ? [] : [self]);
   const typed = query.trim() !== "";
-  const mine = taskId === NO_TASK ? [] : own.map((agent) => ({ ...agent, task: { id: taskId } }));
+  const mine = taskId === undefined ? [] : own.map((agent) => ({ ...agent, task: { id: taskId } }));
   const rows: MentionRow[] = [];
   for (const agent of [...mine, ...workspace]) {
     if (seen.has(agent.id) || (agent.archived === true && !typed)) continue;
     seen.add(agent.id);
-    const task = agent.task;
     const row = agentMenuRow(agent, place);
     rows.push({
-      mention:
-        task === undefined
-          ? { kind: MENTION_KIND.AGENT, agentId: agent.id }
-          : { kind: MENTION_KIND.AGENT, taskId: task.id, agentId: agent.id },
+      mention: { kind: MENTION_KIND.AGENT, agentId: agent.id },
       name: row.label,
       detail: row.detail,
       terms: (row.terms ?? [row.label]).join(" "),
@@ -646,16 +650,12 @@ function personRows(
 }
 
 /**
- * Each of the task's pull requests' rows, by its number and title, wearing
- * its mark, labelled by the agent that published it: a pick writes its
- * GitHub address, as a pull request's link pasted is written; none where
- * no plan stands.
+ * Each of the place's pull requests' rows, its task's or its agent's on no
+ * task, by its number and title, wearing its mark, labelled by the agent
+ * that published it: a pick writes its GitHub address, as a pull request's
+ * link pasted is written.
  */
-function pullRequestRows(
-  taskId: string,
-  pullRequests: readonly MentionablePullRequest[],
-): MentionRow[] {
-  if (taskId === NO_TASK) return [];
+function pullRequestRows(pullRequests: readonly MentionablePullRequest[]): MentionRow[] {
   return pullRequests.map((pullRequest) => {
     const name = pullRequestLabelOf(pullRequest);
     const detail = pullRequest.agent ?? PULL_REQUEST_DETAIL;
@@ -1262,7 +1262,7 @@ export interface MentionableAgent {
   readonly task?: { readonly id: string; readonly name?: string | undefined } | undefined;
   readonly archived?: boolean | undefined;
   /** The agent as the workspace's list read it, where a place drew it from that list: what a picker draws its tab's look and title from. */
-  readonly summary?: CodingAgentSummary | undefined;
+  readonly summary?: AgentSummary | undefined;
 }
 
 /** A person as the list offers them: their account's id, their name, their email where the members read names it, and their picture, which their row wears. */
@@ -1273,9 +1273,9 @@ interface MentionablePerson {
   readonly actor: Actor;
 }
 
-/** One of the task's pull requests, as the list offers it: where it stands, which its mark wears, its GitHub address, and the name of the agent that published it, where the place knows it. */
+/** One of the place's pull requests, as the list offers it: where it stands, which its mark wears, its GitHub address, and the name of the agent that published it, where the place knows it. */
 export interface MentionablePullRequest
-  extends Pick<CodingAgentPullRequest, "number" | "title" | "url" | "state" | "checks" | "queued"> {
+  extends Pick<AgentPullRequest, "number" | "title" | "url" | "state" | "checks" | "queued"> {
   readonly agent: string | undefined;
 }
 
@@ -1294,9 +1294,10 @@ const NO_PAGES: readonly MentionablePage[] = [];
 const NO_AGENTS: readonly MentionableAgent[] = [];
 const NO_PULL_REQUESTS: readonly MentionablePullRequest[] = [];
 
-/** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now; `NO_TASK` for a page no task holds, which offers its repository alone. */
+/** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now; a page no task holds offers its repository, and an agent's own page its pages and pull request beside it. */
 export interface MentionSource {
-  readonly taskId: string;
+  /** The task, or the agent on no task, whose page the list stands on; none for a place neither holds. */
+  readonly holder: MentionHolder | undefined;
   readonly taskName: string;
   /** The slug of the task's workspace, which a mention of it is written under. */
   readonly workspace: string;
@@ -1305,23 +1306,23 @@ export interface MentionSource {
   /** The id of the workspace whose installation the repository is read through, where no plan names it. */
   readonly workspaceId?: string | undefined;
   readonly text: () => string;
-  /** The pages agents showed on the plan; none where the place offers none. */
+  /** The pages agents showed on the plan, or the agent on no task showed itself; none where the place offers none. */
   readonly pages?: readonly MentionablePage[] | undefined;
   /** The plan's coding agents, as its page holds them now; none where the place offers none. */
   readonly agents?: readonly MentionableAgent[] | undefined;
   /** Reads the workspace's coding agents, which the list offers after the plan's own; none where the place offers none. */
   readonly readAgents?: MentionAgentsReader | undefined;
-  /** The pull requests the plan's agents published, as its page holds them now; none where the place offers none. */
+  /** The pull requests the plan's agents published, or the agent on no task did, as its page holds them now; none where the place offers none. */
   readonly pullRequests?: readonly MentionablePullRequest[] | undefined;
 }
 
 /** What a repository's paths are read by: the plan whose repository it is, or, with no plan, the workspace and the repository; none where neither names one. */
 function treeKey(
-  taskId: string,
+  taskId: string | undefined,
   workspaceId: string | undefined,
   repository: string | null,
 ): { planId: string } | { workspaceId: string; repository: string } | undefined {
-  if (taskId !== NO_TASK) return { planId: taskId };
+  if (taskId !== undefined) return { planId: taskId };
   if (workspaceId === undefined || repository === null) return undefined;
   return { workspaceId, repository };
 }
@@ -1329,10 +1330,10 @@ function treeKey(
 /**
  * The kinds the place offers, in the list's order: its repository's files
  * and folders where it names one, the plan where one stands, the
- * workspace's other tasks where it holds any, the plan's pages, the
+ * workspace's other tasks where it holds any, the pages of what holds it, the
  * workspace's agents where it reads them, its people where
  * the window has read them, the pull requests
- * the plan's agents published, the repository's skills where the words go
+ * the plan's agents or the agent on no task published, the repository's skills where the words go
  * to an agent, dates wherever the list stands, and each connected server, the
  * first of each provider narrowed to by the provider's own word.
  */
@@ -1344,18 +1345,19 @@ function kindsOf(
   people: number,
   tasks: number,
 ): readonly MentionKind[] {
-  const { taskId, repository } = source;
-  const pages = taskId === NO_TASK ? 0 : (source.pages ?? NO_PAGES).length;
-  const pullRequests = taskId === NO_TASK ? 0 : (source.pullRequests ?? NO_PULL_REQUESTS).length;
+  const { holder, repository } = source;
+  const taskId = holderTaskId(holder);
+  const pages = holder === undefined ? 0 : (source.pages ?? NO_PAGES).length;
+  const pullRequests = (source.pullRequests ?? NO_PULL_REQUESTS).length;
   const agents =
     source.readAgents !== undefined ||
-    (taskId !== NO_TASK && (source.agents ?? NO_AGENTS).some((agent) => agent.id !== self));
+    (taskId !== undefined && (source.agents ?? NO_AGENTS).some((agent) => agent.id !== self));
   const known = skills?.known ?? [];
   const own: MentionKind[] = [
     ...(repository === null || treeKey(taskId, source.workspaceId, repository) === undefined
       ? []
       : [{ from: MENTION_FROM.FILES, name: MENTION_GROUP.FILES, detail: repository }]),
-    ...(taskId === NO_TASK
+    ...(taskId === undefined
       ? []
       : [
           {
@@ -1505,14 +1507,15 @@ export function useMentionPicker({
   const [closed, setClosed] = useState<Closed | undefined>(undefined);
   const [narrowing, setNarrowing] = useState<Held | undefined>(undefined);
   const [paths, setPaths] = useState<{
-    planId: string;
+    planId: string | undefined;
     workspaceId: string | undefined;
     repository: string | null;
     /** The paths read; none where the read failed, which Retry clears to read again. */
     paths: readonly RepositoryPath[] | undefined;
   }>();
 
-  const taskId = source?.taskId ?? NO_TASK;
+  const holder = source?.holder;
+  const taskId = holderTaskId(holder);
   const agentPlace = useAgentRowPlace(taskId);
   const workspaceId = source?.workspaceId;
   const repository = source?.repository ?? null;
@@ -1530,7 +1533,10 @@ export function useMentionPicker({
 
   // The repository's paths are read the first time the list opens on the task, and again once its repository changes or Retry asks.
   const readOf =
-    paths?.planId === taskId && paths.workspaceId === workspaceId && paths.repository === repository
+    paths !== undefined &&
+    paths.planId === taskId &&
+    paths.workspaceId === workspaceId &&
+    paths.repository === repository
       ? paths
       : undefined;
   const read = readOf?.paths;
@@ -1654,7 +1660,7 @@ export function useMentionPicker({
           {
             plan: taskRows(taskId, source.taskName, planKey, source.text()),
             tasks: taskRowsOffered,
-            pages: pageRows(taskId, source.pages ?? NO_PAGES, now),
+            pages: pageRows(holder, source.pages ?? NO_PAGES, now),
             agents: agentRows(
               taskId,
               source.agents ?? NO_AGENTS,
@@ -1664,7 +1670,7 @@ export function useMentionPicker({
               agentPlace,
             ),
             people: personRows(people, readerId),
-            pullRequests: pullRequestRows(taskId, source.pullRequests ?? NO_PULL_REQUESTS),
+            pullRequests: pullRequestRows(source.pullRequests ?? NO_PULL_REQUESTS),
             skills: skillRows(skills?.known ?? []),
             dates: dateRows(term, narrow?.from === MENTION_FROM.DATES, now, readerZone()),
             // A list narrowed to one server offers its tools before a word is typed.

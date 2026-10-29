@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentPullRequestAnswerView } from "@luke/features/coding-agent-view";
+import type { AgentPullRequestAnswerView } from "@luke/features/agent-view";
 import {
+  AGENT_STATUS,
+  type AgentPullRequestAnswer,
+  type AgentTranscriptMessage,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentPullRequestAnswer,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -33,7 +33,7 @@ import {
 
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
-const PUBLISHED: CodingAgentPullRequestAnswer = {
+const PUBLISHED: AgentPullRequestAnswer = {
   repository: "acme/relay",
   branch: "luke/expiry-job",
   pullRequest: {
@@ -49,7 +49,7 @@ const PUBLISHED: CodingAgentPullRequestAnswer = {
 };
 
 /** One page of transcript, as the tab holds it. */
-function page(id: string): readonly CodingAgentMessage[] {
+function page(id: string): readonly AgentTranscriptMessage[] {
   return [{ id, role: MESSAGE_ROLE.ASSISTANT, parts: [{ type: "text", text: "Done." }] }];
 }
 
@@ -62,16 +62,16 @@ afterEach(() => {
 });
 
 test("a transcript page landing while the read is out leaves its answer standing", async () => {
-  let answer: ((value: CodingAgentPullRequestAnswerView) => void) | undefined;
+  let answer: ((value: AgentPullRequestAnswerView) => void) | undefined;
   const read = () =>
-    new Promise<CodingAgentPullRequestAnswerView>((resolve) => {
+    new Promise<AgentPullRequestAnswerView>((resolve) => {
       answer = resolve;
     });
-  let held: CodingAgentPullRequestAnswer | undefined;
-  function Probe({ messages }: { messages: readonly CodingAgentMessage[] }) {
+  let held: AgentPullRequestAnswer | undefined;
+  function Probe({ messages }: { messages: readonly AgentTranscriptMessage[] }) {
     held = useAgentPullRequest({
       agentId: AGENT,
-      status: CODING_AGENT_STATUS.COMPLETED,
+      status: AGENT_STATUS.COMPLETED,
       shown: true,
       messages,
       read,
@@ -91,16 +91,16 @@ test("a transcript page landing while the read is out leaves its answer standing
 });
 
 test("a tab put out of sight drops the read it had out, and asks afresh when shown again", async () => {
-  const answers: ((value: CodingAgentPullRequestAnswerView) => void)[] = [];
+  const answers: ((value: AgentPullRequestAnswerView) => void)[] = [];
   const read = () =>
-    new Promise<CodingAgentPullRequestAnswerView>((resolve) => {
+    new Promise<AgentPullRequestAnswerView>((resolve) => {
       answers.push(resolve);
     });
-  let held: CodingAgentPullRequestAnswer | undefined;
+  let held: AgentPullRequestAnswer | undefined;
   function Probe({ shown }: { shown: boolean }) {
     held = useAgentPullRequest({
       agentId: AGENT,
-      status: CODING_AGENT_STATUS.COMPLETED,
+      status: AGENT_STATUS.COMPLETED,
       shown,
       messages: page("first"),
       read,
@@ -116,7 +116,7 @@ test("a tab put out of sight drops the read it had out, and asks afresh when sho
   assert.equal(answers.length, 2, "shown again inside the gap, it asks afresh");
 
   const opened = PUBLISHED.pullRequest ?? assert.fail("the fixture names a pull request");
-  const newer: CodingAgentPullRequestAnswer = {
+  const newer: AgentPullRequestAnswer = {
     ...PUBLISHED,
     pullRequest: { ...opened, number: 43 },
   };
@@ -129,13 +129,13 @@ const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const ELSEWHERE = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
 /** Every read answers the same pull request, as a fresh object each time, as the service's answers are. */
-const publishedAgain = (): Promise<CodingAgentPullRequestAnswerView> =>
+const publishedAgain = (): Promise<AgentPullRequestAnswerView> =>
   Promise.resolve(structuredClone(PUBLISHED));
 
 /** The task's pull requests as each render held them, the newest last. */
 function taskKept(): TaskPullRequests[] {
   const held: TaskPullRequests[] = [];
-  const agents = [{ id: AGENT, status: CODING_AGENT_STATUS.COMPLETED }];
+  const agents = [{ id: AGENT, status: AGENT_STATUS.COMPLETED }];
   function Task(): null {
     held.push(useTaskPullRequests(TASK, agents, publishedAgain));
     return null;
@@ -187,12 +187,12 @@ const agentIds = (count: number): string[] =>
 test("a task with many agents reads four at once, starting the next as one settles, the archived last", async () => {
   const [archived = "", ...live] = agentIds(6);
   const agents = [
-    { id: archived, status: CODING_AGENT_STATUS.COMPLETED, archivedAt: 1_000 },
-    ...live.map((id) => ({ id, status: CODING_AGENT_STATUS.COMPLETED })),
+    { id: archived, status: AGENT_STATUS.COMPLETED, archivedAt: 1_000 },
+    ...live.map((id) => ({ id, status: AGENT_STATUS.COMPLETED })),
   ];
-  const answers = new Map<string, (value: CodingAgentPullRequestAnswerView) => void>();
+  const answers = new Map<string, (value: AgentPullRequestAnswerView) => void>();
   const read = (agentId: string) =>
-    new Promise<CodingAgentPullRequestAnswerView>((resolve) => {
+    new Promise<AgentPullRequestAnswerView>((resolve) => {
       answers.set(agentId, resolve);
     });
   function Task(): null {

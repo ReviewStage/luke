@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import type { Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -15,7 +15,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ellipsized } from "../testing/action-label.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
@@ -71,14 +71,14 @@ const TASK: Task = {
   document: { body: "# Checkout retries", assumptions: [] },
 };
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Retry the webhook",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 
@@ -110,7 +110,7 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The open task's tab, read by Dana, the task as given open and listed. */
+/** The open task's tab, read by Dana, the task as given open and listed, its side panel showing the plan. */
 function openTab(
   task: Task,
   workspaces: readonly Workspace[],
@@ -125,10 +125,11 @@ function openTab(
     workspaces,
     workspace: workspaces.find((workspace) => workspace.id === task.workspaceId),
     onMoveTask,
+    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
   });
 }
 
-/** Mounts the tab's toolbar and opens its ⋯ menu. */
+/** Mounts the task's page and opens the Plan tab's ⋯ menu, the task's own. */
 function openMenu(tasks: TasksControl): void {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -137,8 +138,8 @@ function openMenu(tasks: TasksControl): void {
     root.render(createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks })),
   );
   const more =
-    container.querySelector<HTMLButtonElement>('[aria-label="Task actions"]') ??
-    assert.fail("the toolbar draws the plan's ⋯");
+    container.querySelector<HTMLButtonElement>(".side-panel-bar .toolbar-tab-actions button") ??
+    assert.fail("the Plan tab draws the task's ⋯");
   act(() => more.click());
 }
 
@@ -307,7 +308,7 @@ function onTab(
     ...tasks,
     mainTabs: { ...tasks.mainTabs, tabs: [AGENT_TAB], tab },
     sidePanel: { ...tasks.sidePanel, ...sidePanel },
-    agents: codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] }),
+    agents: agentsControl({ agents: [AGENT], agentIds: [AGENT.id] }),
   };
 }
 

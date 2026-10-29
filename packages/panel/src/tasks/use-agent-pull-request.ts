@@ -1,17 +1,17 @@
-import type { CodingAgentPullRequestAnswerView } from "@luke/features/coding-agent-view";
+import type { AgentPullRequestAnswerView } from "@luke/features/agent-view";
 import type {
-  CodingAgentMessage,
-  CodingAgentPullRequest,
-  CodingAgentPullRequestAnswer,
-  CodingAgentStatus,
-  CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AgentPullRequest,
+  AgentPullRequestAnswer,
+  AgentStatus,
+  AgentSummary,
+  AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import type { TaskPullRequestLine } from "@luke/features/task-wire";
 import { keepIdentity } from "@luke/wire";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { agentStillWriting, PUBLISHED_REREAD_MS } from "./coding-agent-model.js";
+import { agentStillWriting, PUBLISHED_REREAD_MS } from "./agent-model.js";
 
 /**
  * use-agent-pull-request.ts -- what one agent published, as its tab draws it: read when the tab shows, again as its transcript lands pages, and once more as the agent ends.
@@ -34,17 +34,17 @@ import { agentStillWriting, PUBLISHED_REREAD_MS } from "./coding-agent-model.js"
  */
 
 /** How one read is asked: the agent, answered as the view hears it. */
-export type PullRequestReader = (agentId: string) => Promise<CodingAgentPullRequestAnswerView>;
+export type PullRequestReader = (agentId: string) => Promise<AgentPullRequestAnswerView>;
 
 interface Held {
   agentId: string;
-  published: CodingAgentPullRequestAnswer | undefined;
+  published: AgentPullRequestAnswer | undefined;
 }
 
 /** What the tab draws of what the agent published. */
 export interface AgentPublished {
   /** What a read answered, else the pull request the task already knows of the agent; nothing before either. */
-  readonly published: CodingAgentPullRequestAnswer | undefined;
+  readonly published: AgentPullRequestAnswer | undefined;
 }
 
 /** The last read out or landed: when, and for which standing of the agent. */
@@ -55,14 +55,14 @@ interface LastRead {
 
 export function useAgentPullRequest(input: {
   agentId: string;
-  status: CodingAgentStatus;
+  status: AgentStatus;
   /** Whether the tab is on screen. */
   shown: boolean;
   /** The transcript as held, whose every change is a page landed. */
-  messages: readonly CodingAgentMessage[];
+  messages: readonly AgentTranscriptMessage[];
   read: PullRequestReader;
   /** The pull request the task's own read already holds for the agent (`TaskPullRequests`), drawn until the tab's read answers. */
-  known?: CodingAgentPullRequest | undefined;
+  known?: AgentPullRequest | undefined;
   /** The clock the gap between reads is measured on. */
   now?: () => number;
 }): AgentPublished {
@@ -120,13 +120,13 @@ export function useAgentPullRequest(input: {
 /** The task's agents' pull requests, and the reader that keeps them as its answers land. */
 export interface TaskPullRequests {
   /** Each agent's pull request, by agent, of those whose latest read named one. */
-  readonly pullRequests: ReadonlyMap<string, CodingAgentPullRequest>;
+  readonly pullRequests: ReadonlyMap<string, AgentPullRequest>;
   /** One read of what an agent published, its answer kept here as it lands. */
   readonly read: PullRequestReader;
 }
 
 /** No agent has a pull request, one map so a render that has none hands down the same one. */
-const NO_PULL_REQUESTS: ReadonlyMap<string, CodingAgentPullRequest> = new Map();
+const NO_PULL_REQUESTS: ReadonlyMap<string, AgentPullRequest> = new Map();
 
 /** The most reads the sweep of a task's agents has out at once (`useTaskPullRequests`). */
 const SWEEP_READS_AT_ONCE = 4;
@@ -169,10 +169,10 @@ interface Visit {
  */
 export function useTaskPullRequests(
   taskId: string | undefined,
-  agents: readonly Pick<CodingAgentSummary, "id" | "status" | "archivedAt">[] | undefined,
+  agents: readonly Pick<AgentSummary, "id" | "status" | "archivedAt">[] | undefined,
   readOnce: PullRequestReader,
   /** Every agent of the task, an archived one among them, which alone its pull requests are kept for; `agents` where left out. */
-  owned: readonly Pick<CodingAgentSummary, "id">[] | undefined = agents,
+  owned: readonly Pick<AgentSummary, "id">[] | undefined = agents,
 ): TaskPullRequests {
   const [held, setHeld] = useState({ taskId, pullRequests: NO_PULL_REQUESTS });
   if (held.taskId !== taskId) setHeld({ taskId, pullRequests: NO_PULL_REQUESTS });

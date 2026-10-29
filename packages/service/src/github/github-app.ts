@@ -439,12 +439,12 @@ class ReachKey extends Data.Class<{
   readonly member: string | undefined;
 }> {}
 
-/** One repository token as minted: for which workspace and member, through which installation, for which repository, cut to what. */
+/** One installation token as minted: for which workspace and member, through which installation, for which repository or none for every one, cut to what. */
 class TokenKey extends Data.Class<{
   readonly organizationId: string;
   readonly member: string | undefined;
   readonly installationId: number;
-  readonly repository: string;
+  readonly repository: string | undefined;
   readonly permissions: InstallationTokenPermissions;
 }> {}
 
@@ -478,18 +478,8 @@ export interface GitHubRepositoryToken {
   readonly access: GitHubTokenAccess;
 }
 
-/** Whether a repository's issues can be read through the workspace's installation. */
-export const ISSUE_ACCESS = {
-  READABLE: "readable",
-  UNGRANTED: "ungranted",
-  UNREACHED: "unreached",
-} as const;
-
-/** A repository's issues readable on a token, ungranted with where the installation's owner grants them, or unreached. */
-type GitHubIssueAccess =
-  | ({ readonly kind: typeof ISSUE_ACCESS.READABLE } & GitHubRepositoryToken)
-  | { readonly kind: typeof ISSUE_ACCESS.UNGRANTED; readonly settingsUrl: string }
-  | { readonly kind: typeof ISSUE_ACCESS.UNREACHED };
+/** A token to read public repositories on, and whose it is. */
+export type GitHubPublicReadToken = Omit<GitHubRepositoryToken, "repository">;
 
 /** What the browser is sent to GitHub with to authorize the App once, so the installer is confirmed. */
 interface GitHubAuthorizeRequest {
@@ -617,6 +607,25 @@ export interface GitHubAppService {
     GitHubWorkspaceReadFailure,
     HttpClient.HttpClient | DatabaseServices
   >;
+  /**
+   * A token to read a public repository on where `repositoryReadToken`
+   * has none, rather than asking GitHub anonymously, whose sixty requests
+   * an hour are per address and so shared with whatever else leaves the
+   * deployment's: the member's own token where they keep one GitHub has
+   * not refused, since GitHub limits it apart from the App, else one
+   * minted on the workspace's first active installation, cut to contents
+   * read and naming no repository, which GitHub answers for any public
+   * repository as well as the installation's own; none where neither is
+   * held.
+   */
+  readonly publicReadToken: (
+    organizationId: string,
+    member: string,
+  ) => Effect.Effect<
+    Option.Option<GitHubPublicReadToken>,
+    GitHubWorkspaceReadFailure,
+    HttpClient.HttpClient | DatabaseServices
+  >;
   /** The same mint with contents and pull requests read, and CI read where the installation grants it: what reads a coding agent's pull request. */
   readonly repositoryPullRequestToken: (
     organizationId: string,
@@ -638,25 +647,6 @@ export interface GitHubAppService {
     member: string | undefined,
   ) => Effect.Effect<
     Option.Option<GitHubRepositoryToken>,
-    GitHubWorkspaceReadFailure,
-    HttpClient.HttpClient | DatabaseServices
-  >;
-  /**
-   * Whether the repository's issues can be read, and the token they are read
-   * on where they can: the same mint as `repositoryIssueToken`, ungranted
-   * with the installation's settings page on GitHub where the installation
-   * reaches the repository and has not granted the App issues, and
-   * unreached where it does not reach the repository. A repository reached
-   * on the member's own token reads its issues on that token. An ungranted
-   * reach is read afresh rather than kept, so issues granted on GitHub are
-   * read on the next ask.
-   */
-  readonly repositoryIssueAccess: (
-    organizationId: string,
-    fullName: string,
-    member: string | undefined,
-  ) => Effect.Effect<
-    GitHubIssueAccess,
     GitHubWorkspaceReadFailure,
     HttpClient.HttpClient | DatabaseServices
   >;
@@ -1605,14 +1595,15 @@ function githubAppService(
 
   /**
    * A token minted for the key's one repository, by its name, which is one
-   * repository on the installation's one account, and how long it is kept:
-   * until `KEPT.TOKEN_MARGIN` before GitHub expires it, and never past its
-   * hour, whatever clock GitHub's `expires_at` was read against.
+   * repository on the installation's one account, or for none named, and
+   * how long it is kept: until `KEPT.TOKEN_MARGIN` before GitHub expires
+   * it, and never past its hour, whatever clock GitHub's `expires_at` was
+   * read against.
    */
   const repositoryTokenOf = (key: TokenKey) =>
     Effect.gen(function* () {
       const minted = yield* mint(key.installationId, {
-        repositories: [key.repository],
+        ...(key.repository === undefined ? undefined : { repositories: [key.repository] }),
         permissions: key.permissions,
       });
       const now = yield* Clock.currentTimeMillis;
@@ -1710,13 +1701,12 @@ function githubAppService(
         return yield* Cache.get(reaches, key);
       });
 
-    /** The member's own token for a repository reached on it, read afresh; none where they no longer keep one GitHub accepts. */
-    const memberRepositoryToken = (reached: ReachedOnToken) =>
-      Effect.map(memberToken(reached.member), (held) =>
+    /** The member's own token, read afresh, and whose it is; none where they no longer keep one GitHub accepts. */
+    const memberReadToken = (member: string) =>
+      Effect.map(memberToken(member), (held) =>
         Result.isFailure(held)
-          ? Option.none<GitHubRepositoryToken>()
-          : Option.some<GitHubRepositoryToken>({
-              repository: reached.repository,
+          ? Option.none<GitHubPublicReadToken>()
+          : Option.some<GitHubPublicReadToken>({
               token: held.success.token,
               access: {
                 kind: GITHUB_ACCESS.TOKEN,
@@ -1726,6 +1716,55 @@ function githubAppService(
               },
             }),
       );
+
+    /** The member's own token for a repository reached on it, on the terms of `memberReadToken`. */
+    const memberRepositoryToken = (reached: ReachedOnToken) =>
+      Effect.map(
+        memberReadToken(reached.member),
+        Option.map((held): GitHubRepositoryToken => ({ repository: reached.repository, ...held })),
+      );
+
+    /**
+     * The token `publicReadToken` answers, as its declaration says. Note that
+     * the installation is chosen by the status the store holds rather than
+     * read from GitHub, so a preview of a public repository costs the App no
+     * read beyond its one mint an hour; and that a mint GitHub refuses moves
+     * on to the next active one, because a reach that found the owner's
+     * installation stops there and leaves an earlier link a missed webhook
+     * left active unmended.
+     */
+    const publicReadToken = (organizationId: string, member: string) =>
+      Effect.gen(function* () {
+        const held = yield* memberReadToken(member);
+        if (Option.isSome(held)) return held;
+        const connected = yield* installationsOfWorkspace(organizationId);
+        for (const one of connected) {
+          if (one.status !== GITHUB_INSTALLATION_STATUS.ACTIVE) continue;
+          const key = new TokenKey({
+            organizationId,
+            member: undefined,
+            installationId: one.installationId,
+            repository: undefined,
+            permissions: INSTALLATION_TOKEN_PERMISSIONS.READ,
+          });
+          const minted = yield* Cache.get(tokens, key).pipe(
+            Effect.map((kept) => Option.some(kept.token)),
+            Effect.catch((failure) =>
+              Effect.as(
+                Effect.logWarning(`A public read token was not minted: ${failure.message}`),
+                Option.none<Redacted.Redacted>(),
+              ),
+            ),
+          );
+          if (Option.isSome(minted)) {
+            return Option.some<GitHubPublicReadToken>({
+              token: minted.value,
+              access: { kind: GITHUB_ACCESS.APP },
+            });
+          }
+        }
+        return Option.none<GitHubPublicReadToken>();
+      });
 
     /**
      * A token for the one repository the workspace or the member reaches:
@@ -1848,6 +1887,7 @@ function githubAppService(
           member,
           () => INSTALLATION_TOKEN_PERMISSIONS.READ,
         ),
+      publicReadToken,
       repositoryPullRequestToken: (organizationId, fullName, member) =>
         repositoryToken(organizationId, fullName, member, (on) =>
           on.ciReadable
@@ -1858,48 +1898,6 @@ function githubAppService(
         repositoryToken(organizationId, fullName, member, (on) =>
           on.issuesReadable ? INSTALLATION_TOKEN_PERMISSIONS.ISSUES : undefined,
         ),
-      repositoryIssueAccess: (organizationId, fullName, member) =>
-        Effect.gen(function* () {
-          const key = new ReachKey({ organizationId, fullName, member });
-          const kept = yield* standingReach(key);
-          // Note that an ungranted reach is read again, because the grant is the one thing a kept reach would hide.
-          const reached =
-            Result.isSuccess(kept) &&
-            kept.success.access === GITHUB_ACCESS.APP &&
-            !kept.success.installation.issuesReadable
-              ? yield* Effect.andThen(Cache.invalidate(reaches, key), standingReach(key))
-              : kept;
-          if (Result.isFailure(reached)) {
-            const unreached: GitHubIssueAccess = { kind: ISSUE_ACCESS.UNREACHED };
-            return unreached;
-          }
-          // Note that a repository reached on the member's own token reads its issues on that token, as its other reads do.
-          if (reached.success.access === GITHUB_ACCESS.TOKEN) {
-            const own = yield* memberRepositoryToken(reached.success);
-            return Option.match(own, {
-              onNone: (): GitHubIssueAccess => ({ kind: ISSUE_ACCESS.UNREACHED }),
-              onSome: (token): GitHubIssueAccess => ({ kind: ISSUE_ACCESS.READABLE, ...token }),
-            });
-          }
-          const on = reached.success.installation;
-          if (!on.issuesReadable) {
-            const ungranted: GitHubIssueAccess = {
-              kind: ISSUE_ACCESS.UNGRANTED,
-              settingsUrl: installationSettingsUrl(on),
-            };
-            return ungranted;
-          }
-          const minted = yield* repositoryToken(
-            organizationId,
-            fullName,
-            member,
-            () => INSTALLATION_TOKEN_PERMISSIONS.ISSUES,
-          );
-          return Option.match(minted, {
-            onNone: (): GitHubIssueAccess => ({ kind: ISSUE_ACCESS.UNREACHED }),
-            onSome: (token): GitHubIssueAccess => ({ kind: ISSUE_ACCESS.READABLE, ...token }),
-          });
-        }),
       repositoryCiReadable: (organizationId, fullName, member) =>
         Effect.map(reachableRepository(organizationId, fullName, member), (reached) =>
           Option.match(reached, {

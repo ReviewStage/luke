@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
@@ -29,20 +29,20 @@ it.layer(getTestDB())("an account's last Runs on pick", (it) => {
   it.effect("is none until kept, then the last one kept, leaving the snapshot as it stood", () =>
     Effect.gen(function* () {
       const userId = yield* openAccount;
-      yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
+      yield* writeAccountPreferences(userId, { preferences: {} });
       const before = yield* readAccountPreferences(userId);
       assert.deepEqual(yield* readRunsOnPick(userId), Option.none());
 
-      yield* keepRunsOnPick(userId, { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: STUDIO });
-      yield* keepRunsOnPick(userId, { machine: CODING_AGENT_MACHINE.VERCEL });
+      yield* keepRunsOnPick(userId, { machine: AGENT_MACHINE.DEVICE, deviceId: STUDIO });
+      yield* keepRunsOnPick(userId, { machine: AGENT_MACHINE.VERCEL });
       assert.deepEqual(
         yield* readRunsOnPick(userId),
-        Option.some({ machine: CODING_AGENT_MACHINE.VERCEL }),
+        Option.some({ machine: AGENT_MACHINE.VERCEL }),
       );
-      yield* keepRunsOnPick(userId, { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: STUDIO });
+      yield* keepRunsOnPick(userId, { machine: AGENT_MACHINE.DEVICE, deviceId: STUDIO });
       assert.deepEqual(
         yield* readRunsOnPick(userId),
-        Option.some({ machine: CODING_AGENT_MACHINE.DEVICE, deviceId: STUDIO }),
+        Option.some({ machine: AGENT_MACHINE.DEVICE, deviceId: STUDIO }),
       );
       assert.deepEqual(yield* readAccountPreferences(userId), before);
     }),
@@ -52,7 +52,7 @@ it.layer(getTestDB())("an account's last Runs on pick", (it) => {
     Effect.gen(function* () {
       const owner = yield* openAccount;
       const other = yield* openAccount;
-      yield* keepRunsOnPick(owner, { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: STUDIO });
+      yield* keepRunsOnPick(owner, { machine: AGENT_MACHINE.DEVICE, deviceId: STUDIO });
 
       assert.deepEqual(yield* readRunsOnPick(other), Option.none());
     }),

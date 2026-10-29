@@ -38,6 +38,7 @@
 
 import { githubAppAvatarUrl, githubAvatarUrl } from "@luke/features/account-picture";
 import {
+  type AgentChangedFile,
   CHANGED_FILE_STATUS,
   CHANGES_BOUNDS,
   CHECK_STATE,
@@ -46,7 +47,6 @@ import {
   type CheckState,
   type CheckSummary,
   CONVERSATION_ENTRY,
-  type CodingAgentChangedFile,
   DEPLOYMENT_STATE,
   type DeploymentState,
   DIFF_SIDE,
@@ -61,7 +61,7 @@ import {
   type PullRequestState,
   REVIEW_STATE,
   type ReviewState,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { githubImageOf, imageTypeOfPath } from "@luke/features/github-image";
 import { REACTION, type Reaction } from "@luke/features/pull-request-write-wire";
 import { Duration, Effect, Fiber, Option, type Redacted, Schema } from "effect";
@@ -567,7 +567,7 @@ export function checkSummaryOf(
  * file moved and left as it was has no patch either, and changed no line,
  * so it carries an empty one rather than reading as binary.
  */
-function changedFileOf(file: (typeof PullRequestFilesSchema.Type)[number]): CodingAgentChangedFile {
+function changedFileOf(file: (typeof PullRequestFilesSchema.Type)[number]): AgentChangedFile {
   const status = GITHUB_FILE_STATUS.get(file.status) ?? CHANGED_FILE_STATUS.MODIFIED;
   const movedOnly = status === CHANGED_FILE_STATUS.RENAMED && file.changes === 0;
   const patch = file.patch ?? (movedOnly ? "" : null);
@@ -596,7 +596,7 @@ function changedFileOf(file: (typeof PullRequestFilesSchema.Type)[number]): Codi
 
 /** A pull request's files as GitHub lists them, up to the changes bound, and whether there were more. */
 export interface PullRequestFiles {
-  readonly files: readonly CodingAgentChangedFile[];
+  readonly files: readonly AgentChangedFile[];
   readonly truncated: boolean;
 }
 
@@ -612,7 +612,7 @@ export const pullRequestFiles = /* @__PURE__ */ Effect.fn("web/pullRequestFiles"
   fullName: string,
   pullRequest: { readonly number: number; readonly changedFiles: number },
 ): Effect.fn.Return<PullRequestFiles, PullRequestReadFailure, HttpClient.HttpClient> {
-  const files: CodingAgentChangedFile[] = [];
+  const files: AgentChangedFile[] = [];
   const path = `${repositoryPath(fullName)}/pulls/${pullRequest.number}/files`;
   for (let page = 1; files.length < CHANGES_BOUNDS.MAX_FILES; page += 1) {
     const request = githubRead(path, token).pipe(
@@ -663,7 +663,7 @@ export interface ImageCommits {
 }
 
 /** Whether a changed file is an image whose before stands at the base: one changed in place, moved, or removed. */
-function imageWithBefore(file: CodingAgentChangedFile): boolean {
+function imageWithBefore(file: AgentChangedFile): boolean {
   return (
     file.status !== CHANGED_FILE_STATUS.ADDED &&
     imageTypeOfPath(file.previousPath ?? file.path) !== undefined
@@ -685,7 +685,7 @@ export const imageCommits = /* @__PURE__ */ Effect.fn("web/imageCommits")(functi
   token: Redacted.Redacted,
   fullName: string,
   pullRequest: Option.Option<Pick<GitHubPullRequest, "headSha" | "baseSha">>,
-  files: readonly CodingAgentChangedFile[],
+  files: readonly AgentChangedFile[],
 ): Effect.fn.Return<ImageCommits, never, HttpClient.HttpClient> {
   if (Option.isNone(pullRequest)) return {};
   const { headSha, baseSha } = pullRequest.value;
@@ -2697,8 +2697,14 @@ export function viewerCanUpdateOf(
 /** The repository's labels, as its pickers list them. */
 const LabelsSchema = Schema.Array(Schema.Struct({ name: Schema.String, color: Schema.String }));
 
-/** The repository's collaborators, each an account. */
-const CollaboratorsSchema = Schema.Array(GitHubAccountSchema);
+/**
+ * The users who may be assigned in the repository, each an account: who the
+ * reviewer picker offers. Note that they are read rather than its
+ * collaborators, because GitHub lists an installation token no collaborator
+ * whose access comes through the organization, which leaves an
+ * organization's repository with nobody to ask.
+ */
+const AssigneesSchema = Schema.Array(GitHubAccountSchema);
 
 /** The teams that reach the repository. */
 const TeamsSchema = Schema.Array(TeamSchema);
@@ -2706,7 +2712,7 @@ const TeamsSchema = Schema.Array(TeamSchema);
 /** The most pages of each of the pickers' listings read: their bound, a hundred to a page. */
 const OPTIONS_MAX_PAGES = Math.ceil(OVERVIEW_BOUNDS.MAX_OPTIONS / PEOPLE_PER_PAGE);
 
-/** What the reviewer and label pickers offer, read of the repository: its labels, its collaborators, and its teams, each up to the bound. */
+/** What the reviewer and label pickers offer, read of the repository: its labels, its assignable users, and its teams, each up to the bound. */
 export interface GitHubReviewOptions {
   readonly labels: readonly GitHubLabel[];
   readonly users: readonly GitHubAccount[];
@@ -2739,8 +2745,8 @@ function optionsListing<A>(
 
 /**
  * What the reviewer and label pickers offer, read on the token of the
- * agent's repository in three asks at once: its labels, its collaborators,
- * who may be asked for a review, and the teams that reach it.
+ * agent's repository in three asks at once: its labels, its assignable
+ * users, who may be asked for a review, and the teams that reach it.
  */
 export const pullRequestReviewOptions = /* @__PURE__ */ Effect.fn("web/pullRequestReviewOptions")(
   function* (
@@ -2751,7 +2757,7 @@ export const pullRequestReviewOptions = /* @__PURE__ */ Effect.fn("web/pullReque
     const [labels, users, teams] = yield* Effect.all(
       [
         optionsListing(token, `${path}/labels`, LabelsSchema, "labels"),
-        optionsListing(token, `${path}/collaborators`, CollaboratorsSchema, "collaborators"),
+        optionsListing(token, `${path}/assignees`, AssigneesSchema, "assignees"),
         optionsListing(token, `${path}/teams`, TeamsSchema, "teams"),
       ],
       { concurrency: "unbounded" },

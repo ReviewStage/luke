@@ -45,7 +45,8 @@ import { TasksBoard } from "./tasks-board.js";
  * once the view asks for it. A card is changed where it stands: its
  * Priority and Status chips send what is picked, and its ⋯ and a
  * right-click drop the task's own menu, whose Rename makes its name a
- * field, and its foot draws its agents at work and their pull requests,
+ * field, cards are chosen by their box and ⌘-click across columns for the
+ * selection bar to act on them all, and its foot draws its agents at work and their pull requests,
  * each its mark and its number. In a narrow room, a phone's, one column stands at a time, chosen
  * by its tab, and a card's Status chip, its mark alone before its name as on a wide board, moves it.
  */
@@ -370,6 +371,36 @@ test("a press on a card opens its task", async () => {
   const board = await mountBoard();
   act(() => cardOf(board, "t-42").click());
   assert.deepEqual(opened, ["t-42"]);
+});
+
+test("a card's box chooses it without opening it, ⌘-click one in another column, and the bar's Status settles both at once", async () => {
+  const settled: [string[], string][] = [];
+  const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, DEFAULT_BOARD_DISPLAY, {
+    onSettleTasks: (taskIds, status) => settled.push([[...taskIds], status]),
+  });
+  const box =
+    board.querySelector<HTMLElement>('li[data-task-id="t-39"] [role="checkbox"]') ??
+    assert.fail("the card of t-39 draws its box");
+  act(() => box.click());
+  act(() => {
+    cardOf(board, "t-42").dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
+    );
+  });
+  assert.deepEqual(opened, [], "choosing opens nothing");
+  const bar = board.querySelector<HTMLElement>('[role="toolbar"]') ?? assert.fail("the bar stands");
+  assert.match(bar.textContent ?? "", /2 selected/u);
+
+  const status = [...bar.querySelectorAll<HTMLButtonElement>("button")].find(
+    (each) => each.textContent?.trim() === "Status",
+  );
+  act(() => (status ?? assert.fail("the bar offers Status")).click());
+  const done = [...document.querySelectorAll<HTMLElement>('[role="menu"] .luke-menu-item')].find(
+    (each) => each.querySelector(".luke-menu-item-label")?.textContent === "Done",
+  );
+  act(() => (done ?? assert.fail("Status offers Done")).click());
+  assert.deepEqual(settled, [[["t-39", "t-42"], TASK_STATUS.DONE]]);
+  assert.equal(board.querySelector('[role="toolbar"]'), null, "the selection is let go");
 });
 
 test("the settled finished before the past week give way to a foot counting them, which shows them all; by priority the columns run from the most pressing, empty ones left out where asked", async () => {
@@ -714,7 +745,7 @@ test("a right-click on a card drops the task's own menu", async () => {
     (label) => label.textContent,
   );
   assert.ok(labels.includes("Rename"), "the menu offers Rename");
-  assert.ok(labels.includes("Mark done"), "the menu offers Mark done");
+  assert.ok(labels.includes("Status"), "the menu offers Status");
   assert.deepEqual(opened, []);
 });
 

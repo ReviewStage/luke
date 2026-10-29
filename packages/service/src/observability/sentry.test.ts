@@ -118,6 +118,25 @@ it.effect(
     }),
 );
 
+it.effect("a database statement's span leaves named by its statement, not by its database", () =>
+  Effect.gen(function* () {
+    const sentry = recordingSentry();
+    const statement = 'select "id" from "task" where "task"."id" = $1';
+    // Note that the span is opened as Effect's SQL client opens a statement's: named for the database, its text an attribute.
+    yield* Effect.void.pipe(
+      Effect.withSpan("postgres", {
+        kind: "client",
+        attributes: { "db.namespace": "postgres", "db.query.text": statement },
+      }),
+      Effect.provide(sentry.layer),
+    );
+    const spans = sentOfType(sentry.sent, "span").map((item) => item.text);
+    const namedAs = (name: string) =>
+      spans.some((text) => text.includes(JSON.stringify({ name }).slice(1, -1)));
+    assert.deepEqual([namedAs(statement), namedAs("postgres")], [true, false]);
+  }),
+);
+
 it.effect("a monitored run returns only once its closing check-in has left", () =>
   Effect.gen(function* () {
     // Note that the network is held by hand, because a function frozen once it answers drops whatever is still in flight.

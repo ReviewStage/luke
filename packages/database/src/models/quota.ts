@@ -1,9 +1,8 @@
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/sql";
+import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
-import { user } from "../schemas/auth.js";
-import { hostedUsage, voiceSessionUsage } from "../schemas/usage.js";
+import { hostedUsage } from "../schemas/usage.js";
 
 /** The UTC day a moment falls on, as the usage table's YYYY-MM-DD key. */
 export function utcDayKey(now: number): string {
@@ -113,84 +112,4 @@ export function spendDictationMeter(input: {
     day: utcDayKey(input.now),
     seconds: input.seconds,
   });
-}
-
-/**
- * What recording a session's seconds came to: recorded, repeated for a
- * session already recorded, and unknown user for an account the report names
- * that the database no longer holds.
- */
-export const VOICE_SECONDS_OUTCOME = {
-  RECORDED: "recorded",
-  REPEATED: "repeated",
-  UNKNOWN_USER: "unknown-user",
-} as const;
-
-export type VoiceSecondsOutcome =
-  (typeof VOICE_SECONDS_OUTCOME)[keyof typeof VOICE_SECONDS_OUTCOME];
-
-const findUserId = SqlSchema.findOneOption({
-  Request: Schema.String,
-  Result: Schema.Struct({ id: Schema.String }),
-  execute: (userId) =>
-    Database.use((db) => db.select({ id: user.id }).from(user).where(eq(user.id, userId)).limit(1)),
-});
-
-const VoiceSessionUsageInsertSchema = Schema.Struct({
-  sessionId: Schema.String,
-  userId: Schema.String,
-  seconds: Schema.Number,
-  recordedAt: Schema.Number,
-});
-
-const insertVoiceSessionUsage = SqlSchema.findAll({
-  Request: VoiceSessionUsageInsertSchema,
-  Result: Schema.Struct({ sessionId: Schema.String }),
-  execute: (write) =>
-    Database.use((db) =>
-      db
-        .insert(voiceSessionUsage)
-        .values({
-          sessionId: write.sessionId,
-          userId: write.userId,
-          seconds: write.seconds,
-          recordedAt: write.recordedAt,
-        })
-        .onConflictDoNothing({ target: voiceSessionUsage.sessionId })
-        .returning({ sessionId: voiceSessionUsage.sessionId }),
-    ),
-});
-
-/**
- * Records the seconds OpenAI billed for one closed GPT Live session, once. The
- * session row is the ledger: its insert is the idempotent step, so a report
- * repeated after a lost answer, or seen by two function connections, records
- * nothing and answers repeated. The lookup and the insert share one
- * transaction, so an account deleted between them cannot leave a session
- * recorded against nobody.
- */
-export function recordVoiceSeconds(input: {
-  readonly userId: string;
-  readonly sessionId: string;
-  readonly seconds: number;
-  readonly now: number;
-}): Effect.Effect<VoiceSecondsOutcome, StoreFailure, DatabaseServices> {
-  return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        const account = yield* findUserId(input.userId);
-        if (Option.isNone(account)) return VOICE_SECONDS_OUTCOME.UNKNOWN_USER;
-
-        const inserted = yield* insertVoiceSessionUsage({
-          sessionId: input.sessionId,
-          userId: input.userId,
-          seconds: input.seconds,
-          recordedAt: input.now,
-        });
-        if (inserted.length === 0) return VOICE_SECONDS_OUTCOME.REPEATED;
-
-        return VOICE_SECONDS_OUTCOME.RECORDED;
-      }),
-    ),
-  );
 }

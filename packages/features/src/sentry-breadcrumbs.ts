@@ -1,14 +1,14 @@
 /**
- * sentry-breadcrumbs.ts -- the breadcrumbs, events, and spans a renderer's or a tab's reports may carry: none that carries a LiveKit access token.
+ * sentry-breadcrumbs.ts -- the breadcrumbs, events, and spans a renderer's or a tab's reports may carry: none that carries an access token.
  *
- * A renderer's `fetch`, XHR, and console become Sentry breadcrumbs, and the
- * panel's avatar session joins a LiveKit room whose failed join asks
- * `https://<host>/rtc/v1/validate?access_token=…`, the grant's own token in
- * the query. That token may reach the panel and never a crash report,
+ * A renderer's `fetch`, XHR, and console become Sentry breadcrumbs, and a
+ * request may carry a bearer token in its query, under the `access_token`
+ * parameter OAuth and LiveKit alike name it by. That token may reach the
+ * page and never a crash report,
  * so a breadcrumb that names one anywhere it carries text is dropped whole
  * rather than redacted: a URL or a console line is free text, and a pattern
  * that missed one spelling would send the rest. An event is held to the same
- * rule, since a failed join's error can carry the same URL in its message.
+ * rule, since a failed request's error can carry the same URL in its message.
  * Every renderer's page, its preload, and main all report, so all three drop
  * them, and so does the web app's tab (`apps/web/src/app/web-sentry-sdk.ts`),
  * on the same terms.
@@ -60,7 +60,7 @@ interface SpanText {
 /** A pattern Sentry's `ignoreSpans` drops a span by as it starts: its name, or one of its attributes. */
 type IgnoredSpan = string | { readonly attributes: Readonly<Record<string, string>> };
 
-/** The query parameter LiveKit carries the participant token in. */
+/** The query parameter a bearer token travels in a URL under. */
 const ACCESS_TOKEN_PARAMETER = "access_token";
 
 /**

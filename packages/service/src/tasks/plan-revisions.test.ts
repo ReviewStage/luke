@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import {
   listRevisions,
   PLAN_REVISION,
@@ -27,9 +27,8 @@ import { PLAN_SAVE_REFUSAL, PLAN_SAVE_STATUS, restoreRevision, saveNotes } from 
  * revision's writer as its last edit. Synthetic accounts and tasks throughout.
  */
 
-const CALL = "rtc-session-history";
 const AGENT_MODEL = "anthropic/claude-opus-5.5";
-const ON_CALL: PlanWriter = { actor: PLAN_ACTOR.NOTETAKER, liveSessionId: CALL };
+const NOTETAKER: PlanWriter = { actor: PLAN_ACTOR.NOTETAKER };
 
 /** Notes that write a draft into a plan, each in a section of its own. */
 const DRAFT_NOTES: readonly PlanNote[] = [
@@ -62,7 +61,7 @@ const AGENT_TITLE = "Invite emails";
 
 const startAgent = (userId: string, taskId: string) =>
   Effect.map(
-    createCodingAgent(userId, {
+    createAgent(userId, {
       taskId,
       idempotencyKey: randomUUID(),
       model: AGENT_MODEL,
@@ -85,7 +84,6 @@ function shapeOf(revisions: readonly PlanRevisionLine[]) {
     seq,
     actor: lastEdit.actor,
     label: lastEdit.label,
-    duringCall: lastEdit.duringCall,
     changes,
   }));
 }
@@ -94,7 +92,7 @@ it.layer(getTestDB())("a plan's history", (it) => {
   it.effect("every save that changes the plan is a revision under the writer who made it", () =>
     Effect.gen(function* () {
       const { userId, taskId } = yield* openTask;
-      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, ON_CALL);
+      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, NOTETAKER);
       const agentId = yield* startAgent(userId, taskId);
       yield* saveNotes(
         { userId, taskId },
@@ -103,12 +101,11 @@ it.layer(getTestDB())("a plan's history", (it) => {
       );
 
       assert.deepEqual(shapeOf(yield* revisionsOf(userId, taskId)), [
-        { seq: 2, actor: PLAN_ACTOR.AGENT, label: AGENT_TITLE, duringCall: false, changes: 1 },
+        { seq: 2, actor: PLAN_ACTOR.AGENT, label: AGENT_TITLE, changes: 1 },
         {
           seq: 1,
           actor: PLAN_ACTOR.NOTETAKER,
           label: undefined,
-          duringCall: true,
           changes: DRAFT_NOTES.length,
         },
       ]);
@@ -120,7 +117,7 @@ it.layer(getTestDB())("a plan's history", (it) => {
       const { userId, taskId, workspaceId } = yield* openTask;
       const teammate = yield* openUser;
       yield* joinWorkspace(workspaceId, teammate);
-      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, ON_CALL);
+      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, NOTETAKER);
 
       assert.equal((yield* revisionsOf(userId, taskId)).length, 1);
       assert.deepEqual(yield* revisionsOf(teammate, taskId), yield* revisionsOf(userId, taskId));
@@ -131,19 +128,19 @@ it.layer(getTestDB())("a plan's history", (it) => {
     Effect.gen(function* () {
       const { userId, taskId } = yield* openTask;
       const intruder = yield* openTask;
-      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, ON_CALL);
+      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, NOTETAKER);
 
       assert.deepEqual(yield* revisionsOf(intruder.userId, taskId), []);
       assert.equal((yield* revisionsOf(userId, taskId)).length, 1);
     }),
   );
-  /** Notes on the call, each a revision of its own: the saves stand further apart than any join. */
+  /** Luke's notes, each a revision of its own: the saves stand further apart than any join. */
   const apart = (userId: string, taskId: string, notes: readonly (readonly [string, string])[]) =>
     Effect.forEach(
       notes,
       ([heading, text]) =>
         Effect.andThen(
-          saveNotes({ userId, taskId }, [added(heading, text)], ON_CALL),
+          saveNotes({ userId, taskId }, [added(heading, text)], NOTETAKER),
           TestClock.adjust(Duration.millis(PLAN_REVISION.JOIN_WITHIN_MS + 1)),
         ),
       { discard: true },
@@ -252,10 +249,10 @@ it.layer(getTestDB())("a plan's history", (it) => {
       }),
   );
 
-  it.effect("Luke's notes on a member's call are kept under that member", () =>
+  it.effect("Luke's notes on a member's turn are kept under that member", () =>
     Effect.gen(function* () {
       const { userId, taskId } = yield* openTask;
-      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, ON_CALL);
+      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, NOTETAKER);
 
       const [line] = yield* revisionsOf(userId, taskId);
       assert.deepEqual(line?.lastEdit.by, { userId, name: "Test User" });

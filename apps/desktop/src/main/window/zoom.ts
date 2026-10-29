@@ -8,8 +8,7 @@
  * (`--zoom`), so the title bar's own buttons clear them at every size.
  *
  * Note that Chromium remembers a zoom per origin, and every window here loads
- * a file of this build's, so one window's zoom reaches every window: the
- * hidden voice window takes it too, and draws nothing it could change. Each
+ * a file of this build's, so one window's zoom reaches every window. Each
  * panel is set to the same absolute factor, never stepped from its own, so
  * that memory has nothing to add to.
  */

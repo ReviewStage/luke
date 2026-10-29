@@ -1,3 +1,4 @@
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import {
   AUTOMATION_FIRING,
   AUTOMATION_RUN_STATUS,
@@ -22,7 +23,6 @@ import {
   automationTriggerSchema,
   type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import type { SentryTriggerEvent, TriggerProvider } from "@luke/features/trigger-catalog";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
@@ -46,25 +46,24 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, type DatabaseServices, queryBuilder } from "../core/query.js";
+import { agentTable } from "../schemas/agent.js";
 import { member } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
-import { codingAgent } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { conversations } from "../schemas/storage.js";
-import { task } from "../schemas/task.js";
 import { agentGivenNameSql } from "./agent-name.js";
-import { noOpenPullRequest } from "./coding-agent-store.js";
+import { noOpenPullRequest } from "./agent-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
-import { AGENT_WORKSPACE, isWorkspaceMember, reachableTask } from "./workspace-store.js";
+import { AGENT_WORKSPACE, isWorkspaceMember } from "./workspace-store.js";
 
 /**
  * automation-store.ts -- an account's automations and their runs: made, listed, changed, and deleted by the account, and a run recorded once per firing.
  *
  * Every statement an account makes names it beside the automation, so no
  * account reads or changes another's, and gates on the account still
- * reaching the automation's task, a member of the task's workspace, as every
- * task statement is gated (`workspace-store.ts`): an account that leaves the
+ * being a member of the automation's workspace, as every task statement is
+ * gated (`workspace-store.ts`): an account that leaves the
  * workspace leaves its automations there with it, unread and unchanged,
  * and their runs fail on the same check when they fire. A trigger is kept
  * with only the columns it uses: a schedule's due instant and a webhook's
@@ -82,18 +81,13 @@ const MAX_RUNS_READ = 100;
 const AutomationRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
-  /** The task it was made on; null for one made on its workspace with no task. */
-  taskId: Schema.NullOr(Schema.String),
-  taskName: Schema.NullOr(Schema.String),
-  /** The task's repository as `owner/name`, or null where it names none or there is no task. */
-  taskRepository: Schema.NullOr(Schema.String),
   name: Schema.String,
   enabled: Schema.Boolean,
   trigger: automationTriggerSchema,
   action: automationActionSchema,
   guards: automationGuardsSchema,
   nextRunAt: Schema.NullOr(InstantColumnSchema),
-  organizationId: Schema.NullOr(Schema.String),
+  organizationId: Schema.String,
   scope: automationScopeSchema,
   repositories: Schema.Array(Schema.String),
   targetKind: automationTargetKindSchema,
@@ -103,36 +97,21 @@ const AutomationRowSchema = Schema.Struct({
   updatedAt: InstantColumnSchema,
 });
 
-/** One automation as its account reads it, with the name of the task it works on. */
+/** One automation as its account reads it. */
 export type Automation = typeof AutomationRowSchema.Type;
-
-/** An automation row's workspace: its own, or its task's on a row an older build wrote, its workspace still null. */
-export const AUTOMATION_WORKSPACE = sql<string>`coalesce(${automation.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${automation.taskId}))`;
-
-/** An automation row's repositories: its own, or its task's on a row an older build wrote, its list still empty. */
-const AUTOMATION_REPOSITORIES = sql<
-  readonly string[]
->`case when ${automation.repositories} = '[]'::jsonb and ${task.repository} is not null then jsonb_build_array(${task.repository}) else ${automation.repositories} end`;
 
 export const AUTOMATION_COLUMNS = {
   id: automation.id,
   userId: automation.userId,
-  taskId: automation.taskId,
-  taskName: task.name,
-  taskRepository: task.repository,
   name: automation.name,
   enabled: automation.enabled,
   trigger: automation.trigger,
   action: automation.action,
   guards: automation.guards,
   nextRunAt: automation.nextRunAt,
-  // Note that a row an older build wrote after the backfill, its workspace null and its
-  // repositories empty, reads its task's, until the contract step fills it for good.
-  organizationId: sql<
-    string | null
-  >`coalesce(${automation.organizationId}, ${task.organizationId})`,
+  organizationId: automation.organizationId,
   scope: automation.scope,
-  repositories: AUTOMATION_REPOSITORIES,
+  repositories: automation.repositories,
   targetKind: automation.targetKind,
   targetAgentId: automation.targetAgentId,
   archiveSuccessful: automation.archiveSuccessful,
@@ -140,15 +119,13 @@ export const AUTOMATION_COLUMNS = {
   updatedAt: automation.updatedAt,
 };
 
-/** What making an automation takes: the task, what fires it and what it starts, its guards, when a schedule is first due, and a webhook's secret hash. */
+/** What making an automation takes: its workspace and repositories, what fires it and what it starts, its guards, when a schedule is first due, and a webhook's secret hash. */
 export interface NewAutomation {
   /** The id to make it under, such as one drawn from an agent's call key so a call run again finds the one it made; a fresh one where left out. A make under an id already standing writes nothing and answers none. */
   readonly id?: string;
-  /** The task it stands on, whose workspace and repository it takes; null for one made on a workspace with repositories of its own. */
-  readonly taskId: string | null;
-  /** The workspace an automation with no task stands on, which the account must be a member of; read off the task otherwise. */
-  readonly organizationId?: string | undefined;
-  /** The repositories an automation with no task works in; read off the task otherwise. */
+  /** The workspace it stands on, which the account must be a member of. */
+  readonly organizationId: string;
+  /** The repositories its runs work in; none for one whose runs go to its owner's operator. */
   readonly repositories?: readonly string[] | undefined;
   readonly name: string;
   readonly trigger: AutomationTrigger;
@@ -275,8 +252,7 @@ function memberOfAutomationWorkspace(
       .from(member)
       .where(
         and(
-          // A row an older build wrote, its workspace still null, is its task's workspace's.
-          eq(member.organizationId, AUTOMATION_WORKSPACE),
+          eq(member.organizationId, automation.organizationId),
           eq(member.userId, userId),
           // The plugin's role text may name several roles, comma-separated, as `roleOf` reads it.
           roles === undefined
@@ -343,22 +319,6 @@ function triggerColumns(
   };
 }
 
-const findReachableTask = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
-  Result: Schema.Struct({
-    id: Schema.String,
-    organizationId: Schema.String,
-    repository: Schema.NullOr(Schema.String),
-  }),
-  execute: ({ userId, taskId }) =>
-    Database.use((db) =>
-      db
-        .select({ id: task.id, organizationId: task.organizationId, repository: task.repository })
-        .from(task)
-        .where(reachableTask(userId, taskId)),
-    ),
-});
-
 /**
  * The id of the transaction a write committed in, read in the write's own
  * `RETURNING`, as Neon's mutations guide says, so a client following the
@@ -374,7 +334,6 @@ const insertAutomation = SqlSchema.findAll({
   Request: Schema.Struct({
     id: Schema.optionalKey(Schema.String),
     userId: Schema.String,
-    taskId: Schema.NullOr(Schema.String),
     name: Schema.String,
     trigger: automationTriggerSchema,
     action: automationActionSchema,
@@ -397,7 +356,6 @@ const insertAutomation = SqlSchema.findAll({
         .values({
           ...(row.id === undefined ? undefined : { id: row.id }),
           userId: row.userId,
-          taskId: row.taskId,
           organizationId: row.organizationId,
           repositories: row.repositories,
           scope: row.scope,
@@ -421,21 +379,18 @@ const insertAutomation = SqlSchema.findAll({
 const findAutomations = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
-    taskId: Schema.NullOr(Schema.String),
     organizationId: Schema.NullOr(Schema.String),
   }),
   Result: AutomationRowSchema,
-  execute: ({ userId, taskId, organizationId }) =>
+  execute: ({ userId, organizationId }) =>
     Database.use((db) =>
       db
         .select(AUTOMATION_COLUMNS)
         .from(automation)
-        .leftJoin(task, eq(task.id, automation.taskId))
         .where(
           and(
             allowedTo(userId, AUTOMATION_ACCESS.READ),
-            taskId === null ? undefined : eq(automation.taskId, taskId),
-            organizationId === null ? undefined : eq(AUTOMATION_WORKSPACE, organizationId),
+            organizationId === null ? undefined : eq(automation.organizationId, organizationId),
           ),
         )
         .orderBy(desc(automation.createdAt), desc(automation.id)),
@@ -450,7 +405,6 @@ const findAutomation = SqlSchema.findOneOption({
       db
         .select(AUTOMATION_COLUMNS)
         .from(automation)
-        .leftJoin(task, eq(task.id, automation.taskId))
         .where(allowedTo(userId, access, id)),
     ),
 });
@@ -513,14 +467,14 @@ const reaimAutomations = SqlSchema.findAll({
             inArray(
               automation.targetAgentId,
               queryBuilder
-                .select({ id: codingAgent.id })
-                .from(codingAgent)
+                .select({ id: agentTable.id })
+                .from(agentTable)
                 .where(
                   and(
-                    eq(codingAgent.userId, userId),
-                    eq(codingAgent.organizationId, workspaceId),
-                    eq(codingAgent.kind, CODING_AGENT_KIND.OPERATOR),
-                    isNotNull(codingAgent.archivedAt),
+                    eq(agentTable.userId, userId),
+                    eq(agentTable.organizationId, workspaceId),
+                    eq(agentTable.kind, AGENT_KIND.OPERATOR),
+                    isNotNull(agentTable.archivedAt),
                   ),
                 ),
             ),
@@ -626,11 +580,11 @@ function historyOf(userId: string, automationId: string): SQL {
 
 const HISTORY_COLUMNS = {
   ...RUN_COLUMNS,
-  agentConversationId: codingAgent.conversationId,
+  agentConversationId: agentTable.conversationId,
   // The name the agent goes by: Luke for an operator, else its title.
-  agentTitle: sql<string | null>`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
-  agentCreatedAt: codingAgent.createdAt,
-  agentUserId: codingAgent.userId,
+  agentTitle: sql<string | null>`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
+  agentCreatedAt: agentTable.createdAt,
+  agentUserId: agentTable.userId,
 };
 
 const findRuns = SqlSchema.findAll({
@@ -641,7 +595,7 @@ const findRuns = SqlSchema.findAll({
       db
         .select(HISTORY_COLUMNS)
         .from(automationRun)
-        .leftJoin(codingAgent, eq(codingAgent.id, automationRun.codingAgentId))
+        .leftJoin(agentTable, eq(agentTable.id, automationRun.codingAgentId))
         .where(historyOf(userId, automationId))
         .orderBy(desc(automationRun.firedAt), desc(automationRun.id))
         .limit(limit),
@@ -660,7 +614,7 @@ const findRunByKey = SqlSchema.findOneOption({
       db
         .select(HISTORY_COLUMNS)
         .from(automationRun)
-        .leftJoin(codingAgent, eq(codingAgent.id, automationRun.codingAgentId))
+        .leftJoin(agentTable, eq(agentTable.id, automationRun.codingAgentId))
         .where(and(historyOf(userId, automationId), eq(automationRun.dedupeKey, dedupeKey))),
     ),
 });
@@ -735,11 +689,7 @@ const findAutomationToRun = SqlSchema.findOneOption({
   Result: AutomationRowSchema,
   execute: (id) =>
     Database.use((db) =>
-      db
-        .select(AUTOMATION_COLUMNS)
-        .from(automation)
-        .leftJoin(task, eq(task.id, automation.taskId))
-        .where(eq(automation.id, id)),
+      db.select(AUTOMATION_COLUMNS).from(automation).where(eq(automation.id, id)),
     ),
 });
 
@@ -778,12 +728,12 @@ const findStartedAgents = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          codingAgentId: codingAgent.id,
-          conversationId: codingAgent.conversationId,
-          createdAt: codingAgent.createdAt,
+          codingAgentId: agentTable.id,
+          conversationId: agentTable.conversationId,
+          createdAt: agentTable.createdAt,
         })
         .from(automationRun)
-        .innerJoin(codingAgent, eq(codingAgent.id, automationRun.codingAgentId))
+        .innerJoin(agentTable, eq(agentTable.id, automationRun.codingAgentId))
         .where(
           and(
             eq(automationRun.automationId, automationId),
@@ -825,17 +775,17 @@ const findArchivableAgents = SqlSchema.findAll({
       db
         .select({
           runId: automationRun.id,
-          userId: codingAgent.userId,
-          codingAgentId: codingAgent.id,
-          conversationId: codingAgent.conversationId,
-          createdAt: codingAgent.createdAt,
-          archivedAt: codingAgent.archivedAt,
+          userId: agentTable.userId,
+          codingAgentId: agentTable.id,
+          conversationId: agentTable.conversationId,
+          createdAt: agentTable.createdAt,
+          archivedAt: agentTable.archivedAt,
           conversationSeq: conversations.nextMessageSeq,
         })
         .from(automationRun)
         .innerJoin(automation, eq(automation.id, automationRun.automationId))
-        .innerJoin(codingAgent, eq(codingAgent.id, automationRun.codingAgentId))
-        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
+        .innerJoin(agentTable, eq(agentTable.id, automationRun.codingAgentId))
+        .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))
         .where(
           and(
             eq(automation.archiveSuccessful, true),
@@ -850,7 +800,7 @@ const findArchivableAgents = SqlSchema.findAll({
                 .from(member)
                 .where(
                   and(
-                    eq(member.userId, codingAgent.userId),
+                    eq(member.userId, agentTable.userId),
                     eq(member.organizationId, AGENT_WORKSPACE),
                   ),
                 ),
@@ -861,7 +811,7 @@ const findArchivableAgents = SqlSchema.findAll({
                 .from(inboxItem)
                 .where(
                   and(
-                    eq(inboxItem.agentId, codingAgent.id),
+                    eq(inboxItem.agentId, agentTable.id),
                     eq(inboxItem.status, INBOX_STATUS.OPEN),
                   ),
                 ),
@@ -1025,13 +975,12 @@ const findGithubAutomations = SqlSchema.findAll({
       db
         .select({ id: automation.id, userId: automation.userId, trigger: automation.trigger })
         .from(automation)
-        .leftJoin(task, eq(task.id, automation.taskId))
         .where(
           and(
             eq(automation.enabled, true),
             eq(automation.triggerKind, AUTOMATION_TRIGGER.GITHUB),
             // GitHub folds a repository's name; an automation keeps each as GitHub spelled it when it was named.
-            sql`exists (select 1 from jsonb_array_elements_text(${AUTOMATION_REPOSITORIES}) as listed(name) where lower(listed.name) = lower(${repository}))`,
+            sql`exists (select 1 from jsonb_array_elements_text(${automation.repositories}) as listed(name) where lower(listed.name) = lower(${repository}))`,
             sql`${automation.trigger}->>'event' = ${event}`,
             // The owner still reaches the automation's workspace, read per row, since a delivery fires every account's automations at once.
             memberOfAutomationWorkspace(automation.userId),
@@ -1136,7 +1085,7 @@ const findOwnFailedRuns = SqlSchema.findAll({
           id: automationRun.id,
           automationId: automationRun.automationId,
           automationName: automation.name,
-          workspaceId: AUTOMATION_WORKSPACE,
+          workspaceId: automation.organizationId,
           reason: automationRun.reason,
           // Note that a failed run is settled by the filter below, so its instant is never null.
           failedAt: automationRun.settledAt,
@@ -1177,7 +1126,7 @@ export function ownFailedRunsLiveStatement(userId: string): Option.Option<LiveSt
             id: automationRun.id,
             automationId: automationRun.automationId,
             automationName: automation.name,
-            workspaceId: AUTOMATION_WORKSPACE,
+            workspaceId: automation.organizationId,
             reason: automationRun.reason,
           },
           { failedAt: automationRun.settledAt },
@@ -1205,28 +1154,7 @@ function readWritten(userId: string, id: string): TaskStoreEffect<Option.Option<
   return findAutomation({ userId, id, access: AUTOMATION_ACCESS.READ });
 }
 
-/** Makes the account's automation on the task, enabled; nothing where the account does not reach the task. */
-/**
- * Where a new automation stands, read as the account: its task's workspace
- * and repository, or the workspace it names with the repositories it names,
- * where the account is a member of it; nothing where it reaches neither.
- */
-const placeOf = Effect.fnUntraced(function* (userId: string, made: NewAutomation) {
-  if (made.taskId !== null) {
-    const reached = yield* findReachableTask({ userId, taskId: made.taskId });
-    return Option.map(reached, (held) => ({
-      organizationId: held.organizationId,
-      repositories: held.repository === null ? [] : [held.repository],
-    }));
-  }
-  const { organizationId } = made;
-  if (organizationId === undefined) return Option.none();
-  const member = yield* isWorkspaceMember(userId, organizationId);
-  return member
-    ? Option.some({ organizationId, repositories: made.repositories ?? [] })
-    : Option.none();
-});
-
+/** Makes the account's automation on its workspace, enabled; nothing where the account is no member of it. */
 export function createAutomation(
   userId: string,
   made: NewAutomation,
@@ -1251,15 +1179,12 @@ export function createAutomationCommitted(
   made: NewAutomation,
 ): TaskStoreEffect<Option.Option<AutomationCommitted>> {
   return Effect.gen(function* () {
-    const reached = yield* placeOf(userId, made);
-    if (Option.isNone(reached)) return Option.none();
+    if (!(yield* isWorkspaceMember(userId, made.organizationId))) return Option.none();
     const now = yield* DateTime.nowAsDate;
-    const { repositories, organizationId } = reached.value;
     const [row] = yield* insertAutomation({
       ...made,
       userId,
-      organizationId,
-      repositories,
+      repositories: made.repositories ?? [],
       scope: made.scope ?? AUTOMATION_SCOPE.PERSONAL,
       targetKind: made.targetKind ?? AUTOMATION_TARGET.NEW_AGENT,
       targetAgentId: made.targetAgentId ?? null,
@@ -1322,20 +1247,18 @@ export function aimOperatorHeartbeat(
   );
 }
 
-/** Which automations a list reads: one task's, one workspace's, or every one the account may read where it names neither. */
+/** Which automations a list reads: one workspace's, or every one the account may read where it names none. */
 export interface AutomationListFilter {
-  readonly taskId?: string | undefined;
   readonly organizationId?: string | undefined;
 }
 
-/** The automations the account may read, newest first, narrowed to one task's or one workspace's where the filter names it. */
+/** The automations the account may read, newest first, narrowed to one workspace's where the filter names it. */
 export function listAutomations(
   userId: string,
   filter: AutomationListFilter = {},
 ): TaskStoreEffect<readonly Automation[]> {
   return findAutomations({
     userId,
-    taskId: filter.taskId ?? null,
     organizationId: filter.organizationId ?? null,
   });
 }
@@ -1509,7 +1432,7 @@ export function claimDueAutomations(claim: DueClaim): TaskStoreEffect<readonly C
 /**
  * One automation by id, whoever owns it, for a run the service fires: the
  * sweep and a trigger hold no account's bearer, and the run's own start
- * checks the owner still reaches the task, as every Start does.
+ * checks the owner is still a member of its workspace, as every Start does.
  */
 export function readAutomationToRun(id: string): TaskStoreEffect<Option.Option<Automation>> {
   return findAutomationToRun(id);

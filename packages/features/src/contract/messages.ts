@@ -19,20 +19,20 @@ import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {
-  CODING_AGENT_BOUNDS,
-  codingAgentMessageAnswerSchema,
-  codingAgentMessageRequestSchema,
-  codingAgentNewestAnswerSchema,
-  codingAgentOlderAnswerSchema,
-  codingAgentPartAnswerSchema,
+  AGENT_BOUNDS,
+  agentMessageAnswerSchema,
+  agentMessageRequestSchema,
+  agentNewestAnswerSchema,
+  agentOlderAnswerSchema,
+  agentPartAnswerSchema,
   MAXIMUM_ATTACHMENTS_BODY_BYTES,
-} from "../coding-agent-wire.js";
+} from "../agent-wire.js";
 import { transcriptNowAnswerSchema } from "../live-wire.js";
 import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
 
 /** A message is its words, its files, and a key: the bound's characters at JSON's widest escape, the files, and room for the keys around them. */
 const MESSAGE_BODY_BYTES =
-  6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 1_024;
+  6 * AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 1_024;
 
 /** The status a message handed to an agent is answered with: taken, its turn yet to read it. */
 const ACCEPTED = 202;
@@ -66,10 +66,7 @@ const agentTranscriptAnswerSchema = EffectSchema.Struct({
 const newestQuery = { before: queryValue, parts: queryValue };
 
 /** The newest page with all it carries, or an older page, as the read named `before` or not. */
-const newestAnswerSchema = EffectSchema.Union([
-  codingAgentNewestAnswerSchema,
-  codingAgentOlderAnswerSchema,
-]);
+const newestAnswerSchema = EffectSchema.Union([agentNewestAnswerSchema, agentOlderAnswerSchema]);
 
 export const messagesContract = {
   /** One agent's transcript past the cursor, held while it runs, or read at once where `wait=none` asks. */
@@ -88,8 +85,8 @@ export const messagesContract = {
         inputStructure: "detailed",
       }),
     )
-    .input(exactBodyInput(EffectSchema.Struct(byId), codingAgentMessageRequestSchema))
-    .output(EffectSchema.flip(codingAgentMessageAnswerSchema)),
+    .input(exactBodyInput(EffectSchema.Struct(byId), agentMessageRequestSchema))
+    .output(EffectSchema.flip(agentMessageAnswerSchema)),
   /** One agent's worker's transcript past the cursor, held while it runs, or read at once where `wait=none` asks. */
   agentWorker: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: "/api/agents/{id}/subagents/{call}/messages" }))
@@ -119,7 +116,7 @@ export const messagesContract = {
       }),
     )
     .input(EffectSchema.Struct({ ...byId, ...byPart }))
-    .output(EffectSchema.flip(codingAgentPartAnswerSchema)),
+    .output(EffectSchema.flip(agentPartAnswerSchema)),
   /** One part of a message of an agent's worker's transcript, whole, read at once. */
   agentWorkerPart: hostedProcedure
     .meta(
@@ -129,5 +126,5 @@ export const messagesContract = {
       }),
     )
     .input(EffectSchema.Struct({ ...byCall, ...byPart }))
-    .output(EffectSchema.flip(codingAgentPartAnswerSchema)),
+    .output(EffectSchema.flip(agentPartAnswerSchema)),
 };

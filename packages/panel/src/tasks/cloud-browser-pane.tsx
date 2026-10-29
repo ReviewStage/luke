@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
+import type { AgentBrowserTab, BrowserTabsPlace } from "@luke/features/agent-browser-tab-wire";
 import { browserAddressOf, chordIsWindows } from "@luke/features/browser-acts";
 import {
   BROWSER_LIVE_CLIENT,
@@ -40,6 +40,7 @@ import {
   Tooltip,
   useAnnounce,
 } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { Clock, Duration, Effect, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -61,6 +62,7 @@ import {
 } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
+import { useCopyToast } from "../copy-feedback.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { usePhoneRoom } from "../stage-room.js";
@@ -185,7 +187,7 @@ function fitted(body: CloudBrowserViewport, aspect: number | undefined): CloudBr
   return { width: Math.floor(width), height: Math.floor(width / aspect) };
 }
 
-/** Whose browser a cloud Browser tab lives in: its agent's name, or Luke's, and the glyph its strip tab and its card wear. */
+/** Whose browser a cloud Browser tab lives in: its agent's name, and the glyph its strip tab and its card wear. */
 export interface CloudBrowserOwner {
   readonly name: string;
   readonly icon: React.JSX.Element;
@@ -271,8 +273,10 @@ function CloudBrowserBar({
   };
   // Note that a step's hint is its name while it works, and the name with the reason while it is off.
   const hintOf = (name: string) => (onStep === undefined ? `${name}: ${whyOff}` : name);
-  // A phone keeps the address as the page's own field, its steps items of the task's header's ⋯.
+  // A phone keeps the address as the page's own field, its steps items of the task's header's ⋯,
+  // and the page's address copied or opened in a browser of the reader's own after them.
   const phone = usePhoneRoom();
+  const copyWithToast = useCopyToast();
   useTabActions(
     phone
       ? [
@@ -299,7 +303,21 @@ function CloudBrowserBar({
               onSelect: () => onStep?.(BROWSER_LIVE_HISTORY.RELOAD),
             },
           ],
-        ]
+          address === ""
+            ? []
+            : [
+                {
+                  label: "Copy address",
+                  icon: <GLYPH.COPY />,
+                  onSelect: () => copyWithToast(address, "Address copied"),
+                },
+                {
+                  label: "Open in browser",
+                  icon: <GLYPH.OPEN_EXTERNALLY />,
+                  onSelect: () => appPlatform().openWeb(address),
+                },
+              ],
+        ].filter((group) => group.length > 0)
       : undefined,
   );
   return (
@@ -486,18 +504,16 @@ function darkBeneath(
 
 /**
  * A cloud Browser tab: its bar, then the page live. `owner` names whose
- * browser it is in, the agent's name or Luke; `shown` is whether the panel
+ * browser it is in, the agent's name; `shown` is whether the panel
  * is on screen and staying, which the view stands open under, while the
  * window's page is visible too.
  */
 export function CloudBrowserPane({
-  taskId,
   tab,
   owner,
   shown,
   memberName,
 }: {
-  taskId: string;
   tab: AgentBrowserTab;
   owner: CloudBrowserOwner;
   shown: boolean;
@@ -554,11 +570,11 @@ export function CloudBrowserPane({
     () =>
       cloudBrowserLive({
         open: appPlatform().openBrowserLive,
-        target: { taskId, tabId: tab.id },
+        target: { agentId: tab.agentId, tabId: tab.id },
         viewport: () => viewport.current,
         onFrame,
       }),
-    [taskId, tab.id, onFrame, generation, watched],
+    [tab.agentId, tab.id, onFrame, generation, watched],
   );
   const views = useMemo(
     () => (watched ? rendererRuntime.atom(live.views) : RESTING),
@@ -753,13 +769,14 @@ export function CloudBrowserPane({
  * tries again. Escape clears the address, then discards the draft.
  */
 export function CloudBrowserDraftPane({
-  taskId,
+  place,
   draft,
   owner,
   onOpened,
   onDiscard,
 }: {
-  taskId: string;
+  /** The holder whose panel the draft stands on, which lists the tab it opens until a read does. */
+  place: BrowserTabsPlace;
   draft: CloudBrowserDraft;
   owner: CloudBrowserOwner;
   onOpened: (tab: AgentBrowserTab) => void;
@@ -772,10 +789,10 @@ export function CloudBrowserDraftPane({
     if (opening) return;
     setOpening(true);
     setRefused(undefined);
-    act(ACT_KIND.TASKS_BROWSER_TAB_OPEN, { taskId, agentId: draft.agentId, address }).then(
+    act(ACT_KIND.TASKS_BROWSER_TAB_OPEN, { agentId: draft.agentId, address }).then(
       (answer) => {
         if ("tab" in answer) {
-          noteOpenedCloudTab(taskId, answer.tab);
+          noteOpenedCloudTab(place, answer.tab);
           onOpened(answer.tab);
           return;
         }

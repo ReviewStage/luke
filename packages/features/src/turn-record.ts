@@ -13,15 +13,15 @@
 
 import { TURN_STATUS } from "@luke/wire";
 import { Option, Schema } from "effect";
-import { BRAIN_REQUEST_FAILURE } from "./brain/requests.js";
 import {
-  CODING_AGENT_BOUNDS,
+  AGENT_BOUNDS,
   TURN_ENDING,
   type TurnEnding,
   type TurnRecord,
   type TurnTokens,
-} from "./coding-agent-wire.js";
+} from "./agent-wire.js";
 import { catalogIdOf } from "./model-label.js";
+import { TURN_FAILURE } from "./turn-run/requests.js";
 
 /** The row's fields a record is read from. */
 export interface RecordedTurn {
@@ -45,9 +45,7 @@ const decodeUsage = Schema.decodeUnknownOption(RecordedUsageSchema);
 
 /** A recorded name the wire carries: one it bounds, and nothing for an empty or overlong one. */
 function choiceOf(recorded: string | null): string | undefined {
-  return recorded === null ||
-    recorded === "" ||
-    recorded.length > CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS
+  return recorded === null || recorded === "" || recorded.length > AGENT_BOUNDS.MAX_CHOICE_CHARS
     ? undefined
     : recorded;
 }
@@ -56,9 +54,7 @@ function choiceOf(recorded: string | null): string | undefined {
 function endingOf(turn: RecordedTurn): TurnEnding | undefined {
   if (turn.status === TURN_STATUS.CANCELLED) return TURN_ENDING.STOPPED;
   if (turn.status !== TURN_STATUS.FAILED) return undefined;
-  return turn.failure === BRAIN_REQUEST_FAILURE.ABANDONED
-    ? TURN_ENDING.ABANDONED
-    : TURN_ENDING.FAILED;
+  return turn.failure === TURN_FAILURE.ABANDONED ? TURN_ENDING.ABANDONED : TURN_ENDING.FAILED;
 }
 
 /** The turn's tokens as its row summed them, or nothing where it recorded none or a shape this build cannot read. */

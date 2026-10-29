@@ -34,7 +34,7 @@ function mounted() {
     const room = useRef<HTMLDivElement>(null);
     latest = useMentionPicker({
       source: {
-        taskId: "plan-1",
+        holder: { taskId: "plan-1" },
         taskName: "Ship the palette",
         workspace: "acme",
         repository: null,
@@ -120,7 +120,7 @@ async function mountedOnPlan(chosen: MentionNode[]) {
     const room = useRef<HTMLDivElement>(null);
     latest = useMentionPicker({
       source: {
-        taskId: "plan-1",
+        holder: { taskId: "plan-1" },
         taskName: "Ship the palette",
         workspace: "stage",
         repository: null,

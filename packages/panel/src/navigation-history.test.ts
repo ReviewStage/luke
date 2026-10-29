@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -52,7 +52,7 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platfor
 import { handState } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
-import { codingAgentsControl, tasksControl } from "./testing/tasks-control.js";
+import { agentsControl, tasksControl } from "./testing/tasks-control.js";
 
 /** A place as the window's history holds it. */
 type HeldPlace = ReturnType<
@@ -676,7 +676,7 @@ function onTask(workspaces: TasksControl["workspaces"]): TasksControl {
   });
 }
 
-test("each step's address is the path of the link ⌥⌘C copies there", async () => {
+test("each step's address is the path of the link ⇧⌘C copies there", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const listed = { workspaces: [ACME], workspace: ACME };
@@ -815,7 +815,6 @@ test("an Inbox told no column of its own until an item stands alone in it takes 
         open: true,
         chosen,
         single: chosen !== undefined,
-        listed: false,
       },
     });
   const window = mount(base);
@@ -890,14 +889,14 @@ function listedTask(name: string, agentTitle?: string): TaskSummary {
     title: agentTitle,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
   };
   const agents = { total: 1, working: 0, agents: [line], pullRequestTotal: 0, pullRequests: [] };
   return { ...task, agents };
 }
 
 /** Agent A as the open task's agents read it, under `title`. */
-function openAgent(title: string): CodingAgentSummary {
+function openAgent(title: string): AgentSummary {
   return {
     id: AGENT_A.agent,
     planId: TASK_ID,
@@ -905,7 +904,7 @@ function openAgent(title: string): CodingAgentSummary {
     effort: "high",
     title,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
 }
@@ -916,7 +915,7 @@ test("Back's list names a task and its agent's tab by the names they go by now, 
     {
       ...open,
       tasks: [listedTask("Auth refactor")],
-      agents: codingAgentsControl({ agents: [openAgent("Token refresh")] }),
+      agents: agentsControl({ agents: [openAgent("Token refresh")] }),
     },
     memoryHistory(),
     namedAsShown,
@@ -944,7 +943,7 @@ test("Back's list names a renamed agent's tab by its name now beside a page's ta
       ...open,
       sidePanel: { ...open.sidePanel, strip: [page] },
       tasks: [listedTask("Auth refactor")],
-      agents: codingAgentsControl({ agents: [openAgent("Token refresh")] }),
+      agents: agentsControl({ agents: [openAgent("Token refresh")] }),
       pages: [{ id: page.page, title: "Notes", version: 1, at: 1 }],
     },
     memoryHistory(),

@@ -1,3 +1,4 @@
+import { AGENT_TOOL } from "@luke/features/agent-tools";
 import {
   connectionHealth,
   type IntegrationTool,
@@ -11,14 +12,31 @@ import {
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import {
+  type LukeToolRow,
+  lukeToolSections,
+  lukeToolSummary,
+  RUN_ON_MAC_DESCRIPTION,
+  RUN_ON_MAC_REASON,
+  RUN_ON_MAC_REASON_WORDS,
+  type RunOnMacReason,
+  runOnMacDetail,
+} from "@luke/features/luke-tools-model";
+import { OPERATOR_NAME } from "@luke/features/model-label";
+import { SETTINGS_VIEW } from "@luke/settings/settings-views";
+import {
   AnchoredPopover,
+  BANNER_LOOK,
   BackButton,
+  Badge,
+  Banner,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
   CHIP_WIDTH,
   Chip,
   GearIcon,
+  GLYPH_INK,
+  GlyphSlot,
   IconButton,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
@@ -27,6 +45,7 @@ import {
   ListRow,
   type ListRowHint,
   McpIcon,
+  MenuSection,
   NO_BACK_KEY,
   OneLine,
   type OneLineHint,
@@ -42,6 +61,7 @@ import {
   SEARCH_FIELD_LOOK,
   SearchField,
   Spinner,
+  STATUS_TONE,
   Switch,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -49,6 +69,7 @@ import {
   Text,
   Tooltip,
   VisuallyHidden,
+  WingFace,
   wholeWordsHint,
 } from "@luke/ui";
 import {
@@ -56,20 +77,22 @@ import {
   opensTools,
   SERVER_ACTION,
   SERVER_ROW,
+  SERVER_SECTION,
   SERVERS_LABEL,
   type ServerRow,
   searchServers,
   serverGroups,
   serverRows,
+  serversOnWords,
   switchedServers,
   type ToolHit,
 } from "@luke/ui/agent-servers-model";
+import { CircleAlertIcon, ICON_SIZE } from "@luke/ui/icons";
 import { matchIntegration, shownTools } from "@luke/ui/integration-search";
-import { searchTokens } from "@luke/ui/search-tokens";
+import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import {
   cloneElement,
   createContext,
-  Fragment,
   useContext,
   useEffect,
   useId,
@@ -85,7 +108,9 @@ import {
   keepInView,
 } from "../integration-tool-list.js";
 import { useIntegrationTools } from "../integration-tools.js";
+import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
 import { Highlighted } from "../search-field.js";
+import { type LukeToolsDoor, type LukeToolsRead, useLukeTools } from "./agent-luke-tools.js";
 import { ServerCard } from "./server-card.js";
 
 /**
@@ -94,9 +119,19 @@ import { ServerCard } from "./server-card.js";
  * Between the model chip and the context ring stands the MCP mark. A press
  * opens a popover from the button's trailing edge, as the model menu and
  * the context popover hang from theirs (`@luke/ui`'s `AnchoredPopover` and
- * `PopoverPanel`, a menu's), drawn as the searchable menu is: a search field first, then the servers under
- * Connected and Not connected (`agent-servers-model.ts`), and Manage in
- * Settings pinned at the foot. A connected server's row names how many
+ * `PopoverPanel`, a menu's), drawn as the searchable menu is: a search field first, then, for a
+ * started agent, Luke's own tools under Built in, then the servers under
+ * Connected, which counts how many this agent has on, and Not connected
+ * (`agent-servers-model.ts`), each section under `@luke/ui`'s `MenuSection`,
+ * and Manage in Settings pinned at the foot. Luke's row is his face, his
+ * name, how many of his tools the agent is offered (`agent-luke-tools.ts`),
+ * `run_on_mac off` in the attention tone where it is, and Always on in a
+ * switch's place, since his tools cannot be turned off; pressing it turns
+ * the popover into his page, his tools under their groups, each its name and
+ * one line of what it does, `run_on_mac` with an On or Off badge and, off,
+ * its short reason. Pressing `run_on_mac` opens its own page: what it does
+ * and, off, why, in the attention tone, with Open Settings where Settings ›
+ * This Mac is what turned it off. A connected server's row names how many
  * tools it offers and ends with this agent's switch; one whose server
  * answered why it lists none says why beside its name and ends with
  * Reconnect; one not connected ends with Connect, which sends the browser
@@ -141,6 +176,8 @@ export interface AgentServersControl {
   readonly onSwitch: (next: readonly string[]) => void;
   /** Opens Settings on its Integrations page, where a server is disconnected. */
   readonly onOpenSettings: () => void;
+  /** The started agent whose own tools, Luke's, head the popover; none where no agent is started yet, as a draft's or an automation's. */
+  readonly luke?: LukeToolsDoor | undefined;
 }
 
 /** The provider a server name that parses as none would be drawn as; never reached, since every row's name is minted from a provider. */
@@ -159,7 +196,7 @@ const SERVER_COUNT_CLASS =
   "agent-servers-count flex-none whitespace-nowrap text-caption-inline text-muted-foreground tabular-nums";
 
 /** What stands at a server's row's end: its switch, or Connect, as Settings › Integrations draws them. */
-export const SERVER_END_CLASS = "ml-auto flex flex-none items-center gap-tight-gap";
+const SERVER_END_CLASS = "ml-auto flex flex-none items-center gap-tight-gap";
 
 /**
  * A page's head in the popover's place: back, folded to its glyph, its mark
@@ -186,6 +223,21 @@ const SEARCH = {
 const PAGE = {
   NONE: "No tools match",
 } as const;
+
+/** What Luke's own row and pages say. */
+const LUKE_WORDS = {
+  SECTION: "Built in",
+  ALWAYS_ON: "Always on",
+  ON: "On",
+  OFF: "Off",
+  READ_FAILED: `${OPERATOR_NAME}'s tools could not be read`,
+  TOOLS: `${OPERATOR_NAME}'s tools`,
+  READING: `Reading ${OPERATOR_NAME}'s tools…`,
+  RUN_ON_MAC_OFF: `${AGENT_TOOL.RUN_ON_MAC} off`,
+} as const;
+
+/** Where the home's highlight stands while Luke's row heads it: before every server's row. */
+const LUKE_PICK = 0;
 
 /** What a row's buttons can be waiting on: the browser sign-in begun, or the one under way ended. */
 const WORKING_ACT = {
@@ -254,11 +306,11 @@ function problemHint(problem: string, said: string | undefined): OneLineHint {
 }
 
 /**
- * What a server's row says between its mark and its end, here and on the
- * card a mention of the server hangs (`server-card.tsx`): its name, how many
- * tools it offers, and where its sign-in or its server stands.
+ * What a server's row says between its mark and its end: its name, how
+ * many tools it offers, and where its sign-in or its server stands, as the
+ * card a mention of the server hangs says them too (`server-card.tsx`).
  */
-export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
+function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
   return (
     // Note that the words stand in a line of their own, because a list row's
     // title would otherwise clip the reason behind a long name.
@@ -330,6 +382,45 @@ function caretOf(event: React.KeyboardEvent<HTMLElement>): number | null | undef
   return event.target instanceof HTMLInputElement ? event.target.selectionStart : undefined;
 }
 
+/** Whether a key on a tool's page goes back to the page it was opened from: Left, or Backspace. */
+function goesBack(event: React.KeyboardEvent<HTMLElement>): boolean {
+  return event.key === "ArrowLeft" || event.key === "Backspace";
+}
+
+/** A page's list as its field's keys move through it: its filter, its highlight, how many rows it draws, and what back, a step, and opening the highlighted row do. */
+interface PageKeys {
+  readonly filter: string;
+  readonly at: number;
+  readonly count: number;
+  readonly back: () => void;
+  readonly step: (to: number) => void;
+  /** Opens the highlighted row; none where it opens nothing. */
+  readonly open: (() => void) | undefined;
+}
+
+/**
+ * What a key in a page's field does, a server's or Luke's: Left or
+ * Backspace on an empty filter goes back, the arrows step the highlight,
+ * and Enter, or Right with the caret at the end, opens the highlighted row.
+ */
+function pageFieldKey(event: React.KeyboardEvent<HTMLElement>, page: PageKeys): void {
+  const caretAtEnd = caretOf(event) === page.filter.length;
+  if (goesBack(event) && page.filter === "") {
+    event.preventDefault();
+    page.back();
+  } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    const step = event.key === "ArrowDown" ? 1 : -1;
+    page.step(Math.min(Math.max(page.at + step, 0), Math.max(page.count - 1, 0)));
+  } else if (
+    page.open !== undefined &&
+    (event.key === "Enter" || (event.key === "ArrowRight" && caretAtEnd))
+  ) {
+    event.preventDefault();
+    page.open();
+  }
+}
+
 /** The search field at the top of either page, which holds the focus while the popover is open. */
 function SearchRow({
   field,
@@ -372,14 +463,70 @@ function ServersNote({ words }: { words: string }): React.JSX.Element {
   );
 }
 
-/** The heading over a run of the home's rows. */
-function ServersHeading({ words }: { words: string }): React.JSX.Element {
+/** Luke's face, at a provider mark's seat. */
+function LukeMark(): React.JSX.Element {
   return (
-    <div className="px-row-inset pt-row-inset pb-tight-gap first:pt-luke-2" aria-hidden="true">
-      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-        {words}
-      </Text>
-    </div>
+    <GlyphSlot ink={GLYPH_INK.TEXT} size={ICON_SIZE.MEDIUM}>
+      <WingFace />
+    </GlyphSlot>
+  );
+}
+
+/** What stands at the end of Luke's row and his page's head in a switch's place: his tools cannot be turned off. */
+function AlwaysOn(): React.JSX.Element {
+  return (
+    <span className={SERVER_END_CLASS}>
+      <span className={SERVER_COUNT_CLASS}>{LUKE_WORDS.ALWAYS_ON}</span>
+    </span>
+  );
+}
+
+/** What Luke's row says between his face and its end: his name, how many tools he offers once read, and whether `run_on_mac` is off. */
+function LukeRowWords({ luke }: { luke: LukeToolsRead }): React.JSX.Element {
+  return (
+    <span className="flex min-w-0 flex-auto items-center gap-icon-gap">
+      <ServerName name={OPERATOR_NAME} />
+      {luke.answer !== undefined ? (
+        <span className={SERVER_COUNT_CLASS}>{toolsCount(luke.answer.tools.length)}</span>
+      ) : null}
+      {luke.reason !== undefined ? (
+        <OneLine
+          hint={wholeWordsHint(RUN_ON_MAC_REASON_WORDS[luke.reason].short)}
+          className="agent-servers-problem flex-auto text-caption-inline text-attention"
+        >
+          {LUKE_WORDS.RUN_ON_MAC_OFF}
+        </OneLine>
+      ) : null}
+      {luke.failed ? (
+        <OneLine
+          hint={wholeWordsHint(LUKE_WORDS.READ_FAILED)}
+          className="agent-servers-problem flex-auto text-caption-inline text-muted-foreground"
+        >
+          {LUKE_WORDS.READ_FAILED}
+        </OneLine>
+      ) : null}
+    </span>
+  );
+}
+
+/** Whether `run_on_mac` is on for the agent, once that is known: On in the complete tone, Off in the attention tone. */
+function RunOnMacBadge({ luke }: { luke: LukeToolsRead }): React.JSX.Element | null {
+  if (luke.reason !== undefined)
+    return <Badge tone={STATUS_TONE.ATTENTION}>{LUKE_WORDS.OFF}</Badge>;
+  if (luke.answer === undefined) return null;
+  return <Badge tone={STATUS_TONE.COMPLETE}>{LUKE_WORDS.ON}</Badge>;
+}
+
+/** Whether a row of Luke's page opens a page of its own: `run_on_mac` alone, whose page says why it is off. */
+function opensLukeTool(tool: LukeToolRow): boolean {
+  return tool.name === AGENT_TOOL.RUN_ON_MAC;
+}
+
+/** Whether a search finds Luke: by his name, or by a tool's name or what it does. */
+function lukeFound(names: readonly string[], tokens: readonly string[]): boolean {
+  return (
+    matchesTokens([OPERATOR_NAME], tokens) ||
+    names.some((name) => matchesTokens([name, lukeToolSummary(name) ?? ""], tokens))
   );
 }
 
@@ -392,10 +539,10 @@ const RowHighlight = createContext<(() => void) | undefined>(undefined);
  * row's `RowHintOptions` hand it (`RowHint`). Note that it rides the row's
  * hint slot, the one door to its press's pointer handlers.
  */
-const PointerHighlight: ListRowHint = ({ label, children }) => {
+const PointerHighlight: ListRowHint = ({ label, row, children }) => {
   const highlight = useContext(RowHighlight);
   return (
-    <RowHint label={label}>
+    <RowHint label={label} row={row}>
       {cloneElement(children, {
         onPointerEnter: (event) => {
           children.props.onPointerEnter?.(event);
@@ -442,6 +589,23 @@ function ServersPopover({
   const [openedTool, setOpenedTool] = useState<string | undefined>(undefined);
   const toolBody = useRef<HTMLDivElement>(null);
   const grant = useIntegrationGrant(statuses);
+  const luke = useLukeTools(servers.luke);
+  const openSettings = useOpenSettings();
+  const [lukeOpen, setLukeOpen] = useState(false);
+  const [lukeTool, setLukeTool] = useState<string | undefined>(undefined);
+  const [lukeFilter, setLukeFilter] = useState("");
+  const [lukeHighlight, setLukeHighlight] = useState(0);
+
+  // Luke's page stands only while the popover draws an agent's; his tool's page only over his.
+  const lukeNames = luke.answer?.tools ?? [];
+  const onLuke = servers.luke !== undefined && lukeOpen;
+  const onRunOnMac = onLuke && lukeTool === AGENT_TOOL.RUN_ON_MAC;
+  const lukeTokens = searchTokens(lukeFilter);
+  const lukeSections = lukeToolSections(
+    lukeNames.filter((name) => matchesTokens([name, lukeToolSummary(name) ?? ""], lukeTokens)),
+  );
+  const lukeRows = lukeSections.flatMap((section) => section.tools);
+  const lukeAt = Math.min(lukeHighlight, Math.max(lukeRows.length - 1, 0));
 
   // A server's page stands only while its server still answers with tools; otherwise the home is drawn.
   const page = rows.find((row) => row.connection === opened && opensTools(row));
@@ -467,22 +631,35 @@ function ServersPopover({
     ...groups.flatMap((group) => group.rows).filter((row) => row.kind !== SERVER_ROW.QUIET),
     ...found.tools,
   ].map((each) => ("tool" in each ? each : { row: each }));
-  const at = Math.min(highlight, Math.max(picks.length - 1, 0));
+  // Luke's row heads the home's picks while it stands: for an agent, and found by the search.
+  const homeTokens = searchTokens(query);
+  const lukeShown = servers.luke !== undefined && lukeFound(lukeNames, homeTokens);
+  const lukeOffset = lukeShown ? 1 : 0;
+  const at = Math.min(highlight, Math.max(picks.length + lukeOffset - 1, 0));
+  const onLukeRow = lukeShown && at === LUKE_PICK;
+  // A search that found one of his tools opens his page filtered to it, as a server's does.
+  const lukeSearch = lukeNames.some((name) =>
+    matchesTokens([name, lukeToolSummary(name) ?? ""], homeTokens),
+  )
+    ? query
+    : "";
 
-  // The field takes focus as the popover opens and as either page is drawn,
-  // and a tool's page its body, so the keys and focus leaving it are heard.
+  // The field takes focus as the popover opens and as any page with one is
+  // drawn, and a tool's page its body, so the keys and focus leaving it are heard.
   useEffect(() => {
-    if (tool !== undefined) toolBody.current?.focus({ preventScroll: true });
+    if (tool !== undefined || onRunOnMac) toolBody.current?.focus({ preventScroll: true });
     else field.current?.focus();
-  }, [page?.connection, tool]);
+  }, [page?.connection, tool, onLuke, onRunOnMac]);
 
   useLayoutEffect(() => {
-    if (tool !== undefined) return;
-    keepInView(
-      list.current,
-      document.getElementById(page === undefined ? `${rowsId}-${at}` : `${rowsId}-tool-${pageAt}`),
-    );
-  }, [at, page, pageAt, tool, rowsId]);
+    if (tool !== undefined || onRunOnMac) return;
+    const highlighted = onLuke
+      ? `${rowsId}-luke-${lukeAt}`
+      : page === undefined
+        ? `${rowsId}-${at}`
+        : `${rowsId}-tool-${pageAt}`;
+    keepInView(list.current, document.getElementById(highlighted));
+  }, [at, page, pageAt, tool, rowsId, onLuke, onRunOnMac, lukeAt]);
 
   /** A grant begun from the row: the browser opens, and the row waits on the window's return to read it. */
   const connect = (server: string) => {
@@ -521,6 +698,31 @@ function ServersPopover({
   /** Back from a tool's page to its server's, the filter and the highlight as they were. */
   const closeTool = () => setOpenedTool(undefined);
 
+  const openLuke = (search: string) => {
+    setLukeOpen(true);
+    setLukeFilter(search);
+    setLukeHighlight(0);
+    setLukeTool(undefined);
+  };
+
+  const backFromLuke = () => {
+    setLukeOpen(false);
+    setLukeFilter("");
+  };
+
+  const openLukeTool = (name: string) => {
+    setLukeHighlight(
+      Math.max(
+        lukeRows.findIndex((each) => each.name === name),
+        0,
+      ),
+    );
+    setLukeTool(name);
+  };
+
+  /** Back from a tool's page to Luke's, the filter and the highlight as they were. */
+  const closeLukeTool = () => setLukeTool(undefined);
+
   /**
    * What a pick does when chosen: a server opens or connects, and a tool
    * opens its server's page, filtered to the search, as does a server the
@@ -546,19 +748,21 @@ function ServersPopover({
 
   const onHomeKey = (event: React.KeyboardEvent<HTMLElement>) => {
     const caretAtEnd = caretOf(event) === query.length;
-    const pick = picks[at];
+    const pick = onLukeRow ? undefined : picks[at - lukeOffset];
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       const step = event.key === "ArrowDown" ? 1 : -1;
-      setHighlight(Math.min(Math.max(at + step, 0), Math.max(picks.length - 1, 0)));
+      setHighlight(Math.min(Math.max(at + step, 0), Math.max(picks.length + lukeOffset - 1, 0)));
     } else if (event.key === "Enter" || (event.key === "ArrowRight" && caretAtEnd)) {
       if (
+        !onLukeRow &&
         event.key === "ArrowRight" &&
         !(pick !== undefined && (pick.tool !== undefined || opensTools(pick.row)))
       )
         return;
       event.preventDefault();
-      choose(pick);
+      if (onLukeRow) openLuke(lukeSearch);
+      else choose(pick);
     } else if (event.key === " " && query.trim() === "" && pick?.row.kind === SERVER_ROW.SWITCH) {
       // Note that we flip the switch only on an empty search, because a space typed after a word is part of the search.
       event.preventDefault();
@@ -567,33 +771,49 @@ function ServersPopover({
   };
 
   const onPageKey = (event: React.KeyboardEvent<HTMLElement>) => {
-    const caretAtEnd = caretOf(event) === filter.length;
     const highlighted = pageTools[pageAt];
-    if ((event.key === "ArrowLeft" || event.key === "Backspace") && filter === "") {
-      event.preventDefault();
-      back();
-    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      const step = event.key === "ArrowDown" ? 1 : -1;
-      setPageHighlight(Math.min(Math.max(pageAt + step, 0), Math.max(pageTools.length - 1, 0)));
-    } else if (
-      highlighted !== undefined &&
-      (event.key === "Enter" || (event.key === "ArrowRight" && caretAtEnd))
-    ) {
-      event.preventDefault();
-      openTool(highlighted.name);
-    }
+    pageFieldKey(event, {
+      filter,
+      at: pageAt,
+      count: pageTools.length,
+      back,
+      step: setPageHighlight,
+      open: highlighted === undefined ? undefined : () => openTool(highlighted.name),
+    });
   };
 
   const onToolKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "ArrowLeft" && event.key !== "Backspace") return;
+    if (!goesBack(event)) return;
     event.preventDefault();
     closeTool();
   };
 
+  const onLukeKey = (event: React.KeyboardEvent<HTMLElement>) => {
+    const highlighted = lukeRows[lukeAt];
+    pageFieldKey(event, {
+      filter: lukeFilter,
+      at: lukeAt,
+      count: lukeRows.length,
+      back: backFromLuke,
+      step: setLukeHighlight,
+      open:
+        highlighted === undefined || !opensLukeTool(highlighted)
+          ? undefined
+          : () => openLukeTool(highlighted.name),
+    });
+  };
+
+  const onLukeToolKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!goesBack(event)) return;
+    event.preventDefault();
+    closeLukeTool();
+  };
+
   // Escape goes back one level, and closes the popover only from its home.
   const dismiss = () => {
-    if (tool !== undefined) closeTool();
+    if (onRunOnMac) closeLukeTool();
+    else if (onLuke) backFromLuke();
+    else if (tool !== undefined) closeTool();
     else if (page !== undefined) back();
     else onClose();
   };
@@ -682,9 +902,11 @@ function ServersPopover({
     }
   };
 
-  /** A row's place among the picks, which names its id and its highlight; a quiet row is none. */
-  const pickIndex = (row: ServerRow, tool?: IntegrationTool) =>
-    picks.findIndex((pick) => pick.row === row && pick.tool === tool);
+  /** A row's place among the home's picks, after Luke's where it stands, which names its id and its highlight; a quiet row is none. */
+  const pickIndex = (row: ServerRow, tool?: IntegrationTool) => {
+    const index = picks.findIndex((pick) => pick.row === row && pick.tool === tool);
+    return index < 0 ? index : index + lukeOffset;
+  };
 
   /** A row of the home: its place among the picks names its id and its highlight, and the pointer coming onto its press moves the highlight there. */
   const homeRow = (input: {
@@ -708,7 +930,7 @@ function ServersPopover({
         key={input.key}
         value={index < 0 || index === at ? undefined : () => setHighlight(index)}
       >
-        <RowHintOptions card={input.card} cardBeside>
+        <RowHintOptions card={input.card}>
           <ListRow
             id={index < 0 ? undefined : `${rowsId}-${index}`}
             leading={<ProviderMark provider={input.row.provider} size={PROVIDER_MARK_SIZE.ICON} />}
@@ -768,6 +990,24 @@ function ServersPopover({
       onPress: () => open(row, query),
     });
 
+  /** Luke's own row, heading the home: his face, his name, his count, `run_on_mac` where it is off, and Always on, opening his page. */
+  const lukeRow = (
+    <RowHighlight.Provider value={at === LUKE_PICK ? undefined : () => setHighlight(LUKE_PICK)}>
+      <ListRow
+        id={`${rowsId}-${LUKE_PICK}`}
+        leading={<LukeMark />}
+        title={<LukeRowWords luke={luke} />}
+        actions={<AlwaysOn />}
+        current={onLukeRow ? LIST_ROW_CURRENT.ITEM : undefined}
+        chevron
+        keepFocus
+        tabbable={false}
+        onPress={() => openLuke(lukeSearch)}
+        hint={{ Hint: PointerHighlight, label: OPERATOR_NAME }}
+      />
+    </RowHighlight.Provider>
+  );
+
   const home = (
     <>
       <SearchRow
@@ -784,25 +1024,44 @@ function ServersPopover({
         <ScrollArea ref={list} size={SCROLL_SIZE.CONTENT}>
           <div ref={moving} className="agent-servers-list p-menu-inset">
             <ListMotion root={moving}>
+              {lukeShown ? (
+                <MenuSection heading={LUKE_WORDS.SECTION}>
+                  <List label={LUKE_WORDS.SECTION} density={LIST_DENSITY.COMPACT}>
+                    {lukeRow}
+                  </List>
+                </MenuSection>
+              ) : null}
               {rows.length === 0 ? <ServersNote words={SERVERS_NONE} /> : null}
-              {rows.length > 0 && picks.length === 0 && groups.length === 0 ? (
+              {rows.length > 0 && picks.length === 0 && groups.length === 0 && !lukeShown ? (
                 <ServersNote words={SEARCH.NONE} />
               ) : null}
-              {groups.map((group) => (
-                <Fragment key={group.heading ?? "unread"}>
-                  {group.heading !== undefined ? <ServersHeading words={group.heading} /> : null}
-                  <List label={group.heading ?? SERVERS_LABEL} density={LIST_DENSITY.COMPACT} moves>
+              {groups.map((group) =>
+                group.heading === undefined ? (
+                  <List key="unread" label={SERVERS_LABEL} density={LIST_DENSITY.COMPACT} moves>
                     {group.rows.map(serverRow)}
                   </List>
-                </Fragment>
-              ))}
+                ) : (
+                  <MenuSection
+                    key={group.heading}
+                    heading={group.heading}
+                    count={
+                      group.heading === SERVER_SECTION.CONNECTED
+                        ? serversOnWords(group.rows)
+                        : undefined
+                    }
+                  >
+                    <List label={group.heading} density={LIST_DENSITY.COMPACT} moves>
+                      {group.rows.map(serverRow)}
+                    </List>
+                  </MenuSection>
+                ),
+              )}
               {found.tools.length > 0 ? (
-                <>
-                  <ServersHeading words={SEARCH.TOOLS} />
+                <MenuSection heading={SEARCH.TOOLS}>
                   <List label={SEARCH.TOOLS} density={LIST_DENSITY.COMPACT}>
                     {found.tools.map(toolRow)}
                   </List>
-                </>
+                </MenuSection>
               ) : null}
             </ListMotion>
           </div>
@@ -859,6 +1118,163 @@ function ServersPopover({
     );
   };
 
+  /** One of Luke's tools on his page: its name in mono and what it does, `run_on_mac` with whether it is on and, where it is off, why. */
+  const lukeToolRow = (shown: LukeToolRow) => {
+    const index = lukeRows.indexOf(shown);
+    const runOnMac = shown.name === AGENT_TOOL.RUN_ON_MAC;
+    const description =
+      runOnMac && luke.reason !== undefined
+        ? RUN_ON_MAC_REASON_WORDS[luke.reason].short
+        : shown.summary;
+    return (
+      <RowHighlight.Provider
+        key={shown.name}
+        value={index === lukeAt ? undefined : () => setLukeHighlight(index)}
+      >
+        <ListRow
+          id={`${rowsId}-luke-${index}`}
+          title={
+            <OneLine
+              className="integration-tool-title integration-tool-code flex-initial font-mono text-caption-inline"
+              words={shown.name}
+            >
+              <Highlighted text={shown.name} tokens={lukeTokens} />
+            </OneLine>
+          }
+          description={
+            description === undefined ? undefined : (
+              <Highlighted text={description} tokens={lukeTokens} />
+            )
+          }
+          actions={runOnMac ? <RunOnMacBadge luke={luke} /> : undefined}
+          current={index === lukeAt ? LIST_ROW_CURRENT.ITEM : undefined}
+          chevron={opensLukeTool(shown)}
+          keepFocus
+          tabbable={false}
+          onPress={opensLukeTool(shown) ? () => openLukeTool(shown.name) : undefined}
+          hint={{ Hint: PointerHighlight, label: shown.name }}
+        />
+      </RowHighlight.Provider>
+    );
+  };
+
+  /** Luke's page in the popover's place: back, his face and name, his count, Always on, a filter, and his tools under their groups. */
+  const lukePage = (
+    <>
+      <div className={SERVER_PAGE_HEAD_CLASS}>
+        <BackButton
+          label={SERVERS_LABEL}
+          place={SERVERS_LABEL}
+          command={NO_BACK_KEY}
+          onBack={backFromLuke}
+        />
+        <LukeMark />
+        <ServerPageTitle name={OPERATOR_NAME} />
+        {luke.answer !== undefined ? (
+          <span className={SERVER_COUNT_CLASS}>{toolsCount(lukeNames.length)}</span>
+        ) : null}
+        <AlwaysOn />
+      </div>
+      <SearchRow
+        field={field}
+        value={lukeFilter}
+        placeholder={`Filter ${toolsCount(lukeNames.length)}`}
+        onChange={(value) => {
+          setLukeFilter(value);
+          setLukeHighlight(0);
+        }}
+        onKeyDown={onLukeKey}
+      />
+      <div className={SERVERS_SCROLL_CLASS}>
+        <ScrollArea ref={list} size={SCROLL_SIZE.CONTENT}>
+          <div className="agent-servers-list p-menu-inset">
+            {luke.answer === undefined ? (
+              <ServersNote words={luke.failed ? LUKE_WORDS.READ_FAILED : LUKE_WORDS.READING} />
+            ) : lukeRows.length === 0 ? (
+              <ServersNote words={PAGE.NONE} />
+            ) : null}
+            {lukeSections.map((section) => (
+              <MenuSection
+                key={section.heading}
+                heading={section.heading}
+                count={toolsCount(section.tools.length)}
+              >
+                <List label={section.heading} density={LIST_DENSITY.COMPACT}>
+                  {section.tools.map(lukeToolRow)}
+                </List>
+              </MenuSection>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+    </>
+  );
+
+  /** `run_on_mac`'s page over Luke's: back, its name, whether it is on, what it does, and where it is off, why, and the fix where there is one. */
+  const runOnMacPage = (reason: RunOnMacReason | undefined) => {
+    const detail = reason === undefined ? undefined : runOnMacDetail(reason, luke.answer?.runOnMac);
+    return (
+      <div className="agent-servers-tool-page flex min-h-0 flex-col">
+        <div className={SERVER_PAGE_HEAD_CLASS}>
+          <BackButton
+            label={LUKE_WORDS.TOOLS}
+            place={LUKE_WORDS.TOOLS}
+            command={NO_BACK_KEY}
+            keepFocus
+            onBack={closeLukeTool}
+          />
+          <OneLine
+            className="agent-servers-page-title font-mono text-caption-inline text-foreground"
+            words={AGENT_TOOL.RUN_ON_MAC}
+          >
+            {AGENT_TOOL.RUN_ON_MAC}
+          </OneLine>
+          <span className={SERVER_END_CLASS}>
+            <RunOnMacBadge luke={luke} />
+          </span>
+        </div>
+        {/* The page's one scroller, focused by script so its keys scroll it as any focused scroller's do. */}
+        <ScrollArea ref={toolBody} tabIndex={-1} onKeyDown={onLukeToolKey}>
+          <div className="flex flex-col gap-block-gap px-list-inset pt-row-inset pb-list-inset">
+            <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {RUN_ON_MAC_DESCRIPTION}
+            </Text>
+            {reason === undefined ? null : (
+              <Banner
+                look={BANNER_LOOK.CARD}
+                tone={STATUS_TONE.ATTENTION}
+                glyph={<CircleAlertIcon />}
+                actions={
+                  reason === RUN_ON_MAC_REASON.SETTINGS_OFF ? (
+                    <Button
+                      variant={BUTTON_VARIANT.OUTLINE}
+                      keepFocus
+                      onClick={() => {
+                        onClose();
+                        openSettings({ page: SETTINGS_VIEW.THIS_MAC });
+                      }}
+                    >
+                      {OPEN_SETTINGS_LABEL}
+                    </Button>
+                  ) : undefined
+                }
+              >
+                <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.LABEL}>
+                  {RUN_ON_MAC_REASON_WORDS[reason].short}
+                </Text>
+                {detail === undefined ? null : (
+                  <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                    {detail}
+                  </Text>
+                )}
+              </Banner>
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+    );
+  };
+
   const toolPage = (row: ServerRow, shown: IntegrationTool) => (
     <div className="agent-servers-tool-page">
       <IntegrationToolDetail
@@ -880,11 +1296,15 @@ function ServersPopover({
       id={id}
       look={POPOVER_PANEL_LOOK.MENU}
       title={
-        tool !== undefined
-          ? toolTitle(tool)
-          : page !== undefined
-            ? `${page.name} tools`
-            : SERVERS_LABEL
+        onRunOnMac
+          ? AGENT_TOOL.RUN_ON_MAC
+          : onLuke
+            ? LUKE_WORDS.TOOLS
+            : tool !== undefined
+              ? toolTitle(tool)
+              : page !== undefined
+                ? `${page.name} tools`
+                : SERVERS_LABEL
       }
       onDismiss={dismiss}
       onLeave={onLeave}
@@ -893,11 +1313,15 @@ function ServersPopover({
       {/* Note that the searchable menu's own class rides a box drawn as its
           contents, because its rows' highlight is that menu's. */}
       <div className="agent-servers-menu contents">
-        {page !== undefined && tool !== undefined
-          ? toolPage(page, tool)
-          : page !== undefined
-            ? serverPage(page)
-            : home}
+        {onRunOnMac
+          ? runOnMacPage(luke.reason)
+          : onLuke
+            ? lukePage
+            : page !== undefined && tool !== undefined
+              ? toolPage(page, tool)
+              : page !== undefined
+                ? serverPage(page)
+                : home}
         <div className="task-compose-menu-foot block flex-none border-t border-border p-menu-inset">
           <Button
             variant={BUTTON_VARIANT.QUIET}

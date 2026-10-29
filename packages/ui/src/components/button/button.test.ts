@@ -192,7 +192,7 @@ test("a toggle is announced pressed while it is on, in any look, and a plain but
   ).toBe(false);
 });
 
-test("a read-only labelled button records a press: it takes none and no Tab stop, and is announced pressed where it was the one given", () => {
+test("a read-only labelled button records a press: it takes none and no Tab stop, is announced pressed where it was the one given, and a drag over its words selects them", () => {
   const heard: string[] = [];
   const container = mount(
     createElement(
@@ -220,8 +220,11 @@ test("a read-only labelled button records a press: it takes none and no Tab stop
     other?.click();
   });
   expect(heard).toEqual([]);
-  expect([given?.disabled, given?.getAttribute("aria-pressed")]).toEqual([true, "true"]);
+  expect([given?.tabIndex, given?.getAttribute("aria-pressed")]).toEqual([-1, "true"]);
   expect(other?.getAttribute("aria-pressed")).toBe("false");
+  const down = new MouseEvent("pointerdown", { bubbles: true, cancelable: true });
+  given?.querySelector(".luke-button-words")?.dispatchEvent(down);
+  expect(down.defaultPrevented).toBe(false);
 });
 
 test("a labelled button wearing a badge says the badge's words after its own, offered or recorded", () => {
@@ -245,9 +248,9 @@ test("a labelled button given a label is named by it, its words within it, and b
     createElement(
       "div",
       null,
-      createElement(Button, { label: "Start a coding agent", children: "Start" }),
+      createElement(Button, { label: "Start an agent", children: "Start" }),
       createElement(Button, {
-        label: "Start a coding agent",
+        label: "Start an agent",
         busy: true,
         busyLabel: "Starting",
         children: "Start",
@@ -260,7 +263,7 @@ test("a labelled button given a label is named by it, its words within it, and b
   ]);
 
   expect(said).toEqual([
-    ["Start a coding agent", "Start"],
+    ["Start an agent", "Start"],
     ["Starting", "Start"],
   ]);
   expect(said[0]?.[0]).toContain(said[0]?.[1]);

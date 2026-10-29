@@ -1,5 +1,5 @@
 import { offeredSkills, skillsOpenSandbox } from "@luke/service/agents/agent-runtime/skills";
-import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
+import { pinnedState } from "@luke/service/agents/eve-host/pinned-state";
 import { SCRIPTED_SKILLS } from "@luke/service/testing/coder-scripted-model";
 import { defineDynamic } from "eve/skills";
 import { recordSandboxOpened, seams, sessionSkills } from "../host.js";

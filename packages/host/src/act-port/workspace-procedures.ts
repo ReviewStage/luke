@@ -1,7 +1,5 @@
 import { WORKSPACE_CALL_FAILURE, type WorkspaceCallFailure } from "@luke/features";
 import type {
-  TasksLinearIssuesAnswer,
-  TasksLinearIssuesParams,
   TasksWorkspaceAnswer,
   TasksWorkspaceCreateParams,
   TasksWorkspaceGitHubConnectAnswer,
@@ -34,7 +32,6 @@ import { Effect, Option, Stream } from "effect";
 import {
   ALREADY_INVITED_REFUSAL,
   isGitHubAddress,
-  LINEAR_UNAVAILABLE_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "../acts.js";
 import { WORKSPACE_ACT_KIND } from "../contract/index.js";
@@ -50,7 +47,7 @@ import {
  * workspace-procedures.ts -- the panel's asks of the host about the account's workspaces.
  *
  * The one check these procedures make is who asked: only a panel draws a
- * workspace, so every one refuses the takeover and the hidden voice window,
+ * workspace, so every one refuses the takeover and any other window,
  * in its own sentence. What the service answers comes back as the panel's
  * own answer, or why there is none: a write the account's role does not
  * allow in words that say so, and anything else in the kind's own words.
@@ -65,11 +62,6 @@ export interface WorkspaceProceduresDependencies {
       params: TasksWorkspaceParams,
     ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
     workspaceGitHubDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
-    workspaceLinearConnect(
-      params: TasksWorkspaceParams,
-    ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
-    workspaceLinearDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
-    workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
     workspaceSentry(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceSentryAnswer>;
     workspaceSentryInstall(
       params: TasksWorkspaceParams,
@@ -140,8 +132,6 @@ function refusedWorkspace<E>(refused: Refused<E>, failure: WorkspaceCallFailure)
       return Effect.fail(refused({ message: WORKSPACE_NOT_PERMITTED_REFUSAL }));
     case WORKSPACE_CALL_FAILURE.ALREADY_INVITED:
       return Effect.fail(refused({ message: ALREADY_INVITED_REFUSAL }));
-    case WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE:
-      return Effect.fail(refused({ message: LINEAR_UNAVAILABLE_REFUSAL }));
     default:
       return Effect.fail(refused());
   }
@@ -153,11 +143,6 @@ const SENTRY_ORIGIN = "https://sentry.io";
 /** Whether an address the host answered parses and stands on Sentry's own origin. */
 function isSentryAddress(url: string): boolean {
   return URL.canParse(url) && new URL(url).origin === SENTRY_ORIGIN;
-}
-
-/** Whether an address the host answered parses and is https, the one kind a browser is sent to unnamed. */
-function isBrowserAddress(url: string): boolean {
-  return URL.canParse(url) && new URL(url).protocol === "https:";
 }
 
 /** One kind of a workspace's follow, as a stream of it reads the host: its follow, its let-go, and its words. */
@@ -260,32 +245,6 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const answer = yield* host.workspaceGitHubDisconnect(input);
       if ("failure" in answer) return yield* refusedWorkspace(errors.REFUSED, answer.failure);
-    }),
-    // Note that the address the service answered opens only where it is
-    // https, because it is Vercel Connect's and the panel did not name it.
-    [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_CONNECT]: actPort[
-      WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_CONNECT
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const answer = yield* host.workspaceLinearConnect(input);
-      if ("failure" in answer) return yield* refusedWorkspace(errors.REFUSED, answer.failure);
-      if (!isBrowserAddress(answer.url)) return yield* Effect.fail(errors.REFUSED());
-      yield* Effect.promise(() => openExternal(answer.url));
-    }),
-    [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_DISCONNECT]: actPort[
-      WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_DISCONNECT
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const answer = yield* host.workspaceLinearDisconnect(input);
-      if ("failure" in answer) return yield* refusedWorkspace(errors.REFUSED, answer.failure);
-    }),
-    [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_ISSUES]: actPort[
-      WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_ISSUES
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const answer = yield* host.workspaceLinearIssues(input);
-      if ("issues" in answer) return answer.issues;
-      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
     }),
     [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ]: actPort[
       WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ

@@ -2,22 +2,20 @@
  * inbox-columns.ts -- whether an Inbox shows its list and the item it reads side by side, or one at a time, by the room the Inbox itself has.
  *
  * An Inbox wide enough holds its list and the chosen item side by side, as a
- * mail app does. Narrower than {@link INBOX_SPLIT}, it shows one at a time,
- * and the one it shows is the list, however many items it holds, the same
- * in the window's Inbox, a task's own Inbox tab, and a phone's: an item
- * stands alone, the whole Inbox wide, only once it was opened, by a row's
- * press, a link, Next, or New thread, and its way back, which Back's chord
- * and Escape take as well, stands the list again. An item opened while the
- * Inbox was split stays open once it narrows, as Material's list-detail
- * layout keeps it; one merely chosen first does not, so a narrowed Inbox
- * lands on its list. The line is drawn by the Inbox's own width rather than the
+ * mail app does, the pane beside the list standing empty while nothing is
+ * chosen. Narrower than {@link INBOX_SPLIT}, it shows one at a time, the
+ * same in the window's Inbox, a task's own Inbox tab, and a phone's: the
+ * item chosen, the whole Inbox wide, else the list. Nothing is chosen until
+ * a row's press, a link, Next, or a thread started from its box chooses it, so an item is chosen
+ * exactly when it is shown, and an Inbox that narrows, as a side panel opening
+ * beside it narrows it, goes on showing the item it showed. Its way back,
+ * which Back's chord and Escape take as well, chooses nothing, which stands
+ * the list again. The line is drawn by the Inbox's own width rather than the
  * window's, because the window's Inbox and a task's own Inbox tab stand in
- * columns of their own, beside a sidebar, a side panel, or neither. Whether the list was asked for is the
- * Inbox's own, unless its holder keeps it (`InboxListing`), as the window
- * keeps its Inbox's, so its history can go back to the list; such a holder
- * hears whether the Inbox shows one column too, so its history holds the
- * list and the item as steps of their own by this line rather than by the
- * window's room, which is narrower.
+ * columns of their own, beside a sidebar, a side panel, or neither. A holder
+ * hears whether the Inbox shows one column (`InboxChoosing`), as the window
+ * does, so its history holds the list and the item as steps of their own by
+ * this line rather than by the window's room, which is narrower.
  */
 
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -105,13 +103,13 @@ export interface InboxColumns {
   /** The Inbox's own element, whose width draws the line. */
   readonly ref: React.RefCallback<HTMLElement>;
   readonly shown: InboxColumnsShown;
-  /** Says a row was pressed, which opens its item while the Inbox shows one column. */
+  /** Says a row was pressed, which hands the keyboard to the item it chose. */
   readonly onOpen: (itemId: string) => void;
   /** Says K or J stepped to another item, which hands the keyboard to its row while the list stands. */
   readonly onStep: () => void;
   /** Goes back from the item to the list, while the item stands alone. */
   readonly onBack: (() => void) | undefined;
-  /** Asks for the list, as Show all does turning off a filter that listed nothing, so the item then chosen does not stand in the rows' place. */
+  /** Says Show all turned off a filter that listed nothing, which hands the keyboard to the rows it lists. */
   readonly onList: () => void;
   /** The list's rows' presses, which the list keeps and a press handing the keyboard on finds. */
   readonly rows: InboxRowPresses;
@@ -140,29 +138,18 @@ export function listHeadControl(list: ParentNode | null): HTMLElement | null {
   );
 }
 
-/** Whether the list was asked for, kept by the Inbox's holder rather than the Inbox, and the way to ask for it or give it up. */
-export interface InboxListing {
-  readonly asked: boolean;
-  readonly onAsk: (asked: boolean) => void;
+/** How the Inbox's holder chooses nothing, and hears whether it shows one column. */
+export interface InboxChoosing {
+  /** Chooses no item, which stands the list alone where the Inbox shows one column. */
+  readonly onClear: () => void;
   /** Hears whether the Inbox shows one column, by its own width, so a holder's history steps between the list and the item exactly while they stand apart. */
   readonly onSingle?: ((single: boolean) => void) | undefined;
 }
 
-/** Whether the list was asked for, held by the Inbox itself where its holder keeps none: asked from the start, since one column shows the list until an item is opened. */
-function useListing(kept: InboxListing | undefined): InboxListing {
-  const [asked, setAsked] = useState(true);
-  return kept ?? { asked, onAsk: setAsked };
-}
-
-/** Which columns stand: both where split, else the list unless an item was opened since it was asked for. */
-function shownColumns(
-  single: boolean,
-  chosen: string | undefined,
-  listAsked: boolean,
-): InboxColumnsShown {
+/** Which columns stand: both where split, else the item chosen, or the list while none is. */
+function shownColumns(single: boolean, chosen: string | undefined): InboxColumnsShown {
   if (!single) return INBOX_COLUMNS.BOTH;
-  if (chosen === undefined || listAsked) return INBOX_COLUMNS.LIST;
-  return INBOX_COLUMNS.ITEM;
+  return chosen === undefined ? INBOX_COLUMNS.LIST : INBOX_COLUMNS.ITEM;
 }
 
 /**
@@ -175,22 +162,19 @@ function shownColumns(
  * never left in what cannot be seen. K and J hand it to the row of the item
  * they step to while the list stands, so ↑↓ go on from there, and leave it
  * where it is while the item stands alone. Note that the keyboard is moved before
- * the window paints, while the hidden control still holds it. `kept` is
- * whether the list was asked for where the holder keeps it.
+ * the window paints, while the hidden control still holds it.
  */
-export function useInboxColumns(
-  chosen: string | undefined,
-  kept?: InboxListing,
-): InboxColumns {
+export function useInboxColumns(chosen: string | undefined, choosing: InboxChoosing): InboxColumns {
   // Note that the Inbox is neither one column nor split until it is measured, which lays it out split.
   const { ref: measure, single: measured } = useColumnSplit();
   const single = measured === true;
-  const { asked: listAsked, onAsk: setListAsked } = useListing(kept);
   // Note that Show all is counted, because it takes its own button away while what stands and what is chosen may stay as they were.
   const [showAlls, setShowAlls] = useState(0);
   const view = useRef<HTMLElement | null>(null);
   const pressed = useRef(false);
   const stepped = useRef(false);
+  // Note that the way back chooses nothing, so the item it left is kept for the keyboard to land on its row.
+  const left = useRef<string | undefined>(undefined);
   const rows = useInboxRowPresses();
   const ref = useCallback(
     (element: HTMLElement | null) => {
@@ -199,8 +183,8 @@ export function useInboxColumns(
     },
     [measure],
   );
-  const shown = shownColumns(single, chosen, listAsked);
-  const onSingle = kept?.onSingle;
+  const shown = shownColumns(single, chosen);
+  const { onClear, onSingle } = choosing;
   useLayoutEffect(() => {
     onSingle?.(single);
   }, [single, onSingle]);
@@ -209,6 +193,8 @@ export function useInboxColumns(
     const held = view.current;
     const step = stepped.current;
     stepped.current = false;
+    const from = chosen ?? left.current;
+    left.current = undefined;
     if (held === null) return;
     const focused = document.activeElement;
     const stranded =
@@ -226,7 +212,7 @@ export function useInboxColumns(
       return;
     }
     // Split, a press that opens an item from outside the list, as Next does, hands the keyboard to its row, and so do K and J.
-    const row = chosen === undefined ? undefined : rows.find(chosen);
+    const row = from === undefined ? undefined : rows.find(from);
     if (!handed) {
       row?.focus();
       return;
@@ -240,7 +226,8 @@ export function useInboxColumns(
     shown === INBOX_COLUMNS.ITEM
       ? () => {
           pressed.current = true;
-          setListAsked(true);
+          left.current = chosen;
+          onClear();
         }
       : undefined;
   useAppCommand(APP_COMMAND.BACK, back);
@@ -250,8 +237,7 @@ export function useInboxColumns(
     shown,
     onOpen: (itemId) => {
       // Note that only a press that changes what stands is kept, since one that changes nothing draws nothing to hand the keyboard to, and a later resize would take it.
-      pressed.current = itemId !== chosen || shown === INBOX_COLUMNS.LIST;
-      setListAsked(false);
+      pressed.current = itemId !== chosen;
     },
     onStep: () => {
       stepped.current = true;
@@ -259,8 +245,6 @@ export function useInboxColumns(
     onBack: back,
     onList: () => {
       pressed.current = true;
-      // Note that a split Inbox shows its list already, so only one column asks for it.
-      if (single) setListAsked(true);
       setShowAlls((count) => count + 1);
     },
     rows,

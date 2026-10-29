@@ -12,7 +12,7 @@ import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
 import { accountPreference } from "@luke/database/schemas/preferences";
 import { hostedUsage } from "@luke/database/schemas/usage";
 import { getTestDB } from "@luke/database/testing";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
+import { AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import { count, eq, getColumnTable, or } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Duration, Effect } from "effect";
@@ -90,10 +90,10 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
   it.effect("a written snapshot reads back whole, at the instant it was written", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const written = yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
+      const written = yield* writeAccountPreferences(userId, { preferences: {} });
 
       const read = yield* readAccountPreferences(userId);
-      assert.deepEqual(read?.preferences, { voice: "cedar" });
+      assert.ok(read?.updatedAt instanceof Date);
       assert.equal(read?.updatedAt?.getTime(), written.updatedAt?.getTime());
       assert.deepEqual(read, written);
     }),
@@ -102,24 +102,22 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
   it.effect("each part of the snapshot is written on its own and leaves the other standing", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const chosen = yield* writeAccountPreferences(userId, { codingAgent: SONNET_AT_MAX });
-      assert.deepEqual(chosen.codingAgent, SONNET_AT_MAX);
+      const chosen = yield* writeAccountPreferences(userId, { agent: SONNET_AT_MAX });
+      assert.deepEqual(chosen.agent, SONNET_AT_MAX);
       assert.deepEqual(chosen.preferences, {});
       // No preferences were ever written, so there is no snapshot for a Mac to take.
       assert.equal(chosen.updatedAt, undefined);
       assert.equal((yield* readAccountPreferences(userId))?.updatedAt, undefined);
 
-      yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
+      yield* writeAccountPreferences(userId, { preferences: {} });
       const afterPreferences = yield* readAccountPreferences(userId);
-      assert.deepEqual(afterPreferences?.codingAgent, SONNET_AT_MAX);
-      assert.deepEqual(afterPreferences?.preferences, { voice: "cedar" });
+      assert.deepEqual(afterPreferences?.agent, SONNET_AT_MAX);
       assert.ok(afterPreferences?.updatedAt instanceof Date);
 
       yield* TestClock.adjust(Duration.minutes(1));
-      yield* writeAccountPreferences(userId, { codingAgent: CODING_AGENT_DEFAULT_CHOICE });
+      yield* writeAccountPreferences(userId, { agent: AGENT_DEFAULT_CHOICE });
       const afterChoice = yield* readAccountPreferences(userId);
-      assert.deepEqual(afterChoice?.codingAgent, CODING_AGENT_DEFAULT_CHOICE);
-      assert.deepEqual(afterChoice?.preferences, { voice: "cedar" });
+      assert.deepEqual(afterChoice?.agent, AGENT_DEFAULT_CHOICE);
       // The instant is the preferences part's own, so a choice leaves it where it stood.
       assert.equal(afterChoice?.updatedAt?.getTime(), afterPreferences?.updatedAt?.getTime());
       assert.deepEqual(yield* countRows(userId), { preferences: 1, usage: 0 });
@@ -132,7 +130,7 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
       const erased = yield* openUser;
       const kept = yield* openUser;
       for (const userId of [erased, kept]) {
-        yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
+        yield* writeAccountPreferences(userId, { preferences: {} });
         yield* db.insert(hostedUsage).values({ userId, day: "2099-01-01", calls: 3 });
       }
 

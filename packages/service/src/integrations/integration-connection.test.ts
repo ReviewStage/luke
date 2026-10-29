@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { account } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
@@ -14,13 +14,13 @@ import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { test } from "vitest";
 import { CONNECTION_POLICY } from "../agents/agent-runtime/role.js";
 import { turnServers } from "../agents/agent-runtime/servers.js";
-import {
-  BRAIN_HOST_ATTRIBUTE,
-  BRAIN_HOST_PRINCIPAL_TYPE,
-  BRAIN_HOST_TURN,
-} from "../agents/brain-host/bounds.js";
 import { type CoderHost, coderHost } from "../agents/coder-host/host.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import {
+  EVE_HOST_ATTRIBUTE,
+  EVE_HOST_PRINCIPAL_TYPE,
+  EVE_HOST_TURN,
+} from "../agents/eve-host/bounds.js";
 import { GitHubApp } from "../github/github-app.js";
 import {
   GITHUB_APP_SETTINGS,
@@ -36,11 +36,8 @@ import {
 import {
   type ConnectorService,
   INTEGRATION_CONNECT_FAILURE,
-  IntegrationConnect,
   IntegrationConnectFailure,
-  type IntegrationConnectService,
   vercelConnector,
-  WorkspaceLinearConnect,
 } from "./integration-connect.js";
 import { integrationConnection } from "./integration-connection.js";
 import {
@@ -49,18 +46,10 @@ import {
   deleteIntegrationConnection,
 } from "./integration-store.js";
 import {
-  grantAccessToken,
-  INTEGRATION_GRANT_HOLDER,
   type IntegrationAdmission,
   integrationAccessToken,
-  integrationGrant,
   integrationUnavailable,
 } from "./integration-token.js";
-import {
-  beginWorkspaceIntegrationSignIn,
-  completeWorkspaceIntegrationSignIn,
-  deleteWorkspaceIntegration,
-} from "./workspace-integration-store.js";
 
 /**
  * The one connection per integration both agents register, through the
@@ -154,11 +143,11 @@ function seatFor(principal: SessionAuthContext): SessionAuth {
 function typedSeat(userId: string, conversationId: string): SessionAuth {
   return seatFor({
     principalId: userId,
-    principalType: BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT,
+    principalType: EVE_HOST_PRINCIPAL_TYPE.ACCOUNT,
     authenticator: "test",
     attributes: {
-      [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: conversationId,
-      [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.TYPED,
+      [EVE_HOST_ATTRIBUTE.CONVERSATION]: conversationId,
+      [EVE_HOST_ATTRIBUTE.TURN]: EVE_HOST_TURN.TYPED,
     },
   });
 }
@@ -171,7 +160,7 @@ const plannedSession = (
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
     const task = yield* startTask(userId, { name: "Teammate invitations" });
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: `start-${userId}`,
       model: "anthropic/claude-opus-5.5",
@@ -334,165 +323,6 @@ it.layer(SUITE)("an integration connection's token read", (it) => {
         const read = yield* tokenRead(host.admit(auth, opened.sessionId), grants);
         assert.ok(Result.isSuccess(read));
         assert.equal(read.success.token, tokenOf(member));
-      }),
-  );
-
-  it.effect(
-    "in a plan of a workspace with Linear connected, the Linear token is the workspace's for every member, and the account's own once the workspace disconnects",
-    () =>
-      Effect.gen(function* () {
-        const host = yield* agentHost;
-        const session = yield* plannedSession(host, typedSeat);
-        yield* connected(session.userId);
-        const state = `workspace-state-${session.workspaceId}`;
-        yield* beginWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, session.userId, state);
-        assert.equal(
-          yield* completeWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, state),
-          true,
-        );
-        const grants = new Map([
-          [session.userId, {}],
-          [session.workspaceId, {}],
-        ]);
-        const admission = host.admit(session.auth, session.sessionId);
-
-        const workspace = yield* tokenRead(admission, grants);
-        yield* deleteWorkspaceIntegration(session.workspaceId, LINEAR);
-        const own = yield* tokenRead(admission, grants);
-
-        assert.ok(Result.isSuccess(workspace));
-        assert.equal(workspace.success.token, tokenOf(session.workspaceId));
-        assert.ok(Result.isSuccess(own));
-        assert.equal(own.success.token, tokenOf(session.userId));
-      }),
-  );
-
-  it.effect(
-    "a workspace's Linear grant read before the workspace disconnected reads the account's own token, as a workspace with none does",
-    () =>
-      Effect.gen(function* () {
-        const host = yield* agentHost;
-        const session = yield* plannedSession(host, typedSeat);
-        yield* connected(session.userId);
-        const state = `workspace-state-${session.workspaceId}`;
-        yield* beginWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, session.userId, state);
-        yield* completeWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, state);
-        const account = { provider: LINEAR, connectionName: LINEAR };
-        const admission = host.admit(session.auth, session.sessionId);
-        const grants = new Map([
-          [session.userId, {}],
-          [session.workspaceId, {}],
-        ]);
-
-        const grant = yield* integrationGrant(account, admission).pipe(
-          Effect.provide(connectLayer(grants)),
-        );
-        assert.ok(Result.isSuccess(grant));
-        yield* deleteWorkspaceIntegration(session.workspaceId, LINEAR);
-        const read = yield* grantAccessToken(account, admission, grant.success).pipe(
-          Effect.provide(connectLayer(grants)),
-        );
-
-        assert.equal(grant.success.holder, INTEGRATION_GRANT_HOLDER.WORKSPACE);
-        assert.ok(Result.isSuccess(read.answer));
-        assert.equal(read.answer.success.token, tokenOf(session.userId));
-        assert.equal(read.grant.holder, INTEGRATION_GRANT_HOLDER.ACCOUNT);
-      }),
-  );
-
-  it.effect(
-    "in a plan of a workspace with Linear connected, a turn is handed Linear once, on the workspace's grant, and a second account handed before keeps its own",
-    () =>
-      Effect.gen(function* () {
-        const host = yield* agentHost;
-        const session = yield* plannedSession(host, typedSeat);
-        const subject = `subject-${session.userId}`;
-        yield* connected(session.userId);
-        yield* beginIntegrationSignIn(
-          session.userId,
-          { provider: LINEAR, connectionName: "linear-2", connectSubject: subject },
-          `state-second-${session.userId}`,
-        );
-        yield* completeIntegrationSignIn(
-          session.userId,
-          "linear-2",
-          `state-second-${session.userId}`,
-        );
-        const state = `workspace-state-${session.workspaceId}`;
-        yield* beginWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, session.userId, state);
-        yield* completeWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, state);
-        const grants = new Map([
-          [session.userId, {}],
-          [subject, {}],
-          [session.workspaceId, {}],
-        ]);
-
-        const admission = host.admit(session.auth, session.sessionId);
-        const standing = yield* turnServers(admission, CONNECTION_POLICY.ALWAYS_ON).pipe(
-          Effect.provide(integrationConnectOver({ LINEAR_CONNECTOR_UID: "oauth/linear" })),
-        );
-        const tokenOfAccount = (connectionName: string) =>
-          Effect.map(
-            integrationAccessToken({ provider: LINEAR, connectionName }, admission).pipe(
-              Effect.provide(connectLayer(grants)),
-            ),
-            (answer) => (Result.isSuccess(answer) ? answer.success.token : answer.failure),
-          );
-
-        assert.ok(standing.on);
-        assert.deepEqual(
-          standing.connections
-            .filter(({ provider }) => provider === LINEAR)
-            .map(({ connectionName, accountNote }) => ({ connectionName, accountNote })),
-          [{ connectionName: LINEAR, accountNote: undefined }],
-        );
-        assert.deepEqual(
-          [yield* tokenOfAccount(LINEAR), yield* tokenOfAccount("linear-2")],
-          [tokenOf(session.workspaceId), tokenOf(subject)],
-        );
-      }),
-  );
-
-  it.effect(
-    "in a plan of a workspace with Linear connected on a deployment naming no workspace connector, the turn's Linear is unreachable, never the member's own grant",
-    () =>
-      Effect.gen(function* () {
-        const host = yield* agentHost;
-        const session = yield* plannedSession(host, typedSeat);
-        yield* connected(session.userId);
-        const state = `workspace-state-${session.workspaceId}`;
-        yield* beginWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, session.userId, state);
-        yield* completeWorkspaceIntegrationSignIn(session.workspaceId, LINEAR, state);
-        const grants = new Map([[session.userId, {}]]);
-        // SAFETY: one entry per provider of INTEGRATION_PROVIDER_LIST, which is every provider.
-        const accounts = Object.fromEntries(
-          INTEGRATION_PROVIDER_LIST.map((provider) => [
-            provider,
-            fakeConnect(provider === LINEAR ? grants : new Map()),
-          ]),
-        ) as IntegrationConnectService;
-        const unconfigured: ConnectorService = {
-          ...CONNECTOR_ASKED_NOTHING,
-          configured: false,
-          token: () =>
-            Effect.fail(
-              new IntegrationConnectFailure({ reason: INTEGRATION_CONNECT_FAILURE.NOT_CONFIGURED }),
-            ),
-        };
-
-        const read = yield* integrationAccessToken(
-          { provider: LINEAR, connectionName: LINEAR },
-          host.admit(session.auth, session.sessionId),
-        ).pipe(
-          Effect.provide(
-            Layer.merge(
-              Layer.succeed(IntegrationConnect, accounts),
-              Layer.succeed(WorkspaceLinearConnect, unconfigured),
-            ),
-          ),
-        );
-
-        assert.deepEqual(read, Result.fail(LINEAR_UNAVAILABLE.UNREACHABLE));
       }),
   );
 

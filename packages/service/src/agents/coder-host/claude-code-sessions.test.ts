@@ -5,22 +5,23 @@ import {
   type ClaudeCodeConfig,
   INPUT_LINE,
   type InputLine,
+  RUNNER_END,
   RUNNER_ENV,
   RUNNER_HARNESS,
 } from "@luke/agent-runner/protocol";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import {
-  claimCodingAgentRunnerLease,
-  releaseCodingAgentRunnerLease,
-} from "@luke/database/models/coding-agent-runner-lease";
+  claimAgentRunnerLease,
+  releaseAgentRunnerLease,
+} from "@luke/database/models/agent-runner-lease";
 import {
-  type CodingAgent,
-  createCodingAgent,
+  type Agent,
+  createAgent,
   latestTurnsOfReached,
-  readCodingAgentRouting,
-  recordCodingAgentNativeSession,
-  updateCodingAgentChoice,
-} from "@luke/database/models/coding-agent-store";
+  readAgentRouting,
+  recordAgentNativeSession,
+  updateAgentChoice,
+} from "@luke/database/models/agent-store";
 import { readNativeRewind, rewindConversation } from "@luke/database/models/conversation-rewind";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import { installSkill } from "@luke/database/models/installed-skill-store";
@@ -32,18 +33,14 @@ import {
   setPlanStatus,
   setProviderKeyForAgents,
 } from "@luke/database/models/provider-key-store";
+import { runnerLinesPast } from "@luke/database/models/runner-line-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, OPERATOR_NOTICE_KIND } from "@luke/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
-import {
-  CODING_AGENT_FAILURE,
-  CODING_AGENT_KIND,
-  CODING_AGENT_MACHINE,
-  CODING_AGENT_PAYER,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_FAILURE, AGENT_KIND, AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -82,7 +79,12 @@ import {
   type InstallationFixture,
   type SentToGitHub,
 } from "../../testing/github-app-fake.js";
-import { fixtureToken, linesOf, runnerSandboxApi } from "../../testing/runner-sandbox-fake.js";
+import {
+  fixtureToken,
+  launchLines,
+  runnerSandboxApi,
+  runnerTook,
+} from "../../testing/runner-sandbox-fake.js";
 import {
   AgentSandboxImage,
   IMAGE_PREPARING_STATUS,
@@ -94,7 +96,7 @@ import {
   EVE_SEND_OUTCOME,
   KEY_REFUSAL,
   PLAN_REFUSAL,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { RUNNER_TAG, vercelMachineLayer } from "../machine/vercel-machine.js";
 import { NATIVE_TEMPLATE } from "../native-sandbox-template.js";
@@ -113,8 +115,8 @@ import {
   runnerIdled,
 } from "./runner-sessions.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
-import { codingAgentFailureOf } from "./status.js";
-import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
+import { agentFailureOf } from "./status.js";
+import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
  * A coding agent's sessions on Claude Code, against a fake of Vercel
@@ -129,6 +131,7 @@ import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 
 const SNAPSHOT = "snap_fixture_image";
 const EVENTS_URL = "https://luke.test/api/agents/runner/events";
+const LINES_URL = "https://luke.test/api/agents/runner-lines";
 const MCP_URL = "https://luke.test/api/agents/mcp";
 
 /** The one integration the agent is handed, a server of its own. */
@@ -194,7 +197,7 @@ const openAgentWithoutPlan = Effect.gen(function* () {
     db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
   );
   const task = yield* startTask(userId, { name: "Teammate invitations" });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: "start-1",
     model: "anthropic/claude-opus-5.5",
@@ -236,6 +239,7 @@ function sessionsFor(userId: string, sequence: { next: number }) {
   const options: RunnerSessionsOptions = {
     userId,
     eventsUrl: EVENTS_URL,
+    linesUrl: LINES_URL,
     mcpUrl: MCP_URL,
     integrations: () => Effect.succeed([LINEAR_SERVER]),
     instructions: () => Effect.succeed(INSTRUCTIONS),
@@ -244,35 +248,38 @@ function sessionsFor(userId: string, sequence: { next: number }) {
   return claudeCodeSessions(options);
 }
 
-const message = (agent: CodingAgent, text: string, lineId?: string) => ({
+/** The first launch's runner as a row leaves it before the next message: as launched, or exited. */
+const asLaunched = (_api: ReturnType<typeof runnerSandboxApi>) => undefined;
+const runnerExited = (api: ReturnType<typeof runnerSandboxApi>) => {
+  const first = api.commands[0];
+  if (first !== undefined) first.exitCode = 0;
+};
+
+const message = (agent: Agent, text: string, lineId?: string) => ({
   conversationId: agent.conversationId,
   turn: "typed" as const,
   message: text,
   ...(lineId === undefined ? undefined : { lineId }),
 });
 
-/** The developer's words on a call, as the voice sends them. */
-const spoken = (agent: CodingAgent, text: string) => ({
-  ...message(agent, text),
-  turn: "spoken" as const,
-});
-
 /** The developer's words of a message line: what follows the turn's own words, which lead every message (`turn-message.ts`). */
 const developerContent = (line: InputLine | undefined) =>
   line?.type === INPUT_LINE.MESSAGE ? line.content.slice(1) : [];
 
-/** Each message line of the command as its text blocks, the turn's own words first. */
-const textsOf = (command: Parameters<typeof linesOf>[0]) =>
-  (linesOf(command) as InputLine[]).flatMap((each) =>
-    each.type === INPUT_LINE.MESSAGE
-      ? [each.content.map((block) => (block.type === "text" ? block.text : ""))]
-      : [],
+/** Each message line of the launch as its text blocks, the turn's own words first. */
+const textsOf = (command: Parameters<typeof launchLines>[0]) =>
+  Effect.map(launchLines(command), (lines) =>
+    (lines as InputLine[]).flatMap((each) =>
+      each.type === INPUT_LINE.MESSAGE
+        ? [each.content.map((block) => (block.type === "text" ? block.text : ""))]
+        : [],
+    ),
   );
 
 /** The account's operator in the agent's workspace, on the same plan. */
-const openOperator = (userId: string, agent: CodingAgent) =>
+const openOperator = (userId: string, agent: Agent) =>
   Effect.map(
-    createCodingAgent(userId, {
+    createAgent(userId, {
       taskId: null,
       organizationId: agent.organizationId,
       idempotencyKey: `operator-${randomUUID()}`,
@@ -281,13 +288,13 @@ const openOperator = (userId: string, agent: CodingAgent) =>
       planSnapshot: null,
       prompt: null,
       repository: null,
-      kind: CODING_AGENT_KIND.OPERATOR,
+      kind: AGENT_KIND.OPERATOR,
     }),
     (started) => Option.getOrThrow(started).agent,
   );
 
 /** A turn of the agent's under way, as the events route queues one, by the id a Stop names it by. */
-const turnUnderWay = (userId: string, agent: CodingAgent) =>
+const turnUnderWay = (userId: string, agent: Agent) =>
   Effect.gen(function* () {
     const turnId = randomUUID();
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
@@ -359,10 +366,10 @@ const across = <A, E>(work: Effect.Effect<A, E>, step: Duration.Duration, times:
   });
 
 /** The agent's newest turn, as its status reads it, and the word its failure is read as. */
-const newestTurn = (agent: CodingAgent) =>
+const newestTurn = (agent: Agent) =>
   Effect.map(latestTurnsOfReached([agent.conversationId]), (turns) => {
     const turn = turns.get(agent.conversationId);
-    return { status: turn?.status, failure: codingAgentFailureOf(turn) };
+    return { status: turn?.status, failure: agentFailureOf(turn) };
   });
 
 afterEach(() => {
@@ -389,7 +396,7 @@ const repositoryAgent = (
     yield* savePlan(userId);
     const task = yield* startTask(userId, { name: "Relay", repository: RELAY_FULL_NAME });
     yield* connectWorkspaceGitHub(task.workspaceId, installation);
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: "start-1",
       model: "anthropic/claude-opus-5.5",
@@ -458,10 +465,10 @@ function sighting(wanted: (sent: SentToGitHub) => boolean) {
 }
 
 /** Another agent of the account's on the agent's own task, started on the branch given or the default one. */
-const anotherAgent = (userId: string, agent: CodingAgent, startBranch?: string) =>
+const anotherAgent = (userId: string, agent: Agent, startBranch?: string) =>
   Effect.gen(function* () {
     assert.ok(agent.taskId !== null);
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: agent.taskId,
       idempotencyKey: `start-${randomUUID()}`,
       model: "anthropic/claude-opus-5.5",
@@ -498,7 +505,7 @@ const repositorySnapshots = (api: ReturnType<typeof runnerSandboxApi>) =>
   );
 
 /** The agent's own sandbox still standing, by the agent's tag. */
-const sandboxOfAgent = (api: ReturnType<typeof runnerSandboxApi>, agent: CodingAgent) =>
+const sandboxOfAgent = (api: ReturnType<typeof runnerSandboxApi>, agent: Agent) =>
   api.sandboxes.find((each) => !each.deleted && each.tags[RUNNER_TAG.AGENT] === agent.id);
 
 it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
@@ -547,10 +554,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const bearer = command.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined && bearer.length > 20);
         assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], PLAN_TOKEN);
-        const routing = Option.getOrThrow(yield* readCodingAgentRouting(userId, agent.id));
+        const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
 
-        const [config, first] = linesOf(command) as [ClaudeCodeConfig, InputLine];
+        const [config, first] = (yield* launchLines(command)) as [ClaudeCodeConfig, InputLine];
         assert.deepEqual(config, {
           harness: RUNNER_HARNESS.CLAUDE_CODE,
           cwd: "/workspace/repository",
@@ -561,6 +568,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           append: INSTRUCTIONS,
           firstSequence: 0,
           eventsUrl: EVENTS_URL,
+          linesUrl: LINES_URL,
           mcpUrl: MCP_URL,
           integrations: [LINEAR_SERVER],
           allowedDomains: config.allowedDomains,
@@ -573,7 +581,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         // No secret in argv, the config, a tag, or anything uploaded.
         const visible = JSON.stringify([
           command.args,
-          command.stdin,
+          yield* launchLines(command),
           api.sandboxes,
           [...(api.uploads[0]?.values() ?? [])],
         ]);
@@ -659,7 +667,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           script,
           /mv \/tmp\/luke-installed-skills \/opt\/luke\/installed-skills && chown -R root:root \/opt\/luke\/installed-skills && chmod -R u=rwX,go=rX/u,
         );
-        const [config] = linesOf(command) as [ClaudeCodeConfig];
+        const [config] = (yield* launchLines(command)) as [ClaudeCodeConfig];
         assert.equal(config.installedSkills, "/opt/luke/installed-skills");
 
         // An account with no installed skills uploads none, and the launch installs nothing.
@@ -724,13 +732,13 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         // Another agent's turn finds the plan refused: a message to this live runner is refused too, and nothing is written to it.
         yield* markPlan(PROVIDER_KEY_STATUS.INVALID);
-        const written = linesOf(reset.commands[0]).length;
+        const written = (yield* launchLines(reset.commands[0])).length;
         assert.deepEqual(yield* live.send(reopened.sessionId, message(agent, "Also the emails.")), {
           outcome: EVE_SEND_OUTCOME.FAILED,
           status: 422,
           planRefusal: PLAN_REFUSAL.SIGNED_OUT,
         });
-        assert.equal(linesOf(reset.commands[0]).length, written);
+        assert.equal((yield* launchLines(reset.commands[0])).length, written);
 
         const refused = runnerSandboxApi();
         assert.deepEqual(yield* openOn(refused), {
@@ -759,7 +767,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           signedIn: { claudeCode: true },
         });
         const task = yield* startTask(userId, { name: "Teammate invitations" });
-        const started = yield* createCodingAgent(userId, {
+        const started = yield* createAgent(userId, {
           taskId: task.id,
           idempotencyKey: "start-key",
           model: "anthropic/claude-opus-5.5",
@@ -768,8 +776,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           prompt: null,
           repository: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-          payer: CODING_AGENT_PAYER.MAC_SIGN_IN,
-          machine: CODING_AGENT_MACHINE.DEVICE,
+          payer: AGENT_PAYER.MAC_SIGN_IN,
+          machine: AGENT_MACHINE.DEVICE,
           deviceId,
         });
         assert.ok(Option.isSome(started));
@@ -838,7 +846,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
         );
         const task = yield* startTask(userId, { name: "Teammate invitations" });
-        const started = yield* createCodingAgent(userId, {
+        const started = yield* createAgent(userId, {
           taskId: task.id,
           idempotencyKey: "start-key",
           model: "anthropic/claude-opus-5.5",
@@ -847,7 +855,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           prompt: null,
           repository: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-          payer: CODING_AGENT_PAYER.API_KEY,
+          payer: AGENT_PAYER.API_KEY,
         });
         assert.ok(Option.isSome(started));
         const agent = started.value.agent;
@@ -890,7 +898,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(command !== undefined);
         assert.equal(command.env[RUNNER_ENV.API_KEY], API_KEY);
         assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
-        const visible = JSON.stringify([command.args, command.stdin, api.sandboxes]);
+        const visible = JSON.stringify([command.args, yield* launchLines(command), api.sandboxes]);
         assert.equal(visible.includes(API_KEY), false);
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Also the emails."));
@@ -924,7 +932,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
         );
         const task = yield* startTask(userId, { name: "Teammate invitations" });
-        const started = yield* createCodingAgent(userId, {
+        const started = yield* createAgent(userId, {
           taskId: task.id,
           idempotencyKey: "start-key",
           model: "anthropic/claude-opus-5.5",
@@ -933,7 +941,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           prompt: null,
           repository: null,
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-          payer: CODING_AGENT_PAYER.API_KEY,
+          payer: AGENT_PAYER.API_KEY,
         });
         assert.ok(Option.isSome(started));
         // The key was sealed under another deployment's ring, as a Preview's database holds production's.
@@ -1010,7 +1018,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const written = new Map(api.uploads.flatMap((upload) => [...upload]));
         assert.equal(written.get(firstPath), pdf);
         assert.equal(written.get(laterPath), pdf);
-        const messages = (linesOf(api.commands[0]) as InputLine[]).filter(
+        const messages = ((yield* launchLines(api.commands[0])) as InputLine[]).filter(
           (each) => each.type === INPUT_LINE.MESSAGE,
         );
         assert.deepEqual(
@@ -1046,7 +1054,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       const opened = yield* sessions.open(message(agent, "Fix the invitations."));
       assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
       const lineId = randomUUID();
-      yield* updateCodingAgentChoice(userId, agent.id, {
+      yield* updateAgentChoice(userId, agent.id, {
         model: "anthropic/claude-sonnet-5.5",
         effort: "low",
       });
@@ -1065,7 +1073,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       });
       assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
       assert.equal(api.commands.length, 1);
-      const [model, line, stop] = (linesOf(api.commands[0]) as InputLine[]).slice(2);
+      const [model, line, stop] = ((yield* launchLines(api.commands[0])) as InputLine[]).slice(2);
       // The agent's model and effort as they stand, ahead of the message, so a change since the launch holds.
       assert.deepEqual(model, {
         type: INPUT_LINE.MODEL,
@@ -1093,7 +1101,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        yield* updateCodingAgentChoice(userId, agent.id, {
+        yield* updateAgentChoice(userId, agent.id, {
           model: "anthropic/claude-opus-5.5-fast",
           effort: "low",
         });
@@ -1106,7 +1114,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.deepEqual([retuned, elsewhere], [RUNNER_CHOICE.WRITTEN, RUNNER_CHOICE.NOT_LIVE]);
         assert.equal(api.commands.length, 1);
-        assert.deepEqual(linesOf(api.commands[0]).slice(2), [
+        assert.deepEqual((yield* launchLines(api.commands[0])).slice(2), [
           { type: INPUT_LINE.MODEL, model: "claude-opus-5-5", fast: true, effort: "low" },
         ]);
       }),
@@ -1169,7 +1177,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
       assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
       assert.ok(
-        (linesOf(api.commands[0]) as InputLine[]).every((line) => line.type !== INPUT_LINE.STOP),
+        ((yield* launchLines(api.commands[0])) as InputLine[]).every(
+          (line) => line.type !== INPUT_LINE.STOP,
+        ),
       );
     }),
   );
@@ -1187,10 +1197,11 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const target = { userId, conversationId: agent.conversationId };
         // The events route records the CLI's session from the runner's init, and the run ends.
-        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
         const firstBearer = api.commands[0]?.env[RUNNER_ENV.BEARER];
         sequence.next = 42;
 
+        yield* runnerTook(agent.id);
         const ended = yield* runnerEnded({
           target,
           sessionId: opened.sessionId,
@@ -1211,7 +1222,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(api.commands.length, 2);
         const relaunch = api.commands[1];
         assert.equal(relaunch?.sandboxSessionId, api.sandboxes[0]?.currentSessionId);
-        const [config, line] = linesOf(relaunch) as [ClaudeCodeConfig, InputLine];
+        const [config, line] = (yield* launchLines(relaunch)) as [ClaudeCodeConfig, InputLine];
         assert.equal(config.resume, CLI_SESSION);
         assert.equal(config.firstSequence, 42);
         assert.ok(line.type === INPUT_LINE.MESSAGE);
@@ -1219,10 +1230,11 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         // A fresh bearer for the new launch, recorded in place of the last.
         const bearer = relaunch?.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined && bearer !== firstBearer);
-        const routing = Option.getOrThrow(yield* readCodingAgentRouting(userId, agent.id));
+        const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
 
         // The first launch's END, arriving late, stops nothing of the second's.
+        yield* runnerTook(agent.id);
         const late = yield* runnerEnded({ target, sessionId: opened.sessionId, sequence: 41 }).pipe(
           Effect.provide(api.layer),
         );
@@ -1231,8 +1243,99 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       }),
   );
 
+  it.effect.each([
+    ["at its upload of the message's files", (rest: string) => rest === "fs/write", asLaunched],
+    ["at the read of its runner's exit", (rest: string) => /^cmd\/[^/]+$/u.test(rest), asLaunched],
+    ["at the relaunch's command", (rest: string) => rest === "cmd", runnerExited],
+  ] as const)(
+    "a message that meets its sandbox stopping %s resumes the sandbox and runs on a runner launched in its next session",
+    ([, call, leave]) =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        yield* runnerTook(agent.id);
+        sequence.next = 42;
+        const first = api.commands[0];
+        leave(api);
+        api.stopsAt.call = call;
+        const pdf = Buffer.from("%PDF-1.7 the report").toString("base64");
+
+        const sent = yield* sessions.send(opened.sessionId, {
+          ...message(agent, "Now the emails."),
+          message: [
+            { type: "text" as const, text: "Now the emails." },
+            { type: "file" as const, data: pdf, mediaType: "application/pdf", filename: "r.pdf" },
+          ],
+        });
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.sandboxes[0]?.status, "running");
+        assert.equal(api.commands.length, 2);
+        const relaunch = api.commands[1];
+        assert.equal(relaunch?.sandboxSessionId, api.sandboxes[0]?.currentSessionId);
+        assert.notEqual(relaunch?.sandboxSessionId, first?.sandboxSessionId);
+        const [, line] = (yield* launchLines(relaunch)) as [ClaudeCodeConfig, InputLine];
+        assert.ok(line.type === INPUT_LINE.MESSAGE);
+        assert.deepEqual(developerContent(line)[0], { type: "text", text: "Now the emails." });
+      }),
+  );
+
   it.effect(
-    "a halt ends the running runner and keeps its sandbox, and the next message relaunches on the CLI's session cut before the line a rewind dropped",
+    "a launch's end that left a message untaken keeps the sandbox up, and the launch that hands it on reads it",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        // The runner took its first message, and a message queued as it ended was never read.
+        yield* runnerTook(agent.id);
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        sequence.next = 9;
+
+        const ended = yield* runnerEnded({
+          target: { userId, conversationId: agent.conversationId },
+          sessionId: opened.sessionId,
+          sequence: 8,
+          reason: RUNNER_END.TURN_ENDED,
+        }).pipe(Effect.provide(api.layer));
+        assert.equal(ended, RUNNER_ENDED.LINES_WAITING);
+        assert.equal(api.sandboxes[0]?.status, "running");
+        const first = api.commands[0];
+        assert.ok(first !== undefined);
+        first.exitCode = 0;
+        const handed = yield* sessions.deliverWaiting(opened.sessionId, agent.conversationId);
+
+        assert.equal(handed, true);
+        assert.equal(api.commands.length, 2);
+        const [config] = (yield* launchLines(api.commands[1])) as [ClaudeCodeConfig];
+        assert.equal(config.resume, CLI_SESSION);
+        assert.equal(config.firstSequence, 9);
+        const read = yield* runnerLinesPast(userId, agent.id, {
+          launch: config.firstSequence,
+          after: 0,
+          since: new Date(0),
+          limit: 10,
+        });
+        assert.deepEqual(
+          read.map((line) => developerContent(JSON.parse(line.text) as InputLine)),
+          [[{ type: "text", text: "Now the emails." }]],
+        );
+      }),
+  );
+
+  it.effect(
+    "a failed launch's end stops the sandbox with a message untaken, handing nothing on",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1243,7 +1346,34 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+
+        const ended = yield* runnerEnded({
+          target: { userId, conversationId: agent.conversationId },
+          sessionId: opened.sessionId,
+          sequence: 3,
+          reason: RUNNER_END.FAILED,
+        }).pipe(Effect.provide(api.layer));
+
+        assert.equal(ended, RUNNER_ENDED.STOPPED);
+        assert.equal(api.sandboxes[0]?.status, "stopped");
+      }),
+  );
+
+  it.effect(
+    "a halt ends the running runner and keeps its sandbox, and the next message relaunches on the CLI's session cut before the line a rewind dropped",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        // The runner took its message, and its events were applied.
+        yield* runnerTook(agent.id);
+        sequence.next = 1;
+        assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
         const target = { userId, conversationId: agent.conversationId };
         const lineId = randomUUID();
         yield* (yield* Database).insert(messages).values({
@@ -1259,6 +1389,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const halted = yield* sessions.halt(opened.sessionId, agent.conversationId);
         // Note that the sandbox's tags no longer name the ended runner, so no message is written to it.
         const tagsAfterHalt = { ...api.sandboxes[0]?.tags };
+        // Read before the relaunch, which drops what the ended launch was written but its untaken messages.
+        const haltedWith = (yield* launchLines(api.commands[0])).at(-1);
         yield* rewindConversation(target, lineId);
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Fix only the emails."));
 
@@ -1268,10 +1400,13 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes.length, 1);
         assert.equal(api.sandboxes[0]?.deleted, false);
-        assert.deepEqual(linesOf(api.commands[0]).at(-1), { type: INPUT_LINE.STOP, launch: 0 });
+        assert.deepEqual(haltedWith, { type: INPUT_LINE.STOP, launch: 0 });
         assert.notEqual(api.commands[0]?.exitCode, null);
         assert.equal(api.commands.length, 2);
-        const [config, line] = linesOf(api.commands[1]) as [ClaudeCodeConfig, InputLine];
+        const [config, line] = (yield* launchLines(api.commands[1])) as [
+          ClaudeCodeConfig,
+          InputLine,
+        ];
         assert.equal(config.resume, CLI_SESSION);
         assert.equal(config.rewindBefore, "dropped-line");
         assert.ok(line.type === INPUT_LINE.MESSAGE);
@@ -1298,6 +1433,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const openedWith = sandbox.timeout;
         // As a sandbox opened before the timeout was shortened, which Vercel reopens on its own each resume.
         sandbox.timeout = CODER.SANDBOX_MAX_LIFETIME_MS;
+        yield* runnerTook(agent.id);
         yield* runnerEnded({
           target: { userId, conversationId: agent.conversationId },
           sessionId: opened.sessionId,
@@ -1323,8 +1459,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
         sequence.next = 42;
+        yield* runnerTook(agent.id);
         yield* runnerEnded({
           target: { userId, conversationId: agent.conversationId },
           sessionId: opened.sessionId,
@@ -1344,7 +1481,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(fresh.tags[SESSION_TAG], opened.sessionId);
         const relaunch = api.commands[1];
         assert.equal(relaunch?.sandboxSessionId, fresh.currentSessionId);
-        const [config, line] = linesOf(relaunch) as [ClaudeCodeConfig, InputLine];
+        const [config, line] = (yield* launchLines(relaunch)) as [ClaudeCodeConfig, InputLine];
         assert.equal(config.resume, undefined);
         assert.ok(line.type === INPUT_LINE.MESSAGE);
         assert.deepEqual(developerContent(line), [{ type: "text", text: "Now the emails." }]);
@@ -1367,6 +1504,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         sequence.next = 42;
+        yield* runnerTook(agent.id);
         yield* runnerEnded({
           target: { userId, conversationId: agent.conversationId },
           sessionId: opened.sessionId,
@@ -1414,6 +1552,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         sequence.next = 42;
+        yield* runnerTook(agent.id);
         yield* runnerEnded({
           target: { userId, conversationId: agent.conversationId },
           sessionId: opened.sessionId,
@@ -1468,7 +1607,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(expired.deleted, true);
         assert.equal(api.sandboxes.length, 2);
         assert.equal(api.sandboxes.at(-1)?.status, "running");
-        const stdin = JSON.stringify(api.commands.slice(1).map(linesOf));
+        const stdin = JSON.stringify(yield* Effect.forEach(api.commands.slice(1), launchLines));
         assert.ok(stdin.includes("Now the emails."));
         assert.ok(stdin.includes("And the docs."));
       }),
@@ -1486,6 +1625,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         sequence.next = 42;
+        yield* runnerTook(agent.id);
         yield* runnerEnded({
           target: { userId, conversationId: agent.conversationId },
           sessionId: opened.sessionId,
@@ -1542,7 +1682,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(api.sandboxes.at(-1)?.snapshotId, "snap_fixture_image_again");
         assert.equal(api.sandboxes.at(-1)?.status, "running");
         assert.equal(expired.deleted, true);
-        assert.ok(JSON.stringify(linesOf(api.commands.at(-1))).includes("Now the emails."));
+        assert.ok(
+          JSON.stringify(yield* launchLines(api.commands.at(-1))).includes("Now the emails."),
+        );
       }),
   );
 
@@ -1598,6 +1740,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const target = { userId, conversationId: agent.conversationId };
         sequence.next = 42;
+        yield* runnerTook(agent.id);
         yield* runnerEnded({ target, sessionId: opened.sessionId, sequence: 41 }).pipe(
           Effect.provide(api.layer),
         );
@@ -1620,7 +1763,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         // The later message went to the running replacement's runner, not to a third sandbox.
         assert.equal(api.commands.length, 2);
         const [, relaunch] = api.commands;
-        assert.ok(linesOf(relaunch).length >= 3);
+        assert.ok((yield* launchLines(relaunch)).length >= 3);
+        yield* runnerTook(agent.id);
         const ended = yield* runnerEnded({
           target,
           sessionId: opened.sessionId,
@@ -1747,7 +1891,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(api.sandboxes.length, 0);
         assert.deepEqual(yield* newestTurn(agent), {
           status: TURN_STATUS.FAILED,
-          failure: CODING_AGENT_FAILURE.SANDBOX,
+          failure: AGENT_FAILURE.SANDBOX,
         });
       }),
   );
@@ -1801,13 +1945,15 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
         const { userId, agent } = yield* openAgent;
-        const sessions = yield* sessionsFor(userId, { next: 3 }).pipe(
-          Effect.provide(services(api)),
-        );
+        const sequence = { next: 3 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const first = api.commands[0];
         assert.ok(first !== undefined);
+        // The runner took its message, its events were applied, and it exited.
+        yield* runnerTook(agent.id);
+        sequence.next = 4;
         first.exitCode = 0;
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Again."));
@@ -1815,7 +1961,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.commands.length, 2);
         assert.equal(api.commands[1]?.sandboxSessionId, first.sandboxSessionId);
-        assert.equal(linesOf(first).length, 2);
+        assert.equal((yield* launchLines(first)).length, 2);
       }),
   );
 
@@ -1826,13 +1972,15 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
         const { userId, agent } = yield* openAgent;
-        const sessions = yield* sessionsFor(userId, { next: 3 }).pipe(
-          Effect.provide(services(api)),
-        );
+        const sequence = { next: 3 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const first = api.commands[0];
         assert.ok(first !== undefined);
+        // The runner took its message, its events were applied, and it exited.
+        yield* runnerTook(agent.id);
+        sequence.next = 4;
         first.exitCode = 0;
         // The first message's relaunch is held as its command starts, the widest the race stands open.
         const held = gate();
@@ -1855,24 +2003,27 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
         );
         assert.equal(api.commands.length, 2);
-        assert.deepEqual((linesOf(api.commands[1]) as InputLine[]).flatMap(developerContent), [
-          { type: "text", text: "One." },
-          { type: "text", text: "Two." },
-        ]);
+        assert.deepEqual(
+          ((yield* launchLines(api.commands[1])) as InputLine[]).flatMap(developerContent),
+          [
+            { type: "text", text: "One." },
+            { type: "text", text: "Two." },
+          ],
+        );
       }),
   );
 
   it.effect(
-    "two messages at once to a running runner are both written, in order, neither over the other",
+    "two messages at once to a running runner are both queued for it, in order, neither over the other",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
-        // The first message's write of its bytes is held, after it read where the stdin stands.
+        // The first message's read of the runner's exit is held, inside its lease.
         const held = gate();
         let holding = false;
         const http = fakeHttpClientLayer(async (url, init) => {
-          if (holding && url.includes("/stdin") && String(init.body).includes('"data"')) {
+          if (holding && url.includes("wait=true")) {
             holding = false;
             await held.pass();
           }
@@ -1900,16 +2051,19 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
         );
         assert.equal(api.commands.length, 1);
-        assert.deepEqual((linesOf(api.commands[0]) as InputLine[]).flatMap(developerContent), [
-          { type: "text", text: "Fix the invitations." },
-          { type: "text", text: "One." },
-          { type: "text", text: "Two." },
-        ]);
+        assert.deepEqual(
+          ((yield* launchLines(api.commands[0])) as InputLine[]).flatMap(developerContent),
+          [
+            { type: "text", text: "Fix the invitations." },
+            { type: "text", text: "One." },
+            { type: "text", text: "Two." },
+          ],
+        );
       }),
   );
 
   it.effect(
-    "a message reaches a running runner with no read of its exit, and a Stop or a retune Vercel would not read is neither relaunched beside the runner nor taken in silence",
+    "a message reaches a running runner whose exit Vercel would not read, and a Stop or a retune Vercel would not read is neither relaunched beside the runner nor taken in silence",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1924,21 +2078,21 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         api.failCommandReads.remaining = 3;
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Again."));
-        const before = linesOf(api.commands[0]).length;
+        const before = (yield* launchLines(api.commands[0])).length;
         const cancelled = yield* sessions.cancel(opened.sessionId, turnId);
         const retuned = yield* sessions.retune(opened.sessionId, agent.conversationId);
 
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        assert.ok(api.commands[0]?.stdin.includes("Again."));
+        assert.ok(JSON.stringify(yield* launchLines(api.commands[0])).includes("Again."));
         assert.deepEqual(cancelled, { outcome: "failed", status: 503 });
         assert.equal(retuned, RUNNER_CHOICE.FAILED);
         assert.equal(api.commands.length, 1);
-        assert.equal(linesOf(api.commands[0]).length, before);
+        assert.equal((yield* launchLines(api.commands[0])).length, before);
       }),
   );
 
   it.effect(
-    "a message to a running runner is written at once, never waiting out a read of its exit",
+    "a message to a running runner waits on a read of its exit no longer than its bound, then is queued for it",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1955,17 +2109,20 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sending = yield* Effect.forkChild(
           sessions.send(opened.sessionId, message(agent, "Now the emails.")),
         );
-        yield* Effect.promise(async () => {
+        const settle = Effect.promise(async () => {
           for (let turn = 0; turn < 200; turn += 1) {
-            await new Promise<void>((settle) => setImmediate(settle));
+            await new Promise<void>((settled) => setImmediate(settled));
           }
         });
+        yield* settle;
+        assert.equal(sending.pollUnsafe(), undefined);
+        yield* TestClock.adjust(CODER.RUNNER_EXIT_READ);
+        yield* settle;
 
-        // The clock never moved, so a send that read the exit first would still be waiting on it.
         const sent = sending.pollUnsafe();
         assert.ok(sent !== undefined && Exit.isSuccess(sent));
         assert.equal(sent.value.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        assert.ok(api.commands[0]?.stdin.includes("Now the emails."));
+        assert.ok(JSON.stringify(yield* launchLines(api.commands[0])).includes("Now the emails."));
         assert.equal(api.commands.length, 1);
       }),
   );
@@ -1989,7 +2146,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const now = new Date(yield* Clock.currentTimeMillis);
         const elsewhere = randomUUID();
         const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
-        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, elsewhere, now, until), true);
+        assert.equal(yield* claimAgentRunnerLease(agent.id, elsewhere, now, until), true);
 
         const waiting = yield* Effect.forkChild(
           sessions.send(opened.sessionId, message(agent, "Again.")),
@@ -2004,12 +2161,110 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(api.commands.length, 1);
         // The lease is still the other call's alone, and free once it lets go.
-        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, randomUUID(), now, until), false);
-        yield* releaseCodingAgentRunnerLease(agent.id, elsewhere);
-        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, randomUUID(), now, until), true);
+        assert.equal(yield* claimAgentRunnerLease(agent.id, randomUUID(), now, until), false);
+        yield* releaseAgentRunnerLease(agent.id, elsewhere);
+        assert.equal(yield* claimAgentRunnerLease(agent.id, randomUUID(), now, until), true);
       }),
   );
 
+  it.effect(
+    "messages sent while another call holds the lease, as a launch does, are answered at once and read by the launch after its first, in the order sent",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 3 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        // Another instance's call holds the lease, as a launch elsewhere does.
+        const now = new Date(yield* Clock.currentTimeMillis);
+        const elsewhere = randomUUID();
+        const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+        assert.equal(yield* claimAgentRunnerLease(agent.id, elsewhere, now, until), true);
+        const kept = keptAfterResponse();
+        yield* updateAgentChoice(userId, agent.id, {
+          model: "anthropic/claude-sonnet-5.5",
+          effort: "low",
+        });
+
+        const answers = yield* Effect.forEach(["Now the emails.", "And the docs."], (text) =>
+          sessions.send(opened.sessionId, message(agent, text)).pipe(Effect.provide(kept.layer)),
+        );
+
+        assert.deepEqual(
+          answers.map((answer) => answer.outcome),
+          [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
+        );
+        const read = yield* runnerLinesPast(userId, agent.id, {
+          launch: 3,
+          after: 0,
+          since: new Date(0),
+          limit: 10,
+        });
+        // The developer's words close each message, the turn's own words ahead of them on the first
+        // alone, and the agent's model as it stands now goes ahead of each message queued behind.
+        const model = {
+          type: INPUT_LINE.MODEL,
+          model: "claude-sonnet-5-5",
+          fast: false,
+          effort: "low",
+        };
+        assert.deepEqual(
+          read.map((line) => {
+            const parsed = JSON.parse(line.text) as InputLine;
+            return parsed.type === INPUT_LINE.MESSAGE ? parsed.content.at(-1) : parsed;
+          }),
+          [
+            { type: "text", text: "Fix the invitations." },
+            model,
+            { type: "text", text: "Now the emails." },
+            model,
+            { type: "text", text: "And the docs." },
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a message queued behind another call's lease whose session has no place once the lease frees is taken back, so no launch reads it later",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 3 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        yield* runnerTook(agent.id);
+        // The session's place is gone, as a reset leaves it.
+        yield* sessions.reset(opened.sessionId);
+        const now = new Date(yield* Clock.currentTimeMillis);
+        const elsewhere = randomUUID();
+        const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+        assert.equal(yield* claimAgentRunnerLease(agent.id, elsewhere, now, until), true);
+        const kept = keptAfterResponse();
+
+        const answer = yield* sessions
+          .send(opened.sessionId, message(agent, "Now the emails."))
+          .pipe(Effect.provide(kept.layer));
+        yield* releaseAgentRunnerLease(agent.id, elsewhere);
+        yield* kept.run;
+
+        assert.equal(answer.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const read = yield* runnerLinesPast(userId, agent.id, {
+          launch: 4,
+          after: 0,
+          since: new Date(0),
+          limit: 10,
+        });
+        assert.deepEqual(read, []);
+      }),
+  );
   it.effect(
     "a launch's end whose credential would not come off the firewall leaves the sandbox up for the sweep",
     () =>
@@ -2024,6 +2279,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         api.failPolicy.remaining = 1;
 
+        yield* runnerTook(agent.id);
         const ended = yield* Effect.result(
           runnerEnded({
             target: { userId, conversationId: agent.conversationId },
@@ -2047,6 +2303,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
       yield* holdSandbox(agent.conversationId, new Date(Date.UTC(2030, 0, 1)));
 
+      yield* runnerTook(agent.id);
       const ended = yield* runnerEnded({
         target: { userId, conversationId: agent.conversationId },
         sessionId: opened.sessionId,
@@ -2076,8 +2333,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const now = new Date(yield* Clock.currentTimeMillis);
         const elsewhere = randomUUID();
         const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
-        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, elsewhere, now, until), true);
+        assert.equal(yield* claimAgentRunnerLease(agent.id, elsewhere, now, until), true);
 
+        yield* runnerTook(agent.id);
         const ending = yield* Effect.forkChild(
           runnerEnded({
             target: { userId, conversationId: agent.conversationId },
@@ -2094,7 +2352,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(sandbox.status, "running");
         // The send's relaunch writes its launch's tag, past the END's sequence, and lets go.
         sandbox.tags[RUNNER_TAG.LAUNCH] = "42";
-        yield* releaseCodingAgentRunnerLease(agent.id, elsewhere);
+        yield* releaseAgentRunnerLease(agent.id, elsewhere);
         yield* TestClock.adjust(CODER.RUNNER_LEASE.POLL);
 
         assert.equal(yield* Fiber.join(ending), RUNNER_ENDED.STALE);
@@ -2117,10 +2375,13 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(sandbox !== undefined);
         const retired = yield* retireWarmRunner({
           sessionId: opened.sessionId,
+          userId,
           agentId: agent.id,
           running: sandbox.currentSessionId,
         }).pipe(Effect.provide(api.layer));
         assert.equal(retired, true);
+        // Read before the relaunch, which drops what the retired launch was written but its untaken messages.
+        const retiredWith = (yield* launchLines(api.commands[0])).at(-1);
         sequence.next = 5;
 
         // The retired runner has not exited yet: Vercel still reads its command as running.
@@ -2129,9 +2390,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         const [first, second] = api.commands;
         assert.ok(first !== undefined && second !== undefined);
-        assert.deepEqual(linesOf(first).at(-1), { type: INPUT_LINE.RETIRE });
-        assert.ok(!first.stdin.includes("Now the emails."));
-        assert.ok(second.stdin.includes("Now the emails."));
+        assert.deepEqual(retiredWith, { type: INPUT_LINE.RETIRE });
+        assert.ok(!JSON.stringify(yield* launchLines(first)).includes("Now the emails."));
+        assert.ok(JSON.stringify(yield* launchLines(second)).includes("Now the emails."));
       }),
   );
 
@@ -2147,7 +2408,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           .insert(user)
           .values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
         const task = yield* startTask(userId, { name: "Teammate invitations" });
-        const started = yield* createCodingAgent(userId, {
+        const started = yield* createAgent(userId, {
           taskId: task.id,
           idempotencyKey: "start-key",
           model: "anthropic/claude-opus-5.5",
@@ -2198,9 +2459,11 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(heldBack, false);
         const [runner] = api.commands;
         assert.ok(runner !== undefined);
-        assert.ok(runner.stdin.includes("Now the emails."));
+        assert.ok(JSON.stringify(yield* launchLines(runner)).includes("Now the emails."));
         assert.ok(
-          (linesOf(runner) as InputLine[]).every((line) => line.type !== INPUT_LINE.RETIRE),
+          ((yield* launchLines(runner)) as InputLine[]).every(
+            (line) => line.type !== INPUT_LINE.RETIRE,
+          ),
         );
         assert.equal(api.sandboxes[0]?.tags[RUNNER_TAG.COMMAND], runner.id);
 
@@ -2221,14 +2484,16 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           sessionId: opened.sessionId,
           sequence: 7,
         }).pipe(Effect.provide(api.layer));
+        // Read before the relaunch, which drops what the retired launch was written but its untaken messages.
+        const retiredWith = (yield* launchLines(runner)).at(-1);
         sequence.next = 9;
         const after = yield* sessions.send(opened.sessionId, message(agent, "And the tests."));
 
         assert.equal(retired, true);
         assert.equal(after.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        assert.deepEqual(linesOf(runner).at(-1), { type: INPUT_LINE.RETIRE });
-        assert.ok(!runner.stdin.includes("And the tests."));
-        assert.ok(api.commands[1]?.stdin.includes("And the tests."));
+        assert.deepEqual(retiredWith, { type: INPUT_LINE.RETIRE });
+        assert.ok(!JSON.stringify(yield* launchLines(runner)).includes("And the tests."));
+        assert.ok(JSON.stringify(yield* launchLines(api.commands[1])).includes("And the tests."));
       }),
   );
 
@@ -2240,16 +2505,21 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const api = runnerSandboxApi();
         const { userId, agent } = yield* openAgent;
         const handed = { servers: [LINEAR_SERVER] };
+        const sequence = { next: 0 };
         const sessions = yield* claudeCodeSessions({
           userId,
           eventsUrl: EVENTS_URL,
+          linesUrl: LINES_URL,
           mcpUrl: MCP_URL,
           integrations: () => Effect.sync(() => handed.servers),
           instructions: () => Effect.succeed(INSTRUCTIONS),
-          nextSequence: () => Effect.succeed(0),
+          nextSequence: () => Effect.sync(() => sequence.next),
         }).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        // The runner took its message, and its events were applied.
+        yield* runnerTook(agent.id);
+        sequence.next = 1;
         handed.servers = [LINEAR_SERVER, { name: "notion", url: `${MCP_URL}/integrations/notion` }];
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Use Notion now."));
@@ -2258,18 +2528,18 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const [first, second] = api.commands;
         assert.ok(first !== undefined && second !== undefined);
         assert.notEqual(first.exitCode, null);
-        assert.ok(!first.stdin.includes("Use Notion now."));
-        const [config] = linesOf(second);
+        assert.ok(!JSON.stringify(yield* launchLines(first)).includes("Use Notion now."));
+        const [config] = yield* launchLines(second);
         assert.ok(typeof config === "object" && config !== null && "integrations" in config);
         assert.deepEqual(config.integrations, handed.servers);
-        assert.ok(second.stdin.includes("Use Notion now."));
+        assert.ok(JSON.stringify(yield* launchLines(second)).includes("Use Notion now."));
 
         // A turn under way keeps its runner, which goes on with the servers it has.
         handed.servers = [LINEAR_SERVER];
         yield* turnUnderWay(userId, agent);
         yield* sessions.send(opened.sessionId, message(agent, "Also the docs."));
         assert.equal(api.commands.length, 2);
-        assert.ok(second.stdin.includes("Also the docs."));
+        assert.ok(JSON.stringify(yield* launchLines(second)).includes("Also the docs."));
       }),
   );
 
@@ -2290,7 +2560,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(reset.outcome, EVE_RESET_OUTCOME.RESET);
         assert.equal(api.sandboxes[0]?.deleted, true);
-        const routing = Option.getOrThrow(yield* readCodingAgentRouting(userId, agent.id));
+        const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, null);
         assert.equal(
           (yield* sessions.reset(opened.sessionId)).outcome,
@@ -2318,14 +2588,22 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       );
 
       const sent = yield* mySessions.send(opened.sessionId, message(mine.agent, "Not yours."));
+      // A send queued behind another call's lease is told the same, and queues nothing.
+      const now = new Date(yield* Clock.currentTimeMillis);
+      const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+      assert.equal(yield* claimAgentRunnerLease(mine.agent.id, randomUUID(), now, until), true);
+      const queuedBehind = yield* mySessions
+        .send(opened.sessionId, message(mine.agent, "Still not yours."))
+        .pipe(Effect.provide(keptAfterResponse().layer));
       const cancelled = yield* mySessions.cancel(opened.sessionId, "turn_0");
       const reset = yield* mySessions.reset(opened.sessionId);
 
       assert.deepEqual(sent, { outcome: EVE_SEND_OUTCOME.RETIRED });
+      assert.deepEqual(queuedBehind, { outcome: EVE_SEND_OUTCOME.RETIRED });
       assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
       assert.equal(reset.outcome, EVE_RESET_OUTCOME.NO_ACTIVE_SESSION);
       assert.equal(api.sandboxes[0]?.deleted, false);
-      assert.equal(linesOf(api.commands[0]).length, 2);
+      assert.equal((yield* launchLines(api.commands[0])).length, 2);
     }),
   );
 
@@ -2354,7 +2632,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(retried.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.commands.length, 3);
         assert.notEqual(api.commands[1]?.exitCode, null);
-        const [config, line] = linesOf(api.commands[2]) as [ClaudeCodeConfig, InputLine];
+        const [config, line] = (yield* launchLines(api.commands[2])) as [
+          ClaudeCodeConfig,
+          InputLine,
+        ];
         assert.equal(config.harness, RUNNER_HARNESS.CLAUDE_CODE);
         assert.equal(line.type, INPUT_LINE.MESSAGE);
       }),
@@ -2379,14 +2660,14 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
       assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
       assert.equal(api.commands.length, 1);
-      const last = (linesOf(api.commands[0]) as InputLine[]).at(-1);
+      const last = ((yield* launchLines(api.commands[0])) as InputLine[]).at(-1);
       assert.ok(last?.type === INPUT_LINE.MESSAGE);
       assert.deepEqual(developerContent(last), [{ type: "text", text: "Now the emails." }]);
     }),
   );
 
   it.effect(
-    "the turn's own words lead every message: the time on a typed first turn, the call's words and the task on a spoken one, and that the call's words no longer hold on a typed turn after it",
+    "the turn's own words lead every message: the time on a typed first turn, and the time again on the next",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2398,29 +2679,18 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
 
-        const called = yield* sessions.send(opened.sessionId, spoken(agent, "And the emails?"));
         const after = yield* sessions.send(opened.sessionId, message(agent, "Also the docs."));
 
-        assert.equal(called.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(after.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.commands.length, 1);
-        const [typed, onCall, typedAfter] = textsOf(api.commands[0]);
+        const [typed, typedAfter] = yield* textsOf(api.commands[0]);
         // A typed first turn opens with the time alone: the plan is its first message already.
         assert.ok(typed?.[0]?.startsWith("The time as this turn opens"), typed?.[0] ?? "");
         assert.deepEqual(typed?.slice(1), ["Fix the invitations."]);
-        // The call's words, how to talk the plan through, and the task as it stands, ahead of what was said.
-        for (const told of [
-          "## This turn is spoken",
-          `\`${CODER_TOOL.DELEGATE}\``,
-          "## Talking the plan through",
-          "The task as it stands as this turn opens",
-        ]) {
-          assert.ok(onCall?.[0]?.includes(told), told);
-        }
-        assert.deepEqual(onCall?.slice(1), ["And the emails?"]);
-        // What the spoken turn handed is kept on the row, so the typed turn after it says the words no longer hold.
-        assert.ok(typedAfter?.[0]?.startsWith("This turn is typed"), typedAfter?.[0] ?? "");
-        assert.ok(typedAfter?.[0]?.includes("The time as this turn opens"), typedAfter?.[0] ?? "");
+        assert.ok(
+          typedAfter?.[0]?.startsWith("The time as this turn opens"),
+          typedAfter?.[0] ?? "",
+        );
         assert.deepEqual(typedAfter?.slice(1), ["Also the docs."]);
       }),
   );
@@ -2433,9 +2703,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const api = runnerSandboxApi();
         const { userId, agent } = yield* openAgent;
         const operator = yield* openOperator(userId, agent);
-        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
-          Effect.provide(services(api)),
-        );
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(operator, "What stands?"));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         // The member's agent settled a turn, which the desk tells of once. The runner is gone by
@@ -2446,8 +2715,11 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           OPERATOR_NOTICE_KIND.TURN_SETTLED,
           new Date(yield* Clock.currentTimeMillis),
         );
-        api.failStdin.remaining = 1;
-        api.failStdin.status = 404;
+        yield* runnerTook(operator.id);
+        sequence.next = 1;
+        const gone = api.commands[0];
+        assert.ok(gone !== undefined);
+        gone.exitCode = 0;
 
         const sent = yield* sessions.send(opened.sessionId, message(operator, "And now?"));
         const again = yield* sessions.send(opened.sessionId, message(operator, "Anything else?"));
@@ -2455,8 +2727,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(again.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.commands.length, 2);
-        const [first] = textsOf(api.commands[0]);
-        const [told, later] = textsOf(api.commands[1]);
+        const [first] = yield* textsOf(api.commands[0]);
+        const [told, later] = yield* textsOf(api.commands[1]);
         assert.ok(first?.[0]?.includes(DESK_LEAD), first?.[0] ?? "");
         assert.deepEqual(first?.slice(1), ["What stands?"]);
         assert.ok(told?.[0]?.includes("New since your last turn"), told?.[0] ?? "");
@@ -2506,7 +2778,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(api.sandboxes.every((sandbox) => sandbox.deleted));
         assert.deepEqual(yield* newestTurn(agent), {
           status: TURN_STATUS.FAILED,
-          failure: CODING_AGENT_FAILURE.SANDBOX,
+          failure: AGENT_FAILURE.SANDBOX,
         });
       }),
   );
@@ -2560,7 +2832,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual(api.sandboxes, []);
         assert.deepEqual(yield* newestTurn(agent), {
           status: TURN_STATUS.FAILED,
-          failure: CODING_AGENT_FAILURE.SANDBOX,
+          failure: AGENT_FAILURE.SANDBOX,
         });
       }),
   );
@@ -2778,7 +3050,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           [sent.outcome, later.outcome],
           [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
         );
-        assert.ok(api.commands[0]?.stdin.includes("Now the emails."));
+        assert.ok(JSON.stringify(yield* launchLines(api.commands[0])).includes("Now the emails."));
         assert.equal(api.commands.length, 1);
         // The refused renewal set nothing; the next message's renewal set the credential afresh.
         assert.equal(api.policies.length, policiesBefore + 1);
@@ -2803,7 +3075,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
             await new Promise<void>((settle) => setImmediate(settle));
           }
         });
-        assert.ok(api.commands[0]?.stdin.includes("Now the emails."));
+        assert.ok(JSON.stringify(yield* launchLines(api.commands[0])).includes("Now the emails."));
         assert.equal(sending.pollUnsafe(), undefined, "the renewal is still held");
         yield* TestClock.adjust(CODER.CREDENTIAL_RENEWAL);
 
@@ -2835,6 +3107,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
         // The launch ended, and its END stopped the sandbox.
         sequence.next = 20;
+        yield* runnerTook(agent.id);
         yield* runnerEnded({
           target: { userId, conversationId: agent.conversationId },
           sessionId: opened.sessionId,

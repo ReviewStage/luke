@@ -1,9 +1,5 @@
-import type { CodingAgentContextRow } from "@luke/database/models/coding-agent-store";
-import {
-  CONTEXT_WINDOW,
-  type CodingAgentContext,
-  type ContextWindow,
-} from "@luke/features/coding-agent-wire";
+import type { AgentContextRow } from "@luke/database/models/agent-store";
+import { type AgentContext, CONTEXT_WINDOW, type ContextWindow } from "@luke/features/agent-wire";
 import type { OfferedModel } from "../../providers/model-catalog.js";
 import { CODER } from "./bounds.js";
 
@@ -36,10 +32,10 @@ export function contextWindowOf(
 }
 
 /** The agent's context as the wire carries it, against the window given; nothing before its first step. */
-export function codingAgentContextOf(
-  row: CodingAgentContextRow,
+export function agentContextOf(
+  row: AgentContextRow,
   windowTokens: number,
-): CodingAgentContext | undefined {
+): AgentContext | undefined {
   const step = row.lastStep;
   if (step === null) return undefined;
   const compacted = row.compactedAt !== null;

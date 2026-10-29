@@ -24,7 +24,7 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
  * not trust is refused each act in its own words, before the host is asked.
  */
 
-const PANEL: ActSender = { sender: Symbol("window"), panel: true, voice: false, call: false };
+const PANEL: ActSender = { sender: Symbol("window"), panel: true };
 
 const SIGNED_IN: AccountSnapshot = {
   status: ACCOUNT_STATUS.SIGNED_IN,

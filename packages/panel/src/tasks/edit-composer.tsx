@@ -1,8 +1,8 @@
 import {
-  CODING_AGENT_STATUS,
-  type CodingAgentAttachment,
-  type CodingAgentMessage,
-} from "@luke/features/coding-agent-wire";
+  AGENT_STATUS,
+  type AgentAttachment,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
@@ -72,13 +72,12 @@ export interface EditComposerDoors {
   readonly doors: PublishedDoors;
   readonly keywords?: readonly string[] | undefined;
   readonly skills?: SkillSource | undefined;
-  readonly dictates: boolean;
   /** Whether messages follow the line, which its send drops, so Send asks first. */
   readonly cuts: boolean;
   /** What the send drops of other members' messages, as "2 messages from Sam"; none where it drops none of theirs. */
   readonly takes?: string | undefined;
   readonly onCancel: () => void;
-  readonly onSend: (words: string, attachments: readonly CodingAgentAttachment[]) => void;
+  readonly onSend: (words: string, attachments: readonly AgentAttachment[]) => void;
 }
 
 const noop = () => undefined;
@@ -90,7 +89,7 @@ const noop = () => undefined;
  */
 function unheld(
   line: readonly LineAttachment[],
-  files: readonly CodingAgentAttachment[],
+  files: readonly AgentAttachment[],
 ): readonly LineAttachment[] {
   const free = [...files];
   return line.filter((each) => {
@@ -103,10 +102,10 @@ function unheld(
 
 /** The box's files with the line's joined after them, but for those already there and those it took off. */
 function joined(
-  files: readonly CodingAgentAttachment[],
+  files: readonly AgentAttachment[],
   line: readonly LineAttachment[],
   dropped: readonly string[],
-): readonly CodingAgentAttachment[] {
+): readonly AgentAttachment[] {
   const joining = unheld(
     line.filter((each) => !dropped.includes(each.key)),
     files,
@@ -119,7 +118,7 @@ export function EditComposer({
   words,
   edit,
 }: {
-  message: CodingAgentMessage;
+  message: AgentTranscriptMessage;
   /** The line's words as its bubble shows them. */
   words: string;
   edit: EditComposerDoors;
@@ -133,7 +132,7 @@ export function EditComposer({
   // join it but for those it took off, since a relaunch keeps a draft's words and not its files.
   const [resumed] = useState(() => kept !== EMPTY_DRAFT);
   const [draft, setDraft] = useState(() => (resumed ? kept.text : words));
-  const [attachments, setAttachments] = useState<readonly CodingAgentAttachment[]>(() =>
+  const [attachments, setAttachments] = useState<readonly AgentAttachment[]>(() =>
     resumed
       ? joined(kept.attachments, line.attachments, kept.dropped ?? [])
       : line.attachments.map((each) => each.attachment),
@@ -145,7 +144,7 @@ export function EditComposer({
   // so one taken off stays off when a read lands after.
   const offered = useRef(new Set(line.attachments.map((each) => each.key)));
   // What the box holds is kept, the files of the line it took off named beside it, and let go where it holds the line as it stands.
-  const keep = (text: string, files: readonly CodingAgentAttachment[]) => {
+  const keep = (text: string, files: readonly AgentAttachment[]) => {
     const dropped = [
       ...held.current.dropped.filter((key) => !line.attachments.some((each) => each.key === key)),
       ...unheld(line.attachments, files)
@@ -219,7 +218,7 @@ export function EditComposer({
       <AgentComposer
         agentId={edit.agentId}
         // Note that the box's round button sends while it is open, whatever the agent is doing.
-        status={CODING_AGENT_STATUS.COMPLETED}
+        status={AGENT_STATUS.COMPLETED}
         composer={composer}
         model={undefined}
         models={undefined}
@@ -229,10 +228,9 @@ export function EditComposer({
         servers={undefined}
         published={undefined}
         doors={edit.doors}
-        onStop={() => Promise.resolve()}
+        onStop={() => Promise.resolve(false)}
         keywords={edit.keywords}
         skills={edit.skills}
-        dictates={edit.dictates}
         sendable={!line.reading}
         onLeave={edit.onCancel}
         beforeSend={() => (

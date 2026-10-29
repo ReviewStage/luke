@@ -2,10 +2,10 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_STATUS,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -27,7 +27,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import {
-  codingAgentsControl,
+  agentsControl,
   pushedTranscripts,
   tasksControl,
   UNPINNED_SUMMARY,
@@ -52,21 +52,21 @@ const TASK: Task = {
   document: { body: "", assumptions: [] },
 };
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Invite expiry job",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 
 const OTHER_AGENT = "4d2f1c7e-9a3b-4e8d-b1c6-2f7a8e9d0b13";
 
 /** The agent's turn: one post to the inbox under the key `invite-ttl`, answered. */
-const POSTED: CodingAgentMessage = {
+const POSTED: AgentTranscriptMessage = {
   id: "turn",
   role: MESSAGE_ROLE.ASSISTANT,
   parts: [
@@ -157,12 +157,12 @@ async function mount(): Promise<HTMLElement> {
       strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
       tab: SIDE_PANEL_TAB.INBOX,
     },
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: [AGENT],
       agentIds: [AGENT.id, OTHER_AGENT],
       inboxFollower: inboxes.follower,
       transcripts: pushedTranscripts(() => [
-        { messages: [POSTED], cursor: "1:0", status: CODING_AGENT_STATUS.COMPLETED, title: null },
+        { messages: [POSTED], cursor: "1:0", status: AGENT_STATUS.COMPLETED, title: null },
       ]),
     }),
   });
@@ -188,9 +188,9 @@ function shownTitle(container: HTMLElement): string | null | undefined {
   return container.querySelector("section.inbox-view [data-inbox-title]")?.textContent;
 }
 
-test("a post's row opens the task's Inbox on the item the agent posted under its key, not the item chosen before, nor another agent's under the same key", async () => {
+test("a post's row opens the task's Inbox on the item the agent posted under its key, not another agent's under the same key", async () => {
   const container = await mount();
-  assert.equal(shownTitle(container), "Which SMTP host?", "the Inbox stands on its newest item");
+  assert.equal(shownTitle(container), undefined, "the Inbox stands on nothing chosen");
 
   const row =
     container.querySelector<HTMLButtonElement>('button[data-call-id="call-post"]') ??

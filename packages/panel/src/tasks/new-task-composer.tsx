@@ -1,8 +1,4 @@
-import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_STATUS,
-  hasWordsOrFiles,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, AGENT_STATUS, hasWordsOrFiles } from "@luke/features/agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
@@ -10,7 +6,15 @@ import { TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
-import { CHIP_WIDTH, POPOVER_ALIGN, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  CHIP_WIDTH,
+  POPOVER_ALIGN,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  VisuallyHidden,
+} from "@luke/ui";
 import { workspaceReaches } from "@luke/ui/tasks-model";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -34,7 +38,7 @@ import { SkillFiles } from "./skill-chip.js";
 import type { SkillWithFile } from "./skill-ref.js";
 import { TaskMentions, tasklessMentions, useMentionAgentsReader } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
-import { MODELS_READ } from "./use-coding-agents.js";
+import { MODELS_READ } from "./use-agents.js";
 import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.js";
 
 /**
@@ -46,11 +50,12 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * later before it, drawing the backlog's mark alone where the card is too
  * narrow for its words, as on a phone, where the model chip's words are cut
  * short too, so Start stays at the row's end in the card.
- * New task's own chips stand in a head row over the card, the same in the
- * dialog and on a new account's welcome: the title, "New task", then the repository the task
- * is about (`repository-chip.tsx`). While local agents are on
- * and the member has a device, the Runs on chip follows the repository's,
- * Cloud or one of their devices, which the task's agents run on
+ * New task's repository chip stands in a head row over the card, the same in the
+ * dialog and on a new account's welcome: the repository the task is about
+ * (`repository-chip.tsx`), its title, "New task", named to a reader alone,
+ * since the card says what it is, and an automation's drawn before it. While local agents are on
+ * and the member has a device, the Runs on chip stands after the box's "+",
+ * as an agent's box draws where its agent runs: Cloud or one of their devices, which the task's agents run on
  * (`runs-on.tsx`); an automation's card draws none. Note that while local
  * agents are on the card reads the member's devices as it opens and holds
  * Start, saying so, until that read lands, a list read before it opened not
@@ -122,7 +127,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
 /** ⌘Return: a bare task from a box with nothing in it. */
 const BARE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
 
-/** Each purpose's head row title, before the repository's chip. */
+/** Each purpose's head row title, before the repository's chip: drawn for an automation's, and named to a reader alone for a task's. */
 const PURPOSE_HEADING = {
   [NEW_TASK_PURPOSE.TASK]: "New task",
   [NEW_TASK_PURPOSE.AUTOMATION]: "Create with an agent",
@@ -152,10 +157,9 @@ const BARE_WORDS: ComposerWords = {
 /** Why an automation's agent did not start where the brief and the words pass an agent's first message's bound. */
 const TOO_LONG = "That request is too long.";
 
-/** Why Start is held: without a repository, or before the member's devices are read. */
+/** Why Start is held without a repository. */
 const COMPOSER_WORDS = {
   NEEDS_REPOSITORY: "Choose a repository",
-  READING_DEVICES: "Checking your devices…",
 } as const;
 
 /** What the card says where the member's devices could not be read, with Retry, rather than starting the task in the cloud. */
@@ -422,7 +426,7 @@ export function NewTaskComposer({
   const start = () => {
     if (!canStart) return;
     const prompt = forAutomation ? automationAgentBrief(said) : said;
-    if (forAutomation && prompt.length > CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS) {
+    if (forAutomation && prompt.length > AGENT_BOUNDS.MAX_MESSAGE_CHARS) {
       setNote({ reason: FAILURE_REASON.OTHER, text: TOO_LONG });
       return;
     }
@@ -489,27 +493,23 @@ export function NewTaskComposer({
     <div className="new-task-composer flex min-w-0 flex-col gap-control-gap">
       <div className="new-task-head flex min-w-0 items-center gap-block-gap">
         <div className="new-task-title flex min-w-0 items-center gap-item-gap">
-          <Text
-            variant={TEXT_VARIANT.DIALOG}
-            as={TEXT_ELEMENT.H2}
-            id={titleId}
-            className="max-w-new-task-title shrink-0"
-          >
-            {PURPOSE_HEADING[purpose]}
-          </Text>
-          {repositoryChip}
-          {devices === undefined ? null : (
-            <NewTaskRunsOnChip
-              devices={devices}
-              device={device}
-              disabled={starting}
-              onChoose={chooseDevice}
-            />
+          {forAutomation ? (
+            <Text
+              variant={TEXT_VARIANT.DIALOG}
+              as={TEXT_ELEMENT.H2}
+              id={titleId}
+              className="max-w-new-task-title shrink-0"
+            >
+              {PURPOSE_HEADING[purpose]}
+            </Text>
+          ) : (
+            <VisuallyHidden id={titleId}>{PURPOSE_HEADING[purpose]}</VisuallyHidden>
           )}
+          {repositoryChip}
         </div>
       </div>
       <AgentComposer
-        status={CODING_AGENT_STATUS.STARTING}
+        status={AGENT_STATUS.STARTING}
         composer={composer}
         wording={startsBare ? BARE_WORDS : PURPOSE_WORDS[purpose]}
         // Note that an automation's agent is held without words, since its brief fences them as the request, files alone saying none.
@@ -523,20 +523,25 @@ export function NewTaskComposer({
         skills={skills}
         published={undefined}
         doors={{ openGitHub: () => undefined, copy: () => undefined }}
-        onStop={() => Promise.resolve()}
+        onStop={() => Promise.resolve(false)}
         onKey={onKey}
         onLeave={onLeave}
         focusedByOwner={focusedByOwner}
         listSide={listSide}
+        tools={
+          devices === undefined ? undefined : (
+            <NewTaskRunsOnChip
+              devices={devices}
+              device={device}
+              disabled={starting}
+              onChoose={chooseDevice}
+            />
+          )
+        }
       />
       {blocked ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           {COMPOSER_WORDS.NEEDS_REPOSITORY}
-        </Text>
-      ) : null}
-      {devicesUnread && !devicesFailed ? (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {COMPOSER_WORDS.READING_DEVICES}
         </Text>
       ) : null}
     </div>

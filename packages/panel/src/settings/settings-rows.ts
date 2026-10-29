@@ -9,10 +9,8 @@ import {
   HOST_CAPABILITY,
   type HostCapability,
 } from "@luke/settings";
-import type { MicrophoneControl } from "@luke/settings/settings-controls";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type { AppSettingsView } from "@luke/settings/wire";
-import { microphoneAccessRow } from "@luke/ui/microphone-access";
 import type { SettingsSearchInput } from "../settings-search.js";
 import type { WorkspaceSettingsControl } from "./workspace-page.js";
 
@@ -34,11 +32,11 @@ import type { WorkspaceSettingsControl } from "./workspace-page.js";
 const PAGE_CAPABILITY = {
   [SETTINGS_VIEW.ACCOUNT]: null,
   [SETTINGS_VIEW.WORKSPACE]: null,
-  [SETTINGS_VIEW.CODING_AGENTS]: null,
+  [SETTINGS_VIEW.AGENTS]: null,
+  [SETTINGS_VIEW.HOSTS]: null,
   [SETTINGS_VIEW.INTEGRATIONS]: null,
   [SETTINGS_VIEW.SKILLS]: null,
   [SETTINGS_VIEW.MEMORY]: null,
-  [SETTINGS_VIEW.VOICE]: HOST_CAPABILITY.VOICE,
   [SETTINGS_VIEW.APPEARANCE]: null,
   [SETTINGS_VIEW.THIS_MAC]: HOST_CAPABILITY.MAC_COMMANDS,
   [SETTINGS_VIEW.EXPERIMENTAL]: null,
@@ -53,6 +51,7 @@ const PAGE_CAPABILITY = {
  */
 const PAGE_EXPERIMENT: Partial<Record<SettingsView, Experiment>> = {
   [SETTINGS_VIEW.MEMORY]: EXPERIMENT.MEMORY,
+  [SETTINGS_VIEW.HOSTS]: EXPERIMENT.LOCAL_AGENTS,
 };
 
 /** Whether a page stands for the account's experiments: every page but one an experiment the account has off holds. */
@@ -109,13 +108,11 @@ export function shownWorkspace(
  */
 export function settingsRowsInput({
   settings,
-  microphone,
   account,
   capabilities,
   workspace,
 }: {
   settings?: AppSettingsView | undefined;
-  microphone: MicrophoneControl;
   account: AccountSnapshot;
   capabilities: readonly HostCapability[];
   workspace?: Pick<WorkspaceSettingsControl, "workspaces" | "workspaceId"> | undefined;
@@ -124,10 +121,6 @@ export function settingsRowsInput({
   const accountDrawn = account.status === ACCOUNT_STATUS.SIGNED_IN;
   return {
     settings,
-    voiceControlsDrawn: microphoneAccessRow({
-      voiceAvailable: microphone.voiceAvailable,
-      status: microphone.status,
-    }).ready,
     accountDrawn,
     capabilities,
     workspace: accountDrawn && workspace ? shownWorkspace(workspace) : undefined,

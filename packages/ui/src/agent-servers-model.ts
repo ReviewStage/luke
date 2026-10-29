@@ -263,6 +263,11 @@ export function serverGroups(rows: readonly ServerRow[]): readonly ServerGroup[]
     .filter((group) => group.rows.length > 0);
 }
 
+/** What the Connected heading counts: how many of its servers this agent has on, of how many ("2 of 3 on"). */
+export function serversOnWords(rows: readonly ServerRow[]): string {
+  return `${rows.filter((row) => row.on).length} of ${rows.length} on`;
+}
+
 /** Whether a row opens onto its server's tools: connected, and its server answered with at least one. */
 export function opensTools(row: ServerRow): boolean {
   return row.kind === SERVER_ROW.SWITCH && row.tools !== undefined && row.tools.length > 0;

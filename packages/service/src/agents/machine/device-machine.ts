@@ -53,7 +53,7 @@
 import { randomUUID } from "node:crypto";
 import { INPUT_LINE, InputLineSchema } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
-import { hasRepository, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { hasRepository, readAgent } from "@luke/database/models/agent-store";
 import {
   type DeviceAgentPin,
   deviceAgentLineStanding,
@@ -68,7 +68,8 @@ import {
 import { deviceLayout, devicesSeenSince } from "@luke/database/models/device-store";
 import { hostRemoved } from "@luke/database/models/host-store";
 import { parseKeyRing, sealMacLaunchSecrets } from "@luke/database/models/provider-key-seal";
-import { CODING_AGENT_MACHINE, MAC_PRESENCE } from "@luke/features/coding-agent-wire";
+import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
+import { AGENT_MACHINE, MAC_PRESENCE } from "@luke/features/agent-wire";
 import {
   DEVICE_AGENT_BOUNDS,
   DEVICE_AGENT_LINE_KIND,
@@ -91,10 +92,10 @@ import {
   Option,
   Redacted,
   Result,
-  Schedule,
   Schema,
 } from "effect";
 import { HostedEnvironment } from "../../environment.js";
+import { heldUntil } from "../../http/held-read.js";
 import { agentCommitIdentity, type CheckoutServices } from "../coder-host/checkout.js";
 import {
   COMMAND_GONE,
@@ -122,7 +123,7 @@ import {
 export const MAC_MACHINE = {
   /** How long a tool's request waits for its Mac's answer before the call is unavailable. */
   ANSWER_WAIT: Duration.seconds(30),
-  /** How often a waiting request, or a runner's exit, is read again. */
+  /** How often a waiting request, or a runner's exit, is read again where Luke Sync cannot wake it. */
   POLL: Duration.millis(250),
   /** How long a read of a runner's exit waits where its caller names no wait, as a sandbox's does. */
   EXIT_WAIT: Duration.seconds(2),
@@ -171,12 +172,17 @@ function onlyEnds(text: string): boolean {
 
 /** A local agent's place on its Mac, under Luke's session given: the agent itself, since it has one place. */
 function macPlace(session: string, agentId: string): MachinePlace {
-  return { machine: CODING_AGENT_MACHINE.DEVICE, session, running: runningOfAgent(agentId) };
+  return { machine: AGENT_MACHINE.DEVICE, session, running: runningOfAgent(agentId) };
 }
 
 /** A failure the store or the seal answered, as a machine's own: unavailable, with no words of the cause. */
 function unavailable(): SandboxUnavailable {
   return new SandboxUnavailable({});
+}
+
+/** The account's topic, which every write to its agents' lines and requests notifies (`deviceAgentLineSync`, `deviceAgentRequestSync`): a Mac's claim, answer, or settle among them. */
+function deviceTopics(userId: string): readonly SyncTopic[] {
+  return [[TOPIC.ACCOUNT, userId]];
 }
 
 /** A line's payload as the row holds it: a JSON object. */
@@ -237,6 +243,8 @@ function deviceMachineOver(
         writableRoots: [folders.folder],
         signedIn: device.value.signedIn,
         isolation: device.value.isolation,
+        // Note that the Mac's follower writes its lines to the stdin of the runner its release bundled.
+        linesRead: false,
       };
       return layout;
     });
@@ -306,11 +314,14 @@ function deviceMachineOver(
         if (!(yield* stored(queueDeviceAgentRequest(userId, { id, agentId, kind, args })))) {
           return Option.none<DeviceAgentAnswer>();
         }
-        return yield* stored(deviceAgentRequestAnswer(userId, id)).pipe(
-          Effect.repeat({ schedule: Schedule.spaced(MAC_MACHINE.POLL), until: Option.isSome }),
-          Effect.timeoutOption(MAC_MACHINE.ANSWER_WAIT),
-          Effect.map(Option.flatten),
+        const held = yield* heldUntil(
+          stored(deviceAgentRequestAnswer(userId, id)),
+          Option.isSome,
+          deviceTopics(userId),
+          MAC_MACHINE.POLL,
+          MAC_MACHINE.ANSWER_WAIT,
         );
+        return Option.flatMap(held, ({ read }) => read);
       }).pipe(Effect.ensuring(Effect.ignore(stored(withdrawDeviceAgentRequest(userId, id)))));
       if (Option.isNone(answer) || answer.value.kind !== kind) return yield* unavailable();
       return answer.value;
@@ -385,7 +396,7 @@ function deviceMachineOver(
             ? { handle: { ...place, command: launch.value.id }, mark: mark.value }
             : undefined;
         const found: FoundPlace = {
-          machine: CODING_AGENT_MACHINE.DEVICE,
+          machine: AGENT_MACHINE.DEVICE,
           session,
           agentId,
           name: nameOfAgent(agentId),
@@ -453,7 +464,7 @@ function deviceMachineOver(
         // Note that the refusal comes before the caller's steps run, so it has nothing to undo.
         yield* refuseAway(pin);
         const read = Effect.gen(function* () {
-          const agent = yield* stored(readCodingAgent(pin.userId, pin.agentId));
+          const agent = yield* stored(readAgent(pin.userId, pin.agentId));
           if (Option.isNone(agent) || !hasRepository(agent.value))
             return { agent, identity: Exit.succeed(undefined) };
           const target = { userId: pin.userId, conversationId: agent.value.conversationId };
@@ -509,14 +520,14 @@ function deviceMachineOver(
     runnerExit: (handle, within = MAC_MACHINE.EXIT_WAIT) =>
       Effect.gen(function* () {
         const pin = yield* pinOfPlace(handle);
-        const settled = yield* exitOf(pin, handle).pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced(MAC_MACHINE.POLL),
-            until: (exit) => exit !== null,
-          }),
-          Effect.timeoutOption(within),
+        const settled = yield* heldUntil(
+          exitOf(pin, handle),
+          (exit) => exit !== null,
+          deviceTopics(pin.userId),
+          MAC_MACHINE.POLL,
+          within,
         );
-        return Option.getOrNull(settled);
+        return Option.match(settled, { onNone: () => null, onSome: ({ read }) => read });
       }),
 
     kill: (handle) =>

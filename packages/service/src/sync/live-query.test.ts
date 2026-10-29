@@ -13,6 +13,7 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { liveQueryParts } from "../live/live-procedures.js";
 import { announcingClock, driven } from "../testing/clock-driven.js";
+import { recordingSentry, sentOfType } from "../testing/sentry-transport.js";
 import { syncHub } from "./hub.js";
 import { LIVE_QUERIES } from "./live-queries.js";
 import { defineLiveQuery, LIVE_MODE, type LiveQuery } from "./live-query.js";
@@ -64,7 +65,7 @@ const probeDB = Layer.provideMerge(
 /** A toy read of one task's probe rows, standing in for a view's own; `sql` reads them, its one placeholder the task. */
 const probeQuery = (sql: string) =>
   defineLiveQuery({
-    name: "taskBoard",
+    name: "taskHistory",
     params: ["taskId"],
     reads: [probeSync],
     topics: ({ taskId }) => [[TOPIC.TASK, taskId]],
@@ -192,15 +193,24 @@ const genericPlanOf = (statement: string) =>
  * column two tables share is told apart by the relation it is read from,
  * and that a column is read wherever any node of the plan names it, bar a
  * scan's whole row emitted for the node above to pick from (`emitsWholeRow`).
+ * A read in cursor mode is planned past a cursor too, as a reader that names
+ * one is answered.
  */
 const faultsOf = (query: LiveQuery) =>
   Effect.gen(function* () {
     const params = Object.fromEntries(query.params.map((param) => [param, randomUUID()]));
-    const statements = query.statements(params);
-    assert.ok(Option.isSome(statements), `${query.name}'s statements could not be built`);
+    const past = query.cursor === undefined ? [] : [(yield* query.cursor.standing(params)).next];
+    const built = [
+      query.statements(params),
+      ...past.map((cursor) => query.statements(params, cursor)),
+    ];
     const declared = new Map(query.reads.map((table) => [table.name, table]));
     const faults = new Set<string>();
-    for (const statement of Object.values<LiveStatement>(statements.value)) {
+    const planned = built.flatMap((statements) => {
+      assert.ok(Option.isSome(statements), `${query.name}'s statements could not be built`);
+      return Object.values<LiveStatement>(statements.value);
+    });
+    for (const statement of planned) {
       const nodes = nodesOf(yield* genericPlanOf(statement.sql));
       const scans = nodes.flatMap(scanOf);
       const wholeRows = new Set(
@@ -251,6 +261,7 @@ const onHub = <A, E, R>(
       Effect.map(Sync, (hub) => ({
         watch: (topics, fallback) =>
           Effect.map(hub.watch(topics, fallback), (watch) => ({
+            ...watch,
             next: Effect.andThen(Queue.offer(looking, undefined), watch.next),
           })),
       })),
@@ -303,6 +314,25 @@ it.layer(probeDB)("live reads Luke Sync wakes", (it) => {
     Effect.gen(function* () {
       assert.deepEqual(yield* faultsOf(query), faults);
     }),
+  );
+
+  it.effect(
+    "a live read's statements reach Sentry under the read's own span, not as traces of their own",
+    () =>
+      Effect.gen(function* () {
+        const sentry = recordingSentry();
+        yield* liveQueryParts(PROBE_READ, { taskId: randomUUID() }, {}).pipe(
+          Effect.provide(sentry.layer),
+        );
+        const spans = sentOfType(sentry.sent, "span").flatMap(
+          (item): readonly { name: string; span_id: string; parent_span_id?: string }[] =>
+            JSON.parse(item.text).items,
+        );
+        const read = spans.find((span) => span.name === "web/live/taskHistory");
+        const statement = spans.find((span) => span.name.includes("from live_query_probe p"));
+        assert.ok(read !== undefined && statement !== undefined);
+        assert.equal(statement.parent_span_id, read.span_id);
+      }),
   );
 
   it.effect(

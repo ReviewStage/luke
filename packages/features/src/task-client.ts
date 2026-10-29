@@ -9,18 +9,16 @@ import {
   callAnswered,
   jsonOf,
 } from "./account-call.js";
-import type { Board, BoardElement, BoardSaveAnswer } from "./board-wire.js";
-import { startRefusedAs } from "./coding-agent-client.js";
-import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
-import type { LocalAgentRefusal } from "./coding-agent-wire.js";
+import { type BrowserTabsPlace, browserTabsPlaceId } from "./agent-browser-tab-wire.js";
+import { startRefusedAs } from "./agent-client.js";
+import type { AgentAgentAnswer } from "./agent-view.js";
+import type { LocalAgentRefusal } from "./agent-wire.js";
 import { GITHUB_REPOSITORY_TREE_RECURSIVE } from "./contract/github.js";
 import { TASK_FILE_QUERY_FLAG } from "./contract/task-files.js";
 import type {
   GitHubRepositoriesAnswer,
   GitHubRepositoryIssueAnswer,
-  GitHubRepositoryIssuesAnswer,
   GitHubRepositoryPullRequestAnswer,
-  RepositoryIssuesAsk,
 } from "./github-repositories-wire.js";
 import {
   askHosted,
@@ -34,7 +32,6 @@ import { imageBodyOf } from "./image-body.js";
 import {
   LIVE_SIGNED_OUT,
   LIVE_USER_QUERY,
-  type TaskBoardLiveAnswer,
   type TaskBrowserTabsLiveAnswer,
   type TaskHistoryLiveAnswer,
   type TaskPagesLiveAnswer,
@@ -57,7 +54,6 @@ import {
   readServiceAnswer,
 } from "./service-wire.js";
 import type { SidebarLiveAnswer } from "./sidebar-live.js";
-import type { TaskIssueChoice, TaskIssueRelation } from "./task-issue-wire.js";
 import type { TaskListLiveAnswer } from "./task-list-live.js";
 import {
   type TaskSectionsWritten,
@@ -99,16 +95,11 @@ import {
   type StartCallFailure,
   TASK_CALL_FAILURE,
   type TaskCallFailure,
-  type TaskIssueCallFailure,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
   type TasksBrowserTabsAnswer,
   type TasksCommentAnswer,
   type TasksCommentsAnswer,
-  type TasksIssueLinkAnswer,
-  type TasksIssueLinksAnswer,
-  type TasksIssueRelateAnswer,
-  type TasksIssueUnlinkAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
 } from "./tasks-view.js";
@@ -126,7 +117,7 @@ import {
 /** A started task, and, where the start named an agent, the agent started on it or why it was not, as an agent's Start answers. */
 export interface TaskStarted {
   readonly task: Task;
-  readonly agent?: CodingAgentAgentAnswer;
+  readonly agent?: AgentAgentAnswer;
   /** The transaction the task was written in, which the task list followed live carries once it lands. */
   readonly txid?: string;
 }
@@ -184,10 +175,9 @@ const REPOSITORY_REFUSALS = {
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
 } as const;
 
-/** The refusals a start can answer with: a repository out of reach, or the Linear issue it was to start from unread. */
+/** The refusals a start can answer with: a repository out of reach, a workspace none of the account's, or a device that would not take its agents. */
 const START_REFUSALS = {
   ...REPOSITORY_REFUSALS,
-  [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED,
 } as const;
@@ -232,12 +222,6 @@ function hostedResult<Answer, Failure extends string>(
   });
 }
 
-/** The refusals a call on a task's linked issues can answer with, by the service's own word for each. */
-const TASK_ISSUE_REFUSALS = new Map<HostedApiError, TaskIssueCallFailure>([
-  [HOSTED_API_ERROR.NOT_FOUND, TASK_CALL_FAILURE.NOT_FOUND],
-  [HOSTED_API_ERROR.LINEAR_UNAVAILABLE, TASK_CALL_FAILURE.LINEAR_UNAVAILABLE],
-]);
-
 /** The refusals a Browser tab's open can answer with, by the service's own word for each. */
 const BROWSER_TAB_OPEN_REFUSALS = new Map<HostedApiError, BrowserTabOpenFailure>([
   [HOSTED_API_ERROR.NOT_FOUND, BROWSER_TAB_OPEN_FAILURE.NOT_FOUND],
@@ -248,22 +232,25 @@ const BROWSER_TAB_OPEN_REFUSALS = new Map<HostedApiError, BrowserTabOpenFailure>
   [HOSTED_API_ERROR.UPSTREAM_ERROR, BROWSER_TAB_OPEN_FAILURE.UNREACHABLE],
 ]);
 
-/** A call on a task's linked issues as the window hears it: the answer, or why there is none, a refusal it does not name as unanswered. */
-function issueView<Answer>(
-  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
-): Effect.Effect<
-  Answer | { readonly failure: TaskIssueCallFailure },
-  never,
-  HttpClient.HttpClient
-> {
-  return Effect.match(asked, {
-    onSuccess: (answer): Answer | { readonly failure: TaskIssueCallFailure } => answer,
-    onFailure: (failed) => ({
-      failure:
-        (failed._tag === "HostedRefused" ? TASK_ISSUE_REFUSALS.get(failed.refusal) : undefined) ??
-        TASK_CALL_FAILURE.UNANSWERED,
-    }),
-  });
+/** A File tab's window as its query carries it, or nothing where it is not one the wire admits. */
+function fileWindowQuery(window: TaskFileRequest):
+  | {
+      readonly path: string;
+      readonly first: string;
+      readonly last: string;
+      readonly raw?: typeof TASK_FILE_QUERY_FLAG;
+      readonly ref?: string;
+    }
+  | undefined {
+  const admitted = Result.getOrUndefined(readEither(taskFileRequestSchema)(window));
+  if (admitted === undefined) return undefined;
+  return {
+    path: admitted.path,
+    first: String(admitted.firstLine),
+    last: String(admitted.lastLine),
+    ...(admitted.raw === true ? { raw: TASK_FILE_QUERY_FLAG } : undefined),
+    ...(admitted.ref === undefined ? undefined : { ref: admitted.ref }),
+  };
 }
 
 /** A procedure's answer, or nothing where it reached none. */
@@ -473,39 +460,8 @@ export class HostedTaskClient {
     return hostedResult(this.#update(taskId, admitted), MOVE_REFUSALS);
   }
 
-  /** One task's whiteboard as it stands; nothing where the service did not answer one. */
-  readBoard(taskId: string): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      Effect.map(askHosted(this.#hosted.plans.readBoard, { id: taskId }), (answer) => answer.board),
-    );
-  }
-
   /**
-   * Where one task's whiteboard stands, sealed for following over Neon
-   * Realtime, or with `poll` its rows inline at the poll address, for a
-   * reader polling while Realtime fails it, for the account `userId`
-   * names: not found where the account reaches no such task, signed out
-   * where the session is no longer that account's, unanswered for anything
-   * else, which the caller answers by sealing it again.
-   */
-  boardLive(
-    taskId: string,
-    userId: string,
-    poll = false,
-    after?: string,
-  ): Effect.Effect<
-    TaskCallResult<TaskBoardLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return hostedResult(
-      askLive(this.#hosted.live.taskBoard, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
-      LIVE_REFUSALS,
-    );
-  }
-
-  /**
-   * Where one task's pages and calls stand, sealed for following over Neon
+   * Where one task's plan and pages stand, sealed for following over Neon
    * Realtime, or with `poll` their rows inline, for a reader polling while
    * Realtime fails them, for the account `userId` names: not found where the
    * account reaches no such task, signed out where the session is another's,
@@ -550,9 +506,9 @@ export class HostedTaskClient {
     );
   }
 
-  /** One task's Browser tabs, the agent's pointer on each among them, sealed for following, or with `poll` their rows inline, on the terms its pages' is. */
+  /** One agent's Browser tabs, or a task's agents' together, the agent's pointer on each among them, sealed for following, or with `poll` their rows inline, on the terms its pages' is. */
   browserTabsLive(
-    taskId: string,
+    place: BrowserTabsPlace,
     userId: string,
     poll = false,
     after?: string,
@@ -563,8 +519,8 @@ export class HostedTaskClient {
   > {
     return hostedResult(
       askLive(
-        this.#hosted.live.taskBrowserTabs,
-        { id: taskId, [LIVE_USER_QUERY]: userId },
+        "taskId" in place ? this.#hosted.live.taskBrowserTabs : this.#hosted.live.agentBrowserTabs,
+        { id: browserTabsPlaceId(place), [LIVE_USER_QUERY]: userId },
         poll,
         after,
       ),
@@ -603,18 +559,19 @@ export class HostedTaskClient {
     taskId: string,
     window: TaskFileRequest,
   ): Effect.Effect<TaskFileAnswer | undefined, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(taskFileRequestSchema)(window));
-    if (admitted === undefined) return Effect.succeed(undefined);
-    return orNothing(
-      askHosted(this.#hosted.taskFiles.file, {
-        id: taskId,
-        path: admitted.path,
-        first: String(admitted.firstLine),
-        last: String(admitted.lastLine),
-        ...(admitted.raw === true ? { raw: TASK_FILE_QUERY_FLAG } : undefined),
-        ...(admitted.ref === undefined ? undefined : { ref: admitted.ref }),
-      }),
-    );
+    const query = fileWindowQuery(window);
+    if (query === undefined) return Effect.succeed(undefined);
+    return orNothing(askHosted(this.#hosted.taskFiles.file, { id: taskId, ...query }));
+  }
+
+  /** One window of a file of a repository the workspace's installation reaches, as `readFile` reads a task's; nothing where the service did not answer, or where the window is not one the wire admits. */
+  readRepositoryFile(
+    place: RepositoryPlace,
+    window: TaskFileRequest,
+  ): Effect.Effect<TaskFileAnswer | undefined, never, HttpClient.HttpClient> {
+    const query = fileWindowQuery(window);
+    if (query === undefined) return Effect.succeed(undefined);
+    return orNothing(askHosted(this.#hosted.github.repositoryFile, { ...place, ...query }));
   }
 
   /**
@@ -701,27 +658,20 @@ export class HostedTaskClient {
     );
   }
 
-  /** The issues one task links, each with where it stands now, read live by the service; or why there are none. */
-  readIssueLinks(
-    taskId: string,
-  ): Effect.Effect<TasksIssueLinksAnswer, never, HttpClient.HttpClient> {
-    return issueView(askHosted(this.#hosted.plans.issues, { id: taskId }));
-  }
-
   /**
    * Opens a Browser tab at the address in the browser of the coding agent
-   * named on the task, taken over by the account at once, under a deadline
+   * named, on a task or on none, taken over by the account at once, under a deadline
    * that outlasts the agent's sandbox resuming; or why none opened, a
    * refusal it does not name as unanswered.
    */
   openBrowserTab(
     params: TasksBrowserTabOpenParams,
   ): Effect.Effect<TasksBrowserTabOpenAnswer, never, HttpClient.HttpClient> {
-    const { taskId, agentId, address } = params;
+    const { agentId, address } = params;
     return Effect.match(
       askHosted(
-        this.#hosted.agentBrowserTabs.open,
-        { params: { id: taskId }, body: { agentId, address } },
+        this.#hosted.agentBrowserTabs.agentOpen,
+        { params: { id: agentId }, body: { address } },
         HOSTED_DEADLINE.BROWSER_OPEN,
       ),
       {
@@ -736,60 +686,18 @@ export class HostedTaskClient {
     );
   }
 
-  /** The Browser tabs open in one task's agents' browsers, the oldest first; or that the service did not answer. */
+  /** The Browser tabs open in one agent's browser, or in every one of a task's agents', the oldest first; or that the service did not answer. */
   readBrowserTabs(
-    taskId: string,
+    place: BrowserTabsPlace,
   ): Effect.Effect<TasksBrowserTabsAnswer, never, HttpClient.HttpClient> {
-    return Effect.match(askHosted(this.#hosted.agentBrowserTabs.list, { id: taskId }), {
+    const asked =
+      "taskId" in place
+        ? askHosted(this.#hosted.agentBrowserTabs.list, { id: place.taskId })
+        : askHosted(this.#hosted.agentBrowserTabs.agentList, { id: place.agentId });
+    return Effect.match(asked, {
       onSuccess: (answer): TasksBrowserTabsAnswer => answer,
       onFailure: (): TasksBrowserTabsAnswer => ({ failure: TASK_CALL_FAILURE.UNANSWERED }),
     });
-  }
-
-  /** An issue linked to one task, which the service reads from its provider first; or why none was linked. */
-  linkIssue(
-    taskId: string,
-    issue: TaskIssueChoice,
-  ): Effect.Effect<TasksIssueLinkAnswer, never, HttpClient.HttpClient> {
-    return issueView(
-      askHosted(this.#hosted.plans.linkIssue, { params: { id: taskId }, body: issue }),
-    );
-  }
-
-  /** Which keyword one task's pull requests write of one of its links; or why it stands as it was. */
-  relateIssue(
-    taskId: string,
-    linkId: string,
-    relation: TaskIssueRelation,
-  ): Effect.Effect<TasksIssueRelateAnswer, never, HttpClient.HttpClient> {
-    return issueView(
-      askHosted(this.#hosted.plans.relateIssue, {
-        params: { id: taskId, link: linkId },
-        body: { relation },
-      }),
-    );
-  }
-
-  /** One of a task's links let go; or why it stands. */
-  unlinkIssue(
-    taskId: string,
-    linkId: string,
-  ): Effect.Effect<TasksIssueUnlinkAnswer, never, HttpClient.HttpClient> {
-    return issueView(askHosted(this.#hosted.plans.unlinkIssue, { id: taskId, link: linkId }));
-  }
-
-  /** The issues of a repository the workspace's installation reaches, as New task's picker asks for them, or that the installation grants none; nothing where the service did not answer. */
-  readRepositoryIssues(
-    place: RepositoryPlace,
-    ask: RepositoryIssuesAsk,
-  ): Effect.Effect<GitHubRepositoryIssuesAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      askHosted(this.#hosted.github.repositoryIssues, {
-        ...place,
-        ...(ask.number === undefined ? undefined : { number: String(ask.number) }),
-        ...(ask.number !== undefined || ask.query === undefined ? undefined : { query: ask.query }),
-      }),
-    );
   }
 
   /** A page of one plan's history, the newest or the one before a revision; nothing where the service did not answer it. */
@@ -916,21 +824,6 @@ export class HostedTaskClient {
         askHosted(this.#hosted.plans.restore, { id: taskId, seq: String(seq) }),
         (answer) => ({ task: answer.plan, txid: answer.txid }),
       ),
-    );
-  }
-
-  /** The board's scene written whole, with the number of Luke's drawing it holds and, when it is the first to hold it, the scene's image; the board as written and, where the write moved the board's live row, the id of its transaction, or nothing where the service did not answer. */
-  saveBoard(
-    taskId: string,
-    elements: readonly BoardElement[],
-    appliedDrawing: number,
-    image?: string,
-  ): Effect.Effect<BoardSaveAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(
-      askHosted(this.#hosted.plans.saveBoard, {
-        params: { id: taskId },
-        body: { elements, appliedDrawing, ...(image === undefined ? undefined : { image }) },
-      }),
     );
   }
 

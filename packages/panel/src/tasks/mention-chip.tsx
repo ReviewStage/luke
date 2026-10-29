@@ -61,7 +61,8 @@ import {
   dateMentionNode,
 } from "./date-picker.js";
 import { useInboxItemTitle } from "./inbox-item-chip.js";
-import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes.js";
+import { holderTaskId, type MentionHolder } from "./mention-holder.js";
+import { OpenedByRow, PullRequestCard } from "./pull-request-card.js";
 import { branchNote, thingCard } from "./thing-card.js";
 import { type AgentTiles, thingMark } from "./thing-mark.js";
 import { useKnownNames, useTaskNameCatchUp, useWordTargets } from "./use-known-names.js";
@@ -89,19 +90,18 @@ import { useWordsDates } from "./words-dates.js";
  * MCP popover draws it, with what the mention does for the agent the words
  * go to (`server-card.tsx`); a page of an integration's, a Linear
  * issue say, wears the integration's mark and opens the page in the
- * browser, its card saying its address. A Linear issue's chip, a pull
- * request's, and a GitHub issue's say the state it stands in after their
- * name, a pull request's and a GitHub issue's wearing GitHub's mark for it,
- * as the workspace's own Linear or GitHub App answers them on the service
- * (`use-link-standing.ts`). A pull request or a GitHub issue GitHub answered
- * for is then called by its number alone, `#42`, its repository's name
- * before it where that is not the task's, `relay#42`, whatever words its
- * link was written with, so a pasted address, an agent's `[@#42](…)`, and
- * its `[@the fix](…)` draw one chip; a bare Linear issue is called by its
- * key and title. Its card then says its title, its key and state, and a
- * pull request's its size, who opened it and when, its branches, labels,
- * and counts (`pull-request-card-notes.tsx`), in its address's place,
- * which it says only while its provider has answered nothing. A page an
+ * browser, its card saying its address. A pull request's chip and a GitHub
+ * issue's say the state it stands in after their name, wearing GitHub's
+ * mark for it, as the workspace's own GitHub App answers them on the
+ * service (`use-link-standing.ts`). A pull request or a GitHub issue GitHub
+ * answered for is then called by its number alone, `#42`, its repository's
+ * name before it where that is not the task's, `relay#42`, whatever words
+ * its link was written with, so a pasted address, an agent's `[@#42](…)`,
+ * and its `[@the fix](…)` draw one chip. An issue's card then says its
+ * title, its key and state, and who opened it, and a pull request's is the
+ * one card every pull request hangs, with its size, who opened it and when,
+ * its branches, labels, and counts (`pull-request-card.tsx`), in its
+ * address's place, which it says only while GitHub has answered nothing. A page an
  * agent showed on a plan wears its tab's glyph, and one of a plan's coding agents its harness's
  * mark, as the place drawing it knows it (`MentionDoors.agentOf`), and any
  * other agent, one of another task's or of none, or one named where the
@@ -175,16 +175,17 @@ const MENTION_STATE = {
 
 type MentionState = (typeof MENTION_STATE)[keyof typeof MENTION_STATE];
 
-/** What a place drawing mentions knows and does: the plan it draws, where its mentions are written, its sections' anchors, and what opening a mention does. */
+/** What a place drawing mentions knows and does: the task or the agent on no task whose words it draws, where its mentions are written, its plan's sections' anchors, and what opening a mention does. */
 export interface MentionDoors {
-  readonly taskId: string;
+  /** The task, or the agent on no task, whose words the place draws; none where neither holds them, so a section of any plan is drawn as found. */
+  readonly holder: MentionHolder | undefined;
   readonly place: MentionPlace;
   readonly anchors: ReadonlySet<string>;
   readonly onOpenTask: (mention: PlanMention) => void;
   /** Shows a file's tab, at its lines where a mention names them; none where no file can be opened from here. */
   readonly onOpenFile: ((path: string, lines: MentionLines | undefined) => void) | undefined;
-  /** One of the plan's agents as its chip wears it; none where the place knows the plan's agents not. */
-  readonly agentOf?: ((agentId: string) => MentionedAgentLook) | undefined;
+  /** One of the plan's agents as its chip wears it, none for an agent not of the plan; the door is none where the place knows the plan's agents not. */
+  readonly agentOf?: ((agentId: string) => MentionedAgentLook | undefined) | undefined;
   /** The card a pull request one of the plan's agents opened hangs on its Pull request tab, by any link to it; none for any other, or where the place knows the plan's agents not. */
   readonly pullRequestOf?: ((url: string) => ReactNode | undefined) | undefined;
 }
@@ -229,16 +230,9 @@ const GONE_WORDS = "No longer in the plan";
 /** What a page's card says of it. */
 const PAGE_WORDS = "A page on this task";
 
-/** What an agent's card says of it, where the place has no card of its tab: on this task, another, or none. */
-const AGENT_WORDS = {
-  THIS_TASK: "A coding agent on this task",
-  OTHER_TASK: "A coding agent on another task",
-  NO_TASK: "A coding agent on no task",
-} as const;
-
 /** Whether what the mention names is there to open: a section of this plan is there while a heading of the plan spells its anchor. */
 function mentionState(mention: Mention, doors: MentionDoors): MentionState {
-  if (mention.kind !== MENTION_KIND.SECTION || mention.taskId !== doors.taskId) {
+  if (mention.kind !== MENTION_KIND.SECTION || mention.taskId !== holderTaskId(doors.holder)) {
     return MENTION_STATE.FOUND;
   }
   return doors.anchors.has(mention.anchor) ? MENTION_STATE.FOUND : MENTION_STATE.GONE;
@@ -309,7 +303,7 @@ function leavesFor(mention: Mention, target: string, doors: MentionDoors): boole
 function agentTiles(doors: MentionDoors): AgentTiles | undefined {
   const { agentOf } = doors;
   if (agentOf === undefined) return undefined;
-  return { taskId: doors.taskId, tileOf: (agentId) => agentOf(agentId).actor };
+  return { tileOf: (agentId) => agentOf(agentId)?.actor };
 }
 
 /** The mark a mention's chip leads with: its thing's (`thing-mark.tsx`), as a link to the same thing leads with it. */
@@ -333,7 +327,7 @@ function MentionGlyph({
   return thingMark(thingOfMention(mention), {
     name,
     known,
-    where: { taskId: doors.taskId, workspace: doors.place.workspace },
+    where: { taskId: holderTaskId(doors.holder), workspace: doors.place.workspace },
     workspace: readLink(target)?.workspace ?? doors.place.workspace,
     tiles: agentTiles(doors),
     standing,
@@ -344,20 +338,15 @@ function MentionGlyph({
 function noteOf(
   mention: Mention,
   state: MentionState,
-  taskId: string,
   standing: LinkStanding | undefined,
 ): string | undefined {
   if (state === MENTION_STATE.GONE) return GONE_WORDS;
   if (mention.kind === MENTION_KIND.LINK) return standing === undefined ? mention.url : undefined;
   if (mention.kind === MENTION_KIND.PAGE) return PAGE_WORDS;
-  if (mention.kind === MENTION_KIND.AGENT) {
-    if (mention.taskId === undefined) return AGENT_WORDS.NO_TASK;
-    return mention.taskId === taskId ? AGENT_WORDS.THIS_TASK : AGENT_WORDS.OTHER_TASK;
-  }
   return undefined;
 }
 
-/** The card a chip hangs: its thing's (`thing-card.tsx`), a file's own card and a server's or a tool's its server's row among them, an agent's tab's or a pull request's Pull request tab's where the place has one, or its glyph and whole name, a provider's page's key and state with what a pull request's notes say, and why it is gone where it is. */
+/** The card a chip hangs: its thing's (`thing-card.tsx`), a file's own card and a server's or a tool's its server's row among them, an agent's tab's or a pull request's Pull request tab's where the place has one, a pull request's one card with what GitHub answered of it, or its glyph and whole name, a GitHub issue's key and state and who opened it, and why it is gone where it is. */
 function MentionCard({
   mention,
   target,
@@ -377,22 +366,20 @@ function MentionCard({
   standing: LinkStanding | undefined;
 }): ReactNode {
   const workspaceId = useWordsWorkspaceId({
-    taskId: doors.taskId,
+    taskId: holderTaskId(doors.holder),
     workspace: doors.place.workspace,
   });
   const repository = doors.place.repository ?? undefined;
   // Only an agent of the page's own task has a tab here, so only its chip hangs that tab's card.
   const tabCard =
-    mention.kind === MENTION_KIND.AGENT && mention.taskId === doors.taskId
-      ? doors.agentOf?.(mention.agentId)?.card
-      : undefined;
+    mention.kind === MENTION_KIND.AGENT ? doors.agentOf?.(mention.agentId)?.card : undefined;
   if (tabCard !== undefined) return tabCard;
   // A pull request one of the plan's agents opened hangs its Pull request tab's card, as the tab does.
   const changesCard =
     mention.kind === MENTION_KIND.LINK ? doors.pullRequestOf?.(mention.url) : undefined;
   if (changesCard !== undefined) return changesCard;
   const whole = mention.kind === MENTION_KIND.FOLDER ? `${mention.path}/` : name;
-  const note = noteOf(mention, state, doors.taskId, standing);
+  const note = noteOf(mention, state, standing);
   const glyph = (
     <MentionGlyph
       mention={mention}
@@ -403,39 +390,39 @@ function MentionCard({
       standing={standing}
     />
   );
-  const card = (
-    <HoverCard data-mention-card="">
-      <HoverCardHead
-        glyph={glyph}
-        name={standing?.title ?? whole}
-        sub={mention.kind === MENTION_KIND.FOLDER ? repository : undefined}
+  // A pull request GitHub answered for hangs the one card every pull request hangs, with what GitHub answered of it (`pull-request-card.tsx`).
+  const card =
+    mention.kind === MENTION_KIND.LINK && standing?.pullRequest !== undefined ? (
+      <PullRequestCard
+        pullRequest={{ ...standing.pullRequest, title: standing.title, url: mention.url }}
+        lines={standing.pullRequest.lines}
+        files={standing.pullRequest.files}
+        when={standing.pullRequest.when}
+        branches={standing.pullRequest.branches}
+        labels={standing.pullRequest.labels}
+        comments={standing.pullRequest.comments}
+        commits={standing.pullRequest.commits}
+        opener={standing.opener}
       />
-      {mention.kind === MENTION_KIND.FOLDER ? (
-        <OptionalNote words={branchNote(repository)} />
-      ) : null}
-      {standing === undefined ? null : standing.pullRequest === undefined ? (
-        <>
+    ) : (
+      <HoverCard data-mention-card="">
+        <HoverCardHead
+          glyph={glyph}
+          name={standing?.title ?? whole}
+          sub={mention.kind === MENTION_KIND.FOLDER ? repository : undefined}
+        />
+        {mention.kind === MENTION_KIND.FOLDER ? (
+          <OptionalNote words={branchNote(repository)} />
+        ) : null}
+        {standing === undefined ? null : (
           <HoverCardNote>
             {standing.state === undefined ? standing.key : `${standing.key} · ${standing.state}`}
           </HoverCardNote>
-          {standing.opener === undefined ? (
-            <OptionalNote words={standing.byline} />
-          ) : (
-            <OpenedNote opener={standing.opener} />
-          )}
-        </>
-      ) : (
-        <PullRequestCardNotes
-          heading={
-            standing.state === undefined ? standing.key : `${standing.key} · ${standing.state}`
-          }
-          pullRequest={standing.pullRequest}
-          opener={standing.opener}
-        />
-      )}
-      {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
-    </HoverCard>
-  );
+        )}
+        {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
+        {standing?.opener === undefined ? null : <OpenedByRow opener={standing.opener} />}
+      </HoverCard>
+    );
   // Note that what the mention names hangs the card the window hangs for it elsewhere, its own card standing in where the window holds none.
   return thingCard(thingOfMention(mention), {
     own: card,
@@ -552,7 +539,7 @@ function MentionChip({
   const openLink = useOpenLink();
   const known = useKnownNames();
   const standing = useLinkStanding(mention, {
-    taskId: doors.taskId,
+    taskId: holderTaskId(doors.holder),
     workspace: doors.place.workspace,
   });
   const section = mention.kind === MENTION_KIND.SECTION ? mention : undefined;
@@ -698,6 +685,11 @@ function WrittenDateChip({
   );
 }
 
+/** The task a place in Luke names, where it names one. */
+function placeTaskId(place: LinkPlace): string | undefined {
+  return "planId" in place ? place.planId : undefined;
+}
+
 /** The mark a place in Luke leads with: its thing's (`thing-mark.tsx`), as a mention of the same thing leads with it. */
 function PlaceGlyph({
   place,
@@ -716,7 +708,7 @@ function PlaceGlyph({
   return thingMark(thingOfPlace(place), {
     name,
     known,
-    where: { taskId: "planId" in place ? (place.planId ?? NO_TASK_ID) : NO_TASK_ID, workspace },
+    where: { taskId: placeTaskId(place), workspace },
     workspace,
     tiles: agentTiles(doors),
     standing: undefined,
@@ -806,10 +798,7 @@ function PlaceCard({
   glyph: ReactNode;
   fallback: ReactNode;
 }): ReactNode {
-  const workspaceId = useWordsWorkspaceId({
-    taskId: "planId" in place ? (place.planId ?? NO_TASK_ID) : NO_TASK_ID,
-    workspace,
-  });
+  const workspaceId = useWordsWorkspaceId({ taskId: placeTaskId(place), workspace });
   return thingCard(thingOfPlace(place), {
     own: fallback,
     glyph,
@@ -845,9 +834,6 @@ function InboxItemChip({
         });
   return <PlaceChip place={place} read={read} {...chip} />;
 }
-
-/** The plan of a place that names none, which no plan's id spells. */
-const NO_TASK_ID = "";
 
 /** The kind a chip of a place in Luke carries beside a mention's kinds, for its styles and a test. */
 const MENTION_KIND_PLACE = "place";
@@ -928,7 +914,8 @@ export function mentionLinkDrawer(doors: MentionDoors): LinkDrawer {
 /** What a place pasted into knows to call a pasted address by: the names the window holds, and the plan it stands on, whose headings name its sections. */
 export interface PastedNames {
   readonly known: KnownNames;
-  readonly taskId: string;
+  /** The plan the words are pasted on; none off a plan. */
+  readonly taskId: string | undefined;
   /** The plan's text as the place holds it. */
   readonly text: () => string;
 }

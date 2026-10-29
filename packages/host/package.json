@@ -42,10 +42,8 @@
     "@luke/credentials": "workspace:*",
     "@luke/features": "workspace:*",
     "@luke/gateway": "workspace:*",
-    "@luke/live": "workspace:*",
     "@luke/runtime": "workspace:*",
     "@luke/settings": "workspace:*",
-    "@luke/voice": "workspace:*",
     "@luke/wire": "workspace:*",
     "@orpc/contract": "catalog:",
     "@orpc/experimental-effect": "catalog:",
@@ -53,6 +51,7 @@
     "@orpc/server": "catalog:",
     "@shikijs/langs": "4.5.0",
     "@shikijs/themes": "4.5.0",
+    "@tanstack/db": "0.15.2",
     "effect": "catalog:",
     "shiki": "4.5.0",
     "ws": "catalog:"

@@ -1,5 +1,4 @@
 import { isLinkOpen, LINK_OPEN, LINK_OPEN_LABEL, LINK_OPEN_LIST } from "@luke/features/link-open";
-import { isLiveVoice, LIVE_DEFAULTS } from "@luke/live";
 import type { UnparsedWireValue } from "@luke/wire";
 import { APP_SETTING_ID, isAppSettingId } from "@luke/wire/app-settings";
 import { Schema } from "effect";
@@ -33,13 +32,6 @@ import {
   type SettingsVisibility,
 } from "./schema-types.js";
 import { isTheme, THEME, THEME_LIST, type Theme } from "./theme.js";
-import {
-  OFFERED_VOICE_LIST,
-  voiceGroup,
-  voiceOptionLabel,
-  voiceSamplePath,
-  voiceTag,
-} from "./voice-choice.js";
 import { isZoomPercent, ZOOM_ACTUAL_SIZE, ZOOM_PERCENTS } from "./zoom.js";
 
 export {
@@ -106,12 +98,9 @@ function macCommandModeGuard(value: UnparsedWireValue) {
   return optional(value, isMacCommandMode);
 }
 
-/** Voice available and the microphone granted: the whole of what a control needs. */
-const voiceControlDrawn = (view: SettingsVisibility): boolean => view.voiceControlsDrawn;
-
-/** The voice controls drawn on a platform that routes the microphone itself. */
+/** A platform that asks for the microphone and routes it itself, as dictation listens on it. */
 const microphoneRouteDrawn = (view: SettingsVisibility): boolean =>
-  view.voiceControlsDrawn && view.capabilities.includes(HOST_CAPABILITY.MICROPHONE);
+  view.capabilities.includes(HOST_CAPABILITY.MICROPHONE);
 
 /** An installed app's own: what a browser tab answers for itself, or cannot do at all. */
 const desktopAppDrawn = (view: SettingsVisibility): boolean =>
@@ -184,26 +173,6 @@ export const APP_SETTING_SCHEMA = {
     // Nothing to run per write: the host reads the setting before each read for commands and as each command is about to run.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
-  voice: choiceSetting({
-    field: "voice",
-    id: APP_SETTING_ID.VOICE,
-    label: "Voice",
-    detail: "Choosing one ends the conversation in progress.",
-    values: OFFERED_VOICE_LIST,
-    token: (voice) => voice,
-    optionLabel: voiceOptionLabel,
-    optionSample: voiceSamplePath,
-    optionGroup: voiceGroup,
-    optionTag: voiceTag,
-    guard: (value: UnparsedWireValue) => optional(value, isLiveVoice),
-    default: LIVE_DEFAULTS.VOICE,
-    page: SETTINGS_PAGE.VOICE,
-    section: SETTING_SECTION.CONTROLS,
-    order: 30,
-    resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    sideEffect: SETTING_SIDE_EFFECT.VOICE,
-    visible: voiceControlDrawn,
-  }),
   /*
    * Where a Luke link opened in a browser goes: it stays on the web, or the
    * web hands it to Luke for Mac (`@luke/features/link-open`). The account's,
@@ -229,6 +198,23 @@ export const APP_SETTING_SCHEMA = {
     visible: accountDrawn,
   }),
   /*
+   * Whether a task New task starts opens, as it always did, or the window
+   * stays on the page it was on and a toast says the task started, with
+   * Open. Kept on this device, as how the window moves is the device's.
+   */
+  openNewTask: toggleSetting({
+    field: "openNewTask",
+    id: APP_SETTING_ID.OPEN_NEW_TASK,
+    label: "Open a task once it starts",
+    default: true,
+    page: SETTINGS_PAGE.ACCOUNT,
+    section: SETTING_SECTION.TASKS,
+    order: 305,
+    visible: accountDrawn,
+    // Nothing to run per write: New task reads the setting as a task starts.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
+  /*
    * Whether this Luke sends its counts of how features are used. On by
    * default in a packaged build, the app people download, and off in a
    * development one, so a run from source counts nothing until its
@@ -250,18 +236,6 @@ export const APP_SETTING_SCHEMA = {
     visible: accountDrawn,
     sideEffect: SETTING_SIDE_EFFECT.USAGE_DATA,
   }),
-  duckOtherMedia: toggleSetting({
-    field: "duckOtherMedia",
-    id: APP_SETTING_ID.DUCK_OTHER_MEDIA,
-    label: "Quiet Music and Spotify",
-    default: true,
-    page: SETTINGS_PAGE.VOICE,
-    section: SETTING_SECTION.CONTROLS,
-    order: 90,
-    resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    sideEffect: SETTING_SIDE_EFFECT.MEDIA_DUCK,
-    visible: voiceControlDrawn,
-  }),
   preferBuiltInMicrophone: toggleSetting({
     field: "preferBuiltInMicrophone",
     id: APP_SETTING_ID.PREFER_BUILT_IN_MICROPHONE,
@@ -270,10 +244,11 @@ export const APP_SETTING_SCHEMA = {
       "When the input is a Bluetooth headset, so the headset keeps its full sound quality. " +
       "With the lid shut, Luke uses the headset's microphone anyway.",
     default: true,
-    page: SETTINGS_PAGE.VOICE,
-    section: SETTING_SECTION.CONTROLS,
+    // Note that it stands on This Mac, under no page's reset, as Open Luke at
+    // login does; the field and its id are unmoved, so a choice already made is kept.
+    page: SETTINGS_PAGE.THIS_MAC,
+    section: SETTING_SECTION.MICROPHONE,
     order: 110,
-    resetScope: SETTINGS_RESET_SCOPE.VOICE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: microphoneRouteDrawn,
   }),

@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { firstMessageText, REPLAY_STEP_KIND } from "@luke/features/agent-replay";
 import {
+  AGENT_BRIEF,
+  AGENT_SENDER,
+  type AgentTranscriptMessage,
   agentMessageReplyLine,
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_SENDER,
-  type CodingAgentMessage,
   OPERATOR_QUIET_REPLY,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { INBOX_REPLY, inboxAnswerMessage } from "@luke/features/inbox-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { test } from "vitest";
@@ -43,13 +43,13 @@ const STEP: WireRecord = { type: "step-start" };
 
 test("a message GitHub sent while the turn ran is copied between the steps before it and the steps after it", () => {
   // The service keeps the line ahead of the journal, which closed behind it.
-  const messages: readonly CodingAgentMessage[] = [
+  const messages: readonly AgentTranscriptMessage[] = [
     { id: "task", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Fix the tile." }] },
     {
       id: "github",
       role: MESSAGE_ROLE.USER,
       parts: [{ type: "text", text: "@octocat reviewed your pull request #12." }],
-      sentBy: { name: "octocat", kind: CODING_AGENT_SENDER.GITHUB },
+      sentBy: { name: "octocat", kind: AGENT_SENDER.GITHUB },
       arrivedIn: { journalId: "journal", afterStep: 2 },
     },
     {
@@ -70,7 +70,7 @@ test("a message GitHub sent while the turn ran is copied between the steps befor
   const copied = agentTranscript({
     title: "Tile",
     messages,
-    brief: CODING_AGENT_BRIEF.PROMPT,
+    brief: AGENT_BRIEF.PROMPT,
   });
 
   assert.equal(
@@ -90,12 +90,16 @@ test("a message GitHub sent while the turn ran is copied between the steps befor
   );
 });
 
-function said(id: string, role: CodingAgentMessage["role"], text: string): CodingAgentMessage {
+function said(
+  id: string,
+  role: AgentTranscriptMessage["role"],
+  text: string,
+): AgentTranscriptMessage {
   return { id, role, parts: [{ type: "text", text }] };
 }
 
 test("another agent's message is copied under the agent that sent it, never as the developer's words nor as the plan, and is no step of the agent's own", () => {
-  const notice: CodingAgentMessage = {
+  const notice: AgentTranscriptMessage = {
     ...said("notice", MESSAGE_ROLE.USER, "@agent-1 are you changing memberships?"),
     metadata: { channel: "agent_message" },
     sentBy: { name: "Invite emails", agent: true },
@@ -131,7 +135,7 @@ test("another agent's message is copied under the agent that sent it, never as t
 });
 
 test("another agent's message in its whole shape is copied as its words alone, without who sent it or how to answer, which its heading says instead", () => {
-  const message: CodingAgentMessage = {
+  const message: AgentTranscriptMessage = {
     ...said(
       "message",
       MESSAGE_ROLE.USER,
@@ -162,7 +166,7 @@ test("another agent's message in its whole shape is copied as its words alone, w
 });
 
 test("a thread's answer is copied led by what the member did, without the header naming its item, as the tab draws it", () => {
-  const answer: CodingAgentMessage = {
+  const answer: AgentTranscriptMessage = {
     ...said(
       "answer",
       MESSAGE_ROLE.USER,
@@ -193,7 +197,7 @@ test("a thread's answer is copied led by what the member did, without the header
 });
 
 test("GitHub's review is copied as its card reads, from its metadata, without the instructions and the fence the agent read", () => {
-  const review: CodingAgentMessage = {
+  const review: AgentTranscriptMessage = {
     ...said(
       "review",
       MESSAGE_ROLE.USER,
@@ -265,7 +269,7 @@ test("an agent started from another is copied as its brief, the source's steps i
       said("first", MESSAGE_ROLE.USER, FORKED_FIRST),
       said("turn", MESSAGE_ROLE.ASSISTANT, "Squared."),
     ],
-    brief: CODING_AGENT_BRIEF.PROMPT,
+    brief: AGENT_BRIEF.PROMPT,
   });
   const concise = transcriptMarkdown(copied, TRANSCRIPT_COPY.CONCISE);
   assert.equal(
@@ -300,7 +304,7 @@ test("an agent started from another that has done nothing yet previews no step, 
   const copied = agentTranscript({
     title: "Tile (2)",
     messages: [said("first", MESSAGE_ROLE.USER, FORKED_FIRST)],
-    brief: CODING_AGENT_BRIEF.PLAN,
+    brief: AGENT_BRIEF.PLAN,
   });
   assert.equal(latestActivity(copied), undefined);
 });
@@ -320,7 +324,7 @@ test("a summary Luke wrote of the source's oldest steps is copied under its line
   const copied = agentTranscript({
     title: "Tile (2)",
     messages: [said("first", MESSAGE_ROLE.USER, first)],
-    brief: CODING_AGENT_BRIEF.PROMPT,
+    brief: AGENT_BRIEF.PROMPT,
   });
   assert.equal(
     transcriptMarkdown(copied, TRANSCRIPT_COPY.CONCISE),
@@ -356,7 +360,7 @@ test("a replay longer than the card draws at first is copied whole, every kept s
   const copied = agentTranscript({
     title: "Tile (2)",
     messages: [said("first", MESSAGE_ROLE.USER, first)],
-    brief: CODING_AGENT_BRIEF.PROMPT,
+    brief: AGENT_BRIEF.PROMPT,
   });
   for (const copy of [TRANSCRIPT_COPY.CONCISE, TRANSCRIPT_COPY.FULL]) {
     const markdown = transcriptMarkdown(copied, copy);
@@ -377,7 +381,7 @@ test("an agent's inbox posts and withdrawals from version 5 are copied as the ro
     input,
     output: { status: "accepted", inbox: [] },
   });
-  const messages: readonly CodingAgentMessage[] = [
+  const messages: readonly AgentTranscriptMessage[] = [
     said("task", MESSAGE_ROLE.USER, "Ask about invites."),
     {
       id: "journal",
@@ -402,7 +406,7 @@ test("an agent's inbox posts and withdrawals from version 5 are copied as the ro
   const copied = agentTranscript({
     title: "Invites",
     messages,
-    brief: CODING_AGENT_BRIEF.PROMPT,
+    brief: AGENT_BRIEF.PROMPT,
   });
   const markdown = transcriptMarkdown(copied, TRANSCRIPT_COPY.CONCISE);
   assert.ok(
@@ -425,7 +429,7 @@ test("an agent started blank is copied with no brief, its first line, spoken on 
       { ...said("asked", MESSAGE_ROLE.USER, "What did you change?"), metadata: spoken },
       { ...said("answered", MESSAGE_ROLE.ASSISTANT, "I moved the export."), metadata: spoken },
     ],
-    brief: CODING_AGENT_BRIEF.BLANK,
+    brief: AGENT_BRIEF.BLANK,
   });
 
   assert.equal(
@@ -446,13 +450,13 @@ test("an operator's heartbeat that found nothing is copied, and previewed, as no
   const operator = agentTranscript({
     title: "Luke",
     messages,
-    brief: CODING_AGENT_BRIEF.BLANK,
+    brief: AGENT_BRIEF.BLANK,
     quiet: true,
   });
   const coder = agentTranscript({
     title: "Tile",
     messages,
-    brief: CODING_AGENT_BRIEF.BLANK,
+    brief: AGENT_BRIEF.BLANK,
   });
 
   assert.deepEqual(latestActivity(operator), {

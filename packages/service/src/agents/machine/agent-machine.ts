@@ -13,7 +13,10 @@
  * the agent's place with its checkout, find it again and record the runner
  * it runs, set the repository's credential at its firewall, resume, stop,
  * and discard it, write files into it, launch the runner there and write
- * its stdin, read whether it ended, end it, and read one file. What a
+ * its stdin, read whether it ended, end it, and read one file. A runner on a
+ * machine whose layout says it reads its lines takes them from Luke's store
+ * instead (`../coder-host/runner-sessions.ts`), and its stdin carries only
+ * its config. What a
  * machine keeps of its own beyond that (a Vercel sandbox's snapshots, the
  * Terminal, the browser) stays outside it until a second machine needs it.
  *
@@ -32,15 +35,15 @@
  * machine that did not answer.
  */
 
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import type { Agent } from "@luke/database/models/agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
-import type { CodingAgentMachine } from "@luke/features/coding-agent-wire";
+import type { AgentMachineKind } from "@luke/features/agent-wire";
 import type { DeviceIsolation, DeviceSignedIn } from "@luke/features/device-agent-wire";
 import { type Brand, Context, Data, type Duration, type Effect } from "effect";
 import type { AgentSandboxImage } from "../agent-sandbox-image.js";
-import type { KeyRefusal, PlanRefusal } from "../brain-host/eve-sessions.js";
 import type { CheckoutServices } from "../coder-host/checkout.js";
 import type { RunnerBundle } from "../coder-host/runner-bundle.js";
+import type { KeyRefusal, PlanRefusal } from "../eve-host/eve-sessions.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
 import { type CommandExit, type SandboxFile, SandboxUnavailable } from "../vercel-sandbox-api.js";
 
@@ -55,7 +58,7 @@ export type MachineKept = Brand.Brand<"MachineKept">;
 
 /** One agent's place on a machine: which machine, Luke's runtime session id, and where that session runs now. */
 export interface MachinePlace {
-  readonly machine: CodingAgentMachine;
+  readonly machine: AgentMachineKind;
   readonly session: string;
   readonly running: MachineRunning;
 }
@@ -87,6 +90,13 @@ export interface MachineLayout {
   readonly signedIn: DeviceSignedIn;
   /** How a local agent's device runs it, in a VM of its own or directly on the machine; none for a sandbox of Luke's. */
   readonly isolation: DeviceIsolation | undefined;
+  /**
+   * Whether the runner reads its lines past its config from Luke
+   * (`@luke/agent-runner`'s `RUNNER_LINES`), as a sandbox's does, rather than
+   * from its stdin, as a Mac's follower writes them to the runner its
+   * release bundled.
+   */
+  readonly linesRead: boolean;
 }
 
 /** What a later call reads of a launch: its first event number, and what it was started with, as a digest (`runner-sessions.ts`'s `launchFingerprint`). */
@@ -96,6 +106,8 @@ export interface RunnerMark {
   readonly fingerprint?: string;
   /** Whether the launch runs on its Mac's own sign-in rather than a credential of the account's; nothing secret, and none for any other launch. */
   readonly ownLogin?: boolean;
+  /** Whether the launch reads its lines from Luke (`MachineLayout`'s `linesRead`); none for one Luke writes them to the stdin of, a launch from before the read among them. */
+  readonly linesRead?: boolean;
 }
 
 /** A runner as its machine recorded it: the handle a later call writes to, and its launch's mark. */
@@ -121,7 +133,7 @@ export type RunnerRecord =
 
 /** A place as a later call finds it by its session. */
 export interface FoundPlace {
-  readonly machine: CodingAgentMachine;
+  readonly machine: AgentMachineKind;
   readonly session: string;
   /** The agent the place was opened for, where it names one. */
   readonly agentId: string | undefined;
@@ -180,7 +192,7 @@ export interface MachineOpen<B, EB, RB> {
   readonly session: string;
   /** The account and conversation the open acts for: the agent's starter's. */
   readonly target: ConversationTarget;
-  readonly agent: CodingAgent;
+  readonly agent: Agent;
   /** How the log names the agent's harness. */
   readonly harness: string;
   /** Whether the open waits on a machine image still being prepared, rather than failing at once. */
@@ -231,7 +243,7 @@ export interface RunnerLaunch<A, E, R, EL, RL> {
 export interface AgentMachineService {
   /** Where the machine keeps the agent's things. */
   readonly layout: (
-    agent: CodingAgent,
+    agent: Agent,
   ) => Effect.Effect<MachineLayout, LaunchRefused | { readonly _tag: string }>;
   /**
    * The agent's place opened under the session, its repository checked out
@@ -254,7 +266,7 @@ export interface AgentMachineService {
   /** What the place's record says of its runner, in place of whatever it said. */
   readonly recordRunner: (
     place: {
-      readonly machine: CodingAgentMachine;
+      readonly machine: AgentMachineKind;
       readonly session: string;
       readonly name: MachineName;
       readonly agentId: string;
@@ -297,6 +309,8 @@ export interface AgentMachineService {
    * takes them, so no line may carry a secret: Codex asks Luke for each
    * access token over HTTPS through the runner's token command
    * (`@luke/agent-runner`'s `codex-token.ts`) rather than taking it on stdin.
+   * A machine whose runner reads its lines (`MachineLayout`'s `linesRead`),
+   * as a sandbox's does, is never written to here.
    */
   readonly writeLine: (
     handle: RunnerHandle,

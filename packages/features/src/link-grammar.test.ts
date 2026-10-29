@@ -40,10 +40,6 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
   ],
   [{ kind: LINK_PLACE.VERSION, planId: TASK, revision: 12 }, `${HOME}/plan/${TASK}/version/12`],
   [{ kind: LINK_PLACE.PAGE, planId: TASK, pageId: OTHER }, `${HOME}/plan/${TASK}/page/${OTHER}`],
-  [
-    { kind: LINK_PLACE.TURN, planId: TASK, at: 1760000000000 },
-    `${HOME}/plan/${TASK}/work/1760000000000`,
-  ],
   [{ kind: LINK_PLACE.AGENT, planId: TASK, agentId: AGENT }, `${HOME}/plan/${TASK}/agent/${AGENT}`],
   [{ kind: LINK_PLACE.AGENT, agentId: AGENT }, `${HOME}/agent/${AGENT}`],
   [
@@ -51,8 +47,18 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
     `${HOME}/plan/${TASK}/agent/${AGENT}/worker/toolu_01`,
   ],
   [
-    { kind: LINK_PLACE.WORKER, planId: TASK, callId: "toolu_02" },
-    `${HOME}/plan/${TASK}/worker/toolu_02`,
+    { kind: LINK_PLACE.WORKER, agentId: AGENT, callId: "toolu_02" },
+    `${HOME}/agent/${AGENT}/worker/toolu_02`,
+  ],
+  [{ kind: LINK_PLACE.CHANGES, agentId: AGENT }, `${HOME}/agent/${AGENT}/changes`],
+  [
+    {
+      kind: LINK_PLACE.PULL_REQUEST_THREAD,
+      agentId: AGENT,
+      threadId: "PRRT_1",
+      view: PULL_REQUEST_THREAD_VIEW.FILES,
+    },
+    `${HOME}/agent/${AGENT}/changes/files/thread/PRRT_1`,
   ],
   [
     { kind: LINK_PLACE.CHANGES, planId: TASK, agentId: AGENT },
@@ -107,7 +113,7 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
     `${HOME}/automation/${OTHER}/run/${AGENT}`,
   ],
   [{ kind: LINK_PLACE.SETTINGS }, `${HOME}/settings`],
-  [{ kind: LINK_PLACE.SETTINGS, page: "coding-agents" }, `${HOME}/settings/coding-agents`],
+  [{ kind: LINK_PLACE.SETTINGS, page: "agents" }, `${HOME}/settings/agents`],
   [{ kind: LINK_PLACE.PERSON, userId: "user_9Fq2-x" }, `${HOME}/person/user_9Fq2-x`],
   [{ kind: LINK_PLACE.ADMIN }, `${HOME}/admin`],
   [{ kind: LINK_PLACE.ADMIN, section: ADMIN_LINK_SECTION.COST }, `${HOME}/admin/cost`],
@@ -202,6 +208,19 @@ test("a task's places are read under the name the unit of work is taking, /task/
   });
 });
 
+test("a turn of Luke's work, or a worker of Luke's, once written under its task, names the task, since neither is drawn now", () => {
+  for (const target of [
+    `${HOME}/plan/${TASK}/work/1760000000000`,
+    `${HOME}/plan/${TASK}/worker/toolu_02`,
+  ]) {
+    assert.deepEqual(
+      readLink(target),
+      { workspace: "acme", place: { kind: LINK_PLACE.TASK, planId: TASK } },
+      target,
+    );
+  }
+});
+
 test("a picture in a plan's address names its task, and nothing of the picture", () => {
   const picture = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
 
@@ -220,9 +239,10 @@ test("an address that names no place in Luke names nothing", () => {
     `https://tryluke.dev//agent/${AGENT}`,
     `${HOME}/agent`,
     `${HOME}/agents/${AGENT}`,
-    `${HOME}/agent/${AGENT}/changes`,
-    `${HOME}/agent/${AGENT}/worker/toolu_01`,
-    `${HOME}/agent/${AGENT}/changes/files/thread/PRRT_1`,
+    `${HOME}/agent/${AGENT}/changes/checks/thread/PRRT_1`,
+    `${HOME}/agent/${AGENT}/worker`,
+    `${HOME}/agent/${AGENT}/worker/toolu_01/more`,
+    `${HOME}/plan/${TASK}/work/latest`,
     `${HOME}/plan/${TASK}/agent/${AGENT}/changes/checks/thread/PRRT_1`,
     `${HOME}/plan/${TASK}/agent/${AGENT}/changes/files/threads/PRRT_1`,
     `${HOME}/plan/${TASK}/agent/${AGENT}/changes/files/thread`,

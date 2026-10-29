@@ -5,7 +5,7 @@ import { inArray } from "drizzle-orm";
 import { Effect, Exit, Option } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
-import { createCodingAgent } from "../../models/coding-agent-store.js";
+import { createAgent } from "../../models/agent-store.js";
 import {
   conversationReachableBy,
   runtimeSessionReachableBy,
@@ -22,8 +22,8 @@ import { conversations } from "../storage.js";
 
 /**
  * The migration that drops the per-task Luke's data: his conversations,
- * stamped deleted with every child under them so the sweep purges them; the
- * words said on calls with no agent; and `task.conversation_id`. Each test
+ * stamped deleted with every child under them so the sweep purges them, and
+ * `task.conversation_id`. Each test
  * stands its own database where it stood before the migration, the migration
  * undone over it, and runs the migration's own statements, less those on the
  * tables a later migration dropped (`replayable`). Synthetic accounts and
@@ -148,7 +148,7 @@ it.layer(getTestDB())("the per-task Luke's conversations", (it) => {
           deletedAt: "2026-09-01T00:00:00.000Z",
         });
         const agent = Option.getOrThrow(
-          yield* createCodingAgent(userId, {
+          yield* createAgent(userId, {
             taskId,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
@@ -195,77 +195,6 @@ it.layer(getTestDB())("the per-task Luke's conversations, once stamped", (it) =>
           [false, false, true, true],
         );
         assert.equal(yield* runtimeSessionReachableBy(userId, sessionId), false);
-      }),
-  );
-});
-
-it.layer(getTestDB())("calls with no agent", (it) => {
-  it.effect(
-    "lose the words said on them once they have ended, closed or started over an hour ago, and keep their rows and avatar sessions; a call still live and an agent's call keep theirs",
-    () =>
-      Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
-        yield* undo;
-        const { userId, taskId } = yield* openTask;
-        const agentId = Option.getOrThrow(
-          yield* createCodingAgent(userId, {
-            taskId,
-            idempotencyKey: randomUUID(),
-            model: "anthropic/claude-opus-5.5",
-            effort: "high",
-            repository: "acme/relay",
-            planSnapshot: "# Teammate invitations\n",
-            prompt: null,
-          }),
-        ).agent.id;
-        const call = (agent: string | null, closed: boolean, startedHoursAgo: number) =>
-          Effect.gen(function* () {
-            const [row] = yield* sql<{ readonly id: string }>`
-              INSERT INTO voice_sessions (user_id, task_id, agent_id, live_session_id, delegation_mode, started_at, closed_at)
-              VALUES (${userId}, ${taskId}, ${agent}, ${`live-${randomUUID()}`}, 'client',
-                now() - make_interval(hours => ${startedHoursAgo}), ${closed ? sql`now()` : null})
-              RETURNING id
-            `;
-            assert.ok(row);
-            yield* sql`
-              INSERT INTO voice_transcript_segments (voice_session_id, seq, role, text, start_ms, end_ms)
-              VALUES (${row.id}, 0, 'user', 'Ship it.', 0, 900)
-            `;
-            yield* sql`
-              INSERT INTO voice_avatar_sessions (voice_session_id, user_id, persona_id, started_at)
-              VALUES (${row.id}, ${userId}, 'persona', now())
-            `;
-            return row.id;
-          });
-        const closed = yield* call(null, true, 0);
-        const lapsed = yield* call(null, false, 2);
-        const live = yield* call(null, false, 0);
-        const agents = yield* call(agentId, true, 0);
-        const calls = [closed, lapsed, live, agents];
-
-        assert.ok(Exit.isSuccess(yield* migrate));
-        const rows = yield* sql<{
-          readonly id: string;
-          readonly segments: number;
-          readonly avatars: number;
-        }>`
-          SELECT v.id,
-            (SELECT count(*)::int FROM voice_transcript_segments s WHERE s.voice_session_id = v.id) AS segments,
-            (SELECT count(*)::int FROM voice_avatar_sessions a WHERE a.voice_session_id = v.id) AS avatars
-          FROM voice_sessions v WHERE v.id IN ${sql.in(calls)}
-        `;
-        assert.deepEqual(
-          calls.map((id) => {
-            const row = rows.find((each) => each.id === id);
-            return row === undefined ? undefined : [row.segments, row.avatars];
-          }),
-          [
-            [0, 1],
-            [0, 1],
-            [1, 1],
-            [1, 1],
-          ],
-        );
       }),
   );
 });

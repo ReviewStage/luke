@@ -13,8 +13,8 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * The window asks the way Linear's and Notion's "New …" ask: it dims over
  * whatever stood open, and a card holds New task's composer
  * (`new-task-composer.tsx`), which takes focus, the card named by the
- * composer's own head row: "New task" and the repository chip after it, as
- * the welcome draws it too. The task starts in the workspace the
+ * composer's own head row: "New task", named to a reader alone, and the
+ * repository chip after it, as the welcome draws it too. The task starts in the workspace the
  * window lists, and the dialog offers no other; the composer lists that
  * workspace's repositories.
  *

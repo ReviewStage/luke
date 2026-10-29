@@ -1,4 +1,4 @@
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { countWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -18,8 +18,7 @@ import type { ActHandle } from "../act.js";
 import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter, withoutPicks } from "../composer-drafts.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { messageFailureWords } from "./coding-agent-model.js";
-import { useInboxSettler } from "./inbox-settling.js";
+import { messageFailureWords } from "./agent-model.js";
 import { cardTitle } from "./tool-call-model.js";
 
 /**
@@ -27,13 +26,13 @@ import { cardTitle } from "./tool-call-model.js";
  *
  * A close goes to the service as an act, under a key kept for the item at
  * the revision it was pressed on, so a press again after a lost reply is
- * the same close. It is laid over every read the window draws the moment
- * it is confirmed (`inbox-settling.ts`), so the item leaves what needs the
- * developer at once. A close taken lets go of the item's draft, wherever
- * its task stands; one the service did not take lays the item as the
- * service answered it, the agent's newer word or another member's
- * settling, over every read behind it, and a toast says why; one that did
- * not reach the service is let go, the item standing again. Only the agent
+ * the same close. The host draws it into every read the window draws the
+ * moment it is confirmed (`@luke/host`'s `inbox-collections.ts`), so the
+ * item leaves what needs the developer at once. A close taken lets go of
+ * the item's draft, wherever its task stands; one the service did not take
+ * lands on the item as the service answered it, the agent's newer word or
+ * another member's settling, and a toast says why; one that did not reach
+ * the service is taken back, the item standing again. Only the agent
  * can open an item again, by posting under its key, so every way to close
  * asks first (`packages/panel/AGENTS.md`'s Confirms), the question going
  * with the surface it was asked on, with the item once it is no longer
@@ -41,7 +40,7 @@ import { cardTitle } from "./tool-call-model.js";
  */
 
 /** What a close the act channel refused hears, as the service not answering. */
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /**
  * What the close is called in a menu and on a row's icon, which is its
@@ -87,7 +86,6 @@ export function useInboxCloser({
   act: ActHandle["act"];
   onHeard?: (() => void) | undefined;
 }): InboxCloser {
-  const settler = useInboxSettler();
   const writer = useDraftWriter();
   const toast = useToast();
   const attempts = useRef(new Map<string, Attempt>());
@@ -106,14 +104,13 @@ export function useInboxCloser({
       const pressed = writer.heldAt(
         (place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id,
       );
-      const sent = settler.close(item);
       const say = (words: string) => {
         if (saying?.quiet !== true) {
           toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
         }
         return false;
       };
-      return act(ACT_KIND.CODING_AGENTS_INBOX_CLOSE, {
+      return act(ACT_KIND.AGENTS_INBOX_CLOSE, {
         itemId: item.id,
         revision: item.revision,
         clientKey: key,
@@ -121,13 +118,8 @@ export function useInboxCloser({
         .catch(() => UNANSWERED)
         .then((answer) => {
           out.current.delete(item.id);
-          if ("failure" in answer) {
-            settler.refuse(sent);
-            return say(messageFailureWords(answer.failure));
-          }
+          if ("failure" in answer) return say(messageFailureWords(answer.failure));
           attempts.current.delete(item.id);
-          // Note that the item as the service answered it stands over every read behind it, taken or not, so a read that lags shows neither the close undone nor the request the agent replaced.
-          settler.take(sent, answer.item);
           if (!answer.taken) {
             return say(
               answer.item.status === INBOX_STATUS.OPEN ? NOT_TAKEN.CHANGED : NOT_TAKEN.SETTLED,
@@ -145,7 +137,7 @@ export function useInboxCloser({
           return true;
         });
     },
-    [act, settler, toast, writer],
+    [act, toast, writer],
   );
 }
 

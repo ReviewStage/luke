@@ -2,8 +2,8 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -59,7 +59,7 @@ import { onRegistry } from "./testing/copy-feedback.js";
 import { sidebarProps } from "./testing/desktop-sidebar.js";
 import { followedInboxes } from "./testing/followed-inboxes.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "./testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "./testing/tasks-control.js";
 
 /**
  * A draft as the developer meets it: words typed in one task's agent's box
@@ -82,14 +82,14 @@ function task(id: string, name: string, agentId: string) {
     repository: null,
     document: { body: `# ${name}`, assumptions: [] },
   };
-  const agent: CodingAgentSummary = {
+  const agent: AgentSummary = {
     id: agentId,
     planId: id,
     model: "openai/gpt-5.6-sol",
     effort: "high",
     title: `${name} agent`,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
   return { plan: summary, agent };
@@ -185,7 +185,7 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
         tab: onTask ? undefined : agentTab,
         openAgents: [open.agent.id],
       },
-      agents: codingAgentsControl({
+      agents: agentsControl({
         agents: [open.agent],
         agentIds: [open.agent.id],
         onMessage: (agentId, text, clientKey, attachments) =>
@@ -199,7 +199,6 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
         task: summary,
         current: summary.id === open.plan.id,
         unread: false,
-        waiting: 0,
         now: 3,
         onOpen: () => undefined,
       }),
@@ -637,20 +636,27 @@ function answerMotion(): void {
 async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   answerMotion();
   fakeAppBridge({});
-  const pin = { task: open.plan.id, tab: { agent: open.agent.id }, label: "Agent", at: 5 };
+  const pin = {
+    task: open.plan.id,
+    tab: { agent: open.agent.id },
+    label: "Agent",
+    at: 5,
+    model: open.agent.model,
+  };
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     tasks: [INVITES.plan, BILLING.plan],
     activeTaskId: open.plan.id,
     chosenPin: pinned ? pin : undefined,
-    sidePanel: { ...tasksControl().sidePanel, pins: pinned ? [pin] : [] },
+    taskAgentPins: pinned ? [{ agentId: open.agent.id, taskId: open.plan.id, pinnedAt: 5 }] : [],
+    liveAgents: [open.agent],
     mainTabs: {
       ...tasksControl().mainTabs,
       tabs: [pin.tab],
       tab: pin.tab,
       openAgents: [open.agent.id],
     },
-    agents: codingAgentsControl({ agents: [open.agent], agentIds: [open.agent.id] }),
+    agents: agentsControl({ agents: [open.agent], agentIds: [open.agent.id] }),
   });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -803,7 +809,7 @@ async function columnOn(
     },
     ...(side === undefined ? undefined : { sidePanel: inboxPanel(side) }),
     agents: {
-      ...codingAgentsControl({
+      ...agentsControl({
         agents: [agent],
         agentIds: [agent.id],
         inboxFollower: followedInboxes(() => ({ items: [approval(1)] })).follower,
@@ -835,7 +841,6 @@ async function columnOn(
               task: INVITES.plan,
               current: true,
               unread: false,
-              waiting: 0,
               now: 3,
               onOpen: () => undefined,
             }),
@@ -938,7 +943,7 @@ test("a draft behind no open tab of its task's, or behind a failed agent's, leav
   assert.equal(closed.rowDrafted(), false, "the agent's tab is closed, but its task is open");
   closed.unmount();
 
-  const failed = { ...INVITES.agent, status: CODING_AGENT_STATUS.FAILED };
+  const failed = { ...INVITES.agent, status: AGENT_STATUS.FAILED };
   const marked = await columnOn([{ agent: INVITES.agent.id }], undefined, failed);
   assert.equal(marked.tabDrafted(INVITES.agent.title ?? ""), false);
   assert.equal(marked.rowDrafted(), false);
@@ -990,7 +995,7 @@ async function inboxOn(item: InboxItem) {
     activeTaskId: INVITES.plan.id,
     region: { kind: DOCUMENT_REGION.READY, task: INVITES.plan },
     sidePanel: inboxPanel(SIDE_PANEL_TAB.INBOX),
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: [INVITES.agent],
       agentIds: [INVITES.agent.id],
       inboxFollower: main.follower,
@@ -1012,7 +1017,6 @@ async function inboxOn(item: InboxItem) {
               task: INVITES.plan,
               current: false,
               unread: false,
-              waiting: 0,
               now: 3,
               onOpen: () => undefined,
             }),
@@ -1022,6 +1026,12 @@ async function inboxOn(item: InboxItem) {
       ),
     ),
   );
+  await settle();
+  // Note that the tab chooses nothing by itself, so the item is opened as a press on its row opens it.
+  const row =
+    container.querySelector<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main") ??
+    assert.fail("the item's row");
+  await act(async () => row.click());
   await settle();
   const box = () => container.querySelector(".inbox-view") ?? assert.fail("the card's answer box");
   return {
@@ -1246,7 +1256,6 @@ test("files attached in this window stay as its draft when another window lets t
       taskId: INVITES.plan.id,
       messages: [],
       send: NEVER_ANSWERED,
-      onStatus: () => undefined,
     });
     return null;
   }

@@ -23,9 +23,12 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import {
+  type Agent,
+  readAgent,
+  readVisibleAgentWorkspace,
+} from "@luke/database/models/agent-store";
 import { readTaskWorkspace } from "@luke/database/models/task-store";
-import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { Effect, Option, Result } from "effect";
@@ -53,25 +56,37 @@ export function taskWorkspace(
 }
 
 /**
- * The workspace an agent's repository is reached through: its task's, read
- * as the account, or for an agent with no task its own, where the account
- * is a member of it still; none otherwise.
+ * The workspace an agent's repository is reached through: its own, which
+ * moves with its task (`task-store.ts`), read off its row where the account
+ * sees the agent whole, its task included (`agentVisibleTo`); none otherwise.
  */
 export function agentWorkspace(
   userId: string,
-  agent: Pick<CodingAgent, "taskId" | "organizationId">,
+  agent: Pick<Agent, "id">,
 ): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
-  if (agent.taskId !== null) return taskWorkspace(userId, agent.taskId);
-  const { organizationId } = agent;
-  return Effect.map(isWorkspaceMember(userId, organizationId), (member) =>
-    member ? Option.some(organizationId) : Option.none(),
+  return readVisibleAgentWorkspace(userId, agent.id);
+}
+
+/**
+ * The workspace of an agent acting as itself under its member, read as it
+ * reads itself (`readAgent`), its task's visibility left out; none
+ * where the member no longer reaches the agent. Note that the task is left
+ * out on purpose, because an agent keeps its own tools and skills while its
+ * starter no longer sees its task; what a member reads of someone else's
+ * agent keeps `agentWorkspace`.
+ */
+export function ownAgentWorkspace(
+  userId: string,
+  agent: Pick<Agent, "id">,
+): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
+  return Effect.map(
+    readAgent(userId, agent.id),
+    Option.map((found) => found.organizationId),
   );
 }
 
 /** The member an agent's GitHub reads act as: its starter where it recorded the token's access, and none otherwise. */
-export function agentMember(
-  agent: Pick<CodingAgent, "githubAccess" | "userId">,
-): string | undefined {
+export function agentMember(agent: Pick<Agent, "githubAccess" | "userId">): string | undefined {
   return agent.githubAccess === GITHUB_ACCESS.TOKEN ? agent.userId : undefined;
 }
 

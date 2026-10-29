@@ -1,19 +1,9 @@
 import {
-  isProductExchangeKind,
   isProductSurfaceEventName,
   type ProductEventPropertiesFor,
-  type ProductExchangeKind,
   type ProductSurfaceEventName,
   productEventFromWire,
 } from "@luke/features/analytics";
-import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
-import { liveExchangeActive } from "@luke/live";
-import {
-  isVoiceCallTranscriptChange,
-  isVoiceView,
-  type VoiceCallTranscriptChange,
-  type VoiceView,
-} from "@luke/voice/voice-view";
 import type { UnparsedWireValue } from "@luke/wire";
 import { wireResult as result, type WireGuard } from "@luke/wire/wire-guard";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./app-state.js";
@@ -83,43 +73,6 @@ export const BRIDGE = {
     channel: "app:state-request",
     args: noArgs,
     result: result<AppStateSnapshot>(isAppStateSnapshot),
-  }),
-  /**
-   * The voice window's whole snapshot of the live conversation, reported on
-   * every edge of its own and on none of anything else's: the main process
-   * writes it into the document that same window reads, so a report the view
-   * did not move would be answered by a delivery asking for another. From
-   * there every panel draws it, a panel that opens later bootstraps from it,
-   * and the exchange level the media duck follows is derived from it. The
-   * count of exchanges rides beside it: a kind travels only on the edge that
-   * opened an exchange, named by the one window that knows who opened it, so
-   * a turn walking from connecting to responding is counted once. What
-   * moved in the standing call's transcript rides beside them too, never the
-   * whole of it, which grows for the call's length: main splices it into the
-   * document's `callTranscript`.
-   */
-  reportVoiceView: entry({
-    kind: "send",
-    channel: "app:report-voice-view",
-    args: args<[VoiceView, ProductExchangeKind | undefined, VoiceCallTranscriptChange | undefined]>(
-      (v) =>
-        v.length === 3 &&
-        isVoiceView(v[0]) &&
-        (v[1] === undefined || (liveExchangeActive(v[0]) && isProductExchangeKind(v[1]))) &&
-        (v[2] === undefined || isVoiceCallTranscriptChange(v[2])),
-    ),
-  }),
-  /**
-   * One tapped live event for the development trace. Fire-and-forget on
-   * purpose: the tap must cost the conversation nothing, and the main process
-   * simply drops it when no traced run is on — which is every packaged run,
-   * because the writer only exists behind the unpackaged `LUKE_TRACE_DIR`
-   * gate.
-   */
-  recordAgentTrace: entry({
-    kind: "send",
-    channel: "app:record-agent-trace",
-    args: args<[AgentWireTrace]>((v) => v.length === 1 && isAgentWireTrace(v[0])),
   }),
   notifyReady: entry({ kind: "send", channel: "app:renderer-ready", args: noArgs }),
   recordSurfaceEvent: entry({

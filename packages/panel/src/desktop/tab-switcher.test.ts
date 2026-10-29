@@ -1,12 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AGENT_STATUS, type AgentSummary, type TasklessAgent } from "@luke/features/agent-wire";
 import type { Channel } from "@luke/features/channel-wire";
-import {
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
-  type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
@@ -35,7 +31,7 @@ import {
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
-import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { TabSwitcher } from "./tab-switcher.js";
 
 /**
@@ -344,19 +340,19 @@ test("a task's card says the task and its agent's tab by the names they go by no
   const told = asked();
   const window = await mounted();
   const column = { agent: "agent-token" };
-  const agent = (title: string): CodingAgentSummary => ({
+  const agent = (title: string): AgentSummary => ({
     id: column.agent,
     planId: TASK,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   });
   const named = (title: string | undefined, name = DOCUMENT_TASK.name) => ({
     tasks: [{ ...DOCUMENT_TASK, name }],
-    agents: codingAgentsControl({ agents: title === undefined ? [] : [agent(title)] }),
+    agents: agentsControl({ agents: title === undefined ? [] : [agent(title)] }),
   });
   await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, named("Token refresh"), column));
   press();
@@ -826,12 +822,12 @@ async function agentCardAfter(status: TasklessAgent["status"]): Promise<HTMLElem
 }
 
 test("an agent's stop whose turn failed says so at its end, as its row and its tab do", async () => {
-  const card = await agentCardAfter(CODING_AGENT_STATUS.FAILED);
+  const card = await agentCardAfter(AGENT_STATUS.FAILED);
   assert.ok(card?.querySelector(".failed-mark"));
 });
 
 test("an agent's stop that finished says nothing at its end", async () => {
-  const card = await agentCardAfter(CODING_AGENT_STATUS.COMPLETED);
+  const card = await agentCardAfter(AGENT_STATUS.COMPLETED);
   assert.ok(card);
   assert.equal(card.querySelector(".failed-mark"), null);
 });

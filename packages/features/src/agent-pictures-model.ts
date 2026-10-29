@@ -19,7 +19,7 @@ import {
  * agent-pictures-model.ts -- the pictures an agent's transcript names, read from its stored calls: the set a `show_image` call showed, the pictures an integration's call answered, and the screenshots a `browser` call took, each by the id the service kept it under.
  *
  * The service keeps a picture beside the transcript and writes its id in the
- * stored output in the bytes' place (`brain-host/relay-pictures.ts`,
+ * stored output in the bytes' place (`eve-host/relay-pictures.ts`,
  * `coder-host/show-image.ts`, `browser/browser-tool.ts`), so what is read here is ids, sizes, and
  * words; the bytes are read apart, through the window's picture cache. A
  * picture the service did not keep is named by why, with its size.

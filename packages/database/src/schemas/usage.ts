@@ -1,4 +1,4 @@
-import { bigint, doublePrecision, integer, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
+import { doublePrecision, integer, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
 import { user } from "./auth.js";
 
 /**
@@ -18,24 +18,8 @@ export const hostedUsage = pgTable(
     day: text("day").notNull(),
     /** Hosted operations spent: a Live session opened, a brain turn, and a dictated clip count alike. */
     calls: integer("calls").default(0).notNull(),
-    /** Seconds of dictated audio transcribed on Luke's key, beside the voice seconds `voice_session_usage` keeps. */
+    /** Seconds of dictated audio transcribed on Luke's key. */
     dictationSeconds: doublePrecision("dictation_seconds").default(0).notNull(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.day] })],
 );
-
-/**
- * One closed GPT Live session's billed seconds, keyed by the session id OpenAI
- * minted, so the voice service's report is taken once however many times it
- * is sent: the row is the idempotency ledger, and a repeated report adds
- * nothing. Nothing of the conversation is here, only the id, the account, the
- * seconds, and when the report landed.
- */
-export const voiceSessionUsage = pgTable("voice_session_usage", {
-  sessionId: text("session_id").primaryKey(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  seconds: doublePrecision("seconds").notNull(),
-  recordedAt: bigint("recorded_at", { mode: "number" }).notNull(),
-});

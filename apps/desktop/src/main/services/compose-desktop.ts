@@ -32,7 +32,6 @@ import {
 import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
 import type { ColourCode } from "@luke/host/task-code-remote";
 import { NO_EXPERIMENTS } from "@luke/settings";
-import { callInProgress } from "@luke/voice/voice-view";
 import { Context, Effect, Layer } from "effect";
 import { BrowserWindow, net, type WebContents } from "electron";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
@@ -233,25 +232,20 @@ export function composeDesktop(
       const windows = createWindowService({
         config,
         state,
-        native,
         operator,
         run,
         launchStanding: quit.launchStanding,
       });
       const colourCode = yield* colourCodeInUtilityProcess(config.resourceDirectory);
-      // A quit, a restart to update, and a sign-out asked for while a call
-      // stands, a panel holds unsaved work, or a terminal of this Mac is open
-      // ask first, with Cancel the default, as a Mac app asks before it loses
-      // anything; while nothing would be lost none of them asks at all.
+      // A quit, a restart to update, and a sign-out asked for while a panel
+      // holds unsaved work or a terminal of this Mac is open ask first, with
+      // Cancel the default, as a Mac app asks before it loses anything; while
+      // nothing would be lost none of them asks at all.
       const unsavedWork = unsavedWorkHolders<WebContents>((sender) => sender.isDestroyed());
-      const atStake = () => {
-        const { view } = state.snapshot().voice;
-        return {
-          call: view !== undefined && callInProgress(view),
-          unsavedWork: unsavedWork.holding(),
-          macTerminals: openMacTerminals(),
-        };
-      };
+      const atStake = () => ({
+        unsavedWork: unsavedWork.holding(),
+        macTerminals: openMacTerminals(),
+      });
       const askFirst = leaveGate({
         atStake,
         ask: (question) => askBeforeLeaving(windows.panels.primaryPanel(), question),
@@ -315,15 +309,6 @@ export function composeDesktop(
           windows.panels.focusExpanded();
           windows.showSettings();
         },
-      });
-
-      // The one edge no service could take as a constructor argument, because
-      // it is a cycle the concerns genuinely have: the windows draw what the
-      // operator hears while the operator is reached over the host's own
-      // server. Reading it before this has run throws by name rather than
-      // answering nothing.
-      operator.link({
-        sendToVoice: (channel, payload) => windows.sendToVoice(channel, payload),
       });
 
       return {

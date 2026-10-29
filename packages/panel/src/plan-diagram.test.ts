@@ -170,9 +170,7 @@ function Version({ previous, now }: { previous: string; now: string }): ReactNod
 test("a Mermaid fence on a plan's page draws as the picture the diagram bundle answered, out of the screen recording", async () => {
   const code = "sequenceDiagram\n  Admin->>Service: Invite";
 
-  const page = await drawn(
-    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
-  );
+  const page = await drawn(createElement(PlanBody, { task: taskWith(mermaidFence(code)) }));
 
   assert.deepEqual(pictures(page), [pictureOf(code, DIAGRAM_APPEARANCE.LIGHT)]);
   assert.equal(page.querySelector(".plan-diagram pre"), null);
@@ -189,7 +187,6 @@ test("a diagram's picture is named for its title, or its first line where it has
       task: taskWith(
         [titled, plain, configured, pie].map((code) => mermaidFence(code)).join("\n\n"),
       ),
-      live: false,
     }),
   );
 
@@ -233,9 +230,7 @@ test("while an edited diagram is drawn again, the picture kept is still named fo
 
 test("Show code puts the fence's code in the picture's place, and Show diagram brings the picture back", async () => {
   const code = "flowchart LR\n  Invite --> Join";
-  const page = await drawn(
-    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
-  );
+  const page = await drawn(createElement(PlanBody, { task: taskWith(mermaidFence(code)) }));
 
   act(() => toggle(page).click());
 
@@ -250,9 +245,7 @@ test("Show code puts the fence's code in the picture's place, and Show diagram b
 });
 
 test("a fence the diagram bundle refuses says it could not be drawn, over its code", async () => {
-  const page = await drawn(
-    createElement(PlanBody, { task: taskWith(mermaidFence(UNPARSED)), live: false }),
-  );
+  const page = await drawn(createElement(PlanBody, { task: taskWith(mermaidFence(UNPARSED)) }));
 
   assert.deepEqual(pictures(page), []);
   assert.equal(
@@ -276,10 +269,7 @@ test("a diagram bundle that failed to load says so with Retry, which imports it 
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        onSideBundles(
-          unloaded,
-          createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
-        ),
+        onSideBundles(unloaded, createElement(PlanBody, { task: taskWith(mermaidFence(code)) })),
       ),
     ),
   );
@@ -301,9 +291,7 @@ test("a diagram bundle that failed to load says so with Retry, which imports it 
 
 test("the diagram is drawn again in the window's new appearance when it flips", async () => {
   const code = "flowchart TD\n  Accept --> Member";
-  const page = await drawn(
-    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
-  );
+  const page = await drawn(createElement(PlanBody, { task: taskWith(mermaidFence(code)) }));
 
   appearance.dark = true;
   act(() => {
@@ -318,7 +306,7 @@ test("a fence in another language, and a Mermaid fence where the words are not a
   const code = "flowchart LR\n  Caption --> Code";
   const shell = "```sh\npnpm install\n```";
 
-  const page = await drawn(createElement(PlanBody, { task: taskWith(shell), live: false }));
+  const page = await drawn(createElement(PlanBody, { task: taskWith(shell) }));
   const caption = await drawn(createElement(MarkdownMessage, { words: mermaidFence(code) }));
 
   assert.equal(page.querySelector(".plan-diagram"), null);
@@ -383,9 +371,7 @@ function press(container: HTMLElement): HTMLButtonElement {
 test("on a finger's device a tap on a diagram opens it over the window at its own pixels, and Close shuts it", async () => {
   device.finger = true;
   const code = "flowchart LR\n  Invite --> Join";
-  const page = await drawn(
-    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
-  );
+  const page = await drawn(createElement(PlanBody, { task: taskWith(mermaidFence(code)) }));
 
   act(() => tap(picture(page)));
 
@@ -411,7 +397,7 @@ test("in a phone's narrow room a tap on a diagram opens it, and Escape shuts it"
     createElement(
       ShellRoomContext.Provider,
       { value: SHELL_ROOM.NARROW },
-      createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
+      createElement(PlanBody, { task: taskWith(mermaidFence(code)) }),
     ),
   );
   room.append(page);
@@ -429,9 +415,7 @@ test("in a phone's narrow room a tap on a diagram opens it, and Escape shuts it"
 
 test("with a mouse in a wide room a tap on a diagram opens nothing over the window", async () => {
   const code = "flowchart LR\n  Invite --> Join";
-  const page = await drawn(
-    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
-  );
+  const page = await drawn(createElement(PlanBody, { task: taskWith(mermaidFence(code)) }));
 
   act(() => tap(picture(page)));
 
@@ -440,9 +424,7 @@ test("with a mouse in a wide room a tap on a diagram opens nothing over the wind
 
 test("in a wide room the keyboard's press on a diagram, named for what it does, opens it over the window", async () => {
   const code = "flowchart LR\n  Invite --> Join";
-  const page = await drawn(
-    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
-  );
+  const page = await drawn(createElement(PlanBody, { task: taskWith(mermaidFence(code)) }));
   const enlarge = press(page);
   assert.equal(enlarge.getAttribute("aria-label"), "Enlarge Diagram: flowchart LR");
 

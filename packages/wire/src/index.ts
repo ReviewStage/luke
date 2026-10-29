@@ -60,7 +60,6 @@ export {
   COMPACTION_METADATA,
   type CommentLineMetadata,
   type CompactionMetadata,
-  callOfLine,
   GITHUB_LINE_BOUNDS,
   GITHUB_LINE_EVENT,
   type GitHubLineMetadata,

@@ -1,10 +1,10 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import {
-  CODING_AGENT_ATTACHMENT_TYPE,
-  CODING_AGENT_BOUNDS,
-  type CodingAgentAttachment,
-} from "@luke/features/coding-agent-wire";
+  AGENT_ATTACHMENT_TYPE,
+  AGENT_BOUNDS,
+  type AgentAttachment,
+} from "@luke/features/agent-wire";
 import { isVideoType } from "@luke/features/conversation-picture-wire";
 import type { InboxImageType } from "@luke/features/inbox-wire";
 import { Effect, Option, Result } from "effect";
@@ -22,7 +22,7 @@ import { AGENT_TOOL } from "../agent-runtime/tools.js";
  * `show_image` keeps a recording, is refused by name, since a message
  * carries pictures alone. Each picture is held to the bound one image of
  * a message is held to, and all of them to a message's bytes together
- * (`CODING_AGENT_BOUNDS`); one past them is refused rather than shrunk,
+ * (`AGENT_BOUNDS`); one past them is refused rather than shrunk,
  * since a `show_image` picture may be larger than a message takes. A
  * forwarded file is named by its id and its type's extension, never by a
  * path, so nothing of where it came from travels with it. The call refused
@@ -59,9 +59,9 @@ export interface ImageForwarder {
 
 /** The extension a forwarded file is named with, by its type. */
 const IMAGE_EXTENSION = {
-  [CODING_AGENT_ATTACHMENT_TYPE.PNG]: "png",
-  [CODING_AGENT_ATTACHMENT_TYPE.JPEG]: "jpg",
-  [CODING_AGENT_ATTACHMENT_TYPE.WEBP]: "webp",
+  [AGENT_ATTACHMENT_TYPE.PNG]: "png",
+  [AGENT_ATTACHMENT_TYPE.JPEG]: "jpg",
+  [AGENT_ATTACHMENT_TYPE.WEBP]: "webp",
 } as const satisfies Record<InboxImageType, string>;
 
 /** Megabytes as a refusal says them, rounded up to a tenth so a picture just past a bound never reads as at it. */
@@ -86,14 +86,14 @@ export function forwardedImages(
   forwarder: ImageForwarder,
   ids: readonly string[],
 ): Effect.Effect<
-  Result.Result<readonly CodingAgentAttachment[], ForwardedImageRefusal>,
+  Result.Result<readonly AgentAttachment[], ForwardedImageRefusal>,
   StoreFailure,
   DatabaseServices
 > {
   return Effect.gen(function* () {
     const named = [...new Set(ids)];
     if (named.length === 0) return Result.succeed([]);
-    const files: CodingAgentAttachment[] = [];
+    const files: AgentAttachment[] = [];
     let total = 0;
     for (const id of named) {
       const picture = yield* pictureOf(forwarder, id);
@@ -102,7 +102,7 @@ export function forwardedImages(
       }
       const { contentType, bytes } = picture.value;
       if (isVideoType(contentType)) return Result.fail({ kind: FORWARDED_IMAGE_REFUSAL.VIDEO, id });
-      if (bytes.byteLength > CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES) {
+      if (bytes.byteLength > AGENT_BOUNDS.MAX_IMAGE_BYTES) {
         return Result.fail({
           kind: FORWARDED_IMAGE_REFUSAL.TOO_LARGE,
           id,
@@ -116,7 +116,7 @@ export function forwardedImages(
         data: Buffer.from(bytes).toString("base64"),
       });
     }
-    if (total > CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES) {
+    if (total > AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES) {
       return Result.fail({ kind: FORWARDED_IMAGE_REFUSAL.TOO_MUCH, bytes: total });
     }
     return Result.succeed(files);
@@ -139,13 +139,13 @@ export function forwardedImageRefusalWords(refusal: ForwardedImageRefusal): stri
     case FORWARDED_IMAGE_REFUSAL.TOO_LARGE:
       return (
         `attachment ${refusal.id} is ${megabytes(refusal.bytes)}, past the ` +
-        `${megabytes(CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES)} an image handed to another agent may ` +
+        `${megabytes(AGENT_BOUNDS.MAX_IMAGE_BYTES)} an image handed to another agent may ` +
         "be. It is not made smaller for you: hand on a smaller picture."
       );
     case FORWARDED_IMAGE_REFUSAL.TOO_MUCH:
       return (
         `the images come to ${megabytes(refusal.bytes)} together, past the ` +
-        `${megabytes(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES)} one message may carry: hand on fewer.`
+        `${megabytes(AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES)} one message may carry: hand on fewer.`
       );
   }
 }

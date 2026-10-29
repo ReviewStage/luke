@@ -1,4 +1,4 @@
-import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentAttachment, AgentSummary } from "@luke/features/agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import {
   ANNOUNCE,
@@ -22,10 +22,10 @@ import { ActionMenu } from "../desktop/action-menu.js";
 import { useAgentArchive } from "../desktop/agent-archive.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { COMPOSER_ROOM_CLASS } from "./agent-composer.js";
+import { CONTINUE_LABEL, CONTINUED_IN } from "./agent-model.js";
 import { AgentActorRef, type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref.js";
-import { CONTINUE_LABEL, CONTINUED_IN } from "./coding-agent-model.js";
 import { useContinueDoor } from "./fork-action.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 
 /**
  * continue-agent.tsx -- where an agent may be continued in a new one: the press that starts it on the agent's whole transcript, and, once it was, the agents that continued it.
@@ -53,7 +53,7 @@ import type { CodingAgentsControl } from "./use-coding-agents.js";
  * one line however often the agent was continued. The press stays where
  * it was, on the failed end line's row, saying Continue again, since a
  * continuation may itself fail or go wrong; each press is a continue of
- * its own, under a key of its own (`use-coding-agents.ts`). A fork is no
+ * its own, under a key of its own (`use-agents.ts`). A fork is no
  * continuation, so a source with only forks keeps its box.
  */
 
@@ -74,7 +74,7 @@ const CONTINUED_COPY = {
 /** What a closed box hands the press: its words and the files attached to them, and the agent's task, under which they are kept. */
 export interface ContinueCarry {
   readonly words: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly taskId: string | null;
 }
 
@@ -95,7 +95,7 @@ export function ContinueAgent({
   label = CONTINUE_LABEL,
 }: {
   agentId: string;
-  control: Pick<CodingAgentsControl, "continueAgent">;
+  control: Pick<AgentsControl, "continueAgent">;
   /** The closed box's words and files, which the press carries; none for a press that carries nothing. */
   carry?: ContinueCarry | undefined;
   /** Whether the press may stand here, where no other place offers it. */
@@ -161,10 +161,7 @@ interface ContinuedDoors {
   readonly agentIds: readonly string[];
   /** The titles the source's summary gives them (`continuedByTitles`), which name a chip the list does not hold. */
   readonly titles: ReadonlyMap<string, string>;
-  readonly control: Pick<
-    CodingAgentsControl,
-    "agents" | "archived" | "models" | "me" | "pullRequests"
-  >;
+  readonly control: Pick<AgentsControl, "agents" | "archived" | "models" | "me" | "pullRequests">;
   /** Opens an agent's tab; none where nothing opens one, when a chip hangs its card alone. */
   readonly onOpenAgent: ((agentId: string) => void) | undefined;
 }
@@ -278,17 +275,17 @@ export function ContinuedComposerNote({
   control,
   shown,
 }: {
-  agent: CodingAgentSummary;
+  agent: AgentSummary;
   doors: ContinuedDoors;
   /** Stops the agent, while it has a turn to stop; settles once the service has answered. */
-  stop?: (() => Promise<void>) | undefined;
-  control: CodingAgentsControl;
+  stop?: (() => Promise<unknown>) | undefined;
+  control: AgentsControl;
   /** Whether the tab is on screen, which the archive's question goes with. */
   shown: boolean;
 }): React.JSX.Element {
   const [stopping, setStopping] = useState(false);
   const archive = useAgentArchive(agent, control, shown);
-  const pressStop = (run: () => Promise<void>) => {
+  const pressStop = (run: () => Promise<unknown>) => {
     setStopping(true);
     run().finally(() => setStopping(false));
   };

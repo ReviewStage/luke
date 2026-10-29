@@ -1,4 +1,4 @@
-import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import { CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import { remedyLabel } from "@luke/features/failure-remedy";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import { readingWords } from "@luke/features/words";
@@ -38,7 +38,7 @@ import {
   unsearchedModels,
   windowLabel,
   windowOf,
-} from "./coding-agent-model.js";
+} from "./agent-model.js";
 import { useRepositoryRemedy } from "./repository-remedy.js";
 
 /**

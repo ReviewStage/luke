@@ -4,24 +4,26 @@ import { it } from "@effect/vitest";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
 import {
+  browserTabsLiveStatement,
   pointBrowserTab,
   takeOverBrowserTab,
-  taskBrowserTabsLiveStatement,
   upsertBrowserTab,
 } from "@luke/database/models/agent-browser-tabs";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
 import { saveGitHubToken } from "@luke/database/models/github-token-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { createTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
+import { task } from "@luke/database/schemas/task";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import {
   AGENT_BROWSER_TAB_OPENER,
   type AgentBrowserTab,
   agentBrowserTabAnswerSchema,
   agentBrowserTabsAnswerSchema,
+  type BrowserTabsPlace,
 } from "@luke/features/agent-browser-tab-wire";
 import { BROWSER_CURSOR_KIND } from "@luke/features/browser-agent-actions";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
@@ -32,6 +34,7 @@ import {
 } from "@luke/features/live-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { eq } from "drizzle-orm";
 import { type Context, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -131,7 +134,7 @@ const openTask = Effect.gen(function* () {
     githubAccess: typeof GITHUB_ACCESS.APP | typeof GITHUB_ACCESS.TOKEN,
   ) =>
     Effect.map(
-      createCodingAgent(starter, {
+      createAgent(starter, {
         taskId,
         planSnapshot: "# Checkout",
         prompt: null,
@@ -166,6 +169,7 @@ const openTask = Effect.gen(function* () {
     teammate,
     reader,
     outsider,
+    workspace,
     taskId,
     coder,
     tokenCoder,
@@ -207,6 +211,8 @@ function request(userId: string | undefined, path: string, method = "GET") {
 
 const tabsPath = (taskId: string) => `/api/plans/${taskId}/browser-tabs`;
 
+const agentTabsPath = (agentId: string) => `/api/agents/${agentId}/browser-tabs`;
+
 /** The eve session a coding agent's sandbox is tagged with once it first ran. */
 const SESSION = "wrun_open_tab_fixture";
 
@@ -216,6 +222,15 @@ function openRequest(userId: string, taskId: string, agentId: string, address: s
     method: "POST",
     headers: { authorization: `Bearer ${userId}`, "content-type": "application/json" },
     body: JSON.stringify({ agentId, address }),
+  });
+}
+
+/** A member's open of a tab at the address in the browser of the agent the path names. */
+function agentOpenRequest(userId: string, agentId: string, address: string) {
+  return new Request(new URL(agentTabsPath(agentId), ORIGIN), {
+    method: "POST",
+    headers: { authorization: `Bearer ${userId}`, "content-type": "application/json" },
+    body: JSON.stringify({ address }),
   });
 }
 
@@ -251,10 +266,10 @@ const runningBrowser = Effect.map(fakeCdpPeer(), (peer) => ({
 const runLive = (statement: LiveStatement) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) => sql.unsafe(statement.sql, [...statement.params]));
 
-/** The task's tabs as Realtime would deliver them to `reader`, read as a window reads them now, and when they would next be read again for a lapse. */
-const liveTabsOf = (reader: string, taskId: string) =>
+/** The task's or the agent's tabs as Realtime would deliver them to `reader`, read as a window reads them now, and when they would next be read again for a lapse. */
+const liveTabsOf = (reader: string, place: BrowserTabsPlace) =>
   Effect.gen(function* () {
-    const statement = Option.getOrThrow(taskBrowserTabsLiveStatement(reader, taskId));
+    const statement = Option.getOrThrow(browserTabsLiveStatement(reader, place));
     const rows = yield* Schema.decodeUnknownEffect(taskBrowserTabsLiveRowsSchema)({
       tabs: yield* runLive(statement),
     });
@@ -358,9 +373,9 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
         const agrees = Effect.gen(function* () {
           for (const member of [starter, teammate, reader]) {
             const held = tabsOf(yield* ask(request(member, tabsPath(taskId))));
-            assert.deepEqual((yield* liveTabsOf(member, taskId)).tabs, held);
+            assert.deepEqual((yield* liveTabsOf(member, { taskId })).tabs, held);
           }
-          assert.deepEqual((yield* liveTabsOf(outsider, taskId)).tabs, []);
+          assert.deepEqual((yield* liveTabsOf(outsider, { taskId })).tabs, []);
         });
 
         yield* agrees;
@@ -375,7 +390,7 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
           at,
         });
         yield* agrees;
-        const [pointed] = (yield* liveTabsOf(starter, taskId)).tabs;
+        const [pointed] = (yield* liveTabsOf(starter, { taskId })).tabs;
         assert.deepEqual(pointed?.cursor, {
           x: 640,
           y: 360.5,
@@ -387,12 +402,12 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
         const heldUntil = new Date(at + BROWSER_TAKEOVER_HOLD_MS);
         yield* takeOverBrowserTab(coderTab.id, starter, heldUntil, new Date(at));
         yield* agrees;
-        const driven = yield* liveTabsOf(starter, taskId);
+        const driven = yield* liveTabsOf(starter, { taskId });
         assert.equal(driven.tabs[0]?.driver?.userId, starter);
         assert.equal(driven.lapse, heldUntil.getTime());
         yield* TestClock.adjust(BROWSER_TAKEOVER_HOLD_MS);
         yield* agrees;
-        const lapsed = yield* liveTabsOf(starter, taskId);
+        const lapsed = yield* liveTabsOf(starter, { taskId });
         assert.equal(lapsed.tabs[0]?.driver, null);
         assert.equal(lapsed.lapse, undefined);
       }),
@@ -498,6 +513,93 @@ it.layer(getTestDB())("a task's Browser tabs route", (it) => {
           listed.find((tab) => tab.id === opened.id),
           opened,
         );
+      }),
+  );
+
+  it.effect(
+    "an agent on no task lists and opens its tabs under its own path, and a teammate who does not see it is refused",
+    () =>
+      Effect.gen(function* () {
+        const { starter, teammate, reader, workspace, ask } = yield* openTask;
+        const loose = Option.getOrThrow(
+          yield* createAgent(starter, {
+            taskId: null,
+            organizationId: workspace,
+            planSnapshot: null,
+            prompt: "Sign in to the side project.",
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: TOKEN_REPOSITORY,
+            githubAccess: GITHUB_ACCESS.TOKEN,
+          }),
+        ).agent;
+        const kept = yield* upsertBrowserTab({
+          conversationId: loose.conversationId,
+          targetId: randomUUID(),
+          address: "https://side.test/",
+          title: "Side",
+          openedBy: { kind: AGENT_BROWSER_TAB_OPENER.AGENT },
+        });
+        yield* runAgent(loose);
+        const { peer, layer } = yield* runningBrowser;
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+
+        for (const member of [starter, reader]) {
+          assert.deepEqual(
+            tabsOf(yield* ask(request(member, agentTabsPath(loose.id)))).map((tab) => tab.id),
+            [kept.id],
+          );
+          const live = yield* liveTabsOf(member, { agentId: loose.id });
+          assert.deepEqual(
+            live.tabs.map((tab) => tab.id),
+            [kept.id],
+          );
+        }
+        assert.deepEqual(yield* ask(request(teammate, agentTabsPath(loose.id))), notFound);
+        assert.deepEqual((yield* liveTabsOf(teammate, { agentId: loose.id })).tabs, []);
+        assert.deepEqual(
+          yield* ask(agentOpenRequest(teammate, loose.id, "https://side.test/login"), layer),
+          notFound,
+        );
+        assert.deepEqual(yield* openedAddresses(peer), []);
+
+        yield* TestClock.adjust("1 second");
+        const opened = tabOf(
+          yield* ask(agentOpenRequest(starter, loose.id, "https://side.test/login"), layer),
+        );
+        assert.equal(opened.agentId, loose.id);
+        assert.equal(opened.driver?.userId, starter);
+        assert.deepEqual(
+          tabsOf(yield* ask(request(reader, agentTabsPath(loose.id)))).map((tab) => tab.id),
+          [kept.id, opened.id],
+        );
+      }),
+  );
+
+  it.effect(
+    "a teammate who reaches an agent but not its task on its starter's own token lists, follows, and opens none of its tabs",
+    () =>
+      Effect.gen(function* () {
+        const { starter, teammate, taskId, coder, coderTab, ask } = yield* openTask;
+        yield* Database.use((db) =>
+          db.update(task).set({ githubAccess: GITHUB_ACCESS.TOKEN }).where(eq(task.id, taskId)),
+        );
+        yield* runAgent(coder);
+        const { peer, layer } = yield* runningBrowser;
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+
+        assert.deepEqual(
+          tabsOf(yield* ask(request(starter, agentTabsPath(coder.id)))).map((tab) => tab.id),
+          [coderTab.id],
+        );
+        assert.deepEqual(yield* ask(request(teammate, agentTabsPath(coder.id))), notFound);
+        assert.deepEqual((yield* liveTabsOf(teammate, { agentId: coder.id })).tabs, []);
+        assert.deepEqual(
+          yield* ask(agentOpenRequest(teammate, coder.id, "https://shop.test/login"), layer),
+          notFound,
+        );
+        assert.deepEqual(yield* openedAddresses(peer), []);
       }),
   );
 

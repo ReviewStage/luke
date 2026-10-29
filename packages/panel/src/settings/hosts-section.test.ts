@@ -83,9 +83,9 @@ test("Add hosts shows the token in its command and sends the service only the to
   await settle();
 
   const add = [...document.querySelectorAll("button")].find(
-    (each) => each.textContent === "Add Linux servers",
+    (each) => each.textContent === "Add hosts",
   );
-  assert.ok(add !== undefined, "Add Linux servers is drawn");
+  assert.ok(add !== undefined, "Add hosts is drawn");
   await act(async () => add.click());
   await settle();
 
@@ -156,7 +156,7 @@ it.effect(
     }),
 );
 
-/** Machines drawn in the desktop over the hosts given, with This Mac standing as given; how often Retry or Turn on again was asked. */
+/** Hosts drawn in the desktop over the hosts given, with This Mac standing as given; how often Retry or Turn on again was asked. */
 async function machinesWithThisMac(
   hosts: readonly Host[],
   standing: ThisMacHostStanding,
@@ -228,7 +228,7 @@ test("this Mac stands first on its own machine's row, with why its setup failed 
 test("a Mac the service no longer lists keeps a This Mac row with Turn on again", async () => {
   const { turnOns } = await machinesWithThisMac([], { standing: THIS_MAC_HOST_STANDING.REMOVED });
 
-  assert.ok(document.body.textContent?.includes("This Mac was removed from Luke"));
+  assert.ok(document.body.textContent?.includes("Removed from Luke."));
   await press("Turn on again");
   assert.equal(turnOns(), 1);
 });

@@ -1,9 +1,5 @@
 import { Schema as EffectSchema } from "effect";
-import {
-  CODING_AGENT_FAILURE,
-  CODING_AGENT_STATUS,
-  disabledServersSchema,
-} from "./coding-agent-wire.js";
+import { AGENT_FAILURE, AGENT_STATUS, disabledServersSchema } from "./agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { modelChoiceSchema } from "./models-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
@@ -88,10 +84,15 @@ export const GITHUB_TRIGGER_EVENT = {
 
 export type GitHubTriggerEvent = (typeof GITHUB_TRIGGER_EVENT)[keyof typeof GITHUB_TRIGGER_EVENT];
 
-/** What an automation starts when it fires. */
+/**
+ * What an automation starts when it fires. Note that both spellings name the
+ * one action, an agent on the task's repository handed the prompt as its
+ * task: the stored rows say `coding-agent` until a migration rewrites them
+ * to `agent`, so a release reads either while writers still write the old one.
+ */
 export const AUTOMATION_ACTION = {
-  /** A coding agent on the task's repository, handed the prompt as its task. */
   CODING_AGENT: "coding-agent",
+  AGENT: "agent",
 } as const;
 
 const nameSchema = EffectSchema.Trim.check(
@@ -229,9 +230,9 @@ export type IntegrationTrigger = Extract<
 /** What an integration trigger filters its events by. */
 export type IntegrationTriggerFilters = NonNullable<IntegrationTrigger["filters"]>;
 
-/** A coding agent handed the prompt as its task, on the model and effort named, or the account's default, with the MCP servers named switched off. */
-const codingAgentActionSchema = EffectSchema.Struct({
-  kind: EffectSchema.Literal(AUTOMATION_ACTION.CODING_AGENT),
+/** An agent handed the prompt as its task, on the model and effort named, or the account's default, with the MCP servers named switched off. */
+const agentActionSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literals([AUTOMATION_ACTION.CODING_AGENT, AUTOMATION_ACTION.AGENT]),
   prompt: EffectSchema.Trim.check(
     EffectSchema.isNonEmpty(),
     EffectSchema.isMaxLength(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS),
@@ -241,7 +242,7 @@ const codingAgentActionSchema = EffectSchema.Struct({
   disabledServers: EffectSchema.optionalKey(disabledServersSchema),
 });
 
-export const automationActionSchema = codingAgentActionSchema;
+export const automationActionSchema = agentActionSchema;
 
 export type AutomationAction = typeof automationActionSchema.Type;
 
@@ -373,6 +374,23 @@ export const automationFiringSchema = EffectSchema.Union([
 
 export type AutomationFiring = typeof automationFiringSchema.Type;
 
+export type AutomationFiringKind = (typeof AUTOMATION_FIRING)[keyof typeof AUTOMATION_FIRING];
+
+/**
+ * Whether a run of each firing hands its agent words someone other than the
+ * automation's owner chose, beside the owner's prompt: a GitHub event's
+ * title and branch, chosen by whoever caused it; a webhook's body, by its
+ * caller; and an integration's event, by whoever caused the error. A
+ * schedule's run and a "Run now" carry the owner's prompt alone.
+ */
+export const FIRING_HANDS_OUTSIDE_WORDS = {
+  [AUTOMATION_FIRING.SCHEDULE]: false,
+  [AUTOMATION_FIRING.GITHUB]: true,
+  [AUTOMATION_FIRING.WEBHOOK]: true,
+  [AUTOMATION_FIRING.INTEGRATION]: true,
+  [AUTOMATION_FIRING.MANUAL]: false,
+} as const satisfies Record<AutomationFiringKind, boolean>;
+
 /** Where a run stands. */
 export const AUTOMATION_RUN_STATUS = {
   /** Recorded and not yet acted on. */
@@ -450,13 +468,11 @@ const automationRunSummarySchema = EffectSchema.Struct({
     EffectSchema.Struct({
       id: wireUuidSchema,
       title: EffectSchema.NullOr(EffectSchema.String),
-      status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+      status: EffectSchema.Literals(Object.values(AGENT_STATUS)),
       /** Whether it runs on the reading account's own keys; absent from a service before it. */
       ownKey: EffectSchema.optionalKey(EffectSchema.Boolean),
       /** Why it failed, where it did, as its own end line says; absent otherwise, and from a service before it. */
-      failureReason: EffectSchema.optionalKey(
-        EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
-      ),
+      failureReason: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_FAILURE))),
     }),
   ),
   firedAt: countedNumber,

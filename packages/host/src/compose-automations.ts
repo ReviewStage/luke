@@ -27,10 +27,18 @@ import {
 import { Data, Effect, FiberMap, Result, type Scope } from "effect";
 import { Base64Url, Hex } from "effect/encoding";
 import * as HttpClient from "effect/http/HttpClient";
+import {
+  type AutomationListCollections,
+  type AutomationRow,
+  automationListCollections,
+  changedFields,
+  writtenFields,
+} from "./automation-collections.js";
 import { followAutomations } from "./automation-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
+import { ROW_GONE, type RowRefused, type RowWritten } from "./live-collection.js";
 import { confirmWrite, type TxWait } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 
@@ -42,7 +50,11 @@ import type { RunMode } from "./run-mode.js";
  * automation's runs, or a workspace's runs, it follows while drawn (`automation-follow.ts`) on
  * the service's live read for the account signed in as it started, each
  * change emitted as `AUTOMATIONS_CHANGED`; following again starts it
- * over, and letting it go, or a sign-out, ends it. Behind a closed account gate, or on a run
+ * over, and letting it go, or a sign-out, ends it. A followed workspace's
+ * automations stand in a collection (`automation-collections.ts`), which a
+ * change or a deletion of one is drawn on the moment it is asked, and a new
+ * one once the service has made it, each answered once the list drawn
+ * shows it. Behind a closed account gate, or on a run
  * that sends nothing, every ask answers unanswered. A webhook's secret is
  * the one secret answered here, by root AGENTS.md's carve-out: one the
  * service minted as a webhook was made, or one minted here at the window's
@@ -138,50 +150,70 @@ function composed(
     [AUTOMATION_FOLLOW.WORKSPACE_RUNS]: new Map<string, TxWait>(),
   };
 
+  /** Each followed workspace's automations in a collection, by the workspace's id, for as long as its follow stands. */
+  const lists = new Map<string, AutomationListCollections>();
+
+  /** The followed list that holds an automation, and the workspace it is of; none where no followed list holds it. */
+  const listShowing = (automationId: string) => {
+    for (const [workspaceId, list] of lists) {
+      if (list.holds(automationId)) return { workspaceId, list };
+    }
+    return undefined;
+  };
+
   /**
-   * A write confirmed once its transaction arrives on any of the follows
-   * that would show it; a write that changed nothing, or one no follow
-   * hands a wait for, waits for nothing, and one not confirmed in time is
-   * answered all the same.
+   * A write confirmed once its transaction arrives on every follow that
+   * would show it, so no view the window draws after the answer lacks it; a
+   * write that changed nothing, or one no follow hands a wait for, waits for
+   * nothing, and one not confirmed in time is answered all the same.
    */
   const confirmed = (txid: string | undefined, on: readonly (TxWait | undefined)[]) =>
     Effect.suspend(() => {
       const standing = on.filter((wait): wait is TxWait => wait !== undefined);
-      return txid === undefined || standing.length === 0
+      return txid === undefined
         ? Effect.void
-        : Effect.raceAll(standing.map((wait) => confirmWrite(wait, txid)));
+        : Effect.asVoid(
+            Effect.all(
+              standing.map((wait) => confirmWrite(wait, txid)),
+              { concurrency: "unbounded" },
+            ),
+          );
     });
 
-  /** The workspace whose followed list last drew each automation, by the automation's id. */
-  const listedIn = new Map<string, string>();
-
-  /** A workspace's list as it now stands drawn: what it holds is noted under it, and what it dropped forgotten. */
-  const drawn = (workspaceId: string, automations: readonly { readonly id: string }[]) => {
-    const held = new Set(automations.map((each) => each.id));
-    for (const [id, listed] of listedIn) {
-      if (listed === workspaceId && !held.has(id)) listedIn.delete(id);
-    }
-    for (const id of held) listedIn.set(id, workspaceId);
+  /**
+   * The waits of the follows that show a write to an automation: its
+   * workspace's list, named or as a followed list holds it, and, for a run,
+   * its runs and its workspace's runs, each of which a run moves. Note that
+   * no other follow is waited on, since a read whose rows the write did not
+   * move never carries its transaction and would only hold the write to its
+   * timeout.
+   */
+  const waitsShowing = (automationId: string, workspaceId: string | undefined, ran: boolean) => {
+    const listed = workspaceId ?? listShowing(automationId)?.workspaceId;
+    return [
+      listed === undefined ? undefined : waits[AUTOMATION_FOLLOW.WORKSPACE].get(listed),
+      ran ? waits[AUTOMATION_FOLLOW.RUNS].get(automationId) : undefined,
+      ran && listed !== undefined ? waits[AUTOMATION_FOLLOW.WORKSPACE_RUNS].get(listed) : undefined,
+    ];
   };
 
   /**
-   * The waits of the follows that show an automation: its workspace's list,
-   * named or as a followed list last drew it, and, with `history`, its runs.
-   * Note that no other follow is waited on, since a list that never drew the
-   * automation never carries its transaction and would only hold the write
-   * to its timeout.
+   * A change to an automation, or its deletion, drawn at once on the
+   * followed list that holds it and standing until that list carries it
+   * (`automation-collections.ts`); one no followed list holds is only
+   * written, as no window draws it.
    */
-  const waitsShowing = (
+  const writtenOver = <Answer>(
     automationId: string,
-    workspaceId: string | undefined,
-    history: boolean,
-  ) => {
-    const listed = workspaceId ?? listedIn.get(automationId);
-    return [
-      listed === undefined ? undefined : waits[AUTOMATION_FOLLOW.WORKSPACE].get(listed),
-      history ? waits[AUTOMATION_FOLLOW.RUNS].get(automationId) : undefined,
-    ];
-  };
+    change: () => Partial<AutomationRow> | typeof ROW_GONE,
+    written: Effect.Effect<RowWritten<AutomationRow, Answer> | RowRefused<Answer>>,
+  ): Effect.Effect<Answer> =>
+    Effect.suspend(() => {
+      const showing = listShowing(automationId);
+      return showing === undefined
+        ? Effect.map(written, (result) => ("refused" in result ? result.refused : result.answer))
+        : showing.list.write(automationId, change, written);
+    });
 
   /** The service asked behind the gate, over the host's own HTTP client. */
   const asked = <Answer>(
@@ -207,11 +239,12 @@ function composed(
           "an automation names where it stands, a name, a trigger, and an action",
         );
         const answer = yield* asked(client.create(made));
+        // A new automation is drawn on its workspace's followed list before its create answers.
         if ("automation" in answer) {
-          yield* confirmed(
-            answer.txid,
-            waitsShowing(answer.automation.id, answer.automation.workspaceId, false),
-          );
+          const { automation, txid } = answer;
+          const list =
+            automation.workspaceId === undefined ? undefined : lists.get(automation.workspaceId);
+          if (list !== undefined) yield* list.made(automation, txid);
         }
         return carried<AutomationView>(answer);
       }),
@@ -222,14 +255,19 @@ function composed(
           params,
           "a change names an automation and what changes",
         );
-        const answer = yield* asked(client.change(change));
-        if ("automation" in answer) {
-          yield* confirmed(
-            answer.txid,
-            waitsShowing(answer.automation.id, answer.automation.workspaceId, false),
-          );
-        }
-        return carried<AutomationView>(answer);
+        return yield* writtenOver(
+          change.automationId,
+          () => changedFields(change.change),
+          Effect.map(asked(client.change(change)), (answer) =>
+            "automation" in answer
+              ? {
+                  answer: carried<AutomationView>(answer),
+                  txid: answer.txid,
+                  fields: writtenFields(answer.automation),
+                }
+              : { refused: carried<AutomationView>(answer) },
+          ),
+        );
       }),
     [GATEWAY_METHOD.AUTOMATIONS_DELETE]: (params) =>
       Effect.gen(function* () {
@@ -238,12 +276,20 @@ function composed(
           params,
           "a delete names an automation",
         );
-        const answer = yield* asked(client.remove(named));
-        // A delete takes the automation off its list and its runs out of its history.
-        if ("deleted" in answer) {
-          yield* confirmed(answer.txid, waitsShowing(named.automationId, undefined, true));
-        }
-        return carried<AutomationDeletedView>(answer);
+        // Note that a delete is confirmed on its list alone, since its runs' follow ends not found rather than carrying it.
+        return yield* writtenOver(
+          named.automationId,
+          () => ROW_GONE,
+          Effect.map(asked(client.remove(named)), (answer) =>
+            "deleted" in answer
+              ? {
+                  answer: carried<AutomationDeletedView>(answer),
+                  txid: answer.txid,
+                  fields: ROW_GONE,
+                }
+              : { refused: carried<AutomationDeletedView>(answer) },
+          ),
+        );
       }),
     [GATEWAY_METHOD.AUTOMATIONS_RUN]: (params) =>
       Effect.gen(function* () {
@@ -253,7 +299,7 @@ function composed(
           "a run names an automation and a key",
         );
         const answer = yield* asked(client.runNow(run));
-        // A run stands in its automation's followed history and as the last run on a followed list.
+        // A run stands in its automation's followed history, in its workspace's followed runs, and as the last run on a followed list.
         if ("run" in answer) {
           yield* confirmed(answer.txid, waitsShowing(run.automationId, undefined, true));
         }
@@ -298,39 +344,54 @@ function composed(
         const userId = dependencies.accountId();
         /** The wait this follow last handed, which only it lets go of. */
         let handed: TxWait | undefined;
-        const follow = followAutomations(
-          {
-            liveList: (workspaceId, poll, after) =>
-              userId === undefined
-                ? Effect.succeed(LIVE_SIGNED_OUT)
-                : asked(client.listLive(workspaceId, userId, poll, after)),
-            liveRuns: (automationId, poll, after) =>
-              userId === undefined
-                ? Effect.succeed(LIVE_SIGNED_OUT)
-                : asked(client.runsLive(automationId, userId, poll, after)),
-            liveWorkspaceRuns: (workspaceId, poll, after) =>
-              userId === undefined
-                ? Effect.succeed(LIVE_SIGNED_OUT)
-                : asked(client.workspaceRunsLive(workspaceId, userId, poll, after)),
+        const told = (followed: AutomationFollowed) =>
+          kernel.emit(GATEWAY_EVENT.AUTOMATIONS_CHANGED, carried(followed));
+        /** A workspace's automations in a collection for as long as this follow stands, which a write to one is drawn on; none for a history. */
+        const listed = Effect.gen(function* () {
+          if (scope.kind !== AUTOMATION_FOLLOW.WORKSPACE) return undefined;
+          const list = yield* automationListCollections({
+            draw: (automations) => told({ scope, view: { automations } }),
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
-            publish: (followed: AutomationFollowed) => {
-              if (
-                followed.scope.kind === AUTOMATION_FOLLOW.WORKSPACE &&
-                "automations" in followed.view
-              ) {
-                drawn(followed.scope.id, followed.view.automations);
-              }
-              kernel.emit(GATEWAY_EVENT.AUTOMATIONS_CHANGED, carried(followed));
-            },
-            // Note that a follow lets go only of its own wait, since one started over may hand its wait first.
-            onTxWait: (wait) => {
-              const standing = waits[scope.kind];
-              if (wait !== undefined) standing.set(scope.id, wait);
-              else if (standing.get(scope.id) === handed) standing.delete(scope.id);
-              handed = wait;
-            },
-          },
-          scope,
+            txWait: () => handed,
+          });
+          lists.set(scope.id, list);
+          // Note that a follow lets go only of its own list, since one started over may stand first.
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              if (lists.get(scope.id) === list) lists.delete(scope.id);
+            }),
+          );
+          return list;
+        });
+        const follow = Effect.scoped(
+          Effect.flatMap(listed, (list) =>
+            followAutomations(
+              {
+                liveList: (workspaceId, poll, after) =>
+                  userId === undefined
+                    ? Effect.succeed(LIVE_SIGNED_OUT)
+                    : asked(client.listLive(workspaceId, userId, poll, after)),
+                liveRuns: (automationId, poll, after) =>
+                  userId === undefined
+                    ? Effect.succeed(LIVE_SIGNED_OUT)
+                    : asked(client.runsLive(automationId, userId, poll, after)),
+                liveWorkspaceRuns: (workspaceId, poll, after) =>
+                  userId === undefined
+                    ? Effect.succeed(LIVE_SIGNED_OUT)
+                    : asked(client.workspaceRunsLive(workspaceId, userId, poll, after)),
+                takeList: (rows) => (list === undefined ? Effect.void : list.answer(rows)),
+                publish: told,
+                // Note that a follow lets go only of its own wait, since one started over may hand its wait first.
+                onTxWait: (wait) => {
+                  const standing = waits[scope.kind];
+                  if (wait !== undefined) standing.set(scope.id, wait);
+                  else if (standing.get(scope.id) === handed) standing.delete(scope.id);
+                  handed = wait;
+                },
+              },
+              scope,
+            ),
+          ),
         );
         // Following again starts over, so a window that opens on what another already follows hears it at once.
         yield* FiberMap.run(follows[scope.kind], scope.id, follow);
@@ -357,13 +418,12 @@ function composed(
       }),
   };
 
-  const reset = Effect.andThen(
+  const reset = Effect.asVoid(
     Effect.all([
       FiberMap.clear(follows.workspace),
       FiberMap.clear(follows.runs),
       FiberMap.clear(follows.workspaceRuns),
     ]),
-    Effect.sync(() => listedIn.clear()),
   );
 
   return { methods, lifetime: Effect.void, reset };

@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
@@ -82,19 +82,19 @@ const TASK: TaskSummary = {
 };
 const OTHER_TASK = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Batch the invitations",
   createdAt: 3,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 
 /** An agent of the task archived since, whose Pull request tab the task may still keep. */
-const ARCHIVED: CodingAgentSummary = {
+const ARCHIVED: AgentSummary = {
   ...AGENT,
   id: "5e7d9c3b-1a2f-4b6e-9d8c-7f6a5b4c3d2e",
   title: "Draft the invitation email",
@@ -163,18 +163,18 @@ const follows = followedInboxes(() => ({ items: [ITEM] }));
 
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   switch (request.kind) {
-    case ACT_KIND.CODING_AGENTS_INBOX_READ_STATE:
+    case ACT_KIND.AGENTS_INBOX_READ_STATE:
       readMarks.push(`${request.payload.unread ? "unread" : "read"}:${request.payload.itemId}`);
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
         value: { id: request.payload.itemId, unread: request.payload.unread },
       });
-    case ACT_KIND.CODING_AGENTS_LIST:
+    case ACT_KIND.AGENTS_LIST:
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
         value: { agents: [ARCHIVED, AGENT] },
       });
-    case ACT_KIND.CODING_AGENTS_PULL_REQUEST:
+    case ACT_KIND.AGENTS_PULL_REQUEST:
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
         value: {
@@ -214,9 +214,11 @@ async function inbox(
   fakeActPort({ ...fakeActPortCalls(), ...follows.procedures });
   handState(NO_EXPERIMENTS);
   function Page() {
-    const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
-    // Whether the list was asked for, which the window keeps as the Tasks tab does.
-    const [listed, setListed] = useState(false);
+    // Note that the item stands chosen, as a press on its row chooses it.
+    const [chosen, setChosen] = useState<InboxChoice | undefined>({
+      taskId: TASK.id,
+      itemId: ITEM.id,
+    });
     const panelFor = chosen !== undefined && "taskId" in chosen ? chosen.taskId : undefined;
     // The task's agents as the Inbox read them, which the window's own hook holds its panel to (`use-tasks-tab.ts`).
     const taskAgents = useInboxTaskAgents(panelFor);
@@ -251,8 +253,7 @@ async function inbox(
             onChoose: setChosen,
             onOpenItem: () => undefined,
             onOpenChannel: () => undefined,
-            listed,
-            onListed: setListed,
+            onClear: () => setChosen(undefined),
             pages,
             onTaskAgents: taskAgents.onRead,
           },
@@ -466,4 +467,71 @@ test("an agent's tab beside the Inbox hangs the agent's card, as its tab in the 
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.ok(card, "the agent's card is hung");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Batch the invitations");
+});
+
+test("an agent beside the Inbox has the agent's menu from its tab's ⋯ and its right-click, whose Open in task, as ⌘O while the panel holds the keys, opens it in its task", async () => {
+  const { container, left } = await inbox();
+  await pressChip(container, "Batch the invitations");
+  const aside = container.querySelector<HTMLElement>('aside[aria-label="Panel"]');
+  assert.ok(aside, "the panel stands beside the Inbox");
+  /** What the open menu offers, by each item's words, the menu left open. */
+  const offered = () => {
+    const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
+    assert.ok(menu, "a menu stands open");
+    const items = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    return { menu, items, words: items.map((item) => item.textContent ?? "") };
+  };
+  const closeMenu = (menu: HTMLElement) =>
+    act(() => {
+      menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+
+  const more = aside.querySelector<HTMLButtonElement>(
+    'button[aria-label="Batch the invitations actions"]',
+  );
+  assert.ok(more, "the agent's tab puts a ⋯ in the panel's bar");
+  act(() => more.click());
+  const fromMore = offered();
+  const agentMenu = [
+    "Copy link",
+    "Copy concise transcript",
+    "Copy full transcript",
+    "Rename",
+    "Show terminal",
+    "Open in task",
+    "Archive",
+    "Permanently delete",
+  ];
+  assert.deepEqual(
+    fromMore.words.map((words) => agentMenu.find((item) => words.startsWith(item))),
+    agentMenu,
+  );
+  closeMenu(fromMore.menu);
+
+  const tab = aside.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+  assert.ok(tab);
+  act(() => {
+    tab.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 20 }),
+    );
+  });
+  const fromRightClick = offered();
+  assert.ok(fromRightClick.words[0]?.startsWith("Close"), "its tab's keeping leads");
+  assert.deepEqual(
+    agentMenu.filter((item) => fromRightClick.words.some((words) => words.startsWith(item))),
+    agentMenu,
+    "then the agent's own menu",
+  );
+  const inTask = fromRightClick.items.find((item) => item.textContent?.startsWith("Open in task"));
+  assert.ok(inTask);
+  await act(async () => inTask.click());
+  assert.deepEqual(left.went, [`${TASK.id} agent ${AGENT.id}`]);
+
+  act(() => tab.focus());
+  act(() => {
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "o", code: "KeyO", metaKey: true, bubbles: true }),
+    );
+  });
+  assert.deepEqual(left.went, [`${TASK.id} agent ${AGENT.id}`, `${TASK.id} agent ${AGENT.id}`]);
 });

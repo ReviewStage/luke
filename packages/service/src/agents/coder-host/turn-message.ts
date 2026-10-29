@@ -14,10 +14,10 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  type CodingAgent,
+  type Agent,
   readNativeHanded,
   recordNativeHanded,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
 import { turnsBefore } from "@luke/database/models/message-reads";
 import { readPlanCommentThreads } from "@luke/database/models/plan-comments";
 import { listRevisions } from "@luke/database/models/plan-revisions";
@@ -26,8 +26,8 @@ import type { ConversationTarget } from "@luke/database/models/writer";
 import { Effect, Option, Result, Schema } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
-import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
+import type { EveHostTurn } from "../eve-host/bounds.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { markDeskNoticesRead, type OperatorDesk, readOperatorDesk } from "../operator-desk.js";
 import { isOperator } from "../steward.js";
 import {
@@ -45,7 +45,7 @@ import {
 
 /** The turn opening: its kind, as its request named it, and its store id. */
 export interface CoderTurn {
-  readonly kind: BrainHostTurn | undefined;
+  readonly kind: EveHostTurn | undefined;
   readonly turnId: string | undefined;
 }
 
@@ -71,9 +71,7 @@ const writeHanded = Schema.encodeUnknownResult(TurnHandedSchema);
  * member's open work as it stands; nothing for any other agent, or where
  * a read failed, which is logged, so the turn still opens.
  */
-const deskOf = (
-  agent: CodingAgent,
-): Effect.Effect<OperatorDesk | undefined, never, DatabaseServices> =>
+const deskOf = (agent: Agent): Effect.Effect<OperatorDesk | undefined, never, DatabaseServices> =>
   isOperator(agent)
     ? readOperatorDesk(agent).pipe(
         Effect.tapError(logStoreFailure),
@@ -111,7 +109,7 @@ const previousTurnStart = (target: ConversationTarget, turnId: string | undefine
  */
 const taskOf = (
   admitted: AdmittedConversation,
-  agent: CodingAgent,
+  agent: Agent,
   turn: CoderTurn,
   handed: TurnHanded,
   now: number,
@@ -130,11 +128,7 @@ const taskOf = (
     if (Option.isNone(stored)) return undefined;
     const threads = Option.getOrElse(comments, () => []);
     const key = taskKey(stored.value, threads);
-    // Note that a turn opened on a spoken line, heard or not, carries no task in its message.
-    const opening =
-      since === undefined &&
-      turn.kind !== BRAIN_HOST_TURN.SPOKEN &&
-      turn.kind !== BRAIN_HOST_TURN.UNHEARD;
+    const opening = since === undefined;
     const saved =
       since !== undefined &&
       savedByAnotherSince(
@@ -153,8 +147,8 @@ const taskOf = (
 
 /**
  * The message the agent's turn opens with after the history, and what the
- * session has handed once it is: the call's words on a spoken turn, or the
- * line saying they still hold or no longer do (`turnKindWords`); the
+ * session has handed once it is: after a spoken turn, the line saying the
+ * call's words no longer hold (`turnKindWords`); the
  * developer's time on every turn; the task as it stands where someone other
  * than the agent saved the plan since its previous turn started, or the rest
  * of it is not what the session last handed (`handed`); an operator's desk,
@@ -169,7 +163,7 @@ const taskOf = (
  */
 export function coderTurnMessage<R>(
   admitted: AdmittedConversation,
-  agent: CodingAgent,
+  agent: Agent,
   turn: CoderTurn,
   handed: TurnHanded,
   now: number,
@@ -187,13 +181,11 @@ export function coderTurnMessage<R>(
     const deskKey = desk === undefined ? handed.desk : contentKey(desk.standing);
     const fresh = desk !== undefined && (desk.notices.length > 0 || deskKey !== handed.desk);
     const desked = fresh ? [desk.text] : [];
-    const spoken = turn.kind === BRAIN_HOST_TURN.SPOKEN;
-    const kind = turnKindWords(turn.kind, handed, agent.taskId !== null);
+    const kind = turnKindWords(handed);
     const taskHanded = task === undefined ? handed.task : task.key;
     const next: TurnHanded = {
       ...(taskHanded === undefined ? undefined : { task: taskHanded }),
       ...(deskKey === undefined ? undefined : { desk: deskKey }),
-      ...(spoken ? { spoken: true, callWords: true } : undefined),
       opened: true,
       ...(flushed || handed.flushTold === true ? { flushTold: true } : undefined),
     };
@@ -210,7 +202,7 @@ export function coderTurnMessage<R>(
  * fails is logged, and the notices are handed again on the next turn.
  */
 export function deskHandedRead(
-  agent: CodingAgent,
+  agent: Agent,
   message: ComposedTurnMessage,
 ): Effect.Effect<void, never, DatabaseServices> {
   const { desk } = message;

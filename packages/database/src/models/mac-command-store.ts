@@ -1,4 +1,9 @@
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND } from "@luke/features/agent-wire";
+import {
+  AUTOMATION_FIRING,
+  AUTOMATION_RUN_STATUS,
+  FIRING_HANDS_OUTSIDE_WORDS,
+} from "@luke/features/automation-wire";
 import {
   MAC_COMMAND_KIND,
   type MacCommand,
@@ -18,6 +23,7 @@ import {
   isNull,
   lt,
   ne,
+  notLike,
   or,
   type SQL,
   sql,
@@ -27,10 +33,12 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, queryBuilder } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { agentTable } from "../schemas/agent.js";
+import { automationRun } from "../schemas/automation.js";
 import { macCommand, macCommandListener } from "../schemas/mac-command.js";
-import { conversations, messages } from "../schemas/storage.js";
+import { conversations, messages, standingLine } from "../schemas/storage.js";
 import { MESSAGE_SENDER } from "../storage-vocabulary.js";
+import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
 import type { ConversationTarget } from "./writer.js";
 
@@ -222,37 +230,118 @@ const findResult = SqlSchema.findOneOption({
 const parent = alias(conversations, "parent");
 
 /** The agent that sent a line, read for whose it is. */
-const sendingAgent = alias(codingAgent, "sending_agent");
+const sendingAgent = alias(agentTable, "sending_agent");
 
 /** The root's developer lines before one of them, read for whether it is the first, the prompt the agent was started on. */
 const earlierLine = alias(messages, "earlier_line");
 
-/** The agent the root conversation is of, read for whether it is an operator, and whether it was started on a prompt or a plan at all. */
-const startedAgent = alias(codingAgent, "started_agent");
+/** The agent the root conversation is of, read for whether it is an operator, whether it was started on a prompt or a plan at all, and what fired the automation's run that started it. */
+const startedAgent = alias(agentTable, "started_agent");
+
+/** The firings whose run hands its agent words its owner did not write beside the automation's prompt. */
+const OUTSIDE_FIRINGS = Object.values(AUTOMATION_FIRING).filter(
+  (kind) => FIRING_HANDS_OUTSIDE_WORDS[kind],
+);
+
+/** That the automation's run that started the root's agent was fired by words its owner did not write, as the agent's origin keeps it whatever becomes of the automation. */
+const STARTED_ON_OUTSIDE_WORDS = inArray(
+  sql<string | null>`${startedAgent.automationOrigin} -> 'firing' ->> 'kind'`,
+  OUTSIDE_FIRINGS,
+);
 
 /**
- * One line of the conversation's root, or the root's own where it is one,
+ * That a run fired by words its owner did not write was handed to the root's
+ * agent: the run that started it, or one sent to it, which is claimed for
+ * the agent before its line is sent. A run that failed handed it nothing,
+ * since a send refused withdraws its line, so only one that started counts.
+ * Note that the runs go with their automation, so this holds only while it
+ * stands.
+ */
+const HANDED_OUTSIDE_RUN = exists(
+  queryBuilder
+    .select({ id: automationRun.id })
+    .from(automationRun)
+    .where(
+      and(
+        or(
+          eq(automationRun.claimedAgentId, startedAgent.id),
+          eq(automationRun.codingAgentId, startedAgent.id),
+        ),
+        eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
+        inArray(sql<string>`${automationRun.firing} ->> 'kind'`, OUTSIDE_FIRINGS),
+      ),
+    ),
+);
+
+/** What an automation's or GitHub's line says of whether it carries words its owner did not write: `true` or `false`, or null on a line kept before it said. */
+const LINE_OUTSIDE_WORDS = sql<string | null>`${messages.metadata} ->> 'outside_words'`;
+
+/** The logins of GitHub's Apps, every one of which ends with `[bot]`, which no person's login can spell. */
+const APP_LOGINS = "%[bot]";
+
+/** That a GitHub line carries words a person chose, what a review or a comment says or a review's inline comments, which its metadata keeps only where there are some, by no App. */
+const GITHUB_LINE_HAS_PERSONS_WORDS = and(
+  or(
+    isNotNull(sql`${messages.metadata} ->> 'words'`),
+    isNotNull(sql`${messages.metadata} -> 'comments'`),
+  ),
+  notLike(sql<string>`${messages.metadata} ->> 'by'`, APP_LOGINS),
+);
+
+/** A line another account put into a conversation: what kind of sender put it there, none for a line kept before senders were, when, and whether the transcript shows it, which a line its hand-over withdrew it does not. */
+const ForeignLineSchema = Schema.Struct({
+  sender: Schema.NullOr(Schema.Literals(Object.values(MESSAGE_SENDER))),
+  createdAt: InstantColumnSchema,
+  shown: Schema.Boolean,
+});
+
+export type ForeignLine = typeof ForeignLineSchema.Type;
+
+/**
+ * The first line of the conversation's root, or the root's own where it is one,
  * that another account put there: a member other than the owner, a former
- * member, or an agent that is not the owner's own or is gone. A developer's
+ * member, or an agent that is not the owner's own or is gone. An
+ * automation's line counts where what fired its run put words its owner did
+ * not write beside the automation's prompt: a webhook's body, an
+ * integration's event, or a GitHub event's (`FIRING_HANDS_OUTSIDE_WORDS`),
+ * as the line says itself (`outside_words`); a line kept before it said
+ * counts where the run that started the agent was so fired, or a run so
+ * fired was sent to it while its automation stands. A schedule's run and a
+ * "Run now" carry the owner's prompt alone, so an operator's heartbeat is
+ * its owner's. A GitHub line counts where it carries a review's or a
+ * comment's words by a person other than the owner, which on a public
+ * repository anyone may write, as the line says itself (`outside_words`,
+ * `github/agent-wakes.ts`); an App's words never count. A line kept before
+ * it said counts where it carries a person's words, whoever wrote them,
+ * since nothing kept says whose GitHub account wrote them. A failed check's
+ * line carries none. A developer's
  * line written before senders were kept, a `user` row with no sender, counts
  * too, because nothing says whose it was; all but the root's first where the
  * agent was started on a prompt or a plan, which that first line is, written
  * untagged by eve's relay for every agent started before the start wrote it
- * with its sender (`coder-host/start.ts`). A blank agent was started on
+ * with its sender (`coder-host/start.ts`), unless the automation's run that
+ * started the agent was fired by words its owner did not write, which that
+ * first line holds. A blank agent was started on
  * none, so its first line is whoever's first steer, and counts. An
  * operator's untagged lines are its owner's and never count, because its
  * conversation is its owner's alone: anyone else's words reach it tagged,
  * and its untagged lines are the opening eve's relay wrote before the
  * service sent it as Luke's (`coder-host/operator.ts`) and its owner's own
- * from before senders were kept.
+ * from before senders were kept. A line its hand-over withdrew counts as
+ * well, unlike in every read that shows a line, because eve may still hand
+ * it to a turn (`writer.ts`'s `withdrawUntakenLine`).
  */
 const findForeignLine = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: ForeignLineSchema,
   execute: ({ userId, conversationId }) =>
     Database.use((db) =>
       db
-        .select({ id: messages.id })
+        .select({
+          sender: messages.sender,
+          createdAt: messages.createdAt,
+          shown: sql<boolean>`${standingLine(messages)}`,
+        })
         .from(conversations)
         .leftJoin(parent, eq(parent.id, conversations.parentConversationId))
         .innerJoin(
@@ -278,11 +367,26 @@ const findForeignLine = SqlSchema.findOneOption({
                 or(isNull(sendingAgent.userId), ne(sendingAgent.userId, userId)),
               ),
               and(
+                eq(messages.sender, MESSAGE_SENDER.AUTOMATION),
+                or(
+                  eq(LINE_OUTSIDE_WORDS, "true"),
+                  and(isNull(LINE_OUTSIDE_WORDS), or(STARTED_ON_OUTSIDE_WORDS, HANDED_OUTSIDE_RUN)),
+                ),
+              ),
+              and(
+                eq(messages.sender, MESSAGE_SENDER.GITHUB),
+                or(
+                  eq(LINE_OUTSIDE_WORDS, "true"),
+                  and(isNull(LINE_OUTSIDE_WORDS), GITHUB_LINE_HAS_PERSONS_WORDS),
+                ),
+              ),
+              and(
                 eq(messages.role, MESSAGE_ROLE.USER),
                 isNull(messages.sender),
-                or(isNull(startedAgent.kind), ne(startedAgent.kind, CODING_AGENT_KIND.OPERATOR)),
+                or(isNull(startedAgent.kind), ne(startedAgent.kind, AGENT_KIND.OPERATOR)),
                 or(
                   and(isNull(startedAgent.prompt), isNull(startedAgent.planSnapshot)),
+                  STARTED_ON_OUTSIDE_WORDS,
                   exists(
                     db
                       .select({ seq: earlierLine.seq })
@@ -300,6 +404,7 @@ const findForeignLine = SqlSchema.findOneOption({
             ),
           ),
         )
+        .orderBy(asc(messages.seq))
         .limit(1),
     ),
 });
@@ -324,15 +429,24 @@ export function macListeningSince(userId: string, since: Date): TaskStoreEffect<
 
 /**
  * Whether anyone but the conversation's owner has put words into it: a line
- * another member sent, one an agent that is not the owner's own sent, or one
- * whose sender was never kept past the opening prompt, of an agent that is
- * not an operator, in the conversation
+ * another member sent, one an agent that is not the owner's own sent, one an
+ * automation sent with words its owner did not write, such as a webhook's
+ * body, one GitHub sent with a review or a comment by a person other than
+ * the owner, or one whose sender was never kept past the opening prompt, of
+ * an agent that is not an operator, in the conversation
  * or, for a worker's, in the agent's it was delegated from. Note that a line
- * the service itself sends, such as a wake, is not counted, because no other
- * account wrote it.
+ * the service itself sends, such as a wakeup or a failed check, is not
+ * counted, because no other account wrote it.
  */
 export function heardFromAnotherAccount(target: ConversationTarget): TaskStoreEffect<boolean> {
   return Effect.map(findForeignLine(target), Option.isSome);
+}
+
+/** The first line another account put into the conversation, as `heardFromAnotherAccount` counts one; none where no one has. */
+export function firstForeignLine(
+  target: ConversationTarget,
+): TaskStoreEffect<Option.Option<ForeignLine>> {
+  return findForeignLine(target);
 }
 
 /** Queues one command for the account's Mac, under the id its caller minted. */

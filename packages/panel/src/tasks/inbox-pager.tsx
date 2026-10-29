@@ -59,8 +59,8 @@ import { cardTitle } from "./tool-call-model.js";
 
 /** What a hint names as the key it is reached by: the chord, on the row's press, the row's card hung through `RowHintOptions` beside it. */
 function keyHint(chord: ShortcutChord): ListRowHint {
-  return ({ label, children }) => (
-    <RowHint label={label}>
+  return ({ label, row, children }) => (
+    <RowHint label={label} row={row}>
       {cloneElement(children, { "aria-keyshortcuts": shortcutAria(chord) })}
     </RowHint>
   );
@@ -148,7 +148,6 @@ export function InboxNextUp({ next }: { next: InboxNext }): React.JSX.Element {
       <List label="Next item" variant={LIST_VARIANT.CARD}>
         <RowHintOptions
           card={<InboxItemCard listed={listed} now={now} models={models} readerId={readerId} />}
-          cardBeside
         >
           <ListRow
             leading={

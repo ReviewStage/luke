@@ -4,6 +4,7 @@ import {
   GAP,
   List,
   ListRow,
+  SELECT_BOX_PLACE,
   SelectionBar,
   SelectionRegion,
   Stack,
@@ -22,7 +23,9 @@ import { CatalogSection } from "../section";
  * click still opening its row; one row unavailable, which nothing chooses;
  * and the bar over it while any is chosen, its count, its acts, and Clear.
  * Then cards of the app's own under two heads, chosen the same way across
- * both in one region.
+ * both in one region, each with the box at its start that the pointer
+ * chooses it by, shown under the pointer and on every card while any is
+ * chosen, and X choosing the card in hand.
  */
 
 const TASKS = [
@@ -99,9 +102,10 @@ function ChoosingCards(): React.JSX.Element {
               {group.head}
             </Text>
             {group.tasks.map((task) => (
-              <Card key={task.id}>
+              <Card key={task.id} className="ps-select-gutter">
                 <CardPress
                   selectKey={task.id}
+                  selectBox={SELECT_BOX_PLACE.GUTTER}
                   disabled={task.id === UNAVAILABLE}
                   onPress={() => setOpen(task.id)}
                 >
@@ -122,7 +126,10 @@ function Selection(): React.JSX.Element {
       <CatalogSection id="selection-tasks" title="Rows chosen with ⌘ and ⇧, and the bar over them">
         <ChoosingTasks />
       </CatalogSection>
-      <CatalogSection id="selection-cards" title="Cards of the app's own, chosen across groups">
+      <CatalogSection
+        id="selection-cards"
+        title="Cards of the app's own, chosen across groups by their boxes, ⌘, ⇧, and X"
+      >
         <ChoosingCards />
       </CatalogSection>
     </>

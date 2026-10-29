@@ -1,15 +1,15 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { settleEndedSessionTurn } from "@luke/database/models/abandoned-turns";
 import {
-  type CodingAgent,
-  type CodingAgentLatestTurn,
+  type Agent,
+  type AgentLatestTurn,
   dispatchMentioningServers,
   latestTurnsOfReached,
   RUNNING_TURN_STATUSES,
-  readCodingAgent,
-  readCodingAgentRouting,
+  readAgent,
+  readAgentRouting,
   taskNamesOf,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import {
   claimRuntimeSession,
@@ -25,7 +25,7 @@ import {
   type StoreWriter,
 } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentAttachment } from "@luke/features/agent-wire";
 import { MENTION_KIND, withoutMemberLinks } from "@luke/features/mention-link";
 import { agentName } from "@luke/features/model-label";
 import { causeKind } from "@luke/runtime/effect";
@@ -48,20 +48,20 @@ import {
 } from "../../http/http-effect.js";
 import { controlsAgent, writesToAgent } from "../agent-reach.js";
 import { eveContent, keptHandedImages, senderLabel } from "../attached-files.js";
-import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import { EVE_HOST_TURN } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   describeUnreachable,
   EVE_SEND_OUTCOME,
   type EveTypedTurn,
   type EveUnreachable,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/eve-sessions.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 import { messageCredentialMissing } from "./agent-runtime-choice.js";
 import { failedCallRefusal } from "./runtime-sessions.js";
-import { codingAgentStatusOf } from "./status.js";
+import { agentStatusOf } from "./status.js";
 
 /**
  * steer.ts -- the developer's words handed to a coding agent: the one path a message takes, from the message box or from Luke's voice.
@@ -71,8 +71,9 @@ import { codingAgentStatusOf } from "./status.js";
  * once eve has taken them. The hand-over runs inside the conversation's
  * lock, so the turn eve opens on the line finds the row standing when its
  * own first write takes the lock, and an eve that did not take the message
- * leaves no row behind. Files the developer attached go with the words,
- * to eve and onto the row, each image kept beside the conversation first
+ * leaves the row withdrawn, read nowhere unless a turn eve hands it to
+ * after all takes it with its kind and sender. Files the developer
+ * attached go with the words, to eve and onto the row, each image kept beside the conversation first
  * and named to eve by its id (`attached-files.ts`), and so does what the words
  * mention of the plan, as it stands now (`mentioned-context.ts`), and a
  * server it mentions is handed to the agent's next turn, unless the words
@@ -82,17 +83,18 @@ import { codingAgentStatusOf } from "./status.js";
  * going away between the two. A send repeated under its key finds the line
  * it already wrote and hands eve nothing again: read once here, before
  * GitHub is asked, and once more by the writer under the lock, so two
- * sends racing under one key still send once. A row the store failed to
- * write after eve took the message is the one gap left, and the relay
- * still writes the line when the turn receives it. The turn's checkout and
+ * sends racing under one key still send once. A hand-over that answered
+ * nothing past its deadline, or whose store write failed after eve took
+ * the message, withdrew a line eve may still hand a turn, which is why the
+ * row is kept rather than deleted. The turn's checkout and
  * its credential renewals run on the developer's standing with GitHub, so
  * a sign-in that lapsed is refused here rather than failing the turn's
  * first step; a GitHub that could not be asked refuses nothing, since an
  * outage or a rate limit says nothing of that standing. The caller is any
- * member of the agent's workspace, whose task read gates the send, or for
- * an agent with no task whose membership of its
- * workspace does, and whose standing with GitHub is asked (the starter
- * alone, for an agent on its starter's own GitHub token), while the line
+ * member who reaches the agent and, for an agent on a task, its task too,
+ * which together gate the send, and whose standing with GitHub is asked
+ * (the starter alone, for an agent on its starter's own GitHub token),
+ * while the line
  * lands in the agent's conversation under the member who started it,
  * naming what sent it: the member, Luke from a call, or an automation's run.
  * A teammate's words, a member's other than the starter, are handed to eve
@@ -113,9 +115,8 @@ import { codingAgentStatusOf } from "./status.js";
  * asked, is settled failed for its session's end
  * (`@luke/database/models/abandoned-turns`'s `settleEndedSessionTurn`)
  * rather than running until the sweep's day-long bound. The words are then
- * no refusal: they open a fresh session over the same conversation, as the
- * brain's ask opens one for a conversation whose session retired
- * (`brain-host/brain-ask.ts`), and so does a message to an agent whose
+ * no refusal: they open a fresh session over the same conversation, and so
+ * does a message to an agent whose
  * session never claimed its record, past the grace its Start's session had
  * to come up in or where its Start opened none. The fresh session claims
  * the record forward, so the ended one is refused from then on, and is
@@ -134,7 +135,7 @@ import { codingAgentStatusOf } from "./status.js";
 export interface SteerLine {
   readonly text: string;
   readonly clientKey: string;
-  readonly attachments?: readonly CodingAgentAttachment[] | undefined;
+  readonly attachments?: readonly AgentAttachment[] | undefined;
   readonly sender: LineSender;
   readonly metadata?: AwaitingLineMetadata | undefined;
   /** The words the servers handed to the next turn are read from where they are not all of `text`: an automation's own prompt, never a webhook body or a GitHub event's words beside it; `text` otherwise. */
@@ -142,7 +143,7 @@ export interface SteerLine {
 }
 
 /** Another coding agent as the row of a line it sends keeps it: by its name, id, and model. */
-export function agentLineSender(agent: CodingAgent): LineSender {
+export function agentLineSender(agent: Agent): LineSender {
   return {
     kind: MESSAGE_SENDER.AGENT,
     agentId: agent.id,
@@ -185,13 +186,12 @@ const REFUSAL_OF_UNWRITTEN_LINE = {
  * second opened beside it would only lose the record to it, so the developer
  * tries again.
  */
-const opensUnclaimed = (agent: CodingAgent) =>
+const opensUnclaimed = (agent: Agent) =>
   Effect.map(
     Clock.currentTimeMillis,
     (now) =>
       (agent.planSnapshot === null && agent.prompt === null) ||
-      codingAgentStatusOf(undefined, { createdAt: agent.createdAt, now }) ===
-        CODING_AGENT_STATUS.FAILED,
+      agentStatusOf(undefined, { createdAt: agent.createdAt, now }) === AGENT_STATUS.FAILED,
   );
 
 /** An eve the client never reached reads as an outage, said in the log by its kind alone. */
@@ -211,7 +211,7 @@ const FORMER_MEMBER = "A former member";
  * under the agent's workspace; nothing for the starter's own words or any
  * other sender's, whose line already says who sent it.
  */
-const teammateLabel = (agent: CodingAgent, sender: LineSender) => {
+const teammateLabel = (agent: Agent, sender: LineSender) => {
   if (sender.kind !== MESSAGE_SENDER.MEMBER || sender.userId === agent.userId) {
     return Effect.succeed(undefined);
   }
@@ -245,10 +245,10 @@ const claimedFor = (target: ConversationTarget, sessionId: string) =>
   );
 
 /** The turn an ended session settles: the newest, where it still stood queued or running before eve was asked; none otherwise. */
-const runningTurnOf = (agent: CodingAgent) =>
+const runningTurnOf = (agent: Agent) =>
   Effect.map(
     hostedStoreOrUnavailable(latestTurnsOfReached([agent.conversationId])),
-    (turns): CodingAgentLatestTurn | undefined => {
+    (turns): AgentLatestTurn | undefined => {
       const turn = turns.get(agent.conversationId);
       return turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status) ? turn : undefined;
     },
@@ -260,11 +260,7 @@ const runningTurnOf = (agent: CodingAgent) =>
  * and the refusal stands all the same, since the sweep's bound still ends
  * the turn in time.
  */
-const settledEnded = (
-  writer: Effect.Effect<StoreWriter>,
-  agent: CodingAgent,
-  turn: CodingAgentLatestTurn,
-) =>
+const settledEnded = (writer: Effect.Effect<StoreWriter>, agent: Agent, turn: AgentLatestTurn) =>
   Effect.gen(function* () {
     const write = yield* writer;
     const now = yield* Clock.currentTimeMillis;
@@ -283,16 +279,13 @@ const settledEnded = (
 
 /**
  * Why the agent takes no message now, read again as the hand-over runs:
- * its task gone, or the agent archived or gone; nothing while it still
- * takes one.
+ * its task out of the sender's reach, or the agent archived or gone;
+ * nothing while it still takes one.
  */
-const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  agent: CodingAgent,
-) {
+const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, agent: Agent) {
   const tasks = agent.taskId === null ? undefined : yield* taskNamesOf(userId, [agent.taskId]);
   if (agent.taskId !== null && tasks?.has(agent.taskId) !== true) return HOSTED_REFUSAL.NOT_FOUND;
-  const now = yield* readCodingAgent(userId, agent.id);
+  const now = yield* readAgent(userId, agent.id);
   return Option.isNone(now) || now.value.archivedAt !== null ? HOSTED_REFUSAL.NOT_FOUND : undefined;
 });
 
@@ -303,24 +296,20 @@ export interface SteerWritten {
 }
 
 /** Hands the line to an agent of the account's workspace, as above; every refusal is the hosted vocabulary's, which the route answers as it is and the voice tool says in words. */
-export const steerCodingAgent = (
+export const steerAgent = (
   eve: AgentSessions<EveTypedTurn>,
   writer: Effect.Effect<StoreWriter>,
   userId: string,
-  agent: CodingAgent,
+  agent: Agent,
   line: SteerLine,
-) =>
-  Effect.map(
-    steerCodingAgentWritten(eve, writer, userId, agent, line),
-    (written) => written.outcome,
-  );
+) => Effect.map(steerAgentWritten(eve, writer, userId, agent, line), (written) => written.outcome);
 
-/** As `steerCodingAgent`, with the transaction that wrote the line beside what it came to. */
-export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodingAgent")(function* (
+/** As `steerAgent`, with the transaction that wrote the line beside what it came to. */
+export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(function* (
   eve: AgentSessions<EveTypedTurn>,
   writer: Effect.Effect<StoreWriter>,
   userId: string,
-  agent: CodingAgent,
+  agent: Agent,
   line: SteerLine,
 ): Effect.fn.Return<
   SteerWritten,
@@ -336,13 +325,13 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   // refused for the same one it always was; a repeat reads them all for nothing, which is rare.
   const read = yield* Effect.all(
     {
-      routing: Effect.result(hostedStoreOrUnavailable(readCodingAgentRouting(userId, agent.id))),
+      routing: Effect.result(hostedStoreOrUnavailable(readAgentRouting(userId, agent.id))),
       repeated: Effect.result(
         hostedStoreOrUnavailable(
           sentLineStands(agent.userId, agent.conversationId, sentLineId(line.clientKey)),
         ),
       ),
-      // An agent on a task answers to the task, read as the sender; one with no task, to its workspace.
+      // The sender reaches the agent, as the routing read holds, and an agent on a task its task too, read as the sender.
       task: Effect.result(
         agent.taskId === null
           ? Effect.succeed(undefined)
@@ -405,6 +394,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
           : hostedStoreOrUnavailable(
               readMentioned(userId, pointed, {
                 task,
+                agentId: agent.id,
                 workspaceId: agent.organizationId,
               }),
             ),
@@ -428,7 +418,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
     return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
   }
   const reads = yield* Effect.fromResult(reached.reads);
-  const mentioned = reviewers ? undefined : mentionedContext(pointed, task, reads);
+  const mentioned = reviewers ? undefined : mentionedContext(pointed, task, reads, agent.id);
   const running = yield* Effect.fromResult(read.running);
   const label = yield* Effect.fromResult(read.label);
   // Each image is kept beside the agent's conversation before eve is handed it, so eve is told its id and the
@@ -442,7 +432,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   let ended = false;
   const message = {
     conversationId: agent.conversationId,
-    turn: BRAIN_HOST_TURN.TYPED,
+    turn: EVE_HOST_TURN.TYPED,
     message: eveContent(line.text, attachments, mentioned, label),
     // The line's own id, which a native harness's runner names back as it takes the message; eve is never handed it.
     lineId: sentLineId(line.clientKey),

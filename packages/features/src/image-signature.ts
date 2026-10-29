@@ -8,7 +8,7 @@ import { INBOX_IMAGE_TYPE, type InboxImageType } from "./inbox-wire.js";
  * service keeps is sniffed by its signature: an inbox image read from an
  * agent's sandbox (`coder-host/inbox-image.ts`), a workspace's photo
  * (`workspace-wire.ts`), and a picture a tool answered an agent
- * (`brain-host/relay-pictures.ts`) alike. A kept picture's size is read
+ * (`eve-host/relay-pictures.ts`) alike. A kept picture's size is read
  * from its header as well, so a reader can hold its place before its bytes
  * arrive.
  */

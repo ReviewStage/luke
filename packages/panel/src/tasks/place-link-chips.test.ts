@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
@@ -83,7 +83,7 @@ const TASK: TaskSummary = {
         title: "Expire old invitations",
         model: "anthropic/claude-opus-5.5",
         effort: "high",
-        status: CODING_AGENT_STATUS.RUNNING,
+        status: AGENT_STATUS.RUNNING,
       },
     ],
     pullRequestTotal: 0,
@@ -107,7 +107,7 @@ const STATE: AppStateSnapshot = (() => {
           title: "Triage new Sentry issues",
           model: "anthropic/claude-opus-5.5",
           effort: "high",
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           createdAt: AT,
           automationId: TRIAGE,
           automationName: "Nightly triage",
@@ -267,39 +267,37 @@ function archivedAgent(id: string, planId: string | null, model: string) {
     effort: "high",
     title: "Retired sweep",
     createdAt: AT,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     archivedAt: AT,
   };
 }
 
-test("an archived agent's chip, which no list the window holds names, wears the harness read for it: on a task by its task's agents, on none by its own id", async () => {
+test("an archived agent's chip, which no list the window holds names, wears the harness read for it by its own id, an older link under its task as one under none", async () => {
   const onTask = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
   const onNone = "6f5e4d3c-2b1a-4f0e-9d8c-7b6a5f4e3d2c";
+  const models = new Map([
+    [onTask, { planId: TASK_ID, model: "openai/gpt-6.1-sol" }],
+    [onNone, { planId: null, model: "anthropic/claude-opus-5.5" }],
+  ]);
   const container = await drawn(
     `${HOME}/plan/${TASK_ID}/agent/${onTask} and ${HOME}/agent/${onNone}`,
     [],
     (request) => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
-        return {
-          status: FAKE_ANSWER.DONE,
-          value: { agents: [archivedAgent(onTask, TASK_ID, "openai/gpt-6.1-sol")] },
-        };
-      }
-      if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
-        return {
-          status: FAKE_ANSWER.DONE,
-          value: {
-            agent: {
-              ...archivedAgent(onNone, null, "anthropic/claude-opus-5.5"),
-              automationId: null,
-              workspaceId: ACME.id,
-              repository: "acme/relay",
-            },
+      const read = request.kind === ACT_KIND.AGENTS_PAGE ? request.payload.agentId : "";
+      const found = models.get(read);
+      if (found === undefined) return undefined;
+      return {
+        status: FAKE_ANSWER.DONE,
+        value: {
+          agent: {
+            ...archivedAgent(read, found.planId, found.model),
+            automationId: null,
+            workspaceId: ACME.id,
+            repository: "acme/relay",
           },
-        };
-      }
-      return undefined;
+        },
+      };
     },
   );
 

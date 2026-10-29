@@ -1,8 +1,4 @@
-import type {
-  GitHubPerson,
-  PendingReviewComment,
-  ReviewThread,
-} from "@luke/features/coding-agent-wire";
+import type { GitHubPerson, PendingReviewComment, ReviewThread } from "@luke/features/agent-wire";
 import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
 import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {

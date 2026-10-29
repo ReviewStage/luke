@@ -8,18 +8,13 @@ import {
   GITHUB_INSTALLATION_STATUS,
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
-import {
-  INTEGRATION_ROW_STATUS,
-  type IntegrationRowStatus,
-} from "@luke/database/integration-vocabulary";
+import { agentTable } from "@luke/database/schemas/agent";
 import { invitation, member, organization, user } from "@luke/database/schemas/auth";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { conversations } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
-import { workspaceIntegrationConnection } from "@luke/database/schemas/workspace-integration";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB } from "@luke/database/testing";
 import {
@@ -28,7 +23,6 @@ import {
   type AdminMetricsScope,
   type AdminWorkspacesKind,
 } from "@luke/features/admin-wire";
-import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
 import { Effect } from "effect";
@@ -77,7 +71,6 @@ function source(overrides: Partial<AdminWorkspaceListSource> = {}): AdminWorkspa
     rows: [],
     owners: [],
     installations: [],
-    integrations: [],
     summary: EMPTY_SUMMARY,
     ...overrides,
   };
@@ -126,7 +119,7 @@ describe("the workspaces builder", () => {
     assert.equal(list.summary.github.activeShare, null);
   });
 
-  test("each row carries its first owner, its installations, and its integrations, and no other row's", () => {
+  test("each row carries its first owner and its installations, and no other row's", () => {
     const row = {
       id: "workspace-a",
       name: "Northwind",
@@ -151,15 +144,6 @@ describe("the workspaces builder", () => {
             installation: { login: "northwind", status: GITHUB_INSTALLATION_STATUS.ACTIVE },
           },
         ],
-        integrations: [
-          {
-            organizationId: "workspace-a",
-            integration: {
-              provider: INTEGRATION_PROVIDER.LINEAR,
-              status: INTEGRATION_ROW_STATUS.CONNECTED,
-            },
-          },
-        ],
         summary: { ...EMPTY_SUMMARY, shared: 4, sharedWithActive: 3 },
       }),
       NOW,
@@ -170,10 +154,8 @@ describe("the workspaces builder", () => {
     assert.deepEqual(list.rows[0]?.installations, [
       { login: "northwind", status: GITHUB_INSTALLATION_STATUS.ACTIVE },
     ]);
-    assert.equal(list.rows[0]?.integrations.length, 1);
     assert.equal(list.rows[1]?.owner, null);
     assert.deepEqual(list.rows[1]?.installations, []);
-    assert.deepEqual(list.rows[1]?.integrations, []);
     assert.equal(list.summary.github.activeShare, 3 / 4);
     assert.equal(list.search, "north");
   });
@@ -262,7 +244,7 @@ const insertAgent = (
     yield* db
       .insert(conversations)
       .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
-    yield* db.insert(codingAgent).values({
+    yield* db.insert(agentTable).values({
       organizationId,
       userId,
       conversationId,
@@ -310,20 +292,6 @@ const insertInstallation = (
     }),
   );
 
-const insertIntegration = (
-  organizationId: string,
-  provider: IntegrationProvider,
-  status: IntegrationRowStatus,
-) =>
-  Database.use((db) =>
-    db.insert(workspaceIntegrationConnection).values({
-      organizationId,
-      provider,
-      status,
-      updatedAt: daysAgo(10),
-    }),
-  );
-
 const insertInvitation = (
   organizationId: string,
   inviterId: string,
@@ -364,13 +332,6 @@ const seedWorld = Effect.gen(function* () {
   yield* insertAgent(northwind, "linus", daysAgo(2), { number: 8, at: daysAgo(0) });
   yield* insertAgent(northwind, "linus", daysAgo(30), { number: 3, at: daysAgo(29) });
   yield* insertInstallation(northwind, "northwind", GITHUB_INSTALLATION_STATUS.ACTIVE);
-  yield* insertIntegration(northwind, INTEGRATION_PROVIDER.NOTION, INTEGRATION_ROW_STATUS.EXPIRED);
-  yield* insertIntegration(
-    northwind,
-    INTEGRATION_PROVIDER.LINEAR,
-    INTEGRATION_ROW_STATUS.CONNECTED,
-  );
-  yield* insertIntegration(northwind, INTEGRATION_PROVIDER.SLACK, INTEGRATION_ROW_STATUS.PENDING);
   yield* insertInvitation(northwind, "grace", INVITATION_STATUS.ACCEPTED, daysAgo(10));
   yield* insertInvitation(northwind, "grace", INVITATION_STATUS.ACCEPTED, daysAgo(-5));
   yield* insertInvitation(northwind, "grace", INVITATION_STATUS.PENDING, daysAgo(-3));
@@ -434,10 +395,6 @@ inSeededWorld(
     assert.equal(northwind?.prsMergedWeek, 2);
     assert.deepEqual(northwind?.installations, [
       { login: "northwind", status: GITHUB_INSTALLATION_STATUS.ACTIVE },
-    ]);
-    assert.deepEqual(northwind?.integrations, [
-      { provider: INTEGRATION_PROVIDER.LINEAR, status: INTEGRATION_ROW_STATUS.CONNECTED },
-      { provider: INTEGRATION_PROVIDER.NOTION, status: INTEGRATION_ROW_STATUS.EXPIRED },
     ]);
 
     assert.deepEqual(list.summary, {

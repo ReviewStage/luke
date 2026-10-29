@@ -2,13 +2,10 @@ import { Schema as EffectSchema } from "effect";
 import {
   agentBrowserTabAnswerSchema,
   agentBrowserTabsAnswerSchema,
+  browserTabsPlaceSchema,
 } from "./agent-browser-tab-wire.js";
-import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
-import {
-  codingAgentSummarySchema,
-  localAgentRefusalSchema,
-  tasklessAgentSchema,
-} from "./coding-agent-wire.js";
+import { agentAgentAnswerSchema } from "./agent-view.js";
+import { agentSummarySchema, localAgentRefusalSchema, tasklessAgentSchema } from "./agent-wire.js";
 import {
   githubIssueSummarySchema,
   githubPullRequestNumberSchema,
@@ -19,7 +16,6 @@ import {
   githubRepositoryPullRequestAnswerSchema,
   workspaceTokenRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
-import { linearIssueSummarySchema } from "./linear-wire.js";
 import {
   pageLineSchema,
   pagePlaceSchema,
@@ -41,12 +37,6 @@ import {
   workspaceSentryAnswerSchema,
   workspaceSentryDisconnectRequestSchema,
 } from "./sentry-install-wire.js";
-import {
-  taskIssueLinkAnswerSchema,
-  taskIssueLinkChangedAnswerSchema,
-  taskIssueLinksAnswerSchema,
-  taskIssueUnlinkAnswerSchema,
-} from "./task-issue-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
   planRevisionAnswerSchema,
@@ -54,6 +44,7 @@ import {
   planRevisionsAnswerSchema,
   repositoryPinRequestSchema,
   repositoryPinSchema,
+  taskAgentPinSchema,
   taskAssigneeIdSchema,
   taskCreateRequestSchema,
   taskFileRefusalSchema,
@@ -79,7 +70,6 @@ import {
 } from "./workspace-invitation-wire.js";
 import {
   formerMemberSchema,
-  linearIssuesRequestSchema,
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
@@ -100,9 +90,8 @@ import {
  * The host reads the service for these and tells the desktop the whole view
  * whenever it moves; the desktop writes it into the document the tasks
  * window draws from. Exactly one task is ever active, the one the window has
- * open, and it is the task a voice session binds to. The view carries task
- * names, documents, and what was said on the active task's calls from the
- * service, and nothing of this Mac's own: a task's repository is the
+ * open. The view carries task names and documents from the service, and
+ * nothing of this Mac's own: a task's repository is the
  * service's, named on the task itself. Beside the tasks it carries the
  * workspaces the account is a member of, and the shapes the window asks a
  * workspace made, a GitHub organization connected or disconnected, a
@@ -151,43 +140,6 @@ const tasksDocumentSchema = EffectSchema.Struct({
 
 export type TasksDocument = typeof tasksDocumentSchema.Type;
 
-/**
- * The two waits on the voice side that no live status names: the voice model
- * delegated an ask the brain has not yet taken, or words are queued
- * for Luke that his voice has not begun to say.
- */
-export const VOICE_PHASE = {
-  HANDING_OFF: "handing_off",
-  ABOUT_TO_ANSWER: "about_to_answer",
-} as const;
-
-export type VoicePhase = (typeof VOICE_PHASE)[keyof typeof VOICE_PHASE];
-
-/** The most of the brain's pending command an activity carries; the service cuts it there. */
-export const TASK_ACTIVITY_ACTION_MAX_CHARS = 120;
-
-/**
- * What each part of Luke is doing on a task call, whole, as the service's
- * `task.activity` frame says it: the voice's wait where it is in one, the
- * brain while it works on an ask with the command it is running
- * where one is pending. Nothing of the ask, and no tool's output.
- */
-export const taskActivitySchema = EffectSchema.Struct({
-  voice: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(VOICE_PHASE))),
-  // Note that the key keeps the wire's legacy spelling, renamed with the wire in the follow-up.
-  planner: EffectSchema.optionalKey(
-    EffectSchema.Struct({
-      action: EffectSchema.optionalKey(
-        EffectSchema.String.check(EffectSchema.isMaxLength(TASK_ACTIVITY_ACTION_MAX_CHARS)),
-      ),
-    }),
-  ),
-  // Note that no notetaker writes beside a call any more and no desktop draws one, so the key is optional here, never removed: this release parses a frame with or without it, while the service keeps sending `notes: false` for the earlier desktops that still require it.
-  notes: EffectSchema.optionalKey(EffectSchema.Boolean),
-});
-
-export type TaskActivity = typeof taskActivitySchema.Type;
-
 /** One run of a line in one colour per appearance, as the host's highlighter split it. */
 const codeTokenSchema = EffectSchema.Struct({
   text: EffectSchema.String,
@@ -222,18 +174,31 @@ export const tasksViewSchema = EffectSchema.Struct({
   /** The agents with no plan in the account's workspaces, newest started first, as the last list read answered; absent before the first that carried them. */
   tasklessAgents: EffectSchema.optionalKey(EffectSchema.Array(tasklessAgentSchema)),
   /**
-   * Every agent on a plan, the archived ones left out, each as its plan's
+   * Every agent on a plan, the archived ones among them, each as its plan's
    * own list names it, the first started first: present only while the list
-   * is followed live over Neon Realtime, when it is what the notices' ledger
-   * reads in place of listing each plan's agents again on a clock.
+   * is followed live over Neon Realtime, when it is what the open plan's
+   * tabs draw, and what the notices' ledger reads, the archived left out, in
+   * place of listing each plan's agents again on a clock.
    */
-  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSummarySchema)),
+  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(agentSummarySchema)),
   /**
    * Every pull request of each plan that has one, uncapped, as its row names
    * the first few: present only while the list is followed live, when the
    * Tasks page's cards name each one rather than a count of the rest.
    */
   taskPullRequests: EffectSchema.optionalKey(EffectSchema.Array(taskPullRequestsSchema)),
+  /**
+   * The reader's pins of agents on a plan, the archived ones left out: present
+   * only while the list is followed live, when the sidebar's Pinned section
+   * draws each beside the pinned tasks.
+   */
+  taskAgentPins: EffectSchema.optionalKey(EffectSchema.Array(taskAgentPinSchema)),
+  /**
+   * The tasks a rename, a pin, or where they stand, asked on this Mac and not
+   * yet carried by the list, is drawn over, so a list that holds its rows
+   * still while read moves those at once; absent where none stands.
+   */
+  pendingTasks: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
   listStatus: tasksReadSchema,
   /** Whether what the host follows live is current (`HOST_LIVE`); absent before the list's follow first says, which reads as live. */
   live: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(HOST_LIVE))),
@@ -250,19 +215,10 @@ export const tasksViewSchema = EffectSchema.Struct({
   /** The one active task, absent while the window has none open. */
   activeTaskId: EffectSchema.optionalKey(EffectSchema.String),
   document: tasksDocumentSchema,
-  /** What each part of Luke is doing on the call about the active task, as last told; absent with no task open or no word yet. */
-  activity: EffectSchema.optionalKey(taskActivitySchema),
-  /**
-   * What each part of Luke is doing on the standing call, whichever task it
-   * is about, as last told: what the floating call window draws while the
-   * call's task is not the one open. Absent before the first word and once
-   * the call has ended.
-   */
-  callActivity: EffectSchema.optionalKey(taskActivitySchema),
   /**
    * The pages agents wrote for the active plan, each by its newest version,
    * the most recently written first, as last read with the task; absent with
-   * none, and cleared with the activity. Their HTML is never held here: the
+   * none, and cleared as the task is left. Their HTML is never held here: the
    * frame that draws a page reads it alone (`brain.page`).
    */
   pages: EffectSchema.optionalKey(EffectSchema.Array(pageLineSchema)),
@@ -322,8 +278,14 @@ export const tasksPinRepositoryParamsSchema = repositoryPinRequestSchema;
 
 export type TasksPinRepositoryParams = typeof tasksPinRepositoryParamsSchema.Type;
 
-/** One change to the account's sidebar sections, as the window asks it; the service keeps them on the account. */
-export const tasksWriteSectionParamsSchema = taskSectionWriteSchema;
+/**
+ * The changes one drag or menu makes to the account's sidebar sections, as
+ * the window asks them: drawn together and written to the service in the
+ * order given, which keeps them on the account.
+ */
+export const tasksWriteSectionParamsSchema = EffectSchema.Struct({
+  writes: EffectSchema.NonEmptyArray(taskSectionWriteSchema),
+});
 
 export type TasksWriteSectionParams = typeof tasksWriteSectionParamsSchema.Type;
 
@@ -352,6 +314,8 @@ export const tasksSetStandingParamsSchema = EffectSchema.Struct({
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
+  /** The name the window knows the member assigned by, which the host draws them by until the list carries them; never sent to the service. */
+  assigneeName: EffectSchema.optionalKey(EffectSchema.String),
 }).check(EffectSchema.makeFilter(namesAStanding));
 
 export type TasksSetStandingParams = typeof tasksSetStandingParamsSchema.Type;
@@ -372,8 +336,6 @@ export const TASK_CALL_FAILURE = {
   NOT_FOUND: "not-found",
   /** The repository named is not one the Luke GitHub App reaches for the account. */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
-  /** The workspace's Linear could not be read for the issue a plan was to start from: none connected, its grant refused, or no such issue. */
-  LINEAR_UNAVAILABLE: "linear-unavailable",
   /** The device a start named for the task's agents would not take them, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). Nothing was written. */
   LOCAL_AGENT_REFUSED: "local-agent-refused",
 } as const;
@@ -390,10 +352,9 @@ export type RepositoryCallFailure = (typeof REPOSITORY_CALL_FAILURES)[number];
 
 const repositoryCallFailureSchema = EffectSchema.Literals(REPOSITORY_CALL_FAILURES);
 
-/** Why a start answered no plan: a repository call's reasons, the Linear issue it was to start from could not be read, the workspace it was to start in is none of the account's, or the device it named would not take its agents. */
+/** Why a start answered no plan: a repository call's reasons, the workspace it was to start in is none of the account's, or the device it named would not take its agents. */
 const START_CALL_FAILURES = [
   ...REPOSITORY_CALL_FAILURES,
-  TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
   TASK_CALL_FAILURE.NOT_FOUND,
   TASK_CALL_FAILURE.LOCAL_AGENT_REFUSED,
 ] as const;
@@ -408,7 +369,7 @@ export type StartCallFailure = (typeof START_CALL_FAILURES)[number];
 export const tasksStartAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     planId: EffectSchema.String,
-    agentStart: EffectSchema.optionalKey(codingAgentAgentAnswerSchema),
+    agentStart: EffectSchema.optionalKey(agentAgentAnswerSchema),
   }),
   EffectSchema.Struct({
     failure: EffectSchema.Literals(START_CALL_FAILURES),
@@ -477,11 +438,25 @@ export const tasksEditAnswerSchema = EffectSchema.Union([
 
 export type TasksEditAnswer = typeof tasksEditAnswerSchema.Type;
 
-/** A window of a file of a task's repository, as the File tab asks the host for it: the task, the path, and the window's first and last line. */
-export const tasksFileParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  ...taskFileRequestSchema.fields,
-});
+/**
+ * A repository as a read with no plan names it, as an agent an automation
+ * started names its own: the workspace whose installation reaches it, and
+ * the repository.
+ */
+const repositoryPlaceFields = {
+  workspaceId: workspaceIdSchema,
+  repository: githubRepositoryFullNameSchema,
+};
+
+/**
+ * A window of a file of a repository, as the File tab asks the host for it:
+ * the task whose repository it is, or the workspace and the repository
+ * where no task names it, the path, and the window's first and last line.
+ */
+export const tasksFileParamsSchema = EffectSchema.Union([
+  EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString, ...taskFileRequestSchema.fields }),
+  EffectSchema.Struct({ ...repositoryPlaceFields, ...taskFileRequestSchema.fields }),
+]);
 
 export type TasksFileParams = typeof tasksFileParamsSchema.Type;
 
@@ -494,16 +469,6 @@ export const tasksFileAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksFileAnswer = typeof tasksFileAnswerSchema.Type;
-
-/**
- * A repository as a read with no plan names it, as an agent an automation
- * started names its own: the workspace whose installation reaches it, and
- * the repository.
- */
-const repositoryPlaceFields = {
-  workspaceId: workspaceIdSchema,
-  repository: githubRepositoryFullNameSchema,
-};
 
 /**
  * One folder of a repository, as the File tab's tree or an `@` list asks
@@ -584,35 +549,12 @@ export type TasksIssueAnswer = typeof tasksIssueAnswerSchema.Type;
 /** The issue as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
 export const tasksIssueSchema = EffectSchema.NullOr(githubIssueSummarySchema);
 
-/** Why a call on a task's linked issues answered nothing: unanswered, the task or the link gone, or Linear unread. */
-const TASK_ISSUE_CALL_FAILURES = [
-  TASK_CALL_FAILURE.UNANSWERED,
-  TASK_CALL_FAILURE.NOT_FOUND,
-  TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
-] as const;
-
-export type TaskIssueCallFailure = (typeof TASK_ISSUE_CALL_FAILURES)[number];
-
-const taskIssueCallFailed = EffectSchema.Struct({
-  failure: EffectSchema.Literals(TASK_ISSUE_CALL_FAILURES),
-});
-
-/** A task's linked issues as the window hears them, each with where it stands now, or why there are none. */
-export const tasksIssueLinksAnswerSchema = EffectSchema.Union([
-  taskIssueLinksAnswerSchema,
-  taskIssueCallFailed,
-]);
-
-export type TasksIssueLinksAnswer = typeof tasksIssueLinksAnswerSchema.Type;
-
-/** A task's agents' Browser tabs, as its side panel asks the host for them: the task. */
-export const tasksBrowserTabsParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-});
+/** Browser tabs, as a side panel asks the host for them: one coding agent's, as its page names it, or a task's agents' together. */
+export const tasksBrowserTabsParamsSchema = browserTabsPlaceSchema;
 
 export type TasksBrowserTabsParams = typeof tasksBrowserTabsParamsSchema.Type;
 
-/** A task's agents' Browser tabs as the window hears them, the oldest first, or that the service did not answer. */
+/** An agent's or a task's Browser tabs as the window hears them, the oldest first, or that the service did not answer. */
 export const tasksBrowserTabsAnswerSchema = EffectSchema.Union([
   agentBrowserTabsAnswerSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
@@ -640,9 +582,8 @@ export const BROWSER_TAB_OPEN_FAILURE = {
 export type BrowserTabOpenFailure =
   (typeof BROWSER_TAB_OPEN_FAILURE)[keyof typeof BROWSER_TAB_OPEN_FAILURE];
 
-/** A Browser tab a member opens from the side panel: the task, the coding agent whose browser it opens in, and the address. */
+/** A Browser tab a member opens from the side panel: the coding agent whose browser it opens in, and the address. */
 export const tasksBrowserTabOpenParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
   agentId: EffectSchema.NonEmptyString,
   address: EffectSchema.NonEmptyString,
 });
@@ -659,48 +600,22 @@ export const tasksBrowserTabOpenAnswerSchema = EffectSchema.Union([
 
 export type TasksBrowserTabOpenAnswer = typeof tasksBrowserTabOpenAnswerSchema.Type;
 
-/** A task's agents' Browser tabs, followed by a window while its side panel lists them. */
-export const taskBrowserTabsFollowSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-});
+/** An agent's or a task's Browser tabs, followed by a window while its side panel lists them. */
+export const taskBrowserTabsFollowSchema = browserTabsPlaceSchema;
 
 export type TaskBrowserTabsFollow = typeof taskBrowserTabsFollowSchema.Type;
 
 /**
- * A followed task's Browser tabs as they now stand, the agent's pointer on
- * each among them, told each time one moves or a takeover lapses while
- * followed, or why there are none.
+ * A followed agent's or task's Browser tabs as they now stand, the agent's
+ * pointer on each among them, told each time one moves or a takeover lapses
+ * while followed, or why there are none.
  */
-export const taskBrowserTabsFollowedSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  view: tasksBrowserTabsAnswerSchema,
-});
+export const taskBrowserTabsFollowedSchema = EffectSchema.Union([
+  EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString, view: tasksBrowserTabsAnswerSchema }),
+  EffectSchema.Struct({ agentId: EffectSchema.NonEmptyString, view: tasksBrowserTabsAnswerSchema }),
+]);
 
 export type TaskBrowserTabsFollowed = typeof taskBrowserTabsFollowedSchema.Type;
-
-/** A link made, why the service made none, or why there is no answer. */
-export const tasksIssueLinkAnswerSchema = EffectSchema.Union([
-  taskIssueLinkAnswerSchema,
-  taskIssueCallFailed,
-]);
-
-export type TasksIssueLinkAnswer = typeof tasksIssueLinkAnswerSchema.Type;
-
-/** A link as it stands once changed, or why there is no answer. */
-export const tasksIssueRelateAnswerSchema = EffectSchema.Union([
-  taskIssueLinkChangedAnswerSchema,
-  taskIssueCallFailed,
-]);
-
-export type TasksIssueRelateAnswer = typeof tasksIssueRelateAnswerSchema.Type;
-
-/** That the link was let go, or why there is no answer. */
-export const tasksIssueUnlinkAnswerSchema = EffectSchema.Union([
-  taskIssueUnlinkAnswerSchema,
-  taskIssueCallFailed,
-]);
-
-export type TasksIssueUnlinkAnswer = typeof tasksIssueUnlinkAnswerSchema.Type;
 
 /** A page of a plan's history, as the version history asks the host for it: the task, and the revision the page is read before where it is an older page. */
 export const tasksRevisionsParamsSchema = EffectSchema.Struct({
@@ -916,19 +831,6 @@ export const tasksWorkspaceSentryAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspaceSentryAnswer = typeof tasksWorkspaceSentryAnswerSchema.Type;
-
-/** The Linear issues a window asks for, to start a plan from one: the workspace, and a search where one is typed. */
-export const tasksLinearIssuesParamsSchema = linearIssuesRequestSchema;
-
-export type TasksLinearIssuesParams = typeof tasksLinearIssuesParamsSchema.Type;
-
-/** The Linear issues as the window hears them: the issues the workspace's connection reaches, or why there are none. */
-export const tasksLinearIssuesAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ issues: EffectSchema.Array(linearIssueSummarySchema) }),
-  workspaceCallFailureSchema,
-]);
-
-export type TasksLinearIssuesAnswer = typeof tasksLinearIssuesAnswerSchema.Type;
 
 /** A workspace's members, as the window asks for them: the workspace. */
 export const tasksWorkspaceMembersParamsSchema = workspaceLeaveRequestSchema;

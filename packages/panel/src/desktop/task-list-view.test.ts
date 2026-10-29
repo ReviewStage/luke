@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
   type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { TASK_STATUS, type TaskStatus, type TaskSummary } from "@luke/features/task-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -142,7 +142,7 @@ function oneOff(
     effort: "high",
     title,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     startedBy: { userId: starter, name: starter === DEAN ? "Dean Stratakos" : "Charles Pan" },
     automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
@@ -748,7 +748,7 @@ test("a pinned one-off agent stands under Pinned beside the pinned tasks, newest
   assert.ok(taskRows(sidebar).some((row) => row.name === "Sweep flaky tests"));
 });
 
-test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, Unpin once pinned, Archive, Move to section, and Permanently delete last", async () => {
+test("a one-off agent's row offers the agent's one menu: Copy link, Rename and Mark as unread, Pin, or Unpin once pinned, and Move to section, Archive, and Permanently delete last", async () => {
   const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, [
     TRIAGE,
     { ...SWEEP, pinnedAt: 950 },
@@ -756,11 +756,11 @@ test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, 
 
   assert.deepEqual(agentMenu(sidebar, "Triage overnight issues"), [
     "Copy link",
-    "Mark as unread",
     "Rename",
+    "Mark as unread",
     "Pin",
-    "Archive",
     "Move to section",
+    "Archive",
     "Show details",
     "Permanently delete",
   ]);
@@ -769,11 +769,11 @@ test("a one-off agent's row offers Mark as unread after Copy link, Pin, Rename, 
   assert.deepEqual(agentMenu(sidebar, "Sweep flaky tests"), [
     "Move down",
     "Copy link",
-    "Mark as unread",
     "Rename",
+    "Mark as unread",
     "Unpin",
-    "Archive",
     "Move to section",
+    "Archive",
     "Show details",
     "Permanently delete",
   ]);

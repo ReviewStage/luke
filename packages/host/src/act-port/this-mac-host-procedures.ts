@@ -4,7 +4,7 @@ import type { HostOperator } from "../host-operator.js";
 import { actPort } from "./base.js";
 
 /**
- * this-mac-host-procedures.ts -- This Mac's `luke-host` as Settings › Agents asks the host: where it stands, and turned on by the member's own act.
+ * this-mac-host-procedures.ts -- This Mac's `luke-host` as Settings › Hosts asks the host: where it stands, and turned on by the member's own act.
  *
  * The host answers both (`../compose-this-mac-host.ts`); one it could not
  * answer, a browser tab's host among them, which runs no local agents, is

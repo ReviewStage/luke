@@ -10,8 +10,8 @@ import {
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { accountBearer } from "./account-call.js";
-import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
-import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { AGENT_CALL_FAILURE } from "./agent-view.js";
+import { AGENT_STATUS } from "./agent-wire.js";
 import { LIVE_POLL, LIVE_POLL_URL, LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
@@ -134,7 +134,7 @@ it.effect(
         effort: "high",
         title: null,
         createdAt: 1_800_000_300_000,
-        status: CODING_AGENT_STATUS.STARTING,
+        status: AGENT_STATUS.STARTING,
         turnId: null,
       };
       const resetsAt = Date.UTC(2026, 9, 21, 15, 40);
@@ -169,14 +169,14 @@ it.effect(
       assert.deepEqual(started, { ok: true, answer: { task, agent: { agent } } });
       assert.deepEqual(refused, {
         ok: true,
-        answer: { task, agent: { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE } },
+        answer: { task, agent: { failure: AGENT_CALL_FAILURE.INVALID_CHOICE } },
       });
       // A plan's reached limit keeps the reset the service named, as a Start on its own does.
       assert.deepEqual(limited, {
         ok: true,
         answer: {
           task,
-          agent: { failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED, resetsAt },
+          agent: { failure: AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED, resetsAt },
         },
       });
       assert.deepEqual(planned, { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED });
@@ -438,16 +438,16 @@ it.effect(
 );
 
 it.effect(
-  "a board's live read polling while Realtime fails asks for its rows inline, and reads them decoded",
+  "a task's pages' live read polling while Realtime fails asks for its rows inline, and reads them decoded",
   () =>
     Effect.gen(function* () {
-      const row = { taskId: TASK_ID, drawingNumber: 2, appliedDrawing: 1, imaged: true };
+      const row = { pageId: "page-1", version: 2 };
       const api = fakeCloudApi({
-        "GET /api/live/task-board": {
+        "GET /api/live/task-pages": {
           answer: () => ({
             url: LIVE_POLL_URL,
             queries: {
-              board: {
+              pages: {
                 capability: LIVE_POLL_URL,
                 queryFingerprint: LIVE_POLL_URL,
                 expiresAt: 0,
@@ -458,29 +458,29 @@ it.effect(
         },
       });
       const polled = yield* Effect.provide(
-        client().boardLive(TASK_ID, "user-dana", true),
+        client().pagesLive({ taskId: TASK_ID }, "user-dana", true),
         api.layer,
       );
       assert.ok(polled.ok);
-      assert.deepEqual(polled.answer.queries.board.rows, [row]);
+      assert.deepEqual(polled.answer.queries.pages.rows, [row]);
       assert.equal(api.requests()[0]?.searchParams.get(LIVE_POLL.QUERY), LIVE_POLL.ON);
-      yield* Effect.provide(client().boardLive(TASK_ID, "user-dana"), api.layer);
+      yield* Effect.provide(client().pagesLive({ taskId: TASK_ID }, "user-dana"), api.layer);
       assert.equal(api.requests()[1]?.searchParams.get(LIVE_POLL.QUERY), null, "a seal asks none");
     }),
 );
 
 it.effect(
-  "a board's live read names the account it is for, and a session the service refuses for it is signed out",
+  "a task's pages' live read names the account it is for, and a session the service refuses for it is signed out",
   () =>
     Effect.gen(function* () {
       const refusing = fakeCloudApi({
-        "GET /api/live/task-board": {
+        "GET /api/live/task-pages": {
           answer: () => ({ error: HOSTED_API_ERROR.INVALID_TOKEN }),
           status: HTTP_STATUS.UNAUTHORIZED,
         },
       });
       const refused = yield* Effect.provide(
-        client().boardLive(TASK_ID, "user-dana", true, "digest"),
+        client().pagesLive({ taskId: TASK_ID }, "user-dana", true, "digest"),
         refusing.layer,
       );
       assert.deepEqual(refused, { ok: false, failure: LIVE_SIGNED_OUT.failure });

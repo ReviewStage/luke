@@ -9,6 +9,8 @@ import {
   formatDayTick,
   formatInstant,
   playheadText,
+  provenanceText,
+  runSpanText,
   sinceText,
   weekdayAndTimeText,
   workingTime,
@@ -24,6 +26,18 @@ test("a call's header names its day as today, yesterday, a weekday this week, or
   assert.equal(callHeading(at(9, 5), now), "Monday, 3:42 PM");
   assert.equal(callHeading(at(8, 21), now), "Sep 21, 3:42 PM");
   assert.equal(callHeading(at(11, 30, 2025), now), "Dec 30, 2025, 3:42 PM");
+});
+
+test("a run's span names its day once where it ended on it, and both days where it crossed midnight", () => {
+  const now = new Date(2026, 9, 8, 18, 0).getTime();
+  const at = (day: number, hour: number, minute: number) =>
+    new Date(2026, 9, day, hour, minute).getTime();
+
+  assert.equal(runSpanText(at(8, 21, 34), at(8, 21, 43), now), "Today, 9:34 – 9:43 PM · 9m 0s");
+  assert.equal(
+    runSpanText(at(7, 23, 50), at(8, 0, 10), now),
+    "Yesterday, 11:50 PM – Today, 12:10 AM · 20m 0s",
+  );
 });
 
 test("a run's length counts in seconds, then minutes, then hours", () => {
@@ -47,6 +61,14 @@ test("a row and a line say an age with the same count, the line adding ago", () 
   assert.equal(agoText(hoursAgo(3), now), "3h ago");
   assert.equal(sinceText(now - 20_000, now), "now");
   assert.equal(agoText(now - 20_000, now), "now");
+});
+
+test("a provenance row says an age inside a week and the day past it", () => {
+  const now = new Date(2026, 9, 23, 12, 0).getTime();
+  const daysAgo = (days: number) => now - days * 86_400_000;
+
+  assert.equal(provenanceText(daysAgo(3), now), "3d ago");
+  assert.equal(provenanceText(daysAgo(11), now), "Oct 12");
 });
 
 test("a distance from now counts ahead with in and behind with ago, in days past a day", () => {

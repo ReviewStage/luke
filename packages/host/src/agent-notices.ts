@@ -1,17 +1,18 @@
 import type {
+  AccountInboxAgent,
   AccountInboxAnswer,
   AccountInboxAutomation,
   AccountInboxEntry,
   AccountInboxTask,
   AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
-import type { CodingAgentAccountInboxAnswerView } from "@luke/features/coding-agent-view";
+import type { AgentAccountInboxAnswerView } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_STATUS,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
+  AGENT_STATUS,
+  type AgentStatus,
+  type AgentSummary,
   type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { Context, Effect, type Scope, Stream } from "effect";
 import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
 
@@ -77,9 +78,9 @@ import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
  */
 
 /** The statuses under which an agent may still write, which is when its task is watched. */
-const WRITING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
-  CODING_AGENT_STATUS.STARTING,
-  CODING_AGENT_STATUS.RUNNING,
+const WRITING_STATUSES: ReadonlySet<AgentStatus> = new Set([
+  AGENT_STATUS.STARTING,
+  AGENT_STATUS.RUNNING,
 ]);
 
 /** How many pushes of the followed list in a row may leave out an agent only a Start answered before the ledger lets it go. */
@@ -153,12 +154,12 @@ export interface AgentNoticesDependencies {
   onPanelFocusChanged: (listener: (focused: boolean) => void) => () => void;
   /** Who is signed in now, by the account's own key, or nobody. */
   signedInAs: () => string | undefined;
-  /** The signed-in account's id, which an agent's starter is named by; none for an identity stored without one, which is told of every agent. */
+  /** The signed-in account's id, which an inbox item's starter is named by; none for an identity stored without one, which counts every item. */
   accountId: () => string | undefined;
   /** The account as each change of it says, for as long as the subscription stands: the ledger is no one else's. */
   onAccountChanged: (listener: (signedInAs: string | undefined) => void) => () => void;
   /** What waits across the account, followed for as long as the stream is run: each answer the host tells as it moves. */
-  followAccountInbox: () => Stream.Stream<CodingAgentAccountInboxAnswerView>;
+  followAccountInbox: () => Stream.Stream<AgentAccountInboxAnswerView>;
   /** Who is signed in, by the account's own key, from where the launch stands and at each change: whose items the inbox read reads. */
   accounts: Stream.Stream<string | undefined>;
   /** Where each task's waiting items, and every task holding an item, are written, for the window's Inbox. */
@@ -167,18 +168,16 @@ export interface AgentNoticesDependencies {
 }
 
 export interface AgentNotices {
-  /** Agents as an answer carried them: a task's list, or the one a Start or a Stop answered. */
-  observeAgents(agents: readonly CodingAgentSummary[]): void;
-  /** The agents with no plan as the plan list last carried them: the account's own are held, each with its automation's name. */
-  observeTaskless(agents: readonly TasklessAgent[]): void;
+  /** Agents as an answer carried them, on a plan or with none: a task's list, the plan list's agents with no plan, or the one a Start or a Stop answered. */
+  observeAgents(agents: readonly (AgentSummary | TasklessAgent)[]): void;
   /** One agent's status as a transcript page carried it; an agent no answer has named yet is left for the list. */
-  observeStatus(agentId: string, status: CodingAgentStatus): void;
+  observeStatus(agentId: string, status: AgentStatus): void;
   /** The agent as the answer to a message carried it: running, with a line awaiting the turn it opens. */
-  observeMessaged(agent: CodingAgentSummary): void;
+  observeMessaged(agent: AgentSummary): void;
   /** A task the host no longer holds: its agents are forgotten. */
   observeTaskGone(taskId: string): void;
   /** Every agent on a plan as the list followed live carries them, and the plans it holds: an agent of any other plan, or one of a held plan the list no longer names, as one archived, is forgotten. */
-  observeFollowed(agents: readonly CodingAgentSummary[], taskIds: readonly string[]): void;
+  observeFollowed(agents: readonly AgentSummary[], taskIds: readonly string[]): void;
   /** The panel said which agent's tab it shows, or none. */
   shown(agentId: string | null): void;
   /** The developer marked the agent as read by hand: its unseen dot goes, whichever page shows. */
@@ -189,7 +188,7 @@ export interface AgentNotices {
 interface HeldAgent {
   /** The plan it works on; null for one an automation started with no plan. */
   taskId: string | null;
-  status: CodingAgentStatus;
+  status: AgentStatus;
   /** The turn the status is read from; none before the first. */
   turnId: string | null;
   /** Whether that turn's reply is a member's operator's quiet reply alone, a heartbeat that found nothing, whose end leaves no dot. */
@@ -198,7 +197,7 @@ interface HeldAgent {
   pastTurns: ReadonlySet<string>;
 }
 
-function stillWriting(status: CodingAgentStatus): boolean {
+function stillWriting(status: AgentStatus): boolean {
   return WRITING_STATUSES.has(status);
 }
 
@@ -245,6 +244,7 @@ function waitingTasks(items: readonly AccountInboxEntry[]): AppInboxSlice["waiti
       title: item.title,
       postedAt: item.postedAt,
       ...(item.asking === undefined ? undefined : { asking: item.asking }),
+      ...(item.channelId === undefined ? undefined : { channelId: item.channelId }),
     };
     const held = tasks.get(item.planId);
     if (held === undefined) tasks.set(item.planId, [waiting]);
@@ -253,32 +253,71 @@ function waitingTasks(items: readonly AccountInboxEntry[]): AppInboxSlice["waiti
   return [...tasks].map(([taskId, held]) => ({ taskId, items: held }));
 }
 
-/** The open items of agents with no task as the window holds them: each with its agent, who started it, and the automation and repository standing in a task's place. */
+/** The open items of agents with no task as the window holds them: each with when it last changed, its agent and its kind, who started it, and the automation and repository standing in a task's place. */
 function waitingTaskless(items: readonly AccountTasklessEntry[]): AppInboxSlice["taskless"] {
   return items.map((item) => ({
     id: item.id,
     agentId: item.agentId,
     title: item.title,
     postedAt: item.postedAt,
+    updatedAt: item.updatedAt,
     agentTitle: item.agentTitle,
     agentModel: item.agentModel,
     automationId: item.automationId,
     automationName: item.automationName,
     repository: item.repository,
+    ...(item.agentKind === undefined ? undefined : { agentKind: item.agentKind }),
     ...(item.asking === undefined ? undefined : { asking: item.asking }),
+    ...(item.channelId === undefined ? undefined : { channelId: item.channelId }),
     ...(item.startedBy === undefined ? undefined : { startedBy: item.startedBy }),
     ...(item.waitsOn === undefined ? undefined : { waitsOn: item.waitsOn }),
     ...(item.workspaceId === undefined ? undefined : { workspaceId: item.workspaceId }),
   }));
 }
 
+/**
+ * Each agent the open items of agents with no task name, once, as a service
+ * before `agents` leaves the window to list them: how many it holds open,
+ * how many are asks among those that wait on the account (`waiting`, as
+ * `waitingOnAccount` keeps them), and when the latest changed, named as its
+ * latest names it. Note that its settled items are not among them, since
+ * such a service names none.
+ */
+function agentsOfOpenItems(
+  items: readonly AccountTasklessEntry[],
+  waiting: readonly AccountTasklessEntry[],
+): AppInboxSlice["agents"] {
+  const toDo = new Set(waiting.filter(asking).map((item) => item.id));
+  const held = new Map<string, AppInboxSlice["agents"][number]>();
+  // The read answers its items the latest changed first, so an agent's first is the one it is named by.
+  for (const item of items) {
+    const was = held.get(item.agentId);
+    held.set(item.agentId, {
+      ...(was ?? {
+        agentId: item.agentId,
+        ...(item.agentKind === undefined ? undefined : { agentKind: item.agentKind }),
+        agentTitle: item.agentTitle,
+        agentModel: item.agentModel,
+        automationId: item.automationId,
+        automationName: item.automationName,
+        repository: item.repository,
+        ...(item.workspaceId === undefined ? undefined : { workspaceId: item.workspaceId }),
+        updatedAt: item.updatedAt,
+      }),
+      items: (was?.items ?? 0) + 1,
+      toDo: (was?.toDo ?? 0) + (toDo.has(item.id) ? 1 : 0),
+    });
+  }
+  return [...held.values()];
+}
+
 /** What an answer of the inbox read carries that the window and the Dock are told of. */
 type InboxAnswered = Pick<
   AccountInboxAnswer,
-  "items" | "plans" | "planless" | "automations" | "failedRuns"
+  "items" | "plans" | "planless" | "automations" | "agents" | "failedRuns"
 >;
 
-/** Whether two answers say alike everything the window draws of each item of an agent with no task: its agent's title and model, the automation and repository standing in a task's place, and the workspace whose list it stands in, which change without the item's stamp moving, a service first naming the workspace among them. */
+/** Whether two answers say alike everything the window draws of each item of an agent with no task: when it last changed, its agent's title and model, the automation and repository standing in a task's place, and the workspace whose list it stands in, which change without the item's stamp moving, a service first naming the workspace among them. */
 function sameTaskless(
   one: readonly AccountTasklessEntry[],
   other: readonly AccountTasklessEntry[],
@@ -290,6 +329,7 @@ function sameTaskless(
       return (
         was !== undefined &&
         was.id === item.id &&
+        was.updatedAt === item.updatedAt &&
         was.agentTitle === item.agentTitle &&
         was.agentModel === item.agentModel &&
         was.automationId === item.automationId &&
@@ -315,6 +355,33 @@ function sameAutomations(
         was.automationId === held.automationId &&
         was.items === held.items &&
         was.updatedAt === held.updatedAt
+      );
+    })
+  );
+}
+
+/** Whether two answers list the same agents with no task holding items, alike in order, count, To do count, instant, and everything the window names each by. */
+function sameAgents(
+  one: readonly AccountInboxAgent[],
+  other: readonly AccountInboxAgent[],
+): boolean {
+  return (
+    one.length === other.length &&
+    one.every((held, at) => {
+      const was = other[at];
+      return (
+        was !== undefined &&
+        was.agentId === held.agentId &&
+        was.items === held.items &&
+        was.toDo === held.toDo &&
+        was.updatedAt === held.updatedAt &&
+        was.agentKind === held.agentKind &&
+        was.agentTitle === held.agentTitle &&
+        was.agentModel === held.agentModel &&
+        was.automationId === held.automationId &&
+        was.automationName === held.automationName &&
+        was.repository === held.repository &&
+        was.workspaceId === held.workspaceId
       );
     })
   );
@@ -372,15 +439,12 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
 
     /** A turn ended: dot its tab, unless the developer is looking at it. */
     function ended(agentId: string, agent: HeldAgent): void {
-      if (
-        agent.status !== CODING_AGENT_STATUS.COMPLETED &&
-        agent.status !== CODING_AGENT_STATUS.FAILED
-      ) {
+      if (agent.status !== AGENT_STATUS.COMPLETED && agent.status !== AGENT_STATUS.FAILED) {
         return;
       }
       if (focused && shownAgent === agentId) return;
       // A heartbeat that found nothing leaves its member nothing to read, so its end is no news.
-      if (agent.quietTurn === true && agent.status === CODING_AGENT_STATUS.COMPLETED) return;
+      if (agent.quietTurn === true && agent.status === AGENT_STATUS.COMPLETED) return;
       unseen.add(agentId);
       publishUnseen();
     }
@@ -389,7 +453,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
      * What the window holds of an answer: each task's items waiting on the
      * account and every task holding one, and beside them the items of
      * agents with no task, every member's listed as a task's are, and the
-     * automations holding them.
+     * automations and the agents holding them.
      */
     function sliceOf(
       answer: InboxAnswered,
@@ -403,6 +467,8 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         })),
         taskless: waitingTaskless(listed),
         automations: answer.automations ?? [],
+        // A service before `agents` names only the agents something waits on.
+        agents: answer.agents ?? agentsOfOpenItems(listed, answer.planless ?? []),
         failedRuns: answer.failedRuns ?? [],
       };
     }
@@ -435,11 +501,12 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         (was.answer.planless?.length ?? 0) === (answer.planless?.length ?? 0) &&
         was.listed.length === listed.length
       ) {
-        // Note that the tasks and automations holding items, and what an item with no task is named
+        // Note that the tasks, automations, and agents holding items, and what an item with no task is named
         // by, may move with nothing waiting moving, an archive, a rename, or a hold let go, so they are written alone.
         if (
           sameTasks(was.answer.plans, answer.plans) &&
           sameAutomations(was.answer.automations ?? [], answer.automations ?? []) &&
+          sameAgents(was.answer.agents ?? [], answer.agents ?? []) &&
           sameTaskless(was.listed, listed)
         ) {
           return;
@@ -448,6 +515,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
           ...was.answer,
           plans: answer.plans,
           automations: answer.automations ?? [],
+          agents: answer.agents ?? [],
           planless: answer.planless ?? [],
         };
         waiting = { ...was, answer: moved, listed };
@@ -472,7 +540,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         publishWaiting({ items: [], plans: [] }, []);
         if (reader === undefined) return Effect.void;
         // An answer that throws is reported rather than left to end the follow, which would never resume.
-        const look = (answer: CodingAgentAccountInboxAnswerView) =>
+        const look = (answer: AgentAccountInboxAnswerView) =>
           Effect.catchDefect(
             Effect.sync(() => {
               if (dependencies.signedInAs() !== reader || "failure" in answer) return;
@@ -510,7 +578,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
           if (
             next.quietTurn === true &&
             was.quietTurn !== true &&
-            was.status === CODING_AGENT_STATUS.COMPLETED
+            was.status === AGENT_STATUS.COMPLETED
           ) {
             ledger.set(agentId, { ...was, quietTurn: true });
             seen(agentId);
@@ -547,7 +615,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
 
     /** The agent as the ledger holds it, on a plan or with none. */
     function heldOf(
-      agent: Pick<CodingAgentSummary, "planId" | "status" | "turnId" | "quietTurn">,
+      agent: Pick<AgentSummary, "planId" | "status" | "turnId" | "quietTurn">,
     ): HeldAgent {
       return {
         taskId: agent.planId,
@@ -558,37 +626,14 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       };
     }
 
-    /**
-     * Whether the ledger holds the agent: one on a plan as every plan read
-     * names it, and one with no plan only where the account started it.
-     * Note that a teammate's is left to its starter, because it asks its
-     * starter, whose key it runs on, and the plan list carries every
-     * member's, as an act on a teammate's agent's page answers it.
-     */
-    function heldHere(agent: Pick<CodingAgentSummary, "planId" | "startedBy">): boolean {
-      const accountId = dependencies.accountId();
-      return (
-        agent.planId !== null || accountId === undefined || agent.startedBy?.userId === accountId
-      );
-    }
-
+    // Note that the ledger holds every agent a read names, any member's, on a
+    // plan or with none, because a teammate's turn ending is news to whoever
+    // reads its page, whether or not it has a plan.
     const notices: AgentNotices = {
       observeAgents: (agents) => {
-        for (const agent of agents) {
-          if (!heldHere(agent)) continue;
-          observe(agent.id, heldOf(agent));
-        }
+        for (const agent of agents) observe(agent.id, heldOf(agent));
       },
-      observeTaskless: (agents) => {
-        for (const agent of agents) {
-          if (!heldHere(agent)) continue;
-          observe(agent.id, heldOf(agent));
-        }
-      },
-      observeMessaged: (agent) => {
-        if (!heldHere(agent)) return;
-        observe(agent.id, heldOf(agent));
-      },
+      observeMessaged: (agent) => observe(agent.id, heldOf(agent)),
       observeStatus: (agentId, status) => {
         const held = ledger.get(agentId);
         // The page's answer says nothing of quiet, so a quiet mark read while the turn ran is not taken as its end's.

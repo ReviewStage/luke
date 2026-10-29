@@ -1,6 +1,6 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { type Agent, fillAgentTitle } from "@luke/database/models/agent-store";
 import { childTitlesOf, fillChildTitle } from "@luke/database/models/child-titles";
-import { type CodingAgent, fillCodingAgentTitle } from "@luke/database/models/coding-agent-store";
 import {
   listMessagesPast,
   listRecentMessages,
@@ -9,10 +9,10 @@ import {
 } from "@luke/database/models/message-reads";
 import { nameUntitledTask } from "@luke/database/models/task-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
-import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
+import type { StoredAutomationOrigin } from "@luke/database/schemas/agent";
 import { firstMessageParts } from "@luke/features/agent-replay";
+import { AGENT_BOUNDS, AGENT_KIND } from "@luke/features/agent-wire";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
-import { CODING_AGENT_BOUNDS, CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { titlesNothing } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { generateText, isTextUIPart, type LanguageModel, type ToolSet } from "ai";
@@ -116,7 +116,7 @@ function tidyAgentTitle(answer: string): Option.Option<string> {
     .replaceAll(SURROUNDING_QUOTES, "")
     .replace(TRAILING_PUNCTUATION, "")
     .trim()
-    .slice(0, CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)
+    .slice(0, AGENT_BOUNDS.MAX_TITLE_CHARS)
     .trim();
   // A task's own sentinel names nothing, so a task it would name stays open to the next title.
   if (title.length === 0 || titlesNothing(title)) {
@@ -380,11 +380,11 @@ function titleOfConversation(
  */
 function titledWithTask(
   userId: string,
-  agent: CodingAgent,
+  agent: Agent,
   title: string,
 ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices> {
   const written = Effect.gen(function* () {
-    const filled = yield* fillCodingAgentTitle(userId, agent.id, title);
+    const filled = yield* fillAgentTitle(userId, agent.id, title);
     if (!filled || agent.taskId === null) return;
     yield* nameUntitledTask(userId, agent.taskId, title);
   });
@@ -441,13 +441,13 @@ export function titleInboxThread(
  * operator is never titled, since it goes by Luke wherever it is named and
  * a title would leak through every read that takes the plain title.
  */
-export function titleCodingAgent(
+export function titleAgent(
   model: LanguageModel | undefined,
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: Agent,
 ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices> {
   return Effect.gen(function* () {
-    if (agent.title !== null || agent.kind === CODING_AGENT_KIND.OPERATOR) return;
+    if (agent.title !== null || agent.kind === AGENT_KIND.OPERATOR) return;
     const title = yield* titleOfConversation(model, target, CODER_TOOL_SET, agent.automationOrigin);
     if (Option.isNone(title)) return;
     yield* titledWithTask(target.userId, agent, title.value);

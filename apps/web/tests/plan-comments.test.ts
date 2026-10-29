@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { createTask, savePlanText } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
@@ -13,7 +13,7 @@ import {
   joinWorkspace,
   openWorkspace,
 } from "@luke/database/testing";
-import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "@luke/features/coding-agent-wire";
+import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "@luke/features/agent-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -30,12 +30,12 @@ import {
   planCommentThreadAnswerSchema,
 } from "@luke/features/plan-comment-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
+import { CODER } from "@luke/service/agents/coder-host/bounds";
 import {
   type AgentSessions,
   EVE_SEND_OUTCOME,
   type EveMessage,
-} from "@luke/service/agents/brain-host/eve-sessions";
-import { CODER } from "@luke/service/agents/coder-host/bounds";
+} from "@luke/service/agents/eve-host/eve-sessions";
 import { sessionSandboxesLayer } from "@luke/service/agents/session-sandboxes";
 import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import { hostedFetch } from "@luke/service/orpc/handler";
@@ -54,17 +54,7 @@ import { keepAwakeDetached } from "@luke/service/testing/session-sandboxes-fake"
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { sql } from "drizzle-orm";
-import {
-  Clock,
-  type Context,
-  DateTime,
-  Effect,
-  Layer,
-  Option,
-  Queue,
-  Result,
-  Stream,
-} from "effect";
+import { Clock, type Context, DateTime, Effect, Layer, Option, Queue, Result } from "effect";
 import { SqlClient } from "effect/sql";
 
 /**
@@ -135,7 +125,6 @@ const fakeEve = (): AgentSessions => ({
     }),
   cancel: () => Effect.die(new Error("this suite cancels nothing")),
   reset: () => Effect.die(new Error("this suite retires no session")),
-  stream: () => Stream.empty,
 });
 
 /** The services a request runs on: the test's own database and clock, and no GitHub or model catalog. */
@@ -251,7 +240,7 @@ const openSharedTask = Effect.gen(function* () {
 const startAgent = (owner: string, taskId: string) =>
   Effect.gen(function* () {
     const { agent } = Option.getOrThrow(
-      yield* createCodingAgent(owner, {
+      yield* createAgent(owner, {
         taskId,
         idempotencyKey: randomUUID(),
         model: "anthropic/claude-opus-5.5",

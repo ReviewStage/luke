@@ -18,10 +18,10 @@ import type {
 } from "./admin-account-wire.js";
 import type { ActivityFeature, FunnelStep, ReachFeature } from "./admin-overview-vocabulary.js";
 import type { ADMIN_ATTENTION_KIND, AdminWorkspacesKind } from "./admin-wire.js";
+import type { AgentFailure, AgentStatus, ContextWindow } from "./agent-wire.js";
 import type { AutomationRunReason } from "./automation-wire.js";
-import type { CodingAgentFailure, CodingAgentStatus, ContextWindow } from "./coding-agent-wire.js";
 import type { GitHubInstallationStatus } from "./github-installation-wire.js";
-import type { INTEGRATION_ROW_STATUS, IntegrationRowStatus } from "./integration-row-wire.js";
+import type { IntegrationRowStatus } from "./integration-row-wire.js";
 import type { IntegrationProvider } from "./integration-wire.js";
 import type { FastAccess, ProviderKeyProvider, ProviderKeyStatus } from "./provider-key-wire.js";
 
@@ -412,7 +412,7 @@ export interface AdminReliability {
   };
   daily: AdminReliabilityDay[];
   /** Failed coding-agent runs by class, most first; a class with none is absent. */
-  agentFailures: { failure: CodingAgentFailure; count: number }[];
+  agentFailures: { failure: AgentFailure; count: number }[];
   /** Skipped and failed automation runs by reason, most first. */
   automationReasons: { reason: AutomationRunReason | null; skipped: number; failed: number }[];
   attention: {
@@ -446,12 +446,6 @@ export interface AdminWorkspaceInstallation {
   status: GitHubInstallationStatus;
 }
 
-/** One integration a workspace connected for its members, and whether its grant still works. */
-export interface AdminWorkspaceIntegration {
-  provider: IntegrationProvider;
-  status: typeof INTEGRATION_ROW_STATUS.CONNECTED | typeof INTEGRATION_ROW_STATUS.EXPIRED;
-}
-
 export interface AdminWorkspaceRow {
   id: string;
   /** The workspace's name as its members read it; a personal one goes by its owner's name. */
@@ -462,7 +456,6 @@ export interface AdminWorkspaceRow {
   members: number;
   /** Every installation connected to it, the first linked first. */
   installations: AdminWorkspaceInstallation[];
-  integrations: AdminWorkspaceIntegration[];
   tasksWeek: number;
   agentsWeek: number;
   /** Distinct pull requests from its agents that merged inside the week. */
@@ -540,9 +533,9 @@ export interface AdminAccountAgent {
   model: string;
   effort: string;
   contextWindow: ContextWindow;
-  status: CodingAgentStatus;
+  status: AgentStatus;
   /** Why it failed, as the wire's word; null for an agent that did not, or failed with no word. */
-  failure: CodingAgentFailure | null;
+  failure: AgentFailure | null;
   pullRequest: AdminPullRequest;
 }
 
@@ -558,7 +551,7 @@ export interface AdminAccountWorkspace {
 
 /** One entry of the failures timeline: what failed, when, and the enumerated word for why. */
 export type AdminAccountFailure =
-  | { kind: typeof ADMIN_FAILURE_KIND.AGENT; at: number; reason: CodingAgentFailure | null }
+  | { kind: typeof ADMIN_FAILURE_KIND.AGENT; at: number; reason: AgentFailure | null }
   | {
       kind: typeof ADMIN_FAILURE_KIND.KEY;
       at: number;

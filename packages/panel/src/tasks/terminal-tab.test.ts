@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { MOTION_DURATION_MS } from "@luke/brand";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import {
   TERMINAL_PORT_CHANNEL,
   TERMINAL_REFUSAL,
@@ -38,7 +38,7 @@ import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { onPhone } from "../testing/phone-tab.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { TerminalCardFoot, TerminalStanding } from "./terminal-shells.js";
 import { TerminalTab } from "./terminal-tab.js";
 import { OpenLinkProvider } from "./use-open-link.js";
@@ -55,14 +55,14 @@ import { OpenLinkProvider } from "./use-open-link.js";
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: TASK,
   model: "openai/gpt-5.6-sol",
   effort: "high",
   title: "Invite flow",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.RUNNING,
+  status: AGENT_STATUS.RUNNING,
   turnId: null,
 };
 
@@ -287,7 +287,7 @@ async function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const agents = codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
+  const agents = agentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
   const registry = AtomRegistry.make();
   before?.(registry);
   const wrapped = (tab: React.ReactElement) =>
@@ -935,7 +935,7 @@ test("a shell's × asks first, then ends it, and ending the one shown shows the 
   const tab = await mount();
   main.post(OLDEST).say({ type: "state", state: "attached" });
   const before = main.sent.length;
-  await tab.press("End zsh");
+  await tab.press("End shell");
   assert.equal(document.querySelector('[role="alertdialog"] h2')?.textContent, "End zsh?");
   assert.match(
     document.querySelector('[role="alertdialog"]')?.textContent ?? "",
@@ -1030,7 +1030,7 @@ test("a refused shell rename reopens its field holding the name typed, says unde
   assert.ok(!tab.container.textContent?.includes("could not be renamed"));
 });
 
-test("a shell row's ⋯, its right-click and the menu key open the same menu of Rename, New shell and End shell", async () => {
+test("a shell row's ⋯, its right-click and the menu key open the same menu of Rename and End shell", async () => {
   const tab = await mount();
   const item = tab.container.querySelector<HTMLElement>('[aria-label="Shell list"] > li');
   const row = item?.querySelector<HTMLButtonElement>(":scope > button, :scope button");
@@ -1053,7 +1053,7 @@ test("a shell row's ⋯, its right-click and the menu key open the same menu of 
     });
     await settle();
   };
-  const SAME = { label: "Shell actions", items: ["Rename", "New shell", "End shell"] };
+  const SAME = { label: "Shell actions", items: ["Rename", "End shell"] };
 
   act(() => more.click());
   assert.deepEqual(offered(), SAME, "the ⋯ opens it");
@@ -1190,7 +1190,7 @@ test("ending the shown shell starts one shell in its place, though the host says
   port.say({ type: "state", state: "attached" });
   const before = main.sent.length;
   main.holding.add(ACT_KIND.TERMINAL_KILL);
-  await tab.press("End zsh");
+  await tab.press("End shell");
   await confirmWith("End shell");
   // The host says the shell is gone, on the port the tab let go, before the end answers.
   port.say({ type: "state", state: "gone" });
@@ -1211,7 +1211,7 @@ test("an end the service refuses leaves the shown shell shown, attached again, a
   main.post(OLDEST).say({ type: "state", state: "attached" });
   main.down.add(ACT_KIND.TERMINAL_KILL);
   const before = main.sent.length;
-  await tab.press("End zsh");
+  await tab.press("End shell");
   await confirmWith("End shell");
   await settle();
   assert.deepEqual(tab.kinds(before), ["terminal.kill", "terminal.list", "terminal.attach"]);
@@ -1231,7 +1231,7 @@ test("an end still out when another shell is chosen leaves the chosen one shown"
   const tab = await mount();
   main.post(OLDEST).say({ type: "state", state: "attached" });
   main.holding.add(ACT_KIND.TERMINAL_KILL);
-  await tab.press("End zsh");
+  await tab.press("End shell");
   await confirmWith("End shell");
   await tab.choose("dev server");
   const before = main.sent.length;
@@ -1249,7 +1249,7 @@ test("an end still out when another shell is chosen leaves the chosen one shown"
 
 test("the question asked from the list goes when the tab leaves the screen", async () => {
   const tab = await mount();
-  await tab.press("End zsh");
+  await tab.press("End shell");
   assert.ok(document.querySelector('[role="alertdialog"]'), "the question stands");
   await tab.render(false);
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
@@ -1494,7 +1494,7 @@ test("the window handing the tab a new link opener keeps the shell's scrollback 
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const agents = codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
+  const agents = agentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
   const registry = AtomRegistry.make();
   const tab = createElement(TerminalTab, {
     agentId: AGENT.id,

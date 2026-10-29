@@ -19,11 +19,10 @@ import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
+import { agentTable } from "../schemas/agent.js";
 import { user } from "../schemas/auth.js";
-import { codingAgent } from "../schemas/coding-agent.js";
 import { planRevision } from "../schemas/plan-revision.js";
 import { task } from "../schemas/task.js";
-import { voiceSessions } from "../schemas/voice.js";
 import { agentGivenNameSql } from "./agent-name.js";
 import { InstantColumnSchema } from "./columns.js";
 import { taskReachableBy } from "./workspace-store.js";
@@ -37,10 +36,10 @@ import { taskReachableBy } from "./workspace-store.js";
  * its whole text, so reading one or going back to one is a read and never a
  * replay.
  * Saves the same writer makes one after another are one revision, moved on
- * by each: the notetaker's on one call, a coding agent's, or the developer's,
- * each while the revision's latest save is a few minutes old at most. A
+ * by each: the notetaker's, a coding agent's, or the developer's, each
+ * while the revision's latest save is a few minutes old at most. A
  * revision names the member it was made for, the developer editing or the
- * one whose call the notetaker wrote on, so two members' saves are never one
+ * one whose turn the notetaker wrote on, so two members' saves are never one
  * revision, and each reads the other's by name. A plan
  * that was written before history began has no revision for that content, so
  * the first save that finds it records it first, under `earlier`, at the
@@ -110,12 +109,11 @@ const STARTED_TEXT = FORMER_START_SECTIONS.map(
 ).join("\n");
 
 /**
- * Who made a save: the notetaker, on the call it listens to where it has
- * one, a coding agent, or the developer, editing a field or, with the
- * revision they restored, restoring one.
+ * Who made a save: the notetaker, a coding agent, or the developer, editing
+ * a field or, with the revision they restored, restoring one.
  */
 export type PlanWriter =
-  | { readonly actor: typeof PLAN_ACTOR.NOTETAKER; readonly liveSessionId?: string }
+  | { readonly actor: typeof PLAN_ACTOR.NOTETAKER }
   | { readonly actor: typeof PLAN_ACTOR.AGENT; readonly agentId: string }
   | { readonly actor: typeof PLAN_ACTOR.DEVELOPER; readonly restoredFrom?: number };
 
@@ -125,7 +123,7 @@ export interface PlanSaveRecord {
   readonly writer: PlanWriter;
   /**
    * The member the save is made for: the developer editing, or the one whose
-   * call or turn the notetaker writes on. A coding agent's save names none.
+   * turn the notetaker writes on. A coding agent's save names none.
    */
   readonly userId: string;
   /** The plan's text before the save. */
@@ -142,7 +140,6 @@ const RevisionRowSchema = Schema.Struct({
   actor: Schema.Literals(Object.values(PLAN_ACTOR)),
   userId: Schema.NullOr(Schema.String),
   agentId: Schema.NullOr(Schema.String),
-  liveSessionId: Schema.NullOr(Schema.String),
   changes: Schema.Number,
   at: InstantColumnSchema,
   restoredFrom: Schema.NullOr(Schema.Number),
@@ -161,7 +158,6 @@ const findNewestRevision = SqlSchema.findOneOption({
           actor: planRevision.actor,
           userId: planRevision.userId,
           agentId: planRevision.agentId,
-          liveSessionId: planRevision.liveSessionId,
           changes: planRevision.changes,
           at: planRevision.at,
           restoredFrom: planRevision.restoredFrom,
@@ -185,7 +181,6 @@ const insertRevision = SqlSchema.findOne({
     actor: Schema.Literals(Object.values(PLAN_ACTOR)),
     userId: Schema.NullOr(Schema.String),
     agentId: Schema.NullOr(Schema.String),
-    liveSessionId: Schema.NullOr(Schema.String),
     document: Schema.String,
     changes: Schema.Number,
     startedAt: Schema.Date,
@@ -220,7 +215,6 @@ const LastEditRowSchema = Schema.Struct({
   actor: Schema.Literals(Object.values(PLAN_ACTOR)),
   editorId: Schema.NullOr(Schema.String),
   editorName: Schema.NullOr(Schema.String),
-  liveSessionId: Schema.NullOr(Schema.String),
   at: InstantColumnSchema,
   agentId: Schema.NullOr(Schema.String),
   agentModel: Schema.NullOr(Schema.String),
@@ -237,17 +231,16 @@ const findLastEdit = SqlSchema.findOneOption({
           actor: planRevision.actor,
           editorId: user.id,
           editorName: user.name,
-          liveSessionId: planRevision.liveSessionId,
           at: planRevision.at,
           agentId: planRevision.agentId,
-          agentModel: codingAgent.model,
+          agentModel: agentTable.model,
           // The name the agent goes by: Luke for an operator, else its title.
           agentTitle: sql<
             string | null
-          >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
+          >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
         })
         .from(planRevision)
-        .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
+        .leftJoin(agentTable, eq(agentTable.id, planRevision.agentId))
         .leftJoin(user, eq(user.id, planRevision.userId))
         .where(eq(planRevision.taskId, taskId))
         .orderBy(desc(planRevision.seq))
@@ -260,7 +253,6 @@ const restored = alias(planRevision, "restored");
 
 const RevisionLineRowSchema = Schema.Struct({
   ...LastEditRowSchema.fields,
-  callId: Schema.NullOr(Schema.String),
   seq: Schema.Number,
   startedAt: InstantColumnSchema,
   changes: Schema.Number,
@@ -289,15 +281,13 @@ const findRevisionLines = SqlSchema.findAll({
           actor: planRevision.actor,
           editorId: user.id,
           editorName: user.name,
-          liveSessionId: planRevision.liveSessionId,
           at: planRevision.at,
-          agentModel: codingAgent.model,
+          agentModel: agentTable.model,
           // The name the agent goes by: Luke for an operator, else its title.
           agentTitle: sql<
             string | null
-          >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
+          >`coalesce(${agentGivenNameSql(agentTable)}, ${agentTable.title})`,
           agentId: planRevision.agentId,
-          callId: voiceSessions.id,
           seq: planRevision.seq,
           startedAt: planRevision.startedAt,
           changes: planRevision.changes,
@@ -306,16 +296,8 @@ const findRevisionLines = SqlSchema.findAll({
         })
         .from(planRevision)
         .innerJoin(task, eq(task.id, planRevision.taskId))
-        .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
+        .leftJoin(agentTable, eq(agentTable.id, planRevision.agentId))
         .leftJoin(user, eq(user.id, planRevision.userId))
-        // The call a revision names by its Live API id, read as the transcript names it.
-        .leftJoin(
-          voiceSessions,
-          and(
-            eq(voiceSessions.liveSessionId, planRevision.liveSessionId),
-            eq(voiceSessions.userId, userId),
-          ),
-        )
         .leftJoin(
           restored,
           and(
@@ -373,7 +355,6 @@ const SectionRevisionRowSchema = Schema.Struct({
   editorId: Schema.NullOr(Schema.String),
   editorName: Schema.NullOr(Schema.String),
   agentId: Schema.NullOr(Schema.String),
-  liveSessionId: Schema.NullOr(Schema.String),
   at: InstantColumnSchema,
   document: Schema.String,
 });
@@ -392,7 +373,6 @@ const findSectionRevisions = SqlSchema.findAll({
           editorId: user.id,
           editorName: user.name,
           agentId: planRevision.agentId,
-          liveSessionId: planRevision.liveSessionId,
           at: planRevision.at,
           document: planRevision.document,
         })
@@ -423,7 +403,8 @@ function lastEditOf(row: LastEditRow): PlanLastEdit {
       : undefined),
     ...(row.agentId === null ? undefined : { agentId: row.agentId }),
     at: row.at.getTime(),
-    duringCall: row.liveSessionId !== null,
+    // Note that no revision is written on a call any more, and a released desktop still requires the key.
+    duringCall: false,
   };
 }
 
@@ -435,11 +416,6 @@ function memberOf(record: PlanSaveRecord): string | null {
 /** The writer's agent, where a coding agent wrote it. */
 function agentOf(writer: PlanWriter): string | null {
   return writer.actor === PLAN_ACTOR.AGENT ? writer.agentId : null;
-}
-
-/** The writer's call, where the notetaker wrote it on one. */
-function callOf(writer: PlanWriter): string | null {
-  return writer.actor === PLAN_ACTOR.NOTETAKER ? (writer.liveSessionId ?? null) : null;
 }
 
 /** The revision the writer restored, where the save is the developer's restore of one. */
@@ -461,7 +437,6 @@ function joins(newest: RevisionRow, record: PlanSaveRecord, now: Date): boolean 
     newest.actor === writer.actor &&
     newest.userId === memberOf(record) &&
     newest.agentId === agentOf(writer) &&
-    newest.liveSessionId === callOf(writer) &&
     now.getTime() - newest.at.getTime() <= PLAN_REVISION.JOIN_WITHIN_MS
   );
 }
@@ -485,7 +460,6 @@ function recordEarlier(
           actor: PLAN_ACTOR.EARLIER,
           userId: null,
           agentId: null,
-          liveSessionId: null,
           document: record.before,
           changes: 0,
           startedAt: at,
@@ -497,13 +471,12 @@ function recordEarlier(
   });
 }
 
-/** A revision's writer as each section it changed names them: the actor, the member or the agent where one wrote, and whether on a call. */
+/** A revision's writer as each section it changed names them: the actor, and the member or the agent where one wrote. */
 function writerOf(row: SectionRevisionRow): PlanSectionWriterWho {
   return {
     actor: row.actor,
     ...editorOf(row),
     ...(row.agentId === null ? undefined : { agentId: row.agentId }),
-    ...(row.liveSessionId === null ? undefined : { duringCall: true }),
   };
 }
 
@@ -539,7 +512,6 @@ export function recordRevision(
       actor: writer.actor,
       userId: memberOf(record),
       agentId: agentOf(writer),
-      liveSessionId: callOf(writer),
       document: after,
       changes: record.changes,
       startedAt: now,
@@ -552,8 +524,8 @@ export function recordRevision(
 
 /**
  * The plan's newest revision as its "Edited by" line reads it: who wrote it,
- * a coding agent named as its row names it now, when, and whether on a call;
- * nothing for a plan with no history yet.
+ * a coding agent named as its row names it now, and when; nothing for a plan
+ * with no history yet.
  */
 export function readLastEdit(
   taskId: string,
@@ -605,7 +577,6 @@ export function listRevisions(
         seq: row.seq,
         lastEdit: lastEditOf(row),
         ...(row.agentId === null ? undefined : { agentId: row.agentId }),
-        ...(row.callId === null ? undefined : { callId: row.callId }),
         startedAt: row.startedAt.getTime(),
         changes: row.changes,
         ...(row.restoredFrom === null || row.restoredAt === null

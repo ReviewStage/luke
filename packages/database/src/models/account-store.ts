@@ -1,12 +1,12 @@
+import { CONTEXT_WINDOW, contextWindowSchema } from "@luke/features/agent-wire";
 import {
   CHAPTERS_MODEL_LIST,
   type ChaptersModelId,
   chaptersModelFrom,
 } from "@luke/features/chapters-model-choice";
-import { CONTEXT_WINDOW, contextWindowSchema } from "@luke/features/coding-agent-wire";
 import { LINK_OPEN_LIST, type LinkOpen } from "@luke/features/link-open";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
+import { AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import {
   type AccountPreferences,
   accountPreferencesFromStored,
@@ -43,7 +43,7 @@ export interface AccountPreferencesRow {
   /** The settings every device shares, the link choice among them where the account made one. */
   preferences: AccountPreferences;
   /** What a click on Start runs on; the catalog's default until the account chooses. */
-  codingAgent: ModelChoice;
+  agent: ModelChoice;
   /** What a Generate chapters the account presses runs on; Haiku until the account chooses, and for a stored value no build lists any more. */
   chaptersModel: ChaptersModelId;
   /** Each experiment the account turned on or back off; one it never chose is absent, and off. */
@@ -62,13 +62,13 @@ export interface AccountPreferencesRow {
  * menu's choice each write their own part without reading the other first.
  * The experiments part is the one patch: its keys are merged over what
  * stood, so a Mac that knows fewer experiments never erases another's.
- * `preferences` is the shared part, whose `voice` it replaces; the link
- * choice is a part of its own, which a build that predates it never sends.
+ * `preferences` is the shared part; the link choice is a part of its own,
+ * which a build that predates it never sends.
  */
 export interface AccountPreferencesWrite {
   preferences?: AccountPreferences;
   linkOpen?: LinkOpen;
-  codingAgent?: ModelChoice;
+  agent?: ModelChoice;
   chaptersModel?: ChaptersModelId;
   experiments?: ExperimentChoices;
 }
@@ -135,7 +135,6 @@ export function deleteAccount(userId: string): Effect.Effect<void, StoreFailure,
 
 /** The columns every read and the write's `returning` project, so a row decodes one way whatever wrote it. */
 const PREFERENCE_COLUMNS = {
-  voice: accountPreference.voice,
   linkOpen: accountPreference.linkOpen,
   codingAgentModel: accountPreference.codingAgentModel,
   codingAgentEffort: accountPreference.codingAgentEffort,
@@ -146,7 +145,6 @@ const PREFERENCE_COLUMNS = {
 };
 
 const PreferenceRowSchema = Schema.Struct({
-  voice: Schema.NullOr(Schema.String),
   linkOpen: Schema.NullOr(Schema.String),
   codingAgentModel: Schema.NullOr(Schema.String),
   codingAgentEffort: Schema.NullOr(Schema.String),
@@ -166,21 +164,17 @@ type PreferenceRow = typeof PreferenceRowSchema.Type;
  */
 function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
   const standard = row.codingAgentContextWindow === CONTEXT_WINDOW.STANDARD;
-  const codingAgent: ModelChoice =
+  const agent: ModelChoice =
     row.codingAgentModel !== null && row.codingAgentEffort !== null
       ? {
           model: row.codingAgentModel,
           effort: row.codingAgentEffort,
           ...(standard ? { contextWindow: CONTEXT_WINDOW.STANDARD } : undefined),
         }
-      : CODING_AGENT_DEFAULT_CHOICE;
+      : AGENT_DEFAULT_CHOICE;
   return {
-    preferences:
-      accountPreferencesFromStored({
-        ...(row.voice ? { voice: row.voice } : undefined),
-        ...(row.linkOpen ? { linkOpen: row.linkOpen } : undefined),
-      }) ?? {},
-    codingAgent,
+    preferences: accountPreferencesFromStored(row.linkOpen ? { linkOpen: row.linkOpen } : {}) ?? {},
+    agent,
     // Note that a stored model no build lists any more reads as Haiku, as a row never written does.
     chaptersModel: chaptersModelFrom(row.chaptersModel),
     // Note that a stored key no build lists any more reads as nothing, because the experiment it named graduated or went.
@@ -252,9 +246,8 @@ export function readAccountRole(
 
 const PreferenceWriteSchema = Schema.Struct({
   userId: Schema.String,
-  voice: Schema.optionalKey(Schema.NullOr(Schema.String)),
   linkOpen: Schema.optionalKey(Schema.Literals(LINK_OPEN_LIST)),
-  codingAgent: Schema.optionalKey(
+  agent: Schema.optionalKey(
     Schema.Struct({
       model: Schema.String,
       effort: Schema.String,
@@ -263,7 +256,8 @@ const PreferenceWriteSchema = Schema.Struct({
   ),
   chaptersModel: Schema.optionalKey(Schema.Literals(CHAPTERS_MODEL_LIST)),
   experiments: Schema.optionalKey(Schema.Record(Schema.String, Schema.Boolean)),
-  updatedAt: Schema.Date,
+  /** The instant the shared preferences part was written, where the write carries it. */
+  updatedAt: Schema.optionalKey(Schema.Date),
 });
 
 type PreferenceWrite = typeof PreferenceWriteSchema.Type;
@@ -274,13 +268,13 @@ function writtenColumns(write: PreferenceWrite) {
     ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),
     ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
     ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
-    ...(write.voice === undefined ? undefined : { voice: write.voice, updatedAt: write.updatedAt }),
-    ...(write.codingAgent === undefined
+    ...(write.updatedAt === undefined ? undefined : { updatedAt: write.updatedAt }),
+    ...(write.agent === undefined
       ? undefined
       : {
-          codingAgentModel: write.codingAgent.model,
-          codingAgentEffort: write.codingAgent.effort,
-          codingAgentContextWindow: write.codingAgent.contextWindow ?? null,
+          codingAgentModel: write.agent.model,
+          codingAgentEffort: write.agent.effort,
+          codingAgentContextWindow: write.agent.contextWindow ?? null,
         }),
   };
 }
@@ -327,12 +321,12 @@ export function writeAccountPreferences(
 ): Effect.Effect<AccountPreferencesRow, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const updatedAt = yield* DateTime.nowAsDate;
+    // Note that the shared part holds no preference since the voice went, so its write moves the instant alone.
     const stored: PreferenceWrite = {
       userId,
-      updatedAt,
-      ...(write.preferences === undefined ? undefined : { voice: write.preferences.voice ?? null }),
+      ...(write.preferences === undefined ? undefined : { updatedAt }),
       ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
-      ...(write.codingAgent === undefined ? undefined : { codingAgent: write.codingAgent }),
+      ...(write.agent === undefined ? undefined : { agent: write.agent }),
       ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
       ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),
     };

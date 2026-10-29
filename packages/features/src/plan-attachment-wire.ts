@@ -1,5 +1,5 @@
 import { Schema as EffectSchema } from "effect";
-import { CODING_AGENT_ATTACHMENT_TYPE } from "./coding-agent-wire.js";
+import { AGENT_ATTACHMENT_TYPE } from "./agent-wire.js";
 import { pictureDataUrlSchema } from "./picture-wire.js";
 import { wireUuidSchema } from "./service-wire.js";
 import { WEBM_TYPE } from "./video-signature.js";
@@ -22,7 +22,7 @@ export const PLAN_ATTACHMENT_BOUNDS = {
 
 /** The types a plan's attachment is served as: a picture's or a video's its text names, or any a comment's file may be. */
 export const PLAN_ATTACHMENT_TYPE = {
-  ...CODING_AGENT_ATTACHMENT_TYPE,
+  ...AGENT_ATTACHMENT_TYPE,
   WEBM: WEBM_TYPE,
 } as const;
 

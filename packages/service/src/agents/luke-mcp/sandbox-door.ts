@@ -20,8 +20,8 @@
 
 import { Effect, type Layer } from "effect";
 import type { HttpClient } from "effect/http";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { AgentMachine, type AgentMachineService } from "../machine/agent-machine.js";
 import { SandboxUnavailable } from "../vercel-sandbox-api.js";
 

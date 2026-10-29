@@ -2,7 +2,7 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
   type PullRequestStackEntry,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
 import { ACT_KIND } from "@luke/host/acts";
 import { BUTTON_VARIANT, Button, dropBelowStart, Tooltip, useMenu } from "@luke/ui";
@@ -21,7 +21,7 @@ import { useOpenPlace } from "./use-open-link.js";
  * agent owns opens that agent's Pull request tab, on its own task's side
  * panel whatever task this one is on, through the window's own opener for a
  * Luke link (`LINK_PLACE.CHANGES`), as a link to that tab would; an agent
- * on no task opens its own page. One no agent owns opens on GitHub, and so
+ * on no task opens it on its own page. One no agent owns opens on GitHub, and so
  * does every one outside the window, where there is no opener.
  */
 
@@ -48,11 +48,10 @@ function markOf(entry: PullRequestStackEntry): PullRequestMarked {
   };
 }
 
-/** The place in Luke a stacked pull request's agent stands: its Pull request tab on its task, or its own page for an agent on none. */
+/** The place in Luke a stacked pull request's agent stands: its Pull request tab, on its task where it has one, else on its own page. */
 function placeOf(agent: NonNullable<PullRequestStackEntry["agent"]>): LinkPlace {
-  return agent.taskId === null
-    ? { kind: LINK_PLACE.AGENT, agentId: agent.id }
-    : { kind: LINK_PLACE.CHANGES, planId: agent.taskId, agentId: agent.id };
+  const task = agent.taskId === null ? undefined : { planId: agent.taskId };
+  return { kind: LINK_PLACE.CHANGES, ...task, agentId: agent.id };
 }
 
 /** How a pull request of the stack opens: its agent's Pull request tab where an agent owns it and the window can open one, else its page on GitHub. */

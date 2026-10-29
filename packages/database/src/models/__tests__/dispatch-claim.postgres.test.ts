@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { ASK_ORIGIN } from "@luke/features";
-import { BRAIN_RUN_EVENT, BRAIN_TURN_ORIGIN, BRAIN_TURN_TRIGGER } from "@luke/features/brain";
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
+import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_ORIGIN } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
@@ -13,13 +12,12 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { Database, type DatabaseServices } from "../../core/query.js";
 import { sqlClientOverUrl } from "../../core/sql-client.js";
+import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
-import { codingAgent } from "../../schemas/coding-agent.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB, openWorkspace, STORE_TEST_DATABASE_ENVIRONMENT } from "../../testing/index.js";
-import { askRecord } from "../asks.js";
-import { deleteCodingAgent, recordCodingAgentPublished } from "../coding-agent-store.js";
+import { deleteAgent, recordAgentPublished } from "../agent-store.js";
 import { readMessageByClientId } from "../message-reads.js";
 import { createTask, finishTaskWork } from "../task-store.js";
 import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../writer.js";
@@ -75,10 +73,10 @@ const startedTurn = (target: ConversationTarget) =>
     yield* writer.consumeAll(target, [
       {
         ...turn,
-        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        kind: RUN_EVENT.TURN_STARTED,
         sequence: 1,
-        origin: BRAIN_TURN_ORIGIN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
         at: 0,
       },
     ]);
@@ -161,7 +159,7 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
         const meanwhile = yield* heldMeanwhile;
         const journal = yield* onAnother(
           writer.consumeAll(target, [
-            { ...turn, kind: BRAIN_RUN_EVENT.STEP_STARTED, sequence: 2, step: 1 },
+            { ...turn, kind: RUN_EVENT.STEP_STARTED, sequence: 2, step: 1 },
           ]),
         );
         const sendStillPending = sending.pollUnsafe() === undefined;
@@ -173,47 +171,6 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
         assert.ok(sendStillPending);
         assert.ok(Result.isSuccess(sent) && Option.isSome(sent.success));
         assert.equal(sent.success.value.effect, STORE_WRITE_EFFECT.WRITTEN);
-      }),
-  );
-
-  it.effect(
-    "the journal lands while an ask's hand-over to eve is pending, and no transaction or lock is held meanwhile",
-    () =>
-      Effect.gen(function* () {
-        const target = yield* openAgentConversation;
-        const onAnother = yield* anotherConnection;
-        const writer = yield* storeWriter({ tools: {} });
-        const asks = askRecord();
-        const { turn } = yield* startedTurn(target);
-        const ask = yield* asks.record({
-          ...target,
-          clientId: randomUUID(),
-          origin: ASK_ORIGIN.TYPED,
-          createdAt: new Date(0),
-        });
-        const held = yield* heldDispatch({ sessionId: "session-1", deliveryId: "delivery-1" });
-
-        const dispatching = yield* Effect.forkChild(
-          onAnother(asks.dispatchOnce(target, ask.id, () => held.dispatch)),
-        );
-        yield* untilBegan(held.began, dispatching);
-        const meanwhile = yield* heldMeanwhile;
-        const journal = yield* onAnother(
-          writer.consumeAll(target, [
-            { ...turn, kind: BRAIN_RUN_EVENT.STEP_STARTED, sequence: 2, step: 1 },
-          ]),
-        );
-        const askStillPending = dispatching.pollUnsafe() === undefined;
-        yield* Deferred.succeed(held.release, undefined);
-        const dispatched = yield* Fiber.join(dispatching);
-
-        assert.deepEqual(meanwhile, NOTHING_HELD);
-        assert.ok(journal.every(Result.isSuccess));
-        assert.ok(askStillPending);
-        assert.equal(
-          typeof dispatched === "string" ? undefined : dispatched.sessionId,
-          "session-1",
-        );
       }),
   );
 
@@ -318,7 +275,7 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
           organizationId: workspace,
         });
         const agentId = randomUUID();
-        yield* db.insert(codingAgent).values({
+        yield* db.insert(agentTable).values({
           id: agentId,
           organizationId: workspace,
           userId: target.userId,
@@ -330,7 +287,7 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
           repositories: ["acme/api"],
           idempotencyKey: randomUUID(),
         });
-        yield* recordCodingAgentPublished(target.userId, agentId, {
+        yield* recordAgentPublished(target.userId, agentId, {
           number: 42,
           title: "Teammate invitations",
           url: "https://github.com/acme/api/pull/42",
@@ -378,7 +335,7 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
         const db = yield* Database;
         const workspace = yield* openWorkspace(target.userId);
         const agentId = randomUUID();
-        yield* db.insert(codingAgent).values({
+        yield* db.insert(agentTable).values({
           id: agentId,
           organizationId: workspace,
           userId: target.userId,
@@ -410,7 +367,7 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
         yield* untilBegan(held.began, sending);
         const deleted = yield* Effect.exit(
           onAnother(
-            deleteCodingAgent(target.userId, agentId, {
+            deleteAgent(target.userId, agentId, {
               standsStopped: stoppedUnlessAwaiting,
               beforeDelete: () => Effect.void,
             }),
@@ -422,9 +379,9 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
         assert.ok(Exit.isFailure(deleted));
         assert.equal(
           (yield* db
-            .select({ id: codingAgent.id })
-            .from(codingAgent)
-            .where(eq(codingAgent.id, agentId))).length,
+            .select({ id: agentTable.id })
+            .from(agentTable)
+            .where(eq(agentTable.id, agentId))).length,
           1,
         );
       }),

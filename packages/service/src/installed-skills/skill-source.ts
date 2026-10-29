@@ -2,9 +2,14 @@
  * skill-source.ts -- a GitHub repository a member pasted as a skill source, read as an install takes it: reached, its ref pinned to a commit, its skill folders found, and one folder's files fetched within a skill's bounds.
  *
  * The repository is read on the workspace's GitHub App installation where
- * it reaches it, else on the member's own token, as a session reads a
- * repository's skills (`agents/agent-runtime/skills.ts`), and else
- * anonymously, which GitHub answers for a public repository alone. Every
+ * it reaches it, else on the member's own token where it may push there,
+ * as a session reads a repository's skills (`agents/agent-runtime/skills.ts`).
+ * A public repository neither reaches is read on `publicReadToken`: the
+ * member's own token, else an installation token of the workspace, and
+ * anonymously only where there is neither, because GitHub's anonymous
+ * limit is sixty requests an hour for every caller leaving the
+ * deployment's address, fewer than one preview of a large repository
+ * asks. Every
  * read after the reach names the commit the ref stood at when it was
  * pinned, so a preview, the install after it, and every file of one skill
  * are read from one tree, whatever lands on the branch between.
@@ -28,6 +33,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import {
   GITHUB_HTTP_STATUS,
   GitHubApp,
+  type GitHubPublicReadToken,
   type GitHubTokenAccess,
   type GitHubUnavailable,
   githubRead,
@@ -85,12 +91,13 @@ export interface SkillFolder {
   readonly group?: string;
 }
 
-/** What GitHub answers for a public repository read anonymously. */
+/** What GitHub answers for a repository read on a public read's token, or anonymously. */
 const PublicRepositorySchema = Schema.Struct({
   name: Schema.String,
   full_name: Schema.String,
   owner: Schema.Struct({ login: Schema.String }),
   default_branch: Schema.String,
+  private: Schema.Boolean,
 });
 
 /** A read on the repository's bearer, a member's token marked invalid where GitHub refuses it, and a GitHub that did not answer refused as unanswered. */
@@ -108,18 +115,23 @@ function onRepository<A, R>(
 }
 
 /**
- * The public repository as GitHub answers it with no token; not reachable
- * where GitHub says there is none, which is what it says of a private one,
- * and unanswered where it is past its anonymous rate limit or down.
+ * The public repository as GitHub answers it on the reader, or with no
+ * token where there is none; not reachable where GitHub says there is none,
+ * which is what it says anonymously of a private one, or where it answers
+ * one private, which only a token it reaches already could read and is
+ * not this read's to take; unanswered where it is past the reader's rate
+ * limit or down.
  */
 const publicRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   owner: string,
   repo: string,
-): Effect.fn.Return<SkillRepository, HostedRefusal, HttpClient.HttpClient> {
+  reader: GitHubPublicReadToken | undefined,
+): Effect.fn.Return<SkillRepository, HostedRefusal, HttpClient.HttpClient | DatabaseServices> {
   const path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+  const bearer = reader?.token ?? null;
   const read = Effect.scoped(
     Effect.gen(function* () {
-      const response = yield* send(githubRead(path, null));
+      const response = yield* send(githubRead(path, bearer));
       const limited = response.headers[RATE_LIMIT_REMAINING_HEADER] === "0";
       if (
         response.status === GITHUB_HTTP_STATUS.NOT_FOUND ||
@@ -127,10 +139,12 @@ const publicRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
       ) {
         return Option.none<typeof PublicRepositorySchema.Type>();
       }
-      return Option.some(yield* readBody(response, PublicRepositorySchema));
+      const record = yield* readBody(response, PublicRepositorySchema);
+      return record.private ? Option.none<typeof record>() : Option.some(record);
     }),
   );
-  const answered = yield* read.pipe(
+  const marked = reader === undefined ? read : read.pipe(markRefusedToken(reader.access));
+  const answered = yield* marked.pipe(
     Effect.tapError((failure) =>
       Effect.logWarning(`A public skill source was not read: ${failure.message}`),
     ),
@@ -142,15 +156,16 @@ const publicRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
     name: answered.value.name,
     fullName: answered.value.full_name,
     defaultBranch: answered.value.default_branch,
-    bearer: null,
-    access: null,
+    bearer,
+    access: reader?.access ?? null,
     public: true,
   };
 });
 
 /**
  * The repository as the workspace's installation reaches it, else the
- * member's own token, else anonymously where it is public.
+ * member's own token, else where it is public on the public read's token,
+ * or anonymously where there is none.
  */
 export const reachSkillRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   workspaceId: string,
@@ -166,7 +181,10 @@ export const reachSkillRepository = /* @__PURE__ */ Effect.fnUntraced(function* 
   const reached = yield* githubReachOrRefusal(
     app.repositoryReadToken(workspaceId, `${owner}/${repo}`, member),
   );
-  if (Option.isNone(reached)) return yield* publicRepository(owner, repo);
+  if (Option.isNone(reached)) {
+    const reader = yield* githubReachOrRefusal(app.publicReadToken(workspaceId, member));
+    return yield* publicRepository(owner, repo, Option.getOrUndefined(reader));
+  }
   const { repository, token, access } = reached.value;
   return {
     owner: repository.owner,

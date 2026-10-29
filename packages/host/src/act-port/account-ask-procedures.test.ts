@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
@@ -21,7 +21,7 @@ import { type TestActPort, testActPort } from "./testing.js";
 
 /**
  * The account's own asks, through the act port as a window calls them: only
- * a panel of this build's own renderer asks; the voice and call windows, and
+ * a panel of this build's own renderer asks; any other window, and
  * a frame this build does not trust, are refused in each kind's own words
  * before the host is asked; a panel's ask reaches the host with its payload
  * as the panel sent it, and a kind that carries nothing with nothing; a
@@ -32,9 +32,8 @@ import { type TestActPort, testActPort } from "./testing.js";
 // The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");
 
-const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
-const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
-const CALL: ActSender = { ...PANEL, panel: false, call: true };
+const PANEL: ActSender = { sender: SENDER, panel: true };
+const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
 /** A synthetic provider key, as Settings carries it once. */
 const PROVIDER_KEY = "sk-proj-synthetic-00000000000000000000abcd";
@@ -117,7 +116,7 @@ function windowPort(
 ) {
   const asked: unknown[] = [];
   const answer =
-    options.answer ?? (() => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+    options.answer ?? (() => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
   const ask =
     (name: keyof HostAsk) =>
     (...params: unknown[]) =>
@@ -166,18 +165,16 @@ async function settled(
   }
 }
 
-it("the voice and call windows are refused every account ask in the kind's own words, a provider key among them, and the host is not asked", async () => {
-  for (const actor of [VOICE, CALL]) {
-    const { client, asked } = windowPort(actor);
-    const refused = [];
-    for (const act of ACTS) {
-      const outcome = await settled(client, act.kind, act.payload);
-      assert.deepEqual(outcome, { refused: REFUSAL[act.kind] });
-      refused.push(outcome);
-    }
-    assert.deepEqual(asked, []);
-    assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
+it("a window that is not a panel is refused every account ask in the kind's own words, a provider key among them, and the host is not asked", async () => {
+  const { client, asked } = windowPort(OTHER_WINDOW);
+  const refused = [];
+  for (const act of ACTS) {
+    const outcome = await settled(client, act.kind, act.payload);
+    assert.deepEqual(outcome, { refused: REFUSAL[act.kind] });
+    refused.push(outcome);
   }
+  assert.deepEqual(asked, []);
+  assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
 });
 
 it("a frame this build does not trust is refused every account ask, even as a panel, and the host is not asked", async () => {
@@ -194,7 +191,7 @@ it("a panel's ask reaches the host once with its payload, a kind that carries no
   const { client, asked } = windowPort(PANEL);
   for (const act of ACTS) {
     assert.deepEqual(await settled(client, act.kind, act.payload), {
-      answer: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+      answer: { failure: AGENT_CALL_FAILURE.UNANSWERED },
     });
   }
   assert.deepEqual(
@@ -243,17 +240,17 @@ it("a payload its kind's schema refuses, or one sent to a kind that carries none
   assert.deepEqual(asked, []);
 });
 
-it("a ChatGPT sign-in waiting on the browser is withdrawn by a panel alone, and the voice window is refused", async () => {
+it("a ChatGPT sign-in waiting on the browser is withdrawn by a panel alone, and a window that is not a panel is refused", async () => {
   const panel = windowPort(PANEL);
   assert.deepEqual(
     await settled(panel.client, ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL, undefined),
     { answer: undefined },
   );
   assert.deepEqual(panel.asked, [["chatGptSignInCancel"]]);
-  const voice = windowPort(VOICE);
+  const other = windowPort(OTHER_WINDOW);
   assert.deepEqual(
-    await settled(voice.client, ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL, undefined),
+    await settled(other.client, ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL, undefined),
     { refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL] },
   );
-  assert.deepEqual(voice.asked, []);
+  assert.deepEqual(other.asked, []);
 });

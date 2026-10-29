@@ -1,5 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import type { TasklessAgent } from "@luke/features/agent-wire";
 import {
   PLAN_ACTOR,
   type PlanSectionEdit,
@@ -263,7 +263,7 @@ type TaskChanges = Pick<TaskSummary, "updatedAt"> & Partial<Pick<TaskSummary, "a
  * seen, which every mark of a task is set to and read against: its newest
  * save, or its agents' newest settled activity where that is later. Note
  * that the agents' activity is read from turns alone (the service's
- * `codingAgentActivityAt`), so a pull request merging or closing, which ends
+ * `agentActivityAt`), so a pull request merging or closing, which ends
  * no turn, never moves it.
  */
 function newestChangeOf(task: TaskChanges): number {

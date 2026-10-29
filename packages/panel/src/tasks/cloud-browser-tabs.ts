@@ -1,15 +1,19 @@
 /**
- * cloud-browser-tabs.ts -- the Browser tabs open in a task's agents' cloud browsers, as the side panel lists them: read from the service while the task is open, then followed live.
+ * cloud-browser-tabs.ts -- the Browser tabs open in coding agents' cloud browsers, as the side panel lists them: one agent's on its page, or a task's agents' on the task's, read from the service while open, then followed live.
  *
- * The service keeps every tab of the task (`@luke/features/agent-browser-tab-wire`),
- * so the panel lists them on any client and after a relaunch. The tabs are
+ * The service keeps every tab of every agent's browser
+ * (`@luke/features/agent-browser-tab-wire`), so the panel lists them on any
+ * client and after a relaunch. What the panel lists them for is its holder
+ * (`BrowserTabsPlace`): the agent an agent's page shows, on a task or on
+ * none, or the task a task's panel stands beside, every one of its agents'
+ * tabs together. The tabs are
  * read once, then followed over Neon Realtime through the host
  * (`TASKS_BROWSER_TABS_FOLLOW`), which polls the read where Realtime fails it
  * and tells the tabs again as a takeover lapses, so the agent's pointer on a
  * tab is drawn within a moment of its move. A follow the host refused, or
  * one that ended, is read and followed afresh `CLOUD_BROWSER_TABS_AGAIN`
  * later, so a panel whose follow broke reads the tabs on that beat as it
- * once did. Every reader of the task shares one read and one follow; a read
+ * once did. Every reader of one holder shares one read and one follow; a read
  * or a follow the host did not answer keeps the list as it last stood. What a tab says (its address and title) is
  * drawn and held nowhere past the read: no trace, count, or app state (root
  * `AGENTS.md`'s cloud browser line).
@@ -23,7 +27,11 @@
  */
 
 import { useAtomValue } from "@effect/atom-react";
-import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
+import {
+  type AgentBrowserTab,
+  type BrowserTabsPlace,
+  browserTabsPlaceId,
+} from "@luke/features/agent-browser-tab-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { Duration, Effect, Schedule, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -38,13 +46,13 @@ export const CLOUD_BROWSER_TABS_AGAIN = Duration.seconds(5);
 /** How long after its agent last acted on a tab the tab says the agent is using it. */
 export const CLOUD_BROWSER_AGENT_RECENT = Duration.seconds(15);
 
-/** A task with no cloud Browser tab, the same array every render. */
+/** A holder with no cloud Browser tab, the same array every render. */
 const NO_TABS: readonly AgentBrowserTab[] = [];
 
-/** One read of the task's tabs; none where the host refused it. */
-function readTabs(taskId: string): Effect.Effect<readonly AgentBrowserTab[] | undefined> {
+/** One read of the holder's tabs; none where the host refused it. */
+function readTabs(place: BrowserTabsPlace): Effect.Effect<readonly AgentBrowserTab[] | undefined> {
   return Effect.promise(() =>
-    askAct(ACT_KIND.TASKS_BROWSER_TABS, { taskId }).then(
+    askAct(ACT_KIND.TASKS_BROWSER_TABS, place).then(
       (answer) => answer.tabs,
       () => undefined,
     ),
@@ -52,14 +60,16 @@ function readTabs(taskId: string): Effect.Effect<readonly AgentBrowserTab[] | un
 }
 
 /**
- * The task's tabs as the host's follow tells them, none for a change it
+ * The holder's tabs as the host's follow tells them, none for a change it
  * could not read; the follow ends quietly where the host refused it, and is
  * let go as the stream is.
  */
-function followedTabs(taskId: string): Stream.Stream<readonly AgentBrowserTab[] | undefined> {
+function followedTabs(
+  place: BrowserTabsPlace,
+): Stream.Stream<readonly AgentBrowserTab[] | undefined> {
   return Stream.unwrap(
     Effect.map(
-      Effect.tryPromise(() => askAct(ACT_KIND.TASKS_BROWSER_TABS_FOLLOW, { taskId })),
+      Effect.tryPromise(() => askAct(ACT_KIND.TASKS_BROWSER_TABS_FOLLOW, place)),
       (opened) => Stream.fromAsyncIterable(opened, (cause) => cause),
     ),
   ).pipe(
@@ -69,17 +79,28 @@ function followedTabs(taskId: string): Stream.Stream<readonly AgentBrowserTab[] 
 }
 
 /**
- * The task's tabs as a read answers them, then as each change the follow
+ * The holder's tabs as a read answers them, then as each change the follow
  * tells; read and followed again on the beat once the follow ends.
  */
-const tabsAtom = Atom.family((taskId: string) =>
-  rendererRuntime.atom(
-    Stream.concat(Stream.fromEffect(readTabs(taskId)), followedTabs(taskId)).pipe(
+function tabsOf(place: BrowserTabsPlace) {
+  return rendererRuntime.atom(
+    Stream.concat(Stream.fromEffect(readTabs(place)), followedTabs(place)).pipe(
       Stream.repeat(Schedule.spaced(CLOUD_BROWSER_TABS_AGAIN)),
       Stream.filter((tabs): tabs is readonly AgentBrowserTab[] => tabs !== undefined),
     ),
-  ),
-);
+  );
+}
+
+/** One read and follow of each holder's tabs, by the agent or the task. */
+const tabsAtom = {
+  task: Atom.family((taskId: string) => tabsOf({ taskId })),
+  agent: Atom.family((agentId: string) => tabsOf({ agentId })),
+};
+
+/** The holder's one read and follow. */
+function tabsAtomOf(place: BrowserTabsPlace) {
+  return "taskId" in place ? tabsAtom.task(place.taskId) : tabsAtom.agent(place.agentId);
+}
 
 /** Reads nothing, for a panel that lists no cloud Browser tab. */
 const unreadAtom = Atom.make<AsyncResult.AsyncResult<readonly AgentBrowserTab[]>>(
@@ -96,13 +117,13 @@ export interface CloudBrowserDraft {
   readonly agentId: string;
 }
 
-/** A task with no draft, the same array every render. */
+/** A holder with no draft, the same array every render. */
 const NO_DRAFTS: readonly CloudBrowserDraft[] = [];
 
-/** The tabs this window opened, by task, that no read has listed yet; a new map at each change. */
+/** The tabs this window opened, by the holder's id, that no read has listed yet; a new map at each change. */
 let opened: ReadonlyMap<string, readonly AgentBrowserTab[]> = new Map();
 
-/** The drafts this window holds, by task, in the order asked for; a new map at each change. */
+/** The drafts this window holds, by the holder's id, in the order asked for; a new map at each change. */
 let drafts: ReadonlyMap<string, readonly CloudBrowserDraft[]> = new Map();
 
 const listeners = new Set<() => void>();
@@ -121,37 +142,41 @@ function setOpened(next: ReadonlyMap<string, readonly AgentBrowserTab[]>): void 
   told();
 }
 
-/** Notes a tab the member opened in an agent's browser on the task, listed until a read lists it. */
-export function noteOpenedCloudTab(taskId: string, tab: AgentBrowserTab): void {
-  const standing = (opened.get(taskId) ?? NO_TABS).filter((each) => each.id !== tab.id);
-  setOpened(new Map(opened).set(taskId, [...standing, tab]));
+/** Notes a tab the member opened in an agent's browser from the holder's panel, listed until a read lists it. */
+export function noteOpenedCloudTab(place: BrowserTabsPlace, tab: AgentBrowserTab): void {
+  const key = browserTabsPlaceId(place);
+  const standing = (opened.get(key) ?? NO_TABS).filter((each) => each.id !== tab.id);
+  setOpened(new Map(opened).set(key, [...standing, tab]));
 }
 
-/** A draft of a tab in the coding agent's browser on the task, held after any the task holds already. */
-export function startCloudDraft(taskId: string, agentId: string): CloudBrowserDraft {
+/** A draft of a tab in the coding agent's browser on the holder's panel, held after any it holds already. */
+export function startCloudDraft(place: BrowserTabsPlace, agentId: string): CloudBrowserDraft {
+  const key = browserTabsPlaceId(place);
   const draft = { id: crypto.randomUUID(), agentId };
-  drafts = new Map(drafts).set(taskId, [...(drafts.get(taskId) ?? NO_DRAFTS), draft]);
+  drafts = new Map(drafts).set(key, [...(drafts.get(key) ?? NO_DRAFTS), draft]);
   told();
   return draft;
 }
 
 /** Lets go of a draft: discarded, or opened as a tab of its own. */
-export function discardCloudDraft(taskId: string, draftId: string): void {
-  const held = drafts.get(taskId) ?? NO_DRAFTS;
+export function discardCloudDraft(place: BrowserTabsPlace, draftId: string): void {
+  const key = browserTabsPlaceId(place);
+  const held = drafts.get(key) ?? NO_DRAFTS;
   if (!held.some((each) => each.id === draftId)) return;
   drafts = new Map(drafts).set(
-    taskId,
+    key,
     held.filter((each) => each.id !== draftId),
   );
   told();
 }
 
-/** The task's drafts in the order asked for; none where `listing` is off, as for the listed tabs. */
+/** The holder's drafts in the order asked for; none where `listing` is off, as for the listed tabs. */
 export function useCloudBrowserDrafts(
-  taskId: string | undefined,
+  place: BrowserTabsPlace | undefined,
   listing: boolean,
 ): readonly CloudBrowserDraft[] {
-  const held = () => (taskId === undefined ? NO_DRAFTS : (drafts.get(taskId) ?? NO_DRAFTS));
+  const key = place === undefined ? undefined : browserTabsPlaceId(place);
+  const held = () => (key === undefined ? NO_DRAFTS : (drafts.get(key) ?? NO_DRAFTS));
   const read = useSyncExternalStore(hear, held, held);
   return listing ? read : NO_DRAFTS;
 }
@@ -166,24 +191,26 @@ function withOpened(
 }
 
 /**
- * The open task's cloud Browser tabs, the oldest first; none while unread,
- * and none at all where `listing` is off: the Browser tab experiment off, or
- * no task open. A tab opened here stands from its open, and is let go of
- * once a read lists it, so one its agent closes afterwards goes.
+ * The holder's cloud Browser tabs, the oldest first: the agent's its page
+ * shows, or the open task's agents'; none while unread, and none at all
+ * where `listing` is off: no holder, or a panel that draws none. A tab
+ * opened here stands from its open, and is let go of once a read lists it,
+ * so one its agent closes afterwards goes.
  */
 export function useCloudBrowserTabs(
-  taskId: string | undefined,
+  place: BrowserTabsPlace | undefined,
   listing: boolean,
 ): readonly AgentBrowserTab[] | undefined {
-  const read = useAtomValue(listing && taskId !== undefined ? tabsAtom(taskId) : unreadAtom);
-  const openedHere = () => (taskId === undefined ? NO_TABS : (opened.get(taskId) ?? NO_TABS));
+  const read = useAtomValue(listing && place !== undefined ? tabsAtomOf(place) : unreadAtom);
+  const key = place === undefined ? undefined : browserTabsPlaceId(place);
+  const openedHere = () => (key === undefined ? NO_TABS : (opened.get(key) ?? NO_TABS));
   const mine = useSyncExternalStore(hear, openedHere, openedHere);
   const listed = AsyncResult.isSuccess(read) ? read.value : undefined;
   useEffect(() => {
-    if (taskId === undefined || listed === undefined || mine.length === 0) return;
+    if (key === undefined || listed === undefined || mine.length === 0) return;
     const left = mine.filter((tab) => !listed.some((each) => each.id === tab.id));
-    if (left.length < mine.length) setOpened(new Map(opened).set(taskId, left));
-  }, [taskId, listed, mine]);
+    if (left.length < mine.length) setOpened(new Map(opened).set(key, left));
+  }, [key, listed, mine]);
   if (!listing) return NO_TABS;
   if (listed === undefined) return mine.length === 0 ? undefined : mine;
   return withOpened(listed, mine);

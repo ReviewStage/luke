@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentTranscriptPage } from "@luke/features/coding-agent-view";
+import type { AgentTranscriptPage } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_STATUS,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import type { Task } from "@luke/features/task-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -19,7 +19,7 @@ import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
@@ -39,18 +39,18 @@ const TASK: Task = {
   document: { body: "", assumptions: [] },
 };
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Invite expiry job",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 
-const BRIEF: CodingAgentMessage = {
+const BRIEF: AgentTranscriptMessage = {
   id: "brief",
   role: MESSAGE_ROLE.USER,
   parts: [{ type: "text", text: "# Teammate invitations\n\nExpire invites after seven days." }],
@@ -58,10 +58,10 @@ const BRIEF: CodingAgentMessage = {
 };
 
 /** The transcript's one page, the brief alone, as the host pushes it. */
-const PAGE: CodingAgentTranscriptPage = {
+const PAGE: AgentTranscriptPage = {
   messages: [BRIEF],
   cursor: "1:0",
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   title: null,
   caughtUp: true,
 };
@@ -78,7 +78,7 @@ afterEach(() => {
 /** A follower that records each transcript followed and hands its pages over only when the test pushes them. */
 function heldFollower() {
   const followed: string[] = [];
-  const hearers: ((page: CodingAgentTranscriptPage) => void)[] = [];
+  const hearers: ((page: AgentTranscriptPage) => void)[] = [];
   const follower: TranscriptFollower = (transcript, hear) => {
     followed.push(transcript.agentId);
     hearers.push(hear);
@@ -87,7 +87,7 @@ function heldFollower() {
   return {
     follower,
     followed,
-    push: (page: CodingAgentTranscriptPage) => {
+    push: (page: AgentTranscriptPage) => {
       for (const hear of hearers) hear(page);
     },
   };
@@ -138,7 +138,7 @@ function opened(input: {
       tab: { agent: AGENT.id },
       openAgents: input.listed ? [AGENT.id] : undefined,
     },
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: input.listed ? [AGENT] : undefined,
       agentIds: input.listed ? [AGENT.id] : undefined,
       transcripts: input.follower,

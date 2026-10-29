@@ -32,7 +32,7 @@ const FUNNEL_LABEL = {
 
 const REACH_LABEL = {
   [REACH_FEATURE.TASKS]: "Tasks & plans",
-  [REACH_FEATURE.CODING_AGENTS]: "Coding agents",
+  [REACH_FEATURE.AGENTS]: "Agents",
   [REACH_FEATURE.INBOX]: "Inbox",
   [REACH_FEATURE.INTEGRATIONS]: "Integration connected",
   [REACH_FEATURE.AUTOMATIONS]: "Automations",

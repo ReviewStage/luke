@@ -1,7 +1,4 @@
-import {
-  CODING_AGENT_BOUNDS,
-  type CodingAgentAttachmentType,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, type AgentAttachmentType } from "@luke/features/agent-wire";
 import {
   CONVERSATION_MEDIA_TYPE,
   CONVERSATION_PICTURE_BOUNDS,
@@ -133,7 +130,7 @@ export const attachment = pgTable(
     position: integer("position"),
     /** The media type the bytes were sniffed to be, or travelled as: what they are served under. A conversation's, an inbox message's, or a plan's may be a WebM an agent recorded, which no other owner's is. */
     contentType: text("content_type")
-      .$type<CodingAgentAttachmentType | ConversationMediaType>()
+      .$type<AgentAttachmentType | ConversationMediaType>()
       .notNull(),
     /** The hex SHA-256 of a conversation's picture's bytes, of which the conversation keeps one row; null for every other owner's. */
     sha256: text("sha256"),
@@ -180,7 +177,7 @@ export const attachment = pgTable(
     // A plan comment's file names its task and workspace, has a name and a place among the comment's files, and is held to a file's bound.
     check(
       "attachment_plan_comment_file",
-      sql`${table.planCommentId} is null or (${table.taskId} is not null and ${table.organizationId} is not null and ${table.name} is not null and ${table.position} is not null and octet_length(${table.bytes}) <= ${bound(CODING_AGENT_BOUNDS.MAX_PDF_BYTES)})`,
+      sql`${table.planCommentId} is null or (${table.taskId} is not null and ${table.organizationId} is not null and ${table.name} is not null and ${table.position} is not null and octet_length(${table.bytes}) <= ${bound(AGENT_BOUNDS.MAX_PDF_BYTES)})`,
     ),
     // A conversation's picture carries its hash and its size in pixels.
     check(
@@ -190,7 +187,7 @@ export const attachment = pgTable(
     // An inbox item's file is of a kind, held to its kind's bound, a message's recording to a video's, and only an answer's or a message's file has a name and a place, and only a message's names a message; no other owner's has a kind.
     check(
       "attachment_inbox_kind",
-      sql`(${table.inboxItemId} is null and ${table.kind} is null) or (${table.inboxItemId} is not null and ((${table.kind} = ${literal(INBOX_ATTACHMENT_KIND.IMAGE)} and octet_length(${table.bytes}) <= ${bound(INBOX_BOUNDS.MAX_IMAGE_BYTES)} and ${table.name} is null and ${table.position} is null and ${table.inboxMessageId} is null) or (${table.kind} = ${literal(INBOX_ATTACHMENT_KIND.ANSWER)} and octet_length(${table.bytes}) <= ${bound(CODING_AGENT_BOUNDS.MAX_PDF_BYTES)} and ${table.name} is not null and ${table.position} is not null and ${table.inboxMessageId} is null) or (${table.kind} = ${literal(INBOX_ATTACHMENT_KIND.MESSAGE)} and (octet_length(${table.bytes}) <= ${bound(CODING_AGENT_BOUNDS.MAX_PDF_BYTES)} or (${isWebm(table)} and octet_length(${table.bytes}) <= ${bound(INBOX_BOUNDS.MAX_VIDEO_BYTES)})) and ${table.name} is not null and ${table.position} is not null and ${table.inboxMessageId} is not null)))`,
+      sql`(${table.inboxItemId} is null and ${table.kind} is null) or (${table.inboxItemId} is not null and ((${table.kind} = ${literal(INBOX_ATTACHMENT_KIND.IMAGE)} and octet_length(${table.bytes}) <= ${bound(INBOX_BOUNDS.MAX_IMAGE_BYTES)} and ${table.name} is null and ${table.position} is null and ${table.inboxMessageId} is null) or (${table.kind} = ${literal(INBOX_ATTACHMENT_KIND.ANSWER)} and octet_length(${table.bytes}) <= ${bound(AGENT_BOUNDS.MAX_PDF_BYTES)} and ${table.name} is not null and ${table.position} is not null and ${table.inboxMessageId} is null) or (${table.kind} = ${literal(INBOX_ATTACHMENT_KIND.MESSAGE)} and (octet_length(${table.bytes}) <= ${bound(AGENT_BOUNDS.MAX_PDF_BYTES)} or (${isWebm(table)} and octet_length(${table.bytes}) <= ${bound(INBOX_BOUNDS.MAX_VIDEO_BYTES)})) and ${table.name} is not null and ${table.position} is not null and ${table.inboxMessageId} is not null)))`,
     ),
   ],
 );

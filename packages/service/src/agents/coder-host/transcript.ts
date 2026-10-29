@@ -1,10 +1,8 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import {
-  type AskTurn,
-  askTurnsOf,
+  type Agent,
+  type AgentDelegation,
   awaitingLinesOf,
-  type CodingAgent,
-  type CodingAgentDelegation,
   delegationStartsOf,
   delegationsOf,
   delegationTitlesOf,
@@ -13,13 +11,13 @@ import {
   latestTurnsOf,
   linePlacesOf,
   lineSendersOf,
-  readCodingAgentContext,
-  readCodingAgentHeaderOfConversation,
-  readCodingAgentRouting,
+  readAgentContext,
+  readAgentHeaderOfConversation,
+  readAgentRouting,
   readDelegation,
   turnUsagesOf,
   untitledDelegationsSince,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import {
   type LatestTurn,
@@ -35,26 +33,27 @@ import {
 } from "@luke/database/models/message-reads";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_CURSOR_START,
-  CODING_AGENT_DELEGATE_TOOL,
-  CODING_AGENT_SENDER,
-  CODING_AGENT_STATUS,
-  type CodingAgentContext,
-  type CodingAgentDelegationStart,
-  type CodingAgentFailure,
-  type CodingAgentPayer,
-  type CodingAgentSender,
-  type CodingAgentStatus,
-  type CodingAgentSubagentStanding,
-  type CodingAgentSubagentTitle,
-  type CodingAgentUsage,
+  AGENT_BOUNDS,
+  AGENT_CURSOR_START,
+  AGENT_DELEGATE_TOOL,
+  AGENT_SENDER,
+  AGENT_STATUS,
+  type AgentContext,
+  type AgentDelegationStart,
+  type AgentFailure,
+  type AgentPayer,
+  type AgentSender,
+  type AgentStatus,
+  type AgentSubagentStanding,
+  type AgentSubagentTitle,
+  type AgentUsage,
   type TurnRecord,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { turnRecordOf } from "@luke/features/turn-record";
 import type { ToolSet } from "ai";
-import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
+import { Clock, Duration, Effect, Option, type Schema } from "effect";
 import {
   isSettledToolPartState,
   isStoredToolPart,
@@ -64,14 +63,15 @@ import {
   storedToolName,
   TURN_STATUS,
 } from "../../core.js";
+import { heldUntil } from "../../http/held-read.js";
 import { ModelCatalog, type OfferedModel } from "../../providers/model-catalog.js";
 import { CODER } from "./bounds.js";
-import { codingAgentContextOf, contextWindowOf } from "./context.js";
+import { agentContextOf, contextWindowOf } from "./context.js";
 import {
   type AgentStanding,
-  codingAgentFailureOf,
-  codingAgentRunStartedAt,
-  codingAgentStatusOf,
+  agentFailureOf,
+  agentRunStartedAt,
+  agentStatusOf,
   ranDirectlyFolderOf,
   statusClockEdge,
 } from "./status.js";
@@ -91,10 +91,12 @@ import { usageOfTurns } from "./usage.js";
  * sequence it has and the journal revision it last read at, so a row added
  * past the first or amended past the second is new to it. A read with
  * nothing new is held open while the agent is starting or its newest turn
- * still runs, looked at again every `MESSAGES_POLL` and let go at
- * `MESSAGES_HOLD`, so a tab hears each message as it lands without asking
- * every half second and a tab on an agent whose first turn has not landed
- * costs one held read per hold rather than a spin; an agent that has ended
+ * still runs, looked at again as each write to the conversation lands
+ * (`transcriptTopics`), every `MESSAGES_POLL` where Luke Sync cannot wake
+ * it, and let go at `MESSAGES_HOLD`, so a tab hears each message as it
+ * lands without asking every half second and a tab on an agent whose
+ * first turn has not landed costs one held read per hold rather than a
+ * spin; an agent that has ended
  * answers at once, unless a message of the developer's awaits the turn it
  * will open, which reads as running and is held for. Every page carries the agent's status as it stood when
  * the page was read, and why where the newest turn failed, so the reader
@@ -137,43 +139,41 @@ export function cursorToWire(cursor: MessageCursor): string {
 }
 
 /** The cursor before every message, as the store reads it. */
-export const CURSOR_START: MessageCursor = cursorOfWire(CODING_AGENT_CURSOR_START);
+export const CURSOR_START: MessageCursor = cursorOfWire(AGENT_CURSOR_START);
 
-/** One row of the transcript as the route answers it: its message as the store holds it, for a turn's journal when the turn began and closed and what it ran on and spent, and for a developer's line what sent it, which is the wire's `CodingAgentMessage` once serialized. */
+/** One row of the transcript as the route answers it: its message as the store holds it, for a turn's journal when the turn began and closed and what it ran on and spent, and for a developer's line what sent it, which is the wire's `AgentTranscriptMessage` once serialized. */
 type TranscriptMessage = StoredUIMessage &
   TurnRecord & {
     readonly startedAt?: number;
     readonly finishedAt?: number;
     readonly clientId?: string;
-    readonly sentBy?: CodingAgentSender;
+    readonly sentBy?: AgentSender;
     readonly sentAt?: number;
     readonly arrivedIn?: LinePlace;
-    readonly turnId?: string;
-    readonly readFrom?: AskTurn;
   };
 
 /** A page of the transcript as the route answers it: each row's message, the agent's status as it stood, and why where its newest turn failed. */
 export interface TranscriptPage {
   readonly messages: readonly TranscriptMessage[];
   readonly cursor: MessageCursor;
-  readonly status: CodingAgentStatus;
+  readonly status: AgentStatus;
   /** When the run that status is read from began, as the agent's summary says it; absent while a line awaits its turn. */
   readonly runStartedAt?: number;
-  readonly failureReason?: CodingAgentFailure;
+  readonly failureReason?: AgentFailure;
   /** Where a failed agent that ran directly on its Mac left its work, which its Mac refused to start; absent for every other failure. */
   readonly ranDirectly?: { readonly folder: string };
   /** What the agent has cost over every turn it and its workers settled; absent before one has. */
-  readonly usage?: CodingAgentUsage;
+  readonly usage?: AgentUsage;
   /** Who pays for the agent, on its own transcript where its row records one; absent on a worker's. */
-  readonly payer?: CodingAgentPayer;
+  readonly payer?: AgentPayer;
   /** What the agent's model's context holds, on its own transcript; absent before its first step and on a worker's. */
-  readonly context?: CodingAgentContext;
+  readonly context?: AgentContext;
   /** The delegations its newest turn still waits on, with when each worker began, on its own transcript; absent while none runs and on a worker's. */
-  readonly delegations?: readonly CodingAgentDelegationStart[];
+  readonly delegations?: readonly AgentDelegationStart[];
   /** Every one of its workers titled so far, by the call that delegated it, on its own transcript; absent while none is and on a worker's. */
-  readonly subagentTitles?: readonly CodingAgentSubagentTitle[];
+  readonly subagentTitles?: readonly AgentSubagentTitle[];
   /** Where every one of its workers stands, read from the worker's own session, on its own transcript; absent while it has delegated nothing and on a worker's. */
-  readonly subagents?: readonly CodingAgentSubagentStanding[];
+  readonly subagents?: readonly AgentSubagentStanding[];
 }
 
 type TranscriptEffect<A, R = never> = Effect.Effect<
@@ -186,12 +186,12 @@ type TranscriptEffect<A, R = never> = Effect.Effect<
 type NewestTurn = LatestTurn | undefined;
 
 /** The agent whose own transcript a page is, as its context is read: its row. */
-type OwnAgent = Pick<CodingAgent, "id">;
+type OwnAgent = Pick<Agent, "id">;
 
 /** The statuses a read waits through: more may still land. */
-const WAITING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
-  CODING_AGENT_STATUS.STARTING,
-  CODING_AGENT_STATUS.RUNNING,
+const WAITING_STATUSES: ReadonlySet<AgentStatus> = new Set([
+  AGENT_STATUS.STARTING,
+  AGENT_STATUS.RUNNING,
 ]);
 
 /** When an agent was started, and whether blank, which is what its status is read by beside its turns (`AgentStanding`). */
@@ -210,10 +210,10 @@ const statusNow = (target: ConversationTarget, { createdAt, blank }: AgentStart)
     const now = yield* Clock.currentTimeMillis;
     const turn = turns.get(target.conversationId);
     const awaitingLineAt = awaiting.get(target.conversationId);
-    const status = codingAgentStatusOf(turn, { createdAt, now, awaitingLineAt, blank });
-    const runStartedAt = codingAgentRunStartedAt(turn, { createdAt, now, awaitingLineAt });
-    const failed = status === CODING_AGENT_STATUS.FAILED;
-    const failureReason = failed ? codingAgentFailureOf(turn) : undefined;
+    const status = agentStatusOf(turn, { createdAt, now, awaitingLineAt, blank });
+    const runStartedAt = agentRunStartedAt(turn, { createdAt, now, awaitingLineAt });
+    const failed = status === AGENT_STATUS.FAILED;
+    const failureReason = failed ? agentFailureOf(turn) : undefined;
     const folder = failed ? ranDirectlyFolderOf(turn) : undefined;
     const ranDirectly = folder === undefined ? undefined : { folder };
     const graceEdge = statusClockEdge(turn, { createdAt, now, awaitingLineAt, blank });
@@ -224,9 +224,9 @@ const statusNow = (target: ConversationTarget, { createdAt, blank }: AgentStart)
 const heldContextOf = (target: ConversationTarget, own: OwnAgent | undefined) =>
   own === undefined
     ? Effect.succeed(Option.none<HeldContext>())
-    : readCodingAgentContext(target.userId, own.id);
+    : readAgentContext(target.userId, own.id);
 
-type HeldContext = Option.Option.Value<Effect.Success<ReturnType<typeof readCodingAgentContext>>>;
+type HeldContext = Option.Option.Value<Effect.Success<ReturnType<typeof readAgentContext>>>;
 
 /** Whether the catalog lists a window for the model, one or two. */
 const windowListed = (offered: readonly OfferedModel[], modelId: string) => {
@@ -246,7 +246,7 @@ const windowListed = (offered: readonly OfferedModel[], modelId: string) => {
 const contextOf = (held: Option.Option<HeldContext>, offered: readonly OfferedModel[]) =>
   Option.isNone(held) || !windowListed(offered, held.value.model)
     ? undefined
-    : codingAgentContextOf(
+    : agentContextOf(
         held.value,
         contextWindowOf(offered, held.value.model, held.value.contextWindow),
       );
@@ -260,7 +260,7 @@ interface JournalTurn {
 /**
  * Each turn whose journal is among the rows, by the turn: when it began,
  * its start or its queueing before eve started it, which is what the
- * working line counted from while it ran (`codingAgentRunStartedAt`), and
+ * working line counted from while it ran (`agentRunStartedAt`), and
  * what it ran on and spent as its row recorded them (`turn-record.ts`).
  */
 const journalTurnsOf = (userId: string, records: readonly StoredMessageRecord[]) => {
@@ -295,25 +295,24 @@ const SENDER_NAME = {
  * build draws it as a sender it cannot place, under its name, and a newer
  * one as an agent.
  */
-function senderOf(sent: LineSent): CodingAgentSender {
+function senderOf(sent: LineSent): AgentSender {
   switch (sent.kind) {
     case MESSAGE_SENDER.MEMBER:
       return sent.member === undefined
-        ? { name: SENDER_NAME.FORMER_MEMBER, kind: CODING_AGENT_SENDER.FORMER }
-        : { ...sent.member, kind: CODING_AGENT_SENDER.MEMBER };
+        ? { name: SENDER_NAME.FORMER_MEMBER, kind: AGENT_SENDER.FORMER }
+        : { ...sent.member, kind: AGENT_SENDER.MEMBER };
     case MESSAGE_SENDER.LUKE:
-      return { name: SENDER_NAME.LUKE, kind: CODING_AGENT_SENDER.LUKE };
+      return { name: SENDER_NAME.LUKE, kind: AGENT_SENDER.LUKE };
     case MESSAGE_SENDER.AUTOMATION:
-      return { name: sent.name, kind: CODING_AGENT_SENDER.AUTOMATION };
+      return { name: sent.name, kind: AGENT_SENDER.AUTOMATION };
     case MESSAGE_SENDER.GITHUB:
-      return { name: sent.login, kind: CODING_AGENT_SENDER.GITHUB };
+      return { name: sent.login, kind: AGENT_SENDER.GITHUB };
     case MESSAGE_SENDER.AGENT:
       return {
         name: sent.name,
         agent: true,
         ...(sent.model === undefined ? undefined : { model: sent.model }),
         ...(sent.agent === undefined ? undefined : { agentId: sent.agent.id }),
-        ...(sent.agent?.taskId === undefined ? undefined : { taskId: sent.agent.taskId }),
       };
   }
 }
@@ -325,30 +324,10 @@ function lineIdsAmong(records: readonly StoredMessageRecord[]): readonly string[
     .map((record) => record.id);
 }
 
-/** The asks the voice's lines among the rows followed, by their delegation, each the ask's client id. */
-function delegationsAmong(records: readonly StoredMessageRecord[]): readonly string[] {
-  return [
-    ...new Set(
-      records.flatMap((record) => {
-        const delegation = spokenDelegationOf(record.message);
-        return delegation === undefined ? [] : [delegation];
-      }),
-    ),
-  ];
-}
-
-/** The ask a line the agent said on a call followed, where the voice handed one on before it; none for any other row. */
-function spokenDelegationOf(message: StoredUIMessage): string | undefined {
-  if (message.role !== MESSAGE_ROLE.ASSISTANT || !spokenOnCall(message)) return undefined;
-  const { metadata } = message;
-  return "delegation_id" in metadata ? metadata.delegation_id : undefined;
-}
-
-/** What a page knows of the developer's lines among its rows, by row: what sent each where its row kept it, and where in a turn under way each arrived where one took it in; and of the agent's own lines on a call, the turn each one's ask ran in, by the ask. */
+/** What a page knows of the developer's lines among its rows, by row: what sent each where its row kept it, and where in a turn under way each arrived where one took it in. */
 interface LinesRead {
   readonly senders: ReadonlyMap<string, LineSent>;
   readonly places: ReadonlyMap<string, LinePlace>;
-  readonly asked: ReadonlyMap<string, AskTurn>;
 }
 
 /** Whether a row is a line said on a call into the agent, either speaker's, which the voice wrote rather than a turn. */
@@ -360,22 +339,16 @@ function spokenOnCall(message: StoredUIMessage): boolean {
 
 /**
  * A row as the page carries it: its message, for a developer's line when
- * and what sent it and where in a turn under way it arrived, for a line the
- * agent said on a call when its words began, and for a turn's journal when
- * the turn began and what it ran on and, once the journal closed, when it
- * did and what it spent, and the turn it is the journal of. Note that a
- * spoken line of the agent's carries no turn's record, because the line is
- * what was said and the turn's journal is its own row; it names instead the
- * turn whose work it answers (`readFrom`), the one the ask it followed ran
- * in, read from the ask's binding at every page rather than stamped on the
- * row as it was said, so a line said while that turn ran, or long after it
- * settled, or before the ask learned its turn, names it all the same, and
- * where the ask joined a typed turn under way, the steps begun before it.
+ * and what sent it and where in a turn under way it arrived, for a line
+ * said on a call when its words began, and for a turn's journal when the
+ * turn began and what it ran on and, once the journal closed, when it did
+ * and what it spent. Note that a spoken line carries no turn's record,
+ * because the line is what was said and the turn's journal is its own row.
  */
 function transcriptMessageOf(
   record: StoredMessageRecord,
   journalTurns: ReadonlyMap<string, JournalTurn>,
-  { senders, places, asked }: LinesRead,
+  { senders, places }: LinesRead,
 ): TranscriptMessage {
   if (record.message.role === MESSAGE_ROLE.USER) {
     const sent = senders.get(record.id);
@@ -389,20 +362,12 @@ function transcriptMessageOf(
     };
   }
   if (spokenOnCall(record.message)) {
-    const delegation = spokenDelegationOf(record.message);
-    const readFrom = delegation === undefined ? undefined : asked.get(delegation);
-    return {
-      ...record.message,
-      sentAt: record.placedAt.getTime(),
-      ...(readFrom === undefined ? undefined : { readFrom }),
-    };
+    return { ...record.message, sentAt: record.placedAt.getTime() };
   }
   const turn = record.turnId === undefined ? undefined : journalTurns.get(record.turnId);
   if (turn === undefined) return record.message;
   return {
     ...record.message,
-    // Note that a turn's journal shares the turn's id as its client id, which no other row of the turn does.
-    ...(record.clientId === record.turnId ? { turnId: record.turnId } : undefined),
     startedAt: turn.startedAt,
     ...(record.finishedAt === undefined ? undefined : { finishedAt: record.finishedAt.getTime() }),
     ...turn.record,
@@ -420,7 +385,7 @@ const delegationsUnderWay = (
   target: ConversationTarget,
   tools: ToolSet,
   turn: NewestTurn,
-): TranscriptEffect<readonly CodingAgentDelegationStart[]> =>
+): TranscriptEffect<readonly AgentDelegationStart[]> =>
   Effect.gen(function* () {
     if (turn === undefined) return [];
     const read = yield* readMessageByClientId(target.userId, target.conversationId, tools, turn.id);
@@ -429,8 +394,7 @@ const delegationsUnderWay = (
       .filter(isStoredToolPart)
       .filter(
         (part) =>
-          storedToolName(part) === CODING_AGENT_DELEGATE_TOOL &&
-          !isSettledToolPartState(part.state),
+          storedToolName(part) === AGENT_DELEGATE_TOOL && !isSettledToolPartState(part.state),
       )
       .map((part) => part.toolCallId);
     const children = calls.map((callId) => ({
@@ -457,7 +421,7 @@ const delegationsUnderWay = (
  */
 const subagentStandingsOf = (
   target: ConversationTarget,
-): TranscriptEffect<readonly CodingAgentSubagentStanding[]> =>
+): TranscriptEffect<readonly AgentSubagentStanding[]> =>
   Effect.gen(function* () {
     const delegations = yield* delegationsOf(target);
     if (delegations.length === 0) return [];
@@ -468,7 +432,7 @@ const subagentStandingsOf = (
     const now = yield* Clock.currentTimeMillis;
     return delegations.map((each) => ({
       callId: each.callId,
-      status: codingAgentStatusOf(turns.get(each.childConversationId), {
+      status: agentStatusOf(turns.get(each.childConversationId), {
         createdAt: each.createdAt,
         now,
       }),
@@ -482,7 +446,7 @@ const subagentStandingsOf = (
 const payerOf = (target: ConversationTarget, own: OwnAgent | undefined) =>
   own === undefined
     ? Effect.succeed(null)
-    : Effect.map(readCodingAgentRouting(target.userId, own.id), (routing) =>
+    : Effect.map(readAgentRouting(target.userId, own.id), (routing) =>
         Option.isNone(routing) ? null : routing.value.payer,
       );
 
@@ -517,14 +481,14 @@ const withUsage = (
           delegations:
             own !== undefined && WAITING_STATUSES.has(page.status)
               ? delegationsUnderWay(target, tools, turn)
-              : Effect.succeed<readonly CodingAgentDelegationStart[]>([]),
+              : Effect.succeed<readonly AgentDelegationStart[]>([]),
           subagentTitles:
             own === undefined
-              ? Effect.succeed<readonly CodingAgentSubagentTitle[]>([])
+              ? Effect.succeed<readonly AgentSubagentTitle[]>([])
               : delegationTitlesOf(target),
           subagents:
             own === undefined
-              ? Effect.succeed<readonly CodingAgentSubagentStanding[]>([])
+              ? Effect.succeed<readonly AgentSubagentStanding[]>([])
               : subagentStandingsOf(target),
         },
         { concurrency: CODER.READ_CONCURRENCY },
@@ -544,7 +508,7 @@ const withUsage = (
     };
   });
 
-/** The rows as a page carries them, with what each needs read beside it: its turn's journal, and what sent each of the developer's lines, where it arrived, and the turn each of the agent's spoken lines answers. */
+/** The rows as a page carries them, with what each needs read beside it: its turn's journal, and what sent each of the developer's lines and where it arrived. */
 const transcriptMessagesOf = (
   target: ConversationTarget,
   records: readonly StoredMessageRecord[],
@@ -556,7 +520,6 @@ const transcriptMessagesOf = (
         journalTurns: journalTurnsOf(target.userId, records),
         senders: lineSendersOf(target, lines),
         places: linePlacesOf(target, lines),
-        asked: askTurnsOf(target, delegationsAmong(records)),
       },
       { concurrency: CODER.READ_CONCURRENCY },
     );
@@ -582,7 +545,7 @@ function pagePast(
           target.conversationId,
           tools,
           after,
-          CODING_AGENT_BOUNDS.MESSAGES_PAGE,
+          AGENT_BOUNDS.MESSAGES_PAGE,
         ),
         standing: statusNow(target, agent),
       },
@@ -607,8 +570,28 @@ function pagePast(
 
 /** What a wait for a delegation's record answers: the record, or none, with whether the agent it was asked of still runs. */
 export type DelegationPast =
-  | { readonly delegation: CodingAgentDelegation }
+  | { readonly delegation: AgentDelegation }
   | { readonly delegation: undefined; readonly agentRuns: boolean };
+
+/** A delegation as it stands, and, where none does while the agent runs, the instant the clock alone may end its run, past its grace. */
+interface DelegationStanding {
+  readonly read: DelegationPast;
+  readonly graceEdge: number | undefined;
+}
+
+/** The delegation a call recorded as it stands now, with the instant the clock alone may end the agent's run where none stands. */
+function delegationStanding(
+  parent: ConversationTarget,
+  childConversationId: string,
+  agent: Pick<AgentStanding, "createdAt">,
+): TranscriptEffect<DelegationStanding> {
+  return Effect.gen(function* () {
+    const found = yield* readDelegation(parent, childConversationId);
+    if (Option.isSome(found)) return { read: { delegation: found.value }, graceEdge: undefined };
+    const { status, graceEdge } = yield* statusNow(parent, agent);
+    return { read: { delegation: undefined, agentRuns: WAITING_STATUSES.has(status) }, graceEdge };
+  });
+}
 
 /** The delegation a call recorded as it stands now: the record, or none with whether the agent it was asked of still runs, which is when it may still land. */
 export function delegationNow(
@@ -616,39 +599,37 @@ export function delegationNow(
   childConversationId: string,
   agent: Pick<AgentStanding, "createdAt">,
 ): TranscriptEffect<DelegationPast> {
-  return Effect.gen(function* () {
-    const found = yield* readDelegation(parent, childConversationId);
-    if (Option.isSome(found)) return { delegation: found.value };
-    const { status } = yield* statusNow(parent, agent);
-    return { delegation: undefined, agentRuns: WAITING_STATUSES.has(status) };
-  });
+  return Effect.map(delegationStanding(parent, childConversationId, agent), ({ read }) => read);
 }
 
 /**
  * The delegation a call recorded, waited for. A worker's tab opens from
  * the moment its call is requested, which is a step ahead of the record the
  * call's own step writes, so a read that finds none while the agent still
- * runs holds as a transcript read does, on the same poll and bound, and
- * answers the record once it lands; none past the hold says the agent still
- * runs, and none once the agent has ended is none for good.
+ * runs holds as a transcript read does, on the same topics, poll, and bound,
+ * and answers the record once it lands; none past the hold says the agent
+ * still runs, and none once the agent has ended is none for good. Note that
+ * the record notifies the parent's conversation, through the worker's own
+ * (`agentDelegationSync`), as the agent's turns and lines do.
  */
 export function delegationPast(
   parent: ConversationTarget,
   childConversationId: string,
   agent: Pick<AgentStanding, "createdAt">,
 ): TranscriptEffect<DelegationPast> {
-  const once: TranscriptEffect<Option.Option<DelegationPast>> = Effect.map(
-    delegationNow(parent, childConversationId, agent),
-    (read) => (read.delegation === undefined && read.agentRuns ? Option.none() : Option.some(read)),
-  );
-  return once.pipe(
-    Effect.repeat({ schedule: Schedule.spaced(CODER.MESSAGES_POLL), until: Option.isSome }),
-    Effect.timeoutOption(CODER.MESSAGES_HOLD),
+  return heldUntil(
+    delegationStanding(parent, childConversationId, agent),
+    ({ read }) => read.delegation !== undefined || !read.agentRuns,
+    transcriptTopics(parent),
+    CODER.MESSAGES_POLL,
+    CODER.MESSAGES_HOLD,
+    ({ graceEdge }) => graceEdge,
+  ).pipe(
     Effect.map((held) =>
-      Option.getOrElse(
-        Option.flatten(held),
-        (): DelegationPast => ({ delegation: undefined, agentRuns: true }),
-      ),
+      Option.match(held, {
+        onNone: (): DelegationPast => ({ delegation: undefined, agentRuns: true }),
+        onSome: ({ read }) => read.read,
+      }),
     ),
   );
 }
@@ -665,7 +646,7 @@ function ownTitleWindow(
   since: Date,
 ): TranscriptEffect<Option.Option<Date>> {
   return Effect.gen(function* () {
-    const own = yield* readCodingAgentHeaderOfConversation(target.userId, target.conversationId);
+    const own = yield* readAgentHeaderOfConversation(target.userId, target.conversationId);
     if (Option.isNone(own) || own.value.title !== null) return Option.none();
     const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
     const newest = turns.get(target.conversationId);
@@ -747,6 +728,25 @@ const holdsFor = (page: TranscriptPage, titleAwaited: TitleAwaited): TranscriptE
   return titleAwaited;
 };
 
+/** The instant the clock alone may end a hold on a page: the agent passing the grace its turn had to land in while it waits, or else the window of a title it waits on closing. */
+const holdEdgeOf = (
+  page: TranscriptPage,
+  graceEdge: number | undefined,
+  titleEdge: TitleEdge,
+): TranscriptEffect<number | undefined> =>
+  WAITING_STATUSES.has(page.status) ? Effect.succeed(graceEdge) : titleEdge;
+
+/**
+ * The topics a held read of a transcript wakes on: its conversation's,
+ * which its messages, its turns, and its workers' conversations and
+ * delegations notify, a worker's title among them, and, on the agent's own
+ * transcript, the agent's, which its own title landing notifies.
+ */
+function transcriptTopics(target: ConversationTarget, own?: OwnAgent): readonly SyncTopic[] {
+  const conversation: SyncTopic = [TOPIC.CONVERSATION, target.conversationId];
+  return own === undefined ? [conversation] : [conversation, [TOPIC.AGENT, own.id]];
+}
+
 /**
  * The transcript past the cursor: the page as it stands, or, while the
  * agent is starting or runs and nothing new stands yet, the first page with
@@ -759,7 +759,11 @@ const holdsFor = (page: TranscriptPage, titleAwaited: TitleAwaited): TranscriptE
  * An ended agent's empty page is held too while `titleAwaited` says a
  * title may still land, because a reader stops at that page and the
  * agent's own title, or a short worker's, lands after its turn ended; the
- * page that ends that hold carries the title.
+ * page that ends that hold carries the title. Each look comes as a write
+ * to the transcript lands (`transcriptTopics`), and no later than the
+ * instant the clock alone may end the hold, the agent passing its grace or
+ * a title's window closing (`titleEdge`), so a hold Luke Sync wakes ends
+ * when a polled one would.
  */
 export function transcriptPast(
   target: ConversationTarget,
@@ -768,21 +772,27 @@ export function transcriptPast(
   agent: AgentStart,
   own?: OwnAgent,
   titleAwaited: TitleAwaited = NO_TITLE_AWAITED,
-  poll: Duration.Input = CODER.MESSAGES_POLL,
+  titleEdge: TitleEdge = NO_TITLE_EDGE,
+  poll: Duration.Duration = CODER.MESSAGES_POLL,
 ): TranscriptEffect<TranscriptPage, ModelCatalog> {
-  const once = Effect.gen(function* () {
+  const look = Effect.gen(function* () {
     const read = yield* pagePast(target, tools, after, agent);
-    return (yield* holdsFor(read.page, titleAwaited)) ? Option.none() : Option.some(read);
+    if (!(yield* holdsFor(read.page, titleAwaited))) return { read, holds: false, edge: undefined };
+    return { read, holds: true, edge: yield* holdEdgeOf(read.page, read.graceEdge, titleEdge) };
   });
-  return once.pipe(
-    Effect.repeat({ schedule: Schedule.spaced(poll), until: Option.isSome }),
-    Effect.timeoutOption(CODER.MESSAGES_HOLD),
-    Effect.flatMap((held) => {
-      const read = Option.flatten(held);
-      return Option.isSome(read)
-        ? Effect.succeed(read.value)
-        : pagePast(target, tools, after, agent);
-    }),
+  return heldUntil(
+    look,
+    ({ holds }) => !holds,
+    transcriptTopics(target, own),
+    poll,
+    CODER.MESSAGES_HOLD,
+    ({ edge }) => edge,
+  ).pipe(
+    Effect.flatMap((held) =>
+      Option.isSome(held)
+        ? Effect.succeed(held.value.read.read)
+        : pagePast(target, tools, after, agent),
+    ),
     Effect.flatMap(({ page, turn }) => withUsage(target, tools, page, turn, own)),
   );
 }
@@ -818,13 +828,10 @@ export function transcriptNow(
     const holds = yield* holdsFor(page, titleAwaited);
     const read = { page: yield* withUsage(target, tools, page, turn, own), holds };
     if (!holds) return read;
-    const waiting = WAITING_STATUSES.has(page.status);
-    const edges = [waiting ? graceEdge : yield* titleEdge].filter(
-      (edge): edge is number => edge !== undefined,
-    );
-    if (edges.length === 0) return read;
+    const edge = yield* holdEdgeOf(page, graceEdge, titleEdge);
+    if (edge === undefined) return read;
     const now = yield* Clock.currentTimeMillis;
-    return { ...read, wakeIn: Math.max(1, Math.min(...edges) - now) };
+    return { ...read, wakeIn: Math.max(1, edge - now) };
   });
 }
 
@@ -857,7 +864,7 @@ const olderPageOf = (
     const records = read.value;
     const messages = yield* transcriptMessagesOf(target, records);
     const [oldest] = records;
-    return records.length < CODING_AGENT_BOUNDS.MESSAGES_PAGE || oldest === undefined
+    return records.length < AGENT_BOUNDS.MESSAGES_PAGE || oldest === undefined
       ? { messages }
       : { messages, before: oldest.seq };
   });
@@ -886,7 +893,7 @@ export function transcriptNewest(
           target.conversationId,
           tools,
           cursor.seq + 1,
-          CODING_AGENT_BOUNDS.MESSAGES_PAGE,
+          AGENT_BOUNDS.MESSAGES_PAGE,
         ),
         standing: statusNow(target, agent),
       },
@@ -921,7 +928,7 @@ export function transcriptBefore(
       target.conversationId,
       tools,
       before,
-      CODING_AGENT_BOUNDS.MESSAGES_PAGE,
+      AGENT_BOUNDS.MESSAGES_PAGE,
     ),
     (read) => olderPageOf(target, read),
   );

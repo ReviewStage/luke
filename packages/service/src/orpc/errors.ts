@@ -10,7 +10,7 @@
  * `hostedRefusalResponse` answered.
  */
 
-import { localAgentRefusalSchema, refusedDeviceSchema } from "@luke/features/coding-agent-wire";
+import { localAgentRefusalSchema, refusedDeviceSchema } from "@luke/features/agent-wire";
 import { installedSkillRefusedDataSchema } from "@luke/features/installed-skill-route-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { repositoryUnreachedSchema } from "@luke/features/repository-reach-wire";

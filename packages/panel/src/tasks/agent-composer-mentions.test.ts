@@ -2,17 +2,14 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type {
-  CodingAgentAgentAnswer,
-  CodingAgentWorkspaceListParams,
-} from "@luke/features/coding-agent-view";
+import type { AgentAgentAnswer, AgentWorkspaceListParams } from "@luke/features/agent-view";
 import {
+  AGENT_STATUS,
+  type AgentPullRequest,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -142,7 +139,7 @@ function workspaceAgent(
   title: string,
   taskId: string | null,
   archivedAt?: number,
-): CodingAgentSummary {
+): AgentSummary {
   return {
     id,
     planId: taskId,
@@ -150,7 +147,7 @@ function workspaceAgent(
     effort: "high",
     title,
     createdAt: 1_000,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     ...(archivedAt === undefined ? undefined : { archivedAt }),
   };
@@ -173,16 +170,16 @@ const OLD_AGENT = workspaceAgent(
 const LEDGER = workspaceAgent("6f6f6f6f-0000-4000-8000-000000000000", "Old ledger", null);
 
 /** The newest agents the workspace's list answers, archived ones left out. */
-const NEWEST_AGENTS: readonly CodingAgentSummary[] = [BILLING_AGENT, SWEEPER];
+const NEWEST_AGENTS: readonly AgentSummary[] = [BILLING_AGENT, SWEEPER];
 
 /** Every agent of the workspace, which a search finds among, archived ones included. */
-const WORKSPACE_AGENTS: readonly CodingAgentSummary[] = [BILLING_AGENT, SWEEPER, OLD_AGENT, LEDGER];
+const WORKSPACE_AGENTS: readonly AgentSummary[] = [BILLING_AGENT, SWEEPER, OLD_AGENT, LEDGER];
 
 /** The newest agents the workspace's list answers now. */
-let newest: readonly CodingAgentSummary[] = NEWEST_AGENTS;
+let newest: readonly AgentSummary[] = NEWEST_AGENTS;
 
 /** The workspace's list as the service answers it: the newest, or those whose title or task's name holds the words, as the store finds them. */
-function workspaceAnswer({ words }: CodingAgentWorkspaceListParams): readonly CodingAgentSummary[] {
+function workspaceAnswer({ words }: AgentWorkspaceListParams): readonly AgentSummary[] {
   if (words === undefined) return newest;
   const lower = words.toLowerCase();
   return WORKSPACE_AGENTS.filter(
@@ -258,7 +255,7 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
           }
         : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
           ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
-          : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+          : request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST
             ? {
                 status: FAKE_ANSWER.DONE,
                 value: {
@@ -308,13 +305,13 @@ async function settle(): Promise<void> {
 /** What a task's page hands its places, every mention a chip was asked to open kept. */
 function planPage(opened: Mention[], repository = "acme/relay"): TaskMentionsValue {
   return {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     taskName: "Invitations",
     workspace: PLACE.workspace,
     repository,
     text: () => PLAN_TEXT,
     doors: {
-      taskId: TASK_ID,
+      holder: { taskId: TASK_ID },
       place: { workspace: PLACE.workspace, repository },
       anchors: new Set(["goal", "rollout"]),
       onOpenTask: (mention) => opened.push(mention),
@@ -356,7 +353,6 @@ function Box({ sender, skills }: { sender: MessageSender; skills: SkillSource })
     taskId: TASK_ID,
     messages: [],
     send: sender,
-    onStatus: ignore,
   });
   return createElement(AgentComposer, { ...QUIET_COMPOSER, agentId: SELF_ID, composer, skills });
 }
@@ -396,7 +392,7 @@ async function box(page: TaskMentionsValue | undefined, skills: SkillSource = no
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
     sent.push(text);
-    return new Promise<CodingAgentAgentAnswer>(ignore);
+    return new Promise<AgentAgentAnswer>(ignore);
   };
   const { container, redraw } = drawing(createElement(Box, { sender, skills }), page);
   await settle();
@@ -869,6 +865,30 @@ test("a page picked from the @ list is drawn as its chip and sent as its link, w
   assert.equal(sent[0], "Build [@Invites by week](https://tryluke.dev/acme/plan/pl_1/page/page-1)");
 });
 
+test("on the page of an agent no plan holds an @ offers the pages it showed, a pick sent as the agent's page's link", async () => {
+  const page = tasklessMentions(
+    { workspace: "acme", workspaceId: "workspace-1", repository: null },
+    ignore,
+    undefined,
+    {},
+    { agentId: "agent-9", pages: [PAGE], pullRequests: [] },
+  );
+  const { container, sent } = await box(page);
+
+  typeInComposer(container, "Build @invites");
+  await settle();
+  const offered = listed(container);
+  pressInComposer(container, "Enter");
+  await settle();
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(offered, ["Invites by week"]);
+  assert.deepEqual(sent, [
+    "Build [@Invites by week](https://tryluke.dev/acme/agent/agent-9/page/page-1)",
+  ]);
+});
+
 test("another agent picked from the @ list is drawn as its chip and sent as its link, which names the agent by its id alone", async () => {
   const { container, sent } = await box(taskPage());
 
@@ -879,9 +899,7 @@ test("another agent picked from the @ list is drawn as its chip and sent as its 
   pressInComposer(container, "Enter");
   await settle();
 
-  assert.deepEqual(sent, [
-    "Build on [@Wire the desktop](https://tryluke.dev/acme/plan/pl_1/agent/agent-2)",
-  ]);
+  assert.deepEqual(sent, ["Build on [@Wire the desktop](https://tryluke.dev/acme/agent/agent-2)"]);
 });
 
 test("a sent message's mention of a page or an agent is drawn as the chip that opens its tab through the window's opener, its target on no attribute", () => {
@@ -892,7 +910,7 @@ test("a sent message's mention of a page or an agent is drawn as the chip that o
     PLACE,
   );
   const agent = mentionMarkdown(
-    { kind: MENTION_KIND.AGENT, taskId: TASK_ID, agentId: STORE_AGENT.id },
+    { kind: MENTION_KIND.AGENT, agentId: STORE_AGENT.id },
     STORE_AGENT.name,
     PLACE,
   );
@@ -913,7 +931,7 @@ test("a sent message's mention of a page or an agent is drawn as the chip that o
     { workspace: "acme", place: { kind: LINK_PLACE.PAGE, planId: TASK_ID, pageId: PAGE.id } },
     {
       workspace: "acme",
-      place: { kind: LINK_PLACE.AGENT, planId: TASK_ID, agentId: STORE_AGENT.id },
+      place: { kind: LINK_PLACE.AGENT, agentId: STORE_AGENT.id },
     },
   ]);
   assert.equal(carryingTarget(container), undefined);
@@ -946,7 +964,7 @@ async function workspaceBox(registry?: AtomRegistry.AtomRegistry) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
     sent.push(text);
-    return new Promise<CodingAgentAgentAnswer>(ignore);
+    return new Promise<AgentAgentAnswer>(ignore);
   };
   const { container } = drawing(
     createElement(WorkspacePage, null, createElement(Box, { sender, skills: noSkills })),
@@ -970,7 +988,7 @@ function agentsListed(container: HTMLElement): [string, string][] {
 /** The workspace lists the list read, by whether each asked for the archived agents. */
 function workspaceReads(): unknown[] {
   return told
-    .filter((each) => each.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST)
+    .filter((each) => each.kind === ACT_KIND.AGENTS_WORKSPACE_LIST)
     .map((each) => each.payload);
 }
 
@@ -1001,7 +1019,7 @@ function listNote(container: HTMLElement): { words: string; retry: HTMLButtonEle
 }
 
 test("an @ whose read of the workspace's agents failed says they could not be read, with Retry, never that none match, and Retry reads them again", async () => {
-  refusing.add(ACT_KIND.CODING_AGENTS_WORKSPACE_LIST);
+  refusing.add(ACT_KIND.AGENTS_WORKSPACE_LIST);
   const { container } = await workspaceBox();
 
   typeInComposer(container, "See @");
@@ -1123,7 +1141,7 @@ it.effect(
 );
 
 it.effect(
-  "an agent of another task picked from the @ list is sent as its link under its task, and one on no task under the workspace",
+  "an agent of another task and one on no task picked from the @ list are each sent as the agent's own link under the workspace",
   () =>
     Effect.gen(function* () {
       const registry = registryOn(yield* Clock.Clock);
@@ -1141,7 +1159,7 @@ it.effect(
       yield* Effect.promise(settle);
 
       assert.deepEqual(sent, [
-        `Ask [@Bill by seat](https://tryluke.dev/acme/plan/${BILLING.id}/agent/${BILLING_AGENT.id}) and [@Sweep flaky tests](https://tryluke.dev/acme/agent/${SWEEPER.id})`,
+        `Ask [@Bill by seat](https://tryluke.dev/acme/agent/${BILLING_AGENT.id}) and [@Sweep flaky tests](https://tryluke.dev/acme/agent/${SWEEPER.id})`,
       ]);
     }),
 );
@@ -1171,7 +1189,7 @@ it.effect(
 
 /** The box on the plan's page that reads its workspace's agents, among the workspace's members. */
 async function workspaceMemberBox() {
-  const sender: MessageSender = () => new Promise<CodingAgentAgentAnswer>(ignore);
+  const sender: MessageSender = () => new Promise<AgentAgentAnswer>(ignore);
   const { container } = drawing(
     amongMembers(
       createElement(WorkspacePage, null, createElement(Box, { sender, skills: noSkills })),
@@ -1186,7 +1204,7 @@ test("an @ row for an agent ends in its starter's face where a teammate started 
   newest = [
     {
       ...BILLING_AGENT,
-      status: CODING_AGENT_STATUS.FAILED,
+      status: AGENT_STATUS.FAILED,
       startedBy: { userId: DANA_ID, name: "Dana Reyes" },
     },
     { ...SWEEPER, startedBy: { userId: READER_ID, name: "Charles Pan" } },
@@ -1296,27 +1314,24 @@ test("an @ row for a page still on its first version says how long ago it was wr
 });
 
 test("a sent mention of an agent of another task or none hangs its card's one reading state while it is read, never the task page's own card for an id it has no tab of", () => {
-  const mention = (agentId: string, taskId: string | undefined) =>
-    mentionMarkdown(
-      taskId === undefined
-        ? { kind: MENTION_KIND.AGENT, agentId }
-        : { kind: MENTION_KIND.AGENT, taskId, agentId },
-      "Agent",
-      PLACE,
-    );
+  const mention = (agentId: string) =>
+    mentionMarkdown({ kind: MENTION_KIND.AGENT, agentId }, "Agent", PLACE);
   const container = drawn(
     createElement(TranscriptWords, {
-      text: `${mention("agent-7", TASK_ID)} ${mention(BILLING_AGENT.id, BILLING.id)} ${mention(SWEEPER.id, undefined)}`,
+      text: `${mention("agent-7")} ${mention(BILLING_AGENT.id)} ${mention(SWEEPER.id)}`,
     }),
-    // The task page's doors answer a card for any id, a "Not found" one for an agent it has no tab of.
+    // The task page's doors answer the card of its own agent's tab, and none for an agent it has no tab of.
     {
       ...planPage([]),
       doors: {
         ...planPage([]).doors,
-        agentOf: (agentId: string) => ({
-          actor: STORE_AGENT.actor,
-          card: createElement("div", { "data-mention-card": "" }, `Not found ${agentId}`),
-        }),
+        agentOf: (agentId: string) =>
+          agentId === "agent-7"
+            ? {
+                actor: STORE_AGENT.actor,
+                card: createElement("div", { "data-mention-card": "" }, "Its tab's card"),
+              }
+            : undefined,
       },
     },
   );
@@ -1324,9 +1339,7 @@ test("a sent mention of an agent of another task or none hangs its card's one re
   const notes = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].map((chip) => {
     restOn(chip);
     const card = document.querySelector(".luke-tooltip-card > *");
-    const words = card?.hasAttribute("data-chip-card-reading")
-      ? "Reading"
-      : (/Not found/u.exec(card?.textContent ?? "")?.[0] ?? card?.textContent);
+    const words = card?.hasAttribute("data-hover-card-skeleton") ? "Reading" : card?.textContent;
     act(() => {
       chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
     });
@@ -1335,7 +1348,7 @@ test("a sent mention of an agent of another task or none hangs its card's one re
 
   assert.deepEqual(
     notes,
-    ["Not found", "Reading", "Reading"],
+    ["Its tab's card", "Reading", "Reading"],
     "the task's own agent hangs its tab's card; another task's and one on none wait on their read",
   );
 });
@@ -1376,10 +1389,7 @@ test("a page's address pasted in the app's own scheme is called by the name the 
   });
   const { container, sent } = await box(planPage([]));
   const page = encodeMention({ kind: MENTION_KIND.PAGE, taskId: TASK_ID, pageId: PAGE.id }, PLACE);
-  const agent = encodeMention(
-    { kind: MENTION_KIND.AGENT, taskId: TASK_ID, agentId: STORE_AGENT.id },
-    PLACE,
-  );
+  const agent = encodeMention({ kind: MENTION_KIND.AGENT, agentId: STORE_AGENT.id }, PLACE);
   const file = "https://github.com/acme/relay/blob/HEAD/apps/web/rollout-store.ts";
 
   typeInComposer(container, "Build ");
@@ -1661,8 +1671,8 @@ test("typing a server's provider and a colon narrows the list to that server, it
 function pullRequest(
   number: number,
   title: string,
-  state: CodingAgentPullRequest["state"],
-): CodingAgentPullRequest {
+  state: AgentPullRequest["state"],
+): AgentPullRequest {
   return {
     number,
     title,
@@ -1778,7 +1788,7 @@ async function memberBox() {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
     sent.push(text);
-    return new Promise<CodingAgentAgentAnswer>(ignore);
+    return new Promise<AgentAgentAnswer>(ignore);
   };
   const { container } = drawing(
     amongMembers(createElement(Box, { sender, skills: noSkills })),

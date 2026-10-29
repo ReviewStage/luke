@@ -1,6 +1,6 @@
 import { bigint, index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
-import { codingAgent } from "./coding-agent.js";
+import { agentTable } from "./agent.js";
 
 /**
  * token-pull-request-poll.ts -- what the scheduled sweep last read of a token agent's pull request.
@@ -30,7 +30,7 @@ export const tokenPullRequestPoll = pgTable(
   {
     agentId: uuid("agent_id")
       .primaryKey()
-      .references(() => codingAgent.id, { onDelete: "cascade" }),
+      .references(() => agentTable.id, { onDelete: "cascade" }),
     /** The pull request's number the state below was read on; another number starts the state afresh. */
     pullRequest: integer("pull_request").notNull(),
     etags: jsonb("etags").$type<StoredPollEtags>().notNull().default({}),

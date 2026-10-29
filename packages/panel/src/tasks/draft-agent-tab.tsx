@@ -1,19 +1,18 @@
-import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, hasWordsOrFiles } from "@luke/features/agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import { useSecond } from "@luke/ui";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation.js";
-import { type AgentCallDoors, CallButton } from "./agent-call.js";
 import { AgentComposer } from "./agent-composer.js";
+import { agentName, modelLabel } from "./agent-model.js";
 import type { TranscriptCards } from "./agent-tab.js";
 import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { ArchivedComposerNote } from "./archived-note.js";
-import { agentName, modelLabel } from "./coding-agent-model.js";
 import { ForkChip } from "./fork-action.js";
 import { forkChoice, startingWords } from "./fork-model.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
-import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentDraft, AgentsControl } from "./use-agents.js";
 import { WorkingLine } from "./working-time.js";
 
 /**
@@ -55,17 +54,7 @@ import { WorkingLine } from "./working-time.js";
  * not land leaves the line for the note and Retry under the box, the words
  * kept.
  *
- * Where the platform takes calls, the box's row offers Call, the waveform
- * an agent's tab offers (`agent-call.tsx`), and a draft's is the one way a
- * voice chat starts: its press starts the agent on eve (`startCall`), on
- * the box's words and files where it holds any, so nothing typed is lost,
- * and blank where it holds none, then opens a call into it as the tab gives
- * way to the agent's own. A Call that did not start the agent leaves the
- * words in the box with why under it, and its Retry presses Call again. A
- * fork's or a continue's draft starts from its source, so it offers none,
- * and neither does the web's, which has no voice.
- *
- * A draft New task handed over (`use-coding-agents.ts`'s `onHandDraft`)
+ * A draft New task handed over (`use-agents.ts`'s `onHandDraft`)
  * is a task whose agent the service refused as New task started them
  * both: it holds the words, files, and model New task's box held, and why
  * (`refused`), which the tab shows under the box with Retry and what mends
@@ -73,7 +62,7 @@ import { WorkingLine } from "./working-time.js";
  */
 
 /** A draft has nothing to stop and has published nothing, so its box's Stop and doors answer nothing. */
-const NOTHING_TO_STOP = () => Promise.resolve();
+const NOTHING_TO_STOP = () => Promise.resolve(false);
 const NO_DOORS = { openGitHub: () => undefined, copy: () => undefined };
 
 /** What a fork's working line names its source as where the task does not list it. */
@@ -100,18 +89,13 @@ export function DraftAgentTab({
   draft,
   control,
   cards,
-  call,
 }: {
   draft: AgentDraft;
-  control: CodingAgentsControl;
+  control: AgentsControl;
   /** The cards a fork's source chip hangs, as its tab's own chip does; none where the place draws none. */
   cards?: TranscriptCards | undefined;
-  /** What the agent's call opens through once Call starts it; none where the platform has no voice. */
-  call?: AgentCallDoors | undefined;
 }): React.JSX.Element {
   const [sending, setSending] = useState(false);
-  // Whether the note under the box is a Call's, so its Retry presses Call again rather than sending.
-  const [callFailed, setCallFailed] = useState(false);
   // When a fork's or a continue's Start went, which its working line counts from; none while none is out.
   const [sentAt, setSentAt] = useState<number | undefined>(undefined);
   const [note, setNote] = useState<Failure | undefined>(undefined);
@@ -148,7 +132,6 @@ export function DraftAgentTab({
     if (sending || (fork === undefined && !hasWordsOrFiles(prompt, draft.attachments))) return;
     setSending(true);
     setNote(undefined);
-    setCallFailed(false);
     if (draft.refused !== undefined) latest.current.onDraftChange({ refused: undefined });
     if (fork !== undefined) setSentAt(Date.now());
     const { id, choice, attachments, disabledServers } = draft;
@@ -162,25 +145,6 @@ export function DraftAgentTab({
       setNote(failed);
     });
   };
-  // Note that the agent stands once the Start lands, so the call opens into it then, as the tab gives way to its own.
-  const pressCall = () => {
-    const start = latest.current.startCall;
-    if (sending || start === undefined || call === undefined) return;
-    setSending(true);
-    setNote(undefined);
-    setCallFailed(false);
-    if (draft.refused !== undefined) latest.current.onDraftChange({ refused: undefined });
-    start(draft).then((answer) => {
-      setSending(false);
-      if ("failure" in answer) {
-        setCallFailed(true);
-        setNote(answer.failure);
-        return;
-      }
-      call.onPress(answer.agentId);
-    });
-  };
-  const offersCall = call !== undefined && control.startCall !== undefined && fork === undefined;
   const composer: AgentComposerControl = {
     draft: draft.prompt,
     setDraft: (prompt) => control.onDraftChange({ prompt }),
@@ -190,7 +154,7 @@ export function DraftAgentTab({
     note: shownNote,
     closed: undefined,
     send,
-    retry: callFailed ? pressCall : send,
+    retry: send,
     sent: [],
   };
 
@@ -219,7 +183,7 @@ export function DraftAgentTab({
           <ForkChip fork={fork} source={source} cards={cards} onDrop={control.onDropFork} />
         )}
         <AgentComposer
-          status={CODING_AGENT_STATUS.STARTING}
+          status={AGENT_STATUS.STARTING}
           sendsEmpty={fork !== undefined}
           composer={composer}
           model={
@@ -246,15 +210,6 @@ export function DraftAgentTab({
           agentName={choice === undefined ? undefined : modelLabel(choice.model, control.models)}
           keywords={control.keywords}
           skills={control.readSkills}
-          call={
-            offersCall ? (
-              <CallButton
-                subject={draft.id}
-                busy={sending || control.start.busy}
-                onPress={pressCall}
-              />
-            ) : undefined
-          }
         />
       </AgentTabFoot>
     </AgentTabFrame>

@@ -1,5 +1,5 @@
 /**
- * words.ts -- the words the app says in many places: a count and its noun, a list of names, a read's reading, no-match and failed phrases, the glossary's fixed terms, the voice's failures, and the sign-in's.
+ * words.ts -- the words the app says in many places: a count and its noun, a list of names, a read's reading, no-match and failed phrases, the glossary's fixed terms, and the sign-in's failures.
  *
  * Each kind of words has one function here, so a screen names only its noun
  * and every screen, the service's included, says it the same way. It holds no
@@ -33,6 +33,9 @@ export const TERM = {
   RESULT: { one: "result", many: "results" },
   SECTION: { one: "section", many: "sections" },
   FILE: { one: "file", many: "files" },
+  COMMENT: { one: "comment", many: "comments" },
+  COMMIT: { one: "commit", many: "commits" },
+  MEMORY: { one: "memory", many: "memories" },
 } as const satisfies Record<string, Noun>;
 
 /** The glossary's verbs: the one label each act goes by. */
@@ -185,113 +188,6 @@ export const REFRESH_FAILED_WORDS = "Could not refresh";
 
 /** What an act that failed on its way to the service says, whatever the failure's own text: a person reads this, and the text goes to the log. */
 export const ACT_UNREACHED_WORDS = "Luke could not reach the service. Try again.";
-
-/**
- * The voice's failures, each said in words of its own. The notice line and
- * app state carry only these keys, never a browser's or a provider's text, so
- * nothing a session carried (an SDP line, a key) can reach the screen. A new
- * failure is a key here and its words in {@link VOICE_FAILURE_WORDS}, which
- * the compiler holds to naming every key.
- */
-export const VOICE_FAILURE = {
-  /** The call could not be built, the host opened no session for it, or it never started. */
-  CALL_NOT_STARTED: "call-not-started",
-  /** A call that stood lost its connection, and every try to get it back failed. */
-  CALL_DROPPED: "call-dropped",
-  /** The system refused the microphone a call needs. */
-  MICROPHONE_REFUSED: "microphone-refused",
-  /** The system allows the microphone, and the device still would not open, so the call cannot hear the developer. */
-  MICROPHONE_UNAVAILABLE: "microphone-unavailable",
-  /** A call runs on the account's own OpenAI key, and none is saved. */
-  OPENAI_KEY_MISSING: "openai-key-missing",
-  /** OpenAI refused the saved key, as it does a revoked or deleted one. */
-  OPENAI_KEY_REFUSED: "openai-key-refused",
-  /** The saved key's OpenAI account has no credit left. */
-  OPENAI_KEY_UNFUNDED: "openai-key-unfunded",
-  /** No credential of the agent's starter pays for a call into it. */
-  AGENT_KEY_MISSING: "agent-key-missing",
-  /** The agent runs on Claude or Codex, which takes no call yet. */
-  NATIVE_AGENT: "native-agent",
-  /** The hosted service's ceiling is reached. */
-  VOICE_UNAVAILABLE: "voice-unavailable",
-  /** The hidden window that holds every call kept failing to load and was given up on for the rest of the run. */
-  VOICE_WINDOW_LOST: "voice-window-lost",
-} as const;
-
-export type VoiceFailure = (typeof VOICE_FAILURE)[keyof typeof VOICE_FAILURE];
-
-/** What a failure offers to do about itself, as the button beside its words. */
-export const VOICE_REMEDY = {
-  /** Settings, where the OpenAI key goes. */
-  ADD_OPENAI_KEY: "add-openai-key",
-  /** System Settings, where the microphone is allowed. */
-  ALLOW_MICROPHONE: "allow-microphone",
-  /** OpenAI's billing page, where the key's account is given credit. */
-  ADD_OPENAI_CREDIT: "add-openai-credit",
-} as const;
-
-export type VoiceRemedy = (typeof VOICE_REMEDY)[keyof typeof VOICE_REMEDY];
-
-/** A failure's words, what happened and what to do, and the remedy its button offers where one does it. */
-export interface VoiceFailureWords {
-  readonly words: string;
-  readonly remedy?: VoiceRemedy;
-}
-
-export const VOICE_FAILURE_WORDS = {
-  [VOICE_FAILURE.CALL_NOT_STARTED]: {
-    words: "Luke could not start the call. Try again in a moment.",
-  },
-  [VOICE_FAILURE.CALL_DROPPED]: {
-    words: "The call dropped. Call again to carry on.",
-  },
-  [VOICE_FAILURE.MICROPHONE_REFUSED]: {
-    words: "A call needs the microphone. Allow it in System Settings.",
-    remedy: VOICE_REMEDY.ALLOW_MICROPHONE,
-  },
-  [VOICE_FAILURE.MICROPHONE_UNAVAILABLE]: {
-    words:
-      "Luke can't hear you: the microphone could not be opened. Check that one is connected, then unmute.",
-  },
-  [VOICE_FAILURE.OPENAI_KEY_MISSING]: {
-    words: "Luke could not start the call: no OpenAI key is saved.",
-    remedy: VOICE_REMEDY.ADD_OPENAI_KEY,
-  },
-  [VOICE_FAILURE.OPENAI_KEY_REFUSED]: {
-    words: "Luke could not start the call. OpenAI refused your key.",
-    remedy: VOICE_REMEDY.ADD_OPENAI_KEY,
-  },
-  [VOICE_FAILURE.OPENAI_KEY_UNFUNDED]: {
-    words: "Luke could not start the call. Your OpenAI account is out of credit.",
-    remedy: VOICE_REMEDY.ADD_OPENAI_CREDIT,
-  },
-  [VOICE_FAILURE.AGENT_KEY_MISSING]: {
-    words: "Connect an API key in Settings to call this agent.",
-  },
-  [VOICE_FAILURE.NATIVE_AGENT]: {
-    words: "This agent runs on Claude or Codex and can't take calls yet.",
-  },
-  [VOICE_FAILURE.VOICE_UNAVAILABLE]: {
-    words: "Voice is temporarily unavailable.",
-  },
-  [VOICE_FAILURE.VOICE_WINDOW_LOST]: {
-    words: "Voice stopped working and could not restart. Quit and reopen Luke to call again.",
-  },
-} as const satisfies Record<VoiceFailure, VoiceFailureWords>;
-
-/** The label of each remedy's button. */
-export const VOICE_REMEDY_LABEL = {
-  [VOICE_REMEDY.ADD_OPENAI_KEY]: "Add an OpenAI key",
-  [VOICE_REMEDY.ALLOW_MICROPHONE]: "Open System Settings",
-  [VOICE_REMEDY.ADD_OPENAI_CREDIT]: "Add OpenAI credit",
-} as const satisfies Record<VoiceRemedy, string>;
-
-const VOICE_FAILURES: ReadonlySet<string> = new Set(Object.values(VOICE_FAILURE));
-
-/** Whether a value crossing from another window is one of the voice's failures, and no free text. */
-export function isVoiceFailure(value: unknown): value is VoiceFailure {
-  return typeof value === "string" && VOICE_FAILURES.has(value);
-}
 
 /**
  * Why a sign-in ended without landing, each said in words of its own. The

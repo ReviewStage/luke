@@ -1,4 +1,4 @@
-import type { PullRequestLabel } from "@luke/features/coding-agent-wire";
+import type { PullRequestLabel } from "@luke/features/agent-wire";
 import { Badge, GAP, Inline, LAYOUT_ELEMENT } from "@luke/ui";
 
 /**

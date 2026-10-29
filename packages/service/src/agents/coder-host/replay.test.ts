@@ -6,15 +6,15 @@
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import type { Agent } from "@luke/database/models/agent-store";
 import { REPLAY_STEP_KIND, type ReplayStep } from "@luke/features/agent-replay";
 import {
+  AGENT_KIND,
+  type AgentPullRequest,
   CHECK_SUMMARY,
-  CODING_AGENT_KIND,
   CONTEXT_WINDOW,
-  type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { it } from "vitest";
 import { callEntry, replayOf, type StartFrom } from "./replay.js";
@@ -28,7 +28,7 @@ const said = (at: number): ReplayStep => ({
 });
 
 /** A source agent that stopped with nothing published. */
-const source: CodingAgent = {
+const source: Agent = {
   id: randomUUID(),
   userId: randomUUID(),
   taskId: randomUUID(),
@@ -36,6 +36,7 @@ const source: CodingAgent = {
   automationId: null,
   automationOrigin: null,
   startedFrom: null,
+  startedByAgentId: null,
   conversationId: randomUUID(),
   model: "claude-sonnet",
   effort: "high",
@@ -51,7 +52,7 @@ const source: CodingAgent = {
   disabledServers: [],
   author: null,
   githubAccess: GITHUB_ACCESS.APP,
-  kind: CODING_AGENT_KIND.CODER,
+  kind: AGENT_KIND.CODER,
   createdAt: new Date(0),
 };
 
@@ -101,13 +102,13 @@ it("a summary beside steps left out is told as some of those that did not fit, n
 });
 
 it("a source that never made a branch of its own sends the new agent to the work it carried, never to the default branch", () => {
-  const origin: CodingAgent = {
+  const origin: Agent = {
     ...source,
     id: randomUUID(),
     title: "Add PR tab",
     branch: "luke/pull-request-tab",
   };
-  const pullRequest: CodingAgentPullRequest = {
+  const pullRequest: AgentPullRequest = {
     number: 3030,
     title: "Add a PR tab",
     url: "https://github.com/acme/app/pull/3030",
@@ -135,10 +136,10 @@ it("a source that never made a branch of its own sends the new agent to the work
   const pushed = carriedFrom(undefined);
   assert.match(
     pushed,
-    /It never made a branch of its own: it took up the work of the coding agent "Add PR tab"/u,
+    /It never made a branch of its own: it took up the work of the agent "Add PR tab"/u,
   );
   assert.match(pushed, /git switch 'luke\/pull-request-tab'/u);
-  assert.ok(pushed.includes("#3030 (https://github.com/acme/app/pull/3030)"));
+  assert.ok(pushed.includes("[@#3030](https://github.com/acme/app/pull/3030)"));
   assert.doesNotMatch(pushed, /start from the repository's default branch/u);
 
   const copied = carriedFrom("luke/add-pr-tab-continued-1a2b3c4d");
@@ -146,7 +147,7 @@ it("a source that never made a branch of its own sends the new agent to the work
   assert.match(copied, /git switch 'luke\/add-pr-tab-continued-1a2b3c4d'/u);
   assert.match(
     copied,
-    /That agent's own branch is `luke\/pull-request-tab`, with its pull request #3030/u,
+    /That agent's own branch is `luke\/pull-request-tab`, with its pull request \[@#3030\]/u,
   );
 
   const unread = replayOf(
@@ -164,10 +165,7 @@ it("a source that never made a branch of its own sends the new agent to the work
     from.steps,
     undefined,
   ).replay.preamble;
-  assert.match(
-    unread,
-    /took up the work of another coding agent, whose checkout was copied for it/u,
-  );
+  assert.match(unread, /took up the work of another agent, whose checkout was copied for it/u);
   assert.match(unread, /git switch 'luke\/add-pr-tab-continued-1a2b3c4d'/u);
 
   assert.match(

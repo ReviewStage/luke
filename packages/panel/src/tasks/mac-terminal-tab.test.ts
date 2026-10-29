@@ -97,7 +97,7 @@ beforeEach(() => {
     if (request.kind === ACT_KIND.MAC_TERMINAL_REVEAL && revealHeld !== undefined) {
       return revealHeld.promise;
     }
-    if (request.kind !== ACT_KIND.CODING_AGENTS_PULL_REQUEST) return Promise.resolve(undefined);
+    if (request.kind !== ACT_KIND.AGENTS_PULL_REQUEST) return Promise.resolve(undefined);
     // SAFETY: the tab asks for a pull request with the agent and, for another's, its number.
     const asked = request.payload as { readonly number?: number };
     return Promise.resolve(asked.number === OTHER.pullRequest.number ? OTHER : published);
@@ -354,7 +354,7 @@ test("the tab drawn again over a run only shows it, starting none", async () => 
     opens().map((each) => each.again),
     [true, false],
   );
-  assert.equal(sent.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST).length, 1);
+  assert.equal(sent.filter((each) => each.kind === ACT_KIND.AGENTS_PULL_REQUEST).length, 1);
   assert.match(again.bar(), /luke\/add-thing/u);
 });
 
@@ -436,7 +436,7 @@ test("on a phone the tab draws no bar, and the task's header's ⋯ stops, runs, 
 
   assert.equal(tab.bar(), "", "no bar stands over the screen");
   assert.deepEqual(tab.offered(), []);
-  assert.deepEqual(tab.handed.labels(), ["Stop", "Open in Terminal"]);
+  assert.deepEqual(tab.handed.labels(), ["Open in Terminal", "Stop"]);
   assert.deepEqual(tab.handed.item("Stop"), { disabled: false, detail: "Running" });
   assert.deepEqual(tab.handed.item("Open in Terminal"), {
     disabled: false,

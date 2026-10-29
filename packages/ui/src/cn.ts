@@ -25,7 +25,6 @@ import { extendTailwindMerge } from "tailwind-merge";
  * tailwind-merge reads each in.
  */
 const PANEL_PLACES = {
-  tracking: ["experiment-tag"],
   spacing: [
     "automation-field",
     "automation-next",
@@ -155,7 +154,7 @@ const CONTENT_TEXT = {
   text: ["toolbar-title", "shortcut"],
   "font-weight": ["toolbar-title"],
   leading: ["reading"],
-  spacing: ["glyph", "working-mark", "thinking-dot", "inline-ref-mark"],
+  spacing: ["glyph", "working-mark", "inline-ref-mark"],
   radius: ["text-link"],
   shadow: ["inline-ref-wash"],
   container: ["inline-ref-pill", "inline-ref-pill-stated"],
@@ -296,11 +295,11 @@ const PANEL_INBOX = {
 } as const;
 
 /**
- * The names the chips, media, and call block of the theme adds (attachment
- * chip, picture set and tile, page thumb, video player, provider button,
- * composer frame, call bar), by the group tailwind-merge reads each in.
+ * The names the chips and media block of the theme adds (attachment chip,
+ * picture set and tile, page thumb, video player, provider button, composer
+ * frame), by the group tailwind-merge reads each in.
  */
-const CHIPS_MEDIA_CALL = {
+const CHIPS_MEDIA = {
   text: ["label-inline"],
   spacing: [
     "attachment-chip",
@@ -311,8 +310,6 @@ const CHIPS_MEDIA_CALL = {
     "attachment-chip-remove",
     "attachment-chip-remove-out",
     "attachment-chip-thumb",
-    "call-row",
-    "call-row-max",
     "icon-12",
     "icon-16",
     "page-thumb-row",
@@ -454,7 +451,7 @@ const merge = extendTailwindMerge({
         ...CONTENT_TEXT.text,
         ...PANEL_WINDOW.text,
         ...ROWS_NAVIGATION.text,
-        ...CHIPS_MEDIA_CALL.text,
+        ...CHIPS_MEDIA.text,
         ...PAGE_PATTERNS.text,
         ...TASK_SURFACES.text,
       ],
@@ -476,7 +473,6 @@ const merge = extendTailwindMerge({
         "title",
         ...PANEL_SHELL.tracking,
         ...PANEL_WINDOW.tracking,
-        ...PANEL_PLACES.tracking,
         ...TASK_SURFACES.tracking,
       ],
       leading: [
@@ -560,7 +556,7 @@ const merge = extendTailwindMerge({
         ...PANEL_SHELL.spacing,
         ...PANEL_SIDE.spacing,
         ...PANEL_INBOX.spacing,
-        ...CHIPS_MEDIA_CALL.spacing,
+        ...CHIPS_MEDIA.spacing,
         ...PANEL_HOME_TASKS.spacing,
         ...PAGE_PATTERNS.spacing,
         ...TASK_SURFACES.spacing,
@@ -585,7 +581,7 @@ const merge = extendTailwindMerge({
         ...CONTENT_TEXT.radius,
         ...ROWS_NAVIGATION.radius,
         ...PANEL_SHELL.radius,
-        ...CHIPS_MEDIA_CALL.radius,
+        ...CHIPS_MEDIA.radius,
         ...PAGE_PATTERNS.radius,
       ],
       shadow: [
@@ -599,12 +595,12 @@ const merge = extendTailwindMerge({
         ...CONTENT_TEXT.shadow,
         ...PANEL_WINDOW.shadow,
         ...ROWS_NAVIGATION.shadow,
-        ...CHIPS_MEDIA_CALL.shadow,
+        ...CHIPS_MEDIA.shadow,
         ...PAGE_PATTERNS.shadow,
         ...TASK_SURFACES.shadow,
       ],
       font: ["ui"],
-      aspect: [...CHIPS_MEDIA_CALL.aspect],
+      aspect: [...CHIPS_MEDIA.aspect],
       container: [
         "dialog-confirm",
         "dialog-wide",

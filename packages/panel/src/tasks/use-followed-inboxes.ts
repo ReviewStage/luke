@@ -1,39 +1,42 @@
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxChanged,
-  type CodingAgentInboxScope,
-} from "@luke/features/coding-agent-view";
+  AGENT_CALL_FAILURE,
+  type AgentInboxChanged,
+  type AgentInboxScope,
+} from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { askAct } from "../act.js";
+import { heldInboxes } from "./held-inboxes.js";
 
 /**
  * use-followed-inboxes.ts -- the inboxes of the plans, or of the agents with no plan, a surface draws, followed while it draws them and pushed to the window as each changes.
  *
  * The window holds one stream open on its act port per plan or agent it
- * draws (`codingAgents.inboxFollow`), and closes it as it stops; the host
+ * draws (`agents.inboxFollow`), and closes it as it stops; the host
  * follows each inbox while any stream of it stands and sends every change
  * down each, so nothing here asks again, holds a cursor, or keeps a loop.
- * Each inbox's items are held as they were last pushed, and kept once it is
- * let go, since nothing newer is on its way, unless the surface asks to
- * forget them: one followed again then starts from nothing until it is
- * pushed anew, rather than from a push older than its follow. One whose last word was that
- * it could not be read is let go, and followed again on Try again; its
- * items as last pushed stand meanwhile.
+ * Each inbox's items are held by the surface (`held-inboxes.tsx`) as they
+ * were last pushed, and kept once it is let go, since nothing newer is on
+ * its way, unless the surface asks to forget them: one followed again then
+ * starts from nothing until it is pushed anew, rather than from a push older
+ * than its follow. One whose last word was that it could not be read is let
+ * go, and followed again on Try again; its items as last pushed stand
+ * meanwhile. The window's Inbox follows none of its own under a window's
+ * root, which holds the account's feed of every item.
  */
 
-type ScopeKind = CodingAgentInboxScope["kind"];
+type ScopeKind = AgentInboxScope["kind"];
 
 /** A followed inbox as the window hears it: its items whole, or why there are none. */
-type Heard = CodingAgentInboxChanged["inbox"];
+type Heard = AgentInboxChanged["inbox"];
 
 /** How the window follows an inbox: hearing each change until the stop it answers is called. */
 export interface InboxFollower {
-  readonly follow: (scope: CodingAgentInboxScope, hear: (inbox: Heard) => void) => () => void;
+  readonly follow: (scope: AgentInboxScope, hear: (inbox: Heard) => void) => () => void;
 }
 
-const UNANSWERED: Heard = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+const UNANSWERED: Heard = { failure: AGENT_CALL_FAILURE.UNANSWERED };
 
 /**
  * The window's own follower: one stream on its act port per follow, closed
@@ -47,7 +50,7 @@ export const windowInboxFollower: InboxFollower = {
     let stopped = false;
     let stream: AsyncIteratorObject<Heard, unknown, unknown> | undefined;
     void (async () => {
-      stream = await askAct(ACT_KIND.CODING_AGENTS_INBOX_FOLLOW, scope);
+      stream = await askAct(ACT_KIND.AGENTS_INBOX_FOLLOW, scope);
       if (stopped) {
         await stream.return?.(undefined);
         return;
@@ -73,18 +76,6 @@ interface FollowedInboxes {
   readonly onRetry: () => void;
 }
 
-/** The inbox pushed, folded into what is held: its items, or its failure. */
-function heard(
-  held: { items: ReadonlyMap<string, readonly InboxItem[]>; failed: ReadonlySet<string> },
-  id: string,
-  inbox: Heard,
-) {
-  if ("failure" in inbox) return { items: held.items, failed: new Set(held.failed).add(id) };
-  const failed = new Set(held.failed);
-  failed.delete(id);
-  return { items: new Map(held.items).set(id, inbox.items), failed };
-}
-
 /** Whether two sorted lists name the same inboxes. */
 function sameIds(one: readonly string[], other: readonly string[]): boolean {
   return one.length === other.length && one.every((id, at) => id === other[at]);
@@ -101,11 +92,10 @@ export function useFollowedInboxes(
   // Note that the follower is read through a ref, so a surface handing a fresh one each render follows nothing anew.
   const latest = useRef(follower);
   latest.current = follower;
-  const [held, setHeld] = useState<{
-    items: ReadonlyMap<string, readonly InboxItem[]>;
-    failed: ReadonlySet<string>;
-  }>({ items: new Map(), failed: new Set() });
-  // The stop of each inbox followed now, by its id.
+  const [store] = useState(() => heldInboxes({ forget }));
+  const heldNow = () => store.heldOf(kind);
+  const held = useSyncExternalStore(store.subscribe, heldNow, heldNow);
+  // The release of each inbox this surface holds now, by its id.
   const following = useRef(new Map<string, () => void>());
 
   // Note that the wanted ids are kept as they were while they name the same inboxes, so a list
@@ -118,35 +108,24 @@ export function useFollowedInboxes(
     const now = new Set(wanted);
     for (const id of now) {
       if (following.current.has(id)) continue;
-      const stop = latest.current.follow({ kind, id }, (inbox) =>
-        setHeld((was) => heard(was, id, inbox)),
-      );
-      following.current.set(id, stop);
+      const release = store.hold(kind, id, (scope, hear) => latest.current.follow(scope, hear));
+      following.current.set(id, release);
     }
-    const letGo: string[] = [];
-    for (const [id, stop] of following.current) {
+    for (const [id, release] of following.current) {
       if (now.has(id)) continue;
       following.current.delete(id);
-      stop();
-      letGo.push(id);
+      release();
     }
-    if (!forget || letGo.length === 0) return;
-    setHeld((was) => {
-      if (!letGo.some((id) => was.items.has(id))) return was;
-      const items = new Map(was.items);
-      for (const id of letGo) items.delete(id);
-      return { ...was, items };
-    });
-  }, [kind, wanted, forget]);
-  // Every inbox still followed is let go as the surface goes.
+  }, [store, kind, wanted]);
+  // Every inbox this surface holds is let go as the surface goes.
   useEffect(
     () => () => {
-      for (const stop of following.current.values()) stop();
+      for (const release of following.current.values()) release();
       following.current.clear();
     },
-    [kind],
+    [store, kind],
   );
 
-  const onRetry = useCallback(() => setHeld((was) => ({ ...was, failed: new Set() })), []);
+  const onRetry = useCallback(() => store.retry(kind), [store, kind]);
   return { items: held.items, failed: held.failed, onRetry };
 }

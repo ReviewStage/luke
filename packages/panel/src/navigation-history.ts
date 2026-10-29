@@ -661,8 +661,8 @@ export interface ListBacks {
   readonly versions: () => void;
   /** Stands an automation's setup again from its runs. */
   readonly runs: () => void;
-  /** Stands the Inbox's list alone, or its item. */
-  readonly inbox: (listed: boolean) => void;
+  /** Chooses no item in the Inbox, which stands its list alone where it shows one column. */
+  readonly inbox: () => void;
   /** Shuts the side panel standing over the plan, the whole pane. */
   readonly panel: () => void;
   /** Leaves the open task for the step behind it, or, where none stands behind it, for the page the window rests on. */
@@ -727,7 +727,7 @@ export function throughHistory(tasks: TasksControl, lists: ListBacks): TasksCont
       return true;
     },
     history: { ...tasks.history, onList: lists.versions },
-    inboxView: { ...tasks.inboxView, onListed: lists.inbox },
+    inboxView: { ...tasks.inboxView, onClear: lists.inbox },
     automationsView: {
       ...tasks.automationsView,
       onRuns: (shown) => (shown ? tasks.automationsView.onRuns(true) : lists.runs()),
@@ -1045,12 +1045,11 @@ export function useWindowHistory(input: {
   const historyOpen = tasks.history.open;
   const { spot } = tasks.history;
   const inboxOpen = tasks.inboxView.open;
-  // An Inbox showing one column, by its own width or a narrow room's, stands its item alone unless its list was asked for.
+  // An Inbox showing one column, by its own width or a narrow room's, stands its item alone, or its list while none is chosen.
   const inboxSingle = narrow || tasks.inboxView.single === true;
-  const inboxAlone = inboxSingle && !tasks.inboxView.listed ? tasks.inboxView.chosen : undefined;
   // The item chosen is a step of its own wherever it shows: alone in one column, or beside the list where the Inbox splits.
-  const inboxChosen = inboxSingle ? inboxAlone : tasks.inboxView.chosen;
-  const inboxListed = inboxSingle ? inboxAlone === undefined : undefined;
+  const inboxChosen = tasks.inboxView.chosen;
+  const inboxListed = inboxSingle ? inboxChosen === undefined : undefined;
   // With a channel chosen, the Inbox is narrowed to it; the channel is the step's from the moment it is chosen, before its name is read.
   const shown = useShownChannel(tasks.workspace?.id);
   const narrowed = useInboxNarrowed();
@@ -1245,7 +1244,6 @@ export function useWindowHistory(input: {
       }
       standChannelPlace(to.channelId);
       if (to.chosen !== undefined) tasks.inboxView.onChoose(to.chosen);
-      if (to.listed !== undefined) tasks.inboxView.onListed(to.listed);
       return;
     }
     if (to.kind === PLACE_KIND.AGENT) {
@@ -1365,12 +1363,8 @@ export function useWindowHistory(input: {
         () => tasks.automationsView.onRuns(false),
       ),
     // Note that the Inbox's list is a step of its own wherever the Inbox shows one column, a room wider than a narrow one's included.
-    inbox: (listed) => {
-      if (!listed) {
-        tasks.inboxView.onListed(false);
-        return;
-      }
-      const stand = () => tasks.inboxView.onListed(true);
+    inbox: () => {
+      const stand = () => tasks.inboxView.onClear();
       if (inboxSingle) upTo({ kind: PLACE_KIND.INBOX, listed: true }, stand);
       else stand();
     },

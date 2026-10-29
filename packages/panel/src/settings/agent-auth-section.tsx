@@ -1,4 +1,4 @@
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { INTEGRATION_STATUS_WORDS } from "@luke/features/integration-status-words";
 import { INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import {
@@ -42,8 +42,6 @@ import {
   JUSTIFY,
   LAYOUT_ELEMENT,
   MARK_PROVIDER,
-  MoreButton,
-  moreLabel,
   PencilIcon,
   PROVIDER_MARK_SIZE,
   ProviderMark,
@@ -74,13 +72,11 @@ import {
   Tooltip,
   TrashIcon,
   useConfirmDialog,
-  useMenu,
 } from "@luke/ui";
 import { InfoIcon } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
-import { ActionMenu } from "../desktop/action-menu.js";
 import { HarnessMark } from "../harness-marks.js";
 import { useSettleOpenAiKey } from "../openai-key.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
@@ -687,7 +683,7 @@ function ChatGptPanel({
     setError(undefined);
     setUnconfirmed(false);
     void act(ACT_KIND.CHATGPT_SIGN_IN)
-      .catch(() => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }) as const)
+      .catch(() => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }) as const)
       .then((outcome) => {
         setSigningIn(false);
         if ("cancelled" in outcome) return;
@@ -817,12 +813,10 @@ function ApiKeyPanel({
 }): React.JSX.Element {
   const { act } = useAct();
   const name = HARNESS[provider].keyName;
-  const door = useRef<HTMLButtonElement | null>(null);
   const [editing, setEditing] = useState(false);
   const [pasted, setPasted] = useState("");
   const [saving, setSaving] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
-  const menu = useMenu(true);
   const open = stored === undefined || editing;
 
   // The pencil opens the field with the focus in it, ready for the paste.
@@ -926,30 +920,19 @@ function ApiKeyPanel({
                 onClick={() => setEditing(true)}
               />
             </Tooltip>
-            <MoreButton ref={door} thing={`${name} key`} {...menu.trigger()} />
+            <Tooltip label={WORDS.REMOVE_KEY}>
+              <IconButton
+                icon={<TrashIcon />}
+                label={WORDS.REMOVE_KEY}
+                disabled={removal.busy}
+                onClick={removal.ask}
+              />
+            </Tooltip>
           </Inline>
         </Inline>
       )}
       {status === undefined || stored === undefined ? null : (
         <State ok={keyStanding(stored.status)}>{status}</State>
-      )}
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={moreLabel(`${name} key`)}
-          menu={menu.drawn}
-          groups={[
-            [
-              {
-                label: WORDS.REMOVE_KEY,
-                icon: <TrashIcon />,
-                danger: true,
-                disabled: removal.busy,
-                onSelect: removal.ask,
-              },
-            ],
-          ]}
-          onClose={menu.close}
-        />
       )}
       <FootQuestion
         confirm={removal}

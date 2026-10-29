@@ -47,14 +47,16 @@ export function onPhone(element: React.ReactNode): {
       labels: () => (held ?? []).flat().map((each) => each.label),
       item: (label) => {
         const found = find(label);
+        const detail = "detail" in found ? found.detail : undefined;
         return {
-          disabled: found.disabled === true,
-          ...(found.detail === undefined ? {} : { detail: found.detail }),
+          disabled: "disabled" in found && found.disabled === true,
+          ...(detail === undefined ? {} : { detail }),
         };
       },
       press: (label, opener = document.body) => {
         const found = find(label);
         act(() => {
+          if ("items" in found) return;
           if ("onAsk" in found) found.onAsk(opener);
           else found.onSelect();
         });

@@ -237,10 +237,8 @@ export const APP_SLICE = {
   ACCESS: sliceAtom("access"),
   UPDATE: sliceAtom("update"),
   AUDIO: sliceAtom("audio"),
-  VOICE: sliceAtom("voice"),
-  CALL_TRANSCRIPT: sliceAtom("callTranscript"),
   TASKS: sliceAtom("tasks"),
-  CODING_AGENTS: sliceAtom("codingAgents"),
+  AGENTS: sliceAtom("agents"),
   INBOX: sliceAtom("inbox"),
   MAC_COMMANDS: sliceAtom("macCommands"),
   NOTIFICATIONS: sliceAtom("notifications"),
@@ -268,12 +266,6 @@ export const SETTINGS_HELD: Atom.Atom<boolean> = Atom.map(
 export const APP_SETTINGS_VIEW: Atom.Atom<AppSettingsView | undefined> = Atom.map(
   APP_SLICE.SETTINGS,
   (settings) => (settings === undefined ? undefined : appSettingsView(settings)),
-);
-
-/** Whether the runtime offers voice at all, which redraws its reader only as it turns. */
-export const VOICE_AVAILABLE: Atom.Atom<boolean> = Atom.map(
-  APP_SLICE.SETTINGS,
-  (settings) => settings?.status.voiceAvailable === true,
 );
 
 /**

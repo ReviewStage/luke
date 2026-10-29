@@ -1,56 +1,48 @@
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-} from "@luke/features/coding-agent-view";
-import type { CodingAgentRuntime, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@luke/features/agent-view";
+import type { AgentRuntime, AgentSummary } from "@luke/features/agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { useRef, useState } from "react";
-import { chooseFailureNote } from "./coding-agent-model.js";
+import { chooseFailureNote } from "./agent-model.js";
 
 /**
  * use-agent-model.ts -- the model chip under an agent's transcript as one control: the choice the chip shows, a change on its way, and why the last one did not take.
  *
- * A choice is drawn on the chip the moment it is made and sent to the
- * service, which writes it on the agent's row for its next step; the
- * agent the service answers is the one the list then holds, so the chip
- * reads the choice back off the agent, and the runtime it runs on, which
- * narrows what the chip offers (`agent-runtime-models.ts`). A change the service refused is
- * taken off the chip again, which falls back to what the agent runs on,
- * and why is said under the box until the next change. An answer a later
- * change overtook is let go. Another agent's tab starts from nothing of
- * this one's.
+ * A choice is sent to the service, which writes it on the agent's row for
+ * its next step, and the host draws it on that row the moment it is asked
+ * (`@luke/host`'s `task-list-collections.ts`), so the chip reads the
+ * choice off the agent, and the runtime it runs on, which narrows what the
+ * chip offers (`agent-runtime-models.ts`). A change the service refused is
+ * taken back by the host, and why is said under the box until the next
+ * change. An answer a later change overtook is let go. Another agent's tab
+ * starts from nothing of this one's.
  */
 
 /** How a change is sent: the agent and the choice, answered as the view hears it. */
-export type ChoiceWriter = (
-  agentId: string,
-  choice: ModelChoice,
-) => Promise<CodingAgentAgentAnswer>;
+export type ChoiceWriter = (agentId: string, choice: ModelChoice) => Promise<AgentAgentAnswer>;
 
 /** Everything the chip draws and presses. */
 export interface AgentModelControl {
-  /** The choice the chip shows: the one on its way where one is, else the agent's. */
+  /** The choice the chip shows: the agent's. */
   choice: ModelChoice;
   /** Why the last change did not take, said under the box; nothing while none failed. */
   note: string | undefined;
   /** Changes the agent's model, effort, and context window for its next step. */
   choose: (next: ModelChoice) => void;
   /** The provider's own harness the agent runs on, which narrows what the chip offers; none on eve. */
-  runtime?: CodingAgentRuntime | undefined;
+  runtime?: AgentRuntime | undefined;
 }
 
 interface Held {
   agentId: string;
-  pending: ModelChoice | undefined;
   note: string | undefined;
 }
 
 function fresh(agentId: string): Held {
-  return { agentId, pending: undefined, note: undefined };
+  return { agentId, note: undefined };
 }
 
 export function useAgentModel(input: {
-  agent: Pick<CodingAgentSummary, "id" | "model" | "effort" | "contextWindow" | "runtime">;
+  agent: Pick<AgentSummary, "id" | "model" | "effort" | "contextWindow" | "runtime">;
   choose: ChoiceWriter;
 }): AgentModelControl {
   const { agent } = input;
@@ -66,22 +58,21 @@ export function useAgentModel(input: {
   const choose = (next: ModelChoice) => {
     writes.current += 1;
     const write = writes.current;
-    setHeld((was) => ({ ...was, pending: next, note: undefined }));
+    setHeld((was) => ({ ...was, note: undefined }));
     latest.current
       .choose(agent.id, next)
-      .catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }))
+      .catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }))
       .then((answer) => {
         if (write !== writes.current || latest.current.agent.id !== agent.id) return;
         setHeld((was) => ({
           ...was,
-          pending: undefined,
           note: "failure" in answer ? chooseFailureNote(answer.failure) : undefined,
         }));
       });
   };
 
   return {
-    choice: held.pending ?? {
+    choice: {
       model: agent.model,
       effort: agent.effort,
       ...(agent.contextWindow === undefined ? undefined : { contextWindow: agent.contextWindow }),

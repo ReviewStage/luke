@@ -1,15 +1,15 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_STATUS,
-  type CodingAgentBrief,
-  type CodingAgentContext,
-  type CodingAgentPayer,
-  type CodingAgentPullRequestAnswer,
-  type CodingAgentStatus,
-  type CodingAgentUsage,
+  AGENT_BOUNDS,
+  AGENT_STATUS,
+  type AgentBrief,
+  type AgentContext,
+  type AgentPayer,
+  type AgentPullRequestAnswer,
+  type AgentStatus,
+  type AgentUsage,
   hasWordsOrFiles,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   FAILURE_REASON,
   type Failure,
@@ -65,7 +65,6 @@ import type { SkillSource } from "./skill-picker.js";
 import { useMentionBox } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
 import type { AgentModelControl } from "./use-agent-model.js";
-import { DICTATION_PHASE } from "./use-dictation.js";
 
 /**
  * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go or a server's sign-in expired.
@@ -82,8 +81,7 @@ import { DICTATION_PHASE } from "./use-dictation.js";
  * the menu that changes it for the next step (`agent-model-chip.tsx`),
  * the ring that shows, once a step has ended, how full the agent's model's
  * context is and opens what fills it (`agent-context.tsx`), the
- * microphone, a call's controls where a call is offered, and the round
- * button. The box takes a message to the agent:
+ * microphone, and the round button. The box takes a message to the agent:
  * Enter sends it, Shift+Enter is a new line (on a coarse pointer Enter is,
  * and the round Send sends: `composer-editor.ts`), and Escape leaves the box; the
  * box is an editor (`composer-field.tsx`) that holds plain words and a
@@ -178,7 +176,7 @@ import { DICTATION_PHASE } from "./use-dictation.js";
  *
  * New task's composer is this same box over a start rather than a message
  * (`new-task-composer.tsx`): its owner names what the box asks for and
- * calls its round button (`wording`), stands its repository chip after the "+" (`tools`),
+ * calls its round button (`wording`), stands its Runs on chip after the "+" (`tools`),
  * holds Start while it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
  * says what Escape does (`onLeave`), hands its workspace's mentions and
  * the chosen repository's skills to its `@` and `/` lists, and offers no MCP servers'
@@ -327,7 +325,7 @@ export function ComposerAttach({ children }: { children: ReactNode }): React.JSX
   return <span className="agent-composer-attach flex">{children}</span>;
 }
 
-/** The owner's presses at the foot's right, before a call and Send: the model chip, the servers, the context ring, the microphone, and the ⋯. */
+/** The owner's presses at the foot's right, before Send: the model chip, the servers, the context ring, the microphone, and the ⋯. */
 export function ComposerActions({ children }: { children: ReactNode }): React.JSX.Element {
   // It may narrow, so a long model name is cut short before the presses are.
   return (
@@ -394,7 +392,7 @@ function ComposerMore({
 export function AgentComposer({
   agentId,
   status,
-  stoppable = status === CODING_AGENT_STATUS.RUNNING,
+  stoppable = status === AGENT_STATUS.RUNNING,
   composer,
   model,
   models,
@@ -415,12 +413,10 @@ export function AgentComposer({
   sendsEmpty = false,
   closedRemedy,
   wording,
-  maxLength = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS,
+  maxLength = AGENT_BOUNDS.MAX_MESSAGE_CHARS,
   tools,
   actions,
   beforeSend,
-  call,
-  dictates = true,
   sendable = true,
   onKey,
   onLeave,
@@ -429,7 +425,7 @@ export function AgentComposer({
 }: {
   /** The agent the box writes to, which its `@` list does not offer; none for a draft not yet started. */
   agentId?: string | undefined;
-  status: CodingAgentStatus;
+  status: AgentStatus;
   /** Whether Stop stands in Send's place while the box is empty: while the agent runs where unsaid, and only while a Stop has something to stop where the tab knows (`offersStop`). */
   stoppable?: boolean;
   composer: AgentComposerControl;
@@ -441,20 +437,20 @@ export function AgentComposer({
   modelsFailed: boolean;
   readModels: () => void;
   /** What the agent has cost, said at the chip's menu's foot; nothing before a turn settled. */
-  usage: CodingAgentUsage | undefined;
+  usage: AgentUsage | undefined;
   /** Who pays for the agent, which the chip's menu names where a plan does; nothing where the page said none. */
-  payer?: CodingAgentPayer | undefined;
+  payer?: AgentPayer | undefined;
   /** The MCP servers the agent is handed and their switches; none where the box offers none, as New task's does. */
   servers: AgentServersControl | undefined;
   /** What the agent's model's context holds, which the ring draws; nothing before a step ended, which draws no ring. */
-  context?: CodingAgentContext | undefined;
+  context?: AgentContext | undefined;
   /** What the agent was handed, which names the brief's part of the context. */
-  brief?: CodingAgentBrief | undefined;
+  brief?: AgentBrief | undefined;
   /** What the agent published, once the service has said; nothing before. */
-  published: CodingAgentPullRequestAnswer | undefined;
+  published: AgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
-  /** Stops the agent; the promise settles once the service has answered. */
-  onStop: () => Promise<void>;
+  /** Stops the agent, answering whether the service took the Stop. */
+  onStop: () => Promise<boolean>;
   /** The name the agent goes by (`agentName` in `@luke/features`), which the placeholder writes to; none where it is not known. */
   agentName?: string | undefined;
   /** The words a dictation is likely to say, read off the plan (`dictation-keywords.ts`). */
@@ -471,16 +467,12 @@ export function AgentComposer({
   wording?: ComposerWords | undefined;
   /** The most the words may spell: a message to an agent's bound, unless the owner sends them elsewhere, as New task's Plan mode sends a task's brief. */
   maxLength?: number;
-  /** What stands after the "+" at the foot's left: New task's repository chip. */
+  /** What stands after the "+" at the foot's left: New task's Runs on chip. */
   tools?: ReactNode;
   /** What stands first among the foot's right-hand presses, before the model chip, handed whether the card is too narrow for their words. */
   actions?: ((narrow: boolean) => ReactNode) | undefined;
   /** What stands just before the round button, handed whether the card is too narrow for its words, as `actions` is. */
   beforeSend?: ((narrow: boolean) => ReactNode) | undefined;
-  /** What stands beside Dictate: an agent's Call, or on a call its controls, where the platform takes calls (`agent-call.tsx`). */
-  call?: ReactNode;
-  /** Whether the box offers Dictate; not while a call holds the microphone, whose own mute stands in the row. */
-  dictates?: boolean;
   /** Whether the round button may send at all, beside the words: New task's is held while Agent mode has no repository. */
   sendable?: boolean;
   /** A key pressed in the field that neither its lists nor dictation took, and none while a file is still being read; answers whether it took it. */
@@ -502,6 +494,9 @@ export function AgentComposer({
   const [serversOpen, setServersOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
+  // Note that a Stop the service took reads Stopping until the agent offers none, because the task
+  // list carries the stop a moment after the answer.
+  if (stopping && !stoppable) setStopping(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // Whether the last paste was cut to the room the box has left, until the words change again.
   const [cut, setCut] = useState(false);
@@ -654,23 +649,15 @@ export function AgentComposer({
     side: listSide,
   });
   const { dictation, dictating } = pickers;
-  // Whether a dictation's strip stands in the bar's place: while the box dictates, or while a clip is read as a call takes the microphone.
-  const striped = dictating && (dictates || dictation.phase === DICTATION_PHASE.TRANSCRIBING);
-  // Note that a call taking the microphone ends a dictation under way, keeping
-  // the words already said, so the row it hands the call to is never hidden
-  // under the dictation's strip.
-  const { phase, startedAt, finish, cancel } = dictation;
-  useEffect(() => {
-    if (dictates || phase !== DICTATION_PHASE.RECORDING) return;
-    if (startedAt === undefined) cancel();
-    else finish();
-  }, [dictates, phase, startedAt, finish, cancel]);
   // A file's lines picked in a File tab on the page (⌥⌘K) are laid in here, where the caret stands.
   useMentionBox((mention) => editor.current?.insertMention(mention));
 
   const stop = () => {
     setStopping(true);
-    onStop().finally(() => setStopping(false));
+    onStop().then(
+      (took) => setStopping(took),
+      () => setStopping(false),
+    );
   };
 
   // Note that a popover closed by key while the ⋯ stands hands focus to the
@@ -838,18 +825,12 @@ export function AgentComposer({
                 open={contextOpen}
                 onOpenChange={handBack(setContextOpen)}
               />
-              {dictates ? (
-                <DictateButton dictation={dictation} disabled={held || module === undefined} />
-              ) : null}
+              <DictateButton dictation={dictation} disabled={held || module === undefined} />
               <ComposerMore card={card} offers={offers} />
               {beforeSend?.(folds(FOLD_WIDTH.ACTIONS))}
             </ComposerActions>
           }
-          // Note that a clip already being read as a call begins keeps its strip
-          // and its Cancel until it lands, with the call's controls beside it,
-          // so neither the clip nor the call is left with no way to reach it.
-          call={striped && dictates ? undefined : call}
-          strip={striped ? <DictationStrip dictation={dictation} /> : undefined}
+          strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
           send={{
             label: sendLabel,
             chord: wording?.chord,

@@ -2,7 +2,7 @@
  * tasks-procedures.ts -- the Tasks tab's asks of the host about the task list, the open task, and what a task holds.
  *
  * The one check these procedures make is who asked. Only a panel draws the
- * Tasks tab, and the takeover and the hidden voice window draw no task, so
+ * Tasks tab, and the takeover and any other window draw no task, so
  * every one refuses them, in its own sentence. What the host does with an
  * ask (which task is active, what the service answers) is the host's to
  * decide, and comes back as the panel's own answer. Nothing is held here.
@@ -14,6 +14,7 @@ import {
   type AdminReadAnswer,
   type AdminReadParams,
 } from "@luke/features/admin-wire";
+import { browserTabsPlaceId } from "@luke/features/agent-browser-tab-wire";
 import { pagePlaceId } from "@luke/features/page-wire";
 import {
   type CodeLines,
@@ -74,7 +75,6 @@ import {
   type TasksTreeParams,
   type TasksWriteSectionParams,
 } from "@luke/features/tasks-view";
-import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import { Effect, MutableHashMap, Option, Stream } from "effect";
 import { GITHUB_LAST_SIGN_IN_REFUSAL, isWebAddress } from "../acts.js";
 import { TASKS_ACT_KIND } from "../contract/index.js";
@@ -140,8 +140,6 @@ export interface TasksProceduresDependencies {
   openExternal: (url: string) => Promise<void>;
   /** The hosted service's origin, without a trailing slash, the only origin a page the host names may open on. */
   serviceBaseUrl: string;
-  /** Tells the voice window, which owns the call, that an agent's Call button was pressed. */
-  talkTo: (about: VoiceCallAbout) => void;
 }
 
 /** The refusal a window that draws no Tasks tab hears, or nothing for a panel. */
@@ -177,7 +175,7 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
   const { host, openExternal } = dependencies;
   /** How many streams stand open of each plan's pages, and each agent's on no task, by its id. */
   const openPages: OpenFollows<TasksPagesAnswer> = MutableHashMap.empty();
-  /** How many streams stand open of each task's Browser tabs. */
+  /** How many streams stand open of each agent's or task's Browser tabs, by its id. */
   const openBrowserTabs: OpenFollows<TasksBrowserTabsAnswer> = MutableHashMap.empty();
   /** How many streams stand open of each plan's history. */
   const openHistories: OpenFollows<TasksRevisionsAnswer> = MutableHashMap.empty();
@@ -204,8 +202,6 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       yield* host.tasksClose();
     }),
-    // Note that a started task opens no call: a call starts only from an
-    // agent's own Call button.
     [TASKS_ACT_KIND.TASKS_START]: actPort[TASKS_ACT_KIND.TASKS_START].effect(function* ({
       input,
       context,
@@ -366,21 +362,6 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         );
       },
     ),
-    // The press names its agent, and the task it is on where it is on one,
-    // whatever task the panel has open: a call is keyed by its agent. That
-    // the agent takes calls and is on the task named is checked as the
-    // call's session is created (`compose-live.ts`).
-    [TASKS_ACT_KIND.TASKS_TALK]: actPort[TASKS_ACT_KIND.TASKS_TALK].effect(function* ({
-      input,
-      context,
-      errors,
-    }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      dependencies.talkTo({
-        agentId: input.agentId,
-        ...(input.taskId === undefined ? undefined : { taskId: input.taskId }),
-      });
-    }),
     [TASKS_ACT_KIND.TASKS_SET_STANDING]: actPort[TASKS_ACT_KIND.TASKS_SET_STANDING].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
@@ -432,7 +413,7 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       if ("issue" in answer) return answer.issue;
       return yield* Effect.fail(errors.REFUSED());
     }),
-    // Likewise a task's Browser tabs: a service that did not answer is refused, never read as no tab.
+    // Likewise an agent's or a task's Browser tabs: a service that did not answer is refused, never read as no tab.
     [TASKS_ACT_KIND.TASKS_BROWSER_TABS]: actPort[TASKS_ACT_KIND.TASKS_BROWSER_TABS].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
@@ -448,19 +429,21 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         return yield* host.tasksBrowserTabOpen(input);
       },
     ),
-    // A task's Browser tabs followed for its side panel: two panels on one task share one follow at the host.
+    // An agent's or a task's Browser tabs followed for its side panel: two panels on one share one follow at the host.
     [TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: actPort[
       TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const tabs = followedStream(
         {
-          keyOf: (scope: TaskBrowserTabsFollow) => scope.taskId,
+          keyOf: (scope: TaskBrowserTabsFollow) => browserTabsPlaceId(scope),
           follow: host.tasksBrowserTabsFollow,
           unfollow: host.tasksBrowserTabsUnfollow,
           onChanged: host.onTaskBrowserTabsChanged,
           valueOf: (changed: TaskBrowserTabsFollowed, scope: TaskBrowserTabsFollow) =>
-            changed.taskId === scope.taskId ? Option.some(changed.view) : Option.none(),
+            browserTabsPlaceId(changed) === browserTabsPlaceId(scope)
+              ? Option.some(changed.view)
+              : Option.none(),
         },
         openBrowserTabs,
         input,

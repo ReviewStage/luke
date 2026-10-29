@@ -4,12 +4,14 @@ import assert from "node:assert/strict";
 import type { FileChip } from "@luke/features/attachment-model";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { IMAGE_OPENING, type ImageOpening } from "@luke/ui";
+import { DIAGRAM_DRAWING, type DiagramModule } from "@luke/ui/diagram-contract";
 import type { ImageView } from "@luke/ui/image-zoom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
+import { type SideBundles, sideBundles } from "../bundle-loader.js";
 import { FindScope } from "../find-in-tab.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
@@ -17,6 +19,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
+import { onSideBundles } from "../testing/side-bundles.js";
 import { wholeFileDrawn, wholeFileLines } from "../testing/whole-file.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 
@@ -30,7 +33,9 @@ import { AttachmentViewer } from "./attachment-viewer.js";
  * pixels does. Two fingers on a touch screen pinch it about the point
  * between them, and a picture asked to open at its own pixels does so from
  * its top left corner once it loads. Copy image puts the picture shown on
- * the clipboard as the PNG it is. jsdom lays nothing out, so each picture is
+ * the clipboard as the PNG it is. A Mermaid file is drawn as the picture the
+ * diagram bundle answers, which stands in for Mermaid since it cannot lay out
+ * under jsdom, and a file of any other kind imports no bundle. jsdom lays nothing out, so each picture is
  * given the 800 by 400 its frame of 800 by 500 would fit a 2400 by 1200
  * screenshot to.
  */
@@ -551,18 +556,83 @@ test("on a phone the viewer's header is Close alone at its start, the file's nam
     document.querySelector<HTMLElement>('[role="dialog"] header') ?? assert.fail("a header");
   const named = (selector: string) =>
     [...head.querySelectorAll(selector)].map((button) => button.getAttribute("aria-label"));
-  assert.deepEqual(named("button"), ["Close", "File actions"], "one control in each corner");
+  assert.deepEqual(named("button"), ["Close", "Attachment actions"], "one control in each corner");
   assert.equal(head.querySelector("h2")?.textContent, "first.png");
 
-  viewer.press("File actions");
+  viewer.press("Attachment actions");
   const items = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
   assert.deepEqual(
     items().map((item) => item.textContent),
-    ["Previous file1 of 2", "Next file1 of 2", "Copy image", "Zoom out", "Zoom in", "Download"],
+    [
+      "Previous file1 of 2",
+      "Next file1 of 2",
+      "Copy image",
+      "Zoom out",
+      "Zoom in",
+      "Download file",
+    ],
   );
   act(() => items()[1]?.click());
   assert.equal(viewer.state.at, 1, "Next file shows the next");
 
   viewer.key("ArrowLeft");
   assert.equal(viewer.state.at, 0, "the arrows still walk the files");
+});
+
+/** A file holding `words` under `name`, as the message box keeps a text file. */
+function textFile(name: string, words: string): FileChip {
+  return { name, mediaType: "text/plain", url: `data:text/plain;base64,${btoa(words)}` };
+}
+
+/** The viewer open on `file` over `bundles`, once what it asked of them has landed. */
+async function openedOver(file: FileChip, bundles: SideBundles): Promise<void> {
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  const viewer = createElement(AttachmentViewer, {
+    files: [file],
+    at: 0,
+    onAt: () => undefined,
+    onClose: () => undefined,
+  });
+  act(() => root.render(onRegistry(registry, onSideBundles(bundles, viewer))));
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+}
+
+test("a Mermaid file opened over the window is drawn as its diagram, zoomed and copied as a picture is", async () => {
+  const code = "flowchart LR\n  Invite --> Join";
+  const drawn = `data:image/svg+xml,${encodeURIComponent(code)}`;
+  const diagram: DiagramModule = {
+    draw: (asked) =>
+      Promise.resolve({ kind: DIAGRAM_DRAWING.DRAWN, url: asked === code ? drawn : "" }),
+  };
+
+  await openedOver(
+    textFile("invite.mmd", code),
+    sideBundles({ diagram: () => Promise.resolve(diagram) }),
+  );
+
+  const picture = document.querySelector<HTMLImageElement>(".luke-zoom-image");
+  assert.equal(picture?.getAttribute("src"), drawn);
+  assert.equal(picture?.getAttribute("alt"), "Diagram: flowchart LR");
+  assert.ok(document.querySelector('button[aria-label="Zoom in"]'));
+  assert.ok(document.querySelector('button[aria-label="Copy image"]'));
+});
+
+test("a file that is no diagram opened over the window imports no diagram bundle", async () => {
+  let imports = 0;
+  const bundles = sideBundles({
+    diagram: () => {
+      imports += 1;
+      return Promise.resolve({ draw: () => Promise.resolve({ kind: DIAGRAM_DRAWING.REFUSED }) });
+    },
+  });
+
+  await openedOver(textFile("notes.md", "flowchart LR\n  A --> B"), bundles);
+
+  assert.equal(imports, 0);
+  assert.equal(document.querySelector(".luke-zoom-image"), null);
 });

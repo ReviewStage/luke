@@ -1,4 +1,5 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import type { Channel } from "@luke/features/channel-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import {
   fieldValueWords,
@@ -32,6 +33,8 @@ import {
   Fill,
   GAP,
   IconButton,
+  INLINE_REF_LOOK,
+  InlineRef,
   LAYOUT_ELEMENT,
   MoreButton,
   moreLabel,
@@ -48,6 +51,7 @@ import {
   Tooltip,
   useMenu,
   useMinute,
+  WingFace,
 } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -57,10 +61,18 @@ import {
   memberActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
+import { GLYPH } from "@luke/ui/icons";
 import { isWireString } from "@luke/wire";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ActorLine, ActorRef, AutomationCard, commentAuthor } from "../actor-ref.js";
+import {
+  ACTOR_SIZE,
+  ActorLine,
+  ActorMark,
+  ActorRef,
+  AutomationCard,
+  commentAuthor,
+} from "../actor-ref.js";
 import {
   Conversation,
   ConversationContent,
@@ -74,7 +86,8 @@ import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { LOG_OVER_COMPOSER_CLASS } from "./agent-composer.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
-import { InboxAnswerBox } from "./inbox-answer-box.js";
+import { ChannelCard } from "./channel-card.js";
+import { type AnswerNewThread, InboxAnswerBox, type NewThreadStart } from "./inbox-answer-box.js";
 import {
   ANSWERED,
   AnsweredCard,
@@ -113,23 +126,27 @@ import {
   answerOf,
   askNumberedPick,
   EMPTY_INBOX_DRAFT,
+  holderAutomationId,
+  holderName,
   INBOX_HOLDER,
   type InboxDraft,
   type InboxHolder,
   type InboxKnownAsk,
   itemWorkspaceId,
   knownAsk,
+  operatorHolder,
   readersItem,
   sentStamp,
 } from "./inbox-model.js";
 import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from "./inbox-pager.js";
 import { InboxStamp } from "./inbox-stamp.js";
+import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { cardTitle } from "./tool-call-model.js";
 import { INERT_LINK_CLASS, TranscriptWords } from "./transcript-blocks.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import { opensAsLink } from "./use-open-link.js";
 import { type PendingInboxReply, pendingReplyOn, type TaskInboxControl } from "./use-task-inbox.js";
 
@@ -194,12 +211,14 @@ import { type PendingInboxReply, pendingReplyOn, type TaskInboxControl } from ".
  * session recording (`ph-no-capture`), and the viewer, drawn over the
  * window outside it, is out of it on its own.
  *
- * Words selected in what the agent wrote stand Reply over them, as an
- * agent's words do in its tab (`reply-to-selection.tsx`): a press lays them
- * into the box as a quote block, so a reply can answer the agent point by
- * point. Reply stands only while the box takes a quote: never while a send
- * is out, a dictation holds the box, or its editor is still loading
- * (`inbox-answer-box.tsx`).
+ * Words selected anywhere in the thread but the draft reply stand Reply
+ * over them, as an agent's words do in its tab (`reply-to-selection.tsx`):
+ * its title, the agent's words and a member's, an answer's picks, ticks,
+ * and values, and the lines saying what became of an ask. A press lays
+ * them into the box as a quote block, so a reply can answer the thread
+ * point by point. Reply stands only while the box takes a quote: never
+ * while a send is out, a dictation holds the box, or its editor is still
+ * loading (`inbox-answer-box.tsx`).
  */
 
 /** What the thread says under its item where the task's inbox could not be read. */
@@ -277,11 +296,14 @@ function useOptionNumbers(
       if (from !== document.body && !(from instanceof Node && inbox?.contains(from) === true))
         return;
       const number = Number(event.key);
+      // Note that a number picks only an option drawn, never one stepped aside while the box starts a new thread.
+      const row = optionRows(shown)[number - 1];
+      if (row === undefined) return;
       const picked = pick?.(draft, number);
       if (picked === undefined) return;
       event.preventDefault();
       control.onDraft(item, picked);
-      optionRows(shown)[number - 1]?.focus();
+      row.focus();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -707,7 +729,10 @@ function AskBox({
       <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
         <CardHead>
           <span className={INBOX_ASK_KIND}>{askHeadWords(ask, undefined)}</span>
-          <span className={INBOX_ASK_STANDING}>{ANSWERED}</span>
+          <span className={INBOX_ASK_STANDING}>
+            <CheckIcon aria-hidden="true" />
+            {ANSWERED}
+          </span>
         </CardHead>
       </Card>
     </div>
@@ -820,14 +845,14 @@ function phoneItemGroups(
       ? []
       : [
           {
-            label: "Previous item",
+            label: "Previous inbox item",
             icon: <ChevronUpIcon />,
             disabled: pager.onPrevious === undefined,
             onSelect: () => pager.onPrevious?.(),
             command: APP_COMMAND.PREVIOUS_INBOX_ITEM,
           },
           {
-            label: "Next item",
+            label: "Next inbox item",
             icon: <ChevronDownIcon />,
             disabled: pager.onNext === undefined,
             onSelect: () => pager.onNext?.(),
@@ -849,21 +874,24 @@ function phoneItemGroups(
                 status: holder.task.status,
               }).icon,
               onSelect: onOpenHolder,
+              command: APP_COMMAND.OPEN_IN_TASK,
             },
           ]
         : [
             {
               label: OPEN_AUTOMATION,
-              detail: holder.name,
+              detail: holderName(holder),
               icon: <ZapIcon />,
               onSelect: onOpenHolder,
             },
           ];
+  // ⌘O opens the item's task, or its agent where no task holds it (`desktop-inbox.tsx`).
   const agentItem: MenuAction = {
     label: OPEN_AGENT,
     detail: by.subject.name,
     icon: <BotIcon />,
     onSelect: by.onOpen,
+    ...(holder.kind === INBOX_HOLDER.TASK ? {} : { command: APP_COMMAND.OPEN_IN_TASK }),
   };
   const panel: MenuAction[] =
     phone.onShowPanel === undefined
@@ -877,30 +905,31 @@ const OPEN_TASK = "Open task";
 const OPEN_AUTOMATION = "Open automation";
 const OPEN_AGENT = "Open agent";
 
-/** What the pane's ⋯ menu is called, which is its tooltip too. */
-const ITEM_THING = "Item";
+/** What the pane's ⋯ menu is called, which is its tooltip too, as the item's row names its own. */
+const ITEM_THING = "Inbox item";
 
 /**
  * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
- * agent's tab end theirs: Mark as read or unread, naming U, as the item's
- * row's menu does; Copy link, the item's link under its task or its agent; and, while the item is open, Close
- * without answering, asked first (`inbox-close.tsx`). It is keyed by its
+ * agent's tab end theirs, offering what the item's row's menu offers in the
+ * same order (`inbox-item-actions.tsx`): Copy link, the item's link under its
+ * agent; Mark as read or unread, naming U; Move to channel…; and, while the
+ * item is open, Resolve without answering, asked first. It is keyed by its
  * item where it is drawn, so a question asked on one item never closes the
  * next, and the menu and the question go with the pane once it is hidden.
  */
 function InboxItemMenu({
-  holder,
   item,
   shown,
   onMark,
+  onMove,
   onClose,
   lead = NO_LEAD,
   heading,
 }: {
-  holder: InboxHolder;
   item: InboxItem;
   shown: boolean;
   onMark: InboxPaneDoors["onMark"];
+  onMove: InboxPaneDoors["onMove"];
   onClose: InboxCloser | undefined;
   /** Groups over the item's own, as a phone's head leads its ⋯ with what its bar drew as buttons (`phoneItemGroups`); none elsewhere. */
   lead?: readonly MenuAction[][];
@@ -908,8 +937,9 @@ function InboxItemMenu({
   heading?: React.ReactNode;
 }): React.JSX.Element | null {
   const menu = useMenu(shown);
-  const { close, groups: itemGroups } = useInboxItemActions(holder, item, {
+  const { close, groups: itemGroups } = useInboxItemActions(item, {
     onMark,
+    onMove,
     onClose,
     shown,
     keyed: true,
@@ -968,20 +998,27 @@ function QuestionClose({
 
 /**
  * The thread's subject, as a plan or a pull request leads with one: the
- * item's title alone, the thread under it.
+ * item's title alone, the thread under it, its words quoted into a reply
+ * as the thread's are.
  */
 function Subject({
   item,
   heading,
+  first,
 }: {
   item: InboxItem;
   /** Takes the title's heading, which the bar watches scroll away (`useHeadingAway`). */
   heading: (element: HTMLElement | null) => void;
+  /** Whether it is the page's first heading, as on a phone, whose bar names what holds the item and whose list is not drawn beside it. */
+  first: boolean;
 }): React.JSX.Element {
   return (
-    <header className="inbox-subject flex flex-col gap-tight-gap border-b border-border pb-block-gap">
+    <header
+      className="inbox-subject flex flex-col gap-tight-gap border-b border-border pb-block-gap"
+      {...{ [REPLY_SCOPE]: "" }}
+    >
       <Text
-        as={TEXT_ELEMENT.H2}
+        as={first ? TEXT_ELEMENT.H1 : TEXT_ELEMENT.H2}
         variant={TEXT_VARIANT.DIALOG}
         ref={heading}
         className="inbox-subject-title"
@@ -1046,7 +1083,7 @@ function AnswerMentions({
 /** The words a dictation into an item's box is likely to say: its repository's, its title's, and its thread's. */
 function answerKeywords(holder: InboxHolder, item: InboxItem): readonly string[] {
   const repository =
-    holder.kind === INBOX_HOLDER.TASK ? holder.task.repository : holder.repository || null;
+    holder.kind === INBOX_HOLDER.TASK ? holder.task.repository : holder.agent.repository;
   const body = (item.thread ?? []).map((message) => message.text).join("\n");
   return dictationKeywords({ repository, title: item.title, body });
 }
@@ -1064,6 +1101,48 @@ export interface InboxPaneDoors {
   readonly onMark?: ((item: InboxItem, unread: boolean) => void) | undefined;
   /** Closes an open item without an answer, from the bar's ⋯ menu; none where the pane offers no close. */
   readonly onClose?: InboxCloser | undefined;
+  /** Asks which channel the item's thread moves to, from the bar's ⋯ menu; none where Channels is off. */
+  readonly onMove?: ((item: InboxItem) => void) | undefined;
+}
+
+/** What starts a new thread from an item's box instead of a reply, where the page offers one. */
+export interface InboxNewThread {
+  /** The channel the item stands in, which a thread started from it lands in; none where the window lists no channels. */
+  readonly channelOf: (item: InboxItem) => Channel | undefined;
+  /** The workspace whose channels those are, whose members name a channel's maker on its card. */
+  readonly workspaceId: string | undefined;
+  /** Starts a thread with the item's agent, in the item's channel, and opens it; answers why it did not start, or nothing once it did. */
+  readonly onStart: (item: InboxItem, start: NewThreadStart) => Promise<string | undefined>;
+}
+
+/**
+ * The box's new thread for one item: the item's agent's chip, wearing its
+ * tile as a mention of the agent does, and its channel's chip, each hanging
+ * its card and opening nothing, since a press on the checkbox's words ticks it.
+ */
+function answerNewThread(offer: InboxNewThread, item: InboxItem, by: ItemAgent): AnswerNewThread {
+  const { name, tile } = by.subject;
+  const channel = offer.channelOf(item);
+  return {
+    agent: (
+      <InlineRef
+        look={INLINE_REF_LOOK.PILL}
+        glyph={<ActorMark actor={tile} size={ACTOR_SIZE.INLINE} />}
+        label={name}
+        card={<AgentCard subject={by.subject} models={by.models} />}
+      />
+    ),
+    channel:
+      channel === undefined ? undefined : (
+        <InlineRef
+          look={INLINE_REF_LOOK.PILL}
+          glyph={<GLYPH.CHANNEL />}
+          label={channel.name}
+          card={<ChannelCard channel={channel} workspaceId={offer.workspaceId} />}
+        />
+      ),
+    onStart: (start) => offer.onStart(item, start),
+  };
 }
 
 /**
@@ -1075,14 +1154,15 @@ function useAutomationCrumb(
   holder: InboxHolder,
   onOpen: (() => void) | undefined,
 ): Crumb | undefined {
-  const automationId = holder.kind === INBOX_HOLDER.AUTOMATION ? holder.automationId : null;
+  const automationId = holderAutomationId(holder);
   const known = useAutomation(automationId ?? undefined);
-  if (holder.kind !== INBOX_HOLDER.AUTOMATION) return undefined;
+  if (holder.kind !== INBOX_HOLDER.AGENT) return undefined;
+  const name = holderName(holder);
   return {
-    label: holder.name,
+    label: name,
     // Note that the agents no automation names stand under no automation, so their crumb wears the factory glyph, as their group's header does.
     glyph: <HolderGlyph holder={holder} />,
-    hint: holder.name,
+    hint: name,
     card:
       known === undefined ? undefined : (
         <AutomationCard automation={known.automation} workspaceName={known.workspaceName} />
@@ -1122,34 +1202,13 @@ function Crumbs({
   /** Whether the heading has scrolled away, so the path names the item. */
   titleShown: boolean;
 }): React.JSX.Element {
-  const { name, agent } = by.subject;
   const automation = useAutomationCrumb(holder, doors.onOpenHolder);
-  const onOpenHolder = doors.onOpenHolder;
-  const task: Crumb | undefined =
-    holder.kind === INBOX_HOLDER.TASK
-      ? {
-          label: holder.task.name,
-          glyph: tabLook({
-            kind: TAB_KIND.PLAN,
-            name: holder.task.name,
-            status: holder.task.status,
-          }).icon,
-          hint: holder.task.name,
-          card: doors.taskCard,
-          onPress: () => onOpenHolder?.(),
-        }
-      : undefined;
+  // Note that Luke stands under nothing but himself, so his path reads Luke › title rather than naming him twice.
+  const operator = operatorHolder(holder);
   const crumbs: Crumb[] = [
-    task ?? automation,
-    {
-      label: name,
-      glyph: tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
-      hint: name,
-      card: <AgentCard subject={by.subject} models={by.models} />,
-      onPress: () => by.onOpen(),
-      // Note that once the title joins the path the agent's crumb keeps its size, so a narrow bar cuts the task's crumb short first and then the title.
-      fixed: titleShown,
-    },
+    taskCrumb(holder, doors) ?? (operator ? undefined : automation),
+    // Note that once the title joins the path the agent's crumb keeps its size, so a narrow bar cuts the task's crumb short first and then the title.
+    agentCrumb(holder, by, titleShown),
     { label: title, current: true, shown: titleShown },
   ].filter((crumb) => crumb !== undefined);
   return (
@@ -1157,6 +1216,52 @@ function Crumbs({
       <Breadcrumbs label="Path" crumbs={crumbs} />
     </div>
   );
+}
+
+/** The path's task crumb, wearing its plan's glyph and hanging its card, which opens the task; none for an item no task holds. */
+function taskCrumb(holder: InboxHolder, doors: InboxPaneDoors): Crumb | undefined {
+  if (holder.kind !== INBOX_HOLDER.TASK) return undefined;
+  const { onOpenHolder } = doors;
+  return {
+    label: holder.task.name,
+    glyph: tabLook({ kind: TAB_KIND.PLAN, name: holder.task.name, status: holder.task.status })
+      .icon,
+    hint: holder.task.name,
+    card: doors.taskCard,
+    onPress: () => onOpenHolder?.(),
+  };
+}
+
+/** The path's agent crumb, wearing its mark, or Luke's face for Luke's own, and hanging its card, which opens its tab; `fixed` keeps its size where the crumbs after it give way first. */
+function agentCrumb(holder: InboxHolder, by: ItemAgent, fixed = false): Crumb {
+  const { name, agent } = by.subject;
+  const operator = operatorHolder(holder);
+  return {
+    label: name,
+    glyph: operator ? <WingFace /> : tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
+    hint: name,
+    card: <AgentCard subject={by.subject} models={by.models} />,
+    onPress: () => by.onOpen(),
+    fixed,
+  };
+}
+
+/**
+ * A phone's bar's name for the item: what holds it, its task as the wide
+ * path leads with it, or its agent where no task holds it, each crumb
+ * pressing where the wide path's does. Note that the bar never names the
+ * item's title, because the thread's heading right under it already does.
+ */
+function PhoneHolder({
+  holder,
+  by,
+  doors,
+}: {
+  holder: InboxHolder;
+  by: ItemAgent;
+  doors: InboxPaneDoors;
+}): React.JSX.Element {
+  return <Breadcrumbs label="Path" crumbs={[taskCrumb(holder, doors) ?? agentCrumb(holder, by)]} />;
 }
 
 /**
@@ -1185,13 +1290,14 @@ export function InboxPane({
   mentions,
   phone,
   channelName,
+  newThread,
 }: {
   /** What holds the item: its task, or the automation that started its agent with no task. */
   holder: InboxHolder;
   item: InboxItem;
   /** The live read of the item's task, or of its agent with no task, which answers it and holds its draft. */
   control: TaskInboxControl;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   doors: InboxPaneDoors;
   /** Whether the list stands alone in the item's place. */
   hidden: boolean;
@@ -1205,13 +1311,15 @@ export function InboxPane({
   mentions?: TaskMentionsValue | undefined;
   /**
    * A phone's head (`phone-head.tsx`), where the item stands alone on a
-   * phone: the way back's glyph, the item's title centred, and one ⋯
+   * phone: the way back's glyph, what holds the item centred (`PhoneHolder`), and one ⋯
    * holding the pager, what the crumbs open, the panel, and the item's own
    * actions; none elsewhere, where the bar draws its crumbs and buttons.
    */
   phone?: InboxPanePhone | undefined;
   /** The channel the Inbox is narrowed to, by name, which the way back to the list names; none where it lists every channel. */
   channelName?: string | undefined;
+  /** What the box's checkbox starts a new thread with instead of a reply; none where the page offers none. */
+  newThread?: InboxNewThread | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
@@ -1221,6 +1329,8 @@ export function InboxPane({
   useScrollToOwnMessage(board, item, readerId);
   const [heading, setHeading] = useState<HTMLElement | null>(null);
   const headingAway = useHeadingAway(board, heading, item.id);
+  // A phone heads the item with its own row, the item standing alone in the list's place.
+  const phoneHead = phone !== undefined && onBack !== undefined;
   // An open ask waits on its task's assignee, else whoever started its agent, as the list says, though any member may answer it.
   const waitingOn = readersItem(item, readerId) ? undefined : inboxWaitsOn(item);
   const by: ItemAgent = {
@@ -1241,7 +1351,7 @@ export function InboxPane({
     onEnter: () => sendFromPane(pane.current),
   };
   // Note that the item's words are read under its own workspace, its plan's or its agent's, never the one the Inbox lists, which may not be the item's.
-  const workspaceId = itemWorkspaceId(holder, item.agentId);
+  const workspaceId = itemWorkspaceId(holder);
   const onDraft = (next: InboxDraft) => control.onDraft(item, next);
   // The open ask's controls stand in the draft reply, over its note.
   const asking = openAskOf(thread);
@@ -1276,6 +1386,7 @@ export function InboxPane({
           keywords={answerKeywords(holder, item)}
           replyScope={board}
           onUnarchiveAgent={() => agents.onArchive(item.agentId, false)}
+          newThread={newThread === undefined ? undefined : answerNewThread(newThread, item, by)}
         />
       </DraftReply>
     </AnswerMentions>
@@ -1287,7 +1398,7 @@ export function InboxPane({
       aria-label={cardTitle(item.title)}
       hidden={hidden}
     >
-      {phone !== undefined && onBack !== undefined ? (
+      {phoneHead ? (
         <PhoneHead
           place="inbox-item"
           start={
@@ -1297,14 +1408,14 @@ export function InboxPane({
               <BackButton label={`#${channelName}`} place={`#${channelName}`} onBack={onBack} />
             )
           }
-          title={cardTitle(item.title)}
+          title={<PhoneHolder holder={holder} by={by} doors={doors} />}
           end={
             <InboxItemMenu
               key={item.id}
-              holder={holder}
               item={item}
               shown={!hidden}
               onMark={doors.onMark}
+              onMove={doors.onMove}
               onClose={doors.onClose}
               lead={phoneItemGroups(holder, by, doors, pager, phone)}
               heading={
@@ -1343,10 +1454,10 @@ export function InboxPane({
               )}
               <InboxItemMenu
                 key={item.id}
-                holder={holder}
                 item={item}
                 shown={!hidden}
                 onMark={doors.onMark}
+                onMove={doors.onMove}
                 onClose={doors.onClose}
               />
             </>
@@ -1366,7 +1477,7 @@ export function InboxPane({
               images={control}
               code={doors.code}
             >
-              <Subject item={item} heading={setHeading} />
+              <Subject item={item} heading={setHeading} first={phoneHead} />
               <Stack
                 as={LAYOUT_ELEMENT.OL}
                 gap={GAP.NONE}
