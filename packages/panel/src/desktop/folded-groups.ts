@@ -33,10 +33,9 @@ import { keptKey, useKept } from "../use-kept.js";
  * and keeps nothing, so its frames never wear a developer's folds. The
  * Inbox's task groups are kept on the same terms, each by its task's id,
  * and so are its view choices, the scope it shows, how it groups and sorts,
- * whose items it lists, a teammate by their account's id, and whether its
- * rows show their media, and its list's width; a task's own Inbox keeps a
- * scope of its own, one for every task, apart from the window's, and shows
- * no media; and the channels keep one scope and one choice of whose items
+ * whose items it lists, a teammate by their account's id, and its list's
+ * width; a task's own Inbox keeps a
+ * scope of its own, one for every task, apart from the window's; and the channels keep one scope and one choice of whose items
  * they list, shared by every channel, apart from the window's, All of
  * everyone's until first turned. A choice kept before its scope was is read
  * as the scope that now lists what it listed: a tab kept before the scopes, Needs you or
@@ -69,7 +68,6 @@ const STORAGE_KEY = {
   INBOX_SORT: "luke.inboxSort",
   INBOX_WHOSE: "luke.inboxWhose",
   CHANNEL_SCOPE: "luke.channelScope",
-  INBOX_MEDIA_PREVIEWS: "luke.inboxMediaPreviews",
   INBOX_SECOND_LINE: "luke.inboxSecondLine",
   INBOX_LIST_WIDTH: "luke.inboxListWidth",
   RUNS_PANEL: "luke.automationRunsPanel",
@@ -110,7 +108,7 @@ export const INBOX_LIST_WIDTH = {
 /** The folded groups, each by its repository, its creator, or its assignee, null for the plans with none. */
 const storedFolds = Schema.fromJsonString(Schema.Array(Schema.NullOr(Schema.String)));
 
-/** Whether Pinned is folded, or the Inbox's rows show their media. */
+/** Whether Pinned is folded, or whether the Inbox shows a second line. */
 const storedFlag = Schema.fromJsonString(Schema.Boolean);
 
 /** The Inbox's folded tasks, by id. */
@@ -225,7 +223,6 @@ const KEPT = {
   SORT: keptKey<InboxSort>(STORAGE_KEY.INBOX_SORT, storedSort),
   WHOSE: keptKey<InboxWhose>(STORAGE_KEY.INBOX_WHOSE, storedWhose),
   CHANNEL_SCOPE: keptKey<ChannelScope>(STORAGE_KEY.CHANNEL_SCOPE, storedChannelScope),
-  MEDIA_PREVIEWS: keptKey(STORAGE_KEY.INBOX_MEDIA_PREVIEWS, storedFlag),
   SECOND_LINE: keptKey(STORAGE_KEY.INBOX_SECOND_LINE, storedFlag),
   FOLDED_GROUPS: keptKey(STORAGE_KEY.GROUPS, storedFolds),
   FOLDED_CREATORS: keptKey(STORAGE_KEY.CREATORS, storedFolds),
@@ -366,9 +363,6 @@ export interface InboxViewChoices extends InboxShowChoice, InboxWhoseChoice {
   onGrouping: (grouping: InboxGrouping) => void;
   sort: InboxSort;
   onSort: (sort: InboxSort) => void;
-  /** Whether each row shows the pictures and pages its item carries, drawn small under its preview. */
-  mediaPreviews: boolean;
-  onMediaPreviews: (mediaPreviews: boolean) => void;
   /** Whether each row shows its second line, what its item asks or how it ended, under its title; off, every row is one line. */
   secondLine: boolean;
   onSecondLine: (secondLine: boolean) => void;
@@ -391,13 +385,12 @@ export function useTaskInboxShow(): InboxShowChoice {
   return useKeptShow(KEPT.TASK_INBOX_SHOW);
 }
 
-/** The Inbox's view choices, To do of everyone's, grouped by nothing, the latest first, with no media shown, until first changed, and kept as each is pressed. */
+/** The Inbox's view choices, To do of everyone's, grouped by nothing, the latest first, until first changed, and kept as each is pressed. */
 export function useInboxViewChoices(): InboxViewChoices {
   const shown = useKeptShow(KEPT.INBOX_SHOW);
   const [grouping, onGrouping] = useKept(KEPT.GROUPING, INBOX_GROUPING.NONE);
   const [sort, onSort] = useKept(KEPT.SORT, INBOX_SORT.LATEST);
   const [whose, onWhose] = useKept(KEPT.WHOSE, EVERYONES);
-  const [mediaPreviews, onMediaPreviews] = useKept(KEPT.MEDIA_PREVIEWS, false);
   const [secondLine, onSecondLine] = useKept(KEPT.SECOND_LINE, true);
   return {
     ...shown,
@@ -407,8 +400,6 @@ export function useInboxViewChoices(): InboxViewChoices {
     onSort,
     whose,
     onWhose,
-    mediaPreviews,
-    onMediaPreviews,
     secondLine,
     onSecondLine,
   };
