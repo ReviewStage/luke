@@ -11,17 +11,21 @@ import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
 import { type PlanAgentEdit, planAgentEditSchema } from "@luke/features/plan-template";
 import {
+  mergePolicySchema,
   PLAN_ACTOR,
   type PlanLastEdit,
   type PlanSectionEdit,
+  TASK_MODE,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
+  type TaskMode,
   type TaskOrigin,
   type TaskPriority,
   type TaskRunsOn,
   type TaskStatus,
   type TaskSummary,
+  taskModeSchema,
   taskPrioritySchema,
   taskStatusSchema,
   UNKNOWN_AGENT_LABEL,
@@ -204,6 +208,8 @@ export interface NewTask {
   readonly runsOn?: TaskRunsOnWrite;
   /** The task it is a child of, which the caller confirmed it reaches in the same workspace, and whose repository and machine it took; none for a task at the top. */
   readonly parentTaskId?: string;
+  /** How the task is worked, fixed as it starts; by its agents where none is named. */
+  readonly mode?: TaskMode;
 }
 
 /**
@@ -263,6 +269,8 @@ const TASK_SUMMARY_COLUMNS = {
   machine: task.machine,
   deviceId: task.deviceId,
   parentTaskId: task.parentTaskId,
+  mode: task.mode,
+  mergePolicy: task.mergePolicy,
   completedAt: task.completedAt,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -292,6 +300,8 @@ const TaskSummaryRowSchema = Schema.Struct({
   machine: MachineSchema,
   deviceId: Schema.NullOr(Schema.String),
   parentTaskId: Schema.NullOr(Schema.String),
+  mode: taskModeSchema,
+  mergePolicy: mergePolicySchema,
   completedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -643,6 +653,8 @@ function summaryOf(
       : { assignee: { userId: row.assigneeId, name: assignee } }),
     ...runsOnOf(row, names, devices),
     ...(row.parentTaskId === null ? undefined : { parentTaskId: row.parentTaskId }),
+    mode: row.mode,
+    mergePolicy: row.mergePolicy,
   };
 }
 
@@ -661,6 +673,7 @@ const TaskInsertSchema = Schema.Struct({
   organizationId: Schema.String,
   name: Schema.String,
   number: Schema.Number,
+  mode: taskModeSchema,
   status: taskStatusSchema,
   priority: taskPrioritySchema,
   assigneeId: Schema.NullOr(Schema.String),
@@ -689,6 +702,7 @@ function taskValues(write: typeof TaskInsertSchema.Type) {
     organizationId: write.organizationId,
     name: write.name,
     number: write.number,
+    mode: write.mode,
     status: write.status,
     completedAt: completedAtOf(write.status, write.now),
     priority: write.priority,
@@ -967,6 +981,7 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       parentTaskId: started.parentTaskId ?? null,
       document: "",
       brief: brief.length > 0 ? brief : null,
+      mode: started.mode ?? TASK_MODE.AGENT,
       status: started.status ?? TASK_STATUS.TODO,
       priority: started.priority ?? TASK_PRIORITY.NONE,
       assigneeId: started.assigneeId ?? null,

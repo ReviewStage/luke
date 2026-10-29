@@ -50,6 +50,7 @@ import {
   nativeRuntimesOfReached,
   operatorReplaced,
   pinAgentCommitted,
+  readAgentUnderPilot,
   readVisibleAgentWorkspace,
   renameAgentCommitted,
   updateAgentChoiceCommitted,
@@ -654,11 +655,15 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         nativeRuntimesOfReached([agent.conversationId]),
       );
       const memoryOn = yield* memoryOnFor(agent.userId);
+      const underPilot = yield* hostedStoreOrUnavailable(
+        readAgentUnderPilot(context.userId, agent.id),
+      );
       return {
         tools: offeredLukeTools({
           agent,
           native: runtimes.has(agent.conversationId),
           memoryOn,
+          underPilot,
         }),
         runOnMac: yield* hostedStoreOrUnavailable(runOnMacStanding(target)),
       };

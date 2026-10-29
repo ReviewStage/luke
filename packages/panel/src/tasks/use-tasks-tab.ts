@@ -21,6 +21,7 @@ import {
   type RepositoryPin,
   type Task,
   type TaskAgentPin,
+  type TaskMode,
   type TaskRunsOnRequest,
   type TaskStanding,
   type TaskStatus,
@@ -113,6 +114,7 @@ import {
   localAgentRefusalWords,
   openingLineOf,
   type SentLine,
+  startsOwnAgents,
 } from "./agent-model.js";
 import {
   CLOSED_TAB_STRIP,
@@ -501,6 +503,8 @@ export interface NewTaskStart {
   /** The device Runs on chose, which a refusal names; none for the cloud. */
   readonly device?: MacOffer;
   readonly handed?: NewTaskAgent;
+  /** How the task is worked, where the card's choice named it while the Pilot experiment is on; by its agents otherwise. */
+  readonly mode?: TaskMode;
   /** What the card held as it pressed Start, which it opens again on where an agent's start is refused after the card closed. */
   readonly card?: NewTaskCardKept;
 }
@@ -1285,6 +1289,7 @@ export function useTasksTab(input: {
     listedAgents: tasks.tasks.some((task) => task.id === viewed.activeTaskId)
       ? liveAgents
       : undefined,
+    mode: tasks.tasks.find((task) => task.id === viewed.activeTaskId)?.mode,
     onOpenIntegrations: input.onOpenIntegrations,
     onOpenApiKeys: input.onOpenApiKeys,
     me: input.accountId,
@@ -1356,7 +1361,8 @@ export function useTasksTab(input: {
   // that nothing reaches the service until the draft is sent or called.
   const openDraftNow = useRef(agents.onNewDraft);
   openDraftNow.current = agents.onNewDraft;
-  // Note that an archive still out wants none, since the agent it took comes back if refused, and
+  // Note that an archive still out wants none, since the agent it took comes back if refused, nor
+  // does a pilot task, whose agents its pilot starts (`startsOwnAgents`), and
   // neither does New task's start of an agent, since main opens its task before the start answers,
   // whose agent no list holds yet, and its answer opens the agent's tab, or its draft if refused.
   const draftWanted =
@@ -1364,7 +1370,8 @@ export function useTasksTab(input: {
     startingTask === undefined &&
     agents.agentIds !== undefined &&
     agents.onUnarchive === undefined &&
-    !agents.archiving;
+    !agents.archiving &&
+    startsOwnAgents(agents.mode);
   const draftTask = viewed.activeTaskId;
   useEffect(() => {
     if (draftWanted && draftTask !== undefined) openDraftNow.current();
@@ -2415,6 +2422,7 @@ export function useTasksTab(input: {
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
       ...(from.runsOn === undefined ? undefined : { runsOn: from.runsOn }),
+      ...(from.mode === undefined ? undefined : { mode: from.mode }),
       planning: false,
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
       ...(stays ? { quiet: true } : undefined),

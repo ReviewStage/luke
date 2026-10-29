@@ -62,7 +62,7 @@ import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
-import type { PlanEditor } from "@luke/features/task-wire";
+import { type PlanEditor, TASK_MODE, type TaskMode } from "@luke/features/task-wire";
 import { dayAndTimeText } from "@luke/features/time-format";
 import {
   ROW_PART,
@@ -552,6 +552,28 @@ export function endLineOffersContinue(input: {
 }): boolean {
   if (!endLineContinues(input.status, input.endReason)) return false;
   return input.continued || !input.boxClosed;
+}
+
+/**
+ * Whether the developer starts agents of their own on a task worked in this
+ * mode: New agent, the draft a task with no tab opens, and a Fork. A pilot
+ * task offers none, because its pilot starts every agent on it; a task read
+ * from a service before modes is worked by its agents.
+ */
+export function startsOwnAgents(mode: TaskMode | undefined): boolean {
+  return mode !== TASK_MODE.PILOT;
+}
+
+/**
+ * Whether an agent offers Continue in new agent on a task worked in this
+ * mode: every agent, but on a pilot task its pilot alone, whose Continue
+ * takes over the agents it started rather than adding one of the developer's.
+ */
+export function offersContinue(
+  mode: TaskMode | undefined,
+  agent: { readonly kind?: AgentKind | undefined },
+): boolean {
+  return startsOwnAgents(mode) || agent.kind === AGENT_KIND.PILOT;
 }
 
 /** Said under an agent's box when the model or effort its chip chose could not be changed. */

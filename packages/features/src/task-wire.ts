@@ -47,6 +47,10 @@ import { trimmedText } from "./text-schema.js";
  * the workspace it starts in, or none for the account's first one.
  * A task may be the child of another, to any depth, which its summary names
  * by id.
+ * A task is worked by its agents or by a pilot (`TASK_MODE`), which its
+ * summary names.
+ * A task's agents' pull requests merge on green or wait for a member's go
+ * (`MERGE_POLICY`), which its summary names.
  * The starting account and the conversation a task resumes in are the
  * service's own and never travel here.
  *
@@ -129,9 +133,38 @@ export const TASK_PRIORITY_ORDER: readonly TaskPriority[] = [
   TASK_PRIORITY.NONE,
 ];
 
+/**
+ * How a task is worked: by the agents its members start on it, or by one
+ * pilot agent that breaks it into child tasks and runs agents on them. A
+ * task's mode is fixed as it starts; every task from before it is worked by
+ * agents.
+ */
+export const TASK_MODE = {
+  AGENT: "agent",
+  PILOT: "pilot",
+} as const;
+
+export type TaskMode = (typeof TASK_MODE)[keyof typeof TASK_MODE];
+
+/**
+ * What becomes of a pull request a task's agents open once its checks pass:
+ * merged on green, or held for a member's go. A task starts at merge on
+ * green.
+ */
+export const MERGE_POLICY = {
+  MERGE_ON_GREEN: "merge-on-green",
+  HOLD: "hold",
+} as const;
+
+export type MergePolicy = (typeof MERGE_POLICY)[keyof typeof MERGE_POLICY];
+
 export const taskStatusSchema = EffectSchema.Literals(Object.values(TASK_STATUS));
 
 export const taskPrioritySchema = EffectSchema.Literals(Object.values(TASK_PRIORITY));
+
+export const taskModeSchema = EffectSchema.Literals(Object.values(TASK_MODE));
+
+export const mergePolicySchema = EffectSchema.Literals(Object.values(MERGE_POLICY));
 
 /**
  * The member a task is assigned to, by their account's id, as a start or a
@@ -243,6 +276,9 @@ function agentStartsUnplanned(request: { agent?: TaskAgentStart; planning?: bool
  * (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), as one naming another place
  * to run is (`HOSTED_API_ERROR.RUNS_ON_LOCKED`), and a parent the starter
  * cannot reach is not found.
+ * A task is worked by its agents unless `mode` names a pilot, which the
+ * service refuses from an account without the Pilot experiment, and which
+ * stands as the task was started.
  * A released desktop may still send `linearIssueId` or `issues`, from when a
  * task could link issues, which are accepted and ignored.
  */
@@ -264,6 +300,7 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(taskAssigneeIdSchema),
   parentTaskId: EffectSchema.optionalKey(wireUuidSchema),
+  mode: EffectSchema.optionalKey(taskModeSchema),
 }).check(EffectSchema.makeFilter(agentStartsUnplanned));
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
@@ -505,6 +542,10 @@ const taskSummaryFields = {
   runsOn: EffectSchema.optionalKey(taskRunsOnSchema),
   /** The task this one is a child of; absent for a task at the top, and from a service before child tasks. */
   parentTaskId: EffectSchema.optionalKey(wireUuidSchema),
+  /** How the task is worked; absent from a service before modes, where every task is worked by its agents. */
+  mode: EffectSchema.optionalKey(taskModeSchema),
+  /** What becomes of its agents' pull requests once their checks pass; absent from a service before it, where they merge on green. */
+  mergePolicy: EffectSchema.optionalKey(mergePolicySchema),
 };
 
 /** How much of a task's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */

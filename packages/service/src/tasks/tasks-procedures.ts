@@ -41,6 +41,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
+import { accountExperimentOn } from "@luke/database/models/account-store";
 import { listAgents, readAgentByKey } from "@luke/database/models/agent-store";
 import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
 import { keepRunsOnPick } from "@luke/database/models/runs-on-pick";
@@ -62,12 +63,15 @@ import { AGENT_MACHINE, LOCAL_AGENT_REFUSAL } from "@luke/features/agent-wire";
 import { TASK_START_STATUS } from "@luke/features/contract";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
-import type {
-  Task,
-  TaskAgentStart,
-  TaskRunsOnRequest,
-  TaskStartAnswer,
+import {
+  TASK_MODE,
+  type Task,
+  type TaskAgentStart,
+  type TaskMode,
+  type TaskRunsOnRequest,
+  type TaskStartAnswer,
 } from "@luke/features/task-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { Data, Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { LocalAgentRefused, taskRunsOnChoice } from "../agents/coder-host/agent-runtime-choice.js";
@@ -401,6 +405,19 @@ const parentAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
+ * How a start asks its task to be worked, checked before anything is
+ * written: a pilot only for an account with the Pilot experiment on, refused
+ * as an invalid request otherwise; agents, or none named, for anyone.
+ */
+const modeAsked = (userId: string, asked: TaskMode | undefined) =>
+  asked !== TASK_MODE.PILOT
+    ? Effect.void
+    : Effect.flatMap(
+        hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.PILOT)),
+        (on) => (on ? Effect.void : Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
+      );
+
+/**
  * Where a task runs is set when it is created and kept: a change that names
  * the place it already holds is nothing to write, and one that names another
  * is refused (`RUNS_ON_LOCKED`) before anything is stopped or written. The
@@ -453,13 +470,16 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * anything is written, and the agent's session is opened as the
      * request's own caller (`coder-host/stop.ts`'s `eveFor`); one whose
      * agent's key already started an agent in the workspace answers that
-     * agent's plan and the agent (`startedBefore`). A plan started as a
-     * child of another takes its parent's repository and place to run
-     * (`parentAsked`), confirmed again as any start's repository is.
+     * agent's plan and the agent (`startedBefore`). A pilot task is refused,
+     * also before anything is written, to an account without the Pilot
+     * experiment (`modeAsked`). A plan started as a child of another takes
+     * its parent's repository and place to run (`parentAsked`), confirmed
+     * again as any start's repository is.
      */
     create: plans.create.effect(function* ({ input, context }) {
       const { userId, request } = context;
       const { agent } = input;
+      yield* modeAsked(userId, input.mode);
       const organizationId = yield* startingWorkspace(seams, userId, input.workspaceId);
       const before =
         agent === undefined
@@ -501,6 +521,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ...(input.assigneeId === undefined ? undefined : { assigneeId: input.assigneeId }),
         ...(runsOn === undefined ? undefined : { runsOn }),
         ...(parent === undefined ? undefined : { parentTaskId: parent.id }),
+        ...(input.mode === undefined ? undefined : { mode: input.mode }),
       }).pipe(
         Effect.catch((failure) =>
           failure._tag === "TaskAssigneeNotMember"

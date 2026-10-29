@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
 import {
+  AGENT_KIND,
   AGENT_PAYER,
   AGENT_RUNTIME,
   type AgentPullRequest,
@@ -14,6 +15,7 @@ import {
 import { FAILURE_REASON, remedyLabel } from "@luke/features/failure-remedy";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
+import { TASK_MODE } from "@luke/features/task-wire";
 import { dayAndTimeText } from "@luke/features/time-format";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
@@ -37,6 +39,7 @@ import {
   messageWords,
   modelLabel,
   offeredModels,
+  offersContinue,
   openingLineOf,
   placedMessages,
   planPayerOf,
@@ -50,6 +53,7 @@ import {
   sidebarCallIds,
   startedAgentOf,
   startFailureNote,
+  startsOwnAgents,
   transcriptRowKey,
   unreadOpeningLine,
   unreadSentLines,
@@ -869,6 +873,24 @@ test("a message to a teammate's agent its starter's own key refused names the st
         reason: FAILURE_REASON.OTHER,
         text: "Ada has no API key or subscription connected for this agent. They connect one in Settings to unblock it.",
       },
+    ],
+  );
+});
+
+test("a pilot task offers no agent of the developer's own and Continue on its pilot alone, where any other task offers both", () => {
+  const pilot = { kind: AGENT_KIND.PILOT };
+  const coder = { kind: AGENT_KIND.CODER };
+
+  assert.deepEqual(
+    [TASK_MODE.PILOT, TASK_MODE.AGENT, undefined].map((mode) => ({
+      newAgent: startsOwnAgents(mode),
+      continuesPilot: offersContinue(mode, pilot),
+      continuesCoder: offersContinue(mode, coder),
+    })),
+    [
+      { newAgent: false, continuesPilot: true, continuesCoder: false },
+      { newAgent: true, continuesPilot: true, continuesCoder: true },
+      { newAgent: true, continuesPilot: true, continuesCoder: true },
     ],
   );
 });

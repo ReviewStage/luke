@@ -86,6 +86,9 @@ EXIT_REFUSED=78
 # How long the script waits for the service's first word with Luke: its first
 # start fetches the pinned Claude Code before it registers.
 CONNECT_WAIT_SECONDS=300
+# How long a Mac's install waits for its running LaunchAgent to stop before it
+# swaps the release; a test points it at none.
+MAC_STOP_WAIT_SECONDS="${LUKE_HOST_MAC_STOP_WAIT_SECONDS:-30}"
 # How long fetching the sandbox image may take.
 IMAGE_WAIT_SECONDS=1800
 # A Mac's install, under the home of the user it is for: its LaunchAgent, by its
@@ -460,6 +463,21 @@ cat >"$1" <<PLIST_EOF
 PLIST_EOF
 }
 
+# Stops the LaunchAgent of the user whose uid is $1 and waits until launchd
+# lists it no more, so no daemon of it is left writing under the files about to
+# be swapped; refuses, having changed nothing, where it does not stop.
+stop_launch_agent() {
+  agent="gui/$1/$MAC_LABEL"
+  launchctl bootout "$agent" >/dev/null 2>&1 || true
+  stopping=0
+  while launchctl print "$agent" >/dev/null 2>&1; do
+    [ "$stopping" -lt "$MAC_STOP_WAIT_SECONDS" ] ||
+      fail "Could not stop Luke host for this account, so nothing was changed. Stop it with launchctl bootout $agent, then run this again."
+    sleep 1
+    stopping=$((stopping + 1))
+  done
+}
+
 # Starts the LaunchAgent written to $2 in the login session of the user whose
 # uid is $1, where they are logged in; where they are not, says it starts at
 # their next login. Answers whether it started.
@@ -504,8 +522,8 @@ install_darwin() {
   tar -xzf "$work/$tarball" -C "$work/unpacked" || fail "Could not unpack $tarball"
   [ -x "$work/unpacked/luke-host/bin/luke-host" ] || fail "$tarball holds no luke-host."
 
-  # Note that a running daemon is stopped before its files are swapped, which stops every agent it runs, as on Linux.
-  launchctl bootout "gui/$uid/$MAC_LABEL" >/dev/null 2>&1 || true
+  # Note that a running daemon is stopped, and gone, before its files are swapped, which stops every agent it runs, as on Linux.
+  stop_launch_agent "$uid"
   mkdir -p "$app" "$logs" "$agents"
   chown "$mac_user:$group" "$agents"
   rm -rf "$install.new" "$install.old"
@@ -515,7 +533,9 @@ install_darwin() {
   fi
   mv "$install.new" "$install"
   rm -rf "$install.old"
-  chown -R "$mac_user:$group" "$app" "$logs"
+  # Note that the state is left as it stands, the user's since its enroll ran as them, so no walk of it meets a file a daemon takes away.
+  chown "$mac_user:$group" "$app"
+  chown -R "$mac_user:$group" "$install" "$logs"
   chmod 700 "$app"
   mkdir -p "$(dirname "$LINK")"
   ln -sf "$install/bin/luke-host" "$LINK"

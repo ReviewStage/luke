@@ -730,4 +730,39 @@
   .luke-list-row[data-swipe="moving"] .luke-list-row-swipe-label {
     transition: transform var(--luke-duration-hover) var(--luke-motion-exit);
   }
+
+  /* A row folding the rows nested under it stands its chevron over its
+     leading mark's cell, past the press's inset, so the two share one place
+     and the title never moves. The mark gives way to the chevron while the
+     pointer rests on the row or the keyboard is on the chevron, as a group's
+     head gives its glyph way (`group-header.tsx`), and on a screen with no
+     hover, where nothing would bring it, the chevron stands at rest. */
+  .luke-list-row-fold {
+    margin-inline-start: var(--luke-list-row-inset-inline);
+    opacity: 0;
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
+  .luke-list-row:has(.luke-list-row-fold) .luke-list-row-leading {
+    transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
+  .luke-list-row:is(:hover, :has(.luke-list-row-fold:focus-visible)) .luke-list-row-fold {
+    opacity: 1;
+  }
+
+  .luke-list-row:has(.luke-list-row-fold):is(:hover, :has(.luke-list-row-fold:focus-visible))
+    .luke-list-row-leading {
+    opacity: 0;
+  }
+
+  @media (hover: none) {
+    .luke-list-row-fold {
+      opacity: 1;
+    }
+
+    .luke-list-row:has(.luke-list-row-fold) .luke-list-row-leading {
+      opacity: 0;
+    }
+  }
 }
