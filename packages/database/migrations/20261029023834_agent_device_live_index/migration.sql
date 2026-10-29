@@ -1,1 +1,0 @@
-CREATE INDEX "agent_device_live" ON "agent" ("device_id") WHERE "device_id" is not null and "archived_at" is null;
