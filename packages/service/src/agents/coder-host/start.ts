@@ -103,7 +103,9 @@ import {
   type AgentSessions,
   describeUnreachable,
   EVE_SEND_OUTCOME,
+  type EveFailed,
   type EveTypedTurn,
+  RUNTIME_REFUSAL,
 } from "../eve-host/eve-sessions.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
@@ -119,6 +121,7 @@ import {
   markedUnconnected,
 } from "./agent-runtime-choice.js";
 import { contextWindowOf } from "./context.js";
+import { isNativeRuntime } from "./native-runtime.js";
 import {
   type FittedReplay,
   replayOf,
@@ -794,6 +797,19 @@ const archivedPilot = (userId: string, pilot: Agent, by: Agent | undefined) => {
 };
 
 /**
+ * Whether an open's refusal is a named outcome the developer is told as
+ * such, which is logged and never reported: the plan or the key refused, the
+ * device removed or away, or the image still being prepared.
+ */
+function namedOpenRefusal(failed: EveFailed): boolean {
+  return (
+    failed.planRefusal !== undefined ||
+    failed.keyRefusal !== undefined ||
+    (failed.runtimeRefusal !== undefined && failed.runtimeRefusal !== RUNTIME_REFUSAL.NOT_HERE)
+  );
+}
+
+/**
  * The agent a Start made discarded because its session never opened, so a
  * retry under the same key starts it afresh and no agent stands to read as
  * never started: why said once as an error and reported
@@ -1323,13 +1339,24 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       Effect.annotateLogs(agentLogIds(agent)),
     );
     if (opened === undefined || opened.outcome !== EVE_SEND_OUTCOME.ACCEPTED) {
+      // An image still being prepared is answered by name, so the Start is made again under its key.
+      const refusal = opened === undefined ? HOSTED_REFUSAL.UNAVAILABLE : failedCallRefusal(opened);
+      // A native harness says why it refused where its harness decided it (`runner-sessions.ts`), so
+      // eve's refusal, and a harness this function cannot reach, are said here.
+      if (
+        opened !== undefined &&
+        (!isNativeRuntime(runtime.runtime) || opened.runtimeRefusal === RUNTIME_REFUSAL.NOT_HERE)
+      ) {
+        yield* agentFailureSaid(
+          `a Start's open was refused: ${refusal.error}, status ${opened.status}`,
+          refusal.error,
+          !namedOpenRefusal(opened),
+        ).pipe(Effect.annotateLogs(agentLogIds(agent)));
+      }
       yield* hostedStoreOrUnavailable(discardAgent(userId, agent.id)).pipe(
         Effect.annotateLogs(agentLogIds(agent)),
       );
-      // An image still being prepared is answered by name, so the Start is made again under its key.
-      return yield* Effect.fail(
-        opened === undefined ? HOSTED_REFUSAL.UNAVAILABLE : failedCallRefusal(opened),
-      );
+      return yield* Effect.fail(refusal);
     }
     yield* Effect.logInfo("a Start opened its agent's session").pipe(
       Effect.annotateLogs(agentLogIds(agent)),

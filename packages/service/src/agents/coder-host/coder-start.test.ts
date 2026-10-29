@@ -17,7 +17,7 @@ import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire
 import { TASK_MODE, TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { and, eq, isNotNull } from "drizzle-orm";
-import { Deferred, Effect, Fiber, Layer, Option, Result } from "effect";
+import { Deferred, Effect, ErrorReporter, Fiber, Layer, Option, Result } from "effect";
 import { MESSAGE_ROLE } from "../../core.js";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
@@ -35,7 +35,9 @@ import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
+  type EveFailed,
   type EveMessage,
+  PLAN_REFUSAL,
 } from "../eve-host/eve-sessions.js";
 import { memoryRelayState, StreamRelay } from "../eve-host/relay.js";
 import { type StartAsk, startAgent } from "./start.js";
@@ -59,7 +61,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_REPOSITORY = `${RELAY.owner}/${RELAY.name}`;
 /** One installation for each test's workspace, since one installation connects to one workspace and the suite's tests share a database. */
-const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 9 }, (_, index) => ({
+const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 10 }, (_, index) => ({
   id: 8_000 + index,
   login: RELAY.owner,
   accountId: 80_000 + index,
@@ -264,6 +266,43 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
         assert.equal(refused.failure, HOSTED_REFUSAL.UNAVAILABLE);
         assert.ok(Option.isNone(yield* readAgentByKey(owner, unreached.idempotencyKey)));
         assert.ok(Option.isNone(yield* readAgentByKey(owner, cut.idempotencyKey)));
+      }),
+  );
+
+  it.effect(
+    "a Start eve refused is reported with the agent's ids, and one its plan refused is not",
+    () =>
+      Effect.gen(function* () {
+        const { owner, workspaceId } = yield* openConnectedWorkspace;
+        const reported: Readonly<Record<string, unknown>>[] = [];
+        const reporting = ErrorReporter.layer([
+          ErrorReporter.make(({ attributes }) => {
+            reported.push(attributes);
+          }),
+        ]);
+        const refusing = (failed: EveFailed) =>
+          Effect.succeed<AgentSessions>({
+            ...fakeEve().sessions,
+            open: () => Effect.succeed(failed),
+          });
+        const started = (failed: EveFailed) =>
+          Effect.result(
+            startAgent(refusing(failed), owner, workspaceAsk(workspaceId)).pipe(
+              Effect.provide(Layer.merge(services, reporting)),
+            ),
+          );
+
+        yield* started({ outcome: EVE_SEND_OUTCOME.FAILED, status: 500 });
+        yield* started({
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 429,
+          planRefusal: PLAN_REFUSAL.LIMIT_REACHED,
+        });
+
+        assert.equal(reported.length, 1);
+        assert.equal(reported[0]?.reason, HOSTED_REFUSAL.UNAVAILABLE.error);
+        assert.equal(typeof reported[0]?.agentId, "string");
+        assert.equal(typeof reported[0]?.conversationId, "string");
       }),
   );
 
