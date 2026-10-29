@@ -8352,6 +8352,47 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
+    "a continue of an agent a pilot started reports to that pilot, and a fork of it to no one",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, source, stored, firstTurn } = yield* sourceAgent;
+        const parent = Option.getOrThrow(
+          yield* createAgent(owner, {
+            taskId: task.id,
+            planSnapshot: "# Invite by link",
+            prompt: null,
+            idempotencyKey: randomUUID(),
+            model: SOL,
+            effort: "low",
+            repository: stored.repository,
+            kind: AGENT_KIND.PILOT,
+          }),
+        ).agent;
+        // The source is made a sub-pilot in place, as the parent's `start_agent` would have started it.
+        yield* Database.use((db) =>
+          db
+            .update(agentTable)
+            .set({ startedByAgentId: parent.id })
+            .where(eq(agentTable.id, source.id)),
+        );
+        const startFrom = (from: { agentId: string; messageId?: string }) =>
+          Effect.map(
+            ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from })),
+            (answered) => readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+          );
+        const starterOf = (agentId: string) =>
+          Effect.map(readAgent(owner, agentId), (read) => Option.getOrThrow(read).startedByAgentId);
+
+        const fork = yield* startFrom({ agentId: source.id, messageId: firstTurn });
+        const continued = yield* startFrom({ agentId: source.id });
+        assert.deepEqual(
+          [yield* starterOf(fork.id), yield* starterOf(continued.id)],
+          [null, parent.id],
+        );
+      }),
+  );
+
+  it.effect(
     "a source eve refuses to stop still has its continue started, and runs on, a pilot unarchived",
     () =>
       Effect.gen(function* () {
