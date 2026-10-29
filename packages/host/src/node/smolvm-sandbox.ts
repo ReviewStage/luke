@@ -216,16 +216,24 @@ const decodeStatus = Schema.decodeUnknownOption(
 
 /** A failure as smolvm prints it under `--error-format json`: a stable code, and its words. */
 const decodeFailure = Schema.decodeUnknownOption(
-  Schema.fromJsonString(Schema.Struct({ error: Schema.Struct({ message: Schema.String }) })),
+  Schema.fromJsonString(
+    Schema.Struct({ error: Schema.Struct({ code: Schema.String, message: Schema.String }) }),
+  ),
 );
 
-/** A failure smolvm printed, in its words where it printed them as JSON and as the last line where it did not, cut short. */
-function failureOf(printed: string): string {
+/** The code smolvm gives a machine it has no record of, under `--error-format json`; `machine delete` gives it, though `machine status --json` does not. */
+const NOT_FOUND = "NOT_FOUND";
+
+/** A failure smolvm printed: its code where it printed one as JSON, and its words, the last line where it did not, cut short. */
+function failureOf(printed: string): { readonly code: string | undefined; readonly words: string } {
   const last = printed.trim().split("\n").at(-1) ?? "";
   return Option.match(decodeFailure(last), {
-    onNone: () => last,
-    onSome: ({ error }) => error.message,
-  }).slice(0, FAILURE_CHARACTERS);
+    onNone: () => ({ code: undefined, words: last.slice(0, FAILURE_CHARACTERS) }),
+    onSome: ({ error }) => ({
+      code: error.code,
+      words: error.message.slice(0, FAILURE_CHARACTERS),
+    }),
+  });
 }
 
 /** A sandboxed device's VMs through `smolvm`: the launch that starts a runner in its agent's VM, and the VM's one turn around it. */
@@ -269,7 +277,7 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
       Effect.orElseSucceed(() => Option.none<{ code: number; printed: string }>()),
     );
 
-  /** What smolvm says of the agent's machine; none where it said nothing it could read, as of a machine it does not have. */
+  /** What smolvm says of the agent's machine; none where it said nothing it could read, as of a machine it has no record of, or a status it did not answer in time. */
   const statusOf = (agentId: string) =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -296,24 +304,33 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
 
   /**
    * The agent's machine deleted where smolvm has one; whether none stands.
-   * One still running is stopped first, gracefully and then at once where
-   * that failed, so nothing of the agent's is left running in it. Note that
-   * a delete smolvm refused for a machine it no longer has leaves nothing
+   * One smolvm says runs is stopped first, gracefully and then at once where
+   * that failed, so the agent's processes end on their own rather than
+   * killed by the delete, which stops a running machine at once. Note that
+   * the delete always runs and its own answer says whether the machine is
+   * gone, because a status smolvm did not answer in time, or answered with
+   * a failure, cannot tell a machine it has no record of from one it could
+   * not read: only a delete it answers with `NOT_FOUND` leaves nothing
    * standing.
    */
   const machineGone = (agentId: string) =>
     Effect.gen(function* () {
-      const status = yield* statusOf(agentId);
-      if (Option.isNone(status)) return true;
       const name = machineOf(agentId);
+      const status = yield* statusOf(agentId);
       if (
-        !STOPPED_STATES.has(status.value.state) &&
+        Option.exists(status, (each) => !STOPPED_STATES.has(each.state)) &&
         !(yield* succeeded(["machine", "stop", "--name", name], STOP_TIMEOUT))
       ) {
         yield* ran(["machine", "stop", "--name", name, "--timeout", "0"], STOP_TIMEOUT);
       }
-      const removed = yield* succeeded(["machine", "delete", "--name", name, "-f"], STOP_TIMEOUT);
-      return removed || Option.isNone(yield* statusOf(agentId));
+      const removed = yield* ran(
+        ["machine", "delete", "--name", name, "-f", "--error-format", "json"],
+        STOP_TIMEOUT,
+      );
+      return Option.exists(
+        removed,
+        (each) => each.code === 0 || failureOf(each.printed).code === NOT_FOUND,
+      );
     });
 
   const exec = (command: LocalAgentSandboxCommand): LocalAgentCommand => {
@@ -476,7 +493,7 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
         }
         const made = yield* ran(created(agentId, folder, github), START_TIMEOUT);
         if (Option.isNone(made)) return yield* unavailable("smolvm did not make the machine");
-        if (made.value.code !== 0) return yield* unavailable(failureOf(made.value.printed));
+        if (made.value.code !== 0) return yield* unavailable(failureOf(made.value.printed).words);
         const up = yield* ran(
           ["machine", "start", "--name", machineOf(agentId), "--error-format", "json"],
           START_TIMEOUT,
@@ -487,7 +504,7 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
         return yield* unavailable(
           Option.match(up, {
             onNone: () => "smolvm did not start the machine",
-            onSome: (each) => failureOf(each.printed),
+            onSome: (each) => failureOf(each.printed).words,
           }),
         );
       }).pipe(

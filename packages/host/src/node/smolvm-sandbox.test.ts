@@ -11,7 +11,17 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { AgentToolPin } from "@luke/agent-runner/pins";
@@ -107,6 +117,12 @@ const plainLine = (id: string, seq: number, kind: DeviceAgentLine["kind"]): Devi
   payload: {},
 });
 
+/** What `smolvm machine delete --error-format json` answers for a machine it has no record of. */
+const NOT_FOUND = {
+  exitCode: 1,
+  stderr: '{"error":{"code":"NOT_FOUND","message":"vm not found"}}\n',
+};
+
 /** A machine `smolvm machine status --json` says stands, as it prints one. */
 const statusOf = (name: string, state: string) => ({
   exitCode: 0,
@@ -123,8 +139,12 @@ const following = (input: {
   readonly nested: boolean;
   readonly lines: (home: string) => readonly DeviceAgentClaimedLine[];
   readonly runnerExits?: Duration.Input;
-  /** Called as each smolvm command is spawned, before it runs, with everything spawned so far. */
-  readonly onSmolvm?: (args: readonly string[], spawned: readonly Spawned[]) => void;
+  /** Called as each smolvm command is spawned, before it runs, with everything spawned so far and whether the machine it names stands. */
+  readonly onSmolvm?: (
+    args: readonly string[],
+    spawned: readonly Spawned[],
+    stands: boolean,
+  ) => void;
   /** Whether the platform checks an agent's folder for unsaved work before a discard, as This Mac's does. */
   readonly checksUnsavedWork?: boolean;
   /** The machines smolvm holds as the follower starts, by name. */
@@ -150,9 +170,9 @@ const following = (input: {
         return { stdout: "/usr/bin:/bin", exitCode: 0 };
       if (program === "/bin/bash" && args[0] === "-c") return { exitCode: 0 };
       if (program !== SMOLVM) return undefined;
-      input.onSmolvm?.(args, spawner.spawned);
       const each = { program, args };
       const name = valuesOf(args, "--name")[0] ?? "";
+      input.onSmolvm?.(args, spawner.spawned, machines.has(name));
       if (isSmolvm("status")(each)) {
         const state = machines.get(name);
         return state === undefined ? { exitCode: 1 } : statusOf(name, state);
@@ -160,7 +180,7 @@ const following = (input: {
       if (isSmolvm("create")(each)) machines.set(name, "created");
       if (isSmolvm("start")(each)) machines.set(name, "running");
       if (isSmolvm("stop")(each)) machines.set(name, "stopped");
-      if (isSmolvm("delete")(each)) machines.delete(name);
+      if (isSmolvm("delete")(each) && !machines.delete(name)) return NOT_FOUND;
       if (isRunner(each)) {
         return input.runnerExits === undefined ? {} : { exitCode: 0, after: input.runnerExits };
       }
@@ -238,7 +258,7 @@ const following = (input: {
   });
 
 it.effect(
-  "a sandboxed agent's VM is made with its folder at its own path and GitHub's credential fed from files outside it, its runner runs in it as the box's user, its token is renewed in those files, and once the turn ends the VM and its credential are gone and the folder's tmp is empty, the rest of the folder kept",
+  "a sandboxed agent's VM is made with its folder at its own path and GitHub's credential fed from files outside it, its runner runs in it as the box's user, its token is renewed in those files, and once the turn ends the VM and its credential are gone and the folder's tmp is empty, a link the agent left there taken away unfollowed, the rest of the folder kept",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -350,7 +370,12 @@ it.effect(
         assert.equal(spawned.some(isSmolvm("stop")), false);
 
         // The turn ends by itself, and lets go of its VM, its credential, and what it left in tmp, while the rest of its folder stays for the next.
-        writeFileSync(`${layout.folder}/tmp/scratch`, "scratch\n");
+        // Note that the agent left a link at tmp to a folder of the box's own, which the emptying must take away without following.
+        const outside = `${layout.folder}/../outside`;
+        mkdirSync(outside);
+        writeFileSync(`${outside}/precious`, "the box's\n");
+        rmSync(`${layout.folder}/tmp`, { recursive: true });
+        symlinkSync(outside, `${layout.folder}/tmp`);
         writeFileSync(`${layout.folder}/home/kept`, "kept\n");
         writeFileSync(`${layout.checkoutPath}/notes.md`, "not committed\n");
         yield* TestClock.adjust(Duration.minutes(10));
@@ -362,6 +387,8 @@ it.effect(
           "--name",
           MACHINE,
           "-f",
+          "--error-format",
+          "json",
         ]);
         // Note that tmp is taken away whole and made again, so a read while it is gone finds nothing yet.
         const temp = () => {
@@ -372,6 +399,8 @@ it.effect(
           }
         };
         yield* until(() => temp()?.length === 0);
+        assert.equal(lstatSync(`${layout.folder}/tmp`).isDirectory(), true);
+        assert.equal(readFileSync(`${outside}/precious`, "utf8"), "the box's\n");
         assert.equal(readFileSync(`${layout.folder}/home/kept`, "utf8"), "kept\n");
         assert.equal(readFileSync(`${layout.checkoutPath}/notes.md`, "utf8"), "not committed\n");
 
@@ -399,7 +428,7 @@ it.effect(
         const seen: {
           signalWhileRunning?: boolean;
           stopAfterRunnerEnded?: boolean;
-          /** At each delete, whether the folder still stood and whether the check had run. */
+          /** At each delete of a machine that stood, whether the folder still stood and whether the check had run. */
           deletes: { folder: boolean; checked: boolean }[];
         } = { deletes: [] };
         let folder = "";
@@ -425,7 +454,7 @@ it.effect(
           // Note that the runner ends a second in, inside the grace its signal gives it.
           runnerExits: Duration.seconds(1),
           checksUnsavedWork: true,
-          onSmolvm: (args, sofar) => {
+          onSmolvm: (args, sofar, stands) => {
             const runner = sofar.find(isRunner);
             if (isSignal({ program: SMOLVM, args })) {
               seen.signalWhileRunning = runner?.ended === "running";
@@ -436,7 +465,7 @@ it.effect(
             ) {
               seen.stopAfterRunnerEnded = runner !== undefined && runner.ended !== "running";
             }
-            if (isSmolvm("delete")({ program: SMOLVM, args })) {
+            if (isSmolvm("delete")({ program: SMOLVM, args }) && stands) {
               seen.deletes.push({
                 folder: existsSync(folder),
                 checked: sofar.some(isUnsavedCheck),
@@ -481,6 +510,8 @@ it.effect(
           "--name",
           MACHINE,
           "-f",
+          "--error-format",
+          "json",
         ]);
         assert.equal(existsSync(credentials), false);
       }),
@@ -571,25 +602,36 @@ it.effect.each([
   {
     case: "a launch that finds no machine of the agent's makes one fresh",
     leftover: undefined,
+    statusReads: true,
     deletes: true,
-    verbs: ["status", "create", "start"],
+    verbs: ["status", "delete", "create", "start"],
     refused: undefined,
   },
   {
     case: "a launch that finds a machine a run that died left deletes it, the agent's folder and credential kept, and makes one fresh from the pinned image with the mounts of now",
     leftover: "running",
+    statusReads: true,
     deletes: true,
     verbs: ["status", "stop", "delete", "create", "start"],
     refused: undefined,
   },
   {
+    case: "a leftover whose status smolvm does not answer is deleted all the same, never taken for none",
+    leftover: "stopped",
+    statusReads: false,
+    deletes: true,
+    verbs: ["status", "delete", "create", "start"],
+    refused: undefined,
+  },
+  {
     case: "a leftover smolvm will not delete stops the launch with words, and no machine is made",
     leftover: "stopped",
+    statusReads: true,
     deletes: false,
-    verbs: ["status", "delete", "status"],
+    verbs: ["status", "delete"],
     refused: "the machine a run before left could not be deleted",
   },
-])("$case", ({ leftover, deletes, verbs, refused }) =>
+])("$case", ({ leftover, statusReads, deletes, verbs, refused }) =>
   Effect.gen(function* () {
     const root = yield* temporaryDirectoryScoped("luke-smolvm-leftover-");
     const folder = `${root}/agent`;
@@ -602,10 +644,11 @@ it.effect.each([
     const spawner = scriptedSpawner((program, args) => {
       const each = { program, args };
       if (isSmolvm("status")(each)) {
-        return state === undefined ? { exitCode: 1 } : statusOf(MACHINE, state);
+        return state === undefined || !statusReads ? { exitCode: 1 } : statusOf(MACHINE, state);
       }
       if (isSmolvm("stop")(each)) state = "stopped";
       if (isSmolvm("delete")(each)) {
+        if (state === undefined) return NOT_FOUND;
         if (!deletes) return { exitCode: 1, stderr: "machine is locked\n" };
         state = undefined;
       }
