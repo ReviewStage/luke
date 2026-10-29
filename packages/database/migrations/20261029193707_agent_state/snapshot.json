@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "3bb05ff1-c753-4bec-8f4b-9e644e570400",
-  "prevIds": ["07a52f82-9c07-45cb-bd97-fb0e84492fa1", "43c904e7-6fec-4e58-b523-8b4b1e3781a8"],
+  "id": "e594b6e3-c5c7-4076-9753-db05c00f494d",
+  "prevIds": ["08209c91-93d7-4871-8dfc-724798444f43"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -42,6 +42,12 @@
     },
     {
       "isRlsEnabled": false,
+      "name": "agent_runner_lease",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
       "name": "agent_state_generation",
       "entityType": "tables",
       "schema": "public"
@@ -49,12 +55,6 @@
     {
       "isRlsEnabled": false,
       "name": "agent_state_key",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "agent_runner_lease",
       "entityType": "tables",
       "schema": "public"
     },
@@ -1516,6 +1516,45 @@
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_runner_lease"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "holder",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_runner_lease"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "held_until",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_runner_lease"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
       "default": "gen_random_uuid()",
       "generated": null,
       "identity": null,
@@ -1705,45 +1744,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "agent_state_key"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "agent_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_runner_lease"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "holder",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_runner_lease"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "held_until",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_runner_lease"
     },
     {
       "type": "uuid",
@@ -9651,6 +9651,19 @@
       "table": "task"
     },
     {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "running",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task"
+    },
+    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -13854,6 +13867,19 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "agent_runner_lease_agent_id_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agent_runner_lease"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["device_id"],
       "schemaTo": "public",
       "tableTo": "device",
@@ -13877,19 +13903,6 @@
       "entityType": "fks",
       "schema": "public",
       "table": "agent_state_key"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["agent_id"],
-      "schemaTo": "public",
-      "tableTo": "agent",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "agent_runner_lease_agent_id_agent_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "agent_runner_lease"
     },
     {
       "nameExplicit": false,
@@ -15843,6 +15856,14 @@
       "entityType": "pks"
     },
     {
+      "columns": ["agent_id"],
+      "nameExplicit": false,
+      "name": "agent_runner_lease_pkey",
+      "schema": "public",
+      "table": "agent_runner_lease",
+      "entityType": "pks"
+    },
+    {
       "columns": ["id"],
       "nameExplicit": false,
       "name": "agent_state_generation_pkey",
@@ -15856,14 +15877,6 @@
       "name": "agent_state_key_pkey",
       "schema": "public",
       "table": "agent_state_key",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["agent_id"],
-      "nameExplicit": false,
-      "name": "agent_runner_lease_pkey",
-      "schema": "public",
-      "table": "agent_runner_lease",
       "entityType": "pks"
     },
     {
