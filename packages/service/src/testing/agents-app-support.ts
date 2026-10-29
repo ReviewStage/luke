@@ -1,9 +1,5 @@
 /**
- * agents-app.ts -- the agents routes as their tests drive them: the routes answered
- * by the group the way a function answers them, over a real dialect, eve a fake
- * at the client's boundary, GitHub a script, the catalog fixed, and the store
- * PGlite, with the accounts, tasks, and agents the tests start from. Synthetic
- * accounts, bearers, tasks, and words throughout.
+ * agents-app-support.ts -- the fixtures and helpers the `agents-app*.test.ts` files share: the routes' paths, the scripted eve, GitHub and catalog, and the request and answer builders.
  */
 
 import assert from "node:assert/strict";
@@ -14,14 +10,16 @@ import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { savePlanText } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
-import { conversations } from "@luke/database/schemas/storage";
+import { conversations, messages } from "@luke/database/schemas/storage";
 import { fakeWorkspaceSeams, startTask } from "@luke/database/testing";
+import { firstMessageParts } from "@luke/features/agent-replay";
 import {
   type AgentTranscriptMessage,
   agentAnswerSchema,
   agentMessageAnswerSchema,
   agentMessagesAnswerSchema,
 } from "@luke/features/agent-wire";
+import { INBOX_ASK_STATUS, INBOX_IMAGE_TYPE, type InboxItem } from "@luke/features/inbox-wire";
 import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -41,6 +39,7 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import type { MessageReceivedPart } from "eve/client";
 import { agentPullRequestProcedures } from "../agents/agent-pull-request-procedures.js";
 import { agentsApp } from "../agents/agents-app.js";
 import { agentsProcedures } from "../agents/agents-procedures.js";
@@ -63,6 +62,7 @@ import { requestUserId } from "../auth/bearer.js";
 import {
   isRecord,
   isWireString,
+  MESSAGE_AUTHOR,
   MESSAGE_ROLE,
   RUN_EVENT,
   RUN_STATUS,
@@ -70,6 +70,7 @@ import {
   sessionKey,
   TURN_ORIGIN,
   TURN_TRIGGER,
+  userMetadataOf,
 } from "../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { recordingProductAnalytics } from "../events/server-events.js";
@@ -77,6 +78,7 @@ import { LINK_OUTCOME } from "../github/github-installations.js";
 import type { AfterResponse } from "../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { type InboxTitleModelOf, inboxProcedures } from "../inbox/inbox-procedures.js";
+import type { postInboxThread } from "../inbox/inbox-store.js";
 import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import type { WebServices } from "../runtime.js";
@@ -95,42 +97,7 @@ import {
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
 
-/** A message to the agent as the bearer given, with the body given. */
-export function messageAs(
-  bearer: string | undefined,
-  agentId: string,
-  body: WireBoundaryInput,
-): Request {
-  return request(AGENT_MESSAGES, bearer, { method: "POST", id: agentId, body });
-}
-
-/** The words of each user row of a transcript page, in order. */
-export function userTexts(page: {
-  readonly messages: readonly AgentTranscriptMessage[];
-}): readonly (string | undefined)[] {
-  return page.messages
-    .filter((message) => message.role === MESSAGE_ROLE.USER)
-    .map((message) => {
-      const part = message.parts.find((each) => isRecord(each) && each.type === "text");
-      return isRecord(part) && isWireString(part.text) ? part.text : undefined;
-    });
-}
-
-/** A Start on the task given as the bearer given, with the body given. */
-export function startAs(
-  bearer: string | undefined,
-  taskId: string,
-  body: WireBoundaryInput,
-): Request {
-  return request(TASK_AGENTS, bearer, { method: "POST", id: taskId, body });
-}
-
-/** Where an Inbox item's attachment is read. */
-export const INBOX_ATTACHMENT = "/api/inbox/attachment";
-
-/** Where the service answers in the tests. */
 export const ORIGIN = "https://luke.test";
-
 export const TASK_AGENTS = "/api/plans/agents";
 export const AGENT_MESSAGES = "/api/agents/messages";
 export const SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
@@ -176,13 +143,15 @@ export const SCRIPTED_SVG = new TextEncoder().encode(
   '<svg xmlns="http://www.w3.org/2000/svg"><script>fetch("/api/plans")</script></svg>',
 );
 
-/** The installation ids handed out so far: one installation stands for one workspace, so each task's workspace connects its own. Note that it is a field, because a test file cannot assign a binding it imports. */
-export const installations = { connected: 0 };
+/** The installation ids handed out so far: one installation stands for one workspace, so each task's workspace connects its own. */
+let installationsConnected = 0;
 
 /** A fresh installation reaching the repository, on an account of its own. */
-export function freshInstallation(): InstallationFixture {
-  installations.connected += 1;
-  return { id: 7 + installations.connected, login: RELAY.owner, repositories: [RELAY] };
+export function freshInstallation(
+  repositories: InstallationFixture["repositories"] = [RELAY],
+): InstallationFixture {
+  installationsConnected += 1;
+  return { id: 7 + installationsConnected, login: RELAY.owner, repositories };
 }
 
 export const SAVED =
@@ -255,7 +224,7 @@ interface Sent {
 }
 
 /** How the fake eve answers a follow-up: accepted with a delivery of its own, or one of the refusals the client reads. */
-type SendAnswer =
+export type SendAnswer =
   | typeof EVE_SEND_OUTCOME.ACCEPTED
   | typeof EVE_SEND_OUTCOME.NOT_READY
   | typeof EVE_SEND_OUTCOME.RETIRED
@@ -778,6 +747,155 @@ export function reachRequests(sent: readonly SentToGitHub[], installationId: num
     listingMints: mints.filter((one) => !forRepository(one)).length,
     repositoryMints: mints.filter(forRepository).length,
   };
+}
+
+export const AGENT_PULL_REQUEST_ACTION = "/api/agents/pull-request-action";
+export const AGENT_PULL_REQUEST_VIEWED = "/api/agents/pull-request-viewed";
+export const AGENT_PULL_REQUEST = "/api/agents/pull-request";
+/** The agent's changes, the files Files changed draws. */
+export const AGENT_CHANGES = "/api/agents/changes";
+export const AGENT_OVERVIEW_PULL_REQUEST = AGENT_OVERVIEW[0];
+
+/** The GraphQL id GitHub gives the published pull request. */
+export const PULL_REQUEST_NODE_ID = "PR_kwDOfixture12";
+
+/** A message to the agent as the bearer given, with the body given. */
+export function messageAs(
+  bearer: string | undefined,
+  agentId: string,
+  body: WireBoundaryInput,
+): Request {
+  return request(AGENT_MESSAGES, bearer, { method: "POST", id: agentId, body });
+}
+
+/** The words of each user row of a transcript page, in order. */
+export function userTexts(page: {
+  readonly messages: readonly AgentTranscriptMessage[];
+}): readonly (string | undefined)[] {
+  return page.messages
+    .filter((message) => message.role === MESSAGE_ROLE.USER)
+    .map((message) => {
+      const part = message.parts.find((each) => isRecord(each) && each.type === "text");
+      return isRecord(part) && isWireString(part.text) ? part.text : undefined;
+    });
+}
+
+/** An agent started on the task, with its conversation as the writer targets it. */
+export const startedAgent = (
+  owner: string,
+  taskId: string,
+  ask: (request: Request) => Effect.Effect<Answer>,
+) =>
+  Effect.gen(function* () {
+    const agent = readAnswer(
+      agentAnswerSchema,
+      HOSTED_HTTP_STATUS.CREATED,
+      yield* ask(startAs(owner, taskId, { idempotencyKey: randomUUID() })),
+    ).agent;
+    const stored = yield* readAgent(owner, agent.id);
+    assert.ok(Option.isSome(stored));
+    return { agent, target: { userId: owner, conversationId: stored.value.conversationId } };
+  });
+
+/** The same, under a name a suite with a `startedAgent` of its own still reaches. */
+export const startedAgentOf = startedAgent;
+
+export function startAs(
+  bearer: string | undefined,
+  taskId: string,
+  body: WireBoundaryInput,
+): Request {
+  return request(TASK_AGENTS, bearer, { method: "POST", id: taskId, body });
+}
+
+export const TASK_INBOX = "/api/plans/{id}/inbox";
+export const INBOX_ITEM = "/api/inbox/{id}";
+export const ACCOUNT_INBOX = "/api/inbox";
+export const INBOX_ATTACHMENT = "/api/inbox/attachment";
+export const INBOX_MESSAGES = "/api/inbox/{id}/messages";
+export const INBOX_ITEM_READ = "/api/inbox/{id}/read";
+export const INBOX_CLOSE = "/api/inbox/{id}/close";
+export const INBOX_READ = "/api/inbox/read";
+
+/** A post as the agent's inbox tool hands the store one. */
+export type ThreadPost = Parameters<typeof postInboxThread>[1];
+
+/** The id of the message whose ask the item's thread holds open, which an answer names. */
+export const openAskOf = (item: InboxItem): string => {
+  const asking = item.thread?.find((each) => each.ask?.status === INBOX_ASK_STATUS.OPEN);
+  assert.ok(asking, "the item holds an ask open");
+  return asking.id;
+};
+
+/** The first bytes of a PNG, as a screenshot's file starts. */
+export const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+
+/** A PNG whose header states its size, 2 by 1, as a conversation keeps a picture. */
+export const SIZED_PNG = Uint8Array.from([
+  ...PNG,
+  ...[0x49, 0x48, 0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 1, 8, 6, 0, 0, 0],
+]);
+
+export const AGENT_PICTURE = "/api/agents/picture";
+
+/** A picture a tool answered: its bytes, the type they were sniffed to be, and its size; synthetic, as the store keeps what it is handed. */
+export const picture = (mark: number) => ({
+  bytes: Uint8Array.from([...PNG, mark]),
+  contentType: INBOX_IMAGE_TYPE.PNG,
+  width: 1200,
+  height: 720,
+});
+
+/** A row of an agent's transcript as the relay leaves it, written straight to the store at the sequence given, answering its id. */
+export const transcriptRow = (
+  agent: { readonly userId: string; readonly conversationId: string },
+  seq: number,
+  role: typeof MESSAGE_ROLE.USER | typeof MESSAGE_ROLE.ASSISTANT,
+  parts: WireBoundaryInput,
+) =>
+  Effect.map(
+    Database.use((db) =>
+      db
+        .insert(messages)
+        .values({
+          userId: agent.userId,
+          conversationId: agent.conversationId,
+          seq,
+          clientId: randomUUID(),
+          role,
+          // SAFETY: the parts are the stored vocabulary's, spelled as the relay writes them.
+          parts: parts as never,
+          metadata:
+            role === MESSAGE_ROLE.USER
+              ? userMetadataOf(TURN_TRIGGER.ASK)
+              : { author: MESSAGE_AUTHOR.MODEL },
+          placedAt: new Date(),
+        })
+        .returning({ id: messages.id }),
+    ),
+    ([row]) => row?.id ?? assert.fail("the row was not written"),
+  );
+
+export const text = (words: string) => ({ type: "text", text: words });
+
+/** A message as eve's receipt lists it: each text part as it was handed, and each file staged, by its name and type with no bytes. */
+export function receiptOf(handed: EveMessage["message"] | undefined): MessageReceivedPart[] {
+  assert.ok(Array.isArray(handed), "the message carried parts");
+  return handed.flatMap((part): MessageReceivedPart[] => {
+    if (part.type === "text") return [{ type: "text", text: part.text }];
+    if (part.type !== "file") return [];
+    const name = part.filename === undefined ? undefined : { filename: part.filename };
+    return [{ type: "file", mediaType: part.mediaType, ...name }];
+  });
+}
+
+/** The first message the newest session opened on, read back into its brief, its replay, and its note. */
+export function openedParts(eve: ReturnType<typeof fakeEve>) {
+  const message = eve.opened.at(-1)?.message.message;
+  if (message === undefined || Array.isArray(message)) {
+    return assert.fail("the session opened on words alone");
+  }
+  return { text: message, parts: firstMessageParts(message) };
 }
 
 /** An agent started on the owner's task, its session claimed, and its first turn where asked. */

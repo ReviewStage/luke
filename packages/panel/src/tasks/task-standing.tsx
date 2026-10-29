@@ -49,6 +49,7 @@ import { useExperiment } from "../use-app-state.js";
 import { MERGE_POLICY_CHOICES, mergePolicySwitchOf } from "./merge-policy-switch.js";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip.js";
 import { TaskRunsOnChip } from "./runs-on.js";
+import { TaskBlockAdd, TaskBlockLines, type TaskBlocksDoor } from "./task-blocks.js";
 
 /**
  * task-standing.tsx -- a task's key over its name, and the chips under it that say and change where it stands, how much it matters, which repository it is about, and where its agents run.
@@ -64,9 +65,11 @@ import { TaskRunsOnChip } from "./runs-on.js";
  * `owner/name`, or Choose a repository while the task has none, which drops
  * the search over every repository the workspace reaches, and which ⌘K's
  * Change repository opens the same way; and, while local agents are on, a
- * fifth for where its agents run (`runs-on.tsx`); and, on a pilot tree's
- * top task, a two-way switch for its merge policy, merge on green or hold
- * every PR (`merge-policy-switch.ts`). A pick is handed back for the page to send;
+ * fifth for where its agents run (`runs-on.tsx`); on a pilot tree's top
+ * task, a two-way switch for its merge policy, merge on green or hold every
+ * PR (`merge-policy-switch.ts`); and last, where the page hands their door,
+ * Add relation, with the task's blocks on a line of their own under the chips
+ * (`task-blocks.tsx`). A pick is handed back for the page to send;
  * without a door to send it, as on an archived task, the chips only say.
  * S, pressed while not typing, opens the status chip's menu, as Linear's S
  * does, and a task row's menu lists what each chip lists
@@ -249,6 +252,8 @@ export interface TaskStandingDoor {
   readonly onSet?: ((standing: TaskStanding) => void) | undefined;
   readonly repository?: TaskRepositoryDoor | undefined;
   readonly devices?: readonly MacOffer[] | undefined;
+  /** The task's blocks' door: the tasks they name, where a press opens one, and where a change is sent; none where they are not drawn. */
+  readonly blocks?: TaskBlocksDoor | undefined;
   /** Whether the plan is in sight, which S's ask waits on, so it never opens a menu behind another tab; in sight where unsaid. */
   readonly inSight?: boolean | undefined;
 }
@@ -364,12 +369,15 @@ export function TaskStandingChips({
   onSet,
   repository,
   devices,
+  blocks,
   inSight = true,
 }: {
   task: Task;
   onSet: ((standing: TaskStanding) => void) | undefined;
   repository?: TaskRepositoryDoor | undefined;
   devices?: readonly MacOffer[] | undefined;
+  /** The task's blocks' door; without it no block is drawn. */
+  blocks?: TaskBlocksDoor | undefined;
   /** Whether the plan is in sight, which S waits on, so it never opens a menu behind another tab. */
   inSight?: boolean | undefined;
 }): React.JSX.Element | null {
@@ -450,7 +458,11 @@ export function TaskStandingChips({
             }}
           />
         )}
+        {blocks?.onChange === undefined ? null : (
+          <TaskBlockAdd task={task} door={blocks} onChange={blocks.onChange} />
+        )}
       </Inline>
+      {blocks === undefined ? null : <TaskBlockLines task={task} door={blocks} />}
     </div>
   );
 }

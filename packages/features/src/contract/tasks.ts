@@ -1,5 +1,5 @@
 /**
- * tasks.ts -- the account's plans and each one's own reads and writes: the list, a start, one plan opened, changed, or deleted, its edit, and its history.
+ * tasks.ts -- the account's plans and each one's own reads and writes: the list, a start, one plan opened, changed, or deleted, its blocks, its edit, and its history.
  *
  * Every path names the plan by its id (`{id}`), which the handler reads as
  * the old routes read it: an id that is no UUID names no plan, and answers
@@ -22,6 +22,7 @@ import {
   TASK_BOUNDS,
   TASK_LIST_QUERY,
   taskAnswerSchema,
+  taskBlockRequestSchema,
   taskCreateRequestSchema,
   taskDeleteAnswerSchema,
   taskListAnswerSchema,
@@ -99,6 +100,12 @@ export const tasksContract = {
     .meta(bodyCap(NAME_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PATCH, path: PLAN, inputStructure: "detailed" }))
     .input(exactBodyInput(EffectSchema.Struct(taskParams), taskUpdateRequestSchema))
+    .output(EffectSchema.flip(taskAnswerSchema)),
+  /** One block of it added or taken away, answered with it as it then stands. */
+  block: hostedProcedure
+    .meta(bodyCap(NAME_BODY_BYTES))
+    .meta(openapi({ method: HTTP_METHOD.POST, path: `${PLAN}/blocks`, inputStructure: "detailed" }))
+    .input(exactBodyInput(EffectSchema.Struct(taskParams), taskBlockRequestSchema))
     .output(EffectSchema.flip(taskAnswerSchema)),
   delete: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: PLAN }))

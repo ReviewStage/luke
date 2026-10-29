@@ -44,7 +44,7 @@ import {
   request,
   SNAPSHOT,
   sessionCookieOf,
-} from "../testing/agents-app.js";
+} from "../testing/agents-app-support.js";
 import { queueAtTurnEnd, sendQueued, sweepAgentQueues } from "./coder-host/agent-queue.js";
 import { steerAgentWritten } from "./coder-host/steer.js";
 import { cancelledTurn } from "./coder-host/stop.js";

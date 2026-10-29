@@ -27,6 +27,7 @@ import {
   turnStoppedUnderReached,
 } from "@luke/database/models/message-reads";
 import { readPageById } from "@luke/database/models/plan-pages";
+import { lockTasksForBlocks } from "@luke/database/models/task-block-store";
 import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
 import {
   listTasks,
@@ -152,6 +153,15 @@ import {
   TASK_ASSIGNEE_INPUT,
   taskAssigneeWrittenSchema,
 } from "./task-assignee.js";
+import {
+  BLOCKED_BY_INPUT,
+  BLOCKS_INPUT,
+  blockChangesNamed,
+  blockWritesAsked,
+  taskBlockReadingsNow,
+  tasksOfWrites,
+  writeTaskBlocks,
+} from "./task-block-changes.js";
 import {
   AGENT_LIST_INPUT,
   type AgentTask,
@@ -303,8 +313,8 @@ export const UPDATE_TASK_REFUSAL = {
     `and at least one change: a name of at most ${TASK_BOUNDS.MAX_NAME_CHARS} characters, a ` +
     "repository as owner/name or null, pinned, a sectionId or null, a status " +
     `(${Object.values(TASK_STATUS).join(", ")}), a priority ` +
-    `(${Object.values(TASK_PRIORITY).join(", ")}), or an assignee as a member's mention link or ` +
-    "null.",
+    `(${Object.values(TASK_PRIORITY).join(", ")}), an assignee as a member's mention link or ` +
+    "null, or tasks to add to or take away from its blockedBy or blocks.",
   NO_TASK:
     "Not run: no task of your workspace has that id, so it is none you can change; " +
     `${AGENT_TOOL.LIST_TASKS} names them.`,
@@ -317,6 +327,9 @@ export const UPDATE_TASK_REFUSAL = {
   GITHUB_UNANSWERED:
     "Not run: GitHub did not answer whether the workspace reaches that repository. The call " +
     "may be made again.",
+  TREE_REPOSITORY:
+    "Not run: a task with a parent or with children works in its tree's repository, so it " +
+    "cannot be given another; leave the repository as it is.",
   NO_SECTION:
     "Not run: the developer you work for keeps no section of this workspace under that id; " +
     `${AGENT_TOOL.LIST_TASKS} names the sections.`,
@@ -421,6 +434,10 @@ export const START_AGENT_REFUSAL = {
     "Not started: that task is worked in pilot mode and has no pilot, so this agent would be its " +
     "pilot, and Pilot is off for the member you start for. Ask them to turn it on in Settings › " +
     "Experimental.",
+  STARTER_CONTINUE:
+    "Not started: you can't continue an agent that started you, directly or through the agents " +
+    "between you, since the agents it started would report to a pilot you started; tell its " +
+    "starter, or ask a member to continue it.",
   SOURCE_RUNNING:
     "Not started: that agent is still starting or working, and a continue would take over work " +
     "it is still doing. Wait until it ends, message it, or fork it at a messageId to try another " +
@@ -721,6 +738,8 @@ const UPDATE_TASK_INPUT = Schema.Struct({
         "under Tasks.",
     ),
   ),
+  blockedBy: Schema.optionalKey(BLOCKED_BY_INPUT),
+  blocks: Schema.optionalKey(BLOCKS_INPUT),
 });
 
 /**
@@ -841,14 +860,20 @@ export const UPDATE_TASK_TOOL = {
     "Change a task of your workspace by its id, as the developer's own task menu would, on behalf " +
     "of the developer you work for: rename it, set or clear its repository, set where it stands " +
     "(its status) or how much it matters (its priority), assign it to a member of the " +
-    "workspace or to no one, or pin or unpin it in their sidebar; name at least one change, " +
+    "workspace or to no one, pin or unpin it in their sidebar, or add and take away the tasks " +
+    "it is blocked by and the tasks it blocks; name at least one change, " +
     "and several go in one call. Mark a task whose work is " +
     "done Done, with status done, as the menu's Mark done does, such as one whose pull requests " +
     "merged, or one the developer asked you to clean up; never a teammate's " +
     "task still in use unless the developer asked for it, and as the developer's operator never " +
     "a teammate's task at all, which is refused. A task is never archived: a settled " +
-    `one stands Done or Canceled, which ${AGENT_TOOL.LIST_TASKS} lists by status. Answers \`accepted\` with the task as ` +
-    "it now stands, `already` true where every change named already stood, or `rejected` and " +
+    `one stands Done or Canceled, which ${AGENT_TOOL.LIST_TASKS} lists by status. A block is ` +
+    "Linear's: the blocker's work comes first and the task it blocks waits on it, as one child " +
+    "task builds on another. It is advice, never a lock, so nothing refuses to start a blocked " +
+    "task. Both tasks must be in your workspace, a task never blocks itself, and a block that " +
+    "would close a cycle is refused. Answers `accepted` with the task as it now stands, its " +
+    "blockedBy and blocks among it where the call changed them, `already` true where every " +
+    "change named already stood, or `rejected` and " +
     "why. Then say which tasks you changed and how.",
   inputSchema: UPDATE_TASK_INPUT,
 } as const;
@@ -1582,6 +1607,25 @@ const earlierContinuationsOf = (
     );
   });
 
+/**
+ * Whether the agent is started, directly or through the agents between,
+ * by the ancestor, read on the starter links as stored now, since a pilot's
+ * takeover moves them after an agent's session began. The links form a
+ * chain that ends at an agent with no starter; one already seen ends it.
+ */
+const startedThrough = (userId: string, agentId: string, ancestorId: string) =>
+  Effect.gen(function* () {
+    const seen = new Set<string>();
+    let at: string | null = agentId;
+    while (at !== null && !seen.has(at)) {
+      seen.add(at);
+      const read: Option.Option<Agent> = yield* readAgent(userId, at);
+      at = Option.isSome(read) ? read.value.startedByAgentId : null;
+      if (at === ancestorId) return true;
+    }
+    return false;
+  });
+
 /** The place a start from another agent lands in, the source's own, once the source is read and found fit to start from, with the agents that already continued it; or why it is not. */
 const sourceLanding = (
   caller: AgentCaller,
@@ -1610,6 +1654,10 @@ const sourceLanding = (
       const at = yield* messageSeqOf(userId, conversationId, from.messageId, role);
       if (Option.isNone(at)) return Result.fail(START_AGENT_REFUSAL.NO_MESSAGE);
       return Result.succeed({ place, continuedBy: [] });
+    }
+    // Note that a continue of an agent that started the caller records the caller as the new agent's starter and, for a pilot, moves the agents it started under it, so the two would name each other.
+    if (yield* startedThrough(callerUserId(caller), caller.agent.id, source.id)) {
+      return Result.fail(START_AGENT_REFUSAL.STARTER_CONTINUE);
     }
     // A continue takes over work that has ended; one already continued is
     // continued again, since a continuation may itself fail or go wrong, and
@@ -1911,16 +1959,23 @@ export function taskStandingOf(
   };
 }
 
-/** A task's change as the model reads it: the task as it now stands, with its mention, and whether every change named already stood before the call. */
+/** What a task's answer says beside the task: whether every change named already stood, the section it was placed in, and whether the call named its blocks. */
+interface TaskUpdateAnswered {
+  readonly already: boolean;
+  readonly section: TaskSectionReading | null | undefined;
+  readonly blocksNamed: boolean;
+}
+
+/** A task's change as the model reads it: the task as it now stands, with its mention, its blocks where the call named them, and whether every change named already stood before the call. */
 const taskUpdateAnswer = (
   userId: string,
   task: StoredTask["task"],
-  already: boolean,
-  section: TaskSectionReading | null | undefined,
+  { already, section, blocksNamed }: TaskUpdateAnswered,
 ) =>
-  Effect.map(
-    workspaceNamingOf(userId, task.workspaceId),
-    ({ step, name }): WireRecord => ({
+  Effect.gen(function* () {
+    const { step, name } = yield* workspaceNamingOf(userId, task.workspaceId);
+    const blocks = blocksNamed ? yield* taskBlockReadingsNow(userId, task.id, step) : undefined;
+    const answer: WireRecord = {
       status: ACTION_RESULT_STATUS.ACCEPTED,
       task: {
         id: task.id,
@@ -1932,10 +1987,12 @@ const taskUpdateAnswer = (
         ...(section === undefined
           ? undefined
           : { section: section === null ? null : { ...section } }),
+        ...blocks,
       },
       already,
-    }),
-  );
+    };
+    return answer;
+  });
 
 /** A sidebar section as an answer names it. */
 interface TaskSectionReading {
@@ -2046,14 +2103,20 @@ export function runUpdateTask(
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
   }
-  const { taskId, sectionId, assignee, archived, ...named } = asked.success;
+  const { taskId, sectionId, assignee, archived, blockedBy, blocks, ...named } = asked.success;
+  const blockChanges = { ...(blockedBy && { blockedBy }), ...(blocks && { blocks }) };
   const assigneeId =
     assignee === undefined ? undefined : assignee === null ? null : assigneeIdOf(assignee);
   if (assignee !== undefined && assigneeId === undefined) {
     return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.NOT_MEMBER));
   }
   const changes = assigneeId === undefined ? named : { ...named, assigneeId };
-  if (Object.keys(changes).length === 0 && archived === undefined && sectionId === undefined) {
+  if (
+    Object.keys(changes).length === 0 &&
+    archived === undefined &&
+    sectionId === undefined &&
+    !blockChangesNamed(blockChanges)
+  ) {
     return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
   }
   const { caller } = call;
@@ -2078,6 +2141,15 @@ export function runUpdateTask(
           : yield* sectionAsked(userId, workspace.value, taskId, sectionId);
       if (placing !== undefined && Result.isFailure(placing)) {
         return agentToolRejected(placing.failure);
+      }
+      // So are the tasks its blocks name, each held to the workspace and to Steward as the task itself is.
+      const blocking = blockChangesNamed(blockChanges)
+        ? yield* blockWritesAsked(userId, workspace.value, taskId, blockChanges, (other) =>
+            stewardTaskRefused(caller, other),
+          )
+        : undefined;
+      if (blocking !== undefined && Result.isFailure(blocking)) {
+        return agentToolRejected(blocking.failure);
       }
       // Note that a teammate names a repository on the App alone, never their own token, because a task on a token is its owner's.
       const owner = read.value.ownerId === userId ? userId : undefined;
@@ -2109,10 +2181,14 @@ export function runUpdateTask(
               githubAccess: repository.success.githubAccess,
             }),
       };
-      const already = changesStand(read.value, asWritten) && (placing?.success.stands ?? true);
-      // The task's change and its place in the sidebar are one transaction, so a place refused, its
-      // section deleted meanwhile, takes the change back with it.
+      const stands = changesStand(read.value, asWritten) && (placing?.success.stands ?? true);
+      // The task's change, its place in the sidebar, and its blocks are one transaction, so a place
+      // refused, its section deleted meanwhile, or a block refused takes the change back with it.
       const writing = Effect.gen(function* () {
+        // Every task the blocks name is locked before the task's change, so the change takes no lock first that another call's blocks wait on.
+        if (blocking !== undefined) {
+          yield* lockTasksForBlocks(userId, tasksOfWrites(blocking.success));
+        }
         const task =
           Object.keys(asWritten).length === 0
             ? Option.some(read.value.task)
@@ -2126,13 +2202,22 @@ export function runUpdateTask(
           });
           if (Option.isNone(placed)) return yield* Effect.fail(new TaskPlaceRefused());
         }
-        return task;
+        const blocksChanged =
+          Option.isSome(task) && blocking !== undefined
+            ? yield* writeTaskBlocks(userId, blocking.success)
+            : false;
+        return { task, blocksChanged };
       });
       const changed = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
         client.withTransaction(writing),
       ).pipe(
         Effect.map(
-          (task): Result.Result<Option.Option<StoredTask["task"]>, string> => Result.succeed(task),
+          (
+            written,
+          ): Result.Result<
+            { task: Option.Option<StoredTask["task"]>; blocksChanged: boolean },
+            string
+          > => Result.succeed(written),
         ),
         Effect.catchTag("TaskAssigneeNotMember", () =>
           Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NOT_MEMBER)),
@@ -2140,15 +2225,19 @@ export function runUpdateTask(
         Effect.catchTag("TaskPlaceRefused", () =>
           Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_SECTION)),
         ),
+        Effect.catchTag("TaskBlockRefused", ({ words }) => Effect.succeed(Result.fail(words))),
+        Effect.catchTag("TaskTreeRepositoryLocked", () =>
+          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.TREE_REPOSITORY)),
+        ),
       );
       if (Result.isFailure(changed)) return agentToolRejected(changed.failure);
-      if (Option.isNone(changed.success)) return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
-      return yield* taskUpdateAnswer(
-        userId,
-        changed.success.value,
-        already,
-        placing?.success.section,
-      );
+      const { task, blocksChanged } = changed.success;
+      if (Option.isNone(task)) return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
+      return yield* taskUpdateAnswer(userId, task.value, {
+        already: stands && !blocksChanged,
+        section: placing?.success.section,
+        blocksNamed: blocking !== undefined,
+      });
     }),
   );
 }

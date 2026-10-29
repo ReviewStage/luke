@@ -150,14 +150,16 @@ const readStreamEvent = Schema.decodeUnknownOption(
   }),
 );
 
-const readResult = Schema.decodeUnknownOption(
-  Schema.Struct({
-    subtype: Schema.String,
-    is_error: Schema.optionalKey(Schema.Boolean),
-    errors: Schema.optionalKey(Schema.Array(Schema.String)),
-    usage: Schema.optionalKey(MessageUsageSchema),
-  }),
-);
+const ResultSchema = Schema.Struct({
+  subtype: Schema.String,
+  is_error: Schema.optionalKey(Schema.Boolean),
+  errors: Schema.optionalKey(Schema.Array(Schema.String)),
+  api_error_status: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  result: Schema.optionalKey(Schema.String),
+  usage: Schema.optionalKey(MessageUsageSchema),
+});
+
+const readResult = Schema.decodeUnknownOption(ResultSchema);
 
 const readRateLimit = Schema.decodeUnknownOption(
   Schema.Struct({
@@ -397,6 +399,22 @@ function counted(value: number | null | undefined): number {
 }
 
 /**
+ * Why a model turn failed, in the CLI's words: its subtype, the API's status
+ * where an API error ended it, and the errors it named, then the error's text.
+ * Note that an API error arrives as a `success` whose `result` is the error's
+ * text, while a turn that did not fail keeps its answer there, which is the
+ * model's and never read here.
+ */
+function failureOf(result: typeof ResultSchema.Type): string {
+  const { subtype, api_error_status, errors, result: said } = result;
+  const status =
+    api_error_status === undefined || api_error_status === null ? [] : [String(api_error_status)];
+  const words = [subtype, ...status, ...(errors ?? [])].join(" ");
+  const failure = said === undefined || said.trim() === "" ? words : `${words}: ${said}`;
+  return redactCredentials(failure).slice(0, FAILURE_CHARS);
+}
+
+/**
  * The end of one model turn: what its main loop cost, and why it failed
  * where it did. Note that the input the provider counts excludes what the
  * prefix cache read and what was written to it, while the record's input
@@ -405,7 +423,7 @@ function counted(value: number | null | undefined): number {
 function resultMoments(message: WireValue): readonly NativeMoment[] {
   const read = readResult(message);
   if (Option.isNone(read)) return [{ kind: NATIVE_MOMENT.RESULT }];
-  const { subtype, is_error, errors, usage } = read.value;
+  const { is_error, usage } = read.value;
   const moments: NativeMoment[] = [];
   if (usage !== undefined) {
     const cachedInputTokens = counted(usage.cache_read_input_tokens);
@@ -422,13 +440,9 @@ function resultMoments(message: WireValue): readonly NativeMoment[] {
     });
   }
   const failed = is_error === true;
-  const failure = [subtype, ...(errors ?? [])].join(" ");
   moments.push(
     failed
-      ? {
-          kind: NATIVE_MOMENT.RESULT,
-          failure: redactCredentials(failure).slice(0, FAILURE_CHARS),
-        }
+      ? { kind: NATIVE_MOMENT.RESULT, failure: failureOf(read.value) }
       : { kind: NATIVE_MOMENT.RESULT },
   );
   // Note that a turn that ran is the plan's answer that it pays, which a limit reached earlier lifts on.

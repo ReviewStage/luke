@@ -1634,7 +1634,7 @@ reading as unchanged, a file only moved carries an empty patch, and a
 list cut at the bound says so. An agent with no pull request yet answers
 a null one. The agent's sandbox is no source: nothing outside its session
 reaches it and its diff is not kept in the store.
-`src/agents/agents-app.test.ts` answers the routes over a fake eve, a
+`src/agents/agents-app*.test.ts` (with `src/testing/agents-app-support.ts`) answer the routes over a fake eve, a
 scripted GitHub, a fixed catalog, and PGlite; `src/agents/coder-host/coder-host.test.ts`
 drives the host, the shared relay, the branch recorded at a turn's end
 over the sandbox double, and the held read on the test clock;
