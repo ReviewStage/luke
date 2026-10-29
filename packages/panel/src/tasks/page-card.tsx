@@ -1,3 +1,4 @@
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import {
   PAGE_SHOWER,
   type PageLine,
@@ -5,19 +6,24 @@ import {
   type PageShower,
 } from "@luke/features/page-wire";
 import { HoverCard, HoverCardHead, HoverCardSkeleton, PageThumb, Time, useMinute } from "@luke/ui";
+import { ACTOR_KIND, ACTOR_STATE, type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { AppWindowIcon } from "lucide-react";
+import { PROVENANCE_VERB, ProvenanceRow } from "../actor-ref.js";
 import { appPlatform } from "../app-platform.js";
 import { PAGE_SANDBOX } from "./page-pane.js";
 import { useKnownNames } from "./use-known-names.js";
+import { useOpenPlace } from "./use-open-link.js";
 
 /**
  * page-card.tsx -- the card a page of the plan hangs wherever it is named: its tab's, its row's in the plan's summary, its chip's and bar's, and the transcript row's of a call that showed or read it.
  *
  * The head is the page as its tab names it: the tab's glyph, its title
  * wrapped to two lines, the version it stands at where it has more than
- * one and who showed it, Luke or a coding agent named as the window holds
- * it now, where the version says, and how long ago that version was
- * written. Under it the page
+ * one, and how long ago that version was written. Under it, who showed it,
+ * where the version says, as a provenance row: Luke, or a coding agent by
+ * its tile and the name the window holds for it now, which a press opens.
+ * Then the page
  * itself, small: its newest version drawn in a frame as its tab draws it
  * (`page-pane.tsx`), under the same sandbox and from the same `luke-page:`
  * address, laid out four times the card's width, a desktop window's, and
@@ -48,45 +54,60 @@ function PagePreview({ place, page }: CardPage): React.JSX.Element {
   );
 }
 
-/** What a page's card says of who showed its version where it names no agent by name. */
-const SHOWN_BY = {
-  LUKE: "Shown by Luke",
-  AGENT: "Shown by a coding agent",
-} as const;
-
-/** Who showed a page's version: Luke, or a coding agent by the name the window holds now; nothing for one shown before who showed it was kept. */
-function showerWords(
+/**
+ * Who showed a page's version: Luke, or a coding agent by the name the
+ * window holds now, its tile at rest since its model is not known here,
+ * hanging its own card on the task it works on; nothing for one shown
+ * before who showed it was kept.
+ */
+function showerActor(
   shownBy: PageShower | undefined,
+  place: PagePlace,
   agents: ReadonlyMap<string, string>,
-): string | undefined {
+): Actor | undefined {
   if (shownBy === undefined) return undefined;
-  if (shownBy.kind === PAGE_SHOWER.LUKE) return SHOWN_BY.LUKE;
-  const name = agents.get(shownBy.agentId);
-  return name === undefined ? SHOWN_BY.AGENT : `Shown by ${name}`;
+  if (shownBy.kind === PAGE_SHOWER.LUKE) return LUKE_ACTOR;
+  return {
+    kind: ACTOR_KIND.AGENT,
+    agentId: shownBy.agentId,
+    taskId: "taskId" in place ? place.taskId : undefined,
+    name: agents.get(shownBy.agentId) ?? TAB_WORDS.CODING_AGENT,
+    provider: undefined,
+    state: ACTOR_STATE.REST,
+  };
 }
 
-/** The line under a page's title: its version where it has more than one, and who showed it, where either is said. */
-function subWords(page: PageLine, agents: ReadonlyMap<string, string>): string | undefined {
-  const words = [
-    page.version > 1 ? `Version ${page.version}` : undefined,
-    showerWords(page.shownBy, agents),
-  ].filter((each) => each !== undefined);
-  return words.length === 0 ? undefined : words.join(" · ");
+/** A press on the agent who showed a page, opening its tab, where the window opens places; none for Luke. */
+function useShowerDoor(shower: Actor | undefined): (() => void) | undefined {
+  const openPlace = useOpenPlace();
+  if (openPlace === undefined || shower?.kind !== ACTOR_KIND.AGENT) return undefined;
+  const { agentId, taskId } = shower;
+  if (agentId === undefined) return undefined;
+  return () =>
+    openPlace({
+      kind: LINK_PLACE.AGENT,
+      ...(taskId === undefined ? undefined : { planId: taskId }),
+      agentId,
+    });
 }
 
-/** A page's card: its glyph, title, version, who showed it, and age, over a preview of its newest version. */
+/** A page's card: its glyph, title, version, and age, who showed it, and a preview of its newest version. */
 export function PageCard({ place, page }: CardPage): React.JSX.Element {
   const now = useMinute();
-  const sub = subWords(page, useKnownNames().agents);
+  const shower = showerActor(page.shownBy, place, useKnownNames().agents);
+  const openShower = useShowerDoor(shower);
   return (
     <HoverCard data-page-card="" data-tab-card="">
       <HoverCardHead
         glyph={<AppWindowIcon aria-hidden="true" />}
         name={page.title}
-        // Note that the words stand in a span of their own, so a long agent's name wraps inside the card.
-        sub={sub === undefined ? undefined : <span>{sub}</span>}
+        sub={page.version > 1 ? `Version ${page.version}` : undefined}
         corner={<Time at={page.at} now={now} hint={false} />}
       />
+      {/* Note that the row says no time, because the corner already says when this version was shown. */}
+      {shower === undefined ? null : (
+        <ProvenanceRow verb={PROVENANCE_VERB.SHOWN} actor={shower} now={now} onOpen={openShower} />
+      )}
       {/* A new version is a new preview, held hidden until it has loaded rather than over the last one's frame. */}
       <PagePreview key={`${page.id}/${page.version}`} place={place} page={page} />
     </HoverCard>

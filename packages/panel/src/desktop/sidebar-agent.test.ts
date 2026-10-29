@@ -342,11 +342,15 @@ test("the row's card says the agent last moved when its row does, the end of its
   restOn(press);
 
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
-  const corner = card?.querySelector(".luke-hover-card-corner")?.textContent ?? "";
   assert.equal(
-    corner,
-    "#42 · 2m",
-    "its pull request, and its run's end rather than its start three days ago",
+    card?.querySelector(".luke-hover-card-corner")?.textContent,
+    "2m",
+    "its run's end rather than its start three days ago",
+  );
+  assert.equal(
+    card?.querySelector("[data-pull-request-mark]")?.closest(".luke-hover-card-row")?.textContent,
+    "#42 Remove the stale copy",
+    "its pull request",
   );
 });
 
@@ -365,8 +369,8 @@ test("the row's card shows a pull request read since the list was, before the li
   const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
   restOn(press);
 
-  const corner = document.querySelector(".luke-tooltip-card .luke-hover-card-corner");
-  assert.match(corner?.textContent ?? "", /^#43/u);
+  const mark = document.querySelector(".luke-tooltip-card [data-pull-request-mark]");
+  assert.match(mark?.closest(".luke-hover-card-row")?.textContent ?? "", /^#43/u);
 });
 
 /** Presses `label` in the row's right-click menu. */

@@ -304,7 +304,7 @@ function readSubject(
   );
 }
 
-/** The agent's tab's card read from the agents a read answered (`tabCard`), with the task it works on under a rule; `reading` while the read is out, and the chip's own where it answered nothing. */
+/** The agent's tab's card read from the agents a read answered (`tabCard`), with the task it works on at its foot; `reading` while the read is out, and the chip's own where it answered nothing. */
 function ReadAgentCard({
   read,
   agentId,

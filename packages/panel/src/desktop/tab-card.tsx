@@ -3,10 +3,11 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import type { TaskStatus } from "@luke/features/task-wire";
 import { HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
+import { GLYPH } from "@luke/ui/icons";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import type { ReactNode } from "react";
 import { AgentCard, type AgentSubject } from "../tasks/agent-ref.js";
-import { AgentTabCard, type CardReading } from "../tasks/agent-tab-card.js";
+import { AgentTabCard, type CardReading, taskFoot } from "../tasks/agent-tab-card.js";
 import { ChangesCard } from "../tasks/changes-card.js";
 import { PageChipCard, TaskChipCard } from "../tasks/chip-cards.js";
 import { browserOf } from "../tasks/cloud-browser-pane.js";
@@ -61,7 +62,7 @@ export type CardSubject =
       readonly kind: typeof TAB_KIND.AGENT;
       readonly subject: AgentSubject;
       readonly models: readonly CatalogModel[] | undefined;
-      /** What a place that holds no tab of the agent says under a rule, the task it works on; none where its tab stands beside it. */
+      /** What a place that holds no tab of the agent says at the card's foot, the task it works on; none where its tab stands beside it. */
       readonly foot?: string | undefined;
     }
   | {
@@ -190,7 +191,13 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
     case TAB_KIND.MAC_TERMINAL:
       return null;
     case TAB_KIND.AGENT:
-      return <AgentCard subject={subject.subject} models={subject.models} foot={subject.foot} />;
+      return (
+        <AgentCard
+          subject={subject.subject}
+          models={subject.models}
+          foot={subject.foot === undefined ? undefined : taskFoot(subject.foot)}
+        />
+      );
     case TAB_KIND.SUBAGENT:
       return (
         <AgentTabCard
@@ -211,13 +218,16 @@ export function tabCard(subject: CardSubject): React.JSX.Element | null {
           onOpenAgent={subject.onOpenAgent}
         />
       );
-    // A Terminal tab hangs its agent's card, saying under a rule whose sandbox its shells run in.
+    // A Terminal tab hangs its agent's card, saying at its foot whose sandbox its shells run in.
     case TAB_KIND.TERMINAL:
       return (
         <AgentCard
           subject={subject.subject}
           models={subject.models}
-          foot={<TerminalCardFoot agentId={subject.agentId} />}
+          foot={{
+            glyph: <GLYPH.TERMINAL />,
+            words: <TerminalCardFoot agentId={subject.agentId} />,
+          }}
         />
       );
     case TAB_KIND.FILE:

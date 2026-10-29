@@ -390,9 +390,12 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
   const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the agent's page hangs the page's own card");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Flake ledger");
-  assert.equal(
-    card.querySelector(".luke-hover-card-sub")?.textContent,
-    "Version 3 · Shown by Sweep the flaky tests",
+  assert.deepEqual(
+    [
+      card.querySelector(".luke-hover-card-sub")?.textContent,
+      card.querySelector(".luke-hover-card-row")?.textContent,
+    ],
+    ["Version 3", "Shown by Sweep the flaky tests"],
   );
   assert.equal(
     card.querySelector(".luke-page-thumb-frame")?.getAttribute("src"),

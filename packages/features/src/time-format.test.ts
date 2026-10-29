@@ -9,6 +9,7 @@ import {
   formatDayTick,
   formatInstant,
   playheadText,
+  provenanceText,
   runSpanText,
   sinceText,
   weekdayAndTimeText,
@@ -60,6 +61,14 @@ test("a row and a line say an age with the same count, the line adding ago", () 
   assert.equal(agoText(hoursAgo(3), now), "3h ago");
   assert.equal(sinceText(now - 20_000, now), "now");
   assert.equal(agoText(now - 20_000, now), "now");
+});
+
+test("a provenance row says an age inside a week and the day past it", () => {
+  const now = new Date(2026, 9, 23, 12, 0).getTime();
+  const daysAgo = (days: number) => now - days * 86_400_000;
+
+  assert.equal(provenanceText(daysAgo(3), now), "3d ago");
+  assert.equal(provenanceText(daysAgo(11), now), "Oct 12");
 });
 
 test("a distance from now counts ahead with in and behind with ago, in days past a day", () => {

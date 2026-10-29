@@ -167,7 +167,7 @@ function CreatorDetail({
           {maker === undefined
             ? `Created by ${by} · `
             : `Created by ${actorName(maker.actor)} for ${by}${maker.fromTask === undefined ? "" : ` · from ${maker.fromTask}`} · `}
-          <Time at={task.createdAt} now={now} hint={false} look={TIME_LOOK.AGO} />
+          <Time at={task.createdAt} now={now} hint={false} look={TIME_LOOK.PROVENANCE} />
         </>
       }
       onPress={door}
