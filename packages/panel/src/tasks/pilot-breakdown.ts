@@ -9,8 +9,8 @@
  * on a task worked by its agents, whatever its children.
  *
  * The answer goes to the task's pilot as a developer's message does, which
- * wakes it: its newest agent not archived, since a pilot task's agents stand
- * on its child tasks and Continue archives the pilot it takes over from.
+ * wakes it: its agent of the pilot kind not archived, the newest where more
+ * than one stands, since Continue archives the pilot it takes over from.
  * Its words open on a line the pilot's instructions know it by, then name
  * each child task the answer is about as the task's chip, so the pilot reads
  * which by id: an approval asks it to start them, and a request for changes
@@ -19,7 +19,7 @@
  * it opened has ended, or until a child the answer did not name waits too.
  */
 
-import type { AgentSummary } from "@luke/features/agent-wire";
+import { AGENT_KIND, type AgentSummary } from "@luke/features/agent-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
 import { TASK_MODE, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { agentStillWriting } from "./agent-model.js";
@@ -67,10 +67,10 @@ export function waitingChildTasks(
     );
 }
 
-/** The agent a pilot task's answer goes to: its newest not archived; none while the task's agents are unread or every one is archived. */
+/** The agent a pilot task's answer goes to: its newest pilot not archived; none while the task's agents are unread or no pilot stands. */
 export function taskPilot(agents: readonly AgentSummary[] | undefined): AgentSummary | undefined {
   return (agents ?? [])
-    .filter((agent) => agent.archivedAt === undefined)
+    .filter((agent) => agent.kind === AGENT_KIND.PILOT && agent.archivedAt === undefined)
     .reduce<AgentSummary | undefined>(
       (newest, agent) =>
         newest === undefined || agent.createdAt > newest.createdAt ? agent : newest,
@@ -78,20 +78,23 @@ export function taskPilot(agents: readonly AgentSummary[] | undefined): AgentSum
     );
 }
 
-/** An answer the developer sent a pilot: to which agent, at which of its turns, about which child tasks. */
+/** An answer the developer sent a pilot: to which agent, at which of its turns, whether that turn still ran, and about which child tasks. */
 export interface BreakdownAnswer {
   readonly agentId: string;
-  /** The pilot's newest turn as the answer was sent, which the answer's own turn follows. */
+  /** The pilot's newest turn as the answer was sent. */
   readonly turnId: string | null;
+  /** Whether the pilot was still writing as the answer was sent, which then steered that turn rather than opening one. */
+  readonly steered: boolean;
   readonly children: readonly string[];
 }
 
 /**
  * Whether `answer` still stands for the breakdown as it waits now: sent to
  * the pilot that stands, about every child that waits, and the pilot not yet
- * through the turn it opened. Note that a message waiting on its turn leaves
- * the turn as it was, so the answer stands while the turn is the one it was
- * sent at, or while the pilot still writes.
+ * through the turn that hears it. That turn is the one running as it was
+ * sent, where it steered one, so it stands while the pilot writes; else the
+ * one it opens, so it stands too while the turn is still the one it was sent
+ * at, since a message waiting on its turn leaves the turn as it was.
  */
 export function answerStands(
   answer: BreakdownAnswer | undefined,
@@ -100,7 +103,8 @@ export function answerStands(
 ): boolean {
   if (answer === undefined || pilot === undefined || pilot.id !== answer.agentId) return false;
   if (waiting.some((child) => !answer.children.includes(child.id))) return false;
-  return pilot.turnId === answer.turnId || agentStillWriting(pilot.status);
+  if (agentStillWriting(pilot.status)) return true;
+  return !answer.steered && pilot.turnId === answer.turnId;
 }
 
 /** What the pilot is told when the developer approves `children`. */

@@ -19,6 +19,7 @@ import {
 import { GLYPH } from "@luke/ui/icons";
 import { useRef, useState } from "react";
 import { enterKeyHint, enterSubmitKey } from "../enter-sends.js";
+import { agentStillWriting } from "../tasks/agent-model.js";
 import {
   answerStands,
   approvalWords,
@@ -43,7 +44,8 @@ import { TOAST_HOLD, useToast } from "../toast.js";
  * the pilot may answer, and a refusal is said in a toast. Once an answer is
  * sent, a line saying so stands in the buttons' place while the pilot works
  * on it, so one approval is not sent twice; a child the pilot adds after it
- * brings the buttons back.
+ * brings the buttons back. The answer goes to the task's pilot, its agent of
+ * the pilot kind, so another agent on the task never takes it.
  */
 
 /** What the waiting children's list is named for a reader moving between lists. */
@@ -163,6 +165,10 @@ export function PlanBreakdown({
   const [answered, setAnswered] = useState<{ taskId: string; answer: BreakdownAnswer } | undefined>(
     undefined,
   );
+  // The answer last sent that the pilot has not been heard to take, and the key it went under.
+  const unsent = useRef<{ agentId: string; text: string; clientKey: string } | undefined>(
+    undefined,
+  );
   const waiting = waitingChildTasks(task, tasks);
   const pilot = taskPilot(agents.agents);
   if (waiting.length === 0) return null;
@@ -170,19 +176,28 @@ export function PlanBreakdown({
   const stands = answerStands(answer, pilot, waiting);
   const send = async (kind: Sending, text: string): Promise<boolean> => {
     if (pilot === undefined) return false;
+    // Note that the same answer sent again to the same pilot keeps its key, because one whose reply was lost may have landed, and the service takes a key once.
+    const held = unsent.current;
+    const clientKey =
+      held !== undefined && held.agentId === pilot.id && held.text === text
+        ? held.clientKey
+        : crypto.randomUUID();
+    unsent.current = { agentId: pilot.id, text, clientKey };
     setSending(kind);
     const reply = await agents
-      .onMessage(pilot.id, text, crypto.randomUUID(), [])
+      .onMessage(pilot.id, text, clientKey, [])
       .finally(() => setSending(undefined));
     if ("failure" in reply) {
       toast({ words: REFUSED_WORDS, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
       return false;
     }
+    unsent.current = undefined;
     setAnswered({
       taskId: task.id,
       answer: {
         agentId: pilot.id,
         turnId: pilot.turnId,
+        steered: agentStillWriting(pilot.status),
         children: waiting.map((child) => child.id),
       },
     });

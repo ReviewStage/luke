@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
+import { AGENT_KIND, AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import {
   TASK_MODE,
   TASK_STATUS,
@@ -46,6 +46,7 @@ function agent(id: string, createdAt: number, extra: Partial<AgentSummary> = {})
     effort: "high",
     title: null,
     createdAt,
+    kind: AGENT_KIND.PILOT,
     status: AGENT_STATUS.COMPLETED,
     turnId: null,
     ...extra,
@@ -76,28 +77,34 @@ test("a pilot task waits on its children in todo with no agent, in the order mad
   assert.deepEqual(names(waitingChildTasks({ id: PARENT, mode: TASK_MODE.AGENT }, tasks)), []);
 });
 
-test("the answer goes to the task's newest agent not archived, so a pilot taken over by Continue hears nothing", () => {
+test("the answer goes to the task's pilot not archived, so neither a pilot taken over by Continue nor another agent hears it", () => {
   const continued = agent("continued", 20);
   assert.equal(
     taskPilot([
       agent("first", 10, { archivedAt: 30 }),
       continued,
       agent("archived", 40, { archivedAt: 50 }),
+      agent("coder", 60, { kind: AGENT_KIND.CODER }),
     ]),
     continued,
   );
   assert.equal(taskPilot([agent("first", 10, { archivedAt: 30 })]), undefined);
 });
 
-test("an answer stands until the turn it opened ends, and a child added since brings the buttons back", () => {
+test("an answer stands until the turn that hears it ends, and a child added since brings the buttons back", () => {
   const waiting = [child("Approve button", 12, TASK_STATUS.TODO)];
-  const answer = { agentId: "pilot", turnId: "turn-1", children: [waiting[0]?.id ?? ""] };
+  const children = [waiting[0]?.id ?? ""];
   const pilot = (turnId: string, status: AgentSummary["status"]) =>
     agent("pilot", 10, { turnId, status });
-  // The message waits on its turn, then its turn runs, then it ends.
-  assert.equal(answerStands(answer, pilot("turn-1", AGENT_STATUS.COMPLETED), waiting), true);
-  assert.equal(answerStands(answer, pilot("turn-2", AGENT_STATUS.RUNNING), waiting), true);
-  assert.equal(answerStands(answer, pilot("turn-2", AGENT_STATUS.COMPLETED), waiting), false);
+  // Sent to an idle pilot: the message waits on its turn, then its turn runs, then it ends.
+  const opened = { agentId: "pilot", turnId: "turn-1", steered: false, children };
+  assert.equal(answerStands(opened, pilot("turn-1", AGENT_STATUS.COMPLETED), waiting), true);
+  assert.equal(answerStands(opened, pilot("turn-2", AGENT_STATUS.RUNNING), waiting), true);
+  assert.equal(answerStands(opened, pilot("turn-2", AGENT_STATUS.COMPLETED), waiting), false);
+  // Sent to a pilot at work: the message steers that turn, which ends on the same id.
+  const steered = { agentId: "pilot", turnId: "turn-1", steered: true, children };
+  assert.equal(answerStands(steered, pilot("turn-1", AGENT_STATUS.RUNNING), waiting), true);
+  assert.equal(answerStands(steered, pilot("turn-1", AGENT_STATUS.COMPLETED), waiting), false);
   const added = [...waiting, child("Merge switch", 13, TASK_STATUS.TODO)];
-  assert.equal(answerStands(answer, pilot("turn-2", AGENT_STATUS.RUNNING), added), false);
+  assert.equal(answerStands(opened, pilot("turn-2", AGENT_STATUS.RUNNING), added), false);
 });
