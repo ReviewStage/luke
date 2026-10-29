@@ -193,7 +193,7 @@ export interface LocalAgentSandbox {
     LocalAgentSandboxUnavailable,
     ChildProcessSpawner.ChildProcessSpawner | FileSystem | Path.Path | HttpClient
   >;
-  /** The agent's VM made where it has none, its folder mounted at the same path, and started; it fails where it could not be. */
+  /** The agent's VM made where it has none, or made again where it stands stopped on an image other than the pinned one, its folder mounted at the same path, and started; it fails where it could not be. */
   readonly started: (agent: {
     readonly agentId: string;
     readonly folder: string;

@@ -512,3 +512,106 @@ it.effect(
       ),
     ),
 );
+
+/** The image an agent's VM was made from before the pin last moved. */
+const EARLIER_IMAGE =
+  "ghcr.io/reviewstage/luke-sandbox:35c90fc1c0bee4e5@sha256:168aedd03509fa3bccb00b84059baea6d19ae7032a7f0ad0c46f43b6a8bf21e0";
+
+it.effect.each([
+  {
+    case: "a stopped VM made from an earlier image is deleted and made again from the pinned one, with the agent's folder and its credential kept",
+    state: "stopped",
+    image: EARLIER_IMAGE,
+    deletes: true,
+    verbs: ["status", "delete", "start", "create", "start"],
+    refused: undefined,
+  },
+  {
+    case: "a stopped VM already on the pinned image is started as it is",
+    state: "stopped",
+    image: IMAGE,
+    deletes: true,
+    verbs: ["status", "start"],
+    refused: undefined,
+  },
+  {
+    case: "a running VM made from an earlier image is left as it is",
+    state: "running",
+    image: EARLIER_IMAGE,
+    deletes: true,
+    verbs: ["status", "start"],
+    refused: undefined,
+  },
+  {
+    case: "a stale VM smolvm will not delete stops the launch with words, and is never started",
+    state: "stopped",
+    image: EARLIER_IMAGE,
+    deletes: false,
+    verbs: ["status", "delete"],
+    refused: "the machine made from an earlier image could not be deleted: machine is locked",
+  },
+])("$case", ({ state, image, deletes, verbs, refused }) =>
+  Effect.gen(function* () {
+    const root = yield* temporaryDirectoryScoped("luke-smolvm-image-");
+    const folder = `${root}/agent`;
+    const stateRoot = `${root}/state`;
+    const token = `${stateRoot}/sandboxes/${AGENT_ID}/github-token`;
+    mkdirSync(`${stateRoot}/sandboxes/${AGENT_ID}`, { recursive: true });
+    writeFileSync(token, "ghs_fixture_1");
+    // Note that the fake smolvm holds one machine, as `machine status --json` prints it, until it is deleted.
+    let stands = true;
+    const spawner = scriptedSpawner((program, args) => {
+      const each = { program, args };
+      if (isSmolvm("status")(each)) {
+        return stands
+          ? { exitCode: 0, stdout: JSON.stringify({ name: MACHINE, state, image }, null, 2) }
+          : { exitCode: 1 };
+      }
+      if (isSmolvm("delete")(each)) {
+        stands = !deletes;
+        return deletes
+          ? { exitCode: 0 }
+          : { exitCode: 1, stderr: '{"error":{"code":"BUSY","message":"machine is locked"}}\n' };
+      }
+      if (isSmolvm("create")(each)) {
+        stands = true;
+        return { exitCode: 0 };
+      }
+      if (isSmolvm("start")(each)) {
+        return stands
+          ? { exitCode: 0 }
+          : { exitCode: 1, stderr: '{"error":{"code":"NOT_FOUND","message":"no such machine"}}\n' };
+      }
+      return undefined;
+    });
+    const vm = smolvmSandbox({
+      smolvm: SMOLVM,
+      stateRoot,
+      runnerFolder: RUNNER_FOLDER,
+      user: USER,
+      nested: false,
+    });
+
+    const detail = yield* vm.sandbox
+      .started({ agentId: AGENT_ID, folder, github: true })
+      .pipe(
+        Effect.provide(spawner.layer),
+        Effect.match({ onFailure: (failed) => failed.detail, onSuccess: () => undefined }),
+      );
+
+    assert.deepEqual(
+      spawner.spawned.map((each) => each.args[1]),
+      verbs,
+    );
+    assert.equal(detail, refused);
+    const create = spawner.spawned.find(isSmolvm("create"));
+    if (create !== undefined) {
+      assert.deepEqual(valuesOf(create.args, "--image"), [IMAGE]);
+      assert.deepEqual(valuesOf(create.args, "-v"), [
+        `${folder}:${folder}`,
+        `${RUNNER_FOLDER}:${RUNNER_FOLDER}:ro`,
+      ]);
+    }
+    assert.equal(readFileSync(token, "utf8"), "ghs_fixture_1");
+  }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
+);
