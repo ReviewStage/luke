@@ -144,7 +144,10 @@ test("a picture pasted into the agent's box is held as its chip, the paste writi
 
 test("a file this machine cannot read says so in the agent's box and is reported with why", async () => {
   const reports: ShownFailureReport[] = [];
-  const uninstall = installShownFailureReporter((report) => reports.push(report));
+  const uninstall = installShownFailureReporter((report) => {
+    reports.push(report);
+    return undefined;
+  });
   const unreadable = new DOMException("The file could not be read.", "NotReadableError");
   const file = Object.assign(new File(["notes"], "notes.txt", { type: "text/plain" }), {
     arrayBuffer: () => Promise.reject(unreadable),

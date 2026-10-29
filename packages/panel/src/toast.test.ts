@@ -14,6 +14,7 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { installShownFailureReporter } from "./failure-report.js";
+import { copyingInto, fakeAppPlatform } from "./testing/app-platform.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import {
   TOAST_HOLD,
@@ -31,7 +32,7 @@ import {
  * hold as its countdown; work under way settles into its own card in
  * place; an act's Undo toast takes the act back and stands for the Undo
  * hold; and a failure toast reports what failed to Sentry, which a recording
- * SDK stands in for. jsdom lays nothing out, so the window's height is given. Synthetic
+ * SDK stands in for, and copies the details of that report. jsdom lays nothing out, so the window's height is given. Synthetic
  * throughout.
  */
 
@@ -55,6 +56,48 @@ afterEach(() => {
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
 });
+
+/** The trace a recording SDK says a report went in. */
+const TRACE_FIXTURE = "0af7651916cd43dd8448eb211c80319c";
+
+/** What a recording SDK answers of the trace standing: the scope's, with no span. */
+const TRACED: Pick<ShownFailureSentry, "getActiveSpan" | "getCurrentScope"> = {
+  getActiveSpan: () => undefined,
+  getCurrentScope: () => ({ getPropagationContext: () => ({ traceId: TRACE_FIXTURE }) }),
+};
+
+/** An agent's Stop that Luke never heard back on, the fetch beneath it naming a credential. */
+function unheardStop(): ToastNotice {
+  // A credential in the cause's code as well as its message, since a code is sent as a tag and grouped by.
+  const unreached = Object.assign(new TypeError("fetch failed with token=fixture-secret"), {
+    status: 503,
+    code: "sk-fixturecode01",
+  });
+  return {
+    words: "The agent could not be stopped.",
+    tone: STATUS_TONE.DANGER,
+    hold: TOAST_HOLD.FAILED,
+    failure: {
+      surface: FAILURE_SURFACE.AGENT_STOP,
+      cause: new Error("Luke didn't hear back.", { cause: unreached }),
+      about: { agentId: "agent-fixture" },
+    },
+  };
+}
+
+/** A message the service refused as too long. */
+function refusedStart(): ToastNotice {
+  return {
+    words: "Messages are limited to 20,000 characters.",
+    tone: STATUS_TONE.DANGER,
+    hold: TOAST_HOLD.FAILED,
+    failure: {
+      surface: FAILURE_SURFACE.AGENT_START,
+      cause: { status: "rejected", reason: "Messages are limited to 20,000 characters." },
+      about: { agentId: "agent-fixture" },
+    },
+  };
+}
 
 /** Hands the test the window's way of showing a toast. */
 function Shower(): null {
@@ -245,38 +288,12 @@ test("a failure toast reports what failed: an unexpected one as an error line an
       warn: (message, attributes) => lines.push({ level: "warn", message, attributes }),
       error: (message, attributes) => lines.push({ level: "error", message, attributes }),
     },
+    ...TRACED,
   };
   const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
-  // A credential in the cause's code as well as its message, since a code is sent as a tag and grouped by.
-  const unreached = Object.assign(new TypeError("fetch failed with token=fixture-secret"), {
-    status: 503,
-    code: "sk-fixturecode01",
-  });
 
-  act(() =>
-    show?.({
-      words: "The agent could not be stopped.",
-      tone: STATUS_TONE.DANGER,
-      hold: TOAST_HOLD.FAILED,
-      failure: {
-        surface: FAILURE_SURFACE.AGENT_STOP,
-        cause: new Error("Luke didn't hear back.", { cause: unreached }),
-        about: { agentId: "agent-fixture" },
-      },
-    }),
-  );
-  act(() =>
-    show?.({
-      words: "Messages are limited to 20,000 characters.",
-      tone: STATUS_TONE.DANGER,
-      hold: TOAST_HOLD.FAILED,
-      failure: {
-        surface: FAILURE_SURFACE.AGENT_START,
-        cause: { status: "rejected", reason: "Messages are limited to 20,000 characters." },
-        about: { agentId: "agent-fixture" },
-      },
-    }),
-  );
+  act(() => show?.(unheardStop()));
+  act(() => show?.(refusedStart()));
   uninstall();
 
   // A window whose document is not read yet says it is online and its account unread.
@@ -339,7 +356,9 @@ test("a failure toast reports what failed: an unexpected one as an error line an
   assert.ok(!beneath.stack?.includes("fixture-secret"));
 });
 
-test("a failure toast for a hosted call that never answered reports what the host kept of it, the trace the service's lines carry unredacted", () => {
+test("a failure toast for a hosted call that never answered reports what the host kept of it, the trace the service's lines carry unredacted, and copies that trace", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform(copyingInto(copied));
   mount(WINDOW.TALL);
   const lines: { message: string; attributes: unknown }[] = [];
   const recording: ShownFailureSentry = {
@@ -348,6 +367,7 @@ test("a failure toast for a hosted call that never answered reports what the hos
       warn: (message, attributes) => lines.push({ message, attributes }),
       error: (message, attributes) => lines.push({ message, attributes }),
     },
+    ...TRACED,
   };
   const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
 
@@ -388,6 +408,76 @@ test("a failure toast for a hosted call that never answered reports what the hos
         "app.account": "unread",
       },
     },
+  ]);
+  const copy = document.querySelector<HTMLButtonElement>(
+    '.luke-toast:not([data-leaving]) button[aria-label="Copy details"]',
+  );
+  await act(async () => copy?.click());
+  assert.ok(
+    copied[0]?.split("\n").includes("hosted.trace_id: 4bf92f3577b34da6a3ce929d0e0e4736"),
+    "the copied details carry the trace the service's lines carry",
+  );
+});
+
+test("a failure toast's Copy details copies what its report sent, to paste as it is: an unexpected one with its issue's event id, a refusal with none", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-29T18:20:03.198Z"));
+  const copied: string[] = [];
+  fakeAppPlatform(copyingInto(copied));
+  mount(WINDOW.TALL);
+  const recording: ShownFailureSentry = {
+    captureException: () => "event-fixture",
+    logger: { warn: () => undefined, error: () => undefined },
+    ...TRACED,
+  };
+  const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
+  act(() => show?.(unheardStop()));
+  act(() => show?.(refusedStart()));
+  uninstall();
+
+  const copies = [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      '.luke-toast:not([data-leaving]) button[aria-label="Copy details"]',
+    ),
+  ];
+  for (const copy of copies) await act(async () => copy.click());
+
+  assert.deepEqual(copied, [
+    [
+      "Luke showed an error. Find it in Sentry and the logs by these details:",
+      "time: 2026-10-29T18:20:03.198Z",
+      "failure.surface: agent.stop",
+      "failure.kind: unexpected",
+      "failure.code: [redacted]",
+      "error.name: Error",
+      "error.message: Luke didn't hear back.",
+      "error.root.name: TypeError",
+      "error.root.code: [redacted]",
+      "error.root.status: 503",
+      "error.root.message: fetch failed with [redacted]",
+      "agent.id: agent-fixture",
+      "app.online: true",
+      "app.account: unread",
+      "sentry.event_id: event-fixture",
+      `sentry.trace_id: ${TRACE_FIXTURE}`,
+    ].join("\n"),
+    [
+      "Luke showed an error. Find it in Sentry and the logs by these details:",
+      "time: 2026-10-29T18:20:03.198Z",
+      "failure.surface: agent.start",
+      "failure.kind: refused",
+      "failure.code: rejected",
+      "error.code: rejected",
+      "error.message: Messages are limited to 20,000 characters.",
+      "agent.id: agent-fixture",
+      "app.online: true",
+      "app.account: unread",
+      `sentry.trace_id: ${TRACE_FIXTURE}`,
+    ].join("\n"),
+  ]);
+  assert.deepEqual(standing(), [
+    "The agent could not be stopped.",
+    "Messages are limited to 20,000 characters.",
   ]);
 });
 

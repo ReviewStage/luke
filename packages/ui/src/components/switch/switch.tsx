@@ -71,6 +71,25 @@ export function Switch({
   );
 }
 
+/** The switch and its words in one line, the words in the body's type, on the line's middle. */
+const LABELED_SWITCH =
+  "inline-flex items-center gap-icon-gap min-w-0 font-ui text-body cursor-press has-disabled:cursor-default";
+
+/**
+ * A `Switch` with its name written beside it, which takes a press for it as
+ * the thumb does: a switch that stands in a row of chips, where no settings
+ * row's label stands for it.
+ */
+export function LabeledSwitch(props: SwitchProps): React.JSX.Element {
+  return (
+    // biome-ignore lint/a11y/noLabelWithoutControl: the switch inside is a native button, which the label's press reaches, which the rule cannot see through a component.
+    <label className={LABELED_SWITCH}>
+      <Switch {...props} />
+      <span className="min-w-0">{props.label}</span>
+    </label>
+  );
+}
+
 /** The switch's drawing alone, hidden from a reader, inside a control that is the switch. */
 export function SwitchMark({ checked }: { checked: boolean }): React.JSX.Element {
   const state = checked ? { "data-checked": "" } : { "data-unchecked": "" };

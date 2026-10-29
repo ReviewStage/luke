@@ -2,7 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { readWorkspacePhoto } from "@luke/database/models/workspace-store";
 import { workspaceIdSchema } from "@luke/features/task-wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Layer, Option, Result } from "effect";
+import { Effect, Layer, Option, Result, type Scope } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { unparsedWire } from "../core.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -13,7 +13,7 @@ import {
   hostedNotFoundRoute,
   hostedRefusing,
   hostedStoreOrUnavailable,
-  resolvedAccount,
+  resolvedUserId,
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
@@ -47,9 +47,7 @@ export interface WorkspacesAppSeams {
 const accountOf = Effect.fn("web/workspacesAccount")(function* (seams: WorkspacesAppSeams) {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const account = yield* resolvedAccount(seams.resolveUserId, request);
-  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  return account.value;
+  return yield* resolvedUserId(seams, request);
 });
 
 /**
@@ -62,7 +60,7 @@ const photoEndpoint = Effect.fn("web/workspacePhotoEndpoint")(function* (
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
-  HttpServerRequest.HttpServerRequest | DatabaseServices
+  HttpServerRequest.HttpServerRequest | DatabaseServices | Scope.Scope
 > {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (incoming.method !== HTTP_METHOD_GET) {

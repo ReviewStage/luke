@@ -12,6 +12,10 @@
  * carried, so a bearer the plugin did not sign is never read past to the
  * cookie beside it.
  *
+ * Every procedure's log lines carry the trace id of the caller's
+ * `traceparent`, through Sentry's tracer as the deployment runs it, even
+ * where the caller did not sample the call.
+ *
  * Synthetic accounts, bearers, and sessions throughout.
  */
 
@@ -21,17 +25,19 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { user } from "@luke/database/schemas/auth";
+import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { HOSTED_ERRORS } from "@luke/features/contract";
 import { HTTP_METHOD } from "@luke/wire";
 import { oc } from "@orpc/contract";
 import { openapi } from "@orpc/openapi";
 import { implement } from "@orpc/server";
-import { Cause, Context, Effect, Option, Schema } from "effect";
+import { Cause, Context, Effect, Layer, Logger, Option, References, Schema } from "effect";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import type { SessionUserIdResolver, UserIdResolver } from "../http/http-effect.js";
+import { sentryReportingLayer } from "../observability/sentry.js";
 import type { WebServices } from "../runtime.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
-import { bearerOnlyMiddleware, type HostedContext, sessionMiddleware } from "./base.js";
+import { bearerOnlyMiddleware, type HostedContext, hosted, sessionMiddleware } from "./base.js";
 import { hostedFetch } from "./handler.js";
 
 const ORIGIN = "https://luke.test";
@@ -228,4 +234,39 @@ it.effect(
         "the Mac's own session, whatever session a cookie beside it names",
       );
     }),
+);
+
+it.effect("a procedure's log lines carry the trace id of the caller's unsampled traceparent", () =>
+  Effect.gen(function* () {
+    const traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+    const annotations: Array<Readonly<Record<string, unknown>>> = [];
+    const recorded = Logger.make(({ fiber }) => {
+      annotations.push(fiber.getRef(References.CurrentLogAnnotations));
+    });
+    const router = {
+      account: {
+        chatGptHost: hosted.account.chatGptHost.effect(function* () {
+          yield* Effect.logInfo("asked for the ChatGPT host");
+          return { extAgentHostId: "host-1" };
+        }),
+      },
+    };
+    // SAFETY: the procedure yields no service, so the tracer and the logger stand in for the web runtime's.
+    const services = (yield* Effect.context().pipe(
+      Effect.provide(Layer.merge(sentryReportingLayer, Logger.layer([recorded]))),
+    )) as Context.Context<WebServices>;
+    const response = yield* Effect.promise(() =>
+      hostedFetch(router)(
+        new Request(`${ORIGIN}${HOSTED_SERVICE_PATH.ACCOUNT_CHATGPT_HOST}`, {
+          headers: { traceparent: `00-${traceId}-00f067aa0ba902b7-00` },
+        }),
+        services,
+      ),
+    );
+    assert.equal(response.status, HOSTED_HTTP_STATUS.OK);
+    assert.deepEqual(
+      annotations.map((line) => line.traceId),
+      [traceId],
+    );
+  }),
 );

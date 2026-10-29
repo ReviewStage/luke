@@ -103,13 +103,16 @@ it("a kind whose port fails with no refusal rejects the caller with the fixed se
 it("a row reading an act's answer is told the fixed sentence for a transport failure and the host's own for a refusal, and the first reports as unexpected", async () => {
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   const kinds: string[] = [];
-  const uninstall = installShownFailureReporter((report) => kinds.push(report.kind));
+  const uninstall = installShownFailureReporter((report) => {
+    kinds.push(report.kind);
+    return undefined;
+  });
   const reasonFor = async (failure: Error) => {
     fakeActPort({ [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.reject(failure) });
     const answer = await askActResult(
       askAct(ACT_KIND.PROVIDER_KEYS_READ).then(() => ({ status: ACTION_RESULT_STATUS.ACCEPTED })),
     );
-    reportShownFailure({ surface: FAILURE_SURFACE.SETTING_WRITE, cause: answer });
+    reportShownFailure({ surface: FAILURE_SURFACE.SETTING_WRITE, cause: answer }, 0);
     return "reason" in answer ? answer.reason : undefined;
   };
 

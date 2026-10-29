@@ -77,6 +77,38 @@ it.effect(
 );
 
 it.effect(
+  "a report and a log line made for an account name it as Sentry's user, and nowhere else",
+  () =>
+    Effect.gen(function* () {
+      const sentry = recordingSentry();
+      yield* Effect.gen(function* () {
+        yield* Effect.logWarning("a title could not be generated");
+        yield* Effect.exit(Effect.withErrorReporting(Effect.fail(new TypeError("refused"))));
+      }).pipe(
+        Effect.annotateLogs({ userId: "fixture-account", agentId: "a" }),
+        Effect.provide(Logger.layer([sentryLogger])),
+        Effect.provide(sentry.layer),
+      );
+      const [event] = sentOfType(sentry.sent, "event").map((item) => JSON.parse(item.text));
+      const [log] = sentOfType(sentry.sent, "log").flatMap((item) => JSON.parse(item.text).items);
+      assert.deepEqual(
+        {
+          eventUser: event.user,
+          eventCarries: [event.tags?.userId, event.extra?.userId],
+          logUser: log.attributes["user.id"]?.value,
+          logCarries: log.attributes.userId,
+        },
+        {
+          eventUser: { id: "fixture-account" },
+          eventCarries: [undefined, undefined],
+          logUser: "fixture-account",
+          logCarries: undefined,
+        },
+      );
+    }),
+);
+
+it.effect(
   "a stood service is captured once whether it fails or its runner cannot run it, and not when it is interrupted",
   () =>
     Effect.gen(function* () {

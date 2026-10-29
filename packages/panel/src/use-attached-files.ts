@@ -78,7 +78,7 @@ async function attachmentOf(file: File): Promise<FileRead> {
     (buffer) => new Uint8Array(buffer),
     (cause: unknown) => {
       // Note that a file this machine could not read is reported as it is said, since nothing named why.
-      reportShownFailure({ surface: FAILURE_SURFACE.ATTACHMENT_READ, cause });
+      reportShownFailure({ surface: FAILURE_SURFACE.ATTACHMENT_READ, cause }, Date.now());
       return undefined;
     },
   );
