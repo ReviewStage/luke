@@ -20,8 +20,8 @@
  * is told once (`native-wakeup-sweep.ts`), until `attempts` reaches the bound
  * the claim is handed, when the claim deletes it instead. An archived agent
  * takes no wakeup, so the claim deletes its wakeups too. A wakeup of an
- * agent on a child task of a pilot tree whose Running switch is off
- * (`readTreeStopped`) is held: not handed out, its next delivery moved on
+ * agent on a task of a pilot tree whose Running switch is off, its top task
+ * among them (`readTreeHeld`), is held: not handed out, its next delivery moved on
  * without counting an attempt, so it fires once Running is on again.
  */
 
@@ -31,7 +31,7 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { agentTable } from "../schemas/agent.js";
 import { agentWakeupTable } from "../schemas/agent-wakeup.js";
-import { readTreeStopped } from "./task-store.js";
+import { readTreeHeld } from "./task-store.js";
 
 type WakeupEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
 
@@ -144,14 +144,14 @@ const holdDelivery = SqlSchema.void({
     ),
 });
 
-/** The wakeups among those due whose agent works on a child task of a stopped pilot tree, each task read once as its account. */
+/** The wakeups among those due whose agent works on a task of a stopped pilot tree, each task read once as its account. */
 const heldOf = (due: readonly ClaimedAgentWakeup[]) =>
   Effect.gen(function* () {
     const stopped = new Map<string, boolean>();
     const held = new Set<string>();
     for (const { id, taskId, userId } of due) {
       if (taskId === null) continue;
-      if (!stopped.has(taskId)) stopped.set(taskId, yield* readTreeStopped(userId, taskId));
+      if (!stopped.has(taskId)) stopped.set(taskId, yield* readTreeHeld(userId, taskId));
       if (stopped.get(taskId) === true) held.add(id);
     }
     return held;

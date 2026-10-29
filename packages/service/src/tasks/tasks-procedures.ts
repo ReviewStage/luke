@@ -648,7 +648,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * A merge policy and the running switch are switched on a pilot task at
      * the top of its tree alone, and refused as an invalid request on any
      * other; one that moves is told to the task's pilot as the member's words
-     * once it is written (`pilot-switch-notice.ts`).
+     * once it is written (`pilot-switch-notice.ts`), but Running switched
+     * off, which stops the pilot with its tree (`running-tree.ts`) and tells
+     * it nothing.
      *
      * A plan is archived no longer; an archive an older build asks for
      * stops every coding agent of the plan first, as a Stop stops one, then
@@ -764,12 +766,15 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const { task: plan, txid, mergePolicyMoved, runningMoved } = task.value;
       // The pilot is told only of a switch that moved under the row's lock, so a repeat of the same switch wakes no one.
       if (mergePolicyMoved) yield* tellPilotOfMergePolicy(seams, request, writer, userId, taskId);
-      // The tree is stopped or resumed before its pilot is told, so the pilot wakes to the tree as the switch left it.
+      // The tree is resumed before its pilot is told, so the pilot wakes to the tree as the switch left it;
+      // switched off, the pilot is stopped with its tree and told nothing.
       if (runningMoved) {
-        yield* plan.running === true
-          ? resumeRunningTree(seams, writer, userId, taskId)
-          : stopRunningTree(seams, request, writer, userId, taskId);
-        yield* tellPilotOfRunning(seams, request, writer, userId, taskId);
+        if (plan.running === true) {
+          yield* resumeRunningTree(seams, writer, userId, taskId);
+          yield* tellPilotOfRunning(seams, request, writer, userId, taskId);
+        } else {
+          yield* stopRunningTree(seams, request, writer, userId, taskId);
+        }
       }
       return txid === undefined ? { plan } : { plan, txid };
     }),

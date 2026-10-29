@@ -77,7 +77,7 @@ import {
   taskListAnswerSchema,
 } from "@luke/features/task-wire";
 import { sentLineId } from "@luke/wire/host-ids";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { Clock, Duration, Effect, Option, Queue, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -480,7 +480,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a running switch is refused on a pilot task with a parent, and on a top pilot task is written and told to its pilot word for word, once per move",
+    "a running switch is refused on a pilot task with a parent, and on a top pilot task is written, switched on told to its pilot word for word, once per move, and switched off told to it not at all",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -516,8 +516,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         // The same switch again moves nothing, so the pilot hears nothing more.
         yield* switched(true);
         assert.equal(eve.sent.length, sends + 1);
-        yield* switched(false);
-        assert.deepEqual(told(sends + 1), [[`Bearer ${owner}`, sessionId, "Running is now off."]]);
+        assert.equal((yield* switched(false)).status, HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(told(sends + 1), []);
       }),
   );
 
@@ -560,32 +560,53 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         eve.sent
           .filter((each) => each.message.message === RESUME_WORDS)
           .map((each) => [each.authorization, each.sessionId]);
-      return { top, coder, switched, resumes };
+      /** The sessions eve was asked to cancel, in no order, since the switch stops a few at once. */
+      const cancelledSessions = () => new Set(eve.cancelled.map(([sessionId]) => sessionId));
+      /** The words the top pilot was sent since the count given, each message's last text part where a teammate's sender line leads it. */
+      const toldPilot = (from: number) =>
+        eve.sent
+          .slice(from)
+          .filter((each) => each.sessionId === top.sessionId)
+          .map(({ message }) =>
+            typeof message.message === "string"
+              ? message.message
+              : receiptOf(message.message).at(-1),
+          );
+      return { top, coder, switched, resumes, cancelledSessions, toldPilot };
     });
 
   it.effect(
-    "a top pilot task's Running switched off by a teammate stops the turn of an agent on its child task, on its starter's Mac, but leaves its pilot's; switched off again stops nothing; and switched on tells the stopped agent alone to carry on, as its starter's deployment",
+    "a top pilot task's Running switched off by a teammate stops the turn of an agent on its child task and its pilot's, both on their starter's Mac, telling the pilot nothing; switched off again stops nothing; a member's message still reaches the stopped pilot; and switched on tells the stopped agent alone to carry on, and wakes the pilot once, each as their starter's deployment",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { top, coder, switched, resumes } = yield* pilotTree(eve);
+        const { top, coder, switched, resumes, cancelledSessions, toldPilot } =
+          yield* pilotTree(eve);
         yield* joinWorkspace(top.task.workspaceId, top.other);
         yield* Database.use((db) =>
           db
             .update(agentTable)
             .set({ machine: AGENT_MACHINE.DEVICE })
-            .where(eq(agentTable.id, coder.agent.id)),
+            .where(inArray(agentTable.id, [coder.agent.id, top.agent.id])),
         );
         assert.equal(yield* switched(top.owner, true), HOSTED_HTTP_STATUS.OK);
+        const offAt = eve.sent.length;
 
         assert.equal(yield* switched(top.other, false), HOSTED_HTTP_STATUS.OK);
-        assert.deepEqual(eve.cancelled, [[coder.sessionId, "turn_0"]]);
+        assert.deepEqual(cancelledSessions(), new Set([coder.sessionId, top.sessionId]));
         assert.equal(yield* switched(top.other, false), HOSTED_HTTP_STATUS.OK);
-        assert.deepEqual(eve.cancelled, [[coder.sessionId, "turn_0"]]);
+        assert.equal(eve.cancelled.length, 2);
+        assert.deepEqual(toldPilot(offAt), [], "Running off tells the pilot nothing");
+        yield* top.sent("Split the invite email out.");
+        assert.deepEqual(toldPilot(offAt), ["Split the invite email out."]);
 
+        const onAt = eve.sent.length;
         assert.deepEqual(resumes(), []);
         assert.equal(yield* switched(top.other, true), HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(resumes(), [[deploymentFor(top.owner), coder.sessionId]]);
+        // The teammate's words reach no agent on its starter's Mac, so Luke wakes the pilot it stopped.
+        assert.deepEqual(toldPilot(onAt), ["Running is now on."]);
+        assert.equal(eve.sent.at(-1)?.authorization, deploymentFor(top.owner));
       }),
   );
 
@@ -594,10 +615,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve({ turnEnded: true });
-        const { top, coder, switched, resumes } = yield* pilotTree(eve);
+        const { top, coder, switched, resumes, cancelledSessions } = yield* pilotTree(eve);
         assert.equal(yield* switched(top.owner, true), HOSTED_HTTP_STATUS.OK);
         assert.equal(yield* switched(top.owner, false), HOSTED_HTTP_STATUS.OK);
-        assert.deepEqual(eve.cancelled, [[coder.sessionId, "turn_0"]]);
+        assert.deepEqual(cancelledSessions(), new Set([coder.sessionId, top.sessionId]));
 
         assert.equal(yield* switched(top.owner, true), HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(resumes(), []);

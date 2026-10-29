@@ -1,17 +1,19 @@
 /**
- * running-tree.ts -- a pilot tree's Running switched off stops every agent of the tree but its top pilot, and switched on resumes the ones it stopped.
+ * running-tree.ts -- a pilot tree's Running switched off stops every agent of the tree, its top pilot among them, and switched on resumes the ones it stopped.
  *
  * A pilot task's top task carries the tree's running switch (`task.running`),
  * which a member switches from the task's head (`tasks-procedures.ts`). Off,
  * every agent standing on a task of the tree, at any depth, has its turn
  * under way stopped as a member's Stop stops it (`stoppedTurn`), under the
- * switching member's authority, but the top task's own pilot, which keeps
- * talking to the developer while its tree is stopped. Each Stop eve took is
+ * switching member's authority, the top task's own pilot among them, which
+ * is told nothing of it: a note would only wake it again. Each Stop eve took is
  * written on its turn as the switch's (`turns.cancel_requested_for_running`), so no
  * starter is told of it (`starter-notices.ts`): the whole tree stopped at
  * once, and a pilot woken per agent would only start its tree again. On,
  * every agent whose newest turn the switch stopped is told to carry on by
- * Luke, once, under the key of the turn it resumes from; an agent the switch
+ * Luke, once, under the key of the turn it resumes from, but the top task's
+ * pilot, which the switch's own notice wakes (`pilot-switch-notice.ts`), so
+ * it is woken once rather than twice; an agent the switch
  * found idle, one whose turn ended before eve took the Stop, or one stopped
  * some other way, is left as it stands.
  *
@@ -50,17 +52,11 @@ const logged =
       failure: "error" in failure ? failure.error : failure._tag,
     });
 
-/** The agents of the top task `taskId`'s tree the switch governs: every one standing on it or under it, but the top task's own pilot. */
-const governedAgents = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  taskId: string,
-) {
-  const agents = yield* hostedStoreOrUnavailable(listAgentsOfTree(userId, taskId));
-  const pilot = pilotOf(agents.filter((agent) => agent.taskId === taskId));
-  return agents.filter((agent) => agent.id !== pilot?.id);
-});
+/** The agents of the top task `taskId`'s tree: every one standing on it or under it. */
+const treeAgents = (userId: string, taskId: string) =>
+  hostedStoreOrUnavailable(listAgentsOfTree(userId, taskId));
 
-/** Every agent of the top task `taskId`'s tree but its pilot stopped, as the member `userId`'s Stop stops each, a few at once. */
+/** Every agent of the top task `taskId`'s tree stopped, its pilot among them, as the member `userId`'s Stop stops each, a few at once. */
 export function stopRunningTree(
   reach: EveReach,
   request: Request,
@@ -68,7 +64,7 @@ export function stopRunningTree(
   userId: string,
   taskId: string,
 ) {
-  return governedAgents(userId, taskId).pipe(
+  return treeAgents(userId, taskId).pipe(
     Effect.flatMap((agents) =>
       Effect.forEach(
         agents,
@@ -107,7 +103,7 @@ const resumed = (
     });
   }).pipe(Effect.catch(logged("an agent was not resumed")));
 
-/** Every agent of the top task `taskId`'s tree, as the member `userId` reads it, whose newest turn the switch stopped told to carry on, a few at once. */
+/** Every agent of the top task `taskId`'s tree but its pilot, as the member `userId` reads it, whose newest turn the switch stopped told to carry on, a few at once. */
 export function resumeRunningTree(
   reach: EveReach,
   writer: Effect.Effect<StoreWriter>,
@@ -115,7 +111,10 @@ export function resumeRunningTree(
   taskId: string,
 ) {
   return Effect.gen(function* () {
-    const agents = yield* governedAgents(userId, taskId);
+    const tree = yield* treeAgents(userId, taskId);
+    // The pilot is woken by the switch's own notice, so it hears no resume beside it.
+    const pilot = pilotOf(tree.filter((agent) => agent.taskId === taskId));
+    const agents = tree.filter((agent) => agent.id !== pilot?.id);
     const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
     yield* Effect.forEach(
       agents,

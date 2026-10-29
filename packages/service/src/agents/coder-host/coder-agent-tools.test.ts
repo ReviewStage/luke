@@ -2570,7 +2570,7 @@ test("message_agent to a pilot a continue took over and archived reaches the pil
   assert.deepEqual(line?.metadata, { channel: MESSAGE_CHANNEL.AGENT_MESSAGE });
 });
 
-test("message_agent to an agent on a child task of a pilot tree whose Running switch is off is refused saying so, while the top task's pilot still hears, and reaches it once Running is on", async () => {
+test("message_agent to an agent on a pilot tree whose Running switch is off, on a child task or the top task's pilot, is refused saying so, and reaches it once Running is on", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const host = hostOf(true);
@@ -2606,12 +2606,17 @@ test("message_agent to an agent on a child task of a pilot tree whose Running sw
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: MESSAGE_AGENT_REFUSAL.TREE_STOPPED,
   });
-  const up = await directMessage(host, worker, pilot, eve.services, "call-up");
-  assert.equal(up.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(up));
+  assert.deepEqual(await directMessage(host, worker, pilot, eve.services, "call-up"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: MESSAGE_AGENT_REFUSAL.TREE_STOPPED,
+  });
+  assert.equal(eve.sent.length, 0, "a stopped tree's agents, its pilot among them, hear no agent");
   await setTop({ running: true });
   const down = await directMessage(host, pilot, worker, eve.services, "call-running");
+  const up = await directMessage(host, worker, pilot, eve.services, "call-running-up");
 
   assert.equal(down.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(down));
+  assert.equal(up.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(up));
 });
 
 test("a message to an agent whose session eve no longer runs opens a fresh session over its conversation rather than being refused, and settles the turn the ended session was running as failed for its session's end, once", async () => {

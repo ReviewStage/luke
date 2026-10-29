@@ -19,9 +19,9 @@
  * No ending is due a starter archived, one whose own newest turn failed, or
  * a member's operator, which hears of its member's agents through its own
  * notices (`operator-notices.ts`), so no ending wakes a starter that cannot
- * answer it or is told another way. An ending whose starter works on a child
- * task of a pilot tree whose Running switch is off (`readTreeStopped`) is
- * held: not due while the switch is off, and due again once it is on, for
+ * answer it or is told another way. An ending whose starter works on a task
+ * of a pilot tree whose Running switch is off, its top task among them
+ * (`readTreeHeld`), is held: not due while the switch is off, and due again once it is on, for
  * as long as the window still holds it.
  */
 
@@ -36,7 +36,7 @@ import { Database, type DatabaseServices, type QueryError } from "../core/query.
 import { agentTable } from "../schemas/agent.js";
 import { messages, standingLine, turns } from "../schemas/storage.js";
 import { agentAutomationNameSql } from "./agent-name.js";
-import { readTreeStopped } from "./task-store.js";
+import { readTreeHeld } from "./task-store.js";
 
 /** How a started agent's run ended without its finishing. */
 export const STARTER_NOTICE_ENDING = {
@@ -209,7 +209,7 @@ const findToldLines = SqlSchema.findAll({
     ),
 });
 
-/** The starters' tasks among the endings that are child tasks of a stopped pilot tree, each read once as its account. */
+/** The starters' tasks among the endings that are tasks of a stopped pilot tree, each read once as its account. */
 const stoppedStarterTasks = (endings: readonly DueStarterNotice[]) =>
   Effect.gen(function* () {
     const accountOf = new Map<string, string>();
@@ -220,7 +220,7 @@ const stoppedStarterTasks = (endings: readonly DueStarterNotice[]) =>
     }
     const stopped = new Set<string>();
     for (const [taskId, userId] of accountOf) {
-      if (yield* readTreeStopped(userId, taskId)) stopped.add(taskId);
+      if (yield* readTreeHeld(userId, taskId)) stopped.add(taskId);
     }
     return stopped;
   });
