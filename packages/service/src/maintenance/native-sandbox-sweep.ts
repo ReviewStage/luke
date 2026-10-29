@@ -41,7 +41,11 @@
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { RUNNER_LOST_DETAIL, settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
+import {
+  RUNNER_LOST_DETAIL,
+  runningTurnIds,
+  settleRunnerLostTurns,
+} from "@luke/database/models/abandoned-turns";
 import { readNativeRunStanding } from "@luke/database/models/agent-store";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
@@ -262,13 +266,20 @@ const settledLostRunner = (
   writer: Pick<StoreWriter, "consume">,
   sandbox: NativeSandbox,
   conversationId: string,
+  lostTurns: ReadonlySet<string>,
   runner: ExitedRunner & { readonly stderr: string | undefined },
   now: Date,
 ) =>
   Effect.gen(function* () {
     const { stderr } = runner;
     const detail = runnerLostDetail(runner.exit, stderr);
-    const turnIds = yield* settleRunnerLostTurns(writer, conversationId, now.getTime(), detail);
+    const turnIds = yield* settleRunnerLostTurns(
+      writer,
+      conversationId,
+      now.getTime(),
+      detail,
+      lostTurns,
+    );
     // Note that a turn cancelled by its Stop, or one the writer refused, is no runner lost to report.
     if (turnIds.length === 0) return;
     const lost = new RunnerLost({
@@ -386,13 +397,15 @@ const endSandbox = (
     if (Option.isSome(going)) {
       const exited = yield* exitedRunner(api, sandbox);
       if (exited === undefined) return SANDBOX_ENDING.LEFT;
+      // The turns open once the runner was seen gone, so a turn queued since is not failed for it.
+      const lostTurns = new Set(yield* runningTurnIds(going.value));
       const stderr = yield* lostRunnerStderr(api, sandbox, exited.commandId);
       // Read again just before the settle, so a message that relaunched the runner since keeps its turn.
       if (Option.isNone(yield* runGoesOn(sandbox))) return SANDBOX_ENDING.LEFT;
       if ((yield* exitedRunner(api, sandbox))?.commandId !== exited.commandId) {
         return SANDBOX_ENDING.LEFT;
       }
-      yield* settledLostRunner(writer, sandbox, going.value, { ...exited, stderr }, now);
+      yield* settledLostRunner(writer, sandbox, going.value, lostTurns, { ...exited, stderr }, now);
       return SANDBOX_ENDING.LOST;
     }
     if (Option.isNone(yield* runEnded(sandbox, now))) return SANDBOX_ENDING.LEFT;
