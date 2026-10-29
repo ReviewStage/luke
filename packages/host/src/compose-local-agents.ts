@@ -880,7 +880,11 @@ export function composeLocalAgents(
               // Note that how it ended is kept before the runner is let go of, so a beat that settles it first carries its exit code.
               endings.set(line.id, ending);
               runners.delete(agentId);
-              yield* Scope.close(runnerScope, Exit.void);
+              // Note that the launch is starting again while its scope closes, since the VM's stop outlasts a beat and no beat may settle the launch before it has said whether the stop failed.
+              starting.add(line.id);
+              yield* Scope.close(runnerScope, Exit.void).pipe(
+                Effect.ensuring(Effect.sync(() => starting.delete(line.id))),
+              );
               // Note that a launch whose VM would not stop stays kept, which every beat stops again before it settles (`vmLetGo`).
               if (unstopped.has(line.id)) return;
               yield* settledLaunch(line.id, ending);

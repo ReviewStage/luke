@@ -45,7 +45,13 @@ uninstall_darwin() {
     exit 1
   fi
   app="$home/$MAC_APP_FOLDER"
-  launchctl bootout "gui/$(id -u "$user")/$MAC_LABEL" >/dev/null 2>&1 || true
+  agent="gui/$(id -u "$user")/$MAC_LABEL"
+  launchctl bootout "$agent" >/dev/null 2>&1 || true
+  # Note that nothing is removed while the LaunchAgent is still loaded, since its daemon and its agents' runners would run on with their folders gone.
+  if launchctl print "$agent" >/dev/null 2>&1; then
+    printf 'Could not stop Luke host for %s, so nothing was removed. Stop it with launchctl bootout %s, then run this again.\n' "$user" "$agent" >&2
+    exit 1
+  fi
   rm -f "$home/Library/LaunchAgents/$MAC_LABEL.plist"
   for smolvm in "$app"/state/agent-tools/smolvm/*/smolvm; do
     [ -x "$smolvm" ] || continue

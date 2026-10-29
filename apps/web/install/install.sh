@@ -112,6 +112,9 @@ BOOT_WORKLOAD_USER="0:0"
 BOOT_WAIT_SECONDS=180
 # How long stopping or deleting the throwaway machine may take.
 BOOT_CLEANUP_SECONDS=60
+# How long a command `timeout` signalled, at its deadline or on an interrupt it
+# was handed, has to end before `timeout` kills it.
+TIMEOUT_KILL_SECONDS=10
 
 if [ -t 1 ]; then
   CHECK="$(printf '\033[32m✓\033[0m')"
@@ -265,7 +268,7 @@ fail_unstarted() {
 smolvm_exec() {
   limit=""
   if [ "$1" = "--within" ]; then
-    command -v timeout >/dev/null 2>&1 && limit="timeout $2"
+    command -v timeout >/dev/null 2>&1 && limit="timeout -k $TIMEOUT_KILL_SECONDS $2"
     shift 2
   fi
   cd "$HOST_HOME" && exec runuser -u "$HOST_USER" -- env \
@@ -339,7 +342,7 @@ boot_run() {
 # would delete the machine.
 boot_interrupted() {
   trap - INT TERM
-  # Note that the step is waited out before the machine goes, since a create still finishing after the delete would leave the machine behind; `timeout` ends only once smolvm has.
+  # Note that the step is waited out before the machine goes, since a create still finishing after the delete would leave the machine behind; `timeout` ends only once smolvm has, killing it after TIMEOUT_KILL_SECONDS where it ignores the TERM it is relayed.
   if [ -n "$boot_job" ]; then
     kill "$boot_job" 2>/dev/null || true
     wait "$boot_job" 2>/dev/null || true

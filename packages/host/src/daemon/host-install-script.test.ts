@@ -11,8 +11,9 @@
  * touching the box or the network.
  */
 
-import { spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
+  createReadStream,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -501,6 +502,7 @@ describe("the host's install script", () => {
       const root = folder();
       const log = join(root, "smolvm.log");
       const started = join(root, "started");
+      execFileSync("mkfifo", [started]);
       const kvm = join(root, "kvm");
       writeFileSync(kvm, "");
       writeFileSync(join(bin, "runuser"), '#!/bin/sh\nshift 3\nexec "$@"\n', { mode: 0o755 });
@@ -511,8 +513,8 @@ describe("the host's install script", () => {
           "#!/bin/sh",
           'printf \'%s\\n\' "$*" >>"$SMOLVM_LOG"',
           'if [ "$2" = start ]; then',
-          '  : >"$SMOLVM_STARTED"',
-          "  exec sleep 60",
+          '  echo started >"$SMOLVM_STARTED"',
+          "  exec sleep 30",
           "fi",
           "",
         ].join("\n"),
@@ -539,12 +541,24 @@ describe("the host's install script", () => {
         },
       );
       const ended = new Promise<number | null>((resolve) => script.on("exit", resolve));
-      for (let tries = 0; tries < 500 && !existsSync(started); tries += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
-      expect(existsSync(started)).toBe(true);
+      try {
+        // Note that the fake VM's start writes to a pipe only once the test reads it, so the signal is sent as the start is under way, with no waiting on the clock.
+        await new Promise<void>((resolve, reject) => {
+          const reader = createReadStream(started);
+          reader.once("data", () => {
+            reader.destroy();
+            resolve();
+          });
+          reader.once("error", reject);
+          script.once("exit", () => reject(new Error("the boot check ended before its start")));
+        });
 
-      script.kill(signal);
+        script.kill(signal);
+      } catch (failure) {
+        // Note that a script a failed test left running is ended, so it holds nothing open.
+        script.kill("SIGKILL");
+        throw failure;
+      }
 
       expect(await ended).toBe(1);
       expect(readFileSync(log, "utf8").trim().split("\n").slice(-2)).toEqual([
@@ -555,11 +569,12 @@ describe("the host's install script", () => {
   );
 
   it.each([
-    { appHost: false, kept: false },
-    { appHost: true, kept: true },
+    { appHost: false, loaded: false, kept: false, status: 0 },
+    { appHost: true, loaded: false, kept: true, status: 0 },
+    { appHost: false, loaded: true, kept: true, status: 1 },
   ])(
-    "a Mac's uninstall removes the agents' folders under the installing user's home, never root's, and leaves the clones the desktop app shares, unless the Luke app's state is there (app state: $appHost)",
-    ({ appHost, kept }) => {
+    "a Mac's uninstall removes the agents' folders under the installing user's home, never root's, and leaves the clones the desktop app shares, unless the Luke app's state is there or the LaunchAgent will not stop (app state: $appHost, still loaded: $loaded)",
+    ({ appHost, loaded, kept, status }) => {
       const bin = folder();
       const home = folder();
       const rootHome = folder();
@@ -569,7 +584,7 @@ describe("the host's install script", () => {
         uname: "echo Darwin",
         id: '[ "$1" = -u ] && { [ -n "$2" ] && echo 501 || echo 0; }',
         dscl: `echo "NFSHomeDirectory: ${home}"`,
-        launchctl: "exit 0",
+        launchctl: `[ "$1" != print ] || exit ${loaded ? 0 : 1}`,
         sudo: "exit 0",
       })) {
         writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
@@ -590,7 +605,7 @@ describe("the host's install script", () => {
         encoding: "utf8",
       });
 
-      expect(answer.status).toBe(0);
+      expect(answer.status).toBe(status);
       expect(existsSync(join(home, ".luke/agents"))).toBe(kept);
       expect(existsSync(join(home, ".luke/clones"))).toBe(true);
       expect(existsSync(join(home, ".luke/keep"))).toBe(true);
