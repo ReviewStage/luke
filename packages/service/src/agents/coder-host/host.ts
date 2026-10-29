@@ -841,7 +841,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const failureDetail = failed === undefined ? undefined : failureDetailOf(failed);
         if (failureDetail !== undefined) {
           yield* reportUnexpected(TURN_FAILURE.SESSION_ENDED, {
-            sandboxSessionId: sessionId,
+            sessionId,
+            failure: TURN_FAILURE.SESSION_ENDED,
             failureDetail,
           });
         }
@@ -860,7 +861,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
             `The turn of ended session ${sessionId} was not settled: ${causeKind(cause)}`,
           ),
         ),
-        Effect.annotateLogs({ sandboxSessionId: sessionId }),
+        Effect.annotateLogs({ sessionId }),
       ),
 
     relayChild: (event, session, state) =>
@@ -956,6 +957,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           sessionId: session.id,
           target: admitted.target,
           turn: opened,
+          ...(agent !== undefined ? { agentId: agent.id } : undefined),
           ...(model !== undefined ? { model } : undefined),
           ...(agent !== undefined ? { reasoningEffort: agent.effort } : undefined),
           ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),

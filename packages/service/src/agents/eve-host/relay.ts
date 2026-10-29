@@ -179,6 +179,8 @@ export function memoryRelayState(initial: RelayState = EMPTY_RELAY_STATE): Relay
 export interface RelayStanding {
   readonly sessionId: string;
   readonly target: ConversationTarget;
+  /** The coding agent whose conversation the session records into, which the relay's log lines name; nothing where the caller holds none. */
+  readonly agentId?: string;
   /** The kind of turn the request that opened the current turn named; nothing when it named none. */
   readonly turn: RelayTurn | undefined;
   /** The model eve resolved the session's turns to, as the turn row records it; nothing where none is known. */
@@ -323,7 +325,8 @@ export function failureDetailOf(data: EveFailure): string {
   const keys = Object.keys(data.details ?? {})
     .sort()
     .join(",");
-  if (keys) words.push(`[${keys.slice(0, FAILURE_DETAIL_BOUNDS.KEYS_CHARS)}]`);
+  // eve's keys are its own names, but are redacted too, since the detail is logged and reported as well as kept.
+  if (keys) words.push(`[${redactCredentials(keys).slice(0, FAILURE_DETAIL_BOUNDS.KEYS_CHARS)}]`);
   const fixed = Option.getOrUndefined(readFailureDetailWords(data.details));
   for (const field of FAILURE_DETAIL_FIELDS) {
     const value = fixed?.[field];
@@ -703,7 +706,8 @@ export class StreamRelay {
         : Effect.andThen(this.#landDue(eveTurnId, event.type, standing), read);
     const ids = {
       conversationId: standing.target.conversationId,
-      sandboxSessionId: standing.sessionId,
+      sessionId: standing.sessionId,
+      ...(standing.agentId !== undefined ? { agentId: standing.agentId } : undefined),
       ...(eveTurnId !== undefined
         ? { turnId: hostTurnId(standing.sessionId, eveTurnId) }
         : undefined),
@@ -716,7 +720,7 @@ export class StreamRelay {
           Effect.andThen(
             reportUnexpected(RELAY_STORE_FAILURE, { ...ids, error: failureKind(failure) }),
           ),
-          Effect.annotateLogs({ failure: TURN_FAILURE.PERSISTENCE }),
+          Effect.annotateLogs({ reason: RELAY_STORE_FAILURE }),
         ),
       ),
       Effect.annotateLogs(ids),
@@ -1215,11 +1219,12 @@ export class StreamRelay {
   ): RelayEffect<void> {
     return Effect.gen({ self: this }, function* () {
       const turn = standing.state.get().turns[eveTurnId];
-      // A failure eve tells of a turn the relay holds nothing of, never started here or already sealed, is said rather than dropped.
+      // Note that a failure eve tells of a turn the relay holds nothing of is said rather than dropped, at
+      // info, because it is most often eve's replay of an end already sealed rather than a turn never started here.
       if (!turn) {
         if (ended === RUN_STATUS.FAILED) {
-          yield* this.#seams.report(
-            `A failed end of turn ${eveTurnId}, which the relay does not hold, is not recorded: ${failureDetail ?? "no detail"}`,
+          yield* Effect.logInfo(
+            `A failed end of a turn the relay holds nothing of, sealed already or never started here, is not relayed: ${failureDetail ?? "no detail"}`,
           );
         }
         return;

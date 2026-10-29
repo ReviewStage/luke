@@ -249,7 +249,9 @@ function abandonedSaid(turn: LostTurn, startedAt: Date | null, now: number) {
   return Effect.logError(`a turn ran past its bound with no end heard and was settled abandoned`, {
     ranMs,
   }).pipe(
-    Effect.andThen(reportUnexpected(TURN_FAILURE.ABANDONED, { ...ids, ranMs })),
+    Effect.andThen(
+      reportUnexpected(TURN_FAILURE.ABANDONED, { ...ids, failure: TURN_FAILURE.ABANDONED, ranMs }),
+    ),
     Effect.annotateLogs({ ...ids, failure: TURN_FAILURE.ABANDONED }),
   );
 }

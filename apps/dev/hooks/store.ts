@@ -258,7 +258,7 @@ export default defineHook({
               state.update((held) => ({ ...held, unadmittedSaid: true }));
               yield* Effect.logWarning(
                 `The events of a session not admitted are dropped: ${admitted.failure}`,
-              ).pipe(Effect.annotateLogs({ sandboxSessionId: ctx.session.id }));
+              ).pipe(Effect.annotateLogs({ sessionId: ctx.session.id }));
               return;
             }
             yield* host.relay(event, admitted.success, ctx.session, state, prompt.get());

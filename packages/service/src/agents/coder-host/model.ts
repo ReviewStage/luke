@@ -251,7 +251,7 @@ function accountKeyMiddleware(standing: AccountKeyStanding): LanguageModelMiddle
           : CODER_REFUSAL.ACCOUNT_KEY_NO_QUOTA;
       await standing.said(
         Effect.logError(`The provider refused the account's own key: ${cause}`).pipe(
-          Effect.annotateLogs({ failure: status }),
+          Effect.annotateLogs({ reason: status }),
         ),
       );
       // Note that the cause is the provider's words alone, never the error, which carries the request's body.

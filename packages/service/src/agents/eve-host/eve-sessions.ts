@@ -463,7 +463,7 @@ const SERVER_ERROR_STATUS = 500;
 /** The ids a call to eve holds, which its log lines carry. */
 interface EveCallIds {
   readonly conversationId: string;
-  readonly sandboxSessionId?: string;
+  readonly sessionId?: string;
 }
 
 /**
@@ -481,7 +481,7 @@ function refusalSaid({ status, body }: EveAnswer, ids: EveCallIds): Effect.Effec
         ? reportUnexpected(EVE_REFUSED, { ...ids, status, body: words })
         : Effect.void,
     ),
-    Effect.annotateLogs({ ...ids, failure: EVE_SEND_OUTCOME.FAILED }),
+    Effect.annotateLogs({ ...ids, reason: EVE_SEND_OUTCOME.FAILED }),
   );
 }
 
@@ -566,7 +566,7 @@ function sessionsOver<Turn extends EveHostTurn>(
     // The not-ready follow-up is tried again on the schedule above, and one still not ready past
     // its last wait is the not-ready the caller reads; an unreachable eve is retried nowhere.
     send: (sessionId, message) => {
-      const ids = { conversationId: message.conversationId, sandboxSessionId: sessionId };
+      const ids = { conversationId: message.conversationId, sessionId: sessionId };
       return post(sessionPath(mount, sessionId), turnHeaders(message), {
         message: message.message,
       }).pipe(
@@ -582,7 +582,7 @@ function sessionsOver<Turn extends EveHostTurn>(
         Effect.catchTag("EveSessionNotReady", () =>
           Effect.as(
             Effect.logError("eve's session was still not ready past the follow-up's retries").pipe(
-              Effect.annotateLogs({ ...ids, failure: EVE_SEND_OUTCOME.NOT_READY }),
+              Effect.annotateLogs({ ...ids, reason: EVE_SEND_OUTCOME.NOT_READY }),
             ),
             { outcome: EVE_SEND_OUTCOME.NOT_READY },
           ),
