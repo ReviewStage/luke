@@ -1252,6 +1252,76 @@ export function readTaskHeader(
   );
 }
 
+/** A task's merge policy, its parent, and its workspace, which is all the walk up to its top task reads. */
+const MergePolicyRowSchema = Schema.Struct({
+  organizationId: Schema.String,
+  parentTaskId: Schema.NullOr(Schema.String),
+  mergePolicy: mergePolicySchema,
+});
+
+const MERGE_POLICY_COLUMNS = {
+  organizationId: task.organizationId,
+  parentTaskId: task.parentTaskId,
+  mergePolicy: task.mergePolicy,
+};
+
+const findMergePolicyRow = SqlSchema.findOneOption({
+  Request: TaskKeySchema,
+  Result: MergePolicyRowSchema,
+  execute: ({ userId, taskId }) =>
+    Database.use((db) =>
+      db.select(MERGE_POLICY_COLUMNS).from(task).where(reachableTask(userId, taskId)).limit(1),
+    ),
+});
+
+const findAncestorMergePolicyRow = SqlSchema.findOneOption({
+  Request: Schema.Struct({ taskId: Schema.String, organizationId: Schema.String }),
+  Result: MergePolicyRowSchema,
+  execute: ({ taskId, organizationId }) =>
+    Database.use((db) =>
+      db
+        .select(MERGE_POLICY_COLUMNS)
+        .from(task)
+        .where(and(eq(task.id, taskId), eq(task.organizationId, organizationId)))
+        .limit(1),
+    ),
+});
+
+/**
+ * What becomes of the pull requests of a task's agents once their checks
+ * pass (`MERGE_POLICY`): the policy of the task's top task, found by walking
+ * `parent_task_id` up to the root, so one switch on the top task governs the
+ * whole tree and a child's own column is never read once it has a parent.
+ * Nothing for a task the account does not reach. The parents above it are
+ * read without a second reach check, but only within its workspace: a child
+ * is made under a parent of its own workspace, and one moved away since
+ * leaves the walk, and the policy of a task the account may not read, behind.
+ * A walk that meets a task it has already seen stops there, with that task's
+ * own policy, since the row constraint only refuses a task its own parent.
+ */
+export function readEffectiveMergePolicy(
+  userId: string,
+  taskId: string,
+): TaskStoreEffect<Option.Option<MergePolicy>> {
+  return Effect.gen(function* () {
+    const first = yield* findMergePolicyRow({ userId, taskId });
+    if (Option.isNone(first)) return Option.none();
+    const seen = new Set([taskId]);
+    let top = first.value;
+    while (top.parentTaskId !== null && !seen.has(top.parentTaskId)) {
+      seen.add(top.parentTaskId);
+      const parent = yield* findAncestorMergePolicyRow({
+        taskId: top.parentTaskId,
+        organizationId: first.value.organizationId,
+      });
+      // A parent whose row is gone, or in another workspace, leaves this one the top.
+      if (Option.isNone(parent)) break;
+      top = parent.value;
+    }
+    return Option.some(top.mergePolicy);
+  });
+}
+
 /**
  * The task as `readTask` reads it, held under the row's lock until the
  * enclosing transaction ends, so a save formatted from it is not crossed by
