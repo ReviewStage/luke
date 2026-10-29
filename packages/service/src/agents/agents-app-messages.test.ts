@@ -135,8 +135,8 @@ import type { SandboxStopReach } from "./session-sandboxes.js";
 
 /** What an agent a Stop halted is told when someone presses Start again, word for word. */
 const RESUME_WORDS =
-  "Work started again. Carry on where you stopped, and first re-read your pull request's " +
-  "reviews, comments, and checks, since nothing woke you while stopped.";
+  "Resume your work where you stopped, and first re-read your pull request's reviews, " +
+  "comments, and checks, since nothing woke you while stopped.";
 
 it.layer(getTestDB())("messaging a coding agent", (it) => {
   /** An agent started on the owner's task, its session claimed, and its first turn where asked. */
@@ -512,7 +512,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const on = yield* switched(true);
         assert.equal(on.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(on.body));
         assert.equal(readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.OK, on).plan.running, true);
-        assert.deepEqual(told(sends), [[`Bearer ${owner}`, sessionId, "Work started."]]);
+        assert.deepEqual(told(sends), [[`Bearer ${owner}`, sessionId, "Start work when ready."]]);
         // The same switch again moves nothing, so the pilot hears nothing more.
         yield* switched(true);
         assert.equal(eve.sent.length, sends + 1);
@@ -605,7 +605,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.equal(yield* switched(top.other, true), HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(resumes(), [[deploymentFor(top.owner), coder.sessionId]]);
         // The teammate's words reach no agent on its starter's Mac, so Luke wakes the pilot it stopped.
-        assert.deepEqual(toldPilot(onAt), ["Work started."]);
+        assert.deepEqual(toldPilot(onAt), ["Start work when ready."]);
         assert.equal(eve.sent.at(-1)?.authorization, deploymentFor(top.owner));
       }),
   );

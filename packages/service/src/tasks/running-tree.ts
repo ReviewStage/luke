@@ -39,8 +39,8 @@ import { pilotOf } from "./pilot-switch-notice.js";
 
 /** What an agent a Stop halted is told when someone presses Start again. */
 const RUNNING_RESUME_MESSAGE =
-  "Work started again. Carry on where you stopped, and first re-read your pull request's " +
-  "reviews, comments, and checks, since nothing woke you while stopped.";
+  "Resume your work where you stopped, and first re-read your pull request's reviews, " +
+  "comments, and checks, since nothing woke you while stopped.";
 
 /** How many agents the switch stops or tells at once: under the web pool's five connections, as a task's archive stops its agents. */
 const RUNNING_TREE_CONCURRENCY = 3;
