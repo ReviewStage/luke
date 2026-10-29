@@ -46,7 +46,7 @@ it.layer(getTestDB())("the release before the agent tables' rename", (it) => {
           returning "id", "context_window" as "contextWindow"`;
         const agentId = started?.id ?? assert.fail("the agent was not written");
         // A column the statement left to its default takes the table's own.
-        assert.equal(started.contextWindow, CONTEXT_WINDOW.LONG);
+        assert.equal(started?.contextWindow, CONTEXT_WINDOW.LONG);
         assert.equal(
           Option.getOrThrow(yield* readAgent(userId, agentId)).conversationId,
           conversationId,
