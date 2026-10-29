@@ -91,7 +91,7 @@ component, factored out of the surface where it builds the box by hand.
   traces. And an automation webhook secret may be shown once, in the window that
   minted it, at creation or rotation; never anywhere else. And a host install
   token may be shown once, in the window that minted it, inside the install
-  command or the setup prompt; never anywhere else. And an agent's cloud browser, a
+  command; never anywhere else. And an agent's cloud browser, a
   Chromium in that agent's own Vercel Sandbox, shows its pages, their live-view
   frames, address, title, screenshots, and text snapshots to that agent and its
   workers, the model, the agent's transcript, and the panels of the workspace
