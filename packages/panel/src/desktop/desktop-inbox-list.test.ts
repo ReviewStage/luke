@@ -1075,7 +1075,7 @@ test("one column wide, an answered item that To do draws no row for shows no cou
   layOut(page, 800);
   assert.equal(readTitle(page), "How is a failed email retried?");
   assert.equal(pagerOf(page), null, "no row, so no count");
-  assert.equal(arrowNamed(page, "Previous item").disabled, true);
+  assert.equal(arrowNamed(page, "Previous item").getAttribute("aria-disabled"), "true");
   act(() => arrowNamed(page, "Next item").click());
   assert.deepEqual([readTitle(page), pagerOf(page)], ["Alert at 80%?", "2 of 2"]);
 });

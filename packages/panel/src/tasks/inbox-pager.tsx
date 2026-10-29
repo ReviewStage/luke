@@ -242,7 +242,7 @@ export function useInboxPager(
   return { pager, direction };
 }
 
-/** The pager at the end of an item's bar: "2 of 8" where the item has a row, then the arrows up and down the list, each naming its key, stepped back where there is nowhere to go. */
+/** The pager at the end of an item's bar: "2 of 8" where the item has a row, then the arrows up and down the list, each naming its key, stepped back where there is nowhere to go. Note that an arrow stepped back keeps the keyboard, because a step that reaches an end leaves focus on it. */
 export function InboxPagerControls({ pager }: { pager: InboxPager }): React.JSX.Element {
   return (
     <div className="inbox-pager flex items-center">
@@ -256,6 +256,7 @@ export function InboxPagerControls({ pager }: { pager: InboxPager }): React.JSX.
           icon={<ChevronUpIcon />}
           label="Previous item"
           disabled={pager.onPrevious === undefined}
+          focusableWhenDisabled
           onClick={pager.onPrevious}
         />
       </Tooltip>
@@ -264,6 +265,7 @@ export function InboxPagerControls({ pager }: { pager: InboxPager }): React.JSX.
           icon={<ChevronDownIcon />}
           label="Next item"
           disabled={pager.onNext === undefined}
+          focusableWhenDisabled
           onClick={pager.onNext}
         />
       </Tooltip>
