@@ -14,6 +14,7 @@ import {
 import { type SentryCapture, sentryReporterLayer } from "@luke/features/sentry-reporting";
 import { SENTRY_TRACES_SAMPLE_RATE } from "@luke/features/sentry-tracing";
 import { type RunMode, sentryReportingEnabled } from "@luke/host";
+import type { LargeActPortMessage } from "@luke/host/act-port";
 import type { EffectDesktopService } from "@luke/host/desktop-service";
 import type { SentryEnvironment } from "@luke/host/sentry-environment";
 import * as Sentry from "@sentry/electron/main";
@@ -113,6 +114,20 @@ function noteWorkingSetCrossing(crossing: WorkingSetCrossing): void {
     level: "warning",
     message: "A window's working set crossed its bound",
     data: { document: crossing.document, working_set_bytes: crossing.workingSetBytes },
+  });
+}
+
+/**
+ * A large message main sent a window's act port, left as a breadcrumb for
+ * whatever is reported next: a freeze the window reports as it reads it
+ * then names the act it answered or the push it carried, and its length.
+ */
+export function noteLargeActPortMessage(message: LargeActPortMessage): void {
+  Sentry.addBreadcrumb({
+    category: "act-port",
+    level: "info",
+    message: "A large message was sent to a window's act port",
+    data: { procedure: message.procedure, push: message.push, length: message.length },
   });
 }
 

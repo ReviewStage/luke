@@ -28,6 +28,7 @@ import {
 } from "electron";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
+import { noteLargeActPortMessage } from "../services/telemetry-service";
 import { windowPushes } from "../window/window-pushes";
 import { macTerminalProcedures } from "./mac-terminal-acts";
 import { whenPageGone } from "./page-gone";
@@ -200,6 +201,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     ipcMain,
     trustedSender: windows.trustedSender,
     senderOf: (sender) => ({ sender, panel: panels.owns(sender) }),
+    noteLargeMessage: noteLargeActPortMessage,
     actPort: createActPortHandler(
       {
         account: {

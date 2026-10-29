@@ -1,4 +1,9 @@
-import type { ActPortHandler, ActSender } from "@luke/host/act-port";
+import {
+  type ActPortHandler,
+  type ActSender,
+  type LargeActPortMessage,
+  noteLargeActPortMessages,
+} from "@luke/host/act-port";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import {
   ACT_PORT,
@@ -38,6 +43,8 @@ export interface BridgeHostDependencies {
   senderOf: (sender: WebContents) => ActSender<WebContents>;
   /** The act port's server, which every window's port is upgraded with. */
   actPort: ActPortHandler<WebContents>;
+  /** Where a large message sent to a window's act port is noted, so a freeze the window reports next names it. */
+  noteLargeMessage: (message: LargeActPortMessage) => void;
   /** The desktop runtime's own services, which every act port procedure's effect runs on. */
   services: Context.Context<never>;
   reports: ReportHandlers;
@@ -56,8 +63,16 @@ type ErasedHandler = (context: BridgeContext, ...args: never[]) => unknown;
  * composition and its start.
  */
 export function registerBridgeHost(dependencies: BridgeHostDependencies): void {
-  const { ipcMain, trustedSender, senderOf, actPort, services, reports, snapshotFor } =
-    dependencies;
+  const {
+    ipcMain,
+    trustedSender,
+    senderOf,
+    actPort,
+    noteLargeMessage,
+    services,
+    reports,
+    snapshotFor,
+  } = dependencies;
 
   // A window's act port, which its preload forwards once per page (oRPC's
   // Electron adapter). Note that every port is upgraded, a frame this build
@@ -68,7 +83,7 @@ export function registerBridgeHost(dependencies: BridgeHostDependencies): void {
     const [port] = event.ports;
     // Note that we take a top frame's port alone, because a child frame can load a trusted page.
     if (port === undefined || event.senderFrame?.parent !== null) return;
-    actPort.upgrade(port, {
+    actPort.upgrade(noteLargeActPortMessages(port, noteLargeMessage), {
       context: () => ({
         actor: senderOf(event.sender),
         trusted: trustedSender(event),
