@@ -1211,64 +1211,69 @@ function ServersPopover({
   );
 
   /** `run_on_mac`'s page over Luke's: back, its name, whether it is on, what it does, and where it is off, why, and the fix where there is one. */
-  const runOnMacPage = (reason: RunOnMacReason | undefined) => (
-    <div className="agent-servers-tool-page flex min-h-0 flex-col">
-      <div className={SERVER_PAGE_HEAD_CLASS}>
-        <BackButton
-          label={LUKE_WORDS.TOOLS}
-          place={LUKE_WORDS.TOOLS}
-          command={NO_BACK_KEY}
-          keepFocus
-          onBack={closeLukeTool}
-        />
-        <OneLine
-          className="agent-servers-page-title font-mono text-caption-inline text-foreground"
-          words={AGENT_TOOL.RUN_ON_MAC}
-        >
-          {AGENT_TOOL.RUN_ON_MAC}
-        </OneLine>
-        <span className={SERVER_END_CLASS}>
-          <RunOnMacBadge luke={luke} />
-        </span>
-      </div>
-      {/* The page's one scroller, focused by script so its keys scroll it as any focused scroller's do. */}
-      <ScrollArea ref={toolBody} tabIndex={-1} onKeyDown={onLukeToolKey}>
-        <div className="flex flex-col gap-block-gap px-list-inset pt-row-inset pb-list-inset">
-          <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {RUN_ON_MAC_DESCRIPTION}
-          </Text>
-          {reason === undefined ? null : (
-            <Banner
-              look={BANNER_LOOK.CARD}
-              tone={STATUS_TONE.ATTENTION}
-              glyph={<CircleAlertIcon />}
-              actions={
-                reason === RUN_ON_MAC_REASON.SETTINGS_OFF ? (
-                  <Button
-                    variant={BUTTON_VARIANT.OUTLINE}
-                    keepFocus
-                    onClick={() => {
-                      onClose();
-                      openSettings({ page: SETTINGS_VIEW.THIS_MAC });
-                    }}
-                  >
-                    {OPEN_SETTINGS_LABEL}
-                  </Button>
-                ) : undefined
-              }
-            >
-              <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.LABEL}>
-                {RUN_ON_MAC_REASON_WORDS[reason].short}
-              </Text>
-              <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-                {runOnMacDetail(reason, luke.answer?.runOnMac)}
-              </Text>
-            </Banner>
-          )}
+  const runOnMacPage = (reason: RunOnMacReason | undefined) => {
+    const detail = reason === undefined ? undefined : runOnMacDetail(reason, luke.answer?.runOnMac);
+    return (
+      <div className="agent-servers-tool-page flex min-h-0 flex-col">
+        <div className={SERVER_PAGE_HEAD_CLASS}>
+          <BackButton
+            label={LUKE_WORDS.TOOLS}
+            place={LUKE_WORDS.TOOLS}
+            command={NO_BACK_KEY}
+            keepFocus
+            onBack={closeLukeTool}
+          />
+          <OneLine
+            className="agent-servers-page-title font-mono text-caption-inline text-foreground"
+            words={AGENT_TOOL.RUN_ON_MAC}
+          >
+            {AGENT_TOOL.RUN_ON_MAC}
+          </OneLine>
+          <span className={SERVER_END_CLASS}>
+            <RunOnMacBadge luke={luke} />
+          </span>
         </div>
-      </ScrollArea>
-    </div>
-  );
+        {/* The page's one scroller, focused by script so its keys scroll it as any focused scroller's do. */}
+        <ScrollArea ref={toolBody} tabIndex={-1} onKeyDown={onLukeToolKey}>
+          <div className="flex flex-col gap-block-gap px-list-inset pt-row-inset pb-list-inset">
+            <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {RUN_ON_MAC_DESCRIPTION}
+            </Text>
+            {reason === undefined ? null : (
+              <Banner
+                look={BANNER_LOOK.CARD}
+                tone={STATUS_TONE.ATTENTION}
+                glyph={<CircleAlertIcon />}
+                actions={
+                  reason === RUN_ON_MAC_REASON.SETTINGS_OFF ? (
+                    <Button
+                      variant={BUTTON_VARIANT.OUTLINE}
+                      keepFocus
+                      onClick={() => {
+                        onClose();
+                        openSettings({ page: SETTINGS_VIEW.THIS_MAC });
+                      }}
+                    >
+                      {OPEN_SETTINGS_LABEL}
+                    </Button>
+                  ) : undefined
+                }
+              >
+                <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.LABEL}>
+                  {RUN_ON_MAC_REASON_WORDS[reason].short}
+                </Text>
+                {detail === undefined ? null : (
+                  <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                    {detail}
+                  </Text>
+                )}
+              </Banner>
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+    );
+  };
 
   const toolPage = (row: ServerRow, shown: IntegrationTool) => (
     <div className="agent-servers-tool-page">
