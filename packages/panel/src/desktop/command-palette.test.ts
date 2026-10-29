@@ -315,6 +315,7 @@ const SETTINGS_PAGES = [
   "Account",
   "Workspace",
   "Agents",
+  "Hosts",
   "Integrations",
   "Skills",
   "Appearance",
