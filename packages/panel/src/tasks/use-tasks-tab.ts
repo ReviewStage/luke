@@ -21,6 +21,7 @@ import {
   type RepositoryPin,
   type Task,
   type TaskAgentPin,
+  type TaskMode,
   type TaskRunsOnRequest,
   type TaskStanding,
   type TaskStatus,
@@ -502,6 +503,8 @@ export interface NewTaskStart {
   /** The device Runs on chose, which a refusal names; none for the cloud. */
   readonly device?: MacOffer;
   readonly handed?: NewTaskAgent;
+  /** How the task is worked, where the card's choice named it while the Pilot experiment is on; by its agents otherwise. */
+  readonly mode?: TaskMode;
   /** What the card held as it pressed Start, which it opens again on where an agent's start is refused after the card closed. */
   readonly card?: NewTaskCardKept;
 }
@@ -2419,6 +2422,7 @@ export function useTasksTab(input: {
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
       ...(from.runsOn === undefined ? undefined : { runsOn: from.runsOn }),
+      ...(from.mode === undefined ? undefined : { mode: from.mode }),
       planning: false,
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
       ...(stays ? { quiet: true } : undefined),

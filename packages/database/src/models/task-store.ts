@@ -15,9 +15,11 @@ import {
   PLAN_ACTOR,
   type PlanLastEdit,
   type PlanSectionEdit,
+  TASK_MODE,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
+  type TaskMode,
   type TaskOrigin,
   type TaskPriority,
   type TaskRunsOn,
@@ -204,6 +206,8 @@ export interface NewTask {
   readonly origin?: TaskOrigin;
   /** Where its agents run; a sandbox where none is named. */
   readonly runsOn?: TaskRunsOnWrite;
+  /** How the task is worked, fixed as it starts; by its agents where none is named. */
+  readonly mode?: TaskMode;
 }
 
 /**
@@ -667,6 +671,7 @@ const TaskInsertSchema = Schema.Struct({
   organizationId: Schema.String,
   name: Schema.String,
   number: Schema.Number,
+  mode: taskModeSchema,
   status: taskStatusSchema,
   priority: taskPrioritySchema,
   assigneeId: Schema.NullOr(Schema.String),
@@ -694,6 +699,7 @@ function taskValues(write: typeof TaskInsertSchema.Type) {
     organizationId: write.organizationId,
     name: write.name,
     number: write.number,
+    mode: write.mode,
     status: write.status,
     completedAt: completedAtOf(write.status, write.now),
     priority: write.priority,
@@ -970,6 +976,7 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       deviceId: (started.runsOn ?? TASK_RUNS_IN_CLOUD).deviceId,
       document: "",
       brief: brief.length > 0 ? brief : null,
+      mode: started.mode ?? TASK_MODE.AGENT,
       status: started.status ?? TASK_STATUS.TODO,
       priority: started.priority ?? TASK_PRIORITY.NONE,
       assigneeId: started.assigneeId ?? null,

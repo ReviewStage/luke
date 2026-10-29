@@ -270,6 +270,9 @@ function agentStartsUnplanned(request: { agent?: TaskAgentStart; planning?: bool
  * unless `assigneeId` names a member of its workspace. Its agents run in the
  * cloud unless `runsOn` names one of the starter's devices, kept on the task
  * before the agent the start asks for starts, so that agent runs there too.
+ * A task is worked by its agents unless `mode` names a pilot, which the
+ * service refuses from an account without the Pilot experiment, and which
+ * stands as the task was started.
  * A released desktop may still send `linearIssueId` or `issues`, from when a
  * task could link issues, which are accepted and ignored.
  */
@@ -290,6 +293,7 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(taskAssigneeIdSchema),
+  mode: EffectSchema.optionalKey(taskModeSchema),
 }).check(EffectSchema.makeFilter(agentStartsUnplanned));
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
