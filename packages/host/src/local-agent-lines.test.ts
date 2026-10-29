@@ -36,7 +36,7 @@ import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
-import { readLocalAgentState } from "./local-agent-state.js";
+import { type AgentSave, readLocalAgentState } from "./local-agent-state.js";
 import { sealAgentState } from "./node/agent-state-seal.js";
 import { fakeSandbox, VM_EXEC } from "./testing/fake-sandbox.js";
 import { type Script, scriptedSpawner } from "./testing/scripted-spawner.js";
@@ -271,27 +271,49 @@ function opened(bundle: Uint8Array): string {
 
 /**
  * The follower on a host that saves its agents' state, one launch line
- * handed once, whose runner ends at once: its VM's pack writes the pack and
- * names its base, or answers as the script given, and its verify passes;
- * the store refuses as many uploads as `uploadsRefused` says before it
- * takes one. With what happened in order (the VM's state commands, its
- * delete, the uploads and the commits), the bodies the service took, the
- * bytes the store took, the folder, the device's record of the agent's
- * saves, what waits for the launch's settle, and whether the device has
- * said a save landed, which it says once it has recorded it.
+ * handed once unless `launches` says none, whose runner ends at once: its
+ * VM's pack writes the pack and names its base, or answers as the script
+ * given, and its verify passes; the store refuses as many uploads as
+ * `uploadsRefused` says before it takes one. The device's state holds the
+ * agent's record given from before, and a bundle of the agent's with no
+ * record naming it where `strayBundle` says, as a run that could not write
+ * its record leaves one. With what happened in order (the VM's state
+ * commands, its delete, the uploads and the commits), the bodies the
+ * service took, the bytes the store took, the folder, the device's record
+ * of the agent's saves, what waits for the launch's settle and for the
+ * device's first beat, and whether the device has said a save landed,
+ * which it says once it has recorded it.
  */
-const saving = (options: { readonly pack?: Script; readonly uploadsRefused?: number } = {}) =>
+const saving = (
+  options: {
+    readonly pack?: Script;
+    readonly uploadsRefused?: number;
+    readonly launches?: false;
+    readonly record?: AgentSave;
+    readonly strayBundle?: true;
+  } = {},
+) =>
   Effect.gen(function* () {
     const root = yield* temporaryDirectoryScoped("luke-agent-saves-");
     const home = path.join(root, "home");
     const stateRoot = path.join(root, "state");
+    const bundle = path.join(stateRoot, "agent-state", AGENT_ID);
     const layout = deviceAgentLayout(home, AGENT_ID);
+    const fileSystem = yield* FileSystem.FileSystem;
+    yield* fileSystem.makeDirectory(path.dirname(bundle), { recursive: true });
+    if (options.record !== undefined) {
+      const saves = { [AGENT_ID]: options.record };
+      const state = JSON.stringify({ devices: {}, launches: [], saves });
+      yield* fileSystem.writeFileString(path.join(stateRoot, "local-agents.json"), state);
+    }
+    if (options.strayBundle === true) yield* fileSystem.writeFileString(bundle, "sealed");
     const happened: string[] = [];
     const saves: unknown[] = [];
     const commits: unknown[] = [];
     const uploads: Uint8Array[] = [];
     const reported: string[] = [];
     const launchSettled = Deferred.makeUnsafe<void>();
+    const beaten = Deferred.makeUnsafe<void>();
     let refusing = options.uploadsRefused ?? 0;
     let linesRead = 0;
     const fetchLike = async (url: string | URL | Request, init?: RequestInit) => {
@@ -304,7 +326,9 @@ const saving = (options: { readonly pack?: Script; readonly uploadsRefused?: num
       const body = init?.body === undefined ? {} : JSON.parse(String(init.body));
       switch (pathname) {
         case HOSTED_SERVICE_PATH.DEVICE_AGENT_DEVICES:
+          return json({ done: true });
         case HOSTED_SERVICE_PATH.DEVICE_AGENT_PRESENCE:
+          Deferred.doneUnsafe(beaten, Exit.void);
           return json({ done: true });
         case HOSTED_SERVICE_PATH.DEVICE_AGENT_LINE_CLAIM:
           return json({
@@ -324,7 +348,9 @@ const saving = (options: { readonly pack?: Script; readonly uploadsRefused?: num
             if (body.id === LAUNCH.id) Deferred.doneUnsafe(launchSettled, Exit.void);
             return json({ done: true });
           }
-          return linesRead++ === 0 ? json({ lines: [LAUNCH] }) : held();
+          return linesRead++ === 0
+            ? json({ lines: options.launches === false ? [] : [LAUNCH] })
+            : held();
         case HOSTED_SERVICE_PATH.DEVICE_AGENT_STATE_SAVE:
           saves.push(body);
           return json({
@@ -415,9 +441,10 @@ const saving = (options: { readonly pack?: Script; readonly uploadsRefused?: num
       commits,
       uploads,
       layout,
-      bundle: path.join(stateRoot, "agent-state", AGENT_ID),
+      bundle,
       saveRecord,
       launchSettled: Deferred.await(launchSettled),
+      beaten: Deferred.await(beaten),
       saved: () => reported.some((line) => line.includes("saved as generation")),
     };
   });
@@ -502,6 +529,41 @@ it.effect(
         assert.deepEqual(saves, []);
         assert.equal(yield* fileSystem.exists(layout.folder), true);
         assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, unsaved: { why: OVER_CAP } });
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a launch naming no saved state, Luke's having expired, starts the agent's next save afresh rather than from the generation it last recorded",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { saves, saveRecord, launchSettled } = yield* saving({
+          record: { userId: DEVICE_ID, generation: 4 },
+        });
+        yield* launchSettled;
+
+        assert.deepEqual(saves, [{ deviceId: DEVICE_ID, agentId: AGENT_ID, fromGeneration: null }]);
+        assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, generation: 1 });
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a bundle no record names, as a run that could not write its record leaves, is let go of as the gate opens and its agent recorded as unsaved",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { bundle, saveRecord, beaten } = yield* saving({
+          launches: false,
+          record: { userId: DEVICE_ID, generation: 2 },
+          strayBundle: true,
+        });
+        yield* beaten;
+
+        const fileSystem = yield* FileSystem.FileSystem;
+        assert.equal(yield* fileSystem.exists(bundle), false);
+        assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, generation: 2, unsaved: {} });
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );

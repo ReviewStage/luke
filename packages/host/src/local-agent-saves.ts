@@ -47,8 +47,9 @@ import {
  * bundle to the one upload it was granted, and commits it; the generation
  * kept is recorded (`local-agent-state.ts`' `AgentSave`), and the next save
  * starts from it. A launch naming a newer generation than the record, as
- * one queued after a save landed, moves the record up; a save refused as
- * stale lets the record go, so the next launch's names the newest.
+ * one queued after a save landed, moves the record up, and one naming none,
+ * the agent's last save having expired, lets the record go; so does a save
+ * refused as stale, so the next launch's names the newest.
  *
  * Whatever fails, the folder stays, and the agent is recorded as unsaved,
  * which keeps its folder from any sweep until a save commits. A pack or a
@@ -62,7 +63,10 @@ import {
  * its upload landed recorded beside it, and each beat tries the agents'
  * bundles that are due (`RETRY`), one at a time per agent, until one
  * commits or the service refuses it as stale, when a newer save stands;
- * the next turn's bundle supersedes it.
+ * the next turn's bundle supersedes it. A bundle no record names, as a run
+ * whose record could not be written leaves one, is let go of as the gate
+ * next opens, and its agent recorded as unsaved, so no sweep takes its
+ * folder for saved.
  *
  * The device's report names sizes, digests, generations, and seconds, and
  * the plain words a failed pack or verify gave; never a URL, the key, or a
@@ -555,10 +559,13 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
       });
 
     /**
-     * What a launch of the agent's says of its saved state: the generation
-     * it restores, which the record moves up to, unless the record names a
-     * newer one, a save of this device's that landed after the launch was
-     * queued; and the agent's state key, held for its next seal.
+     * What a launch of the agent's on a device that saves says of its saved
+     * state: the generation it restores, which the record moves up to,
+     * unless the record names a newer one, a save of this device's that
+     * landed after the launch was queued; or none, where Luke holds none of
+     * the agent's, its last save having expired, which lets the record's go,
+     * so the next save starts afresh; and the agent's state key, held for its
+     * next seal.
      */
     const launched = (
       userId: string,
@@ -568,10 +575,43 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
     ) =>
       Effect.gen(function* () {
         if (key !== undefined) keys.set(agentId, key);
-        if (generation === undefined) return;
         const kept = (yield* saveOf(agentId))?.generation;
+        if (generation === undefined) {
+          if (kept === undefined) return;
+          return yield* saveChanged(
+            userId,
+            agentId,
+            ({ generation: _generation, ...save }) => save,
+          );
+        }
         if (kept !== undefined && kept >= generation) return;
         yield* saveChanged(userId, agentId, (save) => ({ ...save, userId, generation }));
+      });
+
+    /**
+     * Every bundle in the device's state that no record names as waiting,
+     * as a run whose record could not be written leaves one, let go of, and
+     * its agent recorded as unsaved, since nothing will try it again and its
+     * folder may hold state no save committed; a bundle cut off as it was
+     * sealed, named for its agent with a suffix, is let go of alone.
+     */
+    const straysLetGo = (userId: string) =>
+      Effect.gen(function* () {
+        const folder = path.join(stateRoot, BUNDLES_FOLDER);
+        const names = yield* fileSystem
+          .readDirectory(folder)
+          .pipe(Effect.orElseSucceed((): readonly string[] => []));
+        const saves = (yield* dependencies.state).saves ?? {};
+        for (const name of names) {
+          if (saves[name]?.pending !== undefined) continue;
+          yield* Effect.ignore(fileSystem.remove(path.join(folder, name), { force: true }));
+          if (name.includes(".")) continue;
+          report("a local agent's state waiting to be saved had no record, so its folder was kept");
+          yield* saveChanged(saves[name]?.userId ?? userId, name, (save) => ({
+            ...save,
+            unsaved: save.unsaved ?? {},
+          }));
+        }
       });
 
     /** The account's agents whose waiting bundle is due to be tried again. */
@@ -614,6 +654,6 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
         }),
       );
 
-    return { turnEnded, launched, unsavedMarked, due, tried, forgotten };
+    return { turnEnded, launched, unsavedMarked, straysLetGo, due, tried, forgotten };
   });
 }

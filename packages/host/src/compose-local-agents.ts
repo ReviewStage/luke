@@ -892,12 +892,15 @@ export function composeLocalAgents(
             if (platform.formerlyDirect && Option.isNone(ran)) {
               yield* keepMode(agentId, DEVICE_ISOLATION.SANDBOX);
             }
-            yield* saves.launched(
-              userId,
-              agentId,
-              payload.value.stateGeneration,
-              secrets.state?.key,
-            );
+            // Note that only a launch on a device that saves names the generation of the agent's saved state, so on any other its absence says nothing.
+            if (savesState) {
+              yield* saves.launched(
+                userId,
+                agentId,
+                payload.value.stateGeneration,
+                secrets.state?.key,
+              );
+            }
             // Note that the agent is kept as this machine's before its folder or VM is made, so an uninstall finds whatever a launch cut off left.
             yield* keepOwnedAgent(kernel.stateRoot, agentId);
             // Note that the token is had before the repository is made, since the device's git reads it too, through the sandbox's helper.
@@ -1540,6 +1543,7 @@ export function composeLocalAgents(
         }
         const shellVariables = yield* shellEnvironment;
         if (!(yield* asked(registered({})))) return yield* Effect.sleep(IDLE);
+        if (savesState) yield* saves.straysLetGo(userId);
         const left = (yield* Ref.get(state)).launches.filter((launch) => launch.userId === userId);
         for (const launch of left) {
           // Note that a runner that ended with the app saved nothing of its turn, so its folder holds state no save committed.
