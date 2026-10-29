@@ -15,7 +15,7 @@
     overflow: clip;
     border: 1px solid var(--luke-color-border);
     border-radius: var(--luke-control-radius);
-    background: var(--luke-color-fill-hover);
+    background: var(--luke-color-surface);
     font-size: var(--luke-type-caption-size);
   }
 

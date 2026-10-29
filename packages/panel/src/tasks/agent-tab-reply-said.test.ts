@@ -194,7 +194,7 @@ test("a turn that fails while the tab is open says its end line once, politely, 
   await tab.answer(page("The retry", AGENT_STATUS.FAILED, "1:2"));
   await tab.row({ ...AGENT, status: AGENT_STATUS.FAILED });
 
-  assert.equal(announcedPolitely(), "Failed");
+  assert.equal(announcedPolitely(), "Failed: the run ended without saying why");
 });
 
 test("a turn that fails before writing a word says its end line as it lands", async () => {
@@ -210,7 +210,7 @@ test("a turn that fails before writing a word says its end line as it lands", as
   await tab.row({ ...AGENT, status: AGENT_STATUS.FAILED });
   await tab.answer(blank(AGENT_STATUS.FAILED, "1:2"));
 
-  assert.equal(announcedPolitely(), "Failed");
+  assert.equal(announcedPolitely(), "Failed: the run ended without saying why");
 });
 
 test("a tab opened on a turn already finished, or already failed, says nothing", async () => {

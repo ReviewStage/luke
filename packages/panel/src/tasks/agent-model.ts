@@ -382,7 +382,7 @@ export function endLineParts(
         return { words: ranDirectlyWords(ranDirectly.folder, starter), failed: true };
       const words =
         failure === undefined ? undefined : agentFailureWords(failure, starter, continuable);
-      return { words: words === undefined ? "Failed" : `Failed: ${words}`, failed: true };
+      return { words: `Failed: ${words ?? "the run ended without saying why"}`, failed: true };
     }
     case AGENT_STATUS.STARTING:
     case AGENT_STATUS.RUNNING:
