@@ -159,6 +159,8 @@ interface CommandResult {
 /** Why the checkout could not be reached or read, as the reason the tool that asked words for the model; a coding agent's checkout answers the same word. */
 export class RepositoryRefusal extends Data.TaggedError("RepositoryRefusal")<{
   readonly reason: string;
+  /** What a run that threw said, in its own words, for the log and a turn's record alone, never the model; none where it threw no error. */
+  readonly detail?: string | undefined;
 }> {}
 
 /** A shallow checkout is one commit deep: a coding agent's until its first write deepens it. */
@@ -232,7 +234,7 @@ function gitRefusal(failed: CommandResult): RepositoryRefusal {
   });
 }
 
-/** One run in the sandbox as an effect; a run that threw is the sandbox gone, which is the refusal given. */
+/** One run in the sandbox as an effect; a run that threw is the sandbox gone, which is the refusal given, with what it threw. */
 export function runInSandbox(
   sandbox: RepositorySandbox,
   options: Parameters<SandboxSession["run"]>[0],
@@ -240,7 +242,11 @@ export function runInSandbox(
 ) {
   return Effect.tryPromise({
     try: () => sandbox.run(options),
-    catch: () => new RepositoryRefusal({ reason: refusal }),
+    catch: (thrown) =>
+      new RepositoryRefusal({
+        reason: refusal,
+        ...(thrown instanceof Error ? { detail: thrown.message } : undefined),
+      }),
   });
 }
 
