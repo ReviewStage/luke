@@ -8,10 +8,10 @@
  * time or a call's row in a transcript, draws the same mark through the
  * same seat, at the size its slot sets (`--state-glyph-size`). Failed, the
  * glyph stands as it does at rest, so a failed agent still shows the
- * harness it ran in, and `@luke/ui`'s failed triangle stands at the end
+ * harness it ran in, and `@luke/ui`'s failed mark stands at the end
  * of its row or its tab (`stateEndMark`), before its time where it has
  * one, as an editor marks a file's tab with its problems; a call that
- * failed wears the same alert at its row's end. Only a failure has an end
+ * failed wears the same mark right after its label. Only a failure has an end
  * mark of its work, so no other row keeps room for one. At rest, finished or stopped
  * by hand, the glyph stands alone, since that is where every piece of work
  * ends and a mark on each says nothing. Working and failed are said aloud in a fixed word, so nothing of

@@ -1,12 +1,14 @@
 import type { ComponentPropsWithRef, ReactNode } from "react";
-import { OctagonMinusIcon, TriangleAlertIcon } from "../../icons/icons.js";
+import { GLYPH, OctagonMinusIcon } from "../../icons/icons.js";
 
 /**
  * row-mark.tsx -- a small mark a row or a tab wears beside its glyph and words to say one thing about it: that its work failed, that a draft waits in its box, or that it waits on another task's work.
  *
- * A failure wears one shape wherever it is drawn (`FailedMark`): a warning
- * triangle, so it never reads as the round attention mark of a question
- * waiting on the reader beside it. A task blocked by another wears a stop
+ * A failure wears one shape wherever it is drawn (`FailedMark`): the circled
+ * exclamation a failure note and an agent's failed end line wear
+ * (`GLYPH.FAILED`), drawn as a line in the danger ink, so it never reads as
+ * the filled orange attention mark of a question waiting on the reader beside
+ * it. A task blocked by another wears a stop
  * sign (`BlockedMark`), as Linear marks a blocked issue, in the muted ink,
  * since waiting is no fault of its own.
  *
@@ -76,14 +78,14 @@ export function RowMark({
   );
 }
 
-/** The mark of a piece of work that failed: a warning triangle in the danger colour, named Failed. */
+/** The mark of a piece of work that failed: the failure glyph in the danger colour, named Failed. */
 export function FailedMark(anchor: MarkAnchor): React.JSX.Element {
   return (
     <RowMark
       {...anchor}
       kind={ROW_MARK.FAILED}
       label={FAILED_WORDS}
-      glyph={<TriangleAlertIcon aria-hidden="true" />}
+      glyph={<GLYPH.FAILED aria-hidden="true" />}
     />
   );
 }

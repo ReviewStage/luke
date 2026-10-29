@@ -26,6 +26,7 @@ const call = (name: string): Block => ({ part: ROW_PART.CALL, name });
 const thought = (name: string): Block => ({ part: ROW_PART.NOTE, name });
 const words = (name: string): Block => ({ part: ROW_PART.WORDS, name });
 const subagent = (name: string): Block => ({ part: ROW_PART.SUBAGENT, name });
+const agent = (name: string): Block => ({ part: ROW_PART.AGENT, name });
 const arrived = (name: string): Block => ({ part: ROW_PART.ARRIVED, name });
 
 /** A turn's rows as a reader scans them: each block by name, each group's line, what it holds, and whether it is open and running, each fold's line and what it holds. */
@@ -67,7 +68,7 @@ test("a run of calls is counted in the same words while its turn moves and once 
   assert.deepEqual(rowsOf(turn, false), [["2 tool calls", ["ls", "cat"]], "One file."]);
 });
 
-test("a finished turn folds everything ahead of its last words under the same line as before, thoughts and subagents inside it on rows of their own", () => {
+test("a finished turn folds everything ahead of its last words under one line, thoughts, subagents, and agents it started inside it on rows of their own, its line saying it started them and counting its earlier words", () => {
   assert.deepEqual(
     rowsOf(
       [
@@ -76,14 +77,24 @@ test("a finished turn folds everything ahead of its last words under the same li
         subagent("Compare the queues."),
         thought("Read it."),
         call("cat"),
+        agent("Fix the expiry."),
+        words("Started one."),
         words("Seven days."),
       ],
       false,
     ),
     [
       [
-        "2 tool calls, 1 subagent",
-        ["Find the invites.", "ls", "Compare the queues.", "Read it.", "cat"],
+        "2 tool calls, 1 subagent, started 1 agent, 1 message",
+        [
+          "Find the invites.",
+          "ls",
+          "Compare the queues.",
+          "Read it.",
+          "cat",
+          "Fix the expiry.",
+          "Started one.",
+        ],
       ],
       "Seven days.",
     ],

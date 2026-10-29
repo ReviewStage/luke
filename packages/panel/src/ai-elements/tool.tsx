@@ -176,7 +176,10 @@ export interface ToolHeaderProps {
  * What a call's line says: its icon, what it did, who it was about where it
  * names someone by their chip, and where it stands. Note that the chip
  * gives way before the label does, since a name cut at its end still reads,
- * and that the subject after it takes only what is left.
+ * and that the subject after it takes only what is left. A failure's mark
+ * stands right after the label, by what failed, rather than at the line's
+ * far end, where a reader scanning the verbs would miss it; the working
+ * mark keeps the end, where it moves nothing as the call settles.
  */
 export function ToolLine({
   state,
@@ -191,6 +194,7 @@ export function ToolLine({
   "state" | "icon" | "label" | "subject" | "chip" | "subjectIsCode" | "place"
 >): ReactNode {
   const trailing = subject !== undefined || chip !== undefined;
+  const failed = state === TOOL_STATE.OUTPUT_ERROR;
   return (
     <>
       <GlyphSlot>{icon}</GlyphSlot>
@@ -203,6 +207,11 @@ export function ToolLine({
             {trailing ? `${label} ` : label}
           </OneLine>
         )}
+        {failed ? (
+          <span className="flex flex-none self-center">
+            <ToolStateMark state={state} />
+          </span>
+        ) : null}
         {chip === undefined ? null : (
           <span className="tool-chip flex min-w-0 max-w-tool-chip flex-initial whitespace-nowrap">
             {chip}
@@ -224,7 +233,7 @@ export function ToolLine({
           <Badge>{place}</Badge>
         </span>
       )}
-      <ToolStateMark state={state} />
+      {failed ? null : <ToolStateMark state={state} />}
     </>
   );
 }
