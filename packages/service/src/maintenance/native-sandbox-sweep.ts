@@ -41,11 +41,7 @@
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import {
-  RUNNER_LOST_DETAIL,
-  runningTurnIds,
-  settleRunnerLostTurns,
-} from "@luke/database/models/abandoned-turns";
+import { RUNNER_LOST_DETAIL, settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
 import { readNativeRunStanding } from "@luke/database/models/agent-store";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
@@ -258,8 +254,9 @@ class RunnerLost extends Data.TaggedError("RunnerLost")<{
 /**
  * The turns of a run whose runner died mid-turn settled failed with how it
  * ended, read before the store is read again so the settle follows that
- * read at once, logged once as an error under the agent's ids and reported as an
- * issue, since nothing the user did ends a run this way.
+ * read at once. The turns it failed are logged once as an error under the
+ * agent's ids and reported as an issue, since nothing the user did ends a
+ * run this way; a turn its Stop cancelled is neither.
  */
 const settledLostRunner = (
   writer: Pick<StoreWriter, "consume">,
@@ -271,8 +268,9 @@ const settledLostRunner = (
   Effect.gen(function* () {
     const { stderr } = runner;
     const detail = runnerLostDetail(runner.exit, stderr);
-    const turnIds = yield* runningTurnIds(conversationId);
-    yield* settleRunnerLostTurns(writer, conversationId, now.getTime(), detail, new Set(turnIds));
+    const turnIds = yield* settleRunnerLostTurns(writer, conversationId, now.getTime(), detail);
+    // Note that a turn cancelled by its Stop, or one the writer refused, is no runner lost to report.
+    if (turnIds.length === 0) return;
     const lost = new RunnerLost({
       agentId: sandbox.agentId,
       conversationId,

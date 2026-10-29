@@ -355,7 +355,9 @@ export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSess
  * Settles every turn still queued or running of the native coding agent's
  * conversation as failed, its runner gone with no end told, as a runner's
  * own failed end settles one, or as cancelled where a Stop was asked of it, so the agent reads failed and offers Continue
- * rather than running for a day; answers how many this call settled. The
+ * rather than running for a day; answers the ids of the turns this call
+ * settled as failed, so a caller logs and reports those and no cancelled
+ * one or one the writer refused. The
  * turn the native projection holds is dropped with them, so the next
  * launch's events open a turn of their own rather than one already ended.
  * A launch that failed before its runner ran names why in `detail`. Where
@@ -374,10 +376,10 @@ export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunner
     detail: string = RUNNER_LOST_DETAIL,
     only?: ReadonlySet<string>,
     failure: typeof TURN_FAILURE.MODEL | typeof TURN_FAILURE.SESSION_ENDED = TURN_FAILURE.MODEL,
-  ): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
+  ): Effect.fn.Return<readonly string[], QueryError | Schema.SchemaError, DatabaseServices> {
     const running = yield* agentRunningTurns({ conversationId });
     const lost = only === undefined ? running : running.filter((turn) => only.has(turn.id));
-    let settled = 0;
+    const failed: string[] = [];
     for (const { cancelRequestedAt, ...turn } of lost) {
       const written = yield* settledLost(
         writer,
@@ -387,13 +389,13 @@ export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunner
           : { status: RUN_STATUS.CANCELLED },
         now,
       );
-      if (written) settled += 1;
+      if (written && cancelRequestedAt === null) failed.push(turn.id);
     }
     yield* dropNativeProjectionTurns(
       conversationId,
       lost.map((turn) => turn.id),
     );
-    return settled;
+    return failed;
   },
 );
 
