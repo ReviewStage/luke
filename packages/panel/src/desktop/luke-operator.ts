@@ -95,21 +95,24 @@ export interface LukeOperator {
   readonly restore: (agentId: string) => Promise<OperatorAnswer>;
 }
 
-/** What a Reset or its Undo came to: the operator standing after it, where it landed. */
-export type OperatorAnswer = ActionResult & { readonly agentId?: string };
+/** What a Reset or its Undo came to: the operator standing after it, where it landed, or what refused it beneath, where it did not. */
+export type OperatorAnswer = ActionResult & { readonly agentId?: string; readonly cause?: unknown };
 
 /** What an ensure asks beyond the workspace: nothing, a fresh operator, or the archived one named back. */
 type EnsureAsk = Record<string, never> | { readonly reset: true } | { readonly restore: string };
 
-/** The operator's id an ensure answered, or none for a failure or a refusal. */
-function ensuredId(workspaceId: string, ask: EnsureAsk): Promise<string | undefined> {
+/** What an ensure came to: the operator's id it answered, or the answer or error that refused it. */
+type Ensured = { readonly agentId: string } | { readonly cause: unknown };
+
+/** The operator's id an ensure answered, or what failed or refused it. */
+function ensuredId(workspaceId: string, ask: EnsureAsk): Promise<Ensured> {
   return askAct(
     ACT_KIND.AGENTS_ENSURE_OPERATOR,
     // The zone this window reads in, which the heartbeat an ensure that makes Luke aims at him is read in.
     { workspaceId, ...ask, timeZone: readerZone() },
   ).then(
-    (answer) => ("agentId" in answer ? answer.agentId : undefined),
-    () => undefined,
+    (answer) => ("agentId" in answer ? { agentId: answer.agentId } : { cause: answer }),
+    (cause: unknown) => ({ cause }),
   );
 }
 
@@ -138,20 +141,25 @@ function claimEnsure(write: OperatorsWrite, place: OperatorPlace, again: boolean
   });
   if (!claimed) return;
   // Note that the answer lands under the account that asked, so one arriving after a sign-out is never another account's.
-  void ensuredId(place.workspaceId, {}).then((agentId) =>
-    write((held) => withRead(held, place, settled(agentId))),
+  void ensuredId(place.workspaceId, {}).then((ensured) =>
+    write((held) =>
+      withRead(held, place, settled("agentId" in ensured ? ensured.agentId : undefined)),
+    ),
   );
 }
 
-/** A Reset or its Undo asked, the operator it answered kept as the one standing, or `refused` said where none landed. */
+/** A Reset or its Undo asked, the operator it answered kept as the one standing, or `refused` said where none landed, with what refused it beneath. */
 function replaced(
   write: OperatorsWrite,
   place: OperatorPlace,
   ask: EnsureAsk,
   refused: string,
 ): Promise<OperatorAnswer> {
-  return ensuredId(place.workspaceId, ask).then((agentId) => {
-    if (agentId === undefined) return { status: ACTION_RESULT_STATUS.REJECTED, reason: refused };
+  return ensuredId(place.workspaceId, ask).then((ensured): OperatorAnswer => {
+    if (!("agentId" in ensured)) {
+      return { status: ACTION_RESULT_STATUS.REJECTED, reason: refused, cause: ensured.cause };
+    }
+    const { agentId } = ensured;
     write((held) => withRead(held, place, settled(agentId)));
     return { status: ACTION_RESULT_STATUS.ACCEPTED, agentId };
   });

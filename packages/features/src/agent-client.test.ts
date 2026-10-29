@@ -3,10 +3,11 @@ import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordingHttpClient } from "@luke/wire/testing";
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { accountBearer } from "./account-call.js";
+import { accountBearer, CALL_FAULT } from "./account-call.js";
 import { HostedAgentClient } from "./agent-client.js";
 import { AGENT_CALL_FAILURE } from "./agent-view.js";
 import { AGENT_STATUS, LOCAL_AGENT_REFUSAL } from "./agent-wire.js";
+import { FAILURE_FACT } from "./failure-facts.js";
 import { INBOX_REPLY } from "./inbox-wire.js";
 import { LIVE_SIGNED_OUT } from "./live-wire.js";
 import {
@@ -47,6 +48,26 @@ function client(): HostedAgentClient {
   });
 }
 
+/** An answer without what failed beneath it, for a case about which failure it names; the Start's deadline case reads the cause whole. */
+function uncaused(answer: object): object {
+  if (!("cause" in answer)) return answer;
+  const { cause: _cause, ...named } = answer;
+  return named;
+}
+
+/** The trace a failed answer's cause names, checked to be a trace id, since every ask mints its own. */
+function causeTraceOf(answer: object): unknown {
+  const traceId =
+    "cause" in answer &&
+    typeof answer.cause === "object" &&
+    answer.cause !== null &&
+    "traceId" in answer.cause
+      ? answer.cause.traceId
+      : undefined;
+  assert.match(String(traceId), /^[0-9a-f]{32}$/);
+  return traceId;
+}
+
 it.effect(
   "starts an agent with the request as sent, and reads each refusal as its own failure",
   () =>
@@ -78,7 +99,7 @@ it.effect(
           },
         });
         const refused = yield* Effect.provide(client().start(TASK_ID, request), refusing.layer);
-        assert.deepEqual(refused, { failure }, error);
+        assert.deepEqual(uncaused(refused), { failure }, error);
       }
     }),
 );
@@ -561,8 +582,15 @@ it.effect(
       yield* TestClock.adjust("119 seconds");
       assert.equal(unanswered.pollUnsafe(), undefined, "still waiting short of its deadline");
       yield* TestClock.adjust("1 second");
-      assert.deepEqual(yield* Fiber.join(unanswered), {
+      const timedOut = yield* Fiber.join(unanswered);
+      assert.deepEqual(timedOut, {
         failure: AGENT_CALL_FAILURE.UNANSWERED,
+        cause: {
+          _tag: FAILURE_FACT.HOSTED_UNANSWERED,
+          fault: CALL_FAULT.NETWORK,
+          errorName: "TimeoutError",
+          traceId: causeTraceOf(timedOut),
+        },
       });
     }),
 );
@@ -599,7 +627,7 @@ it.effect(
       yield* TestClock.adjust("44 seconds");
       assert.equal(unanswered.pollUnsafe(), undefined, "still waiting short of its deadline");
       yield* TestClock.adjust("1 second");
-      assert.deepEqual(yield* Fiber.join(unanswered), {
+      assert.deepEqual(uncaused(yield* Fiber.join(unanswered)), {
         failure: AGENT_CALL_FAILURE.UNANSWERED,
       });
     }),
@@ -677,8 +705,8 @@ it.effect(
       assert.equal(polling?.get("poll"), "true");
       assert.equal(polling?.get("after"), "d-1");
       assert.deepEqual(signedOut, LIVE_SIGNED_OUT);
-      assert.deepEqual(refused, { failure: AGENT_CALL_FAILURE.UNANSWERED });
-      assert.deepEqual(unread, { failure: AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(uncaused(refused), { failure: AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(uncaused(unread), { failure: AGENT_CALL_FAILURE.UNANSWERED });
     }),
 );
 
@@ -778,7 +806,7 @@ it.effect(
           "POST /api/dictation": { answer: () => ({ error }), status: HTTP_STATUS.CONFLICT },
         });
         const refused = yield* Effect.provide(client().transcribeDictation(clip), refusing.layer);
-        assert.deepEqual(refused, { failure }, error);
+        assert.deepEqual(uncaused(refused), { failure }, error);
       }
     }),
 );

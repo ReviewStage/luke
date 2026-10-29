@@ -13,6 +13,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { KEPT } from "../act.js";
 import {
   DRAFT_PLACE,
   type InboxPlace,
@@ -75,7 +76,7 @@ function CloseProbe({ item, closed }: { item: InboxItem; closed: InboxItem[] }):
     item,
     (each) => {
       closed.push(each);
-      return Promise.resolve(true);
+      return Promise.resolve(KEPT);
     },
     true,
   );

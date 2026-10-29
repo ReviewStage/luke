@@ -21,6 +21,7 @@ import {
   type TurnRow,
 } from "@luke/features/turn-rows";
 import { MESSAGE_ROLE } from "@luke/wire";
+import { unreachedAs } from "../act.js";
 import { blockSays, TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import {
   AGENT_PART,
@@ -564,16 +565,19 @@ export function transcriptMarkdown(transcript: CopiedTranscript, copy: Transcrip
   ].join("\n\n")}\n`;
 }
 
-/** The rest of a transcript from a page on: the messages held with each page joined, until a page shorter than the most one carries, or nothing where a read did not answer. */
+/** A transcript that could not be read whole: the answer or error the read that failed came to, which a shown failure reports. */
+export interface TranscriptUnread {
+  readonly unread: unknown;
+}
+
+/** The rest of a transcript from a page on: the messages held with each page joined, until a page shorter than the most one carries, or why a read did not answer. */
 async function pagesFrom(
   read: TranscriptReader,
   params: Parameters<TranscriptReader>[0],
   held: readonly AgentTranscriptMessage[],
-): Promise<readonly AgentTranscriptMessage[] | undefined> {
-  const answer = await read(params).catch(() => ({
-    failure: AGENT_CALL_FAILURE.UNANSWERED,
-  }));
-  if ("failure" in answer) return undefined;
+): Promise<readonly AgentTranscriptMessage[] | TranscriptUnread> {
+  const answer = await read(params).catch(unreachedAs(AGENT_CALL_FAILURE.UNANSWERED));
+  if ("failure" in answer) return { unread: answer };
   const messages = applyMessagesPage(held, answer.messages);
   if (answer.messages.length < AGENT_BOUNDS.MESSAGES_PAGE) return messages;
   return pagesFrom(read, { ...params, after: answer.cursor }, messages);
@@ -582,7 +586,7 @@ async function pagesFrom(
 /**
  * Every message of an agent's transcript, or of one of its workers' under
  * the call that started it, as it stands now, read from the start, or
- * nothing where a read did not answer. Note that a page shorter than the
+ * why a read did not answer. Note that a page shorter than the
  * most one carries ends the read rather than an empty one, because the
  * service holds a read with nothing past its cursor open while the agent
  * runs, and a copy waits on no hold.
@@ -590,7 +594,7 @@ async function pagesFrom(
 export function readWholeTranscript(
   read: TranscriptReader,
   of: { agentId: string; callId?: string | undefined },
-): Promise<readonly AgentTranscriptMessage[] | undefined> {
+): Promise<readonly AgentTranscriptMessage[] | TranscriptUnread> {
   const { agentId, callId } = of;
   const params = { agentId, after: AGENT_CURSOR_START };
   return pagesFrom(read, callId === undefined ? params : { ...params, callId }, []);

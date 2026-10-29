@@ -121,7 +121,7 @@ export function TerminalCommands({
       const remedy = repositoryRemedy(failure, startAgent);
       const shown = {
         surface: FAILURE_SURFACE.AGENT_START,
-        cause: { failure: failure.reason },
+        cause: failure.cause ?? { failure: failure.reason },
         about: { taskId: "taskId" in failure ? failure.taskId : undefined },
       };
       toast(
