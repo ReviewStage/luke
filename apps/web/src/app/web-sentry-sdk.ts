@@ -127,6 +127,7 @@ export function initWebSentry(build: WebSentryBuild): WebSentry {
     reportRefusal: (directive, origin) => {
       captureMessage(`Content-Security-Policy refused ${directive} to ${origin}`, "warning");
     },
-    reportShownFailure: (report) => sendShownFailure({ captureException, logger, getActiveSpan, getCurrentScope }, report),
+    reportShownFailure: (report) =>
+      sendShownFailure({ captureException, logger, getActiveSpan, getCurrentScope }, report),
   };
 }

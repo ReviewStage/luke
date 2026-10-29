@@ -1154,7 +1154,10 @@ channel, automation, or pull request number), whether your Mac or browser was
 online, and whether you were signed in. It never carries what you typed, a
 transcript, a plan, or a file's contents. The message is the error's own, or
 our service's sentence for a refusal, so it can name what that error named,
-such as an address. Both go under the data collection described above.
+such as an address. Both go under the data collection described above. An
+error notice's Copy details button puts the same facts on your clipboard, with
+the time, the app's version, and the ids Sentry gave the report, and sends
+nothing anywhere: they go only where you paste them.
 
 **Error, performance, and agent reports from our service.** Our service and
 Luke's agents send Sentry reports so that we can find and fix failures. Our

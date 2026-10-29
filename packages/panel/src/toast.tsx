@@ -324,12 +324,7 @@ function arrive(stack: ToastLine, notice: KeptNotice, now: number): ToastLine {
  * and for that one's whole hold, or, waiting, turned where it waits; where
  * none stands or waits, as when it was pushed out, `notice` arrives anew.
  */
-function settleWork(
-  stack: ToastLine,
-  subject: string,
-  notice: KeptNotice,
-  now: number,
-): ToastLine {
+function settleWork(stack: ToastLine, subject: string, notice: KeptNotice, now: number): ToastLine {
   const working = (about: ToastNotice) =>
     about.tone === STATUS_TONE.WORKING && about.subject === subject;
   const standing = stack.shown.find((toast) => !toast.leaving && working(toast.notice));

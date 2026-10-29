@@ -104,6 +104,7 @@ export function initDesktopSentry(options: DesktopSentryOptions): DesktopSentry 
       });
     },
     // A log line through main, which sends what the window logs, and an issue where nothing named it.
-    reportShownFailure: (report) => sendShownFailure({ captureException, logger, getActiveSpan, getCurrentScope }, report),
+    reportShownFailure: (report) =>
+      sendShownFailure({ captureException, logger, getActiveSpan, getCurrentScope }, report),
   };
 }

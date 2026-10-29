@@ -154,7 +154,9 @@ interface ShownFailureHint {
 export interface ShownFailureSentry {
   readonly captureException: (error: Error, hint: ShownFailureHint) => string;
   /** The span standing now, whose trace a line or an issue sent now goes in. */
-  readonly getActiveSpan: () => { readonly spanContext: () => { readonly traceId: string } } | undefined;
+  readonly getActiveSpan: () =>
+    | { readonly spanContext: () => { readonly traceId: string } }
+    | undefined;
   /** The scope standing now, whose trace a line or an issue goes in where no span stands. */
   readonly getCurrentScope: () => {
     readonly getPropagationContext: () => { readonly traceId: string };
@@ -172,7 +174,7 @@ export interface ShownFailureSent {
 }
 
 /** What a failure's copied details say beside its report: when it was shown, the app's version, and what Sentry answered, where a reporter sent it. */
-export interface ShownFailureTold {
+interface ShownFailureTold {
   /** When it was shown, in milliseconds since the epoch. */
   readonly at: number;
   readonly version?: string | undefined;
