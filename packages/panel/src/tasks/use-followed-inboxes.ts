@@ -43,17 +43,6 @@ interface HeldKind {
   readonly failed: ReadonlySet<string>;
 }
 
-/** The inboxes a surface follows on its own. */
-interface HeldInboxes {
-  readonly subscribe: (listener: () => void) => () => void;
-  /** The inboxes of `kind` as they stand, the same value until one of them changes. */
-  readonly heldOf: (kind: ScopeKind) => HeldKind;
-  /** Holds an inbox's follow for one more reader, following it for the first; the release lets it go. */
-  readonly hold: (kind: ScopeKind, id: string, follow: InboxFollower["follow"]) => () => void;
-  /** Clears every inbox of `kind` that could not be read, so it is followed again. */
-  readonly retry: (kind: ScopeKind) => void;
-}
-
 /** One inbox's follow: how many readers hold it, and its stop while it stands. */
 interface Following {
   holders: number;
@@ -67,7 +56,7 @@ const NOTHING_HELD: HeldKind = { items: new Map(), failed: new Set() };
  * holds it, and let go with the last; `forget` lets its items go with it,
  * so one followed again holds nothing until its follow pushes.
  */
-function heldInboxes(options: { readonly forget: boolean }): HeldInboxes {
+function heldInboxes(options: { readonly forget: boolean }) {
   const { forget } = options;
   const held = new Map<ScopeKind, HeldKind>();
   const following = new Map<ScopeKind, Map<string, Following>>();
@@ -106,12 +95,14 @@ function heldInboxes(options: { readonly forget: boolean }): HeldInboxes {
     store(kind, { ...was, items });
   };
   return {
-    subscribe: (listener) => {
+    subscribe: (listener: () => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    /** The inboxes of `kind` as they stand, the same value until one of them changes. */
     heldOf,
-    hold: (kind, id, follow) => {
+    /** Holds an inbox's follow for one more reader, following it for the first; the release lets it go. */
+    hold: (kind: ScopeKind, id: string, follow: InboxFollower["follow"]) => {
       const byId = following.get(kind) ?? new Map<string, Following>();
       following.set(kind, byId);
       const standing = byId.get(id) ?? { holders: 0, stop: undefined };
@@ -125,7 +116,8 @@ function heldInboxes(options: { readonly forget: boolean }): HeldInboxes {
         release(kind, id);
       };
     },
-    retry: (kind) => {
+    /** Clears every inbox of `kind` that could not be read, so it is followed again. */
+    retry: (kind: ScopeKind) => {
       const was = heldOf(kind);
       if (was.failed.size > 0) store(kind, { ...was, failed: new Set() });
     },

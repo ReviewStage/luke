@@ -158,55 +158,40 @@ function currentOf(
   );
 }
 
+/** One value for each kind of holder, as `of` makes it. */
+function byKind<Value>(of: (kind: ScopeKind) => Value): ByHolderKind<Value> {
+  return {
+    [INBOX_SCOPE_KIND.PLAN]: of(INBOX_SCOPE_KIND.PLAN),
+    [INBOX_SCOPE_KIND.AGENT]: of(INBOX_SCOPE_KIND.AGENT),
+  };
+}
+
 export function useHolderInboxItems(holdings: readonly InboxHolding[]): HolderInboxItems {
   const feed = useHostRead(LIVE_READ.INBOX_ITEMS);
   const fed = feed.rows;
-  const items = useMemo(
-    () => ({
-      [INBOX_SCOPE_KIND.PLAN]: feedStanding(
-        fed?.[INBOX_SCOPE_KIND.PLAN],
-        holdings,
-        INBOX_SCOPE_KIND.PLAN,
-      ),
-      [INBOX_SCOPE_KIND.AGENT]: feedStanding(
-        fed?.[INBOX_SCOPE_KIND.AGENT],
-        holdings,
-        INBOX_SCOPE_KIND.AGENT,
-      ),
-    }),
-    [fed, holdings],
-  );
   // Note that a holder the feed holds nothing of is current with none, since the feed stands for every holder whole.
-  const current = useMemo(() => {
-    const ofKind = (kind: ScopeKind) => currentOf(items[kind], holdings, kind, fed?.[kind]);
+  const read = useMemo(() => {
+    const items = byKind((kind) => feedStanding(fed?.[kind], holdings, kind));
+    const absent = (kind: ScopeKind, id: string) =>
+      fed !== undefined && !Object.hasOwn(fed[kind], id);
     return {
-      [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN),
-      [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT),
-    };
-  }, [items, holdings, fed]);
-  const feedHoldsNothing = useMemo(() => {
-    const ofKind = (kind: ScopeKind) => {
-      const held = fed?.[kind];
-      return new Set(
-        held === undefined
-          ? []
-          : holdings.flatMap((holding) =>
-              holding.kind === kind && !Object.hasOwn(held, holding.id) ? [holding.id] : [],
+      items,
+      current: byKind((kind) => currentOf(items[kind], holdings, kind, fed?.[kind])),
+      feedHoldsNothing: byKind(
+        (kind) =>
+          new Set(
+            holdings.flatMap((each) =>
+              each.kind === kind && absent(kind, each.id) ? [each.id] : [],
             ),
-      );
-    };
-    return {
-      [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN),
-      [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT),
+          ),
+      ),
     };
   }, [fed, holdings]);
   const failed = holdings.length > 0 && feed.status === HOST_READ_STATUS.FAILED;
   return {
-    items,
+    ...read,
     failed,
-    pending: !failed && holdings.some((holding) => !current[holding.kind].has(holding.id)),
-    current,
-    feedHoldsNothing,
+    pending: !failed && holdings.some((holding) => !read.current[holding.kind].has(holding.id)),
     onRetry: feed.retry,
   };
 }

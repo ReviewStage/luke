@@ -9,13 +9,8 @@ import { isTestFile } from "./kept-guard.ts";
 
 /**
  * host-read-guard.ts -- what the `no-follow-outside-host-read` rule reads:
- * the one module a surface reads server data through, what opens a follow
- * or reads what a host read already carries, and the files not yet moved
- * onto it, each with the migration step that
- * moves it. Server data reaches a surface only through `useHostRead`
- * (`packages/panel/src/use-host-read.ts`), over the app-state slice the host
- * fills; a follow a surface opens itself is a second stream, store, and
- * lifetime beside it.
+ * the one module a surface reads server data through, the kinds that read
+ * it otherwise, and the files not yet moved, each with its migration step.
  */
 export const HOST_READ_GUARD_RULE = "anti-slop/no-follow-outside-host-read";
 
@@ -37,19 +32,17 @@ export function isWatchedPanelSource(file: string): boolean {
 /** The helpers that hold a follow open on the window's act port. */
 export const FOLLOW_OPENERS: ReadonlySet<string> = new Set(["streamFrom", "followStream"]);
 
-/** The act kinds that open a follow but are not named for one. */
+/** The kinds a surface reads server data by that are not named `*_FOLLOW`: the streamed ones, and `AGENTS_LIST`, whose rows the task list's `liveAgents` carries. */
 const UNNAMED_FOLLOWS: ReadonlySet<string> = new Set([
   "AGENTS_TRANSCRIPT",
   "WORKSPACE_PEOPLE",
   "WORKSPACE_INVITATIONS",
+  "AGENTS_LIST",
 ]);
 
-/** The one-shot reads whose rows a host read already carries, which a surface reads there instead: a task's agents, in the task list's `liveAgents`. */
-const REPLACED_READS: ReadonlySet<string> = new Set(["AGENTS_LIST"]);
-
-/** Whether an act kind's name is one a surface reads server data by outside `useHostRead`: any `*_FOLLOW`, a streamed kind named otherwise, or a read a host read replaces. */
+/** Whether an act kind is one a surface reads server data by outside `useHostRead`. */
 export function isFollowKind(name: string): boolean {
-  return name.endsWith("_FOLLOW") || UNNAMED_FOLLOWS.has(name) || REPLACED_READS.has(name);
+  return name.endsWith("_FOLLOW") || UNNAMED_FOLLOWS.has(name);
 }
 
 const StepsSchema = Schema.Record(Schema.NonEmptyString, Schema.NonEmptyString);

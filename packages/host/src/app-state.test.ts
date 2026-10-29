@@ -145,7 +145,7 @@ describe("a delivery that crosses the wire", () => {
     const adopted = withAppStateDelivery(held, delivered);
 
     assert.deepEqual(Object.keys(delivered.entries), []);
-    assert.deepEqual(delivered.inboxHolders?.moved, {
+    assert.deepEqual(delivered.inboxHolders, {
       [INBOX_SCOPE_KIND.PLAN]: { moved: [item("moved", "Ship tonight?")] },
       [INBOX_SCOPE_KIND.AGENT]: {},
     });

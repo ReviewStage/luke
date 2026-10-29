@@ -269,18 +269,6 @@ export type AppInboxItems = {
 /** The kind of holder an inbox item is on: a plan, or an agent with no task. */
 type InboxHolderKind = (typeof INBOX_SCOPE_KIND)[keyof typeof INBOX_SCOPE_KIND];
 
-/**
- * What crosses to a window of the account's feed once it holds the feed's
- * rows: each holder whose items moved since its last delivery, whole, and
- * each holder gone, by kind. Note that a change crosses as the holders it
- * moved rather than the whole feed, since the largest workspace's feed is
- * megabytes and a change moves one task's list.
- */
-export interface AppInboxHoldersPatch {
-  readonly moved: AppInboxItems;
-  readonly gone: { readonly [Kind in InboxHolderKind]: readonly string[] };
-}
-
 /** The rows of each read the host holds for the panel, by its name. */
 export interface AppHostReads {
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
@@ -433,54 +421,52 @@ export interface AppStateDelivery {
   readonly version: number;
   readonly entries: { readonly [Entry in AppStateEntry]?: AppStateSnapshot[Entry] };
   readonly gone?: readonly AppStateEntry[];
-  /** The account's feed as the holders that moved, in place of its entry, where the window held its rows and still does. */
-  readonly inboxHolders?: AppInboxHoldersPatch;
+  /** Each holder of the account's feed that moved since the window's last delivery, whole, one gone as none, in place of the feed's entry, where the window held its rows and still does. */
+  readonly inboxHolders?: AppInboxItems;
 }
 
 /**
- * The holders of the account's feed that moved from `sent` to `next`, and
- * those gone; none where either holds no rows, which crosses whole, or
- * where no holder moved.
+ * Each holder of the account's feed that moved from `sent` to `next`, one
+ * gone as none; none where either holds no rows, which crosses whole, or
+ * where none moved. Note that a change crosses as the holders it moved,
+ * since the largest workspace's feed is megabytes and a change moves one
+ * task's list.
  */
 function inboxHoldersPatch(
   sent: AppHostRead<AppInboxItems> | undefined,
   next: AppHostRead<AppInboxItems> | undefined,
-): AppInboxHoldersPatch | undefined {
-  const before = sent?.rows;
-  const after = next?.rows;
-  if (before === undefined || after === undefined || next?.failed !== sent?.failed) {
-    return undefined;
-  }
-  const ofKind = (kind: InboxHolderKind) => ({
-    moved: Object.fromEntries(
-      Object.entries(after[kind]).filter(([id, items]) => !Equal.equals(before[kind][id], items)),
-    ),
-    gone: Object.keys(before[kind]).filter((id) => !Object.hasOwn(after[kind], id)),
-  });
-  const plan = ofKind(INBOX_SCOPE_KIND.PLAN);
-  const agent = ofKind(INBOX_SCOPE_KIND.AGENT);
-  const moved = [plan, agent].some(
-    (kind) => Object.keys(kind.moved).length > 0 || kind.gone.length > 0,
-  );
-  if (!moved) return undefined;
-  return {
-    moved: { [INBOX_SCOPE_KIND.PLAN]: plan.moved, [INBOX_SCOPE_KIND.AGENT]: agent.moved },
-    gone: { [INBOX_SCOPE_KIND.PLAN]: plan.gone, [INBOX_SCOPE_KIND.AGENT]: agent.gone },
+): AppInboxItems | undefined {
+  const [before, after] = [sent?.rows, next?.rows];
+  if (before === undefined || after === undefined) return undefined;
+  const ofKind = (kind: InboxHolderKind) =>
+    Object.fromEntries([
+      ...Object.entries(after[kind]).filter(
+        ([id, items]) => !Equal.equals(before[kind][id], items),
+      ),
+      ...Object.keys(before[kind])
+        .filter((id) => !Object.hasOwn(after[kind], id))
+        .map((id) => [id, []]),
+    ]);
+  const patch = {
+    [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN),
+    [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT),
   };
+  return Object.values(patch).some((holders) => Object.keys(holders).length > 0)
+    ? patch
+    : undefined;
 }
 
-/** The account's feed a window holds once `patch` lands on it: each holder moved laid in, keeping what of it did not move, each gone dropped, and every other holder the very list held. */
+/** The account's feed once `patch` lands on `held`: each holder moved laid in, keeping what of it did not move, each gone dropped, and every other the very list held. */
 function withInboxHolders(
   held: AppHostRead<AppInboxItems> | undefined,
-  patch: AppInboxHoldersPatch,
+  patch: AppInboxItems,
 ): AppHostRead<AppInboxItems> {
-  const rows = held?.rows;
   const ofKind = (kind: InboxHolderKind) => {
-    const next: Record<string, readonly InboxItem[]> = { ...rows?.[kind] };
-    for (const id of patch.gone[kind]) Reflect.deleteProperty(next, id);
-    for (const [id, items] of Object.entries(patch.moved[kind])) {
-      const was = rows?.[kind][id];
-      next[id] = was === undefined ? items : keepIdentity(was, items);
+    const next: Record<string, readonly InboxItem[]> = { ...held?.rows?.[kind] };
+    for (const [id, items] of Object.entries(patch[kind])) {
+      const was = next[id];
+      if (items.length === 0) Reflect.deleteProperty(next, id);
+      else next[id] = was === undefined ? items : keepIdentity(was, items);
     }
     return next;
   };

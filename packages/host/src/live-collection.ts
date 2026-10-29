@@ -420,6 +420,9 @@ export function rowWrites<Row extends object>(
     });
 }
 
+/** One account read, for the account it is opened for, until its fiber is let go. */
+type AccountRead = (userId: string) => Effect.Effect<void>;
+
 /**
  * The reads that stand for the signed-in session, as the Inbox's feed does:
  * each opened once for the account signed in, by its name, and every one
@@ -428,12 +431,9 @@ export function rowWrites<Row extends object>(
  */
 export interface AccountReads<Name extends string> {
   /** Opens `name`'s read for the account signed in unless it stands for it already, closing the last account's reads first; nothing while nobody is signed in. */
-  readonly open: (name: Name, read: (userId: string) => Effect.Effect<void>) => Effect.Effect<void>;
+  readonly open: (name: Name, read: AccountRead) => Effect.Effect<void>;
   /** Opens `name`'s read again at once, as Try again asks, rather than waiting on its own restart. */
-  readonly reopen: (
-    name: Name,
-    read: (userId: string) => Effect.Effect<void>,
-  ) => Effect.Effect<void>;
+  readonly reopen: (name: Name, read: AccountRead) => Effect.Effect<void>;
   /** Closes every read: the session ended, by a sign-out or another account signing in. */
   readonly end: Effect.Effect<void>;
 }
@@ -455,11 +455,7 @@ export function accountReads<Name extends string>(
       session = undefined;
       return Effect.andThen(FiberMap.clear(reads), ended);
     });
-    const run = (
-      name: Name,
-      read: (userId: string) => Effect.Effect<void>,
-      onlyIfMissing: boolean,
-    ) =>
+    const run = (name: Name, read: AccountRead, onlyIfMissing: boolean) =>
       Effect.gen(function* () {
         const userId = accountId();
         // Note that another account's reads are closed before this one's opens, so nothing it drew reaches the next.
