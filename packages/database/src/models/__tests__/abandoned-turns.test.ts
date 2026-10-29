@@ -158,11 +158,6 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         yield* turnIn(writer, brain, TURN_STATUS.RUNNING);
         assert.equal(yield* lose(brain), 0);
         assert.deepEqual(yield* newestTurnOf(brain), [TURN_STATUS.RUNNING, null]);
-
-        // A conversation still stored under the kind's old spelling is an agent's all the same.
-        const respelled = yield* openConversation(CONVERSATION_KIND.CODING_AGENT);
-        yield* turnIn(writer, respelled, TURN_STATUS.RUNNING);
-        assert.equal(yield* lose(respelled), 1);
       }),
   );
 

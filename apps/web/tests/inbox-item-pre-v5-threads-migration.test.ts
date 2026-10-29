@@ -5,7 +5,6 @@ import { it } from "@effect/vitest";
 import { MIGRATIONS_FOLDER, runWebMigrations } from "@luke/database/core/migrator";
 import { Database } from "@luke/database/core/query";
 import { user } from "@luke/database/schemas/auth";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { joinWorkspace, openWorkspace, unmigratedPgliteSqlClient } from "@luke/database/testing";
 import { INBOX_MESSAGE_AUTHOR } from "@luke/features/inbox-wire";
 import {
@@ -71,7 +70,7 @@ it.effect(
         const taskId = randomUUID();
         yield* sql`insert into task (id, user_id, organization_id, number, name, document) values (${taskId}, 'dean', ${workspaceId}, 1, 'Teammate invitations', '')`;
         const agent = { id: randomUUID(), conversationId: randomUUID() };
-        yield* sql`insert into conversations (id, user_id, kind) values (${agent.conversationId}, 'dean', ${CONVERSATION_KIND.CODING_AGENT})`;
+        yield* sql`insert into conversations (id, user_id, kind) values (${agent.conversationId}, 'dean', 'coding_agent')`;
         yield* sql`insert into coding_agent (id, task_id, organization_id, user_id, conversation_id, model, effort, plan_snapshot, repository, idempotency_key)
           values (${agent.id}, ${taskId}, ${workspaceId}, 'dean', ${agent.conversationId}, 'anthropic/claude-opus-5.5', 'high', '# Teammate invitations', 'acme/relay', ${randomUUID()})`;
         const item = (

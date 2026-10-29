@@ -47,7 +47,7 @@ import {
   turnlessUserLine,
   turns,
 } from "../schemas/storage.js";
-import { AGENT_CONVERSATION_KINDS } from "../storage-vocabulary.js";
+import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import {
   EpochMillisColumnSchema,
   InstantColumnSchema,
@@ -1111,7 +1111,7 @@ export function newestAwaitingLineAt(conversationId: SQLWrapper): SQL<Date | nul
     .where(
       and(
         eq(messages.conversationId, conversationId),
-        inArray(conversations.kind, AGENT_CONVERSATION_KINDS),
+        eq(conversations.kind, CONVERSATION_KIND.AGENT),
         turnlessUserLine(messages),
         isNull(messages.withdrawnAt),
         lineOfTheAgents(),
@@ -1150,7 +1150,7 @@ const newestAwaitingLines = SqlSchema.findAll({
           and(
             userId === null ? undefined : eq(messages.userId, userId),
             inArray(messages.conversationId, [...conversationIds]),
-            inArray(conversations.kind, AGENT_CONVERSATION_KINDS),
+            eq(conversations.kind, CONVERSATION_KIND.AGENT),
             turnlessUserLine(messages),
             isNull(messages.withdrawnAt),
             lineOfTheAgents(),

@@ -55,7 +55,7 @@ import {
   type UIMessage,
   type UITools,
 } from "ai";
-import { and, asc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   Cause,
@@ -73,9 +73,7 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import {
-  AGENT_CONVERSATION_KINDS,
   CONVERSATION_KIND,
-  isAgentConversationKind,
   MESSAGE_SENDER,
   OPERATOR_NOTICE_KIND,
   type OperatorNoticeKind,
@@ -1115,7 +1113,7 @@ function holdJournal(context: WriterContext, turnId: string, row: MessageRow, di
 
 /** The conversations whose journal is a transcript a coding agent's tab shows: its own and its workers'. */
 const TRANSCRIPT_KINDS: ReadonlySet<string> = new Set([
-  ...AGENT_CONVERSATION_KINDS,
+  CONVERSATION_KIND.AGENT,
   CONVERSATION_KIND.CHILD,
 ]);
 
@@ -1334,7 +1332,7 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
     responseIds: event.responseIds,
   });
   // A coding agent's own turn that settled is told its member's operator, once the write is done.
-  if (isAgentConversationKind(context.kind)) {
+  if (context.kind === CONVERSATION_KIND.AGENT) {
     const kind =
       status === TURN_STATUS.FAILED
         ? OPERATOR_NOTICE_KIND.TURN_FAILED
@@ -1356,7 +1354,7 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Option.isSome(open) && open.value.finishedAt === null) {
     const reason =
       event.status === RUN_STATUS.CANCELLED ? UNANSWERED_REASON.CANCELLED : UNANSWERED_REASON.ENDED;
-    const keepsWords = isAgentConversationKind(context.kind);
+    const keepsWords = context.kind === CONVERSATION_KIND.AGENT;
     const parts = open.value.parts.flatMap((part): Parts => {
       if (part.type === UI_PART_TYPE.TEXT) return keepsWords ? [part] : [];
       return isStoredToolPart(part) && !isSettledToolPartState(part.state)
@@ -1382,7 +1380,7 @@ const settleRetriedCalls = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const boundary = row.parts.findLastIndex((part) => part.type === UI_PART_TYPE.STEP_START);
   // Note that a coding agent's abandoned words leave with the attempt, since its failed turn keeps its words and the retry's own, which may be shorter, could not replace them.
-  const dropsWords = isAgentConversationKind(context.kind);
+  const dropsWords = context.kind === CONVERSATION_KIND.AGENT;
   const parts = row.parts.flatMap((part, index): Parts => {
     if (index <= boundary) return [part];
     if (dropsWords && part.type === UI_PART_TYPE.TEXT) return [];
@@ -1738,7 +1736,7 @@ const findAwaitingLines = SqlSchema.findAll({
         .where(
           and(
             eq(messages.conversationId, key.conversationId),
-            inArray(conversations.kind, AGENT_CONVERSATION_KINDS),
+            eq(conversations.kind, CONVERSATION_KIND.AGENT),
             eq(messages.role, MESSAGE_ROLE.USER),
             isNull(messages.turnId),
             // A line typed into a call is its ask's, taken in by the ask's id and never by its words.

@@ -11,29 +11,34 @@ import { Path } from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
 /**
- * conversation-kind-agent-migration.test.ts -- the migration that spells every agent's conversation kind `agent`.
+ * conversation-kind-agent-migration.test.ts -- the migrations that spell every agent's conversation kind `agent`.
  *
- * Over a database migrated up to it, holding a conversation of each kind an
- * earlier build wrote: once it runs, every `coding_agent` says `agent` and
- * every other kind stands as it was; a second run changes nothing.
- * Synthetic accounts throughout.
+ * Over a database migrated up to each, holding a conversation of each kind
+ * an earlier build wrote: once it runs, every `coding_agent` says `agent` and
+ * every other kind stands as it was; a second run of its rewrite changes
+ * nothing. The contract's rewrite catches what a release still serving wrote
+ * after the first. Synthetic accounts throughout.
  */
 
-const MIGRATION = "20261029032309_conversation_kind_agent";
+const MIGRATIONS = [
+  "20261029032309_conversation_kind_agent",
+  "20261029032431_agent_sql_contract",
+] as const;
 
-/** A migrations folder holding every migration named before `MIGRATION`'s, and none after. */
-const foldersBefore = Effect.gen(function* () {
-  const fileSystem = yield* FileSystem;
-  const path = yield* Path;
-  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-kind-" });
-  const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
-    (name) => name.localeCompare(MIGRATION) < 0,
-  );
-  for (const name of names) {
-    yield* fileSystem.copy(path.join(MIGRATIONS_FOLDER, name), path.join(folder, name));
-  }
-  return folder;
-});
+/** A migrations folder holding every migration named before `migration`, and none after. */
+const foldersBefore = (migration: string) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem;
+    const path = yield* Path;
+    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-kind-" });
+    const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
+      (name) => name.localeCompare(migration) < 0,
+    );
+    for (const name of names) {
+      yield* fileSystem.copy(path.join(MIGRATIONS_FOLDER, name), path.join(folder, name));
+    }
+    return folder;
+  });
 
 /** Each conversation's kind as an earlier build stored it, in order, and as it reads once the migration has run. */
 const KINDS = [
@@ -44,13 +49,13 @@ const KINDS = [
   ["child", "child"],
 ] as const;
 
-it.effect(
-  "every agent's conversation is spelled `agent`, every other kind stands, and a second run changes nothing",
-  () =>
+it.effect.each(MIGRATIONS)(
+  "%s spells every agent's conversation `agent`, every other kind stands, and a second run changes nothing",
+  (migration) =>
     Effect.scoped(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        yield* runWebMigrations(yield* foldersBefore);
+        yield* runWebMigrations(yield* foldersBefore(migration));
         yield* Database.use((db) =>
           db.insert(user).values({ id: "dean", name: "dean", email: "dean@luke.test" }),
         );
@@ -74,10 +79,13 @@ it.effect(
         // A second run, as a deploy that ran it before recording it would, changes nothing.
         const fileSystem = yield* FileSystem;
         const path = yield* Path;
-        const statements = (yield* fileSystem.readFileString(
-          path.join(MIGRATIONS_FOLDER, MIGRATION, "migration.sql"),
-        )).split("--> statement-breakpoint");
-        for (const statement of statements) yield* sql.unsafe(statement);
+        const rewrites = (yield* fileSystem.readFileString(
+          path.join(MIGRATIONS_FOLDER, migration, "migration.sql"),
+        ))
+          .split("--> statement-breakpoint")
+          .filter((statement) => /^(--.*\n)*UPDATE "conversations"/u.test(statement.trim()));
+        assert.ok(rewrites.length > 0, "the migration rewrites conversations");
+        for (const statement of rewrites) yield* sql.unsafe(statement);
         assert.deepEqual(
           yield* stored,
           KINDS.map(([, after]) => after),
