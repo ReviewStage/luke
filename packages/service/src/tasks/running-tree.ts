@@ -6,13 +6,14 @@
  * every agent standing on a task of the tree, at any depth, has its turn
  * under way stopped as a member's Stop stops it (`stoppedTurn`), under the
  * switching member's authority, but the top task's own pilot, which keeps
- * talking to the developer while its tree is stopped. Each Stop is written on
- * its turn as the switch's (`turns.cancel_requested_for_running`), so no
+ * talking to the developer while its tree is stopped. Each Stop eve took is
+ * written on its turn as the switch's (`turns.cancel_requested_for_running`), so no
  * starter is told of it (`starter-notices.ts`): the whole tree stopped at
  * once, and a pilot woken per agent would only start its tree again. On,
- * every agent whose newest turn the switch stopped is told to carry on,
- * once, under the key of the turn it resumes from; an agent the switch found
- * idle, or one stopped some other way, is left as it stands.
+ * every agent whose newest turn the switch stopped is told to carry on by
+ * Luke, once, under the key of the turn it resumes from; an agent the switch
+ * found idle, one whose turn ended before eve took the Stop, or one stopped
+ * some other way, is left as it stands.
  *
  * Both run once the switch is written, and an agent that could not be stopped
  * or told is logged and left, never failing the switch, whose answer is the
@@ -24,7 +25,12 @@ import { LUKE_LINE_METADATA, type StoreWriter } from "@luke/database/models/writ
 import { MESSAGE_SENDER } from "@luke/features/agent-wire";
 import { Effect } from "effect";
 import { steerAgentWritten } from "../agents/coder-host/steer.js";
-import { type EveReach, eveFor, standingsOf, stoppedTurn } from "../agents/coder-host/stop.js";
+import {
+  type EveReach,
+  eveActingFor,
+  standingsOf,
+  stoppedTurn,
+} from "../agents/coder-host/stop.js";
 import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 import { pilotOf } from "./pilot-switch-notice.js";
@@ -77,18 +83,23 @@ export function stopRunningTree(
   );
 }
 
-/** The agent told to carry on, as Luke tells it, under the key of the turn the switch stopped. */
+/**
+ * The agent told to carry on, as Luke tells it, under the key of the turn
+ * the switch stopped. Note that the line goes as the deployment acting for
+ * the agent's starter, as a starter notice goes, never as the member who
+ * switched: an agent on its starter's own GitHub token or Mac takes words
+ * from its starter alone (`controlsAgent`), and a teammate's switch must
+ * resume it all the same.
+ */
 const resumed = (
-  reach: EveReach,
-  request: Request,
   writer: Effect.Effect<StoreWriter>,
-  userId: string,
+  reach: EveReach,
   agent: Agent,
   stoppedTurnId: string,
 ) =>
   Effect.gen(function* () {
-    const eve = yield* eveFor<EveTypedTurn>(reach, request, userId);
-    yield* steerAgentWritten(eve, writer, userId, agent, {
+    const eve = yield* eveActingFor<EveTypedTurn>(reach, agent.userId);
+    yield* steerAgentWritten(eve, writer, agent.userId, agent, {
       text: RUNNING_RESUME_MESSAGE,
       clientKey: stoppedTurnId,
       sender: { kind: MESSAGE_SENDER.LUKE },
@@ -96,10 +107,9 @@ const resumed = (
     });
   }).pipe(Effect.catch(logged("an agent was not resumed")));
 
-/** Every agent of the top task `taskId`'s tree whose newest turn the switch stopped told to carry on, under the member `userId`, a few at once. */
+/** Every agent of the top task `taskId`'s tree, as the member `userId` reads it, whose newest turn the switch stopped told to carry on, a few at once. */
 export function resumeRunningTree(
   reach: EveReach,
-  request: Request,
   writer: Effect.Effect<StoreWriter>,
   userId: string,
   taskId: string,
@@ -112,7 +122,7 @@ export function resumeRunningTree(
       (agent) => {
         const turn = standing(agent.conversationId).turn;
         return turn?.cancelRequestedForRunning === true
-          ? resumed(reach, request, writer, userId, agent, turn.id)
+          ? resumed(writer, reach, agent, turn.id)
           : Effect.void;
       },
       { concurrency: RUNNING_TREE_CONCURRENCY, discard: true },

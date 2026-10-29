@@ -766,8 +766,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       if (mergePolicyMoved) yield* tellPilotOfMergePolicy(seams, request, writer, userId, taskId);
       // The tree is stopped or resumed before its pilot is told, so the pilot wakes to the tree as the switch left it.
       if (runningMoved) {
-        const switched = plan.running === true ? resumeRunningTree : stopRunningTree;
-        yield* switched(seams, request, writer, userId, taskId);
+        yield* plan.running === true
+          ? resumeRunningTree(seams, writer, userId, taskId)
+          : stopRunningTree(seams, request, writer, userId, taskId);
         yield* tellPilotOfRunning(seams, request, writer, userId, taskId);
       }
       return txid === undefined ? { plan } : { plan, txid };

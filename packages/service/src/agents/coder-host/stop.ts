@@ -119,10 +119,34 @@ export function eveFor<Turn extends EveHostTurn = never>(
       if (origin === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* routed(yield* eveSessions<Turn>({ origin, caller: { authorization }, mount }));
     }
-    if (reach.eveAs !== undefined) return yield* routed(reach.eveAs(account));
-    // Note that a runtime without the deployment's environment refuses a cookie's request as
-    // unavailable on purpose, as one whose environment names no secret does: the deployment acts
-    // for no account it cannot prove itself to eve as, and nothing falls back to another caller.
+    return yield* eveActingFor<Turn>(reach, account, mount);
+  });
+}
+
+/**
+ * eve as the deployment reaches it acting for the account, under the
+ * deployment's own secret (`../deployment-eve.ts`): a cookie's request
+ * reaches it so (`eveFor`), and so does a line Luke sends an agent on its own
+ * rather than on a caller's word, as the agent's starter, whichever member's
+ * act it follows (`../../tasks/running-tree.ts`).
+ */
+export function eveActingFor<Turn extends EveHostTurn = never>(
+  reach: EveReach,
+  account: string,
+  mount: EveMount = EVE_MOUNT.CODER,
+): Effect.Effect<
+  AgentSessions<NoInfer<Turn>>,
+  HostedRefusal,
+  HttpClient.HttpClient | DatabaseServices
+> {
+  return Effect.gen(function* () {
+    if (reach.eveAs !== undefined) {
+      const eve: AgentSessions<NoInfer<Turn>> = reach.eveAs(account);
+      return mount === EVE_MOUNT.CODER ? yield* routedSessions(eve, account) : eve;
+    }
+    // Note that a runtime without the deployment's environment refuses as unavailable on purpose,
+    // as one whose environment names no secret does: the deployment acts for no account it cannot
+    // prove itself to eve as, and nothing falls back to another caller.
     const eveAs = yield* deploymentEve<Turn>(reach.eveOrigin(), mount);
     return eveAs(account);
   });
@@ -287,7 +311,7 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
         at,
         ...(key === undefined || !accepted ? undefined : { key }),
         ...(by === undefined ? undefined : { by }),
-        ...(forRunning === true ? { forRunning } : undefined),
+        ...(forRunning === true && accepted ? { forRunning } : undefined),
       }),
     ),
   );
