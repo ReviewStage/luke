@@ -13,6 +13,7 @@ import {
 import { agentPin, taskPin } from "@luke/database/schemas";
 import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
+import { conversations } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
 import { and, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
@@ -142,6 +143,7 @@ function agentsStatement(userId: string) {
           disabledServers: codingAgent.disabledServers,
           published: codingAgent.published,
           startedFrom: codingAgent.startedFrom,
+          runtime: conversations.runtime,
           pinPosition: agentPin.position,
           turnId: latest.id,
           turnStatus: latest.status,
@@ -164,6 +166,7 @@ function agentsStatement(userId: string) {
     )
     .from(codingAgent)
     .leftJoin(task, eq(task.id, codingAgent.taskId))
+    .leftJoin(conversations, eq(conversations.id, codingAgent.conversationId))
     .leftJoin(
       agentPin,
       and(eq(agentPin.codingAgentId, codingAgent.id), eq(agentPin.userId, userId)),

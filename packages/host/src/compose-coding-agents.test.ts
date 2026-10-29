@@ -380,7 +380,7 @@ function fakeService() {
     changeQueue: (agentId, change) =>
       Effect.sync(() => {
         asked.push(`queue:${agentId}:${change.change}`);
-        return { queue: { messages: [] } };
+        return { queue: { messages: [], revision: 1 } };
       }),
     stop: (agentId) =>
       Effect.sync(() => {
@@ -717,6 +717,7 @@ const TRANSCRIPT_PARTS = [
   "workers",
   "window",
   "windowParts",
+  "queueRevision",
 ] as const;
 const SCOPE_PARTS = ["items", "messages", "files"] as const;
 const ACCOUNT_PARTS = ["items", "planless", "plans", "automations", "failedRuns"] as const;
@@ -1310,6 +1311,7 @@ function transcriptRows(live: { readonly transcript: TranscriptLive }, seq: numb
     workers: [],
     window: [],
     windowParts: [],
+    queueRevision: [],
   });
 }
 
@@ -1521,6 +1523,38 @@ it.effect(
       transcriptRows(live, 3, 2);
       yield* nextPoll;
       assert.equal(asked.at(-1), `messages-now:${AGENT_ID}:3:0`);
+    }),
+);
+
+it.effect(
+  "a followed transcript reads its page again when only the agent's queue moves, or a line of the developer's lands awaiting its turn, whoever wrote it",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, sealTranscript, pageNow: script, pageNewest, live } = yield* subject();
+      sealTranscript(LIVE_ANSWERED);
+      pageNewest(newestPage("1:0", "Reading the invites.", "40"));
+      script(pageNow("1:0", { holds: false, text: "Reading the invites." }));
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      transcriptRows(live, 1);
+      yield* settled;
+      const reads = () => asked.filter((ask) => ask.startsWith("messages-now")).length;
+
+      // A message queued, edited, sent, or the queue paused: nothing but its revision moves.
+      const beforeQueue = reads();
+      live.transcript.set({ queueRevision: [{ revision: 1 }] });
+      yield* nextPoll;
+      assert.equal(reads(), beforeQueue + 1, "the queue moving reads the page");
+
+      // A queue's hand-off writes the member's line before its turn is opened; the page says the agent runs.
+      const beforeLine = reads();
+      const line = windowRow(2, "Open the pull request.");
+      live.transcript.set({
+        window: [{ ...line.row, role: "user", turnStatus: null }],
+        windowParts: [line.part],
+      });
+      yield* nextPoll;
+      assert.equal(reads(), beforeLine + 1, "a line awaiting its turn reads the page");
     }),
 );
 

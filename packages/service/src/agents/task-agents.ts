@@ -7,6 +7,7 @@ import {
   listPublishedCodingAgents,
   listPublishedCodingAgentsById,
   listTasklessCodingAgents,
+  nativeRuntimesOfReached,
   type PublishedCodingAgentLine,
 } from "@luke/database/models/coding-agent-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
@@ -243,6 +244,7 @@ export function listTasklessAgents(
     const turns = yield* latestTurnsOfReached(conversationIds);
     const awaiting = yield* awaitingLinesOfReached(conversationIds);
     const settled = yield* lastSettledTurnsOfReached(conversationIds);
+    const runtimes = yield* nativeRuntimesOfReached(conversationIds);
     // The member each was archived by or for is named too, as the agent's own page names them.
     const names = yield* readAccountNames(agents.flatMap(summaryAccounts));
     const now = yield* Clock.currentTimeMillis;
@@ -250,7 +252,12 @@ export function listTasklessAgents(
       const turn = turns.get(agent.conversationId);
       const awaitingLineAt = awaiting.get(agent.conversationId);
       return {
-        ...codingAgentSummary(agent, { turn, awaitingLineAt }, now, names),
+        ...codingAgentSummary(
+          agent,
+          { turn, awaitingLineAt, runtime: runtimes.get(agent.conversationId) },
+          now,
+          names,
+        ),
         // The fields its own page names beside the summary; the run that started it is that page's alone.
         automationId: agent.automationId,
         workspaceId: agent.organizationId,

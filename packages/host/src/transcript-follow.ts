@@ -14,9 +14,11 @@ import {
   type AgentTranscriptLiveAnswer,
   agentTranscriptLiveRowsSchema,
   LIVE_SIGNED_OUT,
+  type SealedLiveQueryWire,
   type TranscriptNowAnswer,
 } from "@luke/features/live-wire";
 import { joinedWindowRows, windowMessagesOf } from "@luke/features/transcript-window";
+import { MESSAGE_ROLE } from "@luke/wire";
 import {
   Data,
   Duration,
@@ -29,7 +31,7 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
-import { decodedLiveRows, LIVE_STATE } from "./live-follow.js";
+import { decodedLiveRows, LIVE_STATE, type SealedRead } from "./live-follow.js";
 
 /**
  * transcript-follow.ts -- a coding agent's transcript, or one of its workers', followed here over the service's held poll for the windows that draw it, each page told as it is read.
@@ -129,10 +131,14 @@ export type TranscriptFollows<Key = TranscriptKey> = RcMap.RcMap<Key, Standing, 
 
 /**
  * The rows a page beside the messages is read by as one text, in no order of
- * Postgres's, so only a change to one moves it: the turns, the titles, and
- * the workers. Note that the messages and the journal's revision are left
- * out, because the window's own rows carry the messages. Held here alone,
- * so it needs no hash, and the host loads where no `node:` module does.
+ * Postgres's, so only a change to one moves it: the turns, the titles, the
+ * workers, the queue's revision, and the developer's lines still awaiting a
+ * turn. Note that the messages and the journal's revision are left out,
+ * because the window's own rows carry the messages; and that a line awaiting
+ * its turn is in, because whoever wrote it, a queue's hand-off or another
+ * member, the agent's status moves with it, which only a page says. Held
+ * here alone, so it needs no hash, and the host loads where no `node:`
+ * module does.
  */
 function digestOf(rows: typeof agentTranscriptLiveRowsSchema.Type): string {
   const parts = {
@@ -140,6 +146,10 @@ function digestOf(rows: typeof agentTranscriptLiveRowsSchema.Type): string {
     conversation: rows.conversation.map(({ id, title }) => ({ id, title })),
     agent: rows.agent,
     workers: rows.workers,
+    queue: rows.queueRevision ?? [],
+    awaiting: rows.window
+      .filter((row) => row.role === MESSAGE_ROLE.USER && row.turnStatus === null)
+      .map(({ id }) => ({ id })),
   };
   return JSON.stringify(
     Object.entries(parts).map(
@@ -182,9 +192,14 @@ function cursorParts(cursor: string): { readonly seq: number; readonly revision:
  * the count of its messages, which released desktops wake on and this host
  * needs no longer, since the window's own rows carry the messages.
  */
-function followedRead(sealed: AgentTranscriptLiveAnswer) {
+function followedRead(sealed: AgentTranscriptLiveAnswer): SealedRead<string> {
   const { messages: _messages, ...queries } = sealed.queries;
-  return { url: sealed.url, queries };
+  // Note that a part an older service does not answer, the queue's, is left out rather than followed as nothing.
+  const answered: Record<string, SealedLiveQueryWire> = {};
+  for (const [part, query] of Object.entries(queries)) {
+    if (query !== undefined) answered[part] = query;
+  }
+  return { url: sealed.url, queries: answered };
 }
 
 /** A read's answer as the host follows it: the read without the count of its messages, or the failure as answered. */

@@ -2,7 +2,13 @@ import { isLinkOpen, LINK_OPEN, LINK_OPEN_LABEL, LINK_OPEN_LIST } from "@luke/fe
 import type { UnparsedWireValue } from "@luke/wire";
 import { APP_SETTING_ID, isAppSettingId } from "@luke/wire/app-settings";
 import { Schema } from "effect";
-import { AGENT_ENTER, AGENT_ENTER_LABEL, AGENT_ENTER_LIST, isAgentEnter } from "./agent-enter.js";
+import {
+  AGENT_ENTER,
+  AGENT_ENTER_DETAIL,
+  AGENT_ENTER_LABEL,
+  AGENT_ENTER_LIST,
+  isAgentEnter,
+} from "./agent-enter.js";
 import { HOST_CAPABILITY } from "./capabilities.js";
 import {
   DIFF_FONT,
@@ -244,8 +250,11 @@ export const APP_SETTING_SCHEMA = {
   agentEnter: choiceSetting({
     field: "agentEnter",
     id: APP_SETTING_ID.AGENT_ENTER,
-    label: "While an agent works, Enter",
-    detail: "Hold ⌘ as you press Enter to do the other. The menu beside Send offers both.",
+    label: "Follow-up behavior",
+    detail: (settings) =>
+      AGENT_ENTER_DETAIL[
+        settings("agentEnter") === AGENT_ENTER.QUEUE ? AGENT_ENTER.QUEUE : AGENT_ENTER.STEER
+      ],
     values: AGENT_ENTER_LIST,
     token: (choice) => choice,
     optionLabel: (choice) => AGENT_ENTER_LABEL[choice],

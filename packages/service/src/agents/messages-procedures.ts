@@ -35,12 +35,14 @@
 
 import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
 import {
-  claimedAt,
+  claimQueuedMessage,
   editQueuedMessage,
   holdQueuedMessage,
   QUEUE_OUTCOME,
+  type QueuedMessageRow,
   queueAgentMessage,
   readAgentQueue,
+  releaseQueuedMessage,
   reorderAgentQueue,
   resumeAgentQueue,
   takeQueuedMessage,
@@ -85,7 +87,13 @@ import {
 } from "../http/http-effect.js";
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
 import { controlsAgent } from "./agent-reach.js";
-import { handOnQueue, queueEveFor, sendQueued, wireQueue } from "./coder-host/agent-queue.js";
+import {
+  claimNext,
+  queueEveFor,
+  sendClaimed,
+  sendQueued,
+  wireQueue,
+} from "./coder-host/agent-queue.js";
 import { cutMessage, wholePartOf } from "./coder-host/part-cut.js";
 import { startedBlank } from "./coder-host/status.js";
 import { steerCodingAgentWritten } from "./coder-host/steer.js";
@@ -435,7 +443,10 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           }
           break;
         case QUEUE_CHANGE.DELETE:
-          yield* found(takeQueuedMessage(userId, agent.id, body.messageId));
+          // Note that a message being sent has left the queue, so deleting it deletes nothing, which is said.
+          if (Option.isNone(yield* found(takeQueuedMessage(userId, agent.id, body.messageId)))) {
+            return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+          }
           break;
         case QUEUE_CHANGE.HOLD:
           if (!(yield* found(holdQueuedMessage(userId, agent.id, body.messageId, body.held)))) {
@@ -443,15 +454,18 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           }
           break;
         case QUEUE_CHANGE.STEER: {
-          // Steered, the message goes now, into the turn under way or as the next where none runs, and leaves the queue once it went.
-          const queue = yield* found(readAgentQueue(userId, agent.id));
-          const now = yield* DateTime.nowAsDate;
-          // Note that a message the hand-off claimed is already on its way, so it is no member's to steer.
-          const message = queue.messages.find(
-            (each) => each.id === body.messageId && !claimedAt(each, now),
+          // Steered, the message is claimed first, with an edit's words where it steers one, so no hand-off sends it
+          // beside this send, and goes now, into the turn under way or as the next; a refusal lets it go back.
+          const claimed = yield* found(
+            claimQueuedMessage(userId, agent.id, body.messageId, body.text),
           );
-          if (message === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-          yield* sendQueued(eve, agent, message);
+          if (Option.isNone(claimed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+          const message = claimed.value;
+          yield* sendQueued(eve, agent, message).pipe(
+            Effect.tapError(() =>
+              hostedStoreOrUnavailable(releaseQueuedMessage(agent.id, message.id)),
+            ),
+          );
           break;
         }
         case QUEUE_CHANGE.REORDER:
@@ -464,12 +478,16 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           break;
       }
       // A queue added to, put in order, resumed, or let go of by an edit while the agent stands idle hands on
-      // its first message now, since no turn's end is coming to hand it on.
-      if (HANDS_ON.has(body.change)) {
-        yield* afterResponse("agent-queue", handOnQueue(eve, agent));
+      // its first message now, since no turn's end is coming to hand it on: claimed here, before the answer
+      // reads the queue, so the answer never lists a message about to go, and sent once the answer is out.
+      const claimed = HANDS_ON.has(body.change)
+        ? yield* claimNext(agent)
+        : Option.none<QueuedMessageRow>();
+      if (Option.isSome(claimed)) {
+        yield* afterResponse("agent-queue", sendClaimed(eve, agent, claimed.value));
       }
       const queue = yield* found(readAgentQueue(userId, agent.id));
-      return { queue: wireQueue(queue, yield* DateTime.nowAsDate) ?? { messages: [] } };
+      return { queue: wireQueue(queue, yield* DateTime.nowAsDate) };
     }),
 
     agentWorker: signedIn.agentWorker.effect(function* ({ input, context }) {

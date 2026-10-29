@@ -13,6 +13,7 @@ import { codingAgent } from "../../schemas/coding-agent.js";
 import { turns } from "../../schemas/storage.js";
 import { getTestDB, startTask } from "../../testing/index.js";
 import {
+  claimQueuedMessage,
   claimQueueHead,
   dropQueuedMessage,
   editQueuedMessage,
@@ -137,7 +138,8 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         assert.ok(last !== undefined);
         yield* takeQueuedMessage(userId, agentId, last.id);
         const emptied = Option.getOrThrow(yield* readAgentQueue(userId, agentId));
-        assert.deepEqual(emptied, { messages: [], paused: undefined });
+        assert.deepEqual(emptied.messages, []);
+        assert.equal(emptied.paused, undefined);
       }),
   );
 
@@ -246,10 +248,13 @@ it.layer(getTestDB())("an agent's queue", (it) => {
       assert.ok(Option.isNone(yield* reorderAgentQueue(other.userId, owner.agentId, [theirs.id])));
       assert.ok(Option.isNone(yield* takeQueuedMessage(other.userId, owner.agentId, theirs.id)));
       assert.ok(Option.isNone(yield* resumeAgentQueue(other.userId, owner.agentId)));
+      assert.ok(Option.isNone(yield* claimQueuedMessage(other.userId, owner.agentId, theirs.id)));
 
+      // Nothing the other account tried moved the queue on: its revision is the owner's two changes.
       assert.deepEqual(Option.getOrThrow(yield* readAgentQueue(owner.userId, owner.agentId)), {
         messages: [theirs],
         paused: { because: QUEUE_PAUSE.STOPPED, refusal: undefined },
+        revision: 2,
       });
     }),
   );

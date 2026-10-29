@@ -700,6 +700,7 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
           "agent",
           "conversation",
           "messages",
+          "queueRevision",
           "turns",
           "window",
           "windowParts",

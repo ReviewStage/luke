@@ -1,6 +1,7 @@
 import type { ShortcutChord } from "@luke/settings/shortcuts";
 import { type ReactNode, useId } from "react";
 import {
+  BUTTON_SHAPE,
   BUTTON_TYPE,
   BUTTON_VARIANT,
   type BusyProps,
@@ -41,7 +42,9 @@ import { Tooltip } from "../tooltip/hint.js";
  *
  * A send that settles something with no message to send, a notice's "Got it",
  * reads in words (`inWords`) rather than as the round glyph, and is the
- * same press otherwise. Where the owner hands a `stop`, as an agent's box
+ * same press otherwise; one that sends another way than the round send
+ * would, an agent's Queue or Steer, wears its own glyph (`icon`) in the
+ * same round place. Where the owner hands a `stop`, as an agent's box
  * does while a turn runs and the box holds nothing, Stop stands in the
  * send's place, the same round button wearing Stop's glyph, busy while the
  * stop it asked for is out.
@@ -75,7 +78,7 @@ export type ComposerSend = {
   onSend?: (() => void) | undefined;
   /** Whether it reads as its label in words, where its press settles something and sends no message ("Got it"), or sends one another way than its round send would ("Queue"). */
   inWords?: boolean | undefined;
-  /** The glyph before its words, where it reads in words and says how it sends ("Queue", "Steer"). */
+  /** The glyph it wears in the send's round place, or before its words where it reads in words, where it sends another way than the round send would ("Queue", "Steer"). */
   icon?: ReactNode;
   /** The key that sends where it is no bare Enter, drawn on its hint: ⌘↩ for a box whose Enter breaks the line. */
   chord?: ShortcutChord | undefined;
@@ -190,16 +193,30 @@ function SendButton({
   }
   return (
     <Tooltip label={label} chord={chord}>
-      <IconButton
-        submit={SUBMIT_STATE.READY}
-        variant={BUTTON_VARIANT.INK}
-        label={label}
-        type={type}
-        disabled={empty || held}
-        onClick={onSend}
-        {...refusing}
-        {...busy}
-      />
+      {icon === undefined ? (
+        <IconButton
+          submit={SUBMIT_STATE.READY}
+          variant={BUTTON_VARIANT.INK}
+          label={label}
+          type={type}
+          disabled={empty || held}
+          onClick={onSend}
+          {...refusing}
+          {...busy}
+        />
+      ) : (
+        <IconButton
+          icon={icon}
+          shape={BUTTON_SHAPE.ROUND}
+          variant={BUTTON_VARIANT.INK}
+          label={label}
+          type={type}
+          disabled={empty || held}
+          onClick={onSend}
+          {...refusing}
+          {...busy}
+        />
+      )}
     </Tooltip>
   );
 }

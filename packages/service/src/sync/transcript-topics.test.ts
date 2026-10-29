@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import {
+  claimQueueHead,
+  dropQueuedMessage,
+  holdQueuedMessage,
+  queueAgentMessage,
+  readAgentQueue,
+  takeQueuedMessage,
+} from "@luke/database/models/agent-queue-store";
 import { fillChildTitle } from "@luke/database/models/child-titles";
 import { writeDelegation } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
@@ -13,7 +21,7 @@ import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import { expectTopicsFire, getTestDB, openTaskAgent, openWorkspace } from "@luke/database/testing";
 import { eq } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { recordDelegation } from "../agents/coder-host/delegation.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
@@ -33,6 +41,7 @@ import {
   TURN_ORIGIN,
   TURN_TRIGGER,
 } from "../core.js";
+import { liveCursorParts } from "../live/live-procedures.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { wokenOnHub } from "../testing/sync-woken.js";
 import { agentTranscriptLive } from "./live-queries.js";
@@ -116,6 +125,49 @@ const runEvent = (target: ConversationTarget, turnId: string) => ({
 });
 
 it.layer(getTestDB())("what moves a coding agent's transcript notifies", (it) => {
+  it.effect(
+    "every write to the agent's queue moves what the transcript's live read answers, and notifies the agent: a message queued, held, claimed, sent, and deleted",
+    () =>
+      Effect.gen(function* () {
+        const { userId, params } = yield* openAgent;
+        const { agentId } = params;
+        const agentTopic: readonly SyncTopic[] = [[TOPIC.AGENT, agentId]];
+        /** What the read answers of the queue now. */
+        const queuePart = Effect.map(
+          liveCursorParts(agentTranscriptLive, params, {}),
+          ({ queries }) => JSON.stringify(queries.queueRevision?.rows ?? []),
+        );
+        const seen = [yield* queuePart];
+        const moved = Effect.fn(function* <A, E, R>(write: Effect.Effect<A, E, R>) {
+          const answered: A[] = [];
+          yield* wakesTheTranscript(
+            Effect.tap(write, (answer) => Effect.sync(() => answered.push(answer))),
+            agentTopic,
+            params,
+          );
+          assert.equal(answered.length, 1, "the write answered once");
+          const now = yield* queuePart;
+          assert.ok(!seen.includes(now), "the write moved the read's queue part on");
+          seen.push(now);
+          // SAFETY: the write answered once, as asserted above, so its one answer stands.
+          return answered[0] as A;
+        });
+
+        yield* moved(
+          queueAgentMessage(userId, agentId, { clientKey: randomUUID(), text: "First" }),
+        );
+        yield* moved(
+          queueAgentMessage(userId, agentId, { clientKey: randomUUID(), text: "Second" }),
+        );
+        const head = Option.getOrThrow(yield* moved(claimQueueHead(agentId)));
+        yield* moved(dropQueuedMessage(agentId, head.id));
+        const [second] = Option.getOrThrow(yield* readAgentQueue(userId, agentId)).messages;
+        assert.ok(second !== undefined);
+        yield* moved(holdQueuedMessage(userId, agentId, second.id, true));
+        yield* moved(takeQueuedMessage(userId, agentId, second.id));
+      }),
+  );
+
   it.effect(
     "a line written, a turn queued, started, and settled, and the journal it writes each notify the conversation, and a turn the agent's, its task's, and its workspace's too",
     () =>

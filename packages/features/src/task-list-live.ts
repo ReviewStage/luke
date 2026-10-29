@@ -17,6 +17,8 @@ import {
   type CodingAgentSummary,
   codingAgentPullRequestSchema,
   codingAgentSummarySchema,
+  NATIVE_CODING_AGENT_RUNTIMES,
+  type NativeCodingAgentRuntime,
   PULL_REQUEST_STATE,
   pullRequestAuthorOf,
   type TasklessAgent,
@@ -137,6 +139,8 @@ const agentLiveRowSchema = EffectSchema.Struct({
   published: EffectSchema.NullOr(codingAgentPullRequestSchema),
   /** The agent this one continues or forks, as its summary's `from` says it. */
   startedFrom: EffectSchema.NullOr(codingAgentSummarySchema.fields.from.schema),
+  /** What answers the agent's conversation (`CODING_AGENT_RUNTIME`); absent from a statement before it was carried. */
+  runtime: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   pinnedAt: EffectSchema.NullOr(countedNumber),
   pinPosition: EffectSchema.NullOr(EffectSchema.String),
   createdAt: countedNumber,
@@ -378,6 +382,12 @@ function archivedByOf(row: AgentLiveRow): CodingAgentArchivedBy | undefined {
   };
 }
 
+/** The provider's own harness the agent runs on, as its summary names it; nothing for an agent on eve. */
+function nativeRuntimeOf(row: AgentLiveRow): { runtime?: NativeCodingAgentRuntime } {
+  const runtime = NATIVE_CODING_AGENT_RUNTIMES.find((native) => native === row.runtime);
+  return runtime === undefined ? {} : { runtime };
+}
+
 /** One agent as the tabs draw it, on a plan or with none, its status read at `now`, as the service's summary of it says it. */
 function agentSummaryOf(row: AgentLiveRow, now: number): CodingAgentSummary {
   const servers = (row.disabledServers ?? []).filter(
@@ -395,6 +405,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number): CodingAgentSummary {
     ...(row.contextWindow === CONTEXT_WINDOW.STANDARD
       ? { contextWindow: CONTEXT_WINDOW.STANDARD }
       : undefined),
+    ...nativeRuntimeOf(row),
     title: row.title,
     ...(row.kind === CODING_AGENT_KIND.OPERATOR ? { kind: row.kind } : undefined),
     createdAt: row.createdAt,

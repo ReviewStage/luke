@@ -11,12 +11,43 @@
  * reaches it, and no window lists it, since its line is on its way into the
  * transcript.
  *
- * Every write that draws a place, or puts the queue in a new order, holds
- * the agent's queue lock until it commits, so two queued at once each draw
- * a place of their own and a new order never crosses a message queued
- * meanwhile. A queue standing empty stands unpaused: a pause is written
- * only over messages, and the last message going takes it with it, so a
- * Stop with nothing queued holds back nothing queued later.
+ * A queued message is in one of three states, and then gone:
+ *
+ *   QUEUED   waiting its turn: `held_until` and `claimed_at` null or lapsed.
+ *   HELD     a member is editing it: `held_until` in the future. The
+ *            hand-off passes over it; it keeps its place.
+ *   CLAIMED  the hand-off or a member's steer is sending it: `claimed_at`
+ *            within the line grace. No window lists it.
+ *   (gone)   the row deleted: sent, steered, or deleted.
+ *
+ * The transitions, and nothing else:
+ *
+ *   (none)  -> QUEUED   queueAgentMessage (a repeat under its key is a no-op)
+ *   QUEUED  -> HELD     holdQueuedMessage(held)
+ *   HELD    -> QUEUED   holdQueuedMessage(let go), editQueuedMessage (the
+ *                       edit saved), or the hold lapsing
+ *   QUEUED  -> QUEUED   editQueuedMessage, reorderAgentQueue
+ *   QUEUED  -> CLAIMED  claimQueueHead (the hand-off: the first unheld, where
+ *                       the queue is unpaused and nothing else stands claimed)
+ *   QUEUED | HELD -> CLAIMED  claimQueuedMessage (a member's steer, with the
+ *                       edit's words where it steers an edit)
+ *   CLAIMED -> (gone)   dropQueuedMessage, once its send answered
+ *   CLAIMED -> QUEUED   releaseQueuedMessage (its send refused), or the
+ *                       claim lapsing (its send cut off; sent again under
+ *                       its key, which answers REPEATED where it went)
+ *   QUEUED | HELD -> (gone)  takeQueuedMessage (a member's delete)
+ *
+ * A member's change to a CLAIMED message finds no message and changes
+ * nothing, which the route answers as not found: it has left the queue.
+ *
+ * Every write holds the agent's queue lock until it commits, so two changes
+ * at once land one after the other, and each that changed anything moves
+ * the queue's revision on in the same transaction (`agent_queue_revision`),
+ * which wakes every live read of the queue and tells a window that a change
+ * it made has landed once a read stands at the revision its answer named. A
+ * queue standing empty stands unpaused: a pause is written only over
+ * messages, and the last message going takes it with it, so a Stop with
+ * nothing queued holds back nothing queued later.
  */
 
 import type { HostedApiError } from "@luke/features";
@@ -28,7 +59,7 @@ import { and, asc, count, eq, exists, inArray, isNull, lte, max, or, sql } from 
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
-import { agentQueuePause, queuedMessage } from "../schemas/agent-queue.js";
+import { agentQueuePause, agentQueueRevision, queuedMessage } from "../schemas/agent-queue.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { turns } from "../schemas/storage.js";
 import { agentReachableBy } from "./workspace-store.js";
@@ -63,10 +94,11 @@ export interface QueuePauseRow {
   readonly refusal: HostedApiError | undefined;
 }
 
-/** An agent's queue: its messages in the order they go, and its pause where it stands paused. */
+/** An agent's queue: its messages in the order they go, its pause where it stands paused, and its revision, 0 before its first change. */
 export interface AgentQueueRead {
   readonly messages: readonly QueuedMessageRow[];
   readonly paused: QueuePauseRow | undefined;
+  readonly revision: number;
 }
 
 /** What queueing a message answered: queued (or queued already under its key), or refused because the queue is full. */
@@ -161,7 +193,7 @@ const findTail = SqlSchema.findAll({
     ),
 });
 
-const insertMessage = SqlSchema.void({
+const insertMessage = SqlSchema.findAll({
   Request: Schema.Struct({
     agentId: Schema.String,
     userId: Schema.String,
@@ -171,6 +203,7 @@ const insertMessage = SqlSchema.void({
     attachments: Schema.NullOr(Schema.Array(Schema.Unknown)),
     now: Schema.Date,
   }),
+  Result: Schema.Struct({ id: Schema.String }),
   execute: ({ attachments, now, ...row }) =>
     Database.use((db) =>
       db
@@ -183,7 +216,8 @@ const insertMessage = SqlSchema.void({
           updatedAt: now,
         })
         // Note that a queue repeated under its key keeps the message queued first, in its place.
-        .onConflictDoNothing({ target: [queuedMessage.agentId, queuedMessage.clientKey] }),
+        .onConflictDoNothing({ target: [queuedMessage.agentId, queuedMessage.clientKey] })
+        .returning({ id: queuedMessage.id }),
     ),
 });
 
@@ -235,20 +269,65 @@ const updateHold = SqlSchema.findAll({
     ),
 });
 
-/** A message claimed by the hand-off to send at `now`, or let go of (`claimedAt` null) where its send was refused. */
-const updateClaim = SqlSchema.void({
+/**
+ * A message claimed to send at `now`, its hold let go and its words those
+ * given where an edit's are, where no send stands claimed on it already;
+ * answers it as claimed.
+ */
+const updateClaim = SqlSchema.findAll({
   Request: Schema.Struct({
     agentId: Schema.String,
     messageId: Schema.String,
-    claimedAt: Schema.NullOr(Schema.Date),
+    text: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
-  execute: ({ agentId, messageId, claimedAt, now }) =>
+  Result: QueuedRowSchema,
+  execute: ({ agentId, messageId, text, now }) =>
     Database.use((db) =>
       db
         .update(queuedMessage)
-        .set({ claimedAt, updatedAt: now })
-        .where(and(eq(queuedMessage.agentId, agentId), eq(queuedMessage.id, messageId))),
+        .set({
+          claimedAt: now,
+          heldUntil: null,
+          updatedAt: now,
+          ...(text === null ? undefined : { text }),
+        })
+        .where(
+          and(
+            eq(queuedMessage.agentId, agentId),
+            eq(queuedMessage.id, messageId),
+            unclaimedAt(now),
+          ),
+        )
+        .returning({
+          id: queuedMessage.id,
+          userId: queuedMessage.userId,
+          clientKey: queuedMessage.clientKey,
+          text: queuedMessage.text,
+          attachments: queuedMessage.attachments,
+          heldUntil: queuedMessage.heldUntil,
+          claimedAt: queuedMessage.claimedAt,
+        }),
+    ),
+});
+
+/** A claimed message let go of, its send refused, so it stands queued in its place again; answers it where it stood claimed. */
+const updateRelease = SqlSchema.findAll({
+  Request: Schema.Struct({ agentId: Schema.String, messageId: Schema.String, now: Schema.Date }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ agentId, messageId, now }) =>
+    Database.use((db) =>
+      db
+        .update(queuedMessage)
+        .set({ claimedAt: null, updatedAt: now })
+        .where(
+          and(
+            eq(queuedMessage.agentId, agentId),
+            eq(queuedMessage.id, messageId),
+            sql`${queuedMessage.claimedAt} is not null`,
+          ),
+        )
+        .returning({ id: queuedMessage.id }),
     ),
 });
 
@@ -339,13 +418,14 @@ const deletePause = SqlSchema.findAll({
 });
 
 /** The pause written over the queue's messages, where any stand; a queue already paused keeps the reason it paused for first. */
-const insertPause = SqlSchema.void({
+const insertPause = SqlSchema.findAll({
   Request: Schema.Struct({
     agentId: Schema.String,
     because: Schema.Literals(PAUSES),
     refusal: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
+  Result: Schema.Struct({ agentId: Schema.String }),
   execute: ({ agentId, because, refusal, now }) =>
     Database.use((db) =>
       db
@@ -362,7 +442,37 @@ const insertPause = SqlSchema.void({
             .where(eq(queuedMessage.agentId, agentId))
             .limit(1),
         )
-        .onConflictDoNothing({ target: agentQueuePause.agentId }),
+        .onConflictDoNothing({ target: agentQueuePause.agentId })
+        .returning({ agentId: agentQueuePause.agentId }),
+    ),
+});
+
+/** The queue's revision moved on by one, answering the revision it moved to. */
+const bumpRevision = SqlSchema.findAll({
+  Request: Schema.Struct({ agentId: Schema.String }),
+  Result: Schema.Struct({ revision: Schema.Number }),
+  execute: ({ agentId }) =>
+    Database.use((db) =>
+      db
+        .insert(agentQueueRevision)
+        .values({ agentId, revision: 1 })
+        .onConflictDoUpdate({
+          target: agentQueueRevision.agentId,
+          set: { revision: sql`${agentQueueRevision.revision} + 1` },
+        })
+        .returning({ revision: agentQueueRevision.revision }),
+    ),
+});
+
+const findRevision = SqlSchema.findAll({
+  Request: Schema.Struct({ agentId: Schema.String }),
+  Result: Schema.Struct({ revision: Schema.Number }),
+  execute: ({ agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ revision: agentQueueRevision.revision })
+        .from(agentQueueRevision)
+        .where(eq(agentQueueRevision.agentId, agentId)),
     ),
 });
 
@@ -371,11 +481,12 @@ function reaches(userId: string, agentId: string): AgentQueueEffect<boolean> {
   return Effect.map(findReached({ userId, agentId }), (rows) => rows.length > 0);
 }
 
-/** The agent's queue as it stands, its messages in order and its pause, for a caller that already asked whether the reader reaches the agent. */
+/** The agent's queue as it stands, its messages in order, its pause, and its revision, for a caller that already asked whether the reader reaches the agent. */
 export function agentQueueNow(agentId: string): AgentQueueEffect<AgentQueueRead> {
   return Effect.gen(function* () {
     const rows = yield* findMessages({ agentId });
     const [pause] = yield* findPause({ agentId });
+    const [revision] = yield* findRevision({ agentId });
     return {
       messages: rows.map(messageOf),
       paused:
@@ -386,18 +497,35 @@ export function agentQueueNow(agentId: string): AgentQueueEffect<AgentQueueRead>
               // SAFETY: the column is written only from a hosted refusal's word for itself.
               refusal: (pause.refusal ?? undefined) as HostedApiError | undefined,
             },
+      revision: revision?.revision ?? 0,
     };
   });
 }
 
-/** Runs `body` in a transaction holding the agent's queue lock, so a place drawn or a new order is the agent's alone until it commits. */
-function underQueueLock<A>(agentId: string, body: AgentQueueEffect<A>): AgentQueueEffect<A> {
+/**
+ * Runs `body` in a transaction holding the agent's queue lock, moving the
+ * queue's revision on where `body` says it changed anything, so every write
+ * lands one after another and every change wakes the queue's readers.
+ */
+function underQueueLock<A>(
+  agentId: string,
+  body: AgentQueueEffect<A>,
+  changed: (answer: A) => boolean,
+): AgentQueueEffect<A> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
-      Effect.andThen(client`select pg_advisory_xact_lock(hashtextextended(${agentId}, 7))`, body),
+      Effect.gen(function* () {
+        yield* client`select pg_advisory_xact_lock(hashtextextended(${agentId}, 7))`;
+        const answer = yield* body;
+        if (changed(answer)) yield* bumpRevision({ agentId });
+        return answer;
+      }),
     ),
   );
 }
+
+/** Whether a member's change, answered as some of whether it changed anything, did. */
+const changedSome = (answer: Option.Option<boolean>) => Option.getOrElse(answer, () => false);
 
 /** The account's agent's queue, or none where the account does not reach the agent. */
 export function readAgentQueue(
@@ -411,10 +539,10 @@ export function readAgentQueue(
 }
 
 /**
- * Queues one message at the end of the agent's queue, as the account's; a
- * queue repeated under its key keeps the message it queued first. Answers
- * whether it is queued or the queue was full, or none where the account does
- * not reach the agent.
+ * Queues one message at the end of the agent's queue, as the account's
+ * (none -> QUEUED); a queue repeated under its key keeps the message it
+ * queued first. Answers whether it is queued or the queue was full, or none
+ * where the account does not reach the agent.
  */
 export function queueAgentMessage(
   userId: string,
@@ -425,6 +553,7 @@ export function queueAgentMessage(
     readonly attachments?: readonly CodingAgentAttachment[] | undefined;
   },
 ): AgentQueueEffect<Option.Option<QueueOutcome>> {
+  let inserted = false;
   return underQueueLock(
     agentId,
     Effect.gen(function* () {
@@ -433,7 +562,7 @@ export function queueAgentMessage(
       if ((tail?.size ?? 0) >= AGENT_QUEUE_BOUNDS.MAX_MESSAGES) {
         return Option.some(QUEUE_OUTCOME.FULL);
       }
-      yield* insertMessage({
+      const rows = yield* insertMessage({
         agentId,
         userId,
         position: (tail?.last ?? -1) + 1,
@@ -445,33 +574,44 @@ export function queueAgentMessage(
             : message.attachments,
         now: yield* DateTime.nowAsDate,
       });
+      inserted = rows.length > 0;
       return Option.some(QUEUE_OUTCOME.QUEUED);
     }),
+    () => inserted,
   );
 }
 
-/** A queued message's words written again in its place; answers whether it stood queued, or none where the account does not reach the agent. */
+/**
+ * A queued or held message's words written again in its place, its hold let
+ * go (HELD -> QUEUED); answers whether it stood queued and unclaimed, or none
+ * where the account does not reach the agent.
+ */
 export function editQueuedMessage(
   userId: string,
   agentId: string,
   messageId: string,
   text: string,
 ): AgentQueueEffect<Option.Option<boolean>> {
-  return Effect.gen(function* () {
-    if (!(yield* reaches(userId, agentId))) return Option.none();
-    const now = yield* DateTime.nowAsDate;
-    const updated = yield* updateText({ agentId, messageId, text, now });
-    return Option.some(updated.length > 0);
-  });
+  return underQueueLock(
+    agentId,
+    Effect.gen(function* () {
+      if (!(yield* reaches(userId, agentId))) return Option.none();
+      const now = yield* DateTime.nowAsDate;
+      const updated = yield* updateText({ agentId, messageId, text, now });
+      return Option.some(updated.length > 0);
+    }),
+    changedSome,
+  );
 }
 
 /**
- * A queued message held out of the hand-off while a member edits it, or let
- * go of, its edit cancelled. Note that a hold left standing, an edit in a
- * window closed meanwhile, lapses once it has stood as long as a sent line
- * reads as awaiting its turn (`LINE_GRACE_MILLIS`), since nobody's edit
- * stays open past it. Answers whether it stood queued, or none where the
- * account does not reach the agent.
+ * A queued message held out of the hand-off while a member edits it
+ * (QUEUED -> HELD), or let go of, its edit cancelled (HELD -> QUEUED). Note
+ * that a hold left standing, an edit in a window closed meanwhile, lapses
+ * once it has stood as long as a sent line reads as awaiting its turn
+ * (`LINE_GRACE_MILLIS`), since nobody's edit stays open past it. Answers
+ * whether it stood queued and unclaimed, or none where the account does not
+ * reach the agent.
  */
 export function holdQueuedMessage(
   userId: string,
@@ -479,19 +619,23 @@ export function holdQueuedMessage(
   messageId: string,
   held: boolean,
 ): AgentQueueEffect<Option.Option<boolean>> {
-  return Effect.gen(function* () {
-    if (!(yield* reaches(userId, agentId))) return Option.none();
-    const now = yield* DateTime.nowAsDate;
-    const heldUntil = held ? new Date(now.getTime() + LINE_GRACE_MILLIS) : null;
-    const updated = yield* updateHold({ agentId, messageId, heldUntil, now });
-    return Option.some(updated.length > 0);
-  });
+  return underQueueLock(
+    agentId,
+    Effect.gen(function* () {
+      if (!(yield* reaches(userId, agentId))) return Option.none();
+      const now = yield* DateTime.nowAsDate;
+      const heldUntil = held ? new Date(now.getTime() + LINE_GRACE_MILLIS) : null;
+      const updated = yield* updateHold({ agentId, messageId, heldUntil, now });
+      return Option.some(updated.length > 0);
+    }),
+    changedSome,
+  );
 }
 
 /**
- * A queued message taken out of the queue, deleted or steered into the
- * running turn, the pause going with the last; answers the message where it
- * stood queued, or none where the account does not reach the agent.
+ * A queued or held message deleted by a member (-> gone), the pause going
+ * with the last; answers the message where it stood unclaimed, or none
+ * where the account does not reach the agent.
  */
 export function takeQueuedMessage(
   userId: string,
@@ -507,13 +651,41 @@ export function takeQueuedMessage(
       yield* deletePauseIfEmpty({ agentId });
       return Option.some(Option.map(Option.fromNullishOr(taken), messageOf));
     }),
+    (answer) => Option.isSome(Option.flatten(answer)),
   );
 }
 
 /**
- * The queue put in a new order: `order` names every message it holds, each
- * once. Answers whether it did, false where `order` names other messages
- * than the queue holds now, or none where the account does not reach the agent.
+ * A queued or held message claimed by a member to steer it now (QUEUED |
+ * HELD -> CLAIMED), its words the edit's where `text` is given, so an edit
+ * steered goes as one message with its new words. Answers the message as
+ * claimed where it stood unclaimed, or none where the account does not
+ * reach the agent; once sent it is dropped, or released where its send was
+ * refused.
+ */
+export function claimQueuedMessage(
+  userId: string,
+  agentId: string,
+  messageId: string,
+  text?: string,
+): AgentQueueEffect<Option.Option<Option.Option<QueuedMessageRow>>> {
+  return underQueueLock(
+    agentId,
+    Effect.gen(function* () {
+      if (!(yield* reaches(userId, agentId))) return Option.none();
+      const now = yield* DateTime.nowAsDate;
+      const [claimed] = yield* updateClaim({ agentId, messageId, text: text ?? null, now });
+      return Option.some(Option.map(Option.fromNullishOr(claimed), messageOf));
+    }),
+    (answer) => Option.isSome(Option.flatten(answer)),
+  );
+}
+
+/**
+ * The queue put in a new order: `order` names every message it lists, each
+ * once, which is every one but a message being sent. Answers whether it
+ * did, false where `order` names other messages than the queue lists now,
+ * or none where the account does not reach the agent.
  */
 export function reorderAgentQueue(
   userId: string,
@@ -539,6 +711,7 @@ export function reorderAgentQueue(
       }
       return Option.some(true);
     }),
+    changedSome,
   );
 }
 
@@ -547,10 +720,14 @@ export function resumeAgentQueue(
   userId: string,
   agentId: string,
 ): AgentQueueEffect<Option.Option<boolean>> {
-  return Effect.gen(function* () {
-    if (!(yield* reaches(userId, agentId))) return Option.none();
-    return Option.some((yield* deletePause({ agentId })).length > 0);
-  });
+  return underQueueLock(
+    agentId,
+    Effect.gen(function* () {
+      if (!(yield* reaches(userId, agentId))) return Option.none();
+      return Option.some((yield* deletePause({ agentId })).length > 0);
+    }),
+    changedSome,
+  );
 }
 
 /**
@@ -563,20 +740,25 @@ export function pauseAgentQueue(
   because: QueuePause,
   refusal?: HostedApiError,
 ): AgentQueueEffect<void> {
-  return Effect.gen(function* () {
-    const now = yield* DateTime.nowAsDate;
-    yield* insertPause({ agentId, because, refusal: refusal ?? null, now });
-  });
+  return Effect.asVoid(
+    underQueueLock(
+      agentId,
+      Effect.gen(function* () {
+        const now = yield* DateTime.nowAsDate;
+        const paused = yield* insertPause({ agentId, because, refusal: refusal ?? null, now });
+        return paused.length > 0;
+      }),
+      (paused) => paused,
+    ),
+  );
 }
 
 /**
- * The message the agent's queue hands on next, claimed to send: its first
- * that no edit holds, where it stands unpaused and no send of it stands
- * claimed already. The claim is taken under the queue lock, so a member's
- * edit or delete lands before it or is refused after it, and two hand-offs
- * at once claim one message between them. Note that a message being edited
- * is passed over rather than holding the queue, and keeps its place for
- * once its edit ends.
+ * The message the agent's queue hands on next, claimed to send (QUEUED ->
+ * CLAIMED): its first that no edit holds, where it stands unpaused and no
+ * send stands claimed on any of it, so one message goes at a time. Note that
+ * a message being edited is passed over rather than holding the queue, and
+ * keeps its place for once its edit ends.
  */
 export function claimQueueHead(agentId: string): AgentQueueEffect<Option.Option<QueuedMessageRow>> {
   return underQueueLock(
@@ -588,18 +770,25 @@ export function claimQueueHead(agentId: string): AgentQueueEffect<Option.Option<
       if (queue.messages.some((message) => claimedAt(message, now))) return Option.none();
       const head = queue.messages.find((message) => !heldAt(message, now));
       if (head === undefined) return Option.none();
-      yield* updateClaim({ agentId, messageId: head.id, claimedAt: now, now });
-      return Option.some({ ...head, claimedAt: now });
+      const [claimed] = yield* updateClaim({ agentId, messageId: head.id, text: null, now });
+      return Option.map(Option.fromNullishOr(claimed), messageOf);
     }),
+    Option.isSome,
   );
 }
 
-/** A claimed message let go of, its send refused, so it stands queued in its place again. */
+/** A claimed message let go of, its send refused, so it stands queued in its place again (CLAIMED -> QUEUED). */
 export function releaseQueuedMessage(agentId: string, messageId: string): AgentQueueEffect<void> {
-  return Effect.gen(function* () {
-    const now = yield* DateTime.nowAsDate;
-    yield* updateClaim({ agentId, messageId, claimedAt: null, now });
-  });
+  return Effect.asVoid(
+    underQueueLock(
+      agentId,
+      Effect.gen(function* () {
+        const now = yield* DateTime.nowAsDate;
+        return (yield* updateRelease({ agentId, messageId, now })).length > 0;
+      }),
+      (released) => released,
+    ),
+  );
 }
 
 /** Whether an edit holds the message out of the hand-off at `now`. */
@@ -662,13 +851,17 @@ export function unpausedQueues(
   return findUnpausedQueues({ limit });
 }
 
-/** A message handed on, taken out of the agent's queue, the pause going with the last; nothing where it stood queued no longer. */
+/** A claimed message sent, taken out of the agent's queue (CLAIMED -> gone), the pause going with the last; nothing where it stood queued no longer. */
 export function dropQueuedMessage(agentId: string, messageId: string): AgentQueueEffect<void> {
-  return underQueueLock(
-    agentId,
-    Effect.andThen(
-      deleteMessage({ agentId, messageId, unclaimedAt: null }),
-      deletePauseIfEmpty({ agentId }),
+  return Effect.asVoid(
+    underQueueLock(
+      agentId,
+      Effect.gen(function* () {
+        const dropped = yield* deleteMessage({ agentId, messageId, unclaimedAt: null });
+        yield* deletePauseIfEmpty({ agentId });
+        return dropped.length > 0;
+      }),
+      (dropped) => dropped,
     ),
   );
 }

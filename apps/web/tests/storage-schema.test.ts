@@ -41,6 +41,7 @@ const DECLARED_TABLES = [
   "agent_browser_tab",
   "agent_pin",
   "agent_queue_pause",
+  "agent_queue_revision",
   "agent_section_entry",
   "attachment",
   "automation",

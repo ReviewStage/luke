@@ -2462,6 +2462,8 @@ function AgentTabView({
   const queue = useAgentQueue(agent.id, transcript.queue);
   const queueEditing = useQueueEditing(composer, queue);
   const enterQueues = useAppSlice(APP_SETTINGS_VIEW)?.agentEnter === AGENT_ENTER.QUEUE;
+  // Only the agent's starter may change its queue, as the service holds (`controlsAgent`); a teammate reads it.
+  const controlsQueue = starter === undefined;
   // A rewind writes in the box, so it is offered only while the box takes words.
   const boxOpen =
     onUnarchive === undefined && continuedNote === undefined && composer.closed === undefined;
@@ -2662,11 +2664,14 @@ function AgentTabView({
         <PublishedDock published={published} doors={doors} />
         <AgentQueueDock
           messages={queue.messages}
+          landing={queue.landing}
+          controls={controlsQueue}
           paused={queue.paused}
           editing={queueEditing.editing}
           onMove={queue.move}
           onSteer={(message) => queue.change({ change: QUEUE_CHANGE.STEER, messageId: message.id })}
           onEdit={queueEditing.edit}
+          onCancelEdit={queueEditing.cancel}
           onDelete={queue.remove}
           onResume={() => queue.change({ change: QUEUE_CHANGE.RESUME })}
         />
@@ -2707,13 +2712,15 @@ function AgentTabView({
             replyDoor={replyDoor}
             closedRemedy={closedRemedy}
             queueing={
-              agent.runtime === undefined
+              agent.runtime === undefined || !controlsQueue
                 ? undefined
                 : {
+                    working,
                     enterQueues,
                     onQueue: queueEditing.queue,
                     editing: queueEditing.editing !== undefined,
                     onSave: queueEditing.save,
+                    onSteer: queueEditing.steer,
                     onCancel: queueEditing.cancel,
                   }
             }

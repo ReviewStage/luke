@@ -16,10 +16,10 @@ import {
   LIST_VARIANT,
   List,
   ListRow,
+  OneLine,
   PauseIcon,
   PlayIcon,
   STATUS_TONE,
-  Text,
   useConfirmDialog,
 } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
@@ -31,13 +31,16 @@ import { COMPOSER_DOCK_CLASS } from "./agent-composer.js";
 /**
  * agent-queue-dock.tsx -- the messages queued behind an agent's running turn, docked over its message box, under its to-do list and its pull request.
  *
- * One row a message, its words on one line, leading with the queue's glyph,
- * which gives way to the handle it is dragged by as the row is hovered
- * (`tasks.css`); on hover, Steer sends it into the turn now, the pencil
- * takes its words into the message box to edit (`agent-composer.tsx`), and
- * the trash deletes it, asking first, since nothing brings its words and
- * files back. The message being edited stays in its place, marked
- * so, and the turn's end passes over it. A queue standing paused says why
+ * One row a message, its words on one line, fading out where they run
+ * past it, leading with the queue's glyph, which gives way to the handle it
+ * is dragged by as the row is hovered (`tasks.css`); on hover, Steer sends
+ * it into the turn now, the pencil takes its words into the message box to
+ * edit (`agent-composer.tsx`), and the trash deletes it, asking first, since
+ * nothing brings its words and files back. The message being edited stays
+ * in its place, marked so, with Cancel on its row, and the turn's end
+ * passes over it. A message still landing, queued from this tab and not yet
+ * the service's, and every row for a reader who did not start the agent,
+ * take no press. A queue standing paused says why
  * over its rows, after a Stop in the quiet tone and after a refusal in the
  * danger one, with Resume. Nothing is drawn while none is queued.
  */
@@ -49,6 +52,7 @@ const WORDS = {
   EDIT: "Edit",
   DELETE: "Delete",
   EDITING: "Editing",
+  CANCEL: "Cancel",
   RESUME: "Resume",
   STOPPED: "Queue paused because you interrupted",
   TURN_FAILED: "Queue paused because the turn failed",
@@ -85,18 +89,26 @@ function pausedWords(paused: QueuePaused): string {
 /** The dock: the paused header where the queue stands paused, then a row per queued message. */
 export function AgentQueueDock({
   messages,
+  landing,
+  controls,
   paused,
   editing,
   onMove,
   onSteer,
   onEdit,
+  onCancelEdit,
   onDelete,
   onResume,
 }: {
   messages: readonly QueuedMessage[];
+  /** The messages queued from this tab that have not landed yet, by the id they are drawn under. */
+  landing: ReadonlySet<string>;
+  /** Whether the reader may change the queue: the agent's starter alone may. */
+  controls: boolean;
   paused: QueuePaused | undefined;
   /** The message the box is editing, by its id; none while none is. */
   editing: string | undefined;
+  onCancelEdit: () => void;
   onMove: (from: number, to: number) => void;
   onSteer: (message: QueuedMessage) => void;
   onEdit: (message: QueuedMessage) => void;
@@ -122,14 +134,16 @@ export function AgentQueueDock({
           tone={paused.because === QUEUE_PAUSE.REFUSED ? STATUS_TONE.DANGER : STATUS_TONE.NEUTRAL}
           glyph={<PauseIcon />}
           actions={
-            <Button
-              size={BUTTON_SIZE.COMPACT}
-              variant={BUTTON_VARIANT.QUIET}
-              icon={<PlayIcon />}
-              onClick={onResume}
-            >
-              {WORDS.RESUME}
-            </Button>
+            controls ? (
+              <Button
+                size={BUTTON_SIZE.COMPACT}
+                variant={BUTTON_VARIANT.QUIET}
+                icon={<PlayIcon />}
+                onClick={onResume}
+              >
+                {WORDS.RESUME}
+              </Button>
+            ) : undefined
           }
         >
           {pausedWords(paused)}
@@ -144,18 +158,24 @@ export function AgentQueueDock({
           onPointerDown={drag}
         >
           {messages.map((message) => {
-            const edited = message.id === editing || message.editing === true;
+            const mine = message.id === editing;
+            const edited = mine || message.editing === true;
+            // Note that a row still landing has no id the service knows, and a reader who did not start the agent may change nothing.
+            const pressable = controls && !landing.has(message.id);
             return (
               <ListRow
                 key={message.id}
                 leading={
-                  <span className="agent-queue-lead" data-queue-handle="">
+                  <span
+                    className="agent-queue-lead"
+                    {...(pressable && !edited ? { "data-queue-handle": "" } : undefined)}
+                  >
                     <GLYPH.QUEUED />
                     <GLYPH.DRAG_HANDLE />
                   </span>
                 }
-                title={<Text truncate>{message.text}</Text>}
-                muted={edited}
+                title={<OneLine>{message.text}</OneLine>}
+                muted={edited || landing.has(message.id)}
                 meta={
                   edited ? (
                     <Badge tone={STATUS_TONE.WORKING} icon={<GLYPH.RENAME />}>
@@ -163,9 +183,17 @@ export function AgentQueueDock({
                     </Badge>
                   ) : undefined
                 }
-                actionsAt={LIST_ROW_ACTIONS.HOVER}
+                actionsAt={mine ? LIST_ROW_ACTIONS.ALWAYS : LIST_ROW_ACTIONS.HOVER}
                 actions={
-                  edited ? undefined : (
+                  mine ? (
+                    <Button
+                      size={BUTTON_SIZE.COMPACT}
+                      variant={BUTTON_VARIANT.QUIET}
+                      onClick={onCancelEdit}
+                    >
+                      {WORDS.CANCEL}
+                    </Button>
+                  ) : !pressable || edited ? undefined : (
                     <>
                       <Button
                         size={BUTTON_SIZE.COMPACT}

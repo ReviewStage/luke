@@ -1744,8 +1744,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 /* A queued message's row leads with the queue's glyph, which gives way to the
-   handle it is dragged by while the row is hovered, dragged, or lifted
-   (`agent-queue-dock.tsx`). */
+   handle it is dragged by while the row is hovered, dragged, or lifted, where
+   it may be dragged at all (`agent-queue-dock.tsx`). */
 .agent-queue-lead {
   display: inline-flex;
 }
@@ -1755,12 +1755,12 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   height: var(--luke-control-icon);
 }
 .agent-queue-lead > :last-child,
-li:is(:hover, [data-dragging]) .agent-queue-lead > :first-child,
-[data-lifted] .agent-queue-lead > :first-child {
+li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :first-child,
+[data-lifted] .agent-queue-lead[data-queue-handle] > :first-child {
   display: none;
 }
-li:is(:hover, [data-dragging]) .agent-queue-lead > :last-child,
-[data-lifted] .agent-queue-lead > :last-child {
+li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-child,
+[data-lifted] .agent-queue-lead[data-queue-handle] > :last-child {
   display: inline-flex;
   cursor: grab;
 }

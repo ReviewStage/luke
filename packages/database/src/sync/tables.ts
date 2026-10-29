@@ -18,7 +18,7 @@
  */
 import { agentBrowserTab } from "../schemas/agent-browser-tab.js";
 import { agentPin } from "../schemas/agent-pin.js";
-import { agentQueuePause, queuedMessage } from "../schemas/agent-queue.js";
+import { agentQueuePause, agentQueueRevision, queuedMessage } from "../schemas/agent-queue.js";
 import { attachment } from "../schemas/attachment.js";
 import { invitation, member, organization, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
@@ -201,6 +201,11 @@ export const queuedMessageSync = defineSyncTable(queuedMessage, {
 
 export const agentQueuePauseSync = defineSyncTable(agentQueuePause, {
   topics: [{ kind: TOPIC.AGENT, column: agentQueuePause.agentId }],
+});
+
+/** Where an agent's queue stands, moved on by every write to it (`agent-queue-store.ts`), on the agent's topic, which its transcript's held read is woken on. */
+export const agentQueueRevisionSync = defineSyncTable(agentQueueRevision, {
+  topics: [{ kind: TOPIC.AGENT, column: agentQueueRevision.agentId }],
 });
 
 /**
@@ -479,6 +484,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   runnerLineSync,
   queuedMessageSync,
   agentQueuePauseSync,
+  agentQueueRevisionSync,
   deviceAgentLineSync,
   deviceAgentRequestSync,
   planCommentThreadSync,

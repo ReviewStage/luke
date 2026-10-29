@@ -20,11 +20,6 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { INTEGRATION_LABEL, pasteCutWords } from "@luke/features/words";
 import type { ShortcutChord } from "@luke/settings/shortcuts";
 import {
-  BANNER_LOOK,
-  Banner,
-  BUTTON_SIZE,
-  BUTTON_VARIANT,
-  Button,
   ComposerBody,
   ComposerFoot,
   McpIcon,
@@ -62,7 +57,6 @@ import { BranchChip, type PublishedDoors } from "./agent-published.js";
 import { AgentServersButton, type AgentServersControl } from "./agent-servers.js";
 import { AttachFilesButton, type AttachPicker } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
-import { agentStillWriting } from "./coding-agent-model.js";
 import { ComposerField } from "./composer-field.js";
 import { useComposerPickers } from "./composer-pickers.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
@@ -221,11 +215,7 @@ const BUTTON = {
   QUEUE: "Queue",
   STEER: "Steer",
   SAVE: "Save",
-  CANCEL: "Cancel",
 } as const;
-
-/** What the line over the box says while it holds a queued message's words being edited. */
-const EDITING_QUEUED = "Editing a queued message";
 
 /**
  * The card widths below which a press draws its mark alone: the branch's
@@ -412,13 +402,18 @@ function ComposerMore({
  * nothing, as an eve agent's or New task's.
  */
 export interface ComposerQueueing {
+  /** Whether a turn is under way or about to start, a line the box sent still on its way among them: what Queue is offered by. */
+  readonly working: boolean;
   /** Whether Enter queues while a turn runs, as Settings says (`agentEnter`); ⌘↩ does the other. */
   readonly enterQueues: boolean;
   /** Queues the box's message behind the turn. */
   readonly onQueue: () => void;
-  /** Whether the box holds a queued message's words being edited, which Send saves back into its place. */
+  /** Whether the box holds a queued message's words being edited, which Send saves back into its place and ⌘↩ steers. */
   readonly editing: boolean;
   readonly onSave: () => void;
+  /** Sends the edited message now with the box's words, as that message. */
+  readonly onSteer: () => void;
+  /** Gives the edit up, as Escape with no list open does; the row's own Cancel does the same. */
   readonly onCancel: () => void;
 }
 
@@ -551,14 +546,8 @@ export function AgentComposer({
     !sendsEmpty && !editingQueued && !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending && !editingQueued;
   // While a turn runs and the box holds a message it may go two ways; holding ⌘ says on Send which a send takes.
-  const queues =
-    queueing !== undefined &&
-    agentStillWriting(status) &&
-    !empty &&
-    !held &&
-    !files.reading &&
-    !editingQueued;
-  const modifierHeld = useModifierHeld(queues);
+  const queues = queueing?.working && !empty && !held && !files.reading && !editingQueued;
+  const modifierHeld = useModifierHeld(queues || editingQueued);
   const queuesNow = queues && queueing.enterQueues !== modifierHeld;
   const { planEditor } = useSideBundles();
   const bundle = useAtomValue(planEditor);
@@ -718,12 +707,12 @@ export function AgentComposer({
     if (queuesNow) return queueing?.onQueue();
     steer();
   };
-  /** A key the queue takes: ⌘↩ saves an edit, or sends the other way than Enter. */
+  /** A key the queue takes: ⌘↩ steers an edit, or sends the other way than Enter. */
   const queueKey = (event: KeyboardEvent): boolean => {
     if (queueing === undefined) return false;
     if (!modEnterSends(event)) return false;
     if (editingQueued) {
-      queueing.onSave();
+      queueing.onSteer();
       return true;
     }
     if (!queues || !sendable) return false;
@@ -731,14 +720,16 @@ export function AgentComposer({
     else queueing.onQueue();
     return true;
   };
-  // Send says what a send does while it is other than steering: Save for an edit, and Queue or Steer as ⌘ turns it.
-  const sendWay = editingQueued
-    ? { label: BUTTON.SAVE, icon: <GLYPH.DONE /> }
-    : queuesNow
-      ? { label: BUTTON.QUEUE, icon: <GLYPH.QUEUED /> }
-      : queues && modifierHeld
-        ? { label: BUTTON.STEER, icon: <GLYPH.STEER /> }
-        : undefined;
+  // Send says what a send does while it is other than steering: Save for an edit in words, and Queue or Steer
+  // as its glyph alone in the round send's place, as ⌘ turns it.
+  const sendWay =
+    editingQueued && !modifierHeld
+      ? { label: BUTTON.SAVE, icon: <GLYPH.DONE />, inWords: true }
+      : queuesNow
+        ? { label: BUTTON.QUEUE, icon: <GLYPH.QUEUED />, inWords: false }
+        : (queues || editingQueued) && modifierHeld
+          ? { label: BUTTON.STEER, icon: <GLYPH.STEER />, inWords: false }
+          : undefined;
 
   // Note that a popover closed by key while the ⋯ stands hands focus to the
   // ⋯, after its own close has handed it to its hidden press, because a
@@ -808,23 +799,6 @@ export function AgentComposer({
         dropping={files.drop.dropping}
         onSubmit={submit}
       >
-        {editingQueued ? (
-          <Banner
-            look={BANNER_LOOK.INSET}
-            glyph={<GLYPH.RENAME />}
-            actions={
-              <Button
-                size={BUTTON_SIZE.COMPACT}
-                variant={BUTTON_VARIANT.QUIET}
-                onClick={() => queueing?.onCancel()}
-              >
-                {BUTTON.CANCEL}
-              </Button>
-            }
-          >
-            {EDITING_QUEUED}
-          </Banner>
-        ) : null}
         <ComposerBody
           files={
             <AttachedFileChips
@@ -933,7 +907,9 @@ export function AgentComposer({
           strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
           send={{
             label: sendWay?.label ?? sendLabel,
-            ...(sendWay === undefined ? undefined : { inWords: true, icon: sendWay.icon }),
+            ...(sendWay === undefined
+              ? undefined
+              : { inWords: sendWay.inWords, icon: sendWay.icon }),
             chord: wording?.chord,
             empty,
             held: held || !sendable || files.reading,

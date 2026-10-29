@@ -69,3 +69,19 @@ export const agentQueuePause = pgTable("agent_queue_pause", {
   refusal: text("refusal").$type<HostedApiError>(),
   pausedAt: timestamptz("paused_at").notNull(),
 });
+
+/**
+ * Where an agent's queue stands, as one number every write to the queue or
+ * its pause moves on, in the same transaction: a message queued, edited,
+ * held or let go, claimed or released, put in a new order, deleted, or sent,
+ * and a pause written or dropped. A reader keyed to it is woken by every one
+ * of them, and a change a window made is known landed once a read stands at
+ * the number its answer named. At most one row per agent, written by its
+ * first change.
+ */
+export const agentQueueRevision = pgTable("agent_queue_revision", {
+  agentId: uuid("agent_id")
+    .primaryKey()
+    .references(() => codingAgent.id, { onDelete: "cascade" }),
+  revision: integer("revision").notNull(),
+});

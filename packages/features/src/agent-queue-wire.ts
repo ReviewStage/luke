@@ -63,10 +63,16 @@ export const queuePausedSchema = EffectSchema.Struct({
 
 export type QueuePaused = typeof queuePausedSchema.Type;
 
-/** An agent's queue: its messages in the order they go, and why it stands paused where it does. */
+/** An agent's queue: its messages in the order they go, why it stands paused where it does, and its revision. */
 export const agentQueueSchema = EffectSchema.Struct({
   messages: EffectSchema.Array(queuedMessageSchema),
   paused: EffectSchema.optionalKey(queuePausedSchema),
+  /**
+   * Where the queue stands, moved on by every change to it
+   * (`agent-queue-store.ts`): a window draws a change of its own still out
+   * over the queue until a page stands at the revision the change answered.
+   */
+  revision: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0)),
 });
 
 export type AgentQueue = typeof agentQueueSchema.Type;

@@ -496,6 +496,7 @@ const withUsage = (
             own === undefined
               ? Effect.succeed<readonly CodingAgentSubagentStanding[]>([])
               : subagentStandingsOf(target),
+          // Note that the queue is read after the page's messages, so a message the page lists as sent has left it.
           queue: own === undefined ? Effect.succeed(undefined) : queueOnPage(own.id),
         },
         { concurrency: CODER.READ_CONCURRENCY },

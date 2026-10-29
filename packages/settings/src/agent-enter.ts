@@ -22,8 +22,14 @@ export const AGENT_ENTER_LIST: readonly AgentEnter[] = Object.values(AGENT_ENTER
 
 /** How each choice reads on its control. */
 export const AGENT_ENTER_LABEL = {
-  [AGENT_ENTER.STEER]: "Steers its turn",
-  [AGENT_ENTER.QUEUE]: "Queues the message",
+  [AGENT_ENTER.STEER]: "Steer",
+  [AGENT_ENTER.QUEUE]: "Queue",
+} as const satisfies Record<AgentEnter, string>;
+
+/** What the row says under its name for each choice: what ⌘↩ does instead. */
+export const AGENT_ENTER_DETAIL = {
+  [AGENT_ENTER.STEER]: "Use ⌘ Enter to queue.",
+  [AGENT_ENTER.QUEUE]: "Use ⌘ Enter to steer.",
 } as const satisfies Record<AgentEnter, string>;
 
 const readsAgentEnter = Schema.is(Schema.Literals(AGENT_ENTER_LIST));

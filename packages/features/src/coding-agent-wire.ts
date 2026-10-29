@@ -687,8 +687,14 @@ export const agentQueueChangeSchema = EffectSchema.Union([
     text: messageWordsSchema.check(EffectSchema.isMinLength(1)),
   }),
   EffectSchema.Struct({
-    change: EffectSchema.Literals([QUEUE_CHANGE.DELETE, QUEUE_CHANGE.STEER]),
+    change: EffectSchema.Literal(QUEUE_CHANGE.DELETE),
     messageId: queuedMessageIdSchema,
+  }),
+  EffectSchema.Struct({
+    change: EffectSchema.Literal(QUEUE_CHANGE.STEER),
+    messageId: queuedMessageIdSchema,
+    /** The words an edit steers it with, which replace its own as it goes; absent to steer it as it stands. */
+    text: EffectSchema.optionalKey(messageWordsSchema.check(EffectSchema.isMinLength(1))),
   }),
   EffectSchema.Struct({
     change: EffectSchema.Literal(QUEUE_CHANGE.HOLD),

@@ -1,20 +1,25 @@
 /**
  * agent-queue.ts -- a coding agent's queue as the service runs it: the queue as a transcript carries it, and its messages handed on, one a turn, once the agent's turn is over.
  *
- * A message queued behind the agent's running turn waits in the store,
- * unsent (`@luke/database/models/agent-queue-store`). Once nothing runs, the
- * first one is claimed, which takes it off every window's queue and out of
- * reach of a member's edit, and goes as its member's own message, under its
- * own send key, so a hand-off repeated sends it once (`steer.ts`'s repeat),
- * and it opens the next turn; it leaves the queue only once it went. A
- * hand-off the service
- * refuses keeps the message, pausing the queue under the refusal, since
- * nobody watches it go to say why it did not. The agent is at work while a
- * turn runs or a message sent to it still awaits its turn, and then nothing
- * is handed on: the turn's end hands on the next (`runner-events-app.ts`'s
- * `turnEnded`), and so does a message queued, the queue put in a new order,
- * or Resume while the agent stands idle, so a queue never waits on a turn
- * end that came and went.
+ * A message queued behind the agent's turn waits in the store, unsent
+ * (`@luke/database/models/agent-queue-store`, whose header writes down the
+ * states a message moves through). Once the agent stands idle, the first one
+ * is claimed, which takes it off every window's queue and out of reach of a
+ * member's change, and then sent as its member's own message, under its own
+ * send key, so a hand-off repeated sends it once (`steer.ts`'s repeat); it
+ * opens the next turn, and leaves the queue once it went. A send the service
+ * refuses lets the message go back to its place and pauses the queue under
+ * the refusal, since nobody watches it go to say why it did not.
+ *
+ * The agent is at work while it starts, while a turn runs, and while a
+ * message sent to it awaits its turn, as its status reads
+ * (`codingAgentStatusOf`), and then nothing is handed on: the turn's end
+ * hands on the next (`runner-events-app.ts`'s `turnEnded`), and so does a
+ * change a member makes while the agent stands idle, so a queue never waits
+ * on a turn end that came and went. A member's change claims in the request
+ * itself (`claimNext`), before its answer reads the queue, so the answer
+ * never lists a message about to go, and sends after the response
+ * (`sendClaimed`), which no answer waits on.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
@@ -30,25 +35,22 @@ import {
   releaseQueuedMessage,
   unpausedQueues,
 } from "@luke/database/models/agent-queue-store";
-import {
-  type CodingAgent,
-  RUNNING_TURN_STATUSES,
-  readCodingAgent,
-} from "@luke/database/models/coding-agent-store";
+import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { awaitingLinesOfReached, latestTurnsOfReached } from "@luke/database/models/message-reads";
 import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import type { HostedApiError } from "@luke/features";
 import { type AgentQueue, QUEUE_PAUSE, type QueuePause } from "@luke/features/agent-queue-wire";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { TURN_STATUS } from "@luke/wire";
-import { Clock, DateTime, Duration, Effect, Option } from "effect";
+import { Clock, DateTime, Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { type HostedRefusal, hostedStoreOrUnavailable } from "../../http/http-effect.js";
 import { deploymentEve, deploymentEveForAccounts } from "../deployment-eve.js";
 import { deploymentEveOrigin } from "../eve-host/eve-origin.js";
 import { type AgentSessions, EVE_MOUNT, type EveTypedTurn } from "../eve-host/eve-sessions.js";
-import { CODER } from "./bounds.js";
 import { routedSessions } from "./runtime-sessions.js";
+import { codingAgentStatusOf, startedBlank } from "./status.js";
 import { steerCodingAgentWritten } from "./steer.js";
 import { type EveReach, eveFor } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -80,10 +82,14 @@ export function queueEveFor(reach: EveReach, request: Request, requester: string
         });
 }
 
-/** The queue as a transcript carries it at `now`: its messages but the one being sent, which of them an edit holds, and its pause; nothing while none is queued. */
-export function wireQueue(read: AgentQueueRead, now: Date): AgentQueue | undefined {
+/**
+ * The queue as the agent's own transcript carries it at `now`, on every
+ * page, empty or not: its messages but one being sent, which of them an edit
+ * holds, its pause, and its revision, which a window's change still out is
+ * drawn over until a page stands at.
+ */
+export function wireQueue(read: AgentQueueRead, now: Date): AgentQueue {
   const queued = read.messages.filter((message) => !claimedAt(message, now));
-  if (queued.length === 0) return undefined;
   return {
     messages: queued.map((message) => ({
       id: message.id,
@@ -107,6 +113,7 @@ export function wireQueue(read: AgentQueueRead, now: Date): AgentQueue | undefin
             ...(read.paused.refusal === undefined ? undefined : { refusal: read.paused.refusal }),
           },
         }),
+    revision: read.revision,
   };
 }
 
@@ -118,22 +125,26 @@ export function queueOnPage(agentId: string) {
   });
 }
 
-/** Whether the agent is at work: a turn runs, or a message sent to it still awaits its turn within the grace a line reads as awaiting. */
+/** Whether the agent is at work, as its status reads: starting, a turn running, or a message sent to it awaiting its turn. */
 const atWork = Effect.fn("web/queueAtWork")(function* (agent: CodingAgent) {
-  const turns = yield* latestTurnsOfReached([agent.conversationId]);
-  const turn = turns.get(agent.conversationId);
-  if (turn !== undefined && RUNNING_TURN_STATUSES.has(turn.status)) return true;
-  const awaiting = (yield* awaitingLinesOfReached([agent.conversationId])).get(
+  const turn = (yield* latestTurnsOfReached([agent.conversationId])).get(agent.conversationId);
+  const awaitingLineAt = (yield* awaitingLinesOfReached([agent.conversationId])).get(
     agent.conversationId,
   );
-  const now = yield* Clock.currentTimeMillis;
-  return awaiting !== undefined && now - awaiting.getTime() < Duration.toMillis(CODER.LINE_GRACE);
+  const status = codingAgentStatusOf(turn, {
+    createdAt: agent.createdAt,
+    now: yield* Clock.currentTimeMillis,
+    awaitingLineAt,
+    blank: startedBlank(agent),
+  });
+  return status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING;
 });
 
 /**
- * One queued message sent now as its member's own message, under its own
+ * One claimed message sent now as its member's own message, under its own
  * send key, and taken out of the queue once it went: as the next turn where
- * none runs, or steering the one under way.
+ * none runs, or steering the one under way. A refusal fails, the message
+ * still claimed, for its caller to let go of.
  */
 export const sendQueued = Effect.fn("web/sendQueued")(function* (
   eveFor: QueueEve,
@@ -157,42 +168,66 @@ export const sendQueued = Effect.fn("web/sendQueued")(function* (
 });
 
 /**
- * The agent's queue handed on where the agent stands idle and the queue
- * unpaused: its first message claimed and sent as the next turn. A refusal
- * lets the message go back to its place and pauses the queue under it, and
- * any failure is logged rather than answered, since whoever's act set this
- * off is not waiting on it. A send cut off before it answered leaves its
- * claim to lapse, after which the next hand-off sends it again under its key.
+ * The agent's next message claimed to send, where the agent stands idle and
+ * the queue unpaused; none otherwise. Run inside a member's request before
+ * its answer reads the queue, so the answer already leaves the message out.
+ * A failure is logged rather than answered, and claims nothing.
  */
-export const handOnQueue = Effect.fn("web/handOnQueue")(function* (
-  eveFor: QueueEve,
-  agent: CodingAgent,
-) {
+export const claimNext = Effect.fn("web/claimNextQueued")(function* (agent: CodingAgent) {
   const step = Effect.gen(function* () {
-    if (yield* hostedStoreOrUnavailable(atWork(agent))) return;
-    const head = yield* hostedStoreOrUnavailable(claimQueueHead(agent.id));
-    if (Option.isNone(head)) return;
-    yield* sendQueued(eveFor, agent, head.value).pipe(
-      Effect.catch((refusal: HostedRefusal) =>
-        hostedStoreOrUnavailable(
-          Effect.andThen(
-            releaseQueuedMessage(agent.id, head.value.id),
-            pauseAgentQueue(agent.id, QUEUE_PAUSE.REFUSED, refusal.error as HostedApiError),
-          ),
-        ),
-      ),
-    );
+    if (yield* hostedStoreOrUnavailable(atWork(agent))) return Option.none<QueuedMessageRow>();
+    return yield* hostedStoreOrUnavailable(claimQueueHead(agent.id));
   });
-  yield* step.pipe(
-    Effect.catchCause((cause) => Effect.logWarning("agent-queue: a hand-off failed", cause)),
+  return yield* step.pipe(
+    Effect.catchCause((cause) =>
+      Effect.as(
+        Effect.logWarning("agent-queue: a claim failed", cause),
+        Option.none<QueuedMessageRow>(),
+      ),
+    ),
   );
 });
 
 /**
- * The agent's queue at its turn's end: paused where the turn stood stopped
- * or failed, as its row says, and handed on otherwise. Note that the row is
- * read rather than the runner's word for its end, because a turn the CLI
- * failed may end its launch as any other.
+ * A message the hand-off claimed, sent. A refusal lets it go back to its
+ * place and pauses the queue under the refusal; any other failure is logged,
+ * its claim left to lapse, after which the next hand-off sends it again
+ * under its key. Nobody's answer waits on it.
+ */
+export const sendClaimed = Effect.fn("web/sendClaimedQueued")(function* (
+  eveFor: QueueEve,
+  agent: CodingAgent,
+  message: QueuedMessageRow,
+) {
+  yield* sendQueued(eveFor, agent, message).pipe(
+    Effect.catch((refusal: HostedRefusal) =>
+      hostedStoreOrUnavailable(
+        Effect.andThen(
+          releaseQueuedMessage(agent.id, message.id),
+          pauseAgentQueue(agent.id, QUEUE_PAUSE.REFUSED, refusal.error as HostedApiError),
+        ),
+      ),
+    ),
+    Effect.catchCause((cause) => Effect.logWarning("agent-queue: a hand-off failed", cause)),
+  );
+});
+
+/** The agent's queue handed on where the agent stands idle and the queue unpaused: its next message claimed, then sent. */
+export const handOnQueue = Effect.fn("web/handOnQueue")(function* (
+  eveFor: QueueEve,
+  agent: CodingAgent,
+) {
+  const claimed = yield* claimNext(agent);
+  if (Option.isSome(claimed)) yield* sendClaimed(eveFor, agent, claimed.value);
+});
+
+/**
+ * The agent's queue at its turn's end: paused where the turn failed, as its
+ * row says, and handed on otherwise. Note that a turn stopped pauses nothing
+ * here, because the Stop paused the queue as it was asked (`stop.ts`), and a
+ * Resume since then must stand; and that the row is read rather than the
+ * runner's word for its end, because a turn the CLI failed may end its
+ * launch as any other.
  */
 export const queueAtTurnEnd = Effect.fn("web/queueAtTurnEnd")(function* (
   eveFor: QueueEve,
@@ -215,7 +250,6 @@ export const queueAtTurnEnd = Effect.fn("web/queueAtTurnEnd")(function* (
 
 /** Why a turn's end pauses the queue, by the status the turn ended under. */
 const PAUSE_OF_TURN: ReadonlyMap<string, QueuePause> = new Map([
-  [TURN_STATUS.CANCELLED, QUEUE_PAUSE.STOPPED],
   [TURN_STATUS.FAILED, QUEUE_PAUSE.TURN_FAILED],
 ]);
 
@@ -241,8 +275,9 @@ const QUEUE_SWEEP_LIMIT = 50;
  * The maintenance sweep's pass over the queues standing unpaused: each
  * handed on where its agent idles, as a turn's end would, so a queue whose
  * turn's end found nothing to hand on (its only message held by an edit
- * since let go of, or a turn ended outside the runner's events) still goes.
- * Answers how many queues it looked at.
+ * since let go of, a send cut off whose claim lapsed, or a turn ended
+ * outside the runner's events) still goes. Answers how many queues it
+ * looked at.
  */
 export const sweepAgentQueues = Effect.fn("web/sweepAgentQueues")(function* (eveFor: QueueEve) {
   const queues = yield* unpausedQueues(QUEUE_SWEEP_LIMIT);
