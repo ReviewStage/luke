@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { createServer } from "node:net";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { SyncListener, type SyncListenerShape } from "@luke/database/sync/listener";
@@ -366,51 +365,23 @@ it.layer(probeDB)("Luke Sync's hub", (it) => {
     ),
   );
 
-  it.effect.each([
-    {
-      sync: "LUKE_SYNC unset",
-      environment: (unpooled: string) => ({ DATABASE_URL_UNPOOLED: unpooled }),
-    },
-    { sync: "LUKE_SYNC on and no unpooled URL", environment: () => ({ LUKE_SYNC: "on" }) },
-  ])(
-    "with $sync, a watch on topics wakes on its fallback, and nothing listens",
-    ({ environment }) =>
-      Effect.gen(function* () {
-        let connections = 0;
-        const server = yield* Effect.acquireRelease(
-          Effect.callback<ReturnType<typeof createServer>>((resume) => {
-            const listening = createServer((socket) => {
-              connections += 1;
-              socket.destroy();
-            });
-            listening.listen(0, "127.0.0.1", () => resume(Effect.succeed(listening)));
-          }),
-          (listening) => Effect.sync(() => listening.close()),
-        );
-        const address = server.address();
-        assert.ok(address !== null && typeof address === "object");
-        const { clock, asleep } = yield* announcingClock;
-        const variables = environment(
-          `postgres://u:p@127.0.0.1:${address.port}/luke?sslmode=disable`,
-        );
+  it.effect("with no unpooled URL, a watch on topics wakes on its fallback", () =>
+    Effect.gen(function* () {
+      const { clock, asleep } = yield* announcingClock;
 
-        const elapsed = yield* Effect.gen(function* () {
-          const sync = yield* Sync;
-          const next = yield* nextOf(yield* sync.watch([probeRow().task], FALLBACK));
-          const from = yield* Clock.currentTimeMillis;
-          yield* driven({ fiber: next, asleep }, FALLBACK);
-          return (yield* Clock.currentTimeMillis) - from;
-        }).pipe(
-          Effect.provide(syncFromEnvironment),
-          Effect.provideService(
-            ConfigProvider.ConfigProvider,
-            ConfigProvider.fromUnknown(variables),
-          ),
-          Effect.provideService(Clock.Clock, clock),
-        );
+      const elapsed = yield* Effect.gen(function* () {
+        const sync = yield* Sync;
+        const next = yield* nextOf(yield* sync.watch([probeRow().task], FALLBACK));
+        const from = yield* Clock.currentTimeMillis;
+        yield* driven({ fiber: next, asleep }, FALLBACK);
+        return (yield* Clock.currentTimeMillis) - from;
+      }).pipe(
+        Effect.provide(syncFromEnvironment),
+        Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({})),
+        Effect.provideService(Clock.Clock, clock),
+      );
 
-        assert.ok(elapsed >= Duration.toMillis(FALLBACK), "the watch woke before its fallback");
-        assert.equal(connections, 0);
-      }),
+      assert.ok(elapsed >= Duration.toMillis(FALLBACK), "the watch woke before its fallback");
+    }),
   );
 });

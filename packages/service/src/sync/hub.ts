@@ -52,7 +52,6 @@ import {
 } from "@luke/database/sync/notification";
 import {
   Clock,
-  Config,
   Data,
   Deferred,
   Duration,
@@ -68,12 +67,7 @@ import {
 } from "effect";
 import { ConnectionError, SqlError } from "effect/sql/SqlError";
 import { databaseUnpooledUrl } from "../db/index.js";
-import { CLOCK_SYNC, clockWatch, Sync, type SyncShape, type SyncWatch } from "./watch.js";
-
-/** The deployment's switch for Luke Sync: on only where it reads `on`, off where it is unset or reads anything else. */
-const LUKE_SYNC = { OFF: "off", ON: "on" } as const;
-
-const SYNC_ENVIRONMENT = { SWITCH: "LUKE_SYNC" } as const;
+import { clockWatch, Sync, type SyncShape, type SyncWatch } from "./watch.js";
 
 /** How the listener is held and proved. */
 const LISTENER = {
@@ -581,16 +575,8 @@ const unpooledListener: Layer.Layer<SyncListener> = Layer.unwrap(
 );
 
 /**
- * Luke Sync as the deployment's environment sets it: the hub over the
- * unpooled URL where `LUKE_SYNC` reads `on`, and the clock otherwise, when
- * the unpooled URL is never read and no listener is ever opened.
+ * Luke Sync as the deployment's environment has it: the hub over the
+ * unpooled URL, whose listener stays down where the deployment sees none,
+ * so every watch waits on its clock.
  */
-export const syncFromEnvironment = Layer.unwrap(
-  Effect.map(
-    Effect.orElseSucceed(Config.option(Config.String(SYNC_ENVIRONMENT.SWITCH)), Option.none),
-    (switched) =>
-      Option.getOrUndefined(switched)?.trim() === LUKE_SYNC.ON
-        ? syncHub.pipe(Layer.provide(unpooledListener))
-        : Layer.succeed(Sync, CLOCK_SYNC),
-  ),
-);
+export const syncFromEnvironment = syncHub.pipe(Layer.provide(unpooledListener));
