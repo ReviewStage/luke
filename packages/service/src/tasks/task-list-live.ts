@@ -13,7 +13,7 @@ import { agentPin, conversations, device, taskPin } from "@luke/database/schemas
 import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
 import { task } from "@luke/database/schemas/task";
-import { AGENT_BRIEF } from "@luke/features/agent-wire";
+import { AGENT_BRIEF, AGENT_KIND } from "@luke/features/agent-wire";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
@@ -158,6 +158,8 @@ function agentsStatement(userId: string) {
           cancelRequested: isNotNull(latest.cancelRequestedAt),
           turnSessionEnded: sessionEndedOf(latest),
           quietTurn: quietTurnOf(agentTable.kind, agentTable.conversationId, latest),
+          // Note that a pilot says so in a column of its own, since a desktop from before the pilot kind refuses that kind in `kind`.
+          pilot: sql<boolean>`${agentTable.kind} = ${AGENT_KIND.PILOT}`,
         },
         {
           archivedAt: agentTable.archivedAt,

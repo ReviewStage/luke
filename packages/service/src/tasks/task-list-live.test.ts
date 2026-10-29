@@ -546,7 +546,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
   );
 
   it.effect(
-    "a member's operator, with no repository, and a task's pilot are delivered and say their kind, as the held read reads them, while a coder says none",
+    "a member's operator, with no repository, is delivered and says its kind, and a task's pilot says it is one, as the held read reads them, while a coder says neither",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
@@ -592,7 +592,9 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           taskAgents.filter((agent) => agent.planId === plan.id),
           yield* heldTaskAgentsOf(owner, plan.id, NOW),
         );
-        assert.equal(taskAgents.find((agent) => agent.id === pilot.id)?.kind, AGENT_KIND.PILOT);
+        const listedPilot = taskAgents.find((agent) => agent.id === pilot.id);
+        assert.equal(listedPilot?.pilot, true);
+        assert.equal(listedPilot?.kind, undefined);
       }),
   );
 

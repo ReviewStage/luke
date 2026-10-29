@@ -162,6 +162,8 @@ const agentLiveRowSchema = EffectSchema.Struct({
   lastSettledAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
   /** Whether the newest turn's reply is a member's operator's quiet reply alone; absent from a statement before heartbeats. */
   quietTurn: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.Boolean)),
+  /** Whether the agent is its task's pilot, said apart from `kind`, which an older desktop reads as coder or operator alone; absent from a statement before pilots. */
+  pilot: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** The harness the agent's conversation runs on, as it was started; absent from a statement before it was carried, as is each below. */
   runtime: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   /** Where the agent's runner lives (`AGENT_MACHINE`). */
@@ -448,7 +450,8 @@ function agentSummaryOf(row: AgentLiveRow, now: number, continued: Continuations
       : undefined),
     ...(runtime === undefined ? undefined : { runtime }),
     title: row.title,
-    ...(row.kind === undefined || row.kind === AGENT_KIND.CODER ? undefined : { kind: row.kind }),
+    ...(row.kind === AGENT_KIND.OPERATOR ? { kind: row.kind } : undefined),
+    ...(row.pilot === true ? { pilot: true } : undefined),
     ...(row.machine === AGENT_MACHINE.DEVICE ? { machine: AGENT_MACHINE.DEVICE } : undefined),
     ...(mac === undefined ? undefined : { mac }),
     createdAt: row.createdAt,

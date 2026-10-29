@@ -44,8 +44,8 @@ import { TOAST_HOLD, useToast } from "../toast.js";
  * the pilot may answer, and a refusal is said in a toast. Once an answer is
  * sent, a line saying so stands in the buttons' place while the pilot works
  * on it, so one approval is not sent twice; a child the pilot adds after it
- * brings the buttons back. The answer goes to the task's pilot, its agent of
- * the pilot kind, so another agent on the task never takes it.
+ * brings the buttons back. The answer goes to the task's pilot, the agent
+ * whose summary says it is one, so another agent on the task never takes it.
  */
 
 /** What the waiting children's list is named for a reader moving between lists. */

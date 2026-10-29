@@ -321,8 +321,9 @@ function summaryFields(
       : undefined),
     ...(standing.runtime === undefined ? undefined : { runtime: standing.runtime }),
     title: agent.title,
-    // Note that a coder says no kind, so its summary is as it was; an operator and a pilot say theirs.
-    ...(agent.kind === AGENT_KIND.CODER ? undefined : { kind: agent.kind }),
+    // Note that only an operator says its kind, so a coder's summary is as it was, and a pilot says so apart, which an older build ignores.
+    ...(agent.kind === AGENT_KIND.OPERATOR ? { kind: agent.kind } : undefined),
+    ...(agent.kind === AGENT_KIND.PILOT ? { pilot: true } : undefined),
     // Likewise only a local agent says where it runs, so a sandboxed agent's summary is as it was.
     ...(agent.machine === AGENT_MACHINE.DEVICE ? { machine: agent.machine } : undefined),
     ...(mac === undefined ? undefined : { mac }),

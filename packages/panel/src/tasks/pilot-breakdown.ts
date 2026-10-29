@@ -9,7 +9,7 @@
  * on a task worked by its agents, whatever its children.
  *
  * The answer goes to the task's pilot as a developer's message does, which
- * wakes it: its agent of the pilot kind not archived, the newest where more
+ * wakes it: its pilot not archived (`pilot` on its summary), the newest where more
  * than one stands, since Continue archives the pilot it takes over from.
  * Its words open on a line the pilot's instructions know it by, then name
  * each child task the answer is about as the task's chip, so the pilot reads
@@ -19,7 +19,7 @@
  * it opened has ended, or until a child the answer did not name waits too.
  */
 
-import { AGENT_KIND, type AgentSummary } from "@luke/features/agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
 import { TASK_MODE, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { agentStillWriting } from "./agent-model.js";
@@ -70,7 +70,7 @@ export function waitingChildTasks(
 /** The agent a pilot task's answer goes to: its newest pilot not archived; none while the task's agents are unread or no pilot stands. */
 export function taskPilot(agents: readonly AgentSummary[] | undefined): AgentSummary | undefined {
   return (agents ?? [])
-    .filter((agent) => agent.kind === AGENT_KIND.PILOT && agent.archivedAt === undefined)
+    .filter((agent) => agent.pilot === true && agent.archivedAt === undefined)
     .reduce<AgentSummary | undefined>(
       (newest, agent) =>
         newest === undefined || agent.createdAt > newest.createdAt ? agent : newest,
