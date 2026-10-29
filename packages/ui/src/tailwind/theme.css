@@ -867,8 +867,6 @@
     [more-end];
   /* A row's lead chip, its name cut short at a short name's measure, its glyph and the gap after it beside that. */
   --spacing-list-row-lead: calc(18ch + var(--luke-type-caption-size) + var(--luke-space-2));
-  /* The label a swiped row's act rides its face's edge in, in a tag's size on the line it stands on. */
-  --spacing-swipe-label: 56px; /* off-scale: a swipe act's label column */
   --text-tag-size: var(--luke-type-tag-size);
   /* A part's corner, its row's own, so its fill follows the row's round. */
   --radius-inherit: inherit;

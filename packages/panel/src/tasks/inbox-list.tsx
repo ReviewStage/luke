@@ -84,8 +84,6 @@ import {
   HourglassIcon,
   InboxIcon,
   ListIcon,
-  MailIcon,
-  MailOpenIcon,
   SlidersHorizontalIcon,
   UserIcon,
   UsersIcon,
@@ -270,12 +268,6 @@ const INBOX_ITEMS = "Inbox items";
 /** What an unread row says to a reader, its dot being drawn for the eye alone. */
 const UNREAD = "Unread";
 
-/** What a row's swipe button says it does, short for the eye and in the menu's own words to a reader: marks the item read, or unread. */
-const SWIPE_WORDS = {
-  READ: { label: "Read", name: commandHead(PANEL_COMMAND.MARK_READ).label },
-  UNREAD: { label: "Unread", name: commandHead(PANEL_COMMAND.MARK_UNREAD).label },
-} as const;
-
 /** What the view's menu offers to clear every dot with. */
 const MARK_ALL_READ = "Mark all as read";
 
@@ -441,10 +433,8 @@ export function inboxRowDraft(
  * open item's own bar keeps its ⋯. Where the list hands down
  * `onMark`, the row offers to mark it read or unread: an item of its menu,
  * which names the key that does the same to the chosen item
- * (`APP_COMMAND.TOGGLE_READ`); and a swipe right, a
- * short one leaving the row open on a Read or Unread button, a long one
- * marking it as it is let go (`@luke/ui`'s `ListRow` swipe). Its menu,
- * opened by the row's ⋯, a right-click, a long press, and the menu key
+ * (`APP_COMMAND.TOGGLE_READ`). Its menu, opened by the row's ⋯, a
+ * right-click, a long press, and the menu key
  * alike (`ListRow`'s `menu`), offers
  * Copy link, the item's link under the task or the agent that holds it, where
  * the list hands down a workspace to write it under. Where the list
@@ -566,15 +556,6 @@ export const InboxItemRow = memo(function InboxItemRow({
           />
         }
         metaAt={LIST_ROW_META.TITLE}
-        swipe={
-          onMark === undefined
-            ? undefined
-            : {
-                ...(unread ? SWIPE_WORDS.READ : SWIPE_WORDS.UNREAD),
-                icon: unread ? <MailOpenIcon /> : <MailIcon />,
-                onAct: () => onMark(listed, !unread),
-              }
-        }
         current={current ? LIST_ROW_CURRENT.PAGE : undefined}
         unread={unread}
         unreadWords={UNREAD}

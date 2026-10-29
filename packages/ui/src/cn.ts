@@ -214,7 +214,6 @@ const ROWS_NAVIGATION = {
     "pane-bar",
     "submenu",
     "submenu-reach",
-    "swipe-label",
   ],
   shadow: ["bar-count-ring"],
   radius: ["inherit"],

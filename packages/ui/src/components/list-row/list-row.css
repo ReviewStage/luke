@@ -15,8 +15,8 @@
    Each part's own box is drawn in utilities (`list-row.tsx`); what stays
    here is what a row's state restyles: its fill and ring, the press's
    insets and height, the words' type and ink, the hover acts and the room
-   they take, the swipe's slide, and every reveal, through `:has()`, the
-   pointer's media, and custom properties set on the row. */
+   they take, and every reveal, through `:has()`, the pointer's media, and
+   custom properties set on the row. */
 
 @layer components {
   /* A list's own box is drawn in utilities (`list-row.tsx`) but for its
@@ -121,11 +121,7 @@
     contain: layout style;
   }
 
-  /* Note that a swipe row's press stands in its slide, so it is reached through it, or that row stands shorter than the rows around it. */
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
-  > .luke-list-row-main,
-  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
-    > .luke-list-row-slide
     > .luke-list-row-main {
     min-height: var(--luke-control-height);
   }
@@ -205,17 +201,13 @@
   /* Beside its acts, the row's press gives its end inset to the acts,
      whatever its list's variant or density set it (so this rule stays below
      theirs); acts standing in its end's track on hover take none of it. */
-  .luke-list-row:not([data-actions="hover"]):has(> .luke-list-row-actions) > .luke-list-row-main,
-  .luke-list-row:not([data-actions="hover"])
-    > .luke-list-row-slide:has(> .luke-list-row-actions)
-    > .luke-list-row-main {
+  .luke-list-row:not([data-actions="hover"]):has(> .luke-list-row-actions) > .luke-list-row-main {
     padding-inline-end: 0;
   }
 
   /* Beside its ⋯, the row's press gives its end inset to the ⋯ too, its
      acts on hover or none, since the ⋯ stands in a track of its own. */
-  .luke-list-row:has(> .luke-list-row-more) > .luke-list-row-main,
-  .luke-list-row > .luke-list-row-slide:has(> .luke-list-row-more) > .luke-list-row-main {
+  .luke-list-row:has(> .luke-list-row-more) > .luke-list-row-main {
     padding-inline-end: 0;
   }
 
@@ -308,8 +300,6 @@
      the marks still stand level with it, and the title runs whole under it.
      The words and the first line lend their parts to the press's tracks, so
      each lands in its own. */
-  /* Note that a swiped row holds its press inside its slide, so the press is
-     matched wherever it stands in the row. */
   .luke-list-row[data-meta="title"] :is(.luke-list-row-text, .luke-list-row-head) {
     display: contents;
   }
@@ -573,10 +563,7 @@
       );
     }
 
-    .luke-list-row[data-actions="hover"]:has(> .luke-list-row-more) > .luke-list-row-main,
-    .luke-list-row[data-actions="hover"]
-      > .luke-list-row-slide:has(> .luke-list-row-more)
-      > .luke-list-row-main {
+    .luke-list-row[data-actions="hover"]:has(> .luke-list-row-more) > .luke-list-row-main {
       padding-inline-end: var(--luke-list-row-inset-inline);
     }
 
@@ -626,100 +613,6 @@
   .luke-list-row:has(:focus-visible) {
     position: relative;
     z-index: 1;
-  }
-
-  /* A row swiped right to its one act (`use-row-swipe.ts`): its face slides
-     on its `transform` over the act's button in the accent, which a short
-     swipe leaves showing and a long one arms, brighter, its label riding
-     the face's edge. While it is out, the face is drawn on the row's own
-     ground, its fill over it, so it hides the button wherever it stands; at
-     rest it is drawn in its fill alone, so a row on a ground the window
-     frosts through (the Mac's sidebar) is as clear as the rows around it
-     that do not swipe. It settles on the motion tokens, so reduced motion
-     and a capture run hold it still, and follows the pointer or the wheel
-     with no lag while it moves. */
-  .luke-list-row[data-swipe] {
-    --luke-list-row-fill: transparent;
-
-    position: relative;
-    overflow: clip;
-    touch-action: pan-y;
-  }
-
-  .luke-list-row[data-swipe]:has(button.luke-list-row-main):hover:not(
-    [data-current="true"],
-    [data-selected="true"]
-  ) {
-    --luke-list-row-fill: var(--luke-color-fill-hover);
-
-    background: none;
-  }
-
-  .luke-list-row[data-swipe][data-current="true"] {
-    --luke-list-row-fill: var(--luke-color-ground);
-
-    background: none;
-  }
-
-  .luke-list-row[data-swipe][data-selected="true"] {
-    --luke-list-row-fill: var(--luke-color-fill-selected);
-
-    background: none;
-  }
-
-  .luke-list-row-slide {
-    background-color: var(--luke-list-row-ground, var(--luke-color-ground));
-    background-image: linear-gradient(var(--luke-list-row-fill), var(--luke-list-row-fill));
-    transform: translateX(var(--luke-list-row-swipe, 0px));
-    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
-  }
-
-  /* Note that the ground goes only once the face has slid home, as the
-     button under it does, so a face settling back never shows the button
-     through its words. */
-  .luke-list-row[data-swipe="rest"] > .luke-list-row-slide {
-    background-color: transparent;
-    transition:
-      transform var(--luke-duration-fast) var(--luke-spring-fast),
-      background-color 0s linear var(--luke-duration-fast);
-  }
-
-  .luke-list-row[data-swipe="moving"] > .luke-list-row-slide {
-    transition: none;
-  }
-
-  /* The button stands hidden at rest, so its edge never shows round the
-     face's corners; it comes in at once as a swipe begins, and goes only
-     once the face has slid home over it. */
-  .luke-list-row-swipe {
-    background: var(--luke-color-accent);
-    opacity: 1;
-  }
-
-  .luke-list-row[data-swipe="rest"] > .luke-list-row-swipe {
-    opacity: 0;
-    transition: opacity 0s linear var(--luke-duration-fast);
-  }
-
-  .luke-list-row[data-swipe="moving"] > .luke-list-row-swipe {
-    transition: background-color var(--luke-duration-hover) var(--luke-motion-exit);
-  }
-
-  .luke-list-row[data-armed="true"] > .luke-list-row-swipe {
-    background: color-mix(in srgb, var(--luke-color-accent) 82%, var(--luke-color-on-accent));
-  }
-
-  .luke-list-row-swipe-label {
-    opacity: var(--luke-list-row-swipe-shown, 0);
-    transform: translateX(var(--luke-list-row-swipe-label, 0px));
-    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
-  }
-
-  /* While the row follows the hand, its label follows a beat behind, so
-     the jump from the button's middle to the face's edge as the row arms
-     glides rather than snaps. */
-  .luke-list-row[data-swipe="moving"] .luke-list-row-swipe-label {
-    transition: transform var(--luke-duration-hover) var(--luke-motion-exit);
   }
 
   /* A row folding the rows nested under it stands its chevron over its
