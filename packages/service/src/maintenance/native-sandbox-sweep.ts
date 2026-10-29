@@ -30,14 +30,16 @@
  * as any ended run's is. The turn keeps how the runner ended, its exit code
  * and the redacted tail of its stderr, after the fixed sentence, and the
  * settle is logged as an error under the agent's ids and reported as an
- * issue. Nothing is relaunched.
+ * issue, each with the exit code alone. Nothing is relaunched.
  *
  * Every call is bounded so the sweep's minute holds: a few pages of the
  * list, a set number of sandboxes read against the store, taken from a
  * window that moves along the list from one sweep to the next, and a set
  * number of stops. What is asked of Vercel is a page, a name, a session, and
  * a dead runner's stderr; what is logged of a failure is its status, and of a
- * dead runner its exit and its stderr's redacted tail.
+ * dead runner its exit. Note that the stderr is kept in the turn's row
+ * alone, never a log line or a report, because those reach Sentry, where a
+ * short secret the redaction cannot recognise would outlive the turn.
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
@@ -229,8 +231,8 @@ function runnerLostDetail(exit: ExitedRunner["exit"], stderr: string | undefined
 
 /**
  * A runner that died mid-turn without its END, reported as one issue
- * whatever the agent, since the ids, exit, and stderr ride as attributes
- * rather than in its message.
+ * whatever the agent, since the ids and exit ride as attributes rather than
+ * in its message; its stderr stays in the turn's row.
  */
 class RunnerLost extends Data.TaggedError("RunnerLost")<{
   readonly agentId: string;
@@ -239,7 +241,6 @@ class RunnerLost extends Data.TaggedError("RunnerLost")<{
   readonly turnIds: readonly string[];
   readonly sandboxSessionId: string;
   readonly exitCode: string;
-  readonly stderr: string;
 }> {
   override get message(): string {
     return RUNNER_LOST_DETAIL;
@@ -252,7 +253,6 @@ class RunnerLost extends Data.TaggedError("RunnerLost")<{
     sessionId: this.sessionId,
     sandboxSessionId: this.sandboxSessionId,
     exitCode: this.exitCode,
-    stderr: this.stderr,
     failure: TURN_FAILURE.MODEL,
     reason: this._tag,
   };
@@ -274,8 +274,7 @@ const settledLostRunner = (
   now: Date,
 ) =>
   Effect.gen(function* () {
-    const { stderr } = runner;
-    const detail = runnerLostDetail(runner.exit, stderr);
+    const detail = runnerLostDetail(runner.exit, runner.stderr);
     const turnIds = yield* settleRunnerLostTurns(
       writer,
       conversationId,
@@ -292,9 +291,8 @@ const settledLostRunner = (
       sessionId: sandbox.sessionId,
       sandboxSessionId: sandbox.running,
       exitCode: String(runner.exit),
-      stderr: stderr === undefined ? "none" : redactCredentials(stderr),
     });
-    yield* Effect.logError(detail).pipe(
+    yield* Effect.logError(`${RUNNER_LOST_DETAIL}: exit ${lost.exitCode}`).pipe(
       Effect.annotateLogs({
         agentId: sandbox.agentId,
         conversationId,

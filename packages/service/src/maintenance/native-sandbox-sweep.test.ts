@@ -14,7 +14,7 @@ import { getTestDB, startTask } from "@luke/database/testing";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
-import { Duration, Effect, Option } from "effect";
+import { Duration, Effect, ErrorReporter, Layer, Option } from "effect";
 import { afterEach, vi } from "vitest";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { RUNNER_TAG } from "../agents/machine/vercel-machine.js";
@@ -208,7 +208,7 @@ afterEach(() => {
 
 it.layer(getTestDB())("the native sandbox sweep", (it) => {
   it.effect(
-    "a runner that exited mid-turn has its turn settled failed with its exit code and stderr and the projection's turn dropped, its sandbox stopped past the grace; a runner still up keeps its turn",
+    "a runner that exited mid-turn has its turn settled failed with its exit code and stderr and the projection's turn dropped, reported by its exit code alone, its sandbox stopped past the grace; a runner still up keeps its turn",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -241,7 +241,16 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         const alive = nativeSandbox(working.id, "cmd_running");
         api.sandboxes.push(dead, alive);
 
-        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+        const reported: Record<string, unknown>[] = [];
+        const reporter = ErrorReporter.layer([
+          ErrorReporter.make(({ attributes }) => {
+            reported.push({ ...attributes });
+          }),
+        ]);
+
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(
+          Effect.provide(Layer.merge(api.layer, reporter)),
+        );
 
         assert.deepEqual(outcome, {
           stopped: 0,
@@ -262,6 +271,10 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
           settled?.failureDetail,
           "the agent's runner stopped before its turn ended: exit 137, stderr: agent-runner: JavaScript heap out of memory",
         );
+        // Note that the stderr stays in the turn's row: what is reported reaches Sentry.
+        assert.equal(reported.length, 1);
+        assert.equal(reported[0]?.exitCode, "137");
+        assert.ok(!JSON.stringify(reported).includes("heap out of memory"));
         assert.equal((yield* statusOf(working.conversationId))[0]?.status, TURN_STATUS.RUNNING);
         const [projection] = yield* db
           .select({ projection: conversations.nativeProjection })
