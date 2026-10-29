@@ -18,8 +18,8 @@ what we collect, who we send it to, and how to turn it off.
 - **Who else gets data.** GitHub for your repositories. Vercel runs our
   service and the sandboxes, and Neon hosts our database. PostHog gets usage
   data and screen recordings with every word masked. Sentry gets crash,
-  error, and performance reports, which leave out what a model was sent or
-  answered. Any integration you connect gets what your agents ask it. See
+  error, and performance reports, and a log of the errors Luke shows you,
+  which leave out what a model was sent or answered. Any integration you connect gets what your agents ask it. See
   [Who we send it to](#who-we-send-it-to).
 - **Commands on your Mac.** Agents can run commands on your Mac, and
   what those commands print leaves it. See "Commands agents run on your Mac"
@@ -1142,6 +1142,20 @@ not attach your Luke account, and does not enable Sentry Replay, screenshots,
 or profiling.
 Fixture and evidence runs send nothing to Sentry.
 
+**Errors Luke shows you.** Each time the Mac app or Luke in a browser shows
+you an error, such as a notice that something you asked for could not be
+done, it also sends Sentry a log line saying so; where the error is not one
+our service or the app named, as a limit you reached is, it sends an error
+report besides. Each carries where in Luke the error was shown, its code, the
+name, code, HTTP status, and message of the error behind it, with every run
+shaped like a credential replaced and the message cut short, the ids of what
+it was about (such as the workspace, task, agent, conversation, inbox item,
+channel, automation, or pull request number), whether your Mac or browser was
+online, and whether you were signed in. It never carries what you typed, a
+transcript, a plan, or a file's contents. The message is the error's own, or
+our service's sentence for a refusal, so it can name what that error named,
+such as an address. Both go under the data collection described above.
+
 **Error, performance, and agent reports from our service.** Our service and
 Luke's agents send Sentry reports so that we can find and fix failures. Our
 service's web functions send every error they did not handle or that ended
@@ -1432,7 +1446,8 @@ site's production deployment records, never a preview of it. A recording
 follows your account in that browser: signing out files what follows under
 nobody, and deleting your account in one tab stops the recording in every
 tab of that browser until you sign in again. It sends Sentry reports of the
-errors it did not handle and of a tab that could not draw, and performance
+errors it did not handle and of a tab that could not draw, the errors it
+shows you, as described under "Errors Luke shows you", and performance
 traces for about one page load in ten, and a warning for each kind of request
 the page's security policy refused, once in each tab, naming only the
 policy's directive and the refused address's origin, or the browser's own

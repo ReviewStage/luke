@@ -19,6 +19,10 @@
  * composer, for no longer than its hold; one with an action there can be
  * dismissed to reach End call or Send under it.
  *
+ * A toast saying a failure carries the failure, which is reported as it is
+ * shown (`failure-report.ts`), so no failure the panel says in a toast goes
+ * unreported.
+ *
  * Each stands for its own hold, paused while the pointer is over it or focus
  * is in it, and leaves by itself once it runs out. Only one
  * whose action is the one way back to something the developer would
@@ -55,6 +59,7 @@ import { Clock, Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
+import { reportShownFailure, type ShownFailure } from "./failure-report.js";
 import { rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
 
 /** The tones said in the polite region: all but a refusal, which is an alert. */
@@ -81,6 +86,15 @@ interface ToastAction {
 }
 
 /**
+ * A toast's tone, and, where it says a failure, the failure it says, which
+ * is reported as the toast is shown (`failure-report.ts`): a failure toast
+ * cannot be built without it, so none reaches a screen unreported.
+ */
+type ToastSaying =
+  | { readonly tone: Exclude<ToastTone, typeof STATUS_TONE.DANGER>; readonly failure?: never }
+  | { readonly tone: typeof STATUS_TONE.DANGER; readonly failure: ShownFailure };
+
+/**
  * A toast to show: its words, an optional second line under them, and its
  * tone, and either how long it stands before it leaves or the action it
  * carries, with its own hold, the action's where it names none, or, where
@@ -90,32 +104,33 @@ interface ToastAction {
  * whoever showed it says so, which withdraws it by its `subject`. Its `subject` is what it
  * is about, by which whoever showed it may withdraw it once it is stale.
  * One of `STATUS_TONE.WORKING` has no hold and no action: it stands until the
- * work it says is under way settles it (`useWorkingToast`).
+ * work it says is under way settles it (`useWorkingToast`). One of
+ * `STATUS_TONE.DANGER` carries the failure it says (`ToastSaying`).
  */
 export type ToastNotice = {
   readonly words: string;
   /** The glyph it leads with in place of its tone's, where what it says has one of its own (`Toast`'s `glyph`). */
   readonly glyph?: () => React.JSX.Element;
   readonly detail?: string;
-  readonly tone: ToastTone;
   readonly subject?: string;
-} & (
-  | { readonly hold: Duration.Duration; readonly action?: never; readonly persists?: never }
-  | { readonly action: ToastAction; readonly hold?: Duration.Duration; readonly persists?: never }
-  | { readonly action: ToastAction; readonly persists: true; readonly hold?: never }
-  | {
-      readonly subject: string;
-      readonly persists: true;
-      readonly action?: never;
-      readonly hold?: never;
-    }
-  | {
-      readonly tone: typeof STATUS_TONE.WORKING;
-      readonly hold?: never;
-      readonly action?: never;
-      readonly persists?: never;
-    }
-);
+} & ToastSaying &
+  (
+    | { readonly hold: Duration.Duration; readonly action?: never; readonly persists?: never }
+    | { readonly action: ToastAction; readonly hold?: Duration.Duration; readonly persists?: never }
+    | { readonly action: ToastAction; readonly persists: true; readonly hold?: never }
+    | {
+        readonly subject: string;
+        readonly persists: true;
+        readonly action?: never;
+        readonly hold?: never;
+      }
+    | {
+        readonly tone: typeof STATUS_TONE.WORKING;
+        readonly hold?: never;
+        readonly action?: never;
+        readonly persists?: never;
+      }
+  );
 
 /** How long a toast takes to leave, as `--luke-duration-exit` says it. */
 const TOAST_EXIT = Duration.millis(MOTION_DURATION_MS.EXIT);
@@ -356,6 +371,12 @@ function stepped(stack: ToastLine, step: ToastStep, now: number): ToastLine {
   }
 }
 
+/** Reports the failure a notice says, where it says one, as it is shown or a working toast turns into it. */
+function reportSaid(step: ToastStep): void {
+  if (step.kind !== TOAST_STEP.SHOW && step.kind !== TOAST_STEP.SETTLE) return;
+  if (step.notice.tone === STATUS_TONE.DANGER) reportShownFailure(step.notice.failure);
+}
+
 /**
  * The toasts' lives, as an atom whose work is their waits: each step lands
  * on the stack, which then runs down to its next change and lets it happen,
@@ -367,6 +388,7 @@ function stepped(stack: ToastLine, step: ToastStep, now: number): ToastLine {
 const toastLifeAtom = Atom.keepAlive(
   rendererRuntime.fn((step: ToastStep, get) =>
     Effect.gen(function* () {
+      yield* Effect.sync(() => reportSaid(step));
       const at = yield* Clock.currentTimeMillis;
       let stack = settle(stepped(get(toastStackAtom), step, at), at);
       get.set(toastStackAtom, stack);

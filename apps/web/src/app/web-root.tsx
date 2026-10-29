@@ -27,6 +27,7 @@ import type { DuplicateGatewayMethod, HostTag } from "@luke/host/effect";
 import { App } from "@luke/panel/app";
 import { installActPort, installAppBridge } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
+import { installShownFailureReporter } from "@luke/panel/failure-report";
 import { installWindowHistory } from "@luke/panel/navigation-history";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
@@ -130,6 +131,8 @@ export async function mountWebApp(
     installed.push(installAppBridge(withLoadLink(web.bridge)));
     installed.push(installActPort(web.actPort, web.actPortClient));
     installed.push(installAppPlatform(web.platform));
+    // Every failure the panel shows is reported through the tab's Sentry.
+    installed.push(installShownFailureReporter(sentry.reportShownFailure));
     // The panel's back and forward are the browser's own, each step in the tab's address.
     installed.push(installTabHistory(installWindowHistory, browserHistory()));
     await runtime.runPromise(appStateFirstRead);

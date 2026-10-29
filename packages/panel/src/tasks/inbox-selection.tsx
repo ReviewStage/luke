@@ -1,4 +1,5 @@
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   ConfirmDialog,
   INSET,
@@ -88,6 +89,7 @@ export function InboxSelectionBar({
           words: closedNote(taken.length - refused, refused),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.INBOX_CLOSE, cause: FAILURE_CONDITION.NOT_KEPT },
         });
       });
     }
@@ -112,6 +114,7 @@ export function InboxSelectionBar({
           words: markedNote(unread, landed.length, refused),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.INBOX_MARK, cause: FAILURE_CONDITION.NOT_KEPT },
         });
       },
     );

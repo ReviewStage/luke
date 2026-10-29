@@ -2,6 +2,7 @@ import { AGENT_CALL_FAILURE, type AgentInboxMessagedView } from "@luke/features/
 import type { Channel } from "@luke/features/channel-wire";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND, type MentionLines } from "@luke/features/mention-link";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { CodeRef } from "@luke/features/task-wire";
 import { backToWords, readFailedWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -282,7 +283,16 @@ export function DesktopInbox({
     if (into === undefined || started.channelId === into) return;
     channels.onMove(started.id, into).then((refused) => {
       if (refused === undefined) return channels.onRefresh();
-      toast({ words: refused, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      toast({
+        words: refused,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: {
+          surface: FAILURE_SURFACE.CHANNEL_MOVE,
+          cause: refused,
+          about: { inboxItemId: started.id, agentId: started.agentId, channelId: into },
+        },
+      });
     });
   };
   // Note that a phone shows one thing at a time across the screen: the list, or the item in its place.

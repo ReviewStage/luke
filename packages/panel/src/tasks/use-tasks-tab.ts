@@ -15,6 +15,7 @@ import type { CatalogModel, MacOffer, ModelChoice } from "@luke/features/models-
 import type { PageLine } from "@luke/features/page-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
 import {
   type CodeRef,
@@ -1808,7 +1809,16 @@ export function useTasksTab(input: {
     const deleted = await act(ACT_KIND.TASKS_DELETE, { taskId }).catch(() => false);
     if (deleted) return { status: ACTION_RESULT_STATUS.ACCEPTED };
     if (!shownNow.current) {
-      toast({ words: DELETE_REFUSED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      toast({
+        words: DELETE_REFUSED_NOTE,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: {
+          surface: FAILURE_SURFACE.TASK_DELETE,
+          cause: FAILURE_CONDITION.NOT_KEPT,
+          about: { taskId },
+        },
+      });
     }
     return DELETE_REFUSED;
   };
@@ -1840,6 +1850,11 @@ export function useTasksTab(input: {
             words: MARK_FAILED_NOTES[mark],
             tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
+            failure: {
+              surface: FAILURE_SURFACE.TASK_MARK,
+              cause: FAILURE_CONDITION.NOT_KEPT,
+              about: { taskId },
+            },
           });
         }
         return changed;
@@ -1861,6 +1876,7 @@ export function useTasksTab(input: {
           words: pinned ? REPOSITORY_PIN_FAILED_NOTES.PIN : REPOSITORY_PIN_FAILED_NOTES.UNPIN,
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.REPOSITORY_PIN, cause: FAILURE_CONDITION.NOT_KEPT },
         });
       });
   };
@@ -1911,6 +1927,7 @@ export function useTasksTab(input: {
         words: pinned ? AGENT_PIN_FAILED_NOTES.PIN : AGENT_PIN_FAILED_NOTES.UNPIN,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
+        failure: { surface: FAILURE_SURFACE.AGENT_PIN, cause: asked, about: { agentId } },
       });
     });
   };
@@ -1984,7 +2001,12 @@ export function useTasksTab(input: {
     Promise.all(asked).then((answers) => {
       if (!answers.includes(false)) return;
       putBack?.();
-      toast({ words: PIN_MOVE_FAILED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      toast({
+        words: PIN_MOVE_FAILED_NOTE,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: { surface: FAILURE_SURFACE.PIN_MOVE, cause: FAILURE_CONDITION.NOT_KEPT },
+      });
     });
   };
 
@@ -2004,6 +2026,7 @@ export function useTasksTab(input: {
           words: SECTION_WRITE_FAILED_NOTE,
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.SECTION_WRITE, cause: FAILURE_CONDITION.NOT_KEPT },
         });
       });
   };
@@ -2062,6 +2085,7 @@ export function useTasksTab(input: {
           words: settleFailedNote(status, refused),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.TASK_SETTLE, cause: FAILURE_CONDITION.NOT_KEPT },
         });
         return;
       }
@@ -2096,6 +2120,7 @@ export function useTasksTab(input: {
         words: STATUS_RESTORE_FAILED_NOTE,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
+        failure: { surface: FAILURE_SURFACE.TASK_SETTLE, cause: FAILURE_CONDITION.NOT_KEPT },
       });
     });
   };
@@ -2243,7 +2268,12 @@ export function useTasksTab(input: {
     return act(kind).then(
       () => true,
       (refused: Error) => {
-        toast({ words: refused.message, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+        toast({
+          words: refused.message,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.GITHUB_ACCOUNT, act: kind, cause: refused },
+        });
         return false;
       },
     );
@@ -2296,7 +2326,12 @@ export function useTasksTab(input: {
         if (!("failure" in answer)) return;
         const words =
           answer.failure === TASK_BLOCK_FAILURE.CYCLE ? BLOCK_CYCLE_NOTE : BLOCK_REFUSED_NOTE;
-        toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+        toast({
+          words,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.TASK_BLOCK, cause: answer, about: { taskId } },
+        });
       });
   };
 
@@ -2323,7 +2358,16 @@ export function useTasksTab(input: {
           return true;
         }
         if (told?.quiet !== true) {
-          toast({ words: MOVE_REFUSED_NOTE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+          toast({
+            words: MOVE_REFUSED_NOTE,
+            tone: STATUS_TONE.DANGER,
+            hold: TOAST_HOLD.FAILED,
+            failure: {
+              surface: FAILURE_SURFACE.TASK_MOVE,
+              cause: answer,
+              about: { taskId, workspaceId },
+            },
+          });
         }
         return false;
       });

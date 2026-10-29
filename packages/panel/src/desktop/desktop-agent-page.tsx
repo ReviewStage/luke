@@ -9,6 +9,7 @@ import {
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import type { MentionLines } from "@luke/features/mention-link";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -417,7 +418,12 @@ export function DesktopAgentPage({
   const unarchive = () =>
     onArchive(agentId, false).then((result) => {
       if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-        toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+        toast({
+          words: result.reason,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.AGENT_ARCHIVE, cause: result, about: { agentId } },
+        });
       }
     }, nothing);
   // The agent's workspace as the account lists it, whose count reads its members again; by its id alone where the list does not hold it yet.

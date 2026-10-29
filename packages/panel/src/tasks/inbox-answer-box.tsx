@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { AGENT_STATUS, type AgentAttachment, type AgentSummary } from "@luke/features/agent-wire";
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { pasteCutWords } from "@luke/features/words";
 import { EXPERIMENT } from "@luke/settings";
 import {
@@ -525,7 +526,16 @@ function AnswerCard({
   const unarchive = () =>
     void onUnarchiveAgent().then((result) => {
       if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-        toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+        toast({
+          words: result.reason,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: {
+            surface: FAILURE_SURFACE.AGENT_ARCHIVE,
+            cause: result,
+            about: { inboxItemId: item.id, agentId: item.agentId, channelId: item.channelId },
+          },
+        });
       } else if (kept !== undefined) control.onDropNote(item.id, kept);
     });
   const message = () => {

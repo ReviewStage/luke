@@ -16,12 +16,13 @@
  * the moment the root starts rather than carried in the entry, because the entry is
  * parsed as the tab opens and a tab with no DSN should not parse it at
  * all. What is reported before it lands, a failure an Effect boundary of the
- * tab's runtime reported, a tab that could draw nothing, or a refusal of the
- * page's policy, is kept for it, a few at most, and sent once it stands.
+ * tab's runtime reported, a tab that could draw nothing, a failure the panel
+ * showed, or a refusal of the page's policy, is kept for it, a few at most, and sent once it stands.
  */
 
 import { type EarlyReports, reportsOnceStarted } from "@luke/features/sentry-early-reports";
 import { type SentryCapture, sentryReporterLayer } from "@luke/features/sentry-reporting";
+import type { ShownFailureReporter } from "@luke/panel/failure-report";
 import type { Layer } from "effect";
 
 /** What the build says about where the tab reports. */
@@ -42,12 +43,16 @@ export interface WebSentry {
   readonly captureException: SentryCapture["captureException"];
   /** Sends one kind of request the page's policy refused, by its directive and the origin it was refused. */
   readonly reportRefusal: (directive: string, origin: string) => void;
+  /** Reports a failure the panel showed: a log line, and an issue besides where nothing named it. */
+  readonly reportShownFailure: ShownFailureReporter;
 }
 
 /** What the root reports through from the moment it starts, whether the SDK stands yet or not. */
 export interface WebSentryReports {
   /** Reports a tab that could draw nothing. */
   readonly reportBlankTab: (error: Error) => void;
+  /** Reports a failure the panel showed, kept for the SDK where it does not stand yet. */
+  readonly reportShownFailure: ShownFailureReporter;
   /** Effect's reporters with Sentry's beside them, for the tab's runtime to stand on. */
   readonly errorReporting: Layer.Layer<never>;
   /** Settles once the SDK stands, or never will, and what was said before then was sent or dropped. */
@@ -198,6 +203,7 @@ export function startWebSentry(build: WebSentryBuild): WebSentryReports {
   if (build.dsn) listenForRefusals(say);
   return {
     reportBlankTab: (error) => say((sentry) => sentry.reportBlankTab(error)),
+    reportShownFailure: (report) => say((sentry) => sentry.reportShownFailure(report)),
     errorReporting: sentryReporterLayer({
       captureException: (error, hint) => {
         say((sentry) => sentry.captureException(error, hint));

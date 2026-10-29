@@ -33,6 +33,7 @@
     "./bundle-loader": "./src/bundle-loader.js",
     "./composer-drafts": "./src/composer-drafts.js",
     "./desktop/luke-identity": "./src/desktop/luke-identity.js",
+    "./failure-report": "./src/failure-report.js",
     "./keyboard-modality": "./src/keyboard-modality.js",
     "./navigation-history": "./src/navigation-history.js",
     "./not-found": "./src/not-found.js",

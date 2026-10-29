@@ -1,12 +1,19 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import {
+  FAILURE_CONDITION,
+  FAILURE_SURFACE,
+  type ShownFailureSentry,
+  sendShownFailure,
+} from "@luke/features/shown-failure";
 import { STATUS_TONE } from "@luke/ui";
 import { Duration } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { installShownFailureReporter } from "./failure-report.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import {
   TOAST_HOLD,
@@ -22,8 +29,9 @@ import {
  * window too short for three stands two, setting the oldest aside until
  * there is room again; one whose hold runs down with an action draws that
  * hold as its countdown; work under way settles into its own card in
- * place; and an act's Undo toast takes the act back and stands for the Undo
- * hold. jsdom lays nothing out, so the window's height is given. Synthetic
+ * place; an act's Undo toast takes the act back and stands for the Undo
+ * hold; and a failure toast reports what failed to Sentry, which a recording
+ * SDK stands in for. jsdom lays nothing out, so the window's height is given. Synthetic
  * throughout.
  */
 
@@ -210,13 +218,122 @@ test("two pieces of work under way stand apart, each settles its own card in pla
   const working = [...document.querySelectorAll(".luke-toast")];
 
   act(() =>
-    second?.({ words: "Couldn't save", tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
+    second?.({
+      words: "Couldn't save",
+      tone: STATUS_TONE.DANGER,
+      hold: TOAST_HOLD.FAILED,
+      failure: { surface: FAILURE_SURFACE.PLAN_SAVE, cause: FAILURE_CONDITION.NOT_KEPT },
+    }),
   );
   act(() => first?.({ words: "Saved", tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE }));
 
   assert.deepEqual(standing(), ["Saved", "Couldn't save"]);
   assert.deepEqual([...document.querySelectorAll(".luke-toast")], working, "the same two cards");
   assert.equal(document.querySelector('[role="alert"]')?.textContent, "Couldn't save");
+});
+
+test("a failure toast reports what failed: an unexpected one as an error line and an issue grouped by where and what, credentials redacted, and a refusal as a warning line alone", () => {
+  mount(WINDOW.TALL);
+  const issues: { error: Error; hint: unknown }[] = [];
+  const lines: { level: string; message: string; attributes: unknown }[] = [];
+  const recording: ShownFailureSentry = {
+    captureException: (error, hint) => {
+      issues.push({ error, hint });
+      return "";
+    },
+    logger: {
+      warn: (message, attributes) => lines.push({ level: "warn", message, attributes }),
+      error: (message, attributes) => lines.push({ level: "error", message, attributes }),
+    },
+  };
+  const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
+  const unreached = Object.assign(new TypeError("fetch failed with token=fixture-secret"), {
+    status: 503,
+  });
+
+  act(() =>
+    show?.({
+      words: "The agent could not be stopped.",
+      tone: STATUS_TONE.DANGER,
+      hold: TOAST_HOLD.FAILED,
+      failure: {
+        surface: FAILURE_SURFACE.AGENT_STOP,
+        cause: new Error("Luke didn't hear back.", { cause: unreached }),
+        about: { agentId: "agent-fixture" },
+      },
+    }),
+  );
+  act(() =>
+    show?.({
+      words: "Messages are limited to 20,000 characters.",
+      tone: STATUS_TONE.DANGER,
+      hold: TOAST_HOLD.FAILED,
+      failure: {
+        surface: FAILURE_SURFACE.AGENT_START,
+        cause: { status: "rejected", reason: "Messages are limited to 20,000 characters." },
+        about: { agentId: "agent-fixture" },
+      },
+    }),
+  );
+  uninstall();
+
+  // A window whose document is not read yet says it is online and its account unread.
+  const unexpected = {
+    "failure.surface": "agent.stop",
+    "failure.kind": "unexpected",
+    "failure.code": "TypeError",
+    "error.name": "Error",
+    "error.message": "Luke didn't hear back.",
+    "error.root.name": "TypeError",
+    "error.root.status": 503,
+    "error.root.message": "fetch failed with [redacted]",
+    "agent.id": "agent-fixture",
+    "app.online": true,
+    "app.account": "unread",
+  };
+  assert.deepEqual(lines, [
+    {
+      level: "error",
+      message: "A failure was shown on agent.stop: TypeError",
+      attributes: unexpected,
+    },
+    {
+      level: "warn",
+      message: "A failure was shown on agent.start: rejected",
+      attributes: {
+        "failure.surface": "agent.start",
+        "failure.kind": "refused",
+        "failure.code": "rejected",
+        "error.code": "rejected",
+        "error.message": "Messages are limited to 20,000 characters.",
+        "agent.id": "agent-fixture",
+        "app.online": true,
+        "app.account": "unread",
+      },
+    },
+  ]);
+  assert.equal(issues.length, 1, "the refusal opens no issue");
+  const [issue] = issues;
+  assert.deepEqual(issue?.hint, {
+    mechanism: { type: "auto.luke.shown_failure", handled: true },
+    captureContext: {
+      level: "error",
+      fingerprint: ["shown-failure", "agent.stop", "TypeError"],
+      tags: {
+        "failure.surface": "agent.stop",
+        "failure.code": "TypeError",
+        "agent.id": "agent-fixture",
+      },
+      contexts: { shown_failure: unexpected },
+    },
+  });
+  assert.equal(issue?.error.message, "Luke didn't hear back.");
+  // Sentry reads the causes beneath an issue's error too, so they go redacted, their frames among them.
+  const beneath = issue?.error.cause;
+  assert.ok(beneath instanceof Error);
+  assert.equal(beneath.name, "TypeError");
+  assert.equal(beneath.message, "fetch failed with [redacted]");
+  assert.ok(!beneath.stack?.includes("fixture-secret"));
 });
 
 test("an Undo toast says the act in the success tone, and its Undo takes the act back and sends the toast away", () => {

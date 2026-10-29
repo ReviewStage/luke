@@ -32,6 +32,7 @@ import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
 } from "@luke/features/pull-request-chapters-view";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskMode } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
@@ -47,6 +48,7 @@ import {
   useDraftWriter,
   useNewAgentDraft,
 } from "../composer-drafts.js";
+import type { ShownFailure } from "../failure-report.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast, useWithdrawToast } from "../toast.js";
@@ -720,7 +722,8 @@ export function useAgents(input: {
   const continues = useRef(new Map<string, PendingContinue>());
   const toast = useToast();
   const failed = useCallback(
-    (words: string) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
+    (words: string, failure: ShownFailure) =>
+      toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED, failure }),
     [toast],
   );
   // Note that the acts and the opening are read through a ref, because the
@@ -941,7 +944,13 @@ export function useAgents(input: {
       if (answer.failure !== AGENT_CALL_FAILURE.UNANSWERED) {
         continues.current.delete(sourceId);
       }
-      if ((latest.current.taskId ?? latest.current.agentId) !== startsOn) failed(START_FAILED_AWAY);
+      if ((latest.current.taskId ?? latest.current.agentId) !== startsOn) {
+        failed(START_FAILED_AWAY, {
+          surface: FAILURE_SURFACE.AGENT_START,
+          cause: answer,
+          about: { agentId: sourceId },
+        });
+      }
       return continueFailureNote(answer, taskId ?? null);
     }
     continues.current.delete(sourceId);
@@ -1229,7 +1238,13 @@ export function useAgents(input: {
   const onStop = async (agentId: string): Promise<boolean> => {
     const answer = await act(ACT_KIND.AGENTS_STOP, { agentId }).catch(() => undefined);
     const took = answer !== undefined && !("failure" in answer);
-    if (!took) failed(STOP_FAILED);
+    if (!took) {
+      failed(STOP_FAILED, {
+        surface: FAILURE_SURFACE.AGENT_STOP,
+        cause: answer ?? FAILURE_CONDITION.NOT_KEPT,
+        about: { agentId },
+      });
+    }
     return took;
   };
 
@@ -1278,7 +1293,13 @@ export function useAgents(input: {
         agentId,
         disabledServers,
       }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
-      if ("failure" in answer && switches.current.get(agentId) === change) failed(SERVERS_FAILED);
+      if ("failure" in answer && switches.current.get(agentId) === change) {
+        failed(SERVERS_FAILED, {
+          surface: FAILURE_SURFACE.AGENT_SERVERS,
+          cause: answer,
+          about: { agentId },
+        });
+      }
       return answer;
     },
     [act, failed],
@@ -1296,7 +1317,13 @@ export function useAgents(input: {
       title,
     }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
     if (!("failure" in answer)) return true;
-    if (renames.current.get(agentId) === rename) failed(RENAME_FAILED);
+    if (renames.current.get(agentId) === rename) {
+      failed(RENAME_FAILED, {
+        surface: FAILURE_SURFACE.AGENT_RENAME,
+        cause: answer,
+        about: { agentId },
+      });
+    }
     return false;
   };
 
@@ -1325,7 +1352,11 @@ export function useAgents(input: {
         reason: notReady ? ARCHIVE_NOT_READY : words.refused,
       };
     }
-    toast(undoToast(words.done, () => archiveNow.current(agentId, !archived).then(sayRefusal)));
+    toast(
+      undoToast(words.done, () =>
+        archiveNow.current(agentId, !archived).then((result) => sayRefusal(result, agentId)),
+      ),
+    );
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
   const archiveNow = useRef(onArchive);
@@ -1346,8 +1377,13 @@ export function useAgents(input: {
     readAgain();
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
-  const sayRefusal = (result: ActionResult) => {
-    if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) failed(result.reason);
+  const sayRefusal = (result: ActionResult, agentId: string) => {
+    if (result.status === ACTION_RESULT_STATUS.ACCEPTED) return;
+    failed(result.reason, {
+      surface: FAILURE_SURFACE.AGENT_ARCHIVE,
+      cause: result,
+      about: { agentId },
+    });
   };
 
   const readAgent = useCallback((named: string) => readAgentById(act, named), [act]);

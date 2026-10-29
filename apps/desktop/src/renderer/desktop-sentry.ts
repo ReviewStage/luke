@@ -7,7 +7,8 @@
  * otherwise pay for it on its way to its first paint. The web tab loads its own the same
  * way (`apps/web/src/app/web-sentry.ts`). What is reported before it lands,
  * a window whose state could not be read or whose surface failed to render,
- * is kept for it, a few at most, and sent once it stands
+ * or a failure the panel showed, is kept for it, a few at most, and sent
+ * once it stands
  * (`@luke/features/sentry-early-reports`).
  *
  * The SDK's tracing starts the window's page load at the document's own
@@ -18,6 +19,7 @@
  */
 
 import { reportsOnceStarted } from "@luke/features/sentry-early-reports";
+import type { ShownFailureReporter } from "@luke/panel/failure-report";
 import type { PanelSpanRecorder } from "@luke/panel/panel-spans";
 
 /** Why a window drew nothing: its state could not be read, or its surface failed to render. */
@@ -39,6 +41,8 @@ export interface DesktopSentry {
   readonly reportBlankWindow: (error: Error, why: BlankWindow) => void;
   /** Records one span the panel timed, sampled as the window's traces are. */
   readonly recordSpan: PanelSpanRecorder;
+  /** Reports a failure the panel showed: a log line, and an issue besides where nothing named it. */
+  readonly reportShownFailure: ShownFailureReporter;
 }
 
 /** What the window reports through from the moment it starts, whether the SDK stands yet or not. */
@@ -47,6 +51,8 @@ export interface DesktopSentryReports {
   readonly reportBlankWindow: (error: Error, why: BlankWindow) => void;
   /** Records one span the panel timed, kept for the SDK where it does not stand yet. */
   readonly recordSpan: PanelSpanRecorder;
+  /** Reports a failure the panel showed, kept for the SDK where it does not stand yet. */
+  readonly reportShownFailure: ShownFailureReporter;
   /** Loads and starts the SDK, once however often it is asked. */
   readonly load: () => void;
   /** Settles once the SDK stands, or never will, and what was said before then was sent or dropped. */
@@ -87,6 +93,9 @@ export function startDesktopSentry(options: DesktopSentryOptions): DesktopSentry
     },
     recordSpan: (span) => {
       say((sentry) => sentry.recordSpan(span));
+    },
+    reportShownFailure: (report) => {
+      say((sentry) => sentry.reportShownFailure(report));
     },
     load: () => asked.resolve(),
     settled,
