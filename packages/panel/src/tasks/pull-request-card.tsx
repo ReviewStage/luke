@@ -14,6 +14,7 @@ import { countWords, TERM } from "@luke/features/words";
 import {
   ALIGN,
   Badge,
+  CARD_WIDTH,
   GAP,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -304,7 +305,10 @@ export function PullRequestCard({
   }, [owned]);
   const marked = { ...pullRequest, checks: pullRequest.checks ?? CHECK_SUMMARY.NONE };
   return (
-    <HoverCard data-pull-request-card="">
+    <HoverCard
+      data-pull-request-card=""
+      width={reviewers !== undefined && reviewers.length > 0 ? CARD_WIDTH.WIDE : CARD_WIDTH.NARROW}
+    >
       <HoverCardHead
         glyph={<PullRequestMark pullRequest={marked} />}
         name={pullRequest.title}
