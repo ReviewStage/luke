@@ -41,6 +41,7 @@ import { repositoryPin } from "../schemas/repository-pin.js";
 import { runnerLine } from "../schemas/runner-line.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
+import { taskBlock } from "../schemas/task-block.js";
 import { taskPin } from "../schemas/task-pin.js";
 import { agentSectionEntry, taskSection, taskSectionEntry } from "../schemas/task-section.js";
 import { TOPIC } from "./notification.js";
@@ -58,6 +59,31 @@ export const taskSync = defineSyncTable(task, {
     { kind: TOPIC.WORKSPACE, column: task.organizationId },
   ],
   ignore: [task.document, task.agentEdits],
+});
+
+/**
+ * One task blocking another, on each task's topic and, through each task,
+ * its workspace's, so the open task on either side and the workspace's task
+ * list hear a block added or taken away. A row is written once and never
+ * changed, so no column of it is hot.
+ */
+export const taskBlockSync = defineSyncTable(taskBlock, {
+  topics: [
+    { kind: TOPIC.TASK, column: taskBlock.blockerTaskId },
+    { kind: TOPIC.TASK, column: taskBlock.blockedTaskId },
+    {
+      through: task,
+      key: task.id,
+      by: taskBlock.blockerTaskId,
+      topics: [{ kind: TOPIC.WORKSPACE, column: task.organizationId }],
+    },
+    {
+      through: task,
+      key: task.id,
+      by: taskBlock.blockedTaskId,
+      topics: [{ kind: TOPIC.WORKSPACE, column: task.organizationId }],
+    },
+  ],
 });
 
 /**
@@ -487,6 +513,7 @@ export const agentDelegationSync = defineSyncTable(agentDelegationTable, {
 
 export const SYNC_TABLES: readonly SyncTable[] = [
   taskSync,
+  taskBlockSync,
   agentSync,
   memberSync,
   userSync,

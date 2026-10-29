@@ -67,6 +67,7 @@ import { reopenTaskInboxItems, settleTaskInboxItems } from "./inbox-settle.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
 import { stampConversationsDeleted } from "./soft-delete.js";
+import { leaveTaskBlocks, readTaskBlocks } from "./task-block-store.js";
 import {
   isWorkspaceMember,
   reachableTask,
@@ -500,7 +501,9 @@ function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
  * The row's plan, as the window and the model read it for `userId`, the
  * reader, whose own pin it carries: its text as the
  * document's body with no assumptions, since they are a section of the text,
- * and who last changed each section, as its revisions read. The row's own account is the one its
+ * who last changed each section, as its revisions read, and the tasks it
+ * waits on and that wait on it, each one the reader reaches
+ * (`task-block-store.ts`). The row's own account is the one its
  * agents are read under. Its last edit is its newest revision, or, before its
  * history begins, the newest save a coding agent made. A task is saved once
  * a save has moved its last save past its start, which no creation and no
@@ -518,6 +521,7 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
           Effect.map(agentLabelsOf(row, sectionWriters), (labels) => ({ sectionWriters, labels })),
         ),
         lastRevision: readLastEdit(row.id),
+        blocks: readTaskBlocks(userId, row.id),
       },
       { concurrency: yield* readConcurrency },
     );
@@ -537,6 +541,7 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
         ...(Option.isSome(lastEdit) ? { lastEdit: lastEdit.value } : undefined),
         document: { body: row.document, assumptions: [] },
         sectionEdits: sectionWriters.map((writer) => sectionEditOf(writer, labels)),
+        ...Option.getOrUndefined(read.blocks),
       },
       ownerId: row.userId,
       githubAccess: row.githubAccess,
@@ -1424,7 +1429,10 @@ export function updateTaskCommitted<E = never, R = never>(
         const txid = written ?? Option.getOrUndefined(pinned)?.txid;
         if (changes.organizationId !== undefined) {
           yield* followingAgentsAndInbox(taskId, row.organizationId, moved, now);
-          if (row.organizationId !== locked.value.organizationId) yield* leaveSections(taskId);
+          if (row.organizationId !== locked.value.organizationId) {
+            yield* leaveSections(taskId);
+            yield* leaveTaskBlocks(taskId);
+          }
         }
         // A task moved to Done or Canceled settles its open inbox items, and one moved off them to work
         // again opens again the items that move settled, by its stamp. Note that this runs after its
