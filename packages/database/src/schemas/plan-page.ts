@@ -25,13 +25,13 @@ import { task } from "./task.js";
  * it; one Luke showed, or one shown before the column, names none, and at
  * least one of the two always stands.
  *
- * Rows go with their task, as its agents do (`coding_agent.task_id`). An
+ * Rows go with their task, as its agents do (`agent.task_id`). An
  * agent's deletion only clears its name from a task's versions, as a plan
  * revision's and a comment's are cleared, so a task's page never loses a
  * version from the middle of its run. The pages of an agent on no task have
  * no other owner, so they go with the agent however it goes, deleted itself
  * or by its account's, workspace's, or conversation's deletion cascading
- * into it: a trigger on `coding_agent` deletes them first
+ * into it: a trigger on `agent` deletes them first
  * (`20261021205954_plan_page_version_agent`), since no foreign key action
  * tells the two kinds of row apart.
  */

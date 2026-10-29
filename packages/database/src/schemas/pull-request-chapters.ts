@@ -10,7 +10,7 @@ import { organization, user } from "./auth.js";
  * pull-request-chapters.ts -- the chapters a pull request's diff was split into, made once per head commit and shared by its workspace.
  *
  * One row per workspace (`organization_id`), repository (`owner/name`, as
- * `coding_agent.repository` names one), pull request number, and head
+ * `agent.repository` names one), pull request number, and head
  * commit: a member pressing Generate claims the row, and every member of the
  * workspace reads what it made. A newer head commit is a new row, so the
  * newest row of a pull request may stand on an older head than GitHub's,
