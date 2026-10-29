@@ -291,7 +291,7 @@ export function ToolContent({
   if (bare) {
     return (
       <DisclosureBody inset={DISCLOSURE_BODY.NONE}>
-        <div className={`${TOOL_BODY_CLASS} flex flex-col gap-tight-gap`} data-bare="">
+        <div className={cn(TOOL_BODY_CLASS, "flex flex-col gap-tight-gap", name)} data-bare="">
           {children}
         </div>
       </DisclosureBody>
