@@ -597,6 +597,43 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
   );
 
   it.effect(
+    "a task's pilot is delivered as a coder, so a desktop from before pilots still decodes the list, which reads as the held read does",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const plan = yield* startTask(owner, { name: "Teammate invitations" });
+        Option.getOrThrow(
+          yield* createAgent(owner, {
+            taskId: plan.id,
+            planSnapshot: "# Invitations\n",
+            prompt: null,
+            kind: AGENT_KIND.PILOT,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "acme/relay",
+          }),
+        );
+        // The kinds a desktop from before pilots decodes; any other fails its whole agent list.
+        const beforePilots = Schema.Array(
+          Schema.Struct({
+            kind: Schema.optionalKey(Schema.Literals([AGENT_KIND.CODER, AGENT_KIND.OPERATOR])),
+          }),
+        );
+
+        const statements = Option.getOrThrow(taskListLiveStatements(owner));
+        const rows = yield* runLive(statements.agents);
+
+        const decoded = yield* Schema.decodeUnknownEffect(beforePilots)(rows);
+        assert.deepEqual(
+          decoded.map((row) => row.kind),
+          [AGENT_KIND.CODER],
+        );
+        assert.deepEqual(yield* liveListOf(owner, NOW), yield* heldListOf(owner, NOW));
+      }),
+  );
+
+  it.effect(
     "an agent with no turn reads failed once its grace ends, as the held read reads it then",
     () =>
       Effect.gen(function* () {
