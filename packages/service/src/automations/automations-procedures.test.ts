@@ -280,7 +280,7 @@ const weekdays = (
     cron: SCHEDULE_PRESET.WEEKDAYS,
     timezone: "America/New_York",
   },
-  action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: PROMPT },
+  action: { kind: AUTOMATION_ACTION.AGENT, prompt: PROMPT },
 });
 
 /** A row an older build paused after its failed starts, as its pause stands now its reason column is gone: turned off. */
@@ -718,7 +718,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           yield* ask(automationPath(automation.id), owner, {
             method: "PATCH",
             body: {
-              action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage, then fix one." },
+              action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Triage, then fix one." },
             },
           }),
         ).automation;
@@ -732,7 +732,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
             method: "PATCH",
             body: {
               action: {
-                kind: AUTOMATION_ACTION.CODING_AGENT,
+                kind: AUTOMATION_ACTION.AGENT,
                 prompt: "Triage, then fix one.",
                 disabledServers: [],
               },
@@ -744,7 +744,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
-    "an automation made or edited with the action kind `agent` is stored as `coding-agent`, the one spelling the release still serving reads",
+    "an automation made or edited with the action kind `coding-agent`, as a window built before the rename sends it, is stored as `agent`",
     () =>
       Effect.gen(function* () {
         const { owner, task, ask } = yield* openAccounts;
@@ -754,7 +754,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, owner, {
             method: "POST",
-            body: { ...made, action: { ...made.action, kind: AUTOMATION_ACTION.AGENT } },
+            body: { ...made, action: { ...made.action, kind: AUTOMATION_ACTION.CODING_AGENT } },
           }),
         );
         const storedKind = Database.use((db) =>
@@ -767,12 +767,14 @@ it.layer(getTestDB())("the automation routes", (it) => {
 
         yield* ask(automationPath(automation.id), owner, {
           method: "PATCH",
-          body: { action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Triage, then fix one." } },
+          body: {
+            action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage, then fix one." },
+          },
         });
         const afterEdit = yield* storedKind;
 
-        assert.deepEqual(afterCreate, [AUTOMATION_ACTION.CODING_AGENT]);
-        assert.deepEqual(afterEdit, [AUTOMATION_ACTION.CODING_AGENT]);
+        assert.deepEqual(afterCreate, [AUTOMATION_ACTION.AGENT]);
+        assert.deepEqual(afterEdit, [AUTOMATION_ACTION.AGENT]);
       }),
   );
 
@@ -1203,7 +1205,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           body: {
             ...weekdays(task.workspaceId),
             action: {
-              kind: AUTOMATION_ACTION.CODING_AGENT,
+              kind: AUTOMATION_ACTION.AGENT,
               prompt: `${"\u0001".repeat(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS - 1)}x`,
             },
           },
@@ -1528,7 +1530,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           body: {
             ...weekdays(task.workspaceId),
             action: {
-              kind: AUTOMATION_ACTION.CODING_AGENT,
+              kind: AUTOMATION_ACTION.AGENT,
               prompt: "\u0001".repeat(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS * 2),
             },
           },
@@ -1555,7 +1557,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
           body: {
             ...weekdays(task.workspaceId),
             action: {
-              kind: AUTOMATION_ACTION.CODING_AGENT,
+              kind: AUTOMATION_ACTION.AGENT,
               prompt: "\u0001".repeat(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS * 2),
             },
           },

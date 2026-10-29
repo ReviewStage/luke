@@ -260,7 +260,7 @@ it.layer(getTestDB())("what moves an inbox notifies", (it) => {
               organizationId: world.workspaceId,
               name: "Nightly flaky-test sweep",
               trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
-              action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix one flaky test." },
+              action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Fix one flaky test." },
               guards: AUTOMATION_DEFAULT_GUARDS,
               nextRunAt: null,
               webhookSecretHash: null,

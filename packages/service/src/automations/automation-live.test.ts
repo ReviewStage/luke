@@ -73,7 +73,7 @@ const ranOnce = (
         repositories: ["acme/api"],
         name,
         trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 2 * * *", timezone: "UTC" },
-        action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Find and fix one flaky test." },
+        action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Find and fix one flaky test." },
         guards: AUTOMATION_DEFAULT_GUARDS,
         nextRunAt: null,
         webhookSecretHash: null,

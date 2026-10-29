@@ -146,7 +146,7 @@ const sentryAutomation = (
         event,
         ...(filters === undefined ? undefined : { filters }),
       },
-      action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix the error the event names." },
+      action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Fix the error the event names." },
       guards: AUTOMATION_DEFAULT_GUARDS,
       nextRunAt: null,
       webhookSecretHash: null,

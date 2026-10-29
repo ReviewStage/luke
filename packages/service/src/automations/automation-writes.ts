@@ -100,15 +100,14 @@ const firstDue = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * The action as the catalog takes it and the store keeps it: a named model
  * must be one offered the account, refused as an invalid request otherwise.
- * Note that the kind is stored as `coding-agent` whichever spelling the
- * request sent, because the release still serving through a deploy reads
- * that one alone until the rename's migration has run.
+ * Note that the kind is stored as `agent` whichever spelling the request
+ * sent, so a request from a window built before the rename writes the same row.
  */
 const checkedAction = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   asked: AutomationAction,
 ): Effect.fn.Return<AutomationAction, HostedRefusal, DatabaseServices | ModelCatalog> {
-  const action = { ...asked, kind: AUTOMATION_ACTION.CODING_AGENT };
+  const action = { ...asked, kind: AUTOMATION_ACTION.AGENT };
   if (action.choice === undefined) return action;
   yield* acceptedAgentChoice(userId, action.choice).pipe(
     Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),

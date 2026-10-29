@@ -221,7 +221,7 @@ function automations(workspaceId: string): readonly AutomationSummary[] {
       name: "Check each deploy",
       trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
       action: {
-        kind: AUTOMATION_ACTION.CODING_AGENT,
+        kind: AUTOMATION_ACTION.AGENT,
         prompt:
           "Open the release the webhook names, read its error rate for an hour, and roll it back if it doubled.",
         choice: { model: "openai/gpt-6.1-sol", effort: "medium" },
@@ -244,7 +244,7 @@ function automations(workspaceId: string): readonly AutomationSummary[] {
         drafts: false,
       },
       action: {
-        kind: AUTOMATION_ACTION.CODING_AGENT,
+        kind: AUTOMATION_ACTION.AGENT,
         prompt:
           "Review the pull request for correctness and leave comments on the lines that need a change.",
       },
@@ -266,7 +266,7 @@ function automations(workspaceId: string): readonly AutomationSummary[] {
         timezone: "Europe/London",
       },
       action: {
-        kind: AUTOMATION_ACTION.CODING_AGENT,
+        kind: AUTOMATION_ACTION.AGENT,
         prompt:
           "Find the flakiest test from last night's runs, fix it or quarantine it, and open a pull request.",
       },

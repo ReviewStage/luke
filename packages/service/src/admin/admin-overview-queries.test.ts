@@ -174,7 +174,7 @@ const fireAutomation = (userId: string, organizationId: string, when: string) =>
       enabled: true,
       triggerKind: AUTOMATION_TRIGGER.SCHEDULE,
       trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 2 * * *", timezone: "UTC" },
-      action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "" },
+      action: { kind: AUTOMATION_ACTION.AGENT, prompt: "" },
       guards: AUTOMATION_DEFAULT_GUARDS,
     });
     for (const status of [AUTOMATION_RUN_STATUS.STARTED, AUTOMATION_RUN_STATUS.SKIPPED]) {

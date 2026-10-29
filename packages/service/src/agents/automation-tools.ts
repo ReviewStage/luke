@@ -678,7 +678,7 @@ export function runCreateAutomation(
       const worked = yield* workedRepository(call.caller);
       const repositories = made.repositories ?? (worked === null ? undefined : [worked]);
       const action: AutomationAction = {
-        kind: AUTOMATION_ACTION.CODING_AGENT,
+        kind: AUTOMATION_ACTION.AGENT,
         prompt: made.prompt,
         ...(choice === undefined ? undefined : { choice }),
         ...(made.disabledServers === undefined

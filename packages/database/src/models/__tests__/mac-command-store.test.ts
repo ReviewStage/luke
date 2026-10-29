@@ -495,7 +495,7 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
                 repositories: [],
                 name: "Triage",
                 trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * *", timezone: "UTC" },
-                action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage what came in." },
+                action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Triage what came in." },
                 guards: AUTOMATION_DEFAULT_GUARDS,
                 nextRunAt: null,
                 webhookSecretHash: null,

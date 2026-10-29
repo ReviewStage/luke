@@ -1244,7 +1244,7 @@ it.effect(
             name: "Flaky-test sweep",
             scope,
             trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
-            action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix the flakiest test." },
+            action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Fix the flakiest test." },
             guards: AUTOMATION_DEFAULT_GUARDS,
             nextRunAt: null,
             webhookSecretHash: null,

@@ -216,7 +216,7 @@ it.layer(getTestDB())("the reliability read's failure counts", (it) => {
                 enabled: true,
                 triggerKind: AUTOMATION_TRIGGER.WEBHOOK,
                 trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
-                action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Sweep the flakes" },
+                action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Sweep the flakes" },
                 guards: AUTOMATION_DEFAULT_GUARDS,
               })
               .returning({ id: automation.id }),
