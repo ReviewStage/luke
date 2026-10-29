@@ -817,6 +817,8 @@ export interface LatestTurn {
   readonly failure: string | null;
   readonly failureDetail: string | null;
   readonly cancelRequestedAt: Date | null;
+  /** Whether the turn's Stop was its pilot tree's Running switched off. */
+  readonly cancelRequestedForRunning: boolean;
   /** When the turn was queued, and when eve started it; null until it has. */
   readonly queuedAt: Date;
   readonly startedAt: Date | null;
@@ -837,6 +839,7 @@ const LatestTurnRowSchema = Schema.Struct({
   failure: Schema.NullOr(Schema.String),
   failureDetail: Schema.NullOr(Schema.String),
   cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
+  cancelRequestedForRunning: Schema.Boolean,
   queuedAt: InstantColumnSchema,
   startedAt: Schema.NullOr(InstantColumnSchema),
   settledAt: Schema.NullOr(InstantColumnSchema),
@@ -866,6 +869,7 @@ const findLatestTurns = SqlSchema.findAll({
           failure: turns.failure,
           failureDetail: turns.failureDetail,
           cancelRequestedAt: turns.cancelRequestedAt,
+          cancelRequestedForRunning: turns.cancelRequestedForRunning,
           queuedAt: turns.queuedAt,
           startedAt: turns.startedAt,
           settledAt: turns.settledAt,

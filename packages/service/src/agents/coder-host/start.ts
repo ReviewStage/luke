@@ -769,7 +769,12 @@ const stoppedSource = (
   /** The coding agent whose `start_agent` continues the source; none for a member's Continue. */
   by: string | undefined,
 ) =>
-  cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source, undefined, by).pipe(
+  cancelledTurn(
+    eve,
+    storeWriter({ tools: CODER_TOOL_SET }),
+    source,
+    by === undefined ? {} : { by },
+  ).pipe(
     Effect.as(true),
     Effect.catch((refusal) =>
       Effect.as(

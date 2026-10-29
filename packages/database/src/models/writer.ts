@@ -272,6 +272,8 @@ interface TurnCancelRequest {
   readonly key?: string;
   /** The coding agent whose `stop_agent`, or whose Start continuing the turn's agent, made the Stop; none for the developer's or Luke's. */
   readonly by?: string;
+  /** Whether the Stop is its pilot tree's Running switched off, which tells no starter and which the switch on again resumes. */
+  readonly forRunning?: boolean;
 }
 
 type TurnCancelResult = Result.Result<StoreWriteEffect, typeof NO_CONVERSATION | typeof NO_TURN>;
@@ -2027,13 +2029,19 @@ const stampTurnCancel = SqlSchema.findAll({
     at: Schema.Date,
     key: Schema.NullOr(Schema.String),
     by: Schema.NullOr(Schema.String),
+    forRunning: Schema.Boolean,
   }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: (row) =>
     Database.use((db) =>
       db
         .update(turns)
-        .set({ cancelRequestedAt: row.at, cancelRequestKey: row.key, cancelRequestedBy: row.by })
+        .set({
+          cancelRequestedAt: row.at,
+          cancelRequestKey: row.key,
+          cancelRequestedBy: row.by,
+          cancelRequestedForRunning: row.forRunning,
+        })
         .where(
           and(
             eq(turns.id, row.turnId),
@@ -2064,6 +2072,7 @@ const requestTurnCancel = /* @__PURE__ */ Effect.fn("web/requestTurnCancel")(fun
     at: cancel.at,
     key: cancel.key ?? null,
     by: cancel.by ?? null,
+    forRunning: cancel.forRunning ?? false,
   });
   return Result.succeed(
     stamped.length === 0 ? STORE_WRITE_EFFECT.REPEATED : STORE_WRITE_EFFECT.WRITTEN,

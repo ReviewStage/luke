@@ -231,6 +231,8 @@ export function fakeEve(
   options: {
     readonly reachable?: boolean;
     readonly cancels?: boolean;
+    /** Whether eve answers every cancel that the turn it names had already ended. */
+    readonly turnEnded?: boolean;
     readonly sends?: SendAnswer;
     /** How many cancels eve holds every cancel's answer for, so a caller asking them one at a time never hears back. */
     readonly cancelsTogether?: number;
@@ -300,7 +302,9 @@ export function fakeEve(
           together.await,
           options.cancels === false
             ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
-            : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED },
+            : options.turnEnded === true
+              ? { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN }
+              : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED },
         );
       }),
     reset: (sessionId) =>

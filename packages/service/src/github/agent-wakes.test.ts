@@ -146,6 +146,7 @@ function turn(settledAt: number | undefined): AgentLatestTurn {
     failure: null,
     failureDetail: null,
     cancelRequestedAt: null,
+    cancelRequestedForRunning: false,
     queuedAt: new Date(MADE_AT - 600_000),
     startedAt: new Date(MADE_AT - 600_000),
     settledAt: settledAt === undefined ? null : new Date(settledAt),

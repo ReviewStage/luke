@@ -53,8 +53,8 @@ const RUNNING_NOTICE = {
   OFF: "Running is now off.",
 } as const;
 
-/** A top task's pilot: its newest standing pilot; none where it has none. */
-function pilotOf(agents: readonly Agent[]): Agent | undefined {
+/** A top task's pilot, of the agents standing on it: its newest standing pilot; none where it has none. */
+export function pilotOf(agents: readonly Agent[]): Agent | undefined {
   return agents.findLast((agent) => agent.archivedAt === null && agent.kind === AGENT_KIND.PILOT);
 }
 

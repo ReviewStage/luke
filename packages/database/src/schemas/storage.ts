@@ -347,6 +347,13 @@ export const turns = pgTable(
      * outlives that agent.
      */
     cancelRequestedBy: uuid("cancel_requested_by"),
+    /**
+     * Whether the Stop was its pilot tree's Running switched off
+     * (`tasks/running-tree.ts`), written with `cancel_requested_at`, so no
+     * starter is told of it (`starter-notices.ts`) and the switch on again
+     * resumes exactly the agents it stopped.
+     */
+    cancelRequestedForRunning: boolean("cancel_requested_for_running").notNull().default(false),
     /** Whether Anthropic refused Fast for a step of the turn, which then ran at standard speed instead (`coder-host/model.ts`). */
     fastRefused: boolean("fast_refused").notNull().default(false),
     /** How many notes a native coding agent's turn has taken on its plan over Luke's MCP server, reserved before each save (`edit_plan`'s per-turn cap); eve keeps its own count in its session. */

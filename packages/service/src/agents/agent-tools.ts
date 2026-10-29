@@ -2281,7 +2281,7 @@ const stopOf = (
     );
     const before = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
     const eveOf = eve === undefined ? Effect.fail(HOSTED_REFUSAL.UNAVAILABLE) : Effect.succeed(eve);
-    const cancelled = earlier ? false : yield* cancelledTurn(eveOf, writer, agent, key, by);
+    const cancelled = earlier ? false : yield* cancelledTurn(eveOf, writer, agent, { key, by });
     const after = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
     const status = agentStatusOf(after.turn, {
       createdAt: agent.createdAt,
