@@ -1,11 +1,11 @@
 /**
  * render.ts -- a synced table's declaration rendered to the SQL of its capture: one trigger function and the two triggers that call it.
  *
- * The capture runs inside every write to its table whatever the `LUKE_SYNC`
- * flag says, so a broken trigger would fail users' writes; it is therefore
- * rendered from the declaration here and never written by hand, and the
- * drift check (`@luke/database/testing`) holds the migrated database to what
- * this renders.
+ * The capture runs inside every write to its table, so a broken trigger
+ * would fail users' writes; it is therefore rendered from the declaration
+ * here and never written by hand, and the drift check
+ * (`@luke/database/testing`) holds the migrated database to what this
+ * renders.
  *
  * A row trigger fires on every insert and delete, and on an update only
  * where a watched column changed. That takes two triggers on one function,

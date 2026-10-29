@@ -76,10 +76,10 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  * holds no pool of its own.
  *
  * `Sync` is here for the same reason: Luke Sync's hub holds one `LISTEN`
- * per instance, shared by every held read and wait on it (`sync/hub.ts`).
- * Without `LUKE_SYNC=on` it stands as the clock, opening nothing, and every
- * wait polls as it always has. Its heartbeat notifies through the same pool
- * as `webSqlClient` below.
+ * per instance, shared by every held read and wait on it (`sync/hub.ts`),
+ * over `DATABASE_URL_UNPOOLED`, and its heartbeat notifies over that same
+ * connection. Without that URL its listener stays down, and every wait
+ * polls on its own clock.
  *
  * `BearerCallers` keeps the caller each bearer resolved to for a minute
  * (`auth/bearer-callers.ts`), so a held read and the polls inside it ask the
@@ -100,7 +100,7 @@ export const webServices = Layer.mergeAll(
   sentryAppFromEnvironment,
   integrationConnectFromEnvironment,
   webLogger,
-  syncFromEnvironment.pipe(Layer.provide(webSqlClient)),
+  syncFromEnvironment,
   bearerCallersLayer,
   modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
   pullRequestLinksLayer,

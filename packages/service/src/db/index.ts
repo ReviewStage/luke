@@ -72,9 +72,9 @@ export const databaseUrl: Config.Config<Redacted.Redacted> = Config.Redacted(
 /**
  * The unpooled connection string as a `Config`, or none where it is missing
  * or blank, under the same rule `databaseUrl` reads its own by. Note that it
- * is optional, because only the build's migrator has been handed it, and a
- * function that cannot see it must still boot: Luke Sync reads it only where
- * `LUKE_SYNC` is on, and without it waits on the clock (`sync/hub.ts`).
+ * is optional, because a function that cannot see it must still boot: Luke
+ * Sync's listener stays down without it, and every wait runs on its clock
+ * (`sync/hub.ts`).
  */
 export const databaseUnpooledUrl: Config.Config<Option.Option<Redacted.Redacted>> = Config.option(
   Config.Redacted(DATABASE_ENVIRONMENT.UNPOOLED_URL),
