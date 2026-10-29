@@ -1015,7 +1015,7 @@ test("a teammate's open item of an agent with no plan is listed under the automa
   assert.equal(meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
   assert.equal(meta?.querySelector(".luke-visually-hidden")?.textContent, "Waiting on Charles Pan");
 
-  showScope(page, "For you");
+  showScope(page, "Needs you");
   assert.equal(
     listed(page).includes("Quarantine the flaky test?"),
     false,
@@ -1396,21 +1396,21 @@ test("a scope turned in one channel stands in every channel, and when the reader
   ]);
   const { page } = mount([], { channels: true });
   await settle();
-  showScope(page, "For you");
+  showScope(page, "Needs you");
   await settle();
-  assert.deepEqual(rowTitles(page), [], "For you leaves out the teammate's thread");
+  assert.deepEqual(rowTitles(page), [], "Needs you leaves out the teammate's thread");
 
   act(() => chooseChannel(APP_CHANNEL.id));
   await settle();
-  assert.equal(headTitle(page), `#${APP_CHANNEL.name} · For you`);
-  assert.deepEqual(rowTitles(page), [], "another channel opens on For you too");
+  assert.equal(headTitle(page), `#${APP_CHANNEL.name} · Needs you`);
+  assert.deepEqual(rowTitles(page), [], "another channel opens on Needs you too");
 
   act(() => leaveChannel());
   await settle();
   act(() => chooseChannel(GENERAL.id));
   await settle();
-  assert.equal(headTitle(page), "#general · For you");
-  assert.deepEqual(rowTitles(page), [], "#general is still on For you");
+  assert.equal(headTitle(page), "#general · Needs you");
+  assert.deepEqual(rowTitles(page), [], "#general is still on Needs you");
 });
 
 test("a channel chosen while the workspace's channels could not be read says so with Retry", async () => {
@@ -1606,7 +1606,7 @@ test("the sidebar lists the channels under the Inbox's row, each with what waits
   const { page } = mount([], { withSidebar: true, waiting });
   await settle();
 
-  assert.deepEqual(sidebarChannels(page), ["general2 for you", "app", "launch", "Add channel"]);
+  assert.deepEqual(sidebarChannels(page), ["general2 need you", "app", "launch", "Add channel"]);
   act(() =>
     (
       [...page.querySelectorAll<HTMLButtonElement>('[aria-label="Channels"] .luke-nav-item')].find(

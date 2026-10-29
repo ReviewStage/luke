@@ -548,19 +548,19 @@ test("a plan main says changed is read again, so an item answered on another Mac
   pointerCross(list, document.body);
   assert.deepEqual(listed(page), everything, "the pointer gone, the list sorts anew");
 
-  showScope(page, "For you");
-  assert.deepEqual(scopes(page), ["Inbox", "[For you]", "All"]);
+  showScope(page, "Needs you");
+  assert.deepEqual(scopes(page), ["Inbox", "[Needs you]", "All"]);
   assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
 
   act(() => world.root?.unmount());
   world.root = undefined;
   ({ page } = mount([], { chosen: ON_THRESHOLD }));
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "[For you]", "All"]);
+  assert.deepEqual(scopes(page), ["Inbox", "[Needs you]", "All"]);
   assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
 
   showScope(page, "All");
-  assert.deepEqual(scopes(page), ["Inbox · All", "For you", "[All]"]);
+  assert.deepEqual(scopes(page), ["Inbox · All", "Needs you", "[All]"]);
   assert.deepEqual(listed(page), everything);
 });
 
@@ -579,7 +579,7 @@ function toDoRows(page: HTMLElement): number {
   return listed(page).filter((row) => !row.startsWith("# ")).length;
 }
 
-test("the sidebar's Inbox counts what For you lists, the questions and the update waiting on you, never a settled thread however unread nor a teammate's question", async () => {
+test("the sidebar's Inbox counts what Needs you lists, the questions and the update waiting on you, never a settled thread however unread nor a teammate's question", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
   const NOTE: InboxItem = {
     ...noticeOf(item("a1b2c3d4-0000-4000-8000-000000000011", "Preview is up", 3_500)),
@@ -614,7 +614,7 @@ test("the sidebar's Inbox counts what For you lists, the questions and the updat
   const { page } = mount([], { holding, waiting, withSidebar: true });
   await settle();
   assert.equal(toDoRows(page), 3, "the two questions and the update");
-  assert.equal(sidebarInboxCount(page), 3, "the sidebar counts the rows For you lists");
+  assert.equal(sidebarInboxCount(page), 3, "the sidebar counts the rows Needs you lists");
 });
 
 test("the sidebar's Inbox counts the open items alone, as before, where main carries no To do count from an older service", async () => {
@@ -632,7 +632,7 @@ test("a fresh profile opens the Inbox on To do, grouped by nothing, None first a
   window.localStorage.clear();
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "[For you]", "All"]);
+  assert.deepEqual(scopes(page), ["Inbox", "[Needs you]", "All"]);
   assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
   const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   act(() => options?.click());
@@ -678,7 +678,7 @@ test("a task done or canceled keeps its items listed and counted as any other's,
     },
   );
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "[For you]", "All"]);
+  assert.deepEqual(scopes(page), ["Inbox", "[Needs you]", "All"]);
   const rows = listed(page);
   for (const row of ["*Alert at 80%?", "*Expire after 7 days?", "*Quarantine the flaky test?"]) {
     assert.ok(
@@ -709,11 +709,11 @@ test("a task done or canceled keeps its items listed and counted as any other's,
 // CI runner whose other workers run the shard's other files, so it is given 10 s.
 test("a tab kept before the scopes opens the Inbox on the scope that lists what it did, Needs you and Unread on To do and All open and Everything on All, and the Needs you press kept before the tabs on To do where pressed and All where not; a scope chosen since is kept in its place", async () => {
   const kept = [
-    [SHOW_KEY, "needs-you", "[For you]"],
-    [SHOW_KEY, "unread", "[For you]"],
+    [SHOW_KEY, "needs-you", "[Needs you]"],
+    [SHOW_KEY, "unread", "[Needs you]"],
     [SHOW_KEY, "open", "[All]"],
     [SHOW_KEY, "all", "[All]"],
-    [EARLIER_SHOW_KEY, true, "[For you]"],
+    [EARLIER_SHOW_KEY, true, "[Needs you]"],
     [EARLIER_SHOW_KEY, false, "[All]"],
   ] as const;
   const opened: (string | undefined)[] = [];
@@ -733,12 +733,12 @@ test("a tab kept before the scopes opens the Inbox on the scope that lists what 
 
   let { page } = mount();
   await settle();
-  showScope(page, "For you");
+  showScope(page, "Needs you");
   act(() => world.root?.unmount());
   world.root = undefined;
   ({ page } = mount());
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "[For you]", "All"]);
+  assert.deepEqual(scopes(page), ["Inbox", "[Needs you]", "All"]);
 }, 10_000);
 
 test("Order by in the view's menu offers Latest first and Oldest first, which lists the item changed longest ago first; a Waiting longest kept before is read as Oldest first, and the sort chosen outlives a relaunch", async () => {
@@ -1024,10 +1024,10 @@ test("with only settled items, read, To do lists no row, the item read still sho
   ];
   assert.deepEqual(listed(page), everything);
 
-  showScope(page, "For you");
+  showScope(page, "Needs you");
   assert.equal(headTitle(page), "Inbox");
   assert.deepEqual(listed(page), [], "the item read is not listed under a filter leaving it out");
-  assert.deepEqual(listEmpty(page), [undefined, "Nothing to do", "Show all"]);
+  assert.deepEqual(listEmpty(page), [undefined, "Nothing needs you", "Show all"]);
   assert.equal(emptyStateIn(page, ".inbox-view-items"), null, "the pane says nothing twice");
   assert.equal(readTitle(page), "How is a failed email retried?");
 
@@ -1037,7 +1037,7 @@ test("with only settled items, read, To do lists no row, the item read still sho
   assert.equal(pagerOf(page), null);
   act(() => backToList(page).click());
   assert.deepEqual(columnsShown(page), ["list"]);
-  assert.equal(listEmpty(page)?.[1], "Nothing to do");
+  assert.equal(listEmpty(page)?.[1], "Nothing needs you");
 
   const showAll = page.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button");
   assert.ok(showAll, "the empty state offers Show all");
@@ -1065,7 +1065,7 @@ test("one column wide, an answered item that To do draws no row for shows no cou
   const { page } = mount();
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
-  showScope(page, "For you");
+  showScope(page, "Needs you");
   assert.deepEqual(listed(page), [
     "# Invites",
     "*Expire after 7 days?",
@@ -1083,7 +1083,7 @@ test("one column wide, an answered item that To do draws no row for shows no cou
 test("on To do, a focused row whose item is answered on another Mac leaves the keyboard on View options rather than nowhere", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
-  showScope(page, "For you");
+  showScope(page, "Needs you");
   rowNamed(page, "Expire after 7 days?").focus();
   world.inboxes.set(INVITES.id, [
     { ...answeredBy(EXPIRY, READER, "Retry once", "", 6_000), updatedAt: 6_000 },
@@ -1114,7 +1114,7 @@ test("on a phone, a focused row whose item is answered elsewhere leaves the keyb
     ...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]'),
   ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === "View options");
   act(() => options?.click());
-  act(() => viewItem("For you").click());
+  act(() => viewItem("Needs you").click());
   rowNamed(page, "Expire after 7 days?").focus();
   world.inboxes.set(INVITES.id, [
     { ...answeredBy(EXPIRY, READER, "Retry once", "", 6_000), updatedAt: 6_000 },
@@ -1167,7 +1167,7 @@ test("on To do, an item answered on another Mac slides out from where its row st
   const played = playListMotions();
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
-  showScope(page, "For you");
+  showScope(page, "Needs you");
   await answerExpiryElsewhere();
   // The settled row To do held leaves with it, from the group that stays.
   const leaving = [...page.querySelectorAll<HTMLElement>("[data-leaving]")];
@@ -1442,7 +1442,7 @@ test("Mark all as read in the view's menu, under Group by, marks every unread it
     return menuWords();
   };
   assert.deepEqual(openOptions(), [
-    "For you",
+    "Needs you",
     "All",
     "—",
     "Group by",
@@ -1681,7 +1681,7 @@ test("a teammate chosen in Whose with nothing in the scope shown says so, and of
   assert.deepEqual(listEmpty(page), [
     undefined,
     "Nothing in the inbox is theirs",
-    "Show everyone's",
+    "Show everyone's items",
   ]);
   const everyone = page.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button");
   act(() => everyone?.click());
