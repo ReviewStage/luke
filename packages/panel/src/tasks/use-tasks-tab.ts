@@ -3442,7 +3442,12 @@ export function useTasksTab(input: {
     onNewTask: () => newTaskWith(undefined),
     onNewTaskIn: (repository) => newTaskWith({ repository }),
     onNewChildTask: (parentTaskId) => {
-      const parent = tasks.tasks.find((task) => task.id === parentTaskId);
+      // The open document stands for its task where the list read did not land, as its menu reads it.
+      const parent =
+        tasks.tasks.find((task) => task.id === parentTaskId) ??
+        (region.kind === DOCUMENT_REGION.READY && region.task.id === parentTaskId
+          ? region.task
+          : undefined);
       if (parent === undefined) return;
       newTaskWith({
         parent: {
