@@ -129,6 +129,7 @@ export function agentsControl(overrides: Partial<AgentsControl> = {}): AgentsCon
     heldIds: overrides.agentIds ?? [],
     keywords: [],
     readSkills: undefined,
+    mode: undefined,
     draft: undefined,
     onNewDraft: () => "draft",
     onForkDraft: () => "draft",
