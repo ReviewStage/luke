@@ -29,7 +29,7 @@ import { useFollowedAutomations } from "./use-followed-automations.js";
  */
 
 /** The list as the pages draw it: read, failed, or not yet read. */
-export type AutomationsRead =
+type AutomationsRead =
   | { readonly automations: readonly AutomationSummary[] }
   | { readonly failure: AutomationCallFailure }
   | undefined;

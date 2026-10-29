@@ -70,7 +70,14 @@ import { formatCount } from "@luke/features/number-format";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TasksTreeAnswer } from "@luke/features/tasks-view";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
-import { noMatchWords, readFailedWords, readingWords, TERM, VERB } from "@luke/features/words";
+import {
+  noMatchWords,
+  REFRESH_FAILED_WORDS,
+  readFailedWords,
+  readingWords,
+  TERM,
+  VERB,
+} from "@luke/features/words";
 import { taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import {
@@ -219,7 +226,7 @@ import {
 import type { AddEntry } from "./strip-tabs.js";
 import { taskOf } from "./task-actions.js";
 import { homeTaskCardOf, TaskRowStatus } from "./task-card.js";
-import { type AutomationsRead, useAutomations } from "./use-automations.js";
+import { useAutomations } from "./use-automations.js";
 import { WorkspaceRef } from "./workspace-ref.js";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the filters stand. */
@@ -688,19 +695,21 @@ function inboxNotice(search: InboxSearch, channelsOn: boolean): PaletteNotice | 
     : undefined;
 }
 
-/** What the Automations filter says while the listed workspace, or its automations, have not been read, or the first push did not land; nothing once they are, as People says of its members. */
+/** What the Automations filter says while the listed workspace, or its automations, have not been read, or a push did not land, a later one under the rows it kept as the Automations page says it; nothing once they are, as People says of its members. */
 function automationsNotice(
   tasks: Pick<TasksControl, "signedIn" | "workspace" | "workspaces" | "listFailed">,
-  read: AutomationsRead,
-  onRetry: () => void,
+  automations: Pick<ReturnType<typeof useAutomations>, "read" | "refreshFailed" | "reload">,
 ): PaletteNotice | undefined {
+  const { read, refreshFailed, reload: onRetry } = automations;
   if (tasks.workspace === undefined) {
     const coming = tasks.signedIn && tasks.workspaces.length === 0 && !tasks.listFailed;
     return coming ? { kind: PALETTE_NOTICE.READING, line: READING_AUTOMATIONS } : undefined;
   }
   if (read === undefined) return { kind: PALETTE_NOTICE.READING, line: READING_AUTOMATIONS };
-  return "failure" in read
-    ? { kind: PALETTE_NOTICE.FAILED, line: AUTOMATIONS_FAILED_LINE, onRetry }
+  if ("failure" in read)
+    return { kind: PALETTE_NOTICE.FAILED, line: AUTOMATIONS_FAILED_LINE, onRetry };
+  return refreshFailed
+    ? { kind: PALETTE_NOTICE.FAILED, line: REFRESH_FAILED_WORDS, onRetry }
     : undefined;
 }
 
@@ -2389,7 +2398,7 @@ export function CommandPalette({
     [PALETTE_FILTER.CHANNELS]: () => undefined,
     [PALETTE_FILTER.PEOPLE]: () => peopleNotice(tasks, membersRead),
     [PALETTE_FILTER.AUTOMATIONS]: () =>
-      automationsAsked ? automationsNotice(tasks, automations.read, automations.reload) : undefined,
+      automationsAsked ? automationsNotice(tasks, automations) : undefined,
     [PALETTE_FILTER.FILES]: () =>
       fileQuery === undefined ? undefined : filesNotice(filesOpen, held),
     [PALETTE_FILTER.COMMANDS]: () => undefined,
