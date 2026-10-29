@@ -58,7 +58,7 @@ const SAVED: AutomationSummary = {
     timezone: "America/Los_Angeles",
   },
   action: {
-    kind: AUTOMATION_ACTION.CODING_AGENT,
+    kind: AUTOMATION_ACTION.AGENT,
     prompt: "Fix the flakiest test.",
     choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
   },
@@ -206,7 +206,7 @@ test("a new automation is made in its workspace on its schedule, task, repositor
       cron: "0 9 * * 1-5",
       timezone: "America/New_York",
     },
-    action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix it." },
+    action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Fix it." },
     scope: AUTOMATION_SCOPE.WORKSPACE,
     target: { kind: AUTOMATION_TARGET.NEW_AGENT },
     archiveSuccessful: false,
@@ -441,7 +441,7 @@ test("runs land in a new agent each time on the account's default until a model 
   assert.deepEqual(
     createRequestOf({ ...fresh, choice, archiveSuccessful: true }, "workspace-acme").action,
     {
-      kind: AUTOMATION_ACTION.CODING_AGENT,
+      kind: AUTOMATION_ACTION.AGENT,
       prompt: "Fix it.",
       choice,
     },
@@ -482,7 +482,7 @@ test("a saved automation opens on where its runs land, and a save sends only the
   );
   assert.deepEqual(changeOf({ ...opened, choice: null }, onAgent, DEFAULTS), {
     action: {
-      kind: AUTOMATION_ACTION.CODING_AGENT,
+      kind: AUTOMATION_ACTION.AGENT,
       prompt: SAVED.action.prompt,
       disabledServers: [],
     },

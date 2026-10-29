@@ -238,7 +238,7 @@ const seedAccount = (userId: string, sharedWorkspace: string) =>
         enabled: true,
         triggerKind: AUTOMATION_TRIGGER.SCHEDULE,
         trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * *", timezone: "UTC" },
-        action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "A prompt the page never reads" },
+        action: { kind: AUTOMATION_ACTION.AGENT, prompt: "A prompt the page never reads" },
         guards: AUTOMATION_DEFAULT_GUARDS,
       })
       .returning({ id: automation.id });

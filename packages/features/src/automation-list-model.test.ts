@@ -51,7 +51,7 @@ function automation(id: string, extra: Partial<AutomationSummary> = {}): Automat
     enabled: true,
     pausedReason: null,
     trigger: SCHEDULE,
-    action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage today's issues." },
+    action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Triage today's issues." },
     guards: AUTOMATION_DEFAULT_GUARDS,
     nextRunAt: 5_000,
     lastRun: null,

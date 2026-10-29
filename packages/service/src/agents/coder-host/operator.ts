@@ -148,7 +148,7 @@ const aimedItsHeartbeat = (
         repositories: [],
         name: OPERATOR_HEARTBEAT_SCHEDULE.NAME,
         trigger,
-        action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: OPERATOR_HEARTBEAT },
+        action: { kind: AUTOMATION_ACTION.AGENT, prompt: OPERATOR_HEARTBEAT },
         guards: AUTOMATION_DEFAULT_GUARDS,
         nextRunAt: nextScheduledRun(trigger, now) ?? null,
         webhookSecretHash: null,

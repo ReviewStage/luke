@@ -103,7 +103,7 @@ const makeAutomation = (world: AutomationWorld) =>
       name: "Nightly flaky-test sweep",
       scope: AUTOMATION_SCOPE.WORKSPACE,
       trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
-      action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix one flaky test." },
+      action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Fix one flaky test." },
       guards: AUTOMATION_DEFAULT_GUARDS,
       nextRunAt: null,
       webhookSecretHash: null,

@@ -86,7 +86,7 @@ const nightly = (organizationId: string): NewAutomation => ({
   repositories: ["acme/api"],
   name: "Nightly flaky-test sweep",
   trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 2 * * *", timezone: "Europe/London" },
-  action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Find and fix one flaky test." },
+  action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Find and fix one flaky test." },
   guards: AUTOMATION_DEFAULT_GUARDS,
   nextRunAt: new Date("2026-10-15T01:00:00Z"),
   webhookSecretHash: null,
@@ -244,7 +244,7 @@ it.layer(getTestDB())("the automation store", (it) => {
   );
 
   it.effect(
-    "an automation whose stored action says `agent`, as the rename's migration leaves it, still reads to run",
+    "an automation whose stored action still says `coding-agent`, as the release serving beside the rename's migration writes it, reads to run",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -256,7 +256,10 @@ it.layer(getTestDB())("the automation store", (it) => {
         yield* db
           .update(automation)
           .set({
-            action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Find and fix one flaky test." },
+            action: {
+              kind: AUTOMATION_ACTION.CODING_AGENT,
+              prompt: "Find and fix one flaky test.",
+            },
           })
           .where(eq(automation.id, made.id));
 
@@ -264,7 +267,7 @@ it.layer(getTestDB())("the automation store", (it) => {
 
         assert.deepEqual(
           Option.map(read, (row) => row.action.kind),
-          Option.some(AUTOMATION_ACTION.AGENT),
+          Option.some(AUTOMATION_ACTION.CODING_AGENT),
         );
       }),
   );

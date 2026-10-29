@@ -856,7 +856,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     enabled: true,
     pausedReason: null,
     trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
-    action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage Sentry." },
+    action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Triage Sentry." },
     guards: AUTOMATION_DEFAULT_GUARDS,
     nextRunAt: null,
     lastRun: null,

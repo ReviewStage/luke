@@ -192,7 +192,7 @@ const openAutomation = (
         timezone: "UTC",
       },
       action: {
-        kind: AUTOMATION_ACTION.CODING_AGENT,
+        kind: AUTOMATION_ACTION.AGENT,
         prompt: options.prompt ?? PROMPT,
         choice: { model: SOL, effort: "low" },
         ...(options.disabledServers === undefined
@@ -1258,7 +1258,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
               kind: AUTOMATION_TRIGGER.GITHUB,
               event: GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED,
             },
-            action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: PROMPT },
+            action: { kind: AUTOMATION_ACTION.AGENT, prompt: PROMPT },
             guards: AUTOMATION_DEFAULT_GUARDS,
             nextRunAt: null,
             webhookSecretHash: null,

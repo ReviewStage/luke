@@ -217,7 +217,7 @@ function landingAgent(draft: AutomationDraft): string | null {
 /** The action a draft's runs take: its task, on its model where it names one, with the servers it switched off. */
 function actionOf(draft: AutomationDraft): AutomationAction {
   return {
-    kind: AUTOMATION_ACTION.CODING_AGENT,
+    kind: AUTOMATION_ACTION.AGENT,
     prompt: draft.prompt.trim(),
     ...(draft.choice === null ? undefined : { choice: draft.choice }),
     ...(draft.disabledServers.length === 0

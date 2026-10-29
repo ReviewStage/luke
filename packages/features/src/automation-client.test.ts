@@ -50,7 +50,7 @@ const SUMMARY = {
   enabled: true,
   pausedReason: null,
   trigger: SCHEDULE,
-  action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage the issues opened today." },
+  action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Triage the issues opened today." },
   guards: AUTOMATION_DEFAULT_GUARDS,
   nextRunAt: 10,
   lastRun: null,
