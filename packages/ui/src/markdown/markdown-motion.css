@@ -1,0 +1,36 @@
+/* markdown-motion.css -- a streaming reply's newest words fading in as they arrive.
+
+   Streamdown marks each word it has not drawn before `data-sd-animate`, with
+   the delay its timeline gave the word in `--sd-delay`, and a list item's
+   marker `data-sd-animate-marker`. Its own stylesheet times them on literals,
+   so this one draws them on the motion tokens instead, as every arriving
+   element is drawn (docs/DESIGN.md): a word's opacity over
+   `--luke-duration-quick` on `--luke-motion-exit`, and a marker's colour,
+   which is all a `::marker` animates, on the same beat. A word already drawn
+   keeps the mark with no delay, which plays nothing new.
+
+   Reduced motion and a capture run never reach these rules, because
+   `markdown.tsx` asks for no fade where motion is held: zeroing the duration
+   would leave the delays, which still stagger the words. */
+
+@keyframes luke-word-arrive {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes luke-marker-arrive {
+  from {
+    color: transparent;
+  }
+}
+
+[data-sd-animate] {
+  animation: luke-word-arrive var(--luke-duration-quick) var(--luke-motion-exit)
+    var(--sd-delay, 0ms) backwards;
+}
+
+[data-sd-animate-marker]::marker {
+  animation: luke-marker-arrive var(--luke-duration-quick) var(--luke-motion-exit)
+    var(--sd-marker-delay, 0ms) backwards;
+}
