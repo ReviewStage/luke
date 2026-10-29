@@ -53,7 +53,7 @@ import { type TranscriptRead, useTranscriptCopier } from "./strip-tabs.js";
  * (`agent-delete.tsx`), which closes the surface once it landed. A row
  * leaves out only what `NOT_ON_A_ROW` names, and nothing of its own is
  * added beside the menu but what the row's kind keeps, a pinned tab's Unpin
- * before it and a summary row's Show details (`row-menu.tsx`).
+ * before it.
  * Run, which runs the agent's pushed branch on this Mac, stands on its
  * Pull request tab instead (`agent-pull-request-tab.tsx`).
  * The doors that open a terminal are the column's, from where it stands

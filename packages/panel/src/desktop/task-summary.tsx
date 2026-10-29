@@ -553,7 +553,7 @@ const AGENT_THING = "Agent";
  * menu over the doors a row has (`agent-actions.tsx`): Copy link, Rename,
  * which turns the row into its name's field as the sidebar's rows do, Archive,
  * asking first while a teammate's agent still works, and Permanently
- * delete, asked first; Show details among them where the row hangs a card.
+ * delete, asked first.
  */
 function AgentSummaryRow({
   entry,

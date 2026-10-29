@@ -712,7 +712,7 @@ test("a one-off agent's menu goes with a floating sidebar as it is put away", as
 
   float(SIDEBAR_OVERLAY.CLOSED);
 
-  assert.equal(opened, 8);
+  assert.equal(opened, 7);
   assert.equal(document.querySelectorAll('[role="menuitem"]').length, 0);
 });
 
@@ -761,7 +761,6 @@ test("a one-off agent's row offers the agent's one menu: Copy link, Rename and M
     "Pin",
     "Move to section",
     "Archive",
-    "Show details",
     "Permanently delete",
   ]);
   await act(async () => menuItem("Pin").click());
@@ -774,7 +773,6 @@ test("a one-off agent's row offers the agent's one menu: Copy link, Rename and M
     "Unpin",
     "Move to section",
     "Archive",
-    "Show details",
     "Permanently delete",
   ]);
   await act(async () => menuItem("Unpin").click());

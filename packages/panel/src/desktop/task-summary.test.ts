@@ -310,7 +310,7 @@ test("the agent's card hung from a Changes card previews its running step while 
   assert.doesNotMatch(latestStep("plan"), /Writing the expiry tests\./u);
 });
 
-test("an agent's row in the summary draws the agent's one menu, Copy link copying the agent's own link, Show details before the delete", async () => {
+test("an agent's row in the summary draws the agent's one menu, Copy link copying the agent's own link", async () => {
   const copied: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   const { page } = mount("plan", "acme");
@@ -327,13 +327,7 @@ test("an agent's row in the summary draws the agent's one menu, Copy link copyin
   assert.ok(copy);
   await act(async () => copy.click());
 
-  assert.deepEqual(labels, [
-    "Copy link",
-    "Rename",
-    "Archive",
-    "Show details⌥↓",
-    "Permanently delete",
-  ]);
+  assert.deepEqual(labels, ["Copy link", "Rename", "Archive", "Permanently delete"]);
   assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${AGENT.id}`]);
 });
 
