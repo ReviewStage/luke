@@ -4,6 +4,7 @@ import { readAccountPreferences } from "@luke/database/models/account-store";
 import {
   type Agent,
   type AgentPlace,
+  archiveAgentCommitted,
   createAgent,
   discardAgent,
   nativeRuntimesOfReached,
@@ -28,7 +29,11 @@ import {
   type LineSender,
   storeWriter,
 } from "@luke/database/models/writer";
-import type { StoredAutomationOrigin, StoredStartedFrom } from "@luke/database/schemas/agent";
+import type {
+  StoredArchive,
+  StoredAutomationOrigin,
+  StoredStartedFrom,
+} from "@luke/database/schemas/agent";
 import { type ConversationRuntime, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   firstMessageText,
@@ -40,6 +45,7 @@ import {
   summaryBytes,
 } from "@luke/features/agent-replay";
 import {
+  AGENT_ARCHIVER,
   AGENT_ATTACHMENT_TYPE,
   AGENT_BOUNDS,
   AGENT_KIND,
@@ -54,7 +60,7 @@ import {
   LOCAL_AGENT_REFUSAL,
 } from "@luke/features/agent-wire";
 import type { GitHubAccess } from "@luke/features/github-repositories-wire";
-import { automationRun } from "@luke/features/model-label";
+import { agentName, automationRun } from "@luke/features/model-label";
 import { AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
 import type { Task } from "@luke/features/task-wire";
@@ -176,7 +182,13 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * one, and once eve has taken it the source is stopped as a Stop stops it,
  * since the work goes on in the new agent; a fork leaves its source
  * running, and a source that could not be stopped is logged, never the
- * Start's failure.
+ * Start's failure. A continue of a pilot is a pilot too, and takes over
+ * from its source: the account's agents the source started that stand
+ * unarchived report to the new pilot from the transaction that makes it
+ * (`createAgent`), those of any pilot that took over from it before among
+ * them, and once stopped the source is archived, by the coding agent that
+ * continued it or else the member, which is logged where it fails; a source
+ * eve would not stop stands unarchived. A fork of a pilot takes over nothing.
  * An ask that names a branch has its agent's checkout cloned at that branch
  * rather than the default one, which the agent's row keeps; the branch is
  * read on GitHub through the same installation before anything is made, so
@@ -696,8 +708,9 @@ function continuedTitle(source: string | null): string | undefined {
  * The source of a continue stopped as a Stop stops it, over the eve the
  * Start reached: a turn it still runs cancelled and stamped, and nothing
  * where it runs none or a Stop already stands on it. Its sandbox is
- * stopped by its own turn's end, as a Stop leaves it. A source that could
- * not be stopped is logged, since the new agent stands either way.
+ * stopped by its own turn's end, as a Stop leaves it. Answers whether the
+ * stop held, false where the source could not be stopped, which is logged,
+ * since the new agent stands either way.
  */
 const stoppedSource = (
   eve: Effect.Effect<
@@ -710,10 +723,31 @@ const stoppedSource = (
   by: string | undefined,
 ) =>
   cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source, undefined, by).pipe(
+    Effect.as(true),
     Effect.catch((refusal) =>
-      Effect.logWarning(`the agent a continue took over from was not stopped: ${refusal.error}`),
+      Effect.as(
+        Effect.logWarning(`the agent a continue took over from was not stopped: ${refusal.error}`),
+        false,
+      ),
     ),
   );
+
+/**
+ * The pilot a continue took over from archived once it is stopped, by the
+ * coding agent whose `start_agent` continued it or else by the member, and
+ * the transaction it was archived in; none where it was not, which is
+ * logged, since the new pilot stands either way.
+ */
+const archivedPilot = (userId: string, pilot: Agent, by: Agent | undefined) => {
+  const archiver: StoredArchive =
+    by === undefined
+      ? { by: AGENT_ARCHIVER.MEMBER, userId }
+      : { by: AGENT_ARCHIVER.AGENT, userId, agentId: by.id, agentName: agentName(by) };
+  return archiveAgentCommitted(userId, pilot.id, true, archiver).pipe(
+    Effect.map(Option.flatMap(({ txid }) => Option.fromNullishOr(txid))),
+    Effect.catch((failure) => Effect.as(logStoreFailure(failure), Option.none<string>())),
+  );
+};
 
 /** The place an agent stands in, which a Start from it puts the new agent in: its task, or its workspace and repository where it has none; none for an agent with neither, which no checkout could go on from. */
 export function placeOfAgent(
@@ -1086,17 +1120,22 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   // A continue is named after its source where the ask names nothing; a fork is named as it starts.
   const continued = from !== undefined && from.told.messageId === undefined;
   const title = ask.title ?? (continued ? continuedTitle(from.source.title) : undefined);
+  // A continue of a pilot is a pilot, which takes over the agents its source started.
+  const takesOver = continued && from.source.kind === AGENT_KIND.PILOT ? from.source : undefined;
+  const place =
+    takesOver !== undefined && brief.taskId !== null ? { ...brief, kind: AGENT_KIND.PILOT } : brief;
   // Where it runs, the runtime, and the payer are decided as the agent is made, by the starter's account, its source or task, and its model, and never change.
   const where = yield* machineOfStart(userId, from?.source, landing.task);
   const runtime = yield* startRuntimeOf(userId, choice.model, keys, where.asked);
   const placed = yield* startMachineOf(userId, where.asked, runtime.runtime);
   const started = yield* hostedStoreOrUnavailable(
     createAgent(userId, {
-      ...brief,
+      ...place,
       automationId: ask.automationId,
       automationOrigin: ask.automationOrigin,
       startedFrom: landing.startedFrom,
       startedByAgentId: ask.startedBy?.id,
+      takesOverFrom: takesOver?.id,
       title,
       idempotencyKey: ask.idempotencyKey,
       model: choice.model,
@@ -1180,13 +1219,19 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
     }
   }
   // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
-  if (continued) yield* stoppedSource(eve, from.source, ask.startedBy?.id);
+  const stopped = continued ? yield* stoppedSource(eve, from.source, ask.startedBy?.id) : false;
   // Work on the task has begun, so one in the backlog or to do moves into progress, and one
   // further along stands; a move that fails is logged, never the Start's failure. A blank agent
   // was handed no work, so its task stands where it is.
   // The Start answers the last transaction it committed in, which Realtime delivers after every
   // one before it, so a client waiting on it sees the agent and its task's standing alike.
   let committed = txid;
+  // The pilot taken over leaves the task's agents once stopped, its work going on in the new one;
+  // one eve would not stop still runs, so it stands where its messages still reach it.
+  if (takesOver !== undefined && stopped) {
+    const archived = yield* archivedPilot(userId, takesOver, ask.startedBy);
+    if (Option.isSome(archived)) committed = archived.value;
+  }
   if (landing.task !== undefined) {
     if (handed !== null) {
       const begun = yield* beginTaskWorkCommitted(userId, landing.task.id).pipe(

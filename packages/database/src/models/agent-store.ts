@@ -314,6 +314,8 @@ export type NewAgent = AgentPlace & {
   readonly startedFrom?: StoredStartedFrom | undefined;
   /** The coding agent whose `start_agent` starts this one; none for a Start by a member, Luke, or an automation. */
   readonly startedByAgentId?: string | undefined;
+  /** The pilot this one continues, whose unarchived agents of the account now report to this one; none for any other Start. */
+  readonly takesOverFrom?: string | undefined;
   /** The agent's title from the start, a run's fixed name; none where it is named later. */
   readonly title?: string | undefined;
   readonly idempotencyKey: string;
@@ -625,6 +627,65 @@ const findOwnAgentId = SqlSchema.findOneOption({
         .select({ id: agentTable.id })
         .from(agentTable)
         .where(and(eq(agentTable.id, agentId), eq(agentTable.userId, userId))),
+    ),
+});
+
+/** The pilots that took over from the agent before, by continuing it. */
+const earlierPilot = alias(agentTable, "earlier_pilot");
+
+/**
+ * The account's unarchived agents a pilot started, or any pilot that took
+ * over from it before, moved to the one that takes over from it now. Note
+ * that the earlier pilots' are moved too, because a pilot continued again
+ * is taken over by its latest continue, which its agents report to.
+ */
+const updateTakenOver = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, from: Schema.String, to: Schema.String }),
+  execute: ({ userId, from, to }) =>
+    Database.use((db) =>
+      db
+        .update(agentTable)
+        .set({ startedByAgentId: to })
+        .where(
+          and(
+            or(
+              eq(agentTable.startedByAgentId, from),
+              inArray(
+                agentTable.startedByAgentId,
+                db
+                  .select({ id: earlierPilot.id })
+                  .from(earlierPilot)
+                  .where(
+                    and(
+                      eq(earlierPilot.kind, AGENT_KIND.PILOT),
+                      sql`${earlierPilot.startedFrom} ->> 'agentId' = ${from}`,
+                      sql`${earlierPilot.startedFrom} ->> 'messageId' is null`,
+                    ),
+                  ),
+              ),
+            ),
+            eq(agentTable.userId, userId),
+            isNull(agentTable.archivedAt),
+          ),
+        ),
+    ),
+});
+
+/** The account's unarchived agents one agent started, moved to another as their starter. */
+const updateStartedBy = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, from: Schema.String, to: Schema.String }),
+  execute: ({ userId, from, to }) =>
+    Database.use((db) =>
+      db
+        .update(agentTable)
+        .set({ startedByAgentId: to })
+        .where(
+          and(
+            eq(agentTable.startedByAgentId, from),
+            eq(agentTable.userId, userId),
+            isNull(agentTable.archivedAt),
+          ),
+        ),
     ),
 });
 
@@ -2011,7 +2072,10 @@ const deleteConversationRow = SqlSchema.void({
  * account's and the row that binds it to the task or the workspace, with
  * the plan text or the prompt, the repository, the automation whose run
  * started it with that run, and the account's own agent whose `start_agent`
- * started it, as handed. A Start whose key the account has already used answers the agent
+ * started it, as handed. A continue of a pilot takes over its agents in the
+ * same transaction: the account's agents it started, or any pilot that
+ * took over from it before started, that stand unarchived report to the
+ * new pilot from then on. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
  * A Start of the member's operator answers the one standing in the
  * workspace where there is one, whatever its key, and writes nothing; one
@@ -2081,6 +2145,10 @@ export function createAgent(
         });
         if (Option.isSome(inserted)) {
           const { txid, ...row } = inserted.value;
+          // The pilot's agents report to the one that continues it from the moment it stands.
+          if (started.takesOverFrom !== undefined) {
+            yield* updateTakenOver({ userId, from: started.takesOverFrom, to: row.id });
+          }
           return Option.some({ agent: row, created: true, txid });
         }
         // Only the operator's index answers an insert with no row: the one another Start made stands.
@@ -2098,12 +2166,19 @@ export function createAgent(
 /**
  * Discards an agent a Start could not open an eve session for: its row and
  * its conversation, with every message and turn the conversation holds,
- * which is none. Answers whether the account reached such an agent.
+ * which is none. The agents a continue of a pilot took over go back to the
+ * pilot it was started from first, since the row's delete would leave them
+ * reporting to no one. Answers whether the account reached such an agent.
  */
 export function discardAgent(userId: string, agentId: string): AgentStoreEffect<boolean> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
+        // Note that an agent never run started none of its own, so every agent it starts was taken over.
+        const source = Option.getOrUndefined(yield* findAgent({ userId, agentId }))?.startedFrom;
+        if (source !== undefined && source !== null) {
+          yield* updateStartedBy({ userId, from: agentId, to: source.agentId });
+        }
         const [deleted] = yield* deleteAgentRow({ userId, agentId });
         if (deleted === undefined) return false;
         yield* deleteConversationRow(deleted.conversationId);

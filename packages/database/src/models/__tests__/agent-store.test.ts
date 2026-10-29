@@ -50,6 +50,7 @@ import {
   createAgent,
   delegationsOf,
   deleteAgent,
+  discardAgent,
   dispatchMentioningServers,
   forgetAgentPublishedRead,
   IDLE_ARCHIVE,
@@ -1545,6 +1546,64 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
         );
         assert.ok(Option.isNone(yield* readAgent(outsider, worker.id)));
         assert.equal(teammates.startedByAgentId, null);
+      }),
+  );
+
+  it.effect(
+    "a continue of a pilot takes over the unarchived agents its source started, from an earlier continue of it among them, and its discard hands them back",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        const task = yield* createTask(owner, { organizationId: workspace, name: "Rollout" });
+        const start = (
+          more: Pick<NewAgent, "startedByAgentId" | "startedFrom" | "takesOverFrom">,
+        ): NewAgent => ({
+          taskId: task.id,
+          planSnapshot: "# Rollout",
+          prompt: null,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/api",
+          ...more,
+        });
+        const pilot = Option.getOrThrow(yield* createAgent(owner, start({}))).agent;
+        const working = Option.getOrThrow(
+          yield* createAgent(owner, start({ startedByAgentId: pilot.id })),
+        ).agent;
+        const archived = Option.getOrThrow(
+          yield* createAgent(owner, start({ startedByAgentId: pilot.id })),
+        ).agent;
+        yield* archiveAgent(owner, archived.id, true);
+        const starterOf = (agentId: string) =>
+          Effect.map(readAgent(owner, agentId), (read) => Option.getOrThrow(read).startedByAgentId);
+
+        const continuedFrom = (agentId: string) =>
+          Effect.map(
+            createAgent(
+              owner,
+              start({
+                startedFrom: { agentId, steps: 1, totalSteps: 1 },
+                takesOverFrom: agentId,
+              }),
+            ),
+            (made) => Option.getOrThrow(made).agent,
+          );
+
+        const first = yield* continuedFrom(pilot.id);
+        assert.deepEqual(
+          [yield* starterOf(working.id), yield* starterOf(archived.id)],
+          [first.id, pilot.id],
+        );
+        yield* Database.use((db) =>
+          db.update(agentTable).set({ kind: AGENT_KIND.PILOT }).where(eq(agentTable.id, first.id)),
+        );
+        const continued = yield* continuedFrom(pilot.id);
+        assert.equal(yield* starterOf(working.id), continued.id, "the latest continue takes over");
+
+        assert.equal(yield* discardAgent(owner, continued.id), true);
+        assert.equal(yield* starterOf(working.id), pilot.id);
       }),
   );
 
