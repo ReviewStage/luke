@@ -41,6 +41,7 @@ import {
   offeredModels,
   offersContinue,
   openingLineOf,
+  pilotTarget,
   placedMessages,
   planPayerOf,
   publishedUrl,
@@ -58,6 +59,7 @@ import {
   unreadOpeningLine,
   unreadSentLines,
 } from "./agent-model.js";
+import { TOOL_TARGET } from "./tool-call-model.js";
 
 test("a model is named by the catalog where it has been read, else by its own id made readable, either way without Claude before its name", () => {
   const models = [
@@ -893,4 +895,23 @@ test("a pilot task offers no agent of the developer's own and Continue on its pi
       { newAgent: true, continuesPilot: true, continuesCoder: true },
     ],
   );
+});
+
+test("only an agent no pilot started keeps its composer, and the note on one a pilot started opens the pilot's tab on its own task, else its tab on the pilot's task", () => {
+  const pilot = {
+    agentId: "pilot",
+    taskId: "invitations",
+    title: "Invitations pilot",
+    model: "anthropic/claude-opus-5.5",
+  };
+  const topPilot = { planId: "invitations" };
+  const coderUnderPilot = { planId: "invitations", startedByPilot: pilot };
+  const subPilot = { planId: "invitation-emails", startedByPilot: pilot };
+  const coderOnPlainTask = { planId: "billing" };
+  assert.deepEqual([topPilot, coderUnderPilot, subPilot, coderOnPlainTask].map(pilotTarget), [
+    undefined,
+    { kind: TOOL_TARGET.AGENT, agent: "pilot" },
+    { kind: TOOL_TARGET.TASK, task: "invitations", agent: "pilot" },
+    undefined,
+  ]);
 });

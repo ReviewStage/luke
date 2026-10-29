@@ -124,6 +124,7 @@ import {
   offersContinue,
   offersStop,
   type PlacedMessage,
+  pilotTarget,
   placedMessages,
   planPayerOf,
   providerOf,
@@ -173,6 +174,7 @@ import {
   MessagePlaceProvider,
   useMessageReveal,
 } from "./message-links.js";
+import { PilotComposerNote } from "./pilot-note.js";
 import { PlanPictures } from "./plan-pictures.js";
 import { ORIGIN_CHIP, ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
@@ -2400,6 +2402,7 @@ function AgentTabView({
   endTrail,
   closedRemedy,
   continuedNote,
+  pilotNote,
   continuable = false,
   bringIn,
   holding = false,
@@ -2455,6 +2458,8 @@ function AgentTabView({
   closedRemedy?: ReactNode;
   /** What stands in the box's place once another agent continued this one (`ContinuedComposerNote`); none while none has. */
   continuedNote?: ReactNode;
+  /** What stands in the box's place, before every other note, once a pilot started the agent (`PilotComposerNote`); none for any other. */
+  pilotNote?: ReactNode;
   /** Whether the tab offers Continue somewhere, or another agent continued this one, so the end line tells no one to start a new one. */
   continuable?: boolean;
 }): React.JSX.Element {
@@ -2470,7 +2475,10 @@ function AgentTabView({
   const lines = useMemo(() => agentLines(kept, composer.sent), [kept, composer.sent]);
   // A rewind writes in the box, so it is offered only while the box takes words.
   const boxOpen =
-    onUnarchive === undefined && continuedNote === undefined && composer.closed === undefined;
+    pilotNote === undefined &&
+    onUnarchive === undefined &&
+    continuedNote === undefined &&
+    composer.closed === undefined;
   const onEdit = useSteady(boxOpen ? composer.edit : undefined);
   const onCancelEdit = useSteady(composer.dropEdit);
   const onSendEdit = useSteady(boxOpen ? composer.sendEdit : undefined);
@@ -2667,7 +2675,9 @@ function AgentTabView({
       <AgentTabFoot>
         <TodosDock messages={lines} working={working} />
         <PublishedDock published={published} doors={doors} />
-        {onUnarchive !== undefined ? (
+        {pilotNote !== undefined ? (
+          pilotNote
+        ) : onUnarchive !== undefined ? (
           <ArchivedComposerNote
             onUnarchive={onUnarchive}
             stop={offersStop(agent) ? onStop : undefined}
@@ -2709,7 +2719,8 @@ function AgentTabView({
         )}
       </AgentTabFoot>
       {/* Note that Reply stands only while the box takes a change, as a file's + does. */}
-      {onUnarchive !== undefined ||
+      {pilotNote !== undefined ||
+      onUnarchive !== undefined ||
       continuedNote !== undefined ||
       composer.closed !== undefined ||
       composer.sending ? null : (
@@ -2926,6 +2937,9 @@ function AgentTabBody({
     onOpenTarget === undefined
       ? undefined
       : (agentId: string) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: agentId });
+  // An agent a pilot started reports to it and takes no member's message, so its box names the pilot instead.
+  const pilot = agent.startedByPilot;
+  const reportsTo = pilotTarget(agent);
   // The agents that continued this one, as its summary or the task's list names them: a fork is none.
   const continued = continuedByIds(agent, control.agents, control.archived);
   const continuedDoors = {
@@ -3035,6 +3049,17 @@ function AgentTabBody({
         }
         closedRemedy={
           <ContinueAgent agentId={agent.id} control={control} carry={carry} offers={continues} />
+        }
+        pilotNote={
+          pilot === undefined || reportsTo === undefined ? undefined : (
+            <PilotComposerNote
+              pilot={pilot}
+              target={reportsTo}
+              control={control}
+              onOpenTarget={onOpenTarget}
+              stop={offersStop(agent) ? () => control.onStop(agent.id) : undefined}
+            />
+          )
         }
       />
     </MessagePlaceProvider>

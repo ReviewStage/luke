@@ -138,6 +138,11 @@ const agentLiveRowSchema = EffectSchema.Struct({
   repository: EffectSchema.NullOr(EffectSchema.String),
   starterId: EffectSchema.String,
   starterName: EffectSchema.NullOr(EffectSchema.String),
+  /** The pilot that started the agent, by its id, task, title, and model; null where no pilot did, and absent from a statement before it was carried. */
+  starterPilotId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  starterPilotTaskId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  starterPilotTitle: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  starterPilotModel: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   automationId: EffectSchema.NullOr(EffectSchema.String),
   automationName: EffectSchema.NullOr(EffectSchema.String),
   archivedAt: EffectSchema.NullOr(countedNumber),
@@ -421,6 +426,20 @@ function continuationsOf(rows: readonly AgentLiveRow[]): Continuations {
 }
 
 /** The Mac a local agent runs on as its summary names it, with no beat; none for one in a sandbox, or whose Mac is gone. */
+/** The pilot that started the agent, as its summary names it; none where no pilot did. */
+function startedByPilotOf(row: AgentLiveRow): AgentSummary["startedByPilot"] {
+  const { starterPilotId, starterPilotTaskId, starterPilotModel } = row;
+  if (starterPilotId == null || starterPilotTaskId == null || starterPilotModel == null) {
+    return undefined;
+  }
+  return {
+    agentId: starterPilotId,
+    taskId: starterPilotTaskId,
+    title: row.starterPilotTitle ?? null,
+    model: starterPilotModel,
+  };
+}
+
 function macOf(row: AgentLiveRow): AgentSummary["mac"] {
   const { deviceId, deviceName } = row;
   if (row.machine !== AGENT_MACHINE.DEVICE || deviceId == null || deviceName == null) {
@@ -441,6 +460,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number, continued: Continuations
   const runtime = NATIVE_AGENT_RUNTIMES.find((each) => each === row.runtime);
   const mac = macOf(row);
   const continuedBy = continued.get(row.id);
+  const startedByPilot = startedByPilotOf(row);
   return {
     id: row.id,
     planId: row.planId,
@@ -465,6 +485,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number, continued: Continuations
     ...(row.starterName === null
       ? undefined
       : { startedBy: { userId: row.starterId, name: row.starterName } }),
+    ...(startedByPilot === undefined ? undefined : { startedByPilot }),
     ...(row.automationId === null ? undefined : { automationId: row.automationId }),
     ...(row.automationName === null ? undefined : { automationName: row.automationName }),
     ...(row.startedFrom === null ? undefined : { from: row.startedFrom }),

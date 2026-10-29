@@ -110,6 +110,7 @@ import {
   plainWords,
   remoteCallOf,
   TOOL_TARGET,
+  type ToolTarget,
   toolTarget,
 } from "./tool-call-model.js";
 
@@ -1176,6 +1177,23 @@ export function closesComposer(failure: AgentCallFailure): boolean {
   return (
     failure === AGENT_CALL_FAILURE.AGENT_RETIRED || failure === AGENT_CALL_FAILURE.DEVICE_REMOVED
   );
+}
+
+/**
+ * Where the note in an agent's composer's place opens the pilot it reports
+ * to: the pilot's tab, where it stands on the agent's own task, as a coding
+ * agent's pilot does, else its tab on the pilot's task, as a sub-pilot's does. None for
+ * an agent no pilot started, which keeps its composer: a member talks to the
+ * top pilot of a pilot tree alone, and to any agent outside one.
+ */
+export function pilotTarget(
+  agent: Pick<AgentSummary, "planId" | "startedByPilot">,
+): ToolTarget | undefined {
+  const pilot = agent.startedByPilot;
+  if (pilot === undefined) return undefined;
+  return pilot.taskId === agent.planId
+    ? { kind: TOOL_TARGET.AGENT, agent: pilot.agentId }
+    : { kind: TOOL_TARGET.TASK, task: pilot.taskId, agent: pilot.agentId };
 }
 
 /**

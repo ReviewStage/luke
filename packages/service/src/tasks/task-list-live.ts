@@ -13,7 +13,7 @@ import { agentPin, conversations, device, taskPin } from "@luke/database/schemas
 import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
 import { task } from "@luke/database/schemas/task";
-import { AGENT_BRIEF } from "@luke/features/agent-wire";
+import { AGENT_BRIEF, AGENT_KIND } from "@luke/features/agent-wire";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
@@ -33,8 +33,8 @@ import {
  * `withTaskAgents`, and `listTasklessAgents`), with every archived plan
  * and agent among them, as the desktop asks for them: the plans with the
  * reader's own pin and the owner's name, and the agents with their newest
- * turn, when the newest line of the developer's awaiting its turn was
- * written and whether that turn's session ended, when the newest turn to end
+ * turn, the pilot that started each where one did, when the newest line
+ * of the developer's awaiting its turn was written and whether that turn's session ended, when the newest turn to end
  * ended, what each last published, the harness its conversation runs on, the
  * Mac a local one runs on, and the names of the members each names. A third, the issues
  * the plans linked, answers no rows now that a plan links none, and stands
@@ -48,6 +48,7 @@ import {
 const starter = alias(user, "starter");
 const archiver = alias(user, "archiver");
 const assignee = alias(user, "assignee");
+const starterPilot = alias(agentTable, "starter_pilot");
 
 /** The statements the plan list is subscribed to live. */
 export interface TaskListLiveStatements {
@@ -142,6 +143,10 @@ function agentsStatement(userId: string) {
           repository: agentTable.repository,
           starterId: agentTable.userId,
           starterName: starter.name,
+          starterPilotId: starterPilot.id,
+          starterPilotTaskId: starterPilot.taskId,
+          starterPilotTitle: starterPilot.title,
+          starterPilotModel: starterPilot.model,
           automationId: agentTable.automationId,
           automationName: sql<string | null>`${agentTable.automationOrigin} ->> 'name'`,
           archivedBy: agentTable.archivedBy,
@@ -176,6 +181,13 @@ function agentsStatement(userId: string) {
     .from(agentTable)
     .leftJoin(agentPin, and(eq(agentPin.agentId, agentTable.id), eq(agentPin.userId, userId)))
     .leftJoin(starter, eq(starter.id, agentTable.userId))
+    .leftJoin(
+      starterPilot,
+      and(
+        eq(starterPilot.id, agentTable.startedByAgentId),
+        eq(starterPilot.kind, AGENT_KIND.PILOT),
+      ),
+    )
     .leftJoin(archiver, eq(archiver.id, sql`${agentTable.archivedBy} ->> 'userId'`))
     .leftJoin(conversations, eq(conversations.id, agentTable.conversationId))
     .leftJoin(device, eq(device.id, agentTable.deviceId))

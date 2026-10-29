@@ -764,7 +764,11 @@ function InboxSidePanel({
   const terminals = useCapability(HOST_CAPABILITY.TERMINALS);
   const openTarget = (target: ToolTarget) => {
     if (target.kind === TOOL_TARGET.PAGE) return panel.onPreview({ page: target.page });
-    if (target.kind === TOOL_TARGET.TASK) return tasks.onShowTask(target.task);
+    if (target.kind === TOOL_TARGET.TASK) {
+      return target.agent === undefined
+        ? tasks.onShowTask(target.task)
+        : tasks.onShowAgent(target.task, target.agent);
+    }
     if (target.kind === TOOL_TARGET.AGENT) {
       if (taskId === undefined) return tasks.agentView.onOpen(target.agent);
       // An agent of the item's task reads beside the item as the panel's preview; pressed with ⌘, it goes to the task.

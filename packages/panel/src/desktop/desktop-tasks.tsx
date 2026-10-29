@@ -574,7 +574,9 @@ function PlanDocument({
       case TOOL_TARGET.PAGE:
         return sidePanel.onPreview({ page: target.page });
       case TOOL_TARGET.TASK:
-        return tasks.onShowTask(target.task);
+        return target.agent === undefined
+          ? tasks.onShowTask(target.task)
+          : tasks.onShowAgent(target.task, target.agent);
     }
   };
   // A delegation's row in an agent's transcript opens its worker in the side
