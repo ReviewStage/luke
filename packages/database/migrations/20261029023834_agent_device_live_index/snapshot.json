@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "0a68ea91-707a-4077-b845-02e6b7412ee1",
+  "id": "732b99d8-0f3a-45d6-b8f5-94302ddf26fc",
   "prevIds": [
     "148624d3-d436-4237-95ab-d4b435cd390c",
     "8c1cb1e4-aa00-489a-9682-bac8c8efa42c",
@@ -10317,7 +10317,7 @@
         }
       ],
       "isUnique": false,
-      "where": "\"archived_at\" is null",
+      "where": "\"device_id\" is not null and \"archived_at\" is null",
       "with": "",
       "method": "btree",
       "concurrently": false,
