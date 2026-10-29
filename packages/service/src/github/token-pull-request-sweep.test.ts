@@ -365,6 +365,7 @@ it.layer(getTestDB())("the poll of a token agent's pull request", (it) => {
       const github = githubHolding(pull);
       pull.checkRuns = [
         {
+          name: "test",
           status: "completed",
           conclusion: "failure",
           completed_at: new Date(MADE_AT).toISOString(),
@@ -375,7 +376,7 @@ it.layer(getTestDB())("the poll of a token agent's pull request", (it) => {
       yield* sweepAt(MADE_AT + MINUTE, github, eve);
       pull.checkRuns = [
         ...pull.checkRuns,
-        { status: "in_progress", conclusion: null, completed_at: null },
+        { name: "lint", status: "in_progress", conclusion: null, completed_at: null },
       ];
       yield* sweepAt(MADE_AT + 2 * MINUTE, github, eve);
 
@@ -395,17 +396,19 @@ it.layer(getTestDB())("the poll of a token agent's pull request", (it) => {
         const github = githubHolding(pull);
         pull.checkRuns = [
           {
+            name: "test",
             status: "completed",
             conclusion: "success",
             completed_at: new Date(MADE_AT).toISOString(),
             app: { slug: "github-actions" },
           },
-          { status: "in_progress", conclusion: null, completed_at: null },
+          { name: "lint", status: "in_progress", conclusion: null, completed_at: null },
         ];
 
         yield* sweepAt(MADE_AT + MINUTE, github, eve);
         const whileRunning = eve.sent.length;
-        pull.checkRuns = pull.checkRuns.map(() => ({
+        pull.checkRuns = pull.checkRuns.map((run) => ({
+          ...run,
           status: "completed",
           conclusion: "success",
           completed_at: new Date(MADE_AT + MINUTE).toISOString(),

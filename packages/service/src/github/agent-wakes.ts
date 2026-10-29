@@ -26,7 +26,7 @@ import {
   type UnparsedWireValue,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, Option, Result, Schema } from "effect";
+import { Clock, Duration, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { agentPullRequestReach } from "../agents/coder-host/published.js";
 import { agentStatusOf } from "../agents/coder-host/status.js";
@@ -38,7 +38,9 @@ import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 import type { GitHubApp } from "./github-app.js";
 import {
   type GitHubReviewLineComment,
+  type HeadCheck,
   type HeadChecks,
+  headCheckFailed,
   headChecksOf,
   reviewLineComments,
 } from "./pull-requests.js";
@@ -81,8 +83,9 @@ import {
  * installed it, and Apps comment on nearly every pull request. Note that an
  * App may quote an outsider's words, which is what that ruling accepts. A
  * failed check and every check finished carry no one's words: the line is
- * the service's own, naming the agent's own branch and commit, and what the
- * agent reads next is its own checks' output on its own commit.
+ * the service's own, naming the agent's own branch and commit, and each
+ * check by its name, how it ended, and its page, never what it wrote, and
+ * what the agent reads next is its own checks' output on its own commit.
  *
  * The agents told are those standing on the pull request's branch, or, for
  * a comment, whose pull request GitHub last answered is the one commented
@@ -118,6 +121,12 @@ import {
  * repository, the commit, and every check's outcome, rather than the
  * delivery's id: two suites that finish together read the same checks and
  * tell once, and a check run again, or one more check finished, tells again.
+ *
+ * A failed check names what failed from the same read of the head's checks,
+ * made only where an agent is told, on its token, and waited on for
+ * `FAILED_CHECKS_GRACE` alone, so the delivery still answers inside GitHub's
+ * ten seconds: a read that fails, runs late, or names no failed check leaves
+ * the line to say a check failed and the agent to read which itself.
  */
 
 /** What a delivery tells an agent of. */
@@ -183,6 +192,16 @@ const PENDING_STATE = "pending";
 
 /** How many characters of a commit's id the message names it by, as GitHub's own pages shorten one. */
 const SHORT_SHA_CHARS = 7;
+
+/**
+ * How long a failed check waits on the head's checks before its agents are
+ * told without them: a short part of the ten seconds GitHub gives a
+ * delivery, since it answers only once its agents were told.
+ */
+const FAILED_CHECKS_GRACE = Duration.seconds(2);
+
+/** The room the message keeps for saying how many failed checks it left unnamed. */
+const UNNAMED_CHECKS_ROOM = 120;
 
 /** The branch prefix a coding agent works on (`coder-host/bounds.ts`), the only branches a failed check is told on. */
 const AGENT_BRANCH_PREFIX = "luke/";
@@ -558,21 +577,54 @@ function withWords(head: string, tag: string, said: string, close: string, reade
 }
 
 /**
+ * The failed checks a message names, opened by `head` and closed by
+ * `close`: one to a line with its page, where GitHub names one, as many as
+ * fit the message bound, then how many more there are to read with
+ * `reader`; the head and the close alone where none is named.
+ */
+function withFailedChecks(
+  head: string,
+  failed: readonly HeadCheck[],
+  close: string,
+  reader: string,
+): string {
+  if (failed.length === 0) return `${head}\n\n${close}`;
+  const opening = `${head}\n\nFailed:\n`;
+  // Note that a name or a page GitHub spells long is still within the bound, because each line is counted against what the message has left.
+  let room = AGENT_BOUNDS.MAX_MESSAGE_CHARS - opening.length - close.length - UNNAMED_CHECKS_ROOM;
+  const named: string[] = [];
+  for (const check of failed) {
+    const line = check.url === null ? `- ${check.name}` : `- ${check.name} (${check.url})`;
+    if (line.length + 1 > room) break;
+    named.push(line);
+    room -= line.length + 1;
+  }
+  const unnamed = failed.length - named.length;
+  const more = unnamed === 0 ? "" : `\n- ${unnamed} more, to read with ${reader}`;
+  return `${opening}${named.join("\n")}${more}\n\n${close}`;
+}
+
+/**
  * The message the agent on `branch` is told, which is also the line its
  * transcript draws as GitHub's: a review with what it says and its inline
  * comments, where they were read (`inline` none where they could not be),
  * a comment with what it says, a failed check by its address, and every
- * check finished by its commit, with whether any `failing`, each read with
- * what the agent's GitHub `access` reaches GitHub with.
+ * check finished by its commit, with whether any failed, and a check line
+ * naming those that failed where the head's `checks` were read, each read
+ * with what the agent's GitHub `access` reaches GitHub with.
  */
 function agentWakeText(
   wake: AgentWake,
   branch: string | null,
   inline: Option.Option<readonly GitHubReviewLineComment[]>,
-  failing: boolean,
+  checks: Option.Option<HeadChecks>,
   access: GitHubAccess,
 ): string {
   const reader = GITHUB_READER[access];
+  const failed = Option.match(checks, {
+    onNone: () => [],
+    onSome: (read) => read.checks.filter(headCheckFailed),
+  });
   switch (wake.kind) {
     case AGENT_WAKE.REVIEW: {
       const verdict = VERDICT_WORDS.get(wake.verdict ?? "") ?? REVIEWED;
@@ -597,13 +649,24 @@ function agentWakeText(
         reader,
       );
     case AGENT_WAKE.CHECK_FAILED:
-      return `A check failed on your branch \`${branch ?? ""}\`: ${wake.url}\n\nRead why with ${reader}, fix the cause, and push, as you watch your own checks.`;
+      return withFailedChecks(
+        `A check failed on your branch \`${branch ?? ""}\`: ${wake.url}`,
+        failed,
+        `Read why with ${reader}, fix the cause, and push, as you watch your own checks.`,
+        reader,
+      );
     case AGENT_WAKE.CHECKS_COMPLETED: {
       const sha = (wake.sha ?? "").slice(0, SHORT_SHA_CHARS);
-      const outcome = failing
-        ? `At least one failed: read why with ${reader}, fix the cause, and push.`
-        : "None failed.";
-      return `Every check finished on \`${sha}\`, the head of ${pullRequestWords(wake)}\n\n${outcome}`;
+      const head = `Every check finished on \`${sha}\`, the head of ${pullRequestWords(wake)}`;
+      if (!Option.exists(checks, (read) => read.failing)) return `${head}\n\nNone failed.`;
+      return failed.length === 0
+        ? `${head}\n\nAt least one failed: read why with ${reader}, fix the cause, and push.`
+        : withFailedChecks(
+            head,
+            failed,
+            `Read why with ${reader}, fix the cause, and push.`,
+            reader,
+          );
     }
   }
 }
@@ -622,15 +685,36 @@ function boundWords(words: string): string {
 }
 
 /**
+ * The finished checks a check line carries, within the metadata's bounds:
+ * each by its name, cut to the bound, how it ended, and its page, left out
+ * where it would not fit; a check still to finish, or with no name, is left
+ * out.
+ */
+function lineChecks(read: HeadChecks): NonNullable<GitHubLineMetadata["checks"]> {
+  return read.checks
+    .flatMap((check) => {
+      const name = check.name.trim().slice(0, GITHUB_LINE_BOUNDS.NAME_CHARS);
+      const url = check.url?.trim() ?? "";
+      if (check.conclusion === null || name === "") return [];
+      const fits = url !== "" && url.length <= GITHUB_LINE_BOUNDS.URL_CHARS;
+      return [{ name, conclusion: check.conclusion, ...(fits ? { url } : {}) }];
+    })
+    .slice(0, GITHUB_LINE_BOUNDS.CHECKS);
+}
+
+/**
  * What the line `agentWakeText` writes says carried it: the wake as GitHub
- * told it, its words and the inline comments read beside it, so a window
- * draws the line from these rather than from the text. Note that the words
- * are kept whole up to GitHub's own bound rather than cut as the text cuts
- * them, because the text is held to what the model reads and these are not.
+ * told it, its words and the inline comments read beside it, and, on a
+ * check line, whether a check failed and the head's finished checks where
+ * they were read, so a window draws the line from these rather than from
+ * the text. Note that the words are kept whole up to GitHub's own bound
+ * rather than cut as the text cuts them, because the text is held to what
+ * the model reads and these are not.
  */
 function githubLine(
   wake: AgentWake,
   inline: Option.Option<readonly GitHubReviewLineComment[]>,
+  checks: Option.Option<HeadChecks>,
   outsideWords: boolean,
 ): GitHubLineMetadata {
   const words = boundWords(wake.words ?? "");
@@ -642,6 +726,11 @@ function githubLine(
       url: comment.url,
       body: boundWords(comment.body),
     }));
+  const checkLine =
+    wake.kind === AGENT_WAKE.CHECK_FAILED || wake.kind === AGENT_WAKE.CHECKS_COMPLETED;
+  const failing =
+    wake.kind === AGENT_WAKE.CHECK_FAILED || Option.exists(checks, (read) => read.failing);
+  const finished = Option.match(checks, { onNone: () => [], onSome: lineChecks });
   return {
     channel: MESSAGE_CHANNEL.GITHUB,
     event: LINE_EVENT_OF_WAKE[wake.kind],
@@ -654,6 +743,8 @@ function githubLine(
     ...(comments.length === 0 ? {} : { comments }),
     ...(wake.sha === undefined ? {} : { sha: wake.sha }),
     outside_words: outsideWords,
+    ...(checkLine ? { failing } : {}),
+    ...(finished.length === 0 ? {} : { checks: finished }),
   };
 }
 
@@ -766,30 +857,18 @@ export function agentIsWoken(
 type WakeServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
 /**
- * The checks on the wake's commit, read on the pull-request token of the
- * agent given, where every one of them finished and there is at least one;
- * none for any other wake, while one is still to finish, or where the read
- * fails, which is logged by its kind alone.
+ * The checks on the commit given, read on the pull-request token of the
+ * agent given; none where the read fails, which is logged by its kind alone.
  */
-function finishedChecksOf(
-  wake: AgentWake,
-  told: OwnedAgent | undefined,
+function headChecksFor(
+  told: OwnedAgent,
+  sha: string | undefined,
 ): Effect.Effect<Option.Option<HeadChecks>, never, WakeServices> {
-  const { sha } = wake;
-  if (
-    wake.kind !== AGENT_WAKE.CHECKS_COMPLETED ||
-    told === undefined ||
-    !hasRepository(told.agent) ||
-    sha === undefined
-  ) {
-    return Effect.succeed(Option.none());
-  }
+  if (!hasRepository(told.agent) || sha === undefined) return Effect.succeed(Option.none());
   const agent = told.agent;
   return agentPullRequestReach(told.userId, agent).pipe(
     Effect.flatMap(({ token }) => headChecksOf(token, agent.repository, sha)),
-    Effect.map((checks) =>
-      checks.any && !checks.pending ? Option.some(checks) : Option.none<HeadChecks>(),
-    ),
+    Effect.map(Option.some),
     // The kind alone: nothing of the checks or the token rides the line.
     Effect.catch((failure) =>
       Effect.as(
@@ -800,6 +879,44 @@ function finishedChecksOf(
       ),
     ),
   );
+}
+
+/**
+ * The checks on the wake's commit its line carries, read for the agent
+ * given where one is told: for every check finished, those read where every
+ * one finished and there is at least one; for a failed check, those read
+ * within `FAILED_CHECKS_GRACE` that name a failed check, none past it, which
+ * is logged; none for any other wake.
+ */
+function checksOfWake(
+  wake: AgentWake,
+  told: OwnedAgent | undefined,
+): Effect.Effect<Option.Option<HeadChecks>, never, WakeServices> {
+  if (told === undefined) return Effect.succeed(Option.none());
+  switch (wake.kind) {
+    case AGENT_WAKE.CHECKS_COMPLETED:
+      return Effect.map(
+        headChecksFor(told, wake.sha),
+        Option.filter((checks) => checks.any && !checks.pending),
+      );
+    case AGENT_WAKE.CHECK_FAILED:
+      return headChecksFor(told, wake.sha).pipe(
+        Effect.timeoutOption(FAILED_CHECKS_GRACE),
+        Effect.flatMap(
+          Option.match({
+            onNone: () =>
+              Effect.as(
+                Effect.logWarning("github webhook: a head's checks were not read in time"),
+                Option.none<HeadChecks>(),
+              ),
+            onSome: (read) =>
+              Effect.succeed(Option.filter(read, (checks) => checks.checks.some(headCheckFailed))),
+          }),
+        ),
+      );
+    default:
+      return Effect.succeed(Option.none());
+  }
 }
 
 /** Whether the agent's row keeps the wake's commit as its pull request's head, as the read of its pull request this delivery made left it. */
@@ -868,21 +985,21 @@ export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(func
       : admitted;
     // Read once for every agent told, since each is told the same review, or the same checks.
     const inline = yield* inlineCommentsOf(wake, woken[0]);
-    const finished = yield* finishedChecksOf(wake, woken[0]);
-    if (checksCompleted && Option.isNone(finished)) return [];
-    const clientKey = Option.isSome(finished)
-      ? checksCompletedKey(wake, finished.value)
-      : deliveryId;
-    const failing = Option.isSome(finished) && finished.value.failing;
+    const checks = yield* checksOfWake(wake, woken[0]);
+    if (checksCompleted && Option.isNone(checks)) return [];
+    const clientKey =
+      checksCompleted && Option.isSome(checks)
+        ? checksCompletedKey(wake, checks.value)
+        : deliveryId;
     return yield* Effect.forEach(woken, ({ userId, agent }) =>
       Effect.gen(function* () {
         const eve = yield* eveFor(userId);
         const outside = yield* hostedStoreOrUnavailable(outsideWordsFor(wake, inline, userId));
         yield* steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
-          text: agentWakeText(wake, agent.branch, inline, failing, agent.githubAccess),
+          text: agentWakeText(wake, agent.branch, inline, checks, agent.githubAccess),
           clientKey,
           sender: { kind: MESSAGE_SENDER.GITHUB, login: wake.by },
-          metadata: githubLine(wake, inline, outside),
+          metadata: githubLine(wake, inline, checks, outside),
         });
         return true;
       }).pipe(
