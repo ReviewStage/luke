@@ -240,6 +240,8 @@ import {
   type TaskHistoryFollowed,
   type TaskPagesFollow,
   type TaskPagesFollowed,
+  type TasksBlockAnswer,
+  type TasksBlockParams,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
   type TasksBrowserTabsAnswer,
@@ -316,6 +318,7 @@ import {
   taskBrowserTabsFollowedSchema,
   taskHistoryFollowedSchema,
   taskPagesFollowedSchema,
+  tasksBlockAnswerSchema,
   tasksBrowserTabOpenAnswerSchema,
   tasksBrowserTabsAnswerSchema,
   tasksCommentAnswerSchema,
@@ -501,6 +504,8 @@ export interface HostOperator {
   tasksSetRepository(params: TasksSetRepositoryParams): Effect.Effect<TasksSetRepositoryAnswer>;
   /** One task moved to another of the account's workspaces; the workspace it now belongs to, or why it stands where it was. */
   tasksMove(params: TasksMoveParams): Effect.Effect<TasksMoveAnswer>;
+  /** One block of a task added or taken away; the task's blocks as they then stand, or why they are unchanged. */
+  tasksBlock(params: TasksBlockParams): Effect.Effect<TasksBlockAnswer>;
   /** The developer's edit of a task's document; saved, a conflict with the text as it stands now, or why nothing was saved. */
   tasksEdit(params: TasksEditParams): Effect.Effect<TasksEditAnswer>;
   /** A window of a file of a task's repository, coloured; or why it is not shown. */
@@ -1643,6 +1648,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           workspaceId: params.workspaceId,
         }),
         answerOf(tasksMoveAnswerSchema, TASK_UNANSWERED),
+      ),
+    tasksBlock: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_BLOCK, { taskId: params.taskId, block: params.block }),
+        answerOf(tasksBlockAnswerSchema, TASK_UNANSWERED),
       ),
     tasksEdit: (params) =>
       Effect.map(

@@ -24,6 +24,12 @@
  * an older build still sends, lists no plan more, and an archive asked for
  * settles the plan instead (`archive-settle.ts`).
  *
+ * `POST /api/plans/{id}/blocks` adds or takes away one block of the plan,
+ * as Linear's blocked-by and blocks are: the other task, of the plan's own
+ * workspace and one the caller reaches, waits on it or is waited on, and a
+ * block that would close a cycle is refused
+ * (`@luke/database/models/task-block-store`).
+ *
  * `/api/plans/{id}/revisions` is the plan's history for the History tab, a
  * page at a time; `/api/plans/{id}/revisions/{seq}` one revision's content
  * beside the one before it; and `/api/plans/{id}/revisions/{seq}/restore`
@@ -46,6 +52,16 @@ import { listAgents, readAgentByKey } from "@luke/database/models/agent-store";
 import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
 import { keepRunsOnPick } from "@luke/database/models/runs-on-pick";
 import {
+  addTaskBlock,
+  removeTaskBlock,
+  type TaskBlockAcrossWorkspaces,
+  type TaskBlockCycle,
+  type TaskBlockEffect,
+  type TaskBlockPair,
+  type TaskBlockSelf,
+  type TaskBlockWritten,
+} from "@luke/database/models/task-block-store";
+import {
   createTaskCommitted,
   deleteTaskCommitted,
   listTasks,
@@ -64,9 +80,12 @@ import { TASK_START_STATUS } from "@luke/features/contract";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
 import {
+  TASK_BLOCK_CHANGE,
+  TASK_BLOCK_RELATION,
   TASK_MODE,
   type Task,
   type TaskAgentStart,
+  type TaskBlockRequest,
   type TaskMode,
   type TaskRunsOnRequest,
   type TaskStartAnswer,
@@ -443,6 +462,39 @@ const runsOnChange = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (!runsOnStands(asked, runsOn)) return yield* Effect.fail(HOSTED_REFUSAL.RUNS_ON_LOCKED);
 });
 
+/**
+ * The block a change names, written for the account: added or taken away,
+ * the plan the path names on the side the change says. Its refusals are
+ * answered by name: a task blocking itself and a task of another workspace
+ * are invalid, a block closing a cycle is refused as one, and the store out
+ * of reach is unavailable. Nothing where the account reaches either task not.
+ */
+const blockWritten = (
+  userId: string,
+  taskId: string,
+  change: TaskBlockRequest,
+): Effect.Effect<Option.Option<TaskBlockWritten>, HostedRefusal, DatabaseServices> => {
+  const pair: TaskBlockPair =
+    change.relation === TASK_BLOCK_RELATION.BLOCKED_BY
+      ? { blockerTaskId: change.taskId, blockedTaskId: taskId }
+      : { blockerTaskId: taskId, blockedTaskId: change.taskId };
+  const written: TaskBlockEffect<
+    Option.Option<TaskBlockWritten>,
+    TaskBlockSelf | TaskBlockAcrossWorkspaces | TaskBlockCycle
+  > = change.change === TASK_BLOCK_CHANGE.ADD
+    ? addTaskBlock(userId, pair)
+    : removeTaskBlock(userId, pair);
+  return written.pipe(
+    Effect.catch((failure) =>
+      failure._tag === "TaskBlockCycle"
+        ? Effect.fail(HOSTED_REFUSAL.TASK_BLOCK_CYCLE)
+        : failure._tag === "TaskBlockSelf" || failure._tag === "TaskBlockAcrossWorkspaces"
+          ? Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)
+          : hostedStoreOrUnavailable(Effect.fail(failure)),
+    ),
+  );
+};
+
 /** The plans resource, every procedure to a signed-in caller. */
 export function tasksProcedures(seams: TasksProcedureSeams) {
   const writer: Effect.Effect<StoreWriter> = storeWriter({ tools: CODER_TOOL_SET });
@@ -697,6 +749,23 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       // The pilot is told only of a policy that moved under the row's lock, so a repeat of the same switch wakes no one.
       if (mergePolicyMoved) yield* tellPilotOfMergePolicy(seams, request, writer, userId, taskId);
       return txid === undefined ? { plan } : { plan, txid };
+    }),
+
+    /**
+     * One block of the plan added or taken away (`blockWritten`), answered
+     * with the plan as it then stands and the transaction the block was
+     * written in, none where it stood as asked already. A task the caller
+     * does not reach, on either side, answers as no plan.
+     */
+    block: plans.block.effect(function* ({ input, context }) {
+      const { userId } = context;
+      const taskId = yield* pathUuid(input.params.id);
+      const written = yield* blockWritten(userId, taskId, input.body);
+      if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const opened = yield* hostedStoreOrUnavailable(readTaskPlan(userId, taskId));
+      if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const { txid } = written.value;
+      return txid === undefined ? { plan: opened.value } : { plan: opened.value, txid };
     }),
 
     /**

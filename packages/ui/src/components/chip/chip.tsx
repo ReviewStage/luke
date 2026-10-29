@@ -37,7 +37,10 @@ import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
  * `onClick`. A removable chip (`onRemove`) is no button of its
  * own: it names what stands, a filter applied, a mention or a label added to
  * a field, and ends in a × named for what lifting it does, which its caller
- * answers at once, so what it named is gone on the press. It springs in as
+ * answers at once, so what it named is gone on the press; one that names a
+ * thing a reader may go to (`onOpen`, a task another waits on) takes a press
+ * on its words too, which opens it, the × its sibling rather than inside it,
+ * since a button holds no button. It springs in as
  * it arrives; its exit is the list's that draws it, a `ListMotion`
  * following it by its `motionKey`, which plays its arrival in its place,
  * since its caller has already let it go.
@@ -173,6 +176,8 @@ type RemovableChipProps = ChipFace & {
   onRemove: () => void;
   /** What the × does, its name for a reader ("Show everyone's tasks"). */
   removeLabel: string;
+  /** Opens what the chip names, a press on its words; without it the words take no press. */
+  onOpen?: (() => void) | undefined;
   /** The key a `ListMotion` around its row follows it by, which plays its arrival and its exit. */
   motionKey?: string | undefined;
   href?: never;
@@ -343,10 +348,14 @@ function faceAttributes({
 const REMOVE =
   "luke-chip-remove m-0 grid size-chip-remove flex-none place-items-center rounded-full border-0 bg-transparent p-0 text-muted-foreground cursor-[inherit] transition-[background-color,color] duration-(--luke-duration-hover) ease-plain [&:hover]:bg-secondary [&:hover]:text-foreground [&>svg]:size-chip-remove-glyph";
 
-/** A removable chip: its face, then a × named for what it lifts. */
+/** A removable chip's words as a press of their own, which opens what it names: no box of their own, so the chip's face is the one drawn. */
+const OPEN_FACE = "m-0 border-0 bg-transparent p-0 text-inherit font-[inherit] cursor-press";
+
+/** A removable chip: its face, its words opening what it names where `onOpen` is given, then a × named for what it lifts. */
 function RemovableChip({
   onRemove,
   removeLabel,
+  onOpen,
   motionKey,
   children,
   ...face
@@ -358,7 +367,18 @@ function RemovableChip({
       {...faceAttributes(face)}
       {...(motionKey === undefined ? {} : motionKeyAttribute(motionKey))}
     >
-      <span className={faceClasses(face, false)}>{children}</span>
+      {onOpen === undefined ? (
+        <span className={faceClasses(face, false)}>{children}</span>
+      ) : (
+        <button
+          type="button"
+          className={`${faceClasses(face, false)} ${OPEN_FACE}`}
+          onClick={pulseOnPress(onOpen, PRESS_PULSE.FACE)}
+          {...PRESS_FACE}
+        >
+          {children}
+        </button>
+      )}
       <button
         type="button"
         className={REMOVE}

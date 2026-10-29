@@ -25,6 +25,8 @@ import {
   type TaskHistoryFollowed,
   type TaskPagesFollow,
   type TaskPagesFollowed,
+  type TasksBlockAnswer,
+  type TasksBlockParams,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
   type TasksBrowserTabsAnswer,
@@ -96,6 +98,7 @@ export interface TasksProceduresDependencies {
     tasksRepositories(params: TasksRepositoriesParams): Effect.Effect<TasksRepositoriesAnswer>;
     tasksSetRepository(params: TasksSetRepositoryParams): Effect.Effect<TasksSetRepositoryAnswer>;
     tasksMove(params: TasksMoveParams): Effect.Effect<TasksMoveAnswer>;
+    tasksBlock(params: TasksBlockParams): Effect.Effect<TasksBlockAnswer>;
     tasksEdit(params: TasksEditParams): Effect.Effect<TasksEditAnswer>;
     githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
     githubDisconnect(): Effect.Effect<TasksGitHubDisconnectAnswer>;
@@ -265,6 +268,14 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
     }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.tasksMove(input);
+    }),
+    [TASKS_ACT_KIND.TASKS_BLOCK]: actPort[TASKS_ACT_KIND.TASKS_BLOCK].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.tasksBlock(input);
     }),
     [TASKS_ACT_KIND.TASKS_EDIT]: actPort[TASKS_ACT_KIND.TASKS_EDIT].effect(function* ({
       input,

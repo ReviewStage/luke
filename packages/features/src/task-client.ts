@@ -68,6 +68,7 @@ import {
   TASK_LIST_ARCHIVED,
   TASK_SKILLS_INSTALLED,
   type Task,
+  type TaskBlockRequest,
   type TaskCreateRequest,
   type TaskFileAnswer,
   type TaskFileRequest,
@@ -79,6 +80,7 @@ import {
   type TaskTreeAnswer,
   type TaskTreeRequest,
   type TaskUpdateRequest,
+  taskBlockRequestSchema,
   taskCreateRequestSchema,
   taskFileRequestSchema,
   taskRenameRequestSchema,
@@ -86,6 +88,7 @@ import {
   taskUpdateRequestSchema,
 } from "./task-wire.js";
 import {
+  type BlockCallFailure,
   BROWSER_TAB_OPEN_FAILURE,
   type BrowserTabOpenFailure,
   PICTURE_KEEP_FAILURE,
@@ -93,6 +96,7 @@ import {
   type RepositoryCallFailure,
   type RepositoryListFailure,
   type StartCallFailure,
+  TASK_BLOCK_FAILURE,
   TASK_CALL_FAILURE,
   type TaskCallFailure,
   type TasksBrowserTabOpenAnswer,
@@ -186,6 +190,13 @@ const START_REFUSALS = {
 const MOVE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+} as const;
+
+/** The refusals a block change can answer with: a task not the account's, one of another workspace, or a cycle the block would close. */
+const BLOCK_REFUSALS = {
+  [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.INVALID_REQUEST]: TASK_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.TASK_BLOCK_CYCLE]: TASK_BLOCK_FAILURE.CYCLE,
 } as const;
 
 /** The refusal a read of one of the plan's own rows can answer with: the plan or the row not the account's. */
@@ -458,6 +469,31 @@ export class HostedTaskClient {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)({ workspaceId }));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedResult(this.#update(taskId, admitted), MOVE_REFUSALS);
+  }
+
+  /**
+   * Adds one block of a task or takes it away, answering the task as it
+   * then stands; or why it is unchanged: the service did not answer, the
+   * other task is not the account's or not of the task's workspace, or the
+   * block would close a cycle. A change the service would refuse by shape
+   * is refused here without traveling at all.
+   */
+  block(
+    taskId: string,
+    block: TaskBlockRequest,
+  ): Effect.Effect<TaskCallResult<TaskWritten, BlockCallFailure>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(taskBlockRequestSchema)(block));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      Effect.map(
+        askHosted(this.#hosted.plans.block, { params: { id: taskId }, body: admitted }),
+        (changed): TaskWritten =>
+          changed.txid === undefined
+            ? { task: changed.plan }
+            : { task: changed.plan, txid: changed.txid },
+      ),
+      BLOCK_REFUSALS,
+    );
   }
 
   /**

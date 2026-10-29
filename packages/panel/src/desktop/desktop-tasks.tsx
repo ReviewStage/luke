@@ -1,7 +1,7 @@
 import type { AgentStatus } from "@luke/features/agent-wire";
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
-import type { TaskStanding } from "@luke/features/task-wire";
+import type { TaskBlockRequest, TaskStanding } from "@luke/features/task-wire";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -45,6 +45,7 @@ import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
+import type { TaskBlocksDoor } from "../tasks/task-blocks.js";
 import {
   mentionablePullRequests,
   TaskMentions,
@@ -746,6 +747,22 @@ function PlanDocument({
   );
   const workspaceName = home?.name ?? "";
   const { macs: devices } = agents;
+  // The task's blocks name and offer the tasks of its own workspace, and a press on one opens it as a list's row would.
+  const openedWorkspace = opened?.workspaceId;
+  const { tasks: everyTask, onSelect: selectTask, onSetTaskBlock } = tasks;
+  const blockTasks = useMemo(
+    () => everyTask.filter((each) => each.workspaceId === openedWorkspace),
+    [everyTask, openedWorkspace],
+  );
+  const changeBlock = useSteadyDoor(
+    openedId === undefined
+      ? undefined
+      : (change: TaskBlockRequest) => onSetTaskBlock(openedId, change),
+  );
+  const blocks = useMemo<TaskBlocksDoor>(
+    () => ({ workspaceName, tasks: blockTasks, onOpen: selectTask, onChange: changeBlock }),
+    [workspaceName, blockTasks, selectTask, changeBlock],
+  );
   // Note that S opens the status chip only while the plan is in sight, never behind an agent's tab or Activity's list.
   const standing = useMemo<TaskStandingDoor>(
     () => ({
@@ -753,9 +770,10 @@ function PlanDocument({
       onSet: setStanding,
       devices,
       repository: repositoryDoor,
+      blocks,
       inSight: planInSight,
     }),
-    [workspaceName, setStanding, devices, repositoryDoor, planInSight],
+    [workspaceName, setStanding, devices, repositoryDoor, blocks, planInSight],
   );
   const reveal = revealed?.taskId === openedId ? revealed?.reveal : undefined;
   const { onSectionRevealed } = tasks;
