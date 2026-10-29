@@ -181,27 +181,24 @@ interface Poll {
   readonly eveFor: EveForAccount;
   /** The sweep's instant, in epoch milliseconds. */
   readonly now: number;
-  /** How the wakes it tells read the head's checks: once for all of them (`checksReadOnce`). */
-  readonly readChecks: HeadChecksRead;
+  /** How the failed checks it tells read the head's checks: once for all of them (`failedChecksReadOnce`). */
+  readonly readFailedChecks: HeadChecksRead;
 }
 
 /**
- * The head's checks read once for every wake one poll tells, which all name
- * its one head, so a poll that tells several failed statuses reads them
- * once; a read its wake's bound cut short keeps nothing, and the next wake
- * reads again.
+ * The head's checks read once for every failed check one poll tells, which
+ * all name its one head, so a poll that tells several failed statuses reads
+ * them once to name what failed. A read that failed, or that its wake's bound
+ * cut short, keeps nothing, so the next wake reads again.
  */
-const checksReadOnce = Effect.map(
-  Ref.make(Option.none<Option.Option<HeadChecks>>()),
+const failedChecksReadOnce = Effect.map(
+  Ref.make(Option.none<HeadChecks>()),
   (kept): HeadChecksRead =>
     (told, sha) =>
-      Effect.flatMap(
-        Ref.get(kept),
-        Option.match({
-          onSome: Effect.succeed,
-          onNone: () =>
-            Effect.tap(headChecksFor(told, sha), (read) => Ref.set(kept, Option.some(read))),
-        }),
+      Effect.flatMap(Ref.get(kept), (held) =>
+        Option.isSome(held)
+          ? Effect.succeed(held)
+          : Effect.tap(headChecksFor(told, sha), (read) => Ref.set(kept, read)),
       ),
 );
 
@@ -258,7 +255,8 @@ function tell(
     { ...wake, repository: agent.repository, branches, pullRequest: number },
     key,
     poll.member.githubLogin,
-    poll.readChecks,
+    // Note that every check finished reads the checks afresh, because it must judge them as they stand after both listings this poll read.
+    wake.kind === AGENT_WAKE.CHECK_FAILED ? poll.readFailedChecks : headChecksFor,
   );
 }
 
@@ -520,7 +518,7 @@ const pollClaimed = /* @__PURE__ */ Effect.fnUntraced(function* (
       claimed,
       eveFor,
       now,
-      readChecks: yield* checksReadOnce,
+      readFailedChecks: yield* failedChecksReadOnce,
     };
     return yield* pollPullRequest(poll).pipe(
       Effect.catchTag("TokenRefused", () => Effect.as(member.markInvalid, 0)),
