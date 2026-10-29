@@ -59,9 +59,13 @@ const CORNER_TOKEN = {
 const CARD =
   "relative flex rounded-control flex-col gap-tight-gap border border-border-strong bg-background px-list-inset py-row-inset";
 
-/** The detail's frame, over the list it opened from, at its full size. */
+/**
+ * The detail's frame, over the list it opened from: in the list's own grid
+ * cell, so it stands at least as tall as the list and the stage grows to
+ * hold a detail taller than the list, a one-card list's among them.
+ */
 const DETAIL =
-  "absolute inset-0 flex rounded-card flex-col gap-field-gap overflow-clip border border-border-strong bg-background p-card-snug shadow-toast";
+  "relative z-1 col-start-1 row-start-1 flex rounded-card flex-col gap-field-gap overflow-clip border border-border-strong bg-background p-card-snug shadow-toast";
 
 /** One card: what it is called, a line under it, and what its detail says. */
 export interface ExpandingCard {
@@ -258,8 +262,11 @@ export function ExpandingCards({
   const shown = cards.find((card) => card.id === opened);
   return (
     <SpringScope>
-      <div ref={stage} className="relative">
-        <ul className="m-0 flex list-none flex-col gap-list-gap p-0" inert={shown !== undefined}>
+      <div ref={stage} className="grid">
+        <ul
+          className="col-start-1 row-start-1 m-0 flex list-none flex-col gap-list-gap p-0"
+          inert={shown !== undefined}
+        >
           {cards.map((card) => (
             <li key={card.id}>
               <CardRow card={card} timing={timing} onOpen={open} />
