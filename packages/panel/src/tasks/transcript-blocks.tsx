@@ -1645,8 +1645,10 @@ export function TranscriptSubagent({
   );
 }
 
-/** What the label of a fold's line adds where a call it holds failed. */
-const CALL_FAILED_WORDS = "a call failed";
+/** What a fold's line says beside its failed mark: how many of the calls it holds failed. */
+function failedWords(failed: number): string {
+  return `${failed} failed`;
+}
 
 /**
  * A line that folds the rows beneath it: a run of calls, or a finished
@@ -1656,10 +1658,12 @@ const CALL_FAILED_WORDS = "a call failed";
  * fold's chevron in a row's icon column, as the plan's card does at its
  * head, because its count already says what it holds, so what is left to
  * say is whether it is open, and an icon of its own would read as one more
- * of the calls it opens onto. Where a call it holds failed, the line wears
- * that call's failed mark after its count, open or closed, as an editor's
- * tree marks a folder holding a file with problems either way, so a
- * failure is never folded out of sight, and its label says a call failed.
+ * of the calls it opens onto. Where calls it holds failed, the line wears
+ * the failed mark after its count, open or closed, as an editor's tree
+ * marks a folder holding a file with problems either way, so a failure is
+ * never folded out of sight, and says beside the mark in the danger ink how
+ * many failed ("2 failed"), so the mark is never left for a reader to read
+ * alone; its label says the same.
  */
 function TurnFold({
   summary,
@@ -1670,15 +1674,20 @@ function TurnFold({
 }: {
   summary: string;
   running: boolean;
-  failed: boolean;
+  failed: number;
   open?: boolean;
   children: ReactNode;
 }): ReactNode {
   return (
     <Disclosure defaultOpen={open} data-turn-fold="">
-      <DisclosureSummary aria-label={failed ? `${summary}, ${CALL_FAILED_WORDS}` : undefined}>
+      <DisclosureSummary aria-label={failed > 0 ? `${summary}, ${failedWords(failed)}` : undefined}>
         {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
-        {failed ? <ToolStateMark state={TOOL_STATE.OUTPUT_ERROR} /> : null}
+        {failed > 0 ? (
+          <span className="inline-flex items-center gap-tight-gap text-destructive">
+            <ToolStateMark state={TOOL_STATE.OUTPUT_ERROR} />
+            <span>{failedWords(failed)}</span>
+          </span>
+        ) : null}
       </DisclosureSummary>
       <DisclosureBody>{children}</DisclosureBody>
     </Disclosure>
