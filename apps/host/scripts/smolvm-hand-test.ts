@@ -7,9 +7,10 @@
  * beside it, then drives the launcher exactly as the follower does: the VM
  * made and started, the runner run through `machine exec -i` with a secret
  * handed by name, its stdin streamed line by line, a command run in the VM
- * as a tool's would be, the runner signalled and given its grace, the VM
- * stopped, and deleted with the token kept for it. Each check prints PASS or
- * FAIL, and the script exits 1 where any failed.
+ * as a tool's would be, the runner signalled and given its grace, and the
+ * turn's VM deleted with the token kept for it; then a second turn's VM made
+ * fresh over the same folder, and deleted as a discard deletes it. Each
+ * check prints PASS or FAIL, and the script exits 1 where any failed.
  *
  *   pnpm --filter @luke/host-daemon hand-test:smolvm [-- --github owner/repo]
  *
@@ -298,12 +299,28 @@ const handTest = Effect.gen(function* () {
   check("it got the signal, not a kill", existsSync(path.join(folder, "tmp", "sigterm")));
   yield* Effect.ignore(runner.kill({ forceKillAfter: GRACE }));
 
-  // The turn's end stops the VM, which starts again for the next; a discard deletes it.
-  yield* box.stopped(agentId);
-  check("the VM starts again after its turn's stop", yield* box.woken(agentId));
+  // The turn's end deletes its VM and the token kept for it; the next turn makes one fresh over the same folder, and a discard deletes that one.
+  const stands = Effect.map(
+    output(SMOLVM, ["machine", "status", "--name", `luke-${agentId}`, "--json"]),
+    (status) => status.code === 0,
+  );
+  const credentials = path.join(root, "state", "sandboxes", agentId);
+  check("the turn's end deletes the VM", (yield* box.deleted(agentId)) && !(yield* stands));
+  check("and the token kept for it", !existsSync(credentials));
+  check("the agent's folder stays for its next turn", existsSync(file));
+  if (token !== undefined) yield* box.githubToken(agentId, token);
+  const nextAt = Date.now();
+  const next = yield* Effect.exit(box.started({ agentId, folder, github: token !== undefined }));
+  check(
+    "the next turn makes a fresh VM",
+    Exit.isSuccess(next) && (yield* stands),
+    `${((Date.now() - nextAt) / 1000).toFixed(1)} s`,
+  );
+  const kept = yield* inVm("cat", ["written-in-vm"]);
+  check("which sees what the turn before wrote in the folder", kept.printed === "from-the-vm");
   yield* box.deleted(agentId);
-  check("a discard deletes the VM", !(yield* box.woken(agentId)));
-  check("and the token kept for it", !existsSync(path.join(root, "state", "sandboxes", agentId)));
+  check("a discard deletes the VM", !(yield* stands));
+  check("and the token kept for it", !existsSync(credentials));
   check("the agent's folder is left for the follower to remove", existsSync(folder));
 
   process.stdout.write(

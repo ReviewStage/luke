@@ -69,6 +69,7 @@ import {
   keepOwnedAgent,
   type LocalAgentState,
   localAgentDeviceOf,
+  ownedAgents,
   readLocalAgentState,
   writeLocalAgentState,
 } from "./local-agent-state.js";
@@ -106,7 +107,7 @@ import type { RunMode } from "./run-mode.js";
  * lost, so it is settled as a runner gone. A launch makes the agent's own
  * repository under its folder (`deviceAgentLayout`) where it has none,
  * through the platform's script,
- * has the agent's VM made and started, sets in the repository, inside the
+ * has a fresh VM made for the agent and started, sets in the repository, inside the
  * VM, who the agent's commits are by where the line says, as a cloud
  * checkout sets it (`@luke/features/checkout-identity`), and starts the
  * runner in it, with
@@ -114,10 +115,10 @@ import type { RunMode } from "./run-mode.js";
  * argument, or a log, and its first lines on its stdin; its line is settled
  * with the runner's exit code once it exits. A message or retune line is
  * written to the running runner's stdin; a files line writes its files under
- * the agent's folder; a stop line ends the runner; a discard line ends it,
- * deletes its VM, and removes the agent's folder with everything in it,
- * unless the platform's check of the worktree finds work there that is
- * nowhere else (a Mac's does, a host's names none); a line of a kind it
+ * the agent's folder; a stop line ends the runner; a discard line ends it
+ * and removes the agent's folder with everything in it, unless the
+ * platform's check of the worktree finds work there that is nowhere else (a
+ * Mac's does, a host's names none); a line of a kind it
  * does not know is settled untouched. A launch whose repository or VM could
  * not be made is settled as not started, and the runner never starts. A
  * launch or files line keeps the agent as one whose folder and VM this
@@ -125,11 +126,16 @@ import type { RunMode } from "./run-mode.js";
  * forgets it, so an uninstall removes this machine's agents and no other
  * Luke install's beside it.
  *
- * The VM (`LocalAgentPlatformSeam.sandbox`) is made and started before the
- * runner starts in it; the runner is signalled in it before its command is
- * killed, since killing it would end the runner with no signal at all; it
- * stops once the runner has ended, whatever ended it; and it is deleted
- * before a discard removes the agent's folder. The runner runs on the VM's
+ * A VM (`LocalAgentPlatformSeam.sandbox`) lives for one turn. It is made
+ * fresh and started before the runner starts in it; the runner is
+ * signalled in it before its command is killed, since killing it would end
+ * the runner with no signal at all; and once the runner has ended, whatever
+ * ended it, the turn is let go of in one step (`turnLetGo`): the VM is
+ * deleted with the GitHub token kept for it, and the folder's `tmp`
+ * emptied, while the rest of the folder stays for the next turn, whose
+ * fresh VM mounts it and whose runner resumes the harness's session from
+ * it. A discard deletes any VM still standing before it removes the
+ * agent's folder. The runner runs on the VM's
  * own Node, Claude Code and Codex, which the device registers. For an agent
  * working in a repository, the device asks the service for an installation
  * token before the repository is made, and again once the last is
@@ -138,8 +144,9 @@ import type { RunMode } from "./run-mode.js";
  * and a sleeping machine stretches a long wait but not the hour; it hands
  * it to the sandbox, which keeps
  * it outside every folder the VM mounts, so the agent only ever sees a
- * placeholder. The check of its folder for unsaved work runs in the VM
- * rather than on the device, since the worktree is the agent's to rig.
+ * placeholder. The check of its folder for unsaved work runs in a VM made
+ * for the check and deleted after it, rather than on the device, since the
+ * worktree is the agent's to rig.
  *
  * Agents on This Mac ran directly on it before every agent ran in a VM
  * (`LocalAgentPlatformSeam.formerlyDirect`), so there the host keeps how
@@ -153,10 +160,15 @@ import type { RunMode } from "./run-mode.js";
  * Every launch this device claimed is kept in the host's state by its
  * line's id and its agent's, no secret beside it, until the service takes
  * its settle. A launch still kept as the gate opens had its runner end with
- * the app, or with the gate, so its agent's VM is stopped where it still
- * runs and it is settled with no exit code, which the service reads as a
- * runner gone: the agent's turn in flight is settled lost, and its next
- * message relaunches the runner on the harness's session.
+ * the app, or with the gate, so its turn is let go of as any turn's end is,
+ * its agent's VM deleted, and it is settled with no exit code, which the
+ * service reads as a runner gone: the agent's turn in flight is settled
+ * lost, and its next message relaunches the runner on the harness's
+ * session. No runner runs as the gate opens, so every VM still standing
+ * then of an agent this machine made (`ownedAgents`) is one a run that died
+ * left, and is deleted too. A VM of an agent this machine did not make is
+ * never touched, since This Mac and a Mac's own `luke-host` share the
+ * user's smolvm store.
  *
  * The service's list of the device's open launches is what the device
  * runs: every beat answers it (`DeviceAgentBeat`), and the device converges
@@ -199,8 +211,8 @@ const UNSAVED_UNKNOWN = "its worktree could not be checked for work not saved el
 const REREAD = Duration.seconds(2);
 /** How many beats in a row a kept launch the service no longer lists must have its settle refused before it is let go of as a line long gone; one only hidden by a stop queued after it is taken well before. */
 const GONE_AFTER_REFUSALS = 4;
-/** How many more times a kept launch's VM that a restart could not stop is stopped again, a beat apart, before its launch is settled regardless, since a VM already gone refuses every stop. */
-const VM_STOP_TRIES = 4;
+/** How many more times a kept launch's VM that could not be deleted is deleted again, a beat apart, before its launch is settled regardless. */
+const VM_DELETE_TRIES = 4;
 /** How a claim the service did not answer is asked again, well inside its own claim window. */
 const CLAIM_RETRY = { every: Duration.seconds(1), times: 5 } as const;
 /** How long a runner's group has to end after SIGTERM before it is sent SIGKILL. */
@@ -367,8 +379,8 @@ export function composeLocalAgents(
             ),
           );
 
-    /** The kept launches whose VM a restart could not stop, by line id, with how many more times a beat stops it again before they are settled regardless. */
-    const unstopped = new Map<string, number>();
+    /** The kept launches whose VM could not be deleted as their turn ended, by line id, with how many more times a beat deletes it again before they are settled regardless. */
+    const undeleted = new Map<string, number>();
 
     const keepLaunch = (userId: string, id: string, agentId: string) =>
       updateState((current) => ({
@@ -410,6 +422,39 @@ export function composeLocalAgents(
           ...current,
           launches: current.launches.filter((launch) => launch.id !== id),
         }));
+      });
+
+    // -- a turn's end ------------------------------------------------------------
+
+    /**
+     * The agent's `tmp` emptied, where its folder stands: taken away whole
+     * and made again rather than emptied entry by entry, since a link the
+     * agent left there would lead a walk out of its folder, and a removal
+     * takes a link away without following it.
+     */
+    const tempEmptied = (layout: DeviceAgentLayout) =>
+      Effect.gen(function* () {
+        if (!(yield* fileSystem.exists(layout.folder))) return;
+        yield* fileSystem.remove(layout.temp, { recursive: true, force: true });
+        yield* fileSystem.makeDirectory(layout.temp, { recursive: true, mode: 0o700 });
+      }).pipe(Effect.ignore);
+
+    /**
+     * The end of one of the agent's turns, under the home folder given, once
+     * nothing holds its VM: a runner that ended, whatever ended it, a check
+     * of its folder between turns, or a run that died with the app or the
+     * gate; whether its VM is gone. A VM lives for one turn, so it is deleted
+     * with the GitHub token kept for it, and the folder's `tmp` is emptied;
+     * the rest of the folder, its repository, home and caches, stays for the
+     * agent's next turn. Note that this is the one step between a runner's
+     * end and its VM's delete, so whatever a turn's end must still do in its
+     * VM goes here, before the delete.
+     */
+    const turnLetGo = (folder: string, agentId: string) =>
+      Effect.gen(function* () {
+        const gone = yield* platform.sandbox.deleted(agentId);
+        yield* tempEmptied(deviceAgentLayout(folder, agentId));
+        return gone;
       });
 
     // -- the gate --------------------------------------------------------------
@@ -570,7 +615,7 @@ export function composeLocalAgents(
         /** The runners a beat stops, since the service no longer holds the device to their launches. */
         const stopping = yield* FiberSet.make();
 
-        /** The lock over the agent's VM's start and stop, one per agent, so one agent's slow start holds up no other's. */
+        /** The lock over the agent's VM's start and delete, one per agent, so one agent's slow start holds up no other's. */
         const vmLockOf = (agentId: string) => {
           const kept = vmLocks.get(agentId);
           if (kept !== undefined) return kept;
@@ -582,12 +627,13 @@ export function composeLocalAgents(
         /**
          * The agent's VM started by `start` and held for as long as the scope
          * it is run in stands, by its runner or by a check of its folder
-         * between turns; whether it stands. The last hold let go of stops the
-         * VM, so a check between turns never leaves it running, and never
-         * stops it under a runner. A VM a discard deleted is held by nothing.
-         * Where a runner's launch (`lineId`) holds it and the stop fails, the
-         * launch joins `unstopped`, so a beat stops it again before the
-         * launch is settled.
+         * between turns; whether it stands. The last hold let go of ends the
+         * turn (`turnLetGo`), which deletes the VM, so a check between turns
+         * never leaves one standing, and none is deleted under a runner. A VM
+         * a discard deleted is held by nothing. Where a runner's launch
+         * (`lineId`) holds it and the delete fails, the launch joins
+         * `undeleted`, so a beat deletes it again before the launch is
+         * settled.
          */
         const vmHeld = <E, R>(
           agentId: string,
@@ -612,9 +658,9 @@ export function composeLocalAgents(
                     if (held === undefined) return;
                     if (held > 1) return vmHolds.set(agentId, held - 1);
                     vmHolds.delete(agentId);
-                    if (yield* platform.sandbox.stopped(agentId)) return;
-                    if (lineId !== undefined) unstopped.set(lineId, VM_STOP_TRIES);
-                    report("a local agent's VM could not be stopped");
+                    if (yield* turnLetGo(folder, agentId)) return;
+                    if (lineId !== undefined) undeleted.set(lineId, VM_DELETE_TRIES);
+                    report("a local agent's VM could not be deleted");
                   }),
                 )
                 .pipe(Effect.provideContext(services)),
@@ -644,8 +690,8 @@ export function composeLocalAgents(
           Effect.gen(function* () {
             yield* keepLaunch(userId, id, agentId);
             const ending = { exitCode: NOT_STARTED, refusal };
-            // Note that a launch whose VM would not stop as its start was given up stays kept with how it ended, which every beat stops again before it settles (`vmLetGo`).
-            if (unstopped.has(id)) return void endings.set(id, ending);
+            // Note that a launch whose VM could not be deleted as its start was given up stays kept with how it ended, which every beat deletes again before it settles (`vmLetGo`).
+            if (undeleted.has(id)) return void endings.set(id, ending);
             yield* settledLaunch(id, ending);
           });
 
@@ -888,13 +934,13 @@ export function composeLocalAgents(
               // Note that how it ended is kept before the runner is let go of, so a beat that settles it first carries its exit code.
               endings.set(line.id, ending);
               runners.delete(agentId);
-              // Note that the launch is starting again while its scope closes, since the VM's stop outlasts a beat and no beat may settle the launch before it has said whether the stop failed.
+              // Note that the launch is starting again while its scope closes, since the VM's delete outlasts a beat and no beat may settle the launch before it has said whether the delete failed.
               starting.add(line.id);
               yield* Scope.close(runnerScope, Exit.void).pipe(
                 Effect.ensuring(Effect.sync(() => starting.delete(line.id))),
               );
-              // Note that a launch whose VM would not stop stays kept, which every beat stops again before it settles (`vmLetGo`).
-              if (unstopped.has(line.id)) return;
+              // Note that a launch whose VM could not be deleted stays kept, which every beat deletes again before it settles (`vmLetGo`).
+              if (undeleted.has(line.id)) return;
               yield* settledLaunch(line.id, ending);
             }).pipe(Effect.forkIn(agentScope));
             runners.set(agentId, { lineId: line.id, stdin, handle, exited });
@@ -904,11 +950,12 @@ export function composeLocalAgents(
          * Why the agent's folder holds work a discard would lose, as the
          * platform's check says it; none where the platform names no check or
          * the check finds nothing. Where the agent ran in a VM (`vm`), the
-         * check runs there, woken for it, and never on the device, whose own
-         * git a repository the agent rigged could make run anything; a VM
-         * that cannot be woken leaves the folder unchecked. A check that
-         * fails, outlasts `UNSAVED_CHECK`, or cannot start is taken as work,
-         * since the folder may hold the only copy.
+         * check runs in a fresh one made for it, since none stands between
+         * turns, which is deleted once the check is done, and never on the
+         * device, whose own git a repository the agent rigged could make run
+         * anything; a VM that cannot be made leaves the folder unchecked. A
+         * check that fails, outlasts `UNSAVED_CHECK`, or cannot start is taken
+         * as work, since the folder may hold the only copy.
          */
         const unsavedWork = (
           agentId: string,
@@ -920,7 +967,13 @@ export function composeLocalAgents(
             const script = platform.unsavedWorkScript({ worktree: layout.checkoutPath });
             return yield* Effect.scoped(
               Effect.gen(function* () {
-                if (vm !== undefined && !(yield* vmHeld(agentId, vm.woken(agentId)))) {
+                // Note that the check reaches no remote, so its VM is made with no GitHub token.
+                const made = (sandbox: LocalAgentSandbox) =>
+                  sandbox.started({ agentId, folder: layout.folder, github: false }).pipe(
+                    Effect.as(true),
+                    Effect.orElseSucceed(() => false),
+                  );
+                if (vm !== undefined && !(yield* vmHeld(agentId, made(vm)))) {
                   return (yield* fileSystem.exists(layout.checkoutPath))
                     ? Option.some(UNSAVED_UNKNOWN)
                     : Option.none<string>();
@@ -957,8 +1010,8 @@ export function composeLocalAgents(
         /**
          * The runner given stopped and its exit waited for, so its line is
          * settled first. It is signalled in its VM first, since killing its
-         * command would end it with no signal at all; its VM stops once it
-         * has ended.
+         * command would end it with no signal at all; its turn is let go of,
+         * its VM deleted, once it has ended.
          */
         const ended = (agentId: string, runner: Runner) =>
           Effect.gen(function* () {
@@ -1235,33 +1288,34 @@ export function composeLocalAgents(
         const refusedUnlisted = new Map<string, number>();
 
         /**
-         * The VM of a kept launch a restart could not stop, stopped again
-         * unless its agent runs or holds it now, which stops it in turn;
-         * whether its launch may be settled: once it stopped, or once
-         * `VM_STOP_TRIES` more stops failed, which is said.
+         * The VM of a kept launch that could not be deleted as its turn
+         * ended, its turn let go of again unless its agent runs or holds a
+         * VM now, whose own end deletes it in turn; whether its launch may be
+         * settled: once the VM is gone, or once `VM_DELETE_TRIES` more
+         * deletes failed, which is said.
          */
         const vmLetGo = (id: string, agentId: string) =>
           vmLockOf(agentId).withPermit(
             Effect.gen(function* () {
-              const triesLeft = unstopped.get(id) ?? 0;
+              const triesLeft = undeleted.get(id) ?? 0;
               const held = runners.has(agentId) || vmHolds.has(agentId);
-              if (!held && triesLeft > 0 && !(yield* platform.sandbox.stopped(agentId))) {
-                unstopped.set(id, triesLeft - 1);
+              if (!held && triesLeft > 0 && !(yield* turnLetGo(folder, agentId))) {
+                undeleted.set(id, triesLeft - 1);
                 return false;
               }
               if (!held && triesLeft === 0) {
                 report(
-                  "a local agent's VM left running could not be stopped, so its launch was settled regardless",
+                  "a local agent's VM left standing could not be deleted, so its launch was settled regardless",
                 );
               }
-              unstopped.delete(id);
+              undeleted.delete(id);
               return true;
             }),
           );
 
         /**
          * Every kept launch of the account's whose runner ended, settled
-         * again with how it ended, a VM a restart could not stop stopped
+         * again with how it ended, a VM that could not be deleted deleted
          * first; let go of where the service took it, or where its answer
          * (`open`) no longer listed it and its settle was refused on
          * `GONE_AFTER_REFUSALS` beats in a row, since a line long settled
@@ -1276,7 +1330,7 @@ export function composeLocalAgents(
                 launch.userId === userId && !running.has(launch.id) && !starting.has(launch.id),
             );
             for (const launch of pending) {
-              if (unstopped.has(launch.id) && launch.agentId !== undefined) {
+              if (undeleted.has(launch.id) && launch.agentId !== undefined) {
                 if (!(yield* vmLetGo(launch.id, launch.agentId))) continue;
               }
               const ending = endings.get(launch.id);
@@ -1379,7 +1433,8 @@ export function composeLocalAgents(
      * One turn of the loop: with the gate shut, a rest; with it open, the
      * machine's lease taken, the device registered, every launch it kept
      * from a runner that ended with the app or the gate settled as gone, its
-     * VM stopped first, and
+     * VM deleted first, every VM this machine's agents left standing
+     * deleted, and
      * the account's agents followed until the gate shuts or the account
      * changes, when the follow's scope closes, every runner it started is
      * stopped with its group, and the lease is given back.
@@ -1397,7 +1452,7 @@ export function composeLocalAgents(
       Effect.gen(function* () {
         const lost = yield* leased;
         if (Option.isNone(lost)) return yield* Effect.sleep(IDLE);
-        // Note that a lease lost to another follower ends the turn wherever it stands, its setup's retries and the kept launches' recovery among it, so nothing of this follower's registers or stops a VM once another holds the machine, and the follow ends with every runner it started.
+        // Note that a lease lost to another follower ends the turn wherever it stands, its setup's retries and the kept launches' recovery among it, so nothing of this follower's registers or deletes a VM once another holds the machine, and the follow ends with every runner it started.
         yield* Effect.race(underLease(userId, folder), lost.value);
       });
 
@@ -1427,12 +1482,18 @@ export function composeLocalAgents(
         if (!(yield* asked(registered({})))) return yield* Effect.sleep(IDLE);
         const left = (yield* Ref.get(state)).launches.filter((launch) => launch.userId === userId);
         for (const launch of left) {
-          // Note that a runner that ended with the app may have left its VM running, so its launch is settled only once its VM stopped, which a beat tries again (`vmLetGo`).
-          if (launch.agentId !== undefined && !(yield* platform.sandbox.stopped(launch.agentId))) {
-            unstopped.set(launch.id, VM_STOP_TRIES);
+          // Note that a runner that ended with the app left its VM standing, so its launch is settled only once its turn is let go of, which a beat tries again (`vmLetGo`).
+          if (launch.agentId !== undefined && !(yield* turnLetGo(folder, launch.agentId))) {
+            undeleted.set(launch.id, VM_DELETE_TRIES);
             continue;
           }
           if (yield* asked(client.settleLine(deviceId, launch.id))) yield* forgetLaunch(launch.id);
+        }
+        // Note that no runner runs yet, so a VM of any agent this machine made is a leftover; the agents of another Luke install sharing the smolvm store are never named here.
+        const kept = new Set(left.flatMap((launch) => launch.agentId ?? []));
+        for (const agentId of yield* ownedAgents(kernel.stateRoot)) {
+          if (kept.has(agentId) || (yield* turnLetGo(folder, agentId))) continue;
+          report("a VM a local agent's run left standing could not be deleted");
         }
         yield* Effect.scoped(follow(userId, deviceId, folder, shellVariables));
       });
