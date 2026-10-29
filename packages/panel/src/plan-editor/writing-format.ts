@@ -19,6 +19,8 @@ import {
   type WritingBlock,
   type WritingMark,
 } from "@luke/settings/shortcuts";
+import { clipsAround, cutTo } from "@luke/ui/clip-room";
+import { visibleViewport } from "@luke/ui/visible-viewport";
 import { type AnyExtension, type ChainedCommands, type Editor, Extension } from "@tiptap/core";
 import { keydownHandler } from "@tiptap/pm/keymap";
 import type { ResolvedPos } from "@tiptap/pm/model";
@@ -116,7 +118,14 @@ function formatOf(editor: Editor): EditorFormat {
   };
 }
 
-/** Where the selected words stand in the window, every line of them; none where they cannot be measured. */
+/**
+ * Where the selected words stand in the window, as much of every line of
+ * them as can be seen; none where they cannot be measured. Note that the
+ * box is held inside what the editor shows, the window cut to the editor's
+ * own scroller and each box that clips it, because words selected past a
+ * scroller's edge, all of a long draft say, would stand the toolbar by
+ * lines no one can see.
+ */
 function selectionBox(editor: Editor): EditorBox | undefined {
   const { view, state } = editor;
   try {
@@ -125,8 +134,15 @@ function selectionBox(editor: Editor): EditorBox | undefined {
     const range = document.createRange();
     range.setStart(start.node, start.offset);
     range.setEnd(end.node, end.offset);
-    const { left, top, right, bottom } = range.getBoundingClientRect();
-    return { left, top, right, bottom };
+    const words = range.getBoundingClientRect();
+    const seen = cutTo(visibleViewport(), [view.dom, ...clipsAround(view.dom)]);
+    const held = (at: number, low: number, high: number) => Math.min(Math.max(at, low), high);
+    return {
+      left: held(words.left, seen.left, seen.right),
+      top: held(words.top, seen.top, seen.bottom),
+      right: held(words.right, seen.left, seen.right),
+      bottom: held(words.bottom, seen.top, seen.bottom),
+    };
   } catch {
     // Note that a position the view cannot find in its own nodes measures nothing.
     return undefined;
