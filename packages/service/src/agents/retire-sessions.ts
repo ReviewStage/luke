@@ -3,7 +3,7 @@ import {
   type StandingSession,
   standingSessionsNamed,
 } from "@luke/database/models/recorded-session";
-import { isAgentConversationKind } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { Duration, Effect, Option, Ref, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { type HostedRefusal, hostedCarriesBearer } from "../http/http-effect.js";
@@ -126,7 +126,7 @@ export function retireSessions(
 ): Effect.Effect<void, never, HttpClient.HttpClient | DatabaseServices> {
   return Effect.gen(function* () {
     const settled = yield* Ref.make(0);
-    const agents = sessions.filter((session) => isAgentConversationKind(session.kind));
+    const agents = sessions.filter((session) => session.kind === CONVERSATION_KIND.AGENT);
     const all = Effect.forEach(
       agents,
       (session) =>

@@ -64,7 +64,6 @@ import { organization, user } from "../schemas/auth.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import {
-  AGENT_CONVERSATION_KINDS,
   CONVERSATION_KIND,
   CONVERSATION_RUNTIME,
   type ConversationRuntime,
@@ -1300,7 +1299,7 @@ const findRunnerTokenConversation = SqlSchema.findOneOption({
         .where(
           and(
             eq(agentTable.runnerTokenHash, runnerTokenHash),
-            inArray(conversations.kind, AGENT_CONVERSATION_KINDS),
+            eq(conversations.kind, CONVERSATION_KIND.AGENT),
             isNull(conversations.deletedAt),
           ),
         )

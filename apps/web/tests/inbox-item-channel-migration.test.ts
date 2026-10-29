@@ -6,7 +6,6 @@ import { MIGRATIONS_FOLDER, runWebMigrations } from "@luke/database/core/migrato
 import { Database } from "@luke/database/core/query";
 import { ensureGeneralChannel } from "@luke/database/models/channel-store";
 import { user } from "@luke/database/schemas/auth";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { openWorkspace, unmigratedPgliteSqlClient } from "@luke/database/testing";
 import { postInboxThread } from "@luke/service/inbox/inbox-store";
 import { Effect, Layer, Result } from "effect";
@@ -40,11 +39,19 @@ const foldersBefore = Effect.gen(function* () {
   return folder;
 });
 
+/** The agent's table and conversation kind before the rename to `agent`, and after it. */
+const BEFORE_RENAME = { table: "coding_agent", kind: "coding_agent" };
+const AFTER_RENAME = { table: "agent", kind: "agent" };
+
 const openUser = (id: string) =>
   Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@luke.test` }));
 
-/** A task and its agent in the account's new workspace, written as the schema of then holds them, since the store writes columns later migrations add. */
-const openAgent = (userId: string) =>
+/**
+ * A task and its agent in the account's new workspace, written as the schema of then holds them,
+ * since the store writes columns later migrations add; under the agent tables' names of before
+ * their rename, or of today's.
+ */
+const openAgent = (userId: string, names: { table: string; kind: string } = BEFORE_RENAME) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const workspaceId = yield* openWorkspace(userId);
@@ -52,8 +59,8 @@ const openAgent = (userId: string) =>
     yield* sql`insert into task (id, user_id, organization_id, name, document, number) values (${taskId}, ${userId}, ${workspaceId}, 'Teammate invitations', '', 1)`;
     const agentId = randomUUID();
     const conversationId = randomUUID();
-    yield* sql`insert into conversations (id, user_id, kind) values (${conversationId}, ${userId}, ${CONVERSATION_KIND.CODING_AGENT})`;
-    yield* sql`insert into coding_agent (id, task_id, organization_id, user_id, conversation_id, model, effort, plan_snapshot, repository, idempotency_key)
+    yield* sql`insert into conversations (id, user_id, kind) values (${conversationId}, ${userId}, ${names.kind})`;
+    yield* sql`insert into ${sql(names.table)} (id, task_id, organization_id, user_id, conversation_id, model, effort, plan_snapshot, repository, idempotency_key)
       values (${agentId}, ${taskId}, ${workspaceId}, ${userId}, ${conversationId}, 'anthropic/claude-opus-5.5', 'high', '# Teammate invitations', 'acme/relay', ${randomUUID()})`;
     return { workspaceId, taskId, agentId };
   });
@@ -94,7 +101,7 @@ it.effect(
           yield* ensureGeneralChannel(charless.workspaceId, now),
         ]);
 
-        const since = yield* openAgent("dean");
+        const since = yield* openAgent("dean", AFTER_RENAME);
         const posted = yield* postInboxThread(
           { userId: "dean", taskId: since.taskId, agentId: since.agentId },
           { key: "invite-copy", title: "Invitations shipped", body: "They go out on sign-up." },

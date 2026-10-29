@@ -1,25 +1,11 @@
-/** What a conversation is to the agent: its main one, an observed session's, a child's, or a coding agent's own. */
+/** What a conversation is to the agent: its main one, an observed session's, a child's, or an agent's own. */
 export const CONVERSATION_KIND = {
   MAIN: "main",
   OBSERVED: "observed",
   CHILD: "child",
-  /** An agent's transcript as a release before the rewrite to `agent` stored it, read beside `agent` until no release writes it. */
-  CODING_AGENT: "coding_agent",
   /** An agent's transcript: its `messages` rows are what the agent tab shows and its latest turn is its status. */
   AGENT: "agent",
 } as const;
-
-/**
- * Both spellings of an agent's conversation. Note that every reader takes
- * both, because the release before this one still writes `coding_agent`
- * while it serves beside this one, after the stored rows are rewritten.
- */
-export const AGENT_CONVERSATION_KINDS = [CONVERSATION_KIND.CODING_AGENT, CONVERSATION_KIND.AGENT];
-
-/** Whether a conversation's kind is an agent's own, in either spelling. */
-export function isAgentConversationKind(kind: string): boolean {
-  return kind === CONVERSATION_KIND.CODING_AGENT || kind === CONVERSATION_KIND.AGENT;
-}
 
 /**
  * What answers a conversation's turns: eve, or a provider's own coding

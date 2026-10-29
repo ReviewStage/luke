@@ -5,7 +5,12 @@ import { it } from "@effect/vitest";
 import { MIGRATIONS_FOLDER, runWebMigrations } from "@luke/database/core/migrator";
 import { Database } from "@luke/database/core/query";
 import { user } from "@luke/database/schemas/auth";
-import { openInboxItem, openWorkspace, unmigratedPgliteSqlClient } from "@luke/database/testing";
+import {
+  openInboxItem,
+  openWorkspace,
+  RENAME_AGENT_TABLES,
+  unmigratedPgliteSqlClient,
+} from "@luke/database/testing";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readStoredUIMessages } from "@luke/wire/ui-messages";
 import { Effect, Layer } from "effect";
@@ -177,7 +182,9 @@ it.effect(
           readonly senderName: string | null;
         }>`select id, role, parts, metadata, sender, sender_name as "senderName" from messages where conversation_id = ${conversationId} order by seq`;
 
-        yield* runWebMigrations();
+        // Note that the run stops short of the agent tables' rename, so a second run of the
+        // vocabulary migration, which names `coding_agent`, meets the schema it was written for.
+        yield* runWebMigrations(yield* foldersUpTo(RENAME_AGENT_TABLES));
 
         const rows = yield* stored;
         assert.deepEqual(
@@ -296,7 +303,9 @@ it.effect(
           readonly senderName: string | null;
         }>`select id, role, parts, metadata, sender, sender_name as "senderName" from messages where conversation_id = ${conversationId} order by seq`;
 
-        yield* runWebMigrations();
+        // Note that the run stops short of the agent tables' rename, so a second run of the
+        // vocabulary migration, which names `coding_agent`, meets the schema it was written for.
+        yield* runWebMigrations(yield* foldersUpTo(RENAME_AGENT_TABLES));
 
         const rows = yield* stored;
         assert.deepEqual(
