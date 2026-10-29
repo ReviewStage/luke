@@ -14,12 +14,12 @@ import { test } from "vitest";
 import { PullRequestLine } from "../desktop/task-card.js";
 import { PublishedRow } from "./agent-published.js";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
-import { ChangesCard } from "./changes-card.js";
+import { PullRequestCard } from "./pull-request-card.js";
 
 /**
  * pull-request-mark.test.ts -- a pull request reads the same wherever the
  * window draws it: a sidebar task's card, the row pinned over its agent's
- * box, and its Changes tab's card each wear one mark saying the words a
+ * box, and its own card each wear one mark saying the words a
  * reader who cannot see it hears.
  */
 
@@ -65,18 +65,21 @@ function places(drawn: AgentPullRequest): ReadonlyMap<string, ReactElement> {
       }),
     ],
     [
-      "Changes card",
-      createElement(ChangesCard, {
-        subject: agentSubject(
-          { agents: [AGENT], archived: [], models: [], me: undefined, pullRequests: new Map() },
-          AGENT.id,
-          NOTHING_HELD,
-          false,
-        ),
-        models: [],
+      "pull request card",
+      createElement(PullRequestCard, {
         pullRequest: drawn,
-        people: undefined,
-        onOpenAgent: ignore,
+        lines: drawn,
+        files: drawn.changedFiles,
+        agent: {
+          subject: agentSubject(
+            { agents: [AGENT], archived: [], models: [], me: undefined, pullRequests: new Map() },
+            AGENT.id,
+            NOTHING_HELD,
+            false,
+          ),
+          models: [],
+          onOpen: ignore,
+        },
       }),
     ],
   ]);

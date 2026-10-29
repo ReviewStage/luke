@@ -316,6 +316,7 @@ async function cardOf(chip: Element | undefined) {
   assert.ok(card, "the chip hangs a card");
   const look = {
     tab: card.matches("[data-tab-card]"),
+    pullRequest: card.matches("[data-pull-request-card]"),
     reading: card.matches("[data-hover-card-skeleton]"),
     led: card.querySelector(".luke-hover-card-lead") !== null,
     actor: card.getAttribute("data-actor-card") ?? undefined,
@@ -556,13 +557,12 @@ test("a pull request's chip off its task's page hangs the card its Pull request 
   const [opened, outside] = container.querySelectorAll("[data-mention-ref]");
 
   const card = await cardOf(opened);
-  assert.equal(card.tab, true, "the chip hangs the Pull request tab's card");
+  assert.equal(card.pullRequest, true, "the chip hangs the pull request's card");
   assert.equal(card.name, "Prorate seats on upgrade");
-  assert.match(card.corner ?? "", /#42/u);
-  assert.match(card.words ?? "", /3 files changed/u);
-  assert.match(card.words ?? "", /Prorate seat changes/u, "it names the agent whose it is");
+  assert.match(card.words ?? "", /in 3 files/u, "it says what the agent's read holds of it");
+  assert.match(card.words ?? "", /By Prorate seat changes/u, "it names the agent whose it is");
   const other = await cardOf(outside);
-  assert.deepEqual([other.tab, other.reading], [false, false]);
+  assert.deepEqual([other.pullRequest, other.reading], [false, false]);
 });
 
 test("while what it shows is read, an agent's chip and a pull request's chip each hang the one reading state, wearing the chip's name", async () => {

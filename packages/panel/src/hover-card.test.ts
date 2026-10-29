@@ -12,17 +12,18 @@ import { TaskCard } from "./desktop/task-card.js";
 import { GLYPH_STATE } from "./state-glyph.js";
 import { agentSubject, NOTHING_HELD } from "./tasks/agent-ref.js";
 import { AgentTabCard, cardCorner } from "./tasks/agent-tab-card.js";
-import { ChangesCard } from "./tasks/changes-card.js";
 import { subagentActor } from "./tasks/coding-agent-model.js";
+import { PullRequestCard } from "./tasks/pull-request-card.js";
 import { SentWords, SkillFiles } from "./tasks/skill-chip.js";
 import type { SkillSource } from "./tasks/skill-picker.js";
+import { PULL_REQUEST_MOMENT } from "./tasks/use-link-standing.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { restOn } from "./testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "./testing/markdown.js";
 
 /**
  * hover-card.test.ts -- every hover card heads itself alike: a task's, a
- * skill's, an agent tab's, and a Changes tab's each name their subject in
+ * skill's, an agent tab's, and a pull request's each name their subject in
  * the one head, with the line under the name and the corner in the same
  * places.
  */
@@ -156,7 +157,7 @@ test("a working agent's card says only how long its run has gone at its corner, 
   );
 });
 
-test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name their subject in the one head, its line and corner in the same places", async () => {
+test("a plan's, a skill's, an agent tab's, and a pull request's cards each name their subject in the one head, its line and corner in the same places", async () => {
   const task = drawn(
     createElement(TaskCard, {
       task: { ...SUMMARY, number: 42 },
@@ -198,42 +199,46 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
   );
   assert.match(agentHead.sub ?? "", /High/u, "the model and effort stand under the name");
 
-  const changes = drawn(
-    createElement(ChangesCard, {
-      subject: agentSubject(
-        {
-          agents: [
-            {
-              id: AGENT,
-              planId: TASK,
-              model: "anthropic/claude-opus-5.5",
-              effort: "high",
-              title: "Invite flow",
-              createdAt: 1,
-              status: AGENT_STATUS.COMPLETED,
-              turnId: null,
-            },
-          ],
-          archived: [],
-          models: [],
-          me: undefined,
-          pullRequests: new Map(),
-        },
-        AGENT,
-        NOTHING_HELD,
-        false,
-      ),
-      models: [],
+  // Note that the pull request's card wears its mark as its glyph and keys itself by its repository, the agent whose it is standing on a row under the head rather than in it.
+  const pullRequest = drawn(
+    createElement(PullRequestCard, {
       pullRequest: PULL_REQUEST,
-      people: undefined,
-      onOpenAgent: () => undefined,
+      lines: PULL_REQUEST,
+      files: PULL_REQUEST.changedFiles,
+      agent: {
+        subject: agentSubject(
+          {
+            agents: [
+              {
+                id: AGENT,
+                planId: TASK,
+                model: "anthropic/claude-opus-5.5",
+                effort: "high",
+                title: "Invite flow",
+                createdAt: 1,
+                status: AGENT_STATUS.COMPLETED,
+                turnId: null,
+              },
+            ],
+            archived: [],
+            models: [],
+            me: undefined,
+            pullRequests: new Map(),
+          },
+          AGENT,
+          NOTHING_HELD,
+          false,
+        ),
+        models: [],
+        onOpen: () => undefined,
+      },
     }),
   );
-  assert.deepEqual(headOf(changes), {
-    glyph: false,
+  assert.deepEqual(headOf(pullRequest), {
+    glyph: true,
     name: "Expire invitations",
-    sub: "Invite flow",
-    corner: "#42",
+    sub: "acme/relay#42 · Open",
+    corner: undefined,
   });
 
   const skills: SkillSource = () =>
@@ -268,6 +273,22 @@ test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name t
     skill.querySelector(".luke-hover-card > .luke-hover-card-note")?.textContent,
     "Cut a release.",
   );
+});
+
+test("a pull request's corner says the age of the moment its state names, and nothing where the service answered only when a merged one was opened", () => {
+  vi.useFakeTimers({ now: STARTED_AT, toFake: ["Date"] });
+  const opened = { moment: PULL_REQUEST_MOMENT.OPENED, at: STARTED_AT - 5 * 86_400_000 };
+  const card = (state: (typeof PULL_REQUEST_STATE)[keyof typeof PULL_REQUEST_STATE]) =>
+    headOf(
+      drawn(
+        createElement(PullRequestCard, {
+          pullRequest: { ...PULL_REQUEST, state, checks: undefined },
+          when: opened,
+        }),
+      ),
+    ).corner;
+  assert.equal(card(PULL_REQUEST_STATE.OPEN), "5d");
+  assert.equal(card(PULL_REQUEST_STATE.MERGED), undefined);
 });
 
 test("a plan's card says under its name when the task last saw activity, its agent's later turn over its plan's save, as its row does", () => {

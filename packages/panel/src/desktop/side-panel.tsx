@@ -99,7 +99,6 @@ import {
   heldLatest,
   lastFinished,
 } from "../tasks/agent-tab-card.js";
-import { peopleOf } from "../tasks/changes-card.js";
 import {
   CloudBrowserDraftPane,
   type CloudBrowserOwner,
@@ -128,6 +127,7 @@ import {
 import { OpenFileTabProvider } from "../tasks/open-file-tab.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { PlanCommentsTab } from "../tasks/plan-comments.js";
+import { peopleOf } from "../tasks/pull-request-card.js";
 import { ofPullRequestTab, pullRequestOfTab } from "../tasks/pull-request-number.js";
 import {
   AgentGlyph,
