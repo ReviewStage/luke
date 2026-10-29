@@ -2994,10 +2994,10 @@ test("⌘K's Automations lists the workspace's automations by name and what fire
   chooseFilter("Automations");
   await settle();
 
-  assert.deepEqual(rows(), ["Deploy notes · When its webhook is called"]);
+  assert.deepEqual(rows(), ["Deploy notes · When its webhook is called · Billing usage alerts"]);
   type("billing");
   await settle();
-  press("Deploy notes · When its webhook is called");
+  press("Deploy notes · When its webhook is called · Billing usage alerts");
   await settle();
   assert.deepEqual(opened, [{ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id }]);
 });

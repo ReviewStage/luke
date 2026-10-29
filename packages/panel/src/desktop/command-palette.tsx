@@ -688,8 +688,16 @@ function inboxNotice(search: InboxSearch, channelsOn: boolean): PaletteNotice | 
     : undefined;
 }
 
-/** What the Automations filter says while the listed workspace's automations have not been pushed, or the first push did not land; nothing once they are. */
-function automationsNotice(read: AutomationsRead, onRetry: () => void): PaletteNotice | undefined {
+/** What the Automations filter says while the listed workspace, or its automations, have not been read, or the first push did not land; nothing once they are, as People says of its members. */
+function automationsNotice(
+  tasks: Pick<TasksControl, "signedIn" | "workspace" | "workspaces" | "listFailed">,
+  read: AutomationsRead,
+  onRetry: () => void,
+): PaletteNotice | undefined {
+  if (tasks.workspace === undefined) {
+    const coming = tasks.signedIn && tasks.workspaces.length === 0 && !tasks.listFailed;
+    return coming ? { kind: PALETTE_NOTICE.READING, line: READING_AUTOMATIONS } : undefined;
+  }
   if (read === undefined) return { kind: PALETTE_NOTICE.READING, line: READING_AUTOMATIONS };
   return "failure" in read
     ? { kind: PALETTE_NOTICE.FAILED, line: AUTOMATIONS_FAILED_LINE, onRetry }
@@ -1099,7 +1107,7 @@ function channelRows(
   }));
 }
 
-/** The listed workspace's automations, each by its name and what fires it, as the Automations page lists it, hanging its card as every place naming one does, which choosing opens on its page; its task's name finds it too. */
+/** The listed workspace's automations, each by its name and what fires it, as the Automations page lists it, then its task's name, hanging its card as every place naming one does, which choosing opens on its page; its task's name finds it too. */
 function automationRows(
   automations: readonly AutomationSummary[],
   workspaceName: string | undefined,
@@ -1110,7 +1118,8 @@ function automationRows(
     return {
       icon: <GLYPH.AUTOMATION />,
       label: automation.name,
-      detail: trigger,
+      // Note that its task's name, which finds it too, is said after what fires it, so a row it found says why.
+      detail: automation.planName === null ? trigger : `${trigger} · ${automation.planName}`,
       card: <AutomationCard automation={automation} workspaceName={workspaceName} />,
       terms: [automation.name, trigger, automation.planName].filter((term) => term !== null),
       onChoose: () => open(automation.id),
@@ -2380,9 +2389,7 @@ export function CommandPalette({
     [PALETTE_FILTER.CHANNELS]: () => undefined,
     [PALETTE_FILTER.PEOPLE]: () => peopleNotice(tasks, membersRead),
     [PALETTE_FILTER.AUTOMATIONS]: () =>
-      automationsAsked && tasks.workspace !== undefined
-        ? automationsNotice(automations.read, automations.reload)
-        : undefined,
+      automationsAsked ? automationsNotice(tasks, automations.read, automations.reload) : undefined,
     [PALETTE_FILTER.FILES]: () =>
       fileQuery === undefined ? undefined : filesNotice(filesOpen, held),
     [PALETTE_FILTER.COMMANDS]: () => undefined,
