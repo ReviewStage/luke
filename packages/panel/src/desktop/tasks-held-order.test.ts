@@ -33,6 +33,7 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
 import { TasksBoard } from "./tasks-board.js";
 import { TasksList } from "./tasks-list.js";
+import { KEPT } from "../act.js";
 
 /**
  * tasks-held-order.test.ts -- the Tasks page's List and Columns hold each
@@ -139,7 +140,7 @@ async function mountView(
       onSetTaskStanding: (taskId, standing, assigneeName) => {
         sent.push([taskId, standing]);
         named.push(assigneeName);
-        return Promise.resolve(true);
+        return Promise.resolve(KEPT);
       },
     });
     const frame = {

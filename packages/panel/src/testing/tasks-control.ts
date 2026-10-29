@@ -24,6 +24,7 @@ import {
   type TasksControl,
   type VersionHistoryControl,
 } from "../tasks/use-tasks-tab.js";
+import { KEPT } from "../act.js";
 
 const ignore = () => undefined;
 
@@ -410,7 +411,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     repositoryMenu: undefined,
     onChangeRepository: ignore,
     onSetRepository: () => Promise.resolve(undefined),
-    onSetTaskStanding: () => Promise.resolve(true),
+    onSetTaskStanding: () => Promise.resolve(KEPT),
     onSetTaskBlock: () => undefined,
     onOpenOnGitHub: ignore,
     onRetryList: ignore,

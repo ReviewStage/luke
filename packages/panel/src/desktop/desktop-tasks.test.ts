@@ -60,6 +60,7 @@ import "../file-tree/index.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
+import { askKept } from "../act.js";
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -1127,7 +1128,7 @@ function standingPageMounted(keeps: boolean) {
               sidePanel: DOCUMENT_PANEL,
               onSetTaskStanding: (_taskId, standing) => {
                 sent.push(standing);
-                return Promise.resolve(keeps);
+                return askKept(Promise.resolve(keeps));
               },
             }),
           }),

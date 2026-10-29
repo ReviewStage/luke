@@ -19,7 +19,7 @@
  * pressed anything.
  */
 
-import { FAILURE_SURFACE, failureAboutOf } from "@luke/features/shown-failure";
+import { FAILURE_CONDITION, FAILURE_SURFACE, failureAboutOf } from "@luke/features/shown-failure";
 import { ACT_UNREACHED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -216,6 +216,15 @@ export const KEPT: Kept = { kept: true };
 /** A write not kept, with what refused it: the answer that said so, or the error the act failed with. */
 export function notKept(cause: unknown): Kept {
   return { kept: false, cause };
+}
+
+/**
+ * A write whose act answers whether it was kept, answered with what refused
+ * it where it was not: the condition, where the act said no and nothing
+ * more, or the error the act failed with.
+ */
+export function askKept(asked: Promise<boolean>): Promise<Kept> {
+  return asked.then((kept) => (kept ? KEPT : notKept(FAILURE_CONDITION.NOT_KEPT)), notKept);
 }
 
 /** What refused the first of several writes that was not kept; nothing where each was kept. */

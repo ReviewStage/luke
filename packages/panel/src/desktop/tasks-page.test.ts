@@ -33,6 +33,7 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
 import { useInboxWaiting } from "./places-waiting.js";
 import { TasksPage } from "./tasks-page.js";
+import { askKept } from "../act.js";
 
 /**
  * tasks-page.test.ts -- the Tasks page the sidebar's Tasks row opens: its List runs the pinned tasks first, then the rest under
@@ -207,7 +208,7 @@ async function mountPage(
       boardView: { open: true, onOpen: () => undefined, onClose: () => (closed += 1) },
       onSetTaskStanding: (taskId, standing) => {
         sent.push([taskId, standing]);
-        return Promise.resolve(keeps);
+        return askKept(Promise.resolve(keeps));
       },
       onMarkTask: (taskId, mark) => marked.push([taskId, mark]),
       onWriteSections: (writes) => written.push(writes),

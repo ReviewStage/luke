@@ -35,6 +35,7 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { TasksBoard } from "./tasks-board.js";
+import { askKept } from "../act.js";
 
 /**
  * tasks-board.test.ts -- the Board lays the listed workspace's tasks out
@@ -174,7 +175,7 @@ async function mountBoard(
     boardView: { open: true, onOpen: () => undefined, onClose: () => (closed += 1) },
     onSetTaskStanding: (taskId, standing) => {
       sent.push([taskId, standing]);
-      return Promise.resolve(keeps);
+      return askKept(Promise.resolve(keeps));
     },
     onRenameTask: (taskId, name) => {
       renamed.push([taskId, name]);
