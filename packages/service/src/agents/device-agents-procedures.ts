@@ -23,10 +23,9 @@
  * machine, and refuses an enroll naming only some of the machine's fields
  * as invalid. A host's every call,
  * the enroll's included, is refused as needing an upgrade where its daemon
- * is below the floor (`auth/device-secret.ts`). Each answers not found,
- * before it touches a row, where the account has the `local-agents`
- * experiment off, and every one but the
- * register where the account holds no such Mac (`agents/device-agent.ts`); a
+ * is below the floor (`auth/device-secret.ts`). Every one but the enrolls
+ * and the register answers not found where the account holds no such Mac
+ * (`agents/device-agent.ts`); a
  * register under an id another account holds writes nothing and answers
  * not found too, and a register keeps only the capabilities this service
  * knows (`DEVICE_CAPABILITY`), so a newer follower's list is never refused.
@@ -56,7 +55,6 @@
  * and its size.
  */
 
-import { accountExperimentOn } from "@luke/database/models/account-store";
 import {
   type AgentStateGeneration,
   commitAgentState,
@@ -79,7 +77,6 @@ import {
   type deviceAgentStateCommitRequestSchema,
 } from "@luke/features/device-agent-wire";
 import { HOST_WIRE, type OwnDeviceEnrollRequest } from "@luke/features/host-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { Clock, Effect, Option, Redacted, Result } from "effect";
 import {
   admittedHostVersion,
@@ -122,15 +119,7 @@ const DONE = { done: true } as const;
 const ownDevice = (caller: DeviceCaller, deviceId: string) =>
   actsForDevice(caller, deviceId) ? Effect.void : Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
 
-/** Not found where the account has the `local-agents` experiment off. */
-const experimentOn = (userId: string) =>
-  Effect.gen(function* () {
-    if (!(yield* hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS)))) {
-      return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    }
-  });
-
-/** The caller's own device under its account's experiment, or not found. */
+/** The caller's own device, or not found. */
 const followed = (caller: DeviceCaller, deviceId: string) =>
   Effect.gen(function* () {
     yield* ownDevice(caller, deviceId);
@@ -236,7 +225,6 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
     }),
     enrollOwn: signedIn.enrollOwn.effect(function* ({ context, input }) {
       const { userId } = context;
-      yield* experimentOn(userId);
       const version = yield* admittedHostVersion(presentedHostVersion(context.request));
       const minted = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
       const machine = yield* enrollingMachine(input);
@@ -254,7 +242,6 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
     register: deviceAgents.register.effect(function* ({ context, input }) {
       yield* ownDevice(context, input.deviceId);
       const { userId } = context;
-      yield* experimentOn(userId);
       const { deviceId, capabilities, ...device } = input;
       const known = Object.values(DEVICE_CAPABILITY).filter((capability) =>
         capabilities?.includes(capability),

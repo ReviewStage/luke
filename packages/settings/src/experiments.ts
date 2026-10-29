@@ -12,8 +12,6 @@ export const EXPERIMENT = {
   MEMORY: "memory",
   /** Luke as the member's operator: one standing agent per workspace that manages their other agents. */
   OPERATOR: "operator",
-  /** Coding agents that run on the developer's own Mac, in a worktree, with their own tools, rather than in a cloud sandbox. */
-  LOCAL_AGENTS: "local-agents",
   /** Channels: a workspace's threads read as Slack-style streams by topic, the sidebar listing channels in place of the Inbox and the tasks. */
   CHANNELS: "channels",
   /** Pilot: a new task can start with one pilot agent that plans the work, splits it into child tasks, and runs a coding agent on each. */
@@ -49,15 +47,6 @@ export const EXPERIMENTS = [
       "and runs a coding agent on each.",
     owner: "Charles",
     since: "2026-10-29",
-  },
-  {
-    key: EXPERIMENT.LOCAL_AGENTS,
-    name: "Local agents",
-    detail:
-      "Run an agent on this Mac, in a worktree, with your own tools. " +
-      "Its transcript and the files its tools read still reach Luke.",
-    owner: "Charles",
-    since: "2026-10-25",
   },
   {
     key: EXPERIMENT.CHANNELS,

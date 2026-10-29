@@ -86,7 +86,7 @@ import {
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-local-agents.ts -- runs on this device the coding agents the account starts on it, each in a VM of its own: their runners started, fed, and stopped as the service's lines say, and their tools' reads and commands answered, for as long as its gate stands (`LocalAgentsDependencies.switchedOn`: the Local agents experiment on a Mac; always on a host).
+ * compose-local-agents.ts -- runs on this device the coding agents the account starts on it, each in a VM of its own: their runners started, fed, and stopped as the service's lines say, and their tools' reads and commands answered, for as long as its gate stands (`LocalAgentsDependencies.switchedOn`: open but while Luke refuses the device, `daemon/host-standing.ts`).
  *
  * The service writes a local agent's work as rows under this device's id
  * (`@luke/features/device-agent-wire`, `contract/device-agents.ts`): lines
@@ -366,7 +366,7 @@ export interface LocalAgentsDependencies {
   accountId: () => string | undefined;
   /** The device id this device enrolled under, where it enrolled one, as a host does; minted once per account and kept otherwise. */
   deviceId?: string | undefined;
-  /** Whether the account's Local agents experiment and Settings › This Mac's switch are both on, read every `IDLE` while the gate is open. */
+  /** Whether the device may ask Luke now, shut while Luke refuses it, read every `IDLE` while the gate is open. */
   switchedOn: Effect.Effect<boolean>;
   client: LocalAgentClient;
 }
@@ -576,7 +576,7 @@ export function composeLocalAgents(
     const asked = <A>(call: Effect.Effect<A, never, HttpClient.HttpClient>) =>
       Effect.provideContext(call, services);
 
-    /** Whether this device runs local agents now: an account signed in, a run that sends, a home folder, and both switches on. */
+    /** Whether this device runs local agents now: an account signed in, a run that sends, a home folder, and its switch on. */
     const gateOpen = Effect.map(
       switchedOn,
       (on) =>

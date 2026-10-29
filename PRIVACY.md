@@ -476,8 +476,8 @@ earlier in its life is not tracked, and its snapshot stays until Vercel lets
 it expire. The sandbox of each session a task's own Luke ran, before tasks
 lost him, is deleted the same way, shortly after his conversation is removed.
 
-**A local agent on your Mac.** For the accounts in the early test of local
-agents, an agent you start on This Mac runs Claude Code, or Codex for a
+**A local agent on your Mac.** Once you turn on This Mac in Settings ›
+Hosts, an agent you start on This Mac runs Claude Code, or Codex for a
 GPT model, on your Mac, each in a virtual machine of its own (smolvm) that sees
 only that agent's folder, and its transcript, its events, and the files its
 tools read still reach our service as any agent's do. It runs on the
@@ -519,21 +519,26 @@ words, and is tried again with the agent's next message. Luke's log on your
 Mac names each save's and each restore's size, digest, generation, and how
 long it took, never what it holds.
 Once a turn's save has landed, your Mac keeps the agent's folder for 15
-minutes, so a message soon after goes on from it, or for less while your
-disk has under a tenth free, then deletes it, and the agent's next turn
-brings its save back. A folder whose save did not land stays until a later
-one does. An agent you archive or delete loses its folder, its machine, and
-its token from your Mac as soon as the archive reaches it, or within minutes
-of your Mac's next being online once our service no longer lists the agent;
-a folder whose save has not landed is saved first where it can be, and one
-that still is not is kept wherever the Mac's check finds work in it that no
-remote has, or cannot tell, for seven days, and then deleted. Only the agents this copy of Luke started are
-ever touched, never another copy's sharing your Mac. To run them, the app
-downloads smolvm from its GitHub release once, keeps it in
-Luke's own folder on your Mac only once it matches the checksum Luke pins,
-checks the files it runs against those checksums again before each use, and
-pulls the public sandbox image our hosts run. An agent that ran directly on
-your Mac before this is not started again; continue it into a new agent.
+minutes, so a message soon after goes on from it, or for less while your disk
+has under a tenth free, then deletes it, and the agent's next turn brings its
+save back. A folder whose save did not land stays until a later one does. An
+agent you archive or delete loses its folder, its machine, and its token from
+your Mac as soon as the archive reaches it, or within minutes of your Mac's
+next being online once our service no longer lists the agent; a folder whose
+save has not landed is saved first where it can be, and one that still is not
+is kept wherever the Mac's check finds work in it that no remote has, or
+cannot tell, for seven days, and then deleted. Only the agents this copy of
+Luke started are ever touched, never another copy's sharing your Mac. Nothing
+of this happens until you turn This Mac on. Turning it on registers a login
+item that runs Luke's host program, `luke-host`, on your Mac at each login,
+whether the app is open or not, and the app keeps it registered from then on;
+removing This Mac in Settings › Hosts stops its agents, and it runs none until
+you turn it on again. To run them, `luke-host` downloads smolvm from its
+GitHub release once, keeps it in Luke's own folder on your Mac only once it
+matches the checksum Luke pins, checks the files it runs against those
+checksums again before each use, and pulls the public sandbox image our hosts
+run. An agent that ran directly on your Mac before this is not started again;
+continue it into a new agent.
 
 **A local agent on a host.** A host is your own Linux server that you add
 to Luke to run your agents, as This Mac does. It has no git login of yours, so

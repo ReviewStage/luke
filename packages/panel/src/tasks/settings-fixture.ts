@@ -78,10 +78,9 @@ const ACCOUNT: AccountSnapshot = {
 /** An admin of Luke, read, so Admin stands rather than waiting on the read. */
 const ADMIN_ACCESS = { admin: true } as const;
 
-/** The experiments the staged pages stand behind: Memory's page and the Hosts group on Agents. */
+/** The experiments the staged pages stand behind: Memory's page. */
 const STAGED_EXPERIMENTS = {
   [EXPERIMENT.MEMORY]: true,
-  [EXPERIMENT.LOCAL_AGENTS]: true,
 } as const;
 
 /** The staged hosts and install token, by id. */

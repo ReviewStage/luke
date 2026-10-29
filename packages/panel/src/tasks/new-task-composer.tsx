@@ -355,9 +355,8 @@ export function NewTaskComposer({
   const pressed = useRef<NewTaskPress | undefined>(refused?.card.press);
   const repositories = newTask.repositoriesIn(workspaceId);
   const workspace = newTask.workspaces.find((each) => each.id === workspaceId);
-  // Runs on stands while local agents are on and the member has a device, never for an automation's agent or a child, which runs where its parent runs.
-  const localAgents = useExperiment(EXPERIMENT.LOCAL_AGENTS);
-  const asksDevices = localAgents && !forAutomation && parent === undefined;
+  // Runs on stands while the member has a device, never for an automation's agent or a child, which runs where its parent runs.
+  const asksDevices = !forAutomation && parent === undefined;
   // Note that the devices are read as the card opens rather than when the
   // model chip first draws, which waits on the default's read, so Start is held for as short as can be.
   const readModels = useRef(newTask.readModels);
@@ -365,10 +364,18 @@ export function NewTaskComposer({
   useEffect(() => {
     if (asksDevices) readModels.current();
   }, [asksDevices]);
-  // Start is held until a read made since the card opened lands, since a start before then would
-  // name none. Note that a list read before the card opened does not count, because it may be one
-  // read before a device was added, and a failed read leaves it standing; a read is told by the
-  // generation it took, never by its list, which a read listing the same devices hands back as it was.
+  const devices =
+    asksDevices && newTask.devices !== undefined && newTask.devices.length > 0
+      ? newTask.devices
+      : undefined;
+  const [device, chooseDevice, keptDevice] = useNewTaskRunsOn(devices);
+  // Start is held until a read made since the card opened lands, where the member's last pick is a
+  // device, since a start before then would name none. Note that a pick of the cloud, every member's
+  // with no device among them, holds nothing, because a start before the read runs in the cloud as
+  // the pick would after it; that a list read before the card opened does not count, because it may
+  // be one read before a device was added, and a failed read leaves it standing; and that a read is
+  // told by the generation it took, never by its list, which a read listing the same devices hands
+  // back as it was.
   const { modelsRead } = newTask;
   const [readAsOpened] = useState(modelsRead.generation);
   const readSinceOpened = modelsRead.generation > readAsOpened;
@@ -376,13 +383,8 @@ export function NewTaskComposer({
   if (!devicesLanded && readSinceOpened && modelsRead.state === MODELS_READ.READ) {
     setDevicesLanded(true);
   }
-  const devicesUnread = asksDevices && !devicesLanded;
+  const devicesUnread = asksDevices && keptDevice && !devicesLanded;
   const devicesFailed = devicesUnread && readSinceOpened && modelsRead.state === MODELS_READ.FAILED;
-  const devices =
-    asksDevices && newTask.devices !== undefined && newTask.devices.length > 0
-      ? newTask.devices
-      : undefined;
-  const [device, chooseDevice] = useNewTaskRunsOn(devices);
   const runsOn = devices === undefined ? undefined : newTaskRunsOn(device);
   // The repositories the chip's last read listed, an App's and a member's token's alike.
   const [listed, setListed] = useState<readonly string[] | undefined>(undefined);

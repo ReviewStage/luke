@@ -9,8 +9,7 @@
  *
  * Every procedure is the account's own, on its bearer or its browser's
  * session (`accountMiddleware`), so the Hosts list works in a browser and on
- * a phone as in the desktop, and answers not found, before it touches a row,
- * where the account has the `local-agents` experiment off. An install token
+ * a phone as in the desktop. An install token
  * reaches here as its SHA-256 alone: the member's own Luke mints the token
  * and shows it where the member is, so the service never holds it. A host
  * removed is refused at once on its secret (`auth/device-secret.ts`), and its
@@ -22,7 +21,6 @@
  */
 
 import { runningTurnIds, settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
-import { accountExperimentOn } from "@luke/database/models/account-store";
 import { devicesSeenSince } from "@luke/database/models/device-store";
 import {
   hostAgentConversations,
@@ -33,7 +31,6 @@ import {
 } from "@luke/database/models/host-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { HOST_WIRE, hostVersionMeets } from "@luke/features/host-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { Clock, Effect } from "effect";
 import { HOST_VERSION } from "../auth/device-secret.js";
 import {
@@ -50,14 +47,6 @@ export interface HostsProcedureSeams {
 }
 
 const DONE = { done: true } as const;
-
-/** Not found where the account has the `local-agents` experiment off, which hosts sit behind as This Mac does. */
-const experimentOn = (userId: string) =>
-  Effect.gen(function* () {
-    if (!(yield* hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.LOCAL_AGENTS)))) {
-      return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    }
-  });
 
 /** The install script's address on the origin the request reached, so a Preview's command names its own. */
 function installScriptUrlOf(request: Request): string {
@@ -107,7 +96,6 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
   const hosts = hosted.hosts.use(accountMiddleware(seams.resolveUserId));
   return {
     list: hosts.list.effect(function* ({ context }) {
-      yield* experimentOn(context.userId);
       const rows = yield* hostedStoreOrUnavailable(hostsOf(context.userId));
       return {
         hosts: rows.map((row) => ({
@@ -122,7 +110,6 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
       };
     }),
     presence: hosts.presence.effect(function* ({ context }) {
-      yield* experimentOn(context.userId);
       const owned = yield* hostedStoreOrUnavailable(devicesSeenSince(context.userId, new Date(0)));
       const now = yield* Clock.currentTimeMillis;
       return {
@@ -134,13 +121,11 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
       };
     }),
     remove: hosts.remove.effect(function* ({ context, input }) {
-      yield* experimentOn(context.userId);
       const removed = yield* hostedStoreOrUnavailable(removeHost(context.userId, input.id));
       if (removed) yield* endedHostAgents(context.userId, input.id);
       return yield* keptOrNotFound(removed);
     }),
     keepInstallToken: hosts.keepInstallToken.effect(function* ({ context, input }) {
-      yield* experimentOn(context.userId);
       const minted = yield* hostedStoreOrUnavailable(
         mintHostInstallToken(context.userId, input.tokenHash),
       );
@@ -151,7 +136,6 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
       };
     }),
     revokeInstallToken: hosts.revokeInstallToken.effect(function* ({ context, input }) {
-      yield* experimentOn(context.userId);
       return yield* keptOrNotFound(
         yield* hostedStoreOrUnavailable(revokeHostInstallToken(context.userId, input.id)),
       );

@@ -699,8 +699,6 @@ export function localAgentRefusalWords(
 ): string {
   const name = device?.name ?? UNNAMED_DEVICE;
   switch (refusal) {
-    case LOCAL_AGENT_REFUSAL.OFF:
-      return `Local agents are off, so this agent can't start on ${name}. Turn them on in Settings › Experimental, ${RUN_IN_CLOUD}.`;
     case LOCAL_AGENT_REFUSAL.MAC_AWAY:
       return `${name} is offline, so this agent can't start there. ${DEVICE_WAKE[devicePlatformOf(device ?? {})]}, ${RUN_IN_CLOUD}.`;
     case LOCAL_AGENT_REFUSAL.CODEX:
