@@ -71,7 +71,6 @@ import { DesktopWelcome } from "./desktop-welcome.js";
 import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
 import { PhoneBack, PhoneHead, PlaceMore, phoneBar } from "./phone-head.js";
 import { PlanAgents } from "./plan-agents.js";
-import { PlanBreakdown } from "./plan-breakdown.js";
 import { type InboxItemAsk, SideInboxTab } from "./side-inbox-tab.js";
 import {
   COLUMN,
@@ -802,40 +801,17 @@ function PlanDocument({
       pullRequestCardDoor,
     ],
   );
-  // The task's agents head its plan, a row opening its agent in this column
-  // as its tab does, under a pilot's breakdown where one waits for Running.
-  const { tasks: allTasks } = tasks;
-  const openTask = useSteadyDoor(tasks.onSelect);
+  // The task's agents head its plan, a row opening its agent in this column as its tab does.
   const planAgents = useMemo(
     () => (
-      <>
-        {opened === undefined ? null : (
-          <PlanBreakdown
-            task={opened}
-            tasks={allTasks}
-            workspaceName={workspaceName}
-            onOpenTask={openTask}
-          />
-        )}
-        <PlanAgents
-          agents={agents}
-          held={views.held}
-          main={{ tab, onChoose: openAgentTab }}
-          onOpenPullRequest={openPullRequestDoor}
-        />
-      </>
+      <PlanAgents
+        agents={agents}
+        held={views.held}
+        main={{ tab, onChoose: openAgentTab }}
+        onOpenPullRequest={openPullRequestDoor}
+      />
     ),
-    [
-      opened,
-      allTasks,
-      workspaceName,
-      openTask,
-      agents,
-      views.held,
-      tab,
-      openAgentTab,
-      openPullRequestDoor,
-    ],
+    [agents, views.held, tab, openAgentTab, openPullRequestDoor],
   );
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.

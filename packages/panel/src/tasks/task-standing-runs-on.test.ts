@@ -67,7 +67,12 @@ async function runsOnChip(task: Task, sent: TaskStanding[]): Promise<HTMLButtonE
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(TaskStandingChips, { task, onSet: (standing) => sent.push(standing) }),
+        createElement(TaskStandingChips, {
+          task,
+          onSet: (standing) => {
+            sent.push(standing);
+          },
+        }),
       ),
     ),
   );
