@@ -929,7 +929,7 @@ test("a call of an integration's tool is one row wearing the integration's mark,
   );
   act(() => row.click());
   const body = container.querySelector('[data-call-id="call-linear_remote"]')?.textContent ?? "";
-  assert.ok(body.includes('"team": "LUKE"'), "the body holds the input list_issues was sent");
+  assert.ok(body.includes("LUKE"), "the body holds the input list_issues was sent");
   assert.ok(!body.includes("parentCallId"), "the body holds no envelope around it");
 });
 

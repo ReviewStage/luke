@@ -15,6 +15,8 @@ import {
   FailureNote,
   GlyphSlot,
   LineSummary,
+  NOTE_LINE_LOOK,
+  NoteLine,
   OneLine,
   Tooltip,
   useDisclosurePreviewShown,
@@ -46,11 +48,15 @@ import { Fold, type FoldProps } from "./fold.js";
  * line opens, and its hint says what a press does, as a line that opens a
  * tab says what it opens. The body under
  * it, set in under the words, is the call's input and its answer, each a
- * `CodeCard` headed "Input" and "Answer" with the window's one Copy and its
+ * `CodeCard` headed "Input" and "Output" with the window's one Copy and its
  * one cut at 40 lines, so a long answer shows its first lines over "Show
- * all", and Copy copies the whole of it either way. What the words say is
- * the caller's decision (`tasks/tool-call-model.ts`); how a block of each
- * kind is drawn is this file's. Its look is `.tool`'s (tasks.css).
+ * all", and Copy copies the whole of it either way; a command is one
+ * "Terminal" card instead, its prompt line over what it printed, as a shell
+ * shows them. JSON reads as words (`readableBlock`), an answer that only
+ * acknowledges is left out, and an empty one says "No output". What the
+ * words say is the caller's decision (`tasks/tool-call-model.ts`); how a
+ * block of each kind is drawn is this file's. Its look is `.tool`'s
+ * (tasks.css).
  */
 
 /** The states a tool part may stand in, as the AI SDK spells them. */
@@ -84,8 +90,18 @@ const COMMAND_PROMPT = "$ ";
 /** What a block's header says it is. */
 const BLOCK_TITLE = {
   INPUT: "Input",
-  ANSWER: "Answer",
+  OUTPUT: "Output",
+  TERMINAL: "Terminal",
 } as const;
+
+/** What an answer of nothing says in its card's place. */
+const NO_OUTPUT = "No output";
+
+/** What an empty list reads as. */
+const NONE = "(none)";
+
+/** The answers that only acknowledge, which tell a reader nothing the row does not. */
+const ACKNOWLEDGEMENTS: ReadonlySet<unknown> = new Set(["accepted", "Done.", "done", "ok", true]);
 
 /**
  * Whether a block says a call's subject whole, so the row previewing it
@@ -200,7 +216,8 @@ export function ToolLine({
           <OneLine
             className={chip === undefined ? TOOL_LABEL_CLASS : `${TOOL_LABEL_CLASS} shrink-0`}
           >
-            {trailing ? `${label} ` : label}
+            {/* Note that a verb drops its colon where nothing follows it, as an open row's whose body says its subject. */}
+            {trailing ? `${label} ` : label.replace(/:$/u, "")}
           </OneLine>
         )}
         {chip === undefined ? null : (
@@ -336,9 +353,72 @@ function BlockCard({
   );
 }
 
-/** What the call was given. */
+/** A JSON block's value, or its text where it is no JSON, as a string answer is drawn as it is. */
+function blockValue(block: ToolBlock): unknown {
+  try {
+    return JSON.parse(block.text);
+  } catch {
+    return block.text;
+  }
+}
+
+function isContainer(value: unknown): value is object {
+  return value !== null && typeof value === "object";
+}
+
+/** A value that stands on its key's line: a scalar, its later lines set in under the first, or an empty list or record as "(none)". */
+function leafWords(value: unknown, indent: string): string {
+  if (isContainer(value)) return NONE;
+  return String(value).replaceAll("\n", `\n${indent}  `);
+}
+
+/** A JSON value as indented `key: value` lines and `- item` lines, with no braces or quotes. */
+function readableLines(value: unknown, indent: string): string[] {
+  if (Array.isArray(value) && value.length === 0) return [`${indent}${NONE}`];
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => {
+      const [first = "", ...rest] = readableLines(item, `${indent}  `);
+      return [`${indent}- ${first.trimStart()}`, ...rest];
+    });
+  }
+  if (!isContainer(value)) return [`${indent}${leafWords(value, indent)}`];
+  return Object.entries(value).flatMap(([key, item]) =>
+    isContainer(item) && Object.keys(item).length > 0
+      ? [`${indent}${key}:`, ...readableLines(item, `${indent}  `)]
+      : [`${indent}${key}: ${leafWords(item, indent)}`],
+  );
+}
+
+/**
+ * A block as a reader reads it: JSON as indented words, a record holding
+ * one string as that string, and every other kind as it is. Note that it
+ * knows no tool: what one tool's answer means is `tool-call-model.ts`'s.
+ */
+function readableBlock(block: ToolBlock): ToolBlock {
+  if (block.kind !== TOOL_BLOCK.JSON) return block;
+  const value = blockValue(block);
+  if (!isContainer(value)) return block;
+  const [only, ...more] = Object.values(value);
+  if (!Array.isArray(value) && typeof only === "string" && more.length === 0) {
+    return { kind: TOOL_BLOCK.TEXT, text: only };
+  }
+  return { kind: TOOL_BLOCK.TEXT, text: readableLines(value, "").join("\n") };
+}
+
+/** Whether a JSON answer only acknowledges the call, as "accepted" or `{ "ok": true }` does. */
+function acknowledges(block: ToolBlock): boolean {
+  if (block.kind !== TOOL_BLOCK.JSON) return false;
+  const value = blockValue(block);
+  if (!isContainer(value) || Array.isArray(value)) return ACKNOWLEDGEMENTS.has(value);
+  const values = Object.values(value);
+  return values.length > 0 && values.every((item) => ACKNOWLEDGEMENTS.has(item));
+}
+
+/** What the call was given, read as words; nothing where it was given nothing. */
 export function ToolInput({ block }: { block: ToolBlock }): ReactNode {
-  return <BlockCard block={block} title={BLOCK_TITLE.INPUT} data="data-tool-input" />;
+  const readable = readableBlock(block);
+  if (readable.text === "") return null;
+  return <BlockCard block={readable} title={BLOCK_TITLE.INPUT} data="data-tool-input" />;
 }
 
 export interface ToolOutputProps {
@@ -347,7 +427,11 @@ export interface ToolOutputProps {
   errorText: string | undefined;
 }
 
-/** What the call answered, cut at 40 lines by its card, or the error it ended in; nothing while it has answered neither. */
+/**
+ * What the call answered, read as words and cut at 40 lines by its card, or
+ * the error it ended in, or a muted line where it answered nothing; nothing
+ * while it has answered neither, or where it only acknowledged the call.
+ */
 export function ToolOutput({ block, errorText }: ToolOutputProps): ReactNode {
   if (errorText !== undefined) {
     return (
@@ -358,6 +442,42 @@ export function ToolOutput({ block, errorText }: ToolOutputProps): ReactNode {
       </div>
     );
   }
-  if (block === undefined) return null;
-  return <BlockCard block={block} title={BLOCK_TITLE.ANSWER} data="data-tool-output" />;
+  if (block === undefined || acknowledges(block)) return null;
+  const readable = readableBlock(block);
+  if (readable.text.trim() === "") {
+    return (
+      <div data-tool-output="" data-empty="">
+        <NoteLine look={NOTE_LINE_LOOK.INSET}>{NO_OUTPUT}</NoteLine>
+      </div>
+    );
+  }
+  return <BlockCard block={readable} title={BLOCK_TITLE.OUTPUT} data="data-tool-output" />;
+}
+
+export interface ToolTerminalProps extends ToolOutputProps {
+  /** The command, a `TOOL_BLOCK.COMMAND` block. */
+  input: ToolBlock;
+}
+
+/**
+ * A command and what it printed as one card, as a shell shows them: the
+ * prompt line, then its output, and the error it ended in under the card.
+ * Note that Copy takes the command alone, without its prompt or output.
+ */
+export function ToolTerminal({ input, block, errorText }: ToolTerminalProps): ReactNode {
+  const printed = block === undefined ? "" : readableBlock(block).text.trimEnd();
+  const prompt = `${COMMAND_PROMPT}${input.text}`;
+  return (
+    <>
+      <CodeCard
+        title={BLOCK_TITLE.TERMINAL}
+        titleIs={CODE_CARD_TITLE.WORDS}
+        code={printed === "" ? prompt : `${prompt}\n${printed}`}
+        copied={input.text === "" ? undefined : input.text}
+        data={{ "data-tool-terminal": "" }}
+        copy={copyThroughShell}
+      />
+      <ToolOutput block={undefined} errorText={errorText} />
+    </>
+  );
 }
