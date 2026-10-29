@@ -23,7 +23,9 @@ import {
   browserTracingIntegration,
   captureException,
   captureMessage,
+  getActiveSpan,
   getClient,
+  getCurrentScope,
   init,
   logger,
   startBrowserTracingPageLoadSpan,
@@ -136,6 +138,7 @@ export function initWebSentry(build: WebSentryBuild): WebSentry {
     reportRefusal: (directive, origin) => {
       captureMessage(`Content-Security-Policy refused ${directive} to ${origin}`, "warning");
     },
-    reportShownFailure: (report) => sendShownFailure({ captureException, logger }, report),
+    reportShownFailure: (report) =>
+      sendShownFailure({ captureException, logger, getActiveSpan, getCurrentScope }, report),
   };
 }

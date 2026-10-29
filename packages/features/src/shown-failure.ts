@@ -20,6 +20,12 @@
  * Sentry (root `AGENTS.md`), and a refusal's is the sentence the service or
  * the host drew for it.
  *
+ * The same facts are what a person copies from the failure they were shown
+ * (`shownFailureDetails`), with the Sentry event id the issue was opened
+ * under, the trace it was sent in, the time, and the app's version, so what
+ * they paste to an agent names what Sentry and the logs hold and nothing
+ * they do not.
+ *
  * Written against the few calls it makes rather than one SDK's types, so the
  * desktop's `@sentry/electron` and the web's `@sentry/browser` each hand
  * their own, as `sentry-reporting.ts` takes them.
@@ -144,13 +150,35 @@ interface ShownFailureHint {
   };
 }
 
-/** The calls of a Sentry SDK a shown failure is sent through, as `@sentry/electron/renderer` and `@sentry/browser` both export them. */
+/** The calls of a Sentry SDK a shown failure is sent through, as `@sentry/electron/renderer` and `@sentry/browser` both export them, and the trace what it sends is part of. */
 export interface ShownFailureSentry {
   readonly captureException: (error: Error, hint: ShownFailureHint) => string;
+  /** The span standing now, whose trace a line or an issue sent now goes in. */
+  readonly getActiveSpan: () =>
+    | { readonly spanContext: () => { readonly traceId: string } }
+    | undefined;
+  /** The scope standing now, whose trace a line or an issue goes in where no span stands. */
+  readonly getCurrentScope: () => {
+    readonly getPropagationContext: () => { readonly traceId: string };
+  };
   readonly logger: {
     readonly warn: (message: string, attributes: FailureAttributes) => void;
     readonly error: (message: string, attributes: FailureAttributes) => void;
   };
+}
+
+/** What Sentry answered a shown failure with: the event id of the issue it opened, where it opened one, and the trace it was sent in. */
+export interface ShownFailureSent {
+  readonly eventId?: string | undefined;
+  readonly traceId?: string | undefined;
+}
+
+/** What a failure's copied details say beside its report: when it was shown, the app's version, and what Sentry answered, where a reporter sent it. */
+interface ShownFailureTold {
+  /** When it was shown, in milliseconds since the epoch. */
+  readonly at: number;
+  readonly version?: string | undefined;
+  readonly sent?: ShownFailureSent | undefined;
 }
 
 /** What a cause says of itself, each where it says it. */
@@ -209,6 +237,17 @@ const FAILURE_ATTRIBUTE = {
   ACCOUNT: "app.account",
   LIVE: "app.live",
 } as const;
+
+/** The keys a failure's copied details name beside its attributes. */
+const DETAIL_KEY = {
+  TIME: "time",
+  VERSION: "app.version",
+  EVENT: "sentry.event_id",
+  TRACE: "sentry.trace_id",
+} as const;
+
+/** The line a failure's copied details open with, saying what the rest is for. */
+const DETAILS_HEADING = "Luke showed an error. Find it in Sentry and the logs by these details:";
 
 /** The issue's context its attributes travel under. */
 const SHOWN_FAILURE_CONTEXT = "shown_failure";
@@ -385,6 +424,14 @@ function sendableError(chain: readonly unknown[], facts: readonly CauseFacts[]):
   return sent;
 }
 
+/** A failure read for sending: its chain, what each cause says, its code, and its attributes. */
+function readReport(report: ShownFailureReport) {
+  const chain = chainOf(report.cause);
+  const facts = chain.map(factsOf);
+  const code = codeOf(facts);
+  return { chain, facts, code, attributes: attributesOf(report, facts, code) };
+}
+
 /**
  * The ids a payload names under the keys `FailureAbout` reads, for an act
  * whose failure was shown with nothing else to say what it was about.
@@ -406,20 +453,24 @@ export function failureAboutOf(payload: unknown): FailureAbout {
 /**
  * Sends Sentry a failure the app showed: a log line, at `warn` for a refusal
  * something named and at `error` for anything else, and for anything else
- * an issue besides, grouped by where it was shown and its code.
+ * an issue besides, grouped by where it was shown and its code. Answers the
+ * issue's event id, where it opened one, and the trace both went in.
  */
-export function sendShownFailure(sentry: ShownFailureSentry, report: ShownFailureReport): void {
-  const chain = chainOf(report.cause);
-  const facts = chain.map(factsOf);
-  const code = codeOf(facts);
-  const attributes = attributesOf(report, facts, code);
+export function sendShownFailure(
+  sentry: ShownFailureSentry,
+  report: ShownFailureReport,
+): ShownFailureSent {
+  const { chain, facts, code, attributes } = readReport(report);
   const line = `A failure was shown on ${report.surface}: ${code}`;
+  const traceId =
+    sentry.getActiveSpan()?.spanContext().traceId ??
+    sentry.getCurrentScope().getPropagationContext().traceId;
   if (report.kind === FAILURE_KIND.REFUSED) {
     sentry.logger.warn(line, attributes);
-    return;
+    return { traceId };
   }
   sentry.logger.error(line, attributes);
-  sentry.captureException(sendableError(chain, facts), {
+  const eventId = sentry.captureException(sendableError(chain, facts), {
     mechanism: { type: SHOWN_FAILURE_MECHANISM, handled: true },
     captureContext: {
       level: ISSUE_LEVEL,
@@ -432,4 +483,29 @@ export function sendShownFailure(sentry: ShownFailureSentry, report: ShownFailur
       contexts: { [SHOWN_FAILURE_CONTEXT]: attributes },
     },
   });
+  return { eventId: eventId === "" ? undefined : eventId, traceId };
+}
+
+/**
+ * What a person copies from a failure they were shown, to paste to an agent
+ * as it is: a line saying what it is, then one `key: value` line each for
+ * the time it was shown (ISO 8601, UTC), the app's version, every attribute
+ * its report sends under the name Sentry searches it by, and the event id
+ * and trace Sentry answered, each where it is known. Note that it is built
+ * from the report the same way the report's own attributes are, so the two
+ * cannot drift, and nothing the report leaves out is copied.
+ */
+export function shownFailureDetails(report: ShownFailureReport, told: ShownFailureTold): string {
+  const { attributes } = readReport(report);
+  const lines: Record<string, string | number | boolean | undefined> = {
+    [DETAIL_KEY.TIME]: new Date(told.at).toISOString(),
+    [DETAIL_KEY.VERSION]: told.version,
+    ...attributes,
+    [DETAIL_KEY.EVENT]: told.sent?.eventId,
+    [DETAIL_KEY.TRACE]: told.sent?.traceId,
+  };
+  const said = Object.entries(lines).flatMap(([key, value]) =>
+    value === undefined || value === "" ? [] : [`${key}: ${value}`],
+  );
+  return [DETAILS_HEADING, ...said].join("\n");
 }
