@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { readAgentQueue } from "@luke/database/models/agent-queue-store";
 import { archiveAgent, createAgent, readAgent } from "@luke/database/models/agent-store";
 import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
 import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
@@ -11,7 +10,6 @@ import { lapsedSandboxLeases, sandboxHeld } from "@luke/database/models/sandbox-
 import { createTask } from "@luke/database/models/task-store";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
-import { QUEUE_CHANGE } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import {
   SANDBOX_STATE,
@@ -26,7 +24,6 @@ import type { WebServices } from "../runtime.js";
 import { openGithubUser, openTokenMember } from "../testing/github-app-fake.js";
 import { keepAwakeDetached, scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
 import { agentsProcedures } from "./agents-procedures.js";
-import { messagesProcedures } from "./messages-procedures.js";
 import { type SandboxStopReach, SessionSandboxes } from "./session-sandboxes.js";
 import { AgentSandbox, type AgentSandboxService, SHELL_REFUSAL } from "./terminal/agent-sandbox.js";
 import { SandboxUnavailable } from "./vercel-sandbox-api.js";
@@ -176,19 +173,17 @@ const standing = (
         ),
       ),
     );
-    const resolveUserId = (incoming: Request) =>
-      Effect.succeed(
-        Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
-      );
     const handle = hostedFetch({
       agents: agentsProcedures({
-        resolveUserId,
+        resolveUserId: (incoming: Request) =>
+          Effect.succeed(
+            Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
+          ),
         eveOrigin: () => undefined,
         sandbox,
         sessionSandboxes,
         keepAwake,
       }),
-      messages: messagesProcedures({ resolveUserId, eveOrigin: () => undefined }),
     });
     // SAFETY: the terminal procedures yield the store and the network alone, which is all a test provides of the web runtime's services.
     const webServices = services as Context.Context<WebServices>;
@@ -306,38 +301,6 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
         assert.ok(
           lapsed.some((lease) => lease.conversationId === agent.conversationId),
           "a resume nobody attached to lapses for the lease sweep",
-        );
-      }),
-  );
-
-  it.effect(
-    "an agent on its starter's own GitHub token takes changes to its queue from its starter alone: a teammate who sees it is refused, and one who does not reads it as none",
-    () =>
-      Effect.gen(function* () {
-        const { userId, reader, tokenless, agent } = yield* openTokenAgent;
-        const call = yield* standing(
-          new Map([
-            ["Bearer owner", userId],
-            ["Bearer reader", reader],
-            ["Bearer tokenless", tokenless],
-          ]),
-          scriptedSandbox(SANDBOX_STATE.RUNNING).layer,
-        );
-        const queued = (bearer: string) =>
-          call(`/api/agents/${agent.id}/queue`, bearer, {
-            method: "POST",
-            body: { change: QUEUE_CHANGE.ADD, text: "Then the tests.", clientKey: randomUUID() },
-          });
-
-        assert.deepEqual(yield* queued("Bearer reader"), {
-          status: 403,
-          body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
-        });
-        assert.equal((yield* queued("Bearer tokenless")).status, 404);
-        assert.equal((yield* queued("Bearer owner")).status, 200);
-        assert.deepEqual(
-          Option.getOrThrow(yield* readAgentQueue(userId, agent.id)).messages.length,
-          1,
         );
       }),
   );

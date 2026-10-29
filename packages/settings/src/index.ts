@@ -58,7 +58,7 @@ export {
   describedSettings,
   isAppSettingField,
   isSettingsResetScope,
-  linkOpenFromWire,
+  ownPreferenceFromWire,
   SETTING_KEEP,
   type SettingKeep,
   type SettingsRowsInput,

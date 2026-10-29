@@ -21,16 +21,15 @@ import type { HeldComposer } from "./use-agent-composer.js";
 /**
  * use-agent-queue.ts -- an agent's queue as its tab draws and changes it: the messages queued behind its turn, in the order they go, and the one door every change goes through.
  *
- * What the tab draws is the service's queue, as the newest transcript page
- * carries it (`use-agent-transcript.ts`), read live: every change to the
- * queue moves its revision on, which wakes the page. Nothing here polls, and
- * nothing is drawn from a second copy of the queue. A change the tab made
- * is drawn over the page while it is out, keyed to its own request: from
- * the press until a page stands at the revision its answer named, or until
- * it fails, so it never outlives its request, an answer that lands after a
- * newer page draws nothing older, and a change refused springs back at
- * once. A message queued is drawn at the queue's end as it goes, taking no
- * press until it has landed, since the service knows it by no id before.
+ * What the tab draws is the service's queue, read live with the newest
+ * transcript page (`use-agent-transcript.ts`), or the queue a change's
+ * answer named where that stands at a higher revision; every change to the
+ * queue moves its revision on, which wakes the page. Nothing here polls. A
+ * message queued, as the box empties at once, and a new order, as a drag
+ * drops it, are drawn before their answer, keyed to their own request and
+ * let go as it answers; every other change waits its round trip. A message
+ * queued is drawn at the queue's end as it goes, taking no press until it
+ * has landed, since the service knows it by no id before.
  */
 
 /** What a change answered where the act itself failed. */
@@ -56,63 +55,51 @@ const NO_RENEWAL = Atom.make(AsyncResult.initial<number>());
 /** A queue with nothing in it, as an agent's page before its first change carries none. */
 const EMPTY: AgentQueue = { messages: [], revision: 0 };
 
-/** One change the tab made, still drawn over the page: its own id, the change, and the revision its answer named once it answered. */
+/** One change the tab drew at once, still out: its own id, and the change. */
 interface Out {
   readonly id: number;
-  readonly change: AgentQueueChange;
-  readonly revision: number | undefined;
+  readonly change: DrawnAtOnce;
 }
 
-/** The queue as one change still out would leave it. */
-function drawnWith(queue: AgentQueue, change: AgentQueueChange): AgentQueue {
-  switch (change.change) {
-    case QUEUE_CHANGE.ADD:
-      // A message the page lists under its key has landed, and is drawn as the page draws it.
-      if (queue.messages.some((message) => message.clientKey === change.clientKey)) return queue;
-      return {
-        ...queue,
-        messages: [
-          ...queue.messages,
-          {
-            id: change.clientKey,
-            text: change.text,
-            queuedBy: "",
-            ...(change.attachments === undefined || change.attachments.length === 0
-              ? undefined
-              : {
-                  files: change.attachments.map((file) => ({
-                    name: file.name,
-                    mediaType: file.mediaType,
-                  })),
-                }),
-          },
-        ],
-      };
-    case QUEUE_CHANGE.DELETE:
-    case QUEUE_CHANGE.STEER:
-      return {
-        ...queue,
-        messages: queue.messages.filter((message) => message.id !== change.messageId),
-      };
-    case QUEUE_CHANGE.EDIT:
-      return {
-        ...queue,
-        messages: queue.messages.map((message) =>
-          message.id === change.messageId ? { ...message, text: change.text } : message,
-        ),
-      };
-    case QUEUE_CHANGE.REORDER: {
-      const at = new Map(change.order.map((id, index) => [id, index]));
-      const placed = (message: QueuedMessage) => at.get(message.id) ?? change.order.length;
-      return { ...queue, messages: queue.messages.toSorted((a, b) => placed(a) - placed(b)) };
-    }
-    case QUEUE_CHANGE.RESUME: {
-      const { paused: _paused, ...unpaused } = queue;
-      return unpaused;
-    }
-    case QUEUE_CHANGE.HOLD:
-      return queue;
+/** A change the tab draws before the service answers it: a message queued, as the box empties at once, and a new order, as a drag drops it. */
+type DrawnAtOnce = Extract<
+  AgentQueueChange,
+  { readonly change: typeof QUEUE_CHANGE.ADD | typeof QUEUE_CHANGE.REORDER }
+>;
+
+/** Whether a change is drawn before the service answers it; every other waits on its answer. */
+function drawnAtOnce(change: AgentQueueChange): change is DrawnAtOnce {
+  return change.change === QUEUE_CHANGE.ADD || change.change === QUEUE_CHANGE.REORDER;
+}
+
+/** The queue as a change still out would leave it. */
+function drawnWith(queue: AgentQueue, change: DrawnAtOnce): AgentQueue {
+  if (change.change === QUEUE_CHANGE.REORDER) {
+    const at = new Map(change.order.map((id, index) => [id, index]));
+    const placed = (message: QueuedMessage) => at.get(message.id) ?? change.order.length;
+    return { ...queue, messages: queue.messages.toSorted((a, b) => placed(a) - placed(b)) };
   }
+  // A message the queue lists under its key has landed, and is drawn as the queue draws it.
+  if (queue.messages.some((message) => message.clientKey === change.clientKey)) return queue;
+  return {
+    ...queue,
+    messages: [
+      ...queue.messages,
+      {
+        id: change.clientKey,
+        text: change.text,
+        queuedBy: "",
+        ...(change.attachments === undefined || change.attachments.length === 0
+          ? undefined
+          : {
+              files: change.attachments.map((file) => ({
+                name: file.name,
+                mediaType: file.mediaType,
+              })),
+            }),
+      },
+    ],
+  };
 }
 
 /** An agent's queue as its tab holds it. */
@@ -138,44 +125,37 @@ export interface AgentQueueControl {
 export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): AgentQueueControl {
   const { act } = useAct();
   const [out, setOut] = useState<readonly Out[]>([]);
+  const [answered, setAnswered] = useState<AgentQueue | undefined>();
   const counter = useRef(0);
   const page = queue ?? EMPTY;
-  // A change lets go of the page once a page stands at the revision its answer named.
-  const standing = out.filter(
-    (each) => each.revision === undefined || each.revision > page.revision,
-  );
-  useEffect(() => {
-    if (standing.length === out.length) return;
-    setOut((was) =>
-      was.filter((each) => each.revision === undefined || each.revision > page.revision),
-    );
-  }, [standing.length, out.length, page.revision]);
-  const drawn = standing.reduce((held, each) => drawnWith(held, each.change), page);
-  const landed = new Set(page.messages.flatMap((message) => message.clientKey ?? []));
+  // The queue as the service last said it, by whichever of the page and a change's answer stands at the higher revision.
+  const standing = answered !== undefined && answered.revision > page.revision ? answered : page;
+  const drawn = out.reduce((held, each) => drawnWith(held, each.change), standing);
   const landing = new Set(
-    standing.flatMap((each) =>
-      each.change.change === QUEUE_CHANGE.ADD && !landed.has(each.change.clientKey)
-        ? [each.change.clientKey]
+    out.flatMap(({ change: each }) =>
+      each.change === QUEUE_CHANGE.ADD &&
+      !standing.messages.some((message) => message.clientKey === each.clientKey)
+        ? [each.clientKey]
         : [],
     ),
   );
+
   const listed = new Set(page.messages.map((message) => message.id));
   const change = (next: AgentQueueChange, after?: Promise<unknown>) => {
     counter.current += 1;
     const id = counter.current;
-    setOut((was) => [...was, { id, change: next, revision: undefined }]);
+    if (drawnAtOnce(next)) setOut((was) => [...was, { id, change: next }]);
     return (after ?? Promise.resolve())
       .then(() => act(ACT_KIND.AGENTS_QUEUE, { agentId, change: next }))
       .catch(() => UNANSWERED)
       .then((answer) => {
-        // Note that a change refused is dropped at once, and one answered stands until a page at its revision.
-        setOut((was) =>
-          "queue" in answer
-            ? was.map((each) =>
-                each.id === id ? { ...each, revision: answer.queue.revision } : each,
-              )
-            : was.filter((each) => each.id !== id),
-        );
+        // Note that a change answered is drawn as the queue its answer names, and one refused springs back.
+        setOut((was) => was.filter((each) => each.id !== id));
+        if ("queue" in answer) {
+          setAnswered((was) =>
+            was === undefined || answer.queue.revision > was.revision ? answer.queue : was,
+          );
+        }
         return answer;
       });
   };
@@ -264,6 +244,8 @@ export function useQueueEditing(
   const refused = useRef<{ readonly text: string; readonly clientKey: string } | undefined>(
     undefined,
   );
+  // The message whose edit is being saved or steered, by id, which its hold is no longer renewed for.
+  const settling = useRef<string | undefined>(undefined);
   const { change } = queue;
   const latestChange = useRef(change);
   latestChange.current = change;
@@ -278,7 +260,8 @@ export function useQueueEditing(
   );
   useEffect(() => {
     const id = held.current;
-    if (renewal === undefined || id === undefined) return;
+    // Note that an edit being saved or steered renews nothing, so a renewal that lands after it holds no message.
+    if (renewal === undefined || id === undefined || settling.current === id) return;
     void latestChange.current({ change: QUEUE_CHANGE.HOLD, messageId: id, held: true });
   }, [renewal]);
   const giveBack = (stash: Stashed) => {
@@ -286,11 +269,14 @@ export function useQueueEditing(
     composer.setAttachments(() => stash.attachments);
     setStashed(undefined);
   };
-  /** The edit closed once the queue took `edit`, where it is still this message's; left open where it was refused. */
-  const closing = (stash: Stashed, edit: AgentQueueChange) =>
+  /** The edit closed once the queue took `edit`, where it is still this message's; left open, its hold renewed again, where it was refused. */
+  const closing = (stash: Stashed, edit: AgentQueueChange) => {
+    settling.current = stash.id;
     void change(edit).then((answer) => {
+      settling.current = undefined;
       if (!("failure" in answer) && held.current === stash.id) giveBack(stash);
     });
+  };
   const cancel = () => {
     if (stashed === undefined) return;
     void change({ change: QUEUE_CHANGE.HOLD, messageId: stashed.id, held: false });

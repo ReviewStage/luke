@@ -3,9 +3,6 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import {
-  claimQueueHead,
-  dropQueuedMessage,
-  holdQueuedMessage,
   queueAgentMessage,
   readAgentQueue,
   takeQueuedMessage,
@@ -126,45 +123,28 @@ const runEvent = (target: ConversationTarget, turnId: string) => ({
 
 it.layer(getTestDB())("what moves a coding agent's transcript notifies", (it) => {
   it.effect(
-    "every write to the agent's queue moves what the transcript's live read answers, and notifies the agent: a message queued, held, claimed, sent, and deleted",
+    "a message taken out of the agent's queue moves what the transcript's live read answers, and notifies the agent",
     () =>
       Effect.gen(function* () {
         const { userId, params } = yield* openAgent;
         const { agentId } = params;
-        const agentTopic: readonly SyncTopic[] = [[TOPIC.AGENT, agentId]];
         /** What the read answers of the queue now. */
         const queuePart = Effect.map(
           liveCursorParts(agentTranscriptLive, params, {}),
           ({ queries }) => JSON.stringify(queries.queueRevision?.rows ?? []),
         );
-        const seen = [yield* queuePart];
-        const moved = Effect.fn(function* <A, E, R>(write: Effect.Effect<A, E, R>) {
-          const answered: A[] = [];
-          yield* wakesTheTranscript(
-            Effect.tap(write, (answer) => Effect.sync(() => answered.push(answer))),
-            agentTopic,
-            params,
-          );
-          assert.equal(answered.length, 1, "the write answered once");
-          const now = yield* queuePart;
-          assert.ok(!seen.includes(now), "the write moved the read's queue part on");
-          seen.push(now);
-          // SAFETY: the write answered once, as asserted above, so its one answer stands.
-          return answered[0] as A;
-        });
+        yield* queueAgentMessage(userId, agentId, { clientKey: randomUUID(), text: "First" });
+        const [queued] = Option.getOrThrow(yield* readAgentQueue(userId, agentId)).messages;
+        assert.ok(queued !== undefined);
+        const before = yield* queuePart;
 
-        yield* moved(
-          queueAgentMessage(userId, agentId, { clientKey: randomUUID(), text: "First" }),
+        yield* wakesTheTranscript(
+          takeQueuedMessage(userId, agentId, queued.id),
+          [[TOPIC.AGENT, agentId]],
+          params,
         );
-        yield* moved(
-          queueAgentMessage(userId, agentId, { clientKey: randomUUID(), text: "Second" }),
-        );
-        const head = Option.getOrThrow(yield* moved(claimQueueHead(agentId)));
-        yield* moved(dropQueuedMessage(agentId, head));
-        const [second] = Option.getOrThrow(yield* readAgentQueue(userId, agentId)).messages;
-        assert.ok(second !== undefined);
-        yield* moved(holdQueuedMessage(userId, agentId, second.id, true));
-        yield* moved(takeQueuedMessage(userId, agentId, second.id));
+
+        assert.notEqual(yield* queuePart, before);
       }),
   );
 

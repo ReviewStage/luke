@@ -20,7 +20,7 @@
 import { agentDelegationTable, agentTable } from "../schemas/agent.js";
 import { agentBrowserTab } from "../schemas/agent-browser-tab.js";
 import { agentPin } from "../schemas/agent-pin.js";
-import { agentQueuePause, agentQueueRevision, queuedMessage } from "../schemas/agent-queue.js";
+import { agentQueue } from "../schemas/agent-queue.js";
 import { attachment } from "../schemas/attachment.js";
 import { invitation, member, organization, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
@@ -231,21 +231,9 @@ const runnerLineSync = defineSyncTable(runnerLine, {
   ignore: [runnerLine.acceptedAt],
 });
 
-/**
- * A message queued behind an agent's running turn, and the queue's pause,
- * each on the agent's topic, which the agent's tab reads its queue on.
- */
-export const queuedMessageSync = defineSyncTable(queuedMessage, {
-  topics: [{ kind: TOPIC.AGENT, column: queuedMessage.agentId }],
-});
-
-export const agentQueuePauseSync = defineSyncTable(agentQueuePause, {
-  topics: [{ kind: TOPIC.AGENT, column: agentQueuePause.agentId }],
-});
-
 /** Where an agent's queue stands, moved on by every write to it (`agent-queue-store.ts`), on the agent's topic, which its transcript's held read is woken on. */
-export const agentQueueRevisionSync = defineSyncTable(agentQueueRevision, {
-  topics: [{ kind: TOPIC.AGENT, column: agentQueueRevision.agentId }],
+export const agentQueueSync = defineSyncTable(agentQueue, {
+  topics: [{ kind: TOPIC.AGENT, column: agentQueue.agentId }],
 });
 
 /**
@@ -523,9 +511,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   agentPinSync,
   macCommandSync,
   runnerLineSync,
-  queuedMessageSync,
-  agentQueuePauseSync,
-  agentQueueRevisionSync,
+  agentQueueSync,
   deviceAgentLineSync,
   deviceAgentRequestSync,
   planCommentThreadSync,

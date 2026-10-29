@@ -50,8 +50,8 @@ import {
   accountPreferencesFromWire,
   accountPreferencesParts,
   experimentChoicesFrom,
-  linkOpenFromWire,
   NO_EXPERIMENTS,
+  ownPreferenceFromWire,
 } from "@luke/settings";
 import type { UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -226,7 +226,8 @@ export function accountProcedures(seams: AccountProcedureSeams) {
     /**
      * Writes each part the body carries — `preferences`, a validated
      * settings snapshot that replaces the stored one whole, `linkOpen`,
-     * where the account's links open, `agent`, a choice the catalog
+     * where the account's links open, `agentEnter`, what Enter does in an
+     * agent's box while it works, `agent`, a choice the catalog
      * accepts, `chaptersModel`, one of the chapters' fixed set, and `experiments`, each experiment's on or off merged over
      * what stood — and answers the snapshot as it then stands. A body
      * carrying none of them asks for nothing and is refused.
@@ -237,6 +238,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       if (
         body.preferences === undefined &&
         body.linkOpen === undefined &&
+        body.agentEnter === undefined &&
         body.agent === undefined &&
         body.chaptersModel === undefined &&
         body.experiments === undefined
@@ -251,9 +253,14 @@ export function accountProcedures(seams: AccountProcedureSeams) {
         write.preferences = preferences;
       }
       if (body.linkOpen !== undefined) {
-        const linkOpen = linkOpenFromWire(body.linkOpen);
+        const linkOpen = ownPreferenceFromWire("linkOpen", body.linkOpen);
         if (linkOpen === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
         write.linkOpen = linkOpen;
+      }
+      if (body.agentEnter !== undefined) {
+        const agentEnter = ownPreferenceFromWire("agentEnter", body.agentEnter);
+        if (agentEnter === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+        write.agentEnter = agentEnter;
       }
       if (body.agent !== undefined) {
         write.agent = yield* acceptedAgentChoice(seams, context.userId, body.agent);

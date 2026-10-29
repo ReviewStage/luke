@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "f78b9550-34fc-4d33-8864-e8be2a27fdc7",
+  "id": "7b399286-24df-4a9f-89a8-920a17bf8a13",
   "prevIds": [
     "6de81a75-94f7-432f-808a-e04773cb279f"
   ],
@@ -44,13 +44,7 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "agent_queue_pause",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "agent_queue_revision",
+      "name": "agent_queue",
       "entityType": "tables",
       "schema": "public"
     },
@@ -1524,59 +1518,7 @@
       "name": "agent_id",
       "entityType": "columns",
       "schema": "public",
-      "table": "agent_queue_pause"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "because",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_queue_pause"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "refusal",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_queue_pause"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "paused_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_queue_pause"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "agent_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_queue_revision"
+      "table": "agent_queue"
     },
     {
       "type": "integer",
@@ -1589,7 +1531,33 @@
       "name": "revision",
       "entityType": "columns",
       "schema": "public",
-      "table": "agent_queue_revision"
+      "table": "agent_queue"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "paused_because",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_queue"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "paused_refusal",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_queue"
     },
     {
       "type": "uuid",
@@ -8095,6 +8063,19 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "name": "agent_enter",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_preference"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
       "name": "agent_model",
       "entityType": "columns",
       "schema": "public",
@@ -13843,27 +13824,10 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "agent_queue_pause_agent_id_agent_id_fkey",
+      "name": "agent_queue_agent_id_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "agent_queue_pause"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "agent_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "agent",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "agent_queue_revision_agent_id_agent_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "agent_queue_revision"
+      "table": "agent_queue"
     },
     {
       "nameExplicit": false,
@@ -16418,19 +16382,9 @@
         "agent_id"
       ],
       "nameExplicit": false,
-      "name": "agent_queue_pause_pkey",
+      "name": "agent_queue_pkey",
       "schema": "public",
-      "table": "agent_queue_pause",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "agent_id"
-      ],
-      "nameExplicit": false,
-      "name": "agent_queue_revision_pkey",
-      "schema": "public",
-      "table": "agent_queue_revision",
+      "table": "agent_queue",
       "entityType": "pks"
     },
     {

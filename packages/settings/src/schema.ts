@@ -262,7 +262,8 @@ export const APP_SETTING_SCHEMA = {
   /*
    * What Enter does in an agent's message box while its turn runs: steer it,
    * as every message did before queueing, or queue the message behind it.
-   * Kept on this device, as how a keyboard is worked is the device's.
+   * An account preference, as the link choice is: the account carries it to
+   * every Mac and the web, riding a part of the snapshot of its own.
    */
   agentEnter: choiceSetting({
     field: "agentEnter",
@@ -277,11 +278,12 @@ export const APP_SETTING_SCHEMA = {
     optionLabel: (choice) => AGENT_ENTER_LABEL[choice],
     guard: (value: UnparsedWireValue) => optional(value, isAgentEnter),
     default: AGENT_ENTER.STEER,
-    page: SETTINGS_PAGE.AGENTS,
+    page: SETTINGS_PAGE.ACCOUNT,
     section: SETTING_SECTION.COMPOSER,
     order: 400,
     // Nothing to run per write: the message box reads the choice as a key is pressed.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
+    visible: accountDrawn,
   }),
   lineNumbers: toggleSetting({
     field: "lineNumbers",

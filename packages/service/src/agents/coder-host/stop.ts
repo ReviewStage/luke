@@ -1,5 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { liftAgentQueuePause, pauseAgentQueue } from "@luke/database/models/agent-queue-store";
+import { pauseAgentQueue } from "@luke/database/models/agent-queue-store";
 import {
   type Agent,
   type AgentLatestTurn,
@@ -217,15 +217,7 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   // An agent its starter's plan pays for is stopped by those the plan's policy admits.
   yield* admitsPlanWriter(account, agent);
-  // The developer's Stop pauses what is queued behind the turn too, so nothing more goes until Resume. Note that it
-  // pauses before the cancel goes out, because the turn's end may land before eve answers it, and would hand on
-  // a queue not yet paused; and that a cancel refused, or one that stopped nothing, takes the pause back.
-  const paused = yield* hostedStoreOrUnavailable(pauseAgentQueue(agent.id, QUEUE_PAUSE.STOPPED));
-  const lifted = paused ? hostedStoreOrUnavailable(liftAgentQueuePause(agent.id)) : Effect.void;
-  const stopped = yield* cancelledTurn(eveFor(reach, request, account), writer, agent).pipe(
-    Effect.onError(() => Effect.orElseSucceed(lifted, () => undefined)),
-  );
-  if (!stopped) yield* lifted;
+  yield* cancelledTurn(eveFor(reach, request, account), writer, agent);
 });
 
 /**
@@ -255,6 +247,10 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   // A native agent's released wait left wakeups with no turn running to name, which a Stop ends
   // as a stopped CLI's own end with it, so they go whether or not a turn stands to cancel.
   yield* hostedStoreOrUnavailable(replaceAgentWakeups(agent.id, []));
+  // Every Stop, the developer's, a Continue's, another agent's, or a rewind's, pauses what is queued behind the
+  // turn, so nothing more goes until Resume. Note that it pauses before the cancel goes out, because the turn's
+  // end may land before eve answers it, and would hand on a queue not yet paused.
+  yield* hostedStoreOrUnavailable(pauseAgentQueue(agent.id, QUEUE_PAUSE.STOPPED));
   const turn = (yield* standingsOf([agent.conversationId]))(agent.conversationId).turn;
   if (!stoppable(turn)) return false;
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));

@@ -21,7 +21,7 @@ import {
   agentBrowserTabSync,
   agentDelegationSync,
   agentPinSync,
-  agentQueueRevisionSync,
+  agentQueueSync,
   agentSectionEntrySync,
   agentSync,
   attachmentSync,
@@ -609,7 +609,7 @@ export const agentTranscriptLive = defineLiveQuery({
     memberSync,
     githubPersonalTokenSync,
     githubRepositoryReadSync,
-    agentQueueRevisionSync,
+    agentQueueSync,
   ],
   topics: ({ conversationId, parentConversationId, agentId, readerId }) => {
     const parent: readonly SyncTopic[] =

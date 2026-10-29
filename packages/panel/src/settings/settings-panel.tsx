@@ -96,6 +96,7 @@ export function SettingsPanel({
               onDeleteAccount={onDeleteAccount}
             />
             {panelView ? <LinksSection view={panelView} writes={writes} /> : null}
+            {panelView ? <AgentComposerSection view={panelView} writes={writes} /> : null}
             {panelView ? <TasksSection view={panelView} writes={writes} /> : null}
             {panelView ? <PrivacySection view={panelView} writes={writes} /> : null}
           </>
@@ -125,9 +126,6 @@ export function SettingsPanel({
       ) : null}
 
       {view === SETTINGS_VIEW.AGENTS ? <AgentsPage signedIn={signedIn} /> : null}
-      {view === SETTINGS_VIEW.AGENTS && panelView ? (
-        <AgentComposerSection view={panelView} writes={writes} />
-      ) : null}
 
       {view === SETTINGS_VIEW.HOSTS ? <HostsSection signedIn={signedIn} /> : null}
 

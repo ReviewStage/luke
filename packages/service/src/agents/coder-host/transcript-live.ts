@@ -10,7 +10,7 @@ import type { MessageCursor } from "@luke/database/models/message-reads";
 import { agentVisibleTo } from "@luke/database/models/workspace-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { agentDelegationTable, agentTable } from "@luke/database/schemas/agent";
-import { agentQueueRevision } from "@luke/database/schemas/agent-queue";
+import { agentQueue } from "@luke/database/schemas/agent-queue";
 import { user } from "@luke/database/schemas/auth";
 import { conversations, messages, standingLine, turns } from "@luke/database/schemas/storage";
 import { AGENT_BOUNDS, PART_CUT_FIELD } from "@luke/features/agent-wire";
@@ -413,9 +413,9 @@ export function transcriptLiveStatements(
   // The agent's queue as its revision, which every write to the queue or its pause moves on in the same
   // transaction (`agent-queue-store.ts`), so one number wakes the read for all of them.
   const queueRevision = queryBuilder
-    .select({ revision: agentQueueRevision.revision })
-    .from(agentQueueRevision)
-    .innerJoin(agentTable, eq(agentTable.id, agentQueueRevision.agentId))
+    .select({ revision: agentQueue.revision })
+    .from(agentQueue)
+    .innerJoin(agentTable, eq(agentTable.id, agentQueue.agentId))
     .where(
       and(
         eq(agentTable.conversationId, parentConversationId),

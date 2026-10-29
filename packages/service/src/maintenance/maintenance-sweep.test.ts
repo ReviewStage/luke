@@ -70,7 +70,6 @@ interface Recorded {
   tokenPullRequests: number[];
   imageTemplates: number[];
   repositorySnapshots: number[];
-  agentQueues: number[];
 }
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
@@ -92,7 +91,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     tokenPullRequests: [],
     imageTemplates: [],
     repositorySnapshots: [],
-    agentQueues: [],
   };
   const options: MaintenanceSweepOptions = {
     request: sweepRequest(),
@@ -183,11 +181,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.repositorySnapshots.push(now);
         return { listed: 3, deleted: 1 };
       }),
-    sweepAgentQueues: (now) =>
-      Effect.sync(() => {
-        recorded.agentQueues.push(now);
-        return 1;
-      }),
+    sweepAgentQueues: () => Effect.succeed(0),
     ...overrides,
   };
   return { options, recorded };
@@ -225,7 +219,6 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       tokenPullRequests: [],
       imageTemplates: [],
       repositorySnapshots: [],
-      agentQueues: [],
     });
   }),
 );
@@ -258,7 +251,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       tokenPullRequests: [],
       imageTemplates: [],
       repositorySnapshots: [],
-      agentQueues: [],
     });
     assert.deepEqual(missing.recorded, {
       purged: [],
@@ -278,7 +270,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       tokenPullRequests: [],
       imageTemplates: [],
       repositorySnapshots: [],
-      agentQueues: [],
     });
   }),
 );
@@ -323,7 +314,6 @@ it.effect(
         tokenPullRequests: [instant],
         imageTemplates: [instant],
         repositorySnapshots: [instant],
-        agentQueues: [instant],
       });
     }),
 );

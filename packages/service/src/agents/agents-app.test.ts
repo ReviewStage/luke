@@ -261,6 +261,7 @@ import { instancePublishedCache } from "./coder-host/published.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { steerAgentWritten } from "./coder-host/steer.js";
+import { cancelledTurn } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { EVE_HOST_TURN } from "./eve-host/bounds.js";
 import {
@@ -5862,41 +5863,51 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       }),
   );
 
-  it.effect("a Stop of an agent whose turn has nothing to stop pauses nothing queued", () =>
-    Effect.gen(function* () {
-      const eve = fakeEve();
-      // The turn ended with a message still queued, which the turn's end has not handed on yet.
-      const { agent, ask, owner, queued } = yield* queuedBehindEndedTurn(eve, [
-        "Open the pull request.",
-      ]);
+  it.effect(
+    "a turn cancelled other than by the Stop route, as a Continue, another agent's stop_agent, or a rewind cancels it, pauses the queue before the cancel",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { agent, ask, owner, github } = yield* startedAgent(eve, { running: true });
+        yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.ADD,
+          text: "Open the pull request.",
+          clientKey: randomUUID(),
+        });
+        const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
 
-      yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
+        yield* cancelledTurn(
+          Effect.succeed(eve.eve(`deployment:${owner}`)),
+          storeWriter({ tools: CODER_TOOL_SET }),
+          stored,
+        ).pipe(Effect.provide(Layer.mergeAll(github.layer, noNetwork)));
 
-      assert.equal((yield* queued)?.paused, undefined);
-    }),
+        const page = readAnswer(
+          agentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        );
+        assert.equal(page.queue?.paused?.because, QUEUE_PAUSE.STOPPED);
+        assert.equal(handedCount(eve, "Open the pull request."), 0);
+      }),
   );
 
-  it.effect("a Stop eve refuses stops nothing, so it pauses nothing queued behind the turn", () =>
-    Effect.gen(function* () {
-      const eve = fakeEve({ cancels: false });
-      const { agent, ask, owner } = yield* startedAgent(eve, { running: true });
-      yield* queueChanged(ask, owner, agent.id, {
-        change: QUEUE_CHANGE.ADD,
-        text: "Then open a pull request.",
-        clientKey: randomUUID(),
-      });
+  it.effect(
+    "a Stop pauses what is queued though the turn was already over, so no sweep sends it after the Stop",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        // The turn ended with a message still queued, which the turn's end has not handed on yet.
+        const { agent, ask, owner, queued, swept } = yield* queuedBehindEndedTurn(eve, [
+          "Open the pull request.",
+        ]);
 
-      const stopped = yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
+        yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
+        yield* swept;
 
-      assert.notEqual(stopped.status, HOSTED_HTTP_STATUS.OK);
-      const page = readAnswer(
-        agentMessagesAnswerSchema,
-        HOSTED_HTTP_STATUS.OK,
-        yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
-      );
-      assert.equal(page.queue?.messages.length, 1);
-      assert.equal(page.queue?.paused, undefined);
-    }),
+        assert.equal((yield* queued)?.paused?.because, QUEUE_PAUSE.STOPPED);
+        assert.equal(handedCount(eve, "Open the pull request."), 0);
+      }),
   );
 
   it.effect(

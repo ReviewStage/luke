@@ -21,10 +21,10 @@ import {
 
 /**
  * An agent's queue as its tab draws and changes it. What it draws is the
- * service's queue, as the newest transcript page carries it, with each
- * change still out drawn over it until a page stands at the revision its
- * answer named, or until it fails: so an answer that lands after a newer
- * page never draws an older queue, and a change refused draws nothing. The
+ * service's queue, as the newest page or a change's answer names it,
+ * whichever stands at the higher revision, so an answer that lands after a
+ * newer page never draws an older queue; a message queued and a new order
+ * are drawn as they go, and spring back where refused. The
  * message box's part: a message the queue refused comes back into the box,
  * an edit the queue did not save stays open with its new words, an edit of
  * a message the queue would not hold closes, and an edit steered is one
@@ -136,7 +136,6 @@ test("Resume answered after the page that handed the message on draws neither th
     }),
   );
   act(() => void now().queue.change({ change: QUEUE_CHANGE.RESUME }));
-  assert.equal(now().queue.paused, undefined, "Resume is drawn at once");
 
   act(() => now().page({ messages: [], revision: 7 }));
   await answer({ queue: { messages: [message("m1", "Open the pull request")], revision: 6 } });
@@ -145,14 +144,19 @@ test("Resume answered after the page that handed the message on draws neither th
   assert.equal(now().queue.paused, undefined);
 });
 
-test("a change refused draws nothing past its refusal", async () => {
-  act(() => now().page({ messages: [message("m1", "Run tests")], revision: 1 }));
-  act(() => void now().queue.change({ change: QUEUE_CHANGE.DELETE, messageId: "m1" }));
-  assert.deepEqual(texts(), []);
+test("a new order is drawn as the drag drops it, and springs back where the queue refuses it", async () => {
+  act(() =>
+    now().page({
+      messages: [message("m1", "Run tests"), message("m2", "Open the PR")],
+      revision: 1,
+    }),
+  );
+  act(() => now().queue.move(1, 0));
+  assert.deepEqual(texts(), ["Open the PR", "Run tests"]);
 
   await answer(refused);
 
-  assert.deepEqual(texts(), ["Run tests"]);
+  assert.deepEqual(texts(), ["Run tests", "Open the PR"]);
 });
 
 test("a message the queue refused comes back into the box it was queued from", async () => {
@@ -200,8 +204,8 @@ test("an edit steered is one change of the message it edits, with its new words,
     messageId: "m1",
     text: "Run tests and fix failures",
   });
-  assert.deepEqual(texts(), [], "the message steered leaves the queue at once");
   await answer({ queue: { messages: [], revision: 3 } });
+  assert.deepEqual(texts(), [], "the message steered leaves the queue");
   assert.equal(now().editing.editing, undefined);
   assert.equal(sent.filter((each) => each.change === QUEUE_CHANGE.ADD).length, 0);
 });

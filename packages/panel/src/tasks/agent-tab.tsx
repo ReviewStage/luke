@@ -2522,7 +2522,10 @@ function AgentTabView({
   // Note that a line on its way counts as work from the press, because the agent's status turns
   // running only once the service takes the line, which may take seconds.
   const lineGoing = composer.sent.some((line) => line.state === SENT_LINE_STATE.PENDING);
-  const working = agentStillWriting(agent.status) || lineGoing;
+  // Note that the transcript's own page says the agent runs before the agent's summary does, since a line that
+  // lands awaiting its turn moves the page and not the list the summary is read from.
+  const pageRuns = transcript.pageStatus !== undefined && agentStillWriting(transcript.pageStatus);
+  const working = agentStillWriting(agent.status) || pageRuns || lineGoing;
   const name = agentName(agent, models);
   const keyProvider = providerOf(agent.model);
   const tab = useRef<HTMLElement>(null);
@@ -2632,10 +2635,7 @@ function AgentTabView({
                     failed={transcript.failed}
                     // Note that a rewind draws the working line from its press until its line reads back, however slow its stop and relaunch.
                     working={working || composer.rewinding}
-                    pageRuns={
-                      transcript.pageStatus !== undefined &&
-                      agentStillWriting(transcript.pageStatus)
-                    }
+                    pageRuns={pageRuns}
                     rewindOut={composer.rewindOut}
                     sessionStarting={agent.status === AGENT_STATUS.STARTING}
                     // Note that while a rewind goes the line counts from its press, never from the run before it, which is the agent's start until a new turn begins.
@@ -2644,7 +2644,7 @@ function AgentTabView({
                     }
                     ended={
                       // Note that the end line waits for a page, so a stopped agent's tab never draws it over nothing, and gives way to a line on its way, which the working line stands for.
-                      transcript.pages === 0 || lineGoing
+                      transcript.pages === 0 || lineGoing || pageRuns
                         ? undefined
                         : endLineParts(
                             agent.status,

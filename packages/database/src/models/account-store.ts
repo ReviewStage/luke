@@ -9,6 +9,8 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import { AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import {
   type AccountPreferences,
+  AGENT_ENTER_LIST,
+  type AgentEnter,
   accountPreferencesFromStored,
   type Experiment,
   type ExperimentChoices,
@@ -62,12 +64,13 @@ export interface AccountPreferencesRow {
  * menu's choice each write their own part without reading the other first.
  * The experiments part is the one patch: its keys are merged over what
  * stood, so a Mac that knows fewer experiments never erases another's.
- * `preferences` is the shared part; the link choice is a part of its own,
- * which a build that predates it never sends.
+ * `preferences` is the shared part; the link choice and Enter's choice are
+ * parts of their own, which a build that predates them never sends.
  */
 export interface AccountPreferencesWrite {
   preferences?: AccountPreferences;
   linkOpen?: LinkOpen;
+  agentEnter?: AgentEnter;
   agent?: ModelChoice;
   chaptersModel?: ChaptersModelId;
   experiments?: ExperimentChoices;
@@ -136,6 +139,7 @@ export function deleteAccount(userId: string): Effect.Effect<void, StoreFailure,
 /** The columns every read and the write's `returning` project, so a row decodes one way whatever wrote it. */
 const PREFERENCE_COLUMNS = {
   linkOpen: accountPreference.linkOpen,
+  agentEnter: accountPreference.agentEnter,
   agentModel: accountPreference.agentModel,
   agentEffort: accountPreference.agentEffort,
   agentContextWindow: accountPreference.agentContextWindow,
@@ -146,6 +150,7 @@ const PREFERENCE_COLUMNS = {
 
 const PreferenceRowSchema = Schema.Struct({
   linkOpen: Schema.NullOr(Schema.String),
+  agentEnter: Schema.NullOr(Schema.String),
   agentModel: Schema.NullOr(Schema.String),
   agentEffort: Schema.NullOr(Schema.String),
   agentContextWindow: Schema.NullOr(contextWindowSchema),
@@ -173,7 +178,11 @@ function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
         }
       : AGENT_DEFAULT_CHOICE;
   return {
-    preferences: accountPreferencesFromStored(row.linkOpen ? { linkOpen: row.linkOpen } : {}) ?? {},
+    preferences:
+      accountPreferencesFromStored({
+        ...(row.linkOpen ? { linkOpen: row.linkOpen } : undefined),
+        ...(row.agentEnter ? { agentEnter: row.agentEnter } : undefined),
+      }) ?? {},
     agent,
     // Note that a stored model no build lists any more reads as Haiku, as a row never written does.
     chaptersModel: chaptersModelFrom(row.chaptersModel),
@@ -247,6 +256,7 @@ export function readAccountRole(
 const PreferenceWriteSchema = Schema.Struct({
   userId: Schema.String,
   linkOpen: Schema.optionalKey(Schema.Literals(LINK_OPEN_LIST)),
+  agentEnter: Schema.optionalKey(Schema.Literals(AGENT_ENTER_LIST)),
   agent: Schema.optionalKey(
     Schema.Struct({
       model: Schema.String,
@@ -267,6 +277,7 @@ function writtenColumns(write: PreferenceWrite) {
   return {
     ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),
     ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
+    ...(write.agentEnter === undefined ? undefined : { agentEnter: write.agentEnter }),
     ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
     ...(write.updatedAt === undefined ? undefined : { updatedAt: write.updatedAt }),
     ...(write.agent === undefined
@@ -326,6 +337,7 @@ export function writeAccountPreferences(
       userId,
       ...(write.preferences === undefined ? undefined : { updatedAt }),
       ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
+      ...(write.agentEnter === undefined ? undefined : { agentEnter: write.agentEnter }),
       ...(write.agent === undefined ? undefined : { agent: write.agent }),
       ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
       ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),

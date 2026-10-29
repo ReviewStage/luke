@@ -56,32 +56,21 @@ export const queuedMessage = pgTable(
 );
 
 /**
- * Whether an agent's queue stands paused, and why: at most one row per
- * agent, written by a Stop, a failed turn, or a refused hand-off, and
- * deleted by Resume. `refusal` is the service's word for what refused a
- * hand-off, null for any other pause.
- */
-export const agentQueuePause = pgTable("agent_queue_pause", {
-  agentId: uuid("agent_id")
-    .primaryKey()
-    .references(() => agentTable.id, { onDelete: "cascade" }),
-  because: text("because").$type<QueuePause>().notNull(),
-  refusal: text("refusal").$type<HostedApiError>(),
-  pausedAt: timestamptz("paused_at").notNull(),
-});
-
-/**
- * Where an agent's queue stands, as one number every write to the queue or
- * its pause moves on, in the same transaction: a message queued, edited,
+ * Where an agent's queue stands: its revision, one number every write to
+ * the queue moves on in the same transaction (a message queued, edited,
  * held or let go, claimed or released, put in a new order, deleted, or sent,
- * and a pause written or dropped. A reader keyed to it is woken by every one
- * of them, and a change a window made is known landed once a read stands at
- * the number its answer named. At most one row per agent, written by its
- * first change.
+ * and a pause written or dropped), which wakes every reader keyed to it and
+ * tells a window a change it made has landed once a read stands at the
+ * number its answer named; and whether it stands paused, and why: by a
+ * Stop or any cancel, a failed turn, or a refused hand-off, with the
+ * service's word for what refused it, and null while it runs. At most one
+ * row per agent, written by its queue's first change.
  */
-export const agentQueueRevision = pgTable("agent_queue_revision", {
+export const agentQueue = pgTable("agent_queue", {
   agentId: uuid("agent_id")
     .primaryKey()
     .references(() => agentTable.id, { onDelete: "cascade" }),
   revision: integer("revision").notNull(),
+  pausedBecause: text("paused_because").$type<QueuePause>(),
+  pausedRefusal: text("paused_refusal").$type<HostedApiError>(),
 });

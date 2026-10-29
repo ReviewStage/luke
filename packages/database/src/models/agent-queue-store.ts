@@ -55,12 +55,12 @@ import { AGENT_QUEUE_BOUNDS, QUEUE_PAUSE, type QueuePause } from "@luke/features
 import { LINE_GRACE_MILLIS } from "@luke/features/agent-status";
 import type { AgentAttachment } from "@luke/features/agent-wire";
 import { TURN_STATUS } from "@luke/wire";
-import { and, asc, count, eq, exists, inArray, isNull, lte, max, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, exists, inArray, isNotNull, isNull, lte, max, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { agentTable } from "../schemas/agent.js";
-import { agentQueuePause, agentQueueRevision, queuedMessage } from "../schemas/agent-queue.js";
+import { agentQueue, queuedMessage } from "../schemas/agent-queue.js";
 import { turns } from "../schemas/storage.js";
 import { agentReachableBy } from "./workspace-store.js";
 
@@ -110,11 +110,6 @@ export const QUEUE_OUTCOME = {
 export type QueueOutcome = (typeof QUEUE_OUTCOME)[keyof typeof QUEUE_OUTCOME];
 
 const PAUSES: readonly QueuePause[] = Object.values(QUEUE_PAUSE);
-
-const PauseRowSchema = Schema.Struct({
-  because: Schema.Literals(PAUSES),
-  refusal: Schema.NullOr(Schema.String),
-});
 
 /** A row as the store reads it, its files as the request carried them. */
 function messageOf(row: typeof QueuedRowSchema.Type): QueuedMessageRow {
@@ -169,15 +164,24 @@ const findMessages = SqlSchema.findAll({
     ),
 });
 
-const findPause = SqlSchema.findAll({
+/** The queue's own row: its revision, and its pause where it stands paused. */
+const findQueueRow = SqlSchema.findAll({
   Request: Schema.Struct({ agentId: Schema.String }),
-  Result: PauseRowSchema,
+  Result: Schema.Struct({
+    revision: Schema.Number,
+    pausedBecause: Schema.NullOr(Schema.Literals(PAUSES)),
+    pausedRefusal: Schema.NullOr(Schema.String),
+  }),
   execute: ({ agentId }) =>
     Database.use((db) =>
       db
-        .select({ because: agentQueuePause.because, refusal: agentQueuePause.refusal })
-        .from(agentQueuePause)
-        .where(eq(agentQueuePause.agentId, agentId)),
+        .select({
+          revision: agentQueue.revision,
+          pausedBecause: agentQueue.pausedBecause,
+          pausedRefusal: agentQueue.pausedRefusal,
+        })
+        .from(agentQueue)
+        .where(eq(agentQueue.agentId, agentId)),
     ),
 });
 
@@ -403,10 +407,11 @@ const deletePauseIfEmpty = SqlSchema.void({
   execute: ({ agentId }) =>
     Database.use((db) =>
       db
-        .delete(agentQueuePause)
+        .update(agentQueue)
+        .set({ pausedBecause: null, pausedRefusal: null })
         .where(
           and(
-            eq(agentQueuePause.agentId, agentId),
+            eq(agentQueue.agentId, agentId),
             sql`not ${exists(
               db
                 .select({ id: queuedMessage.id })
@@ -418,74 +423,65 @@ const deletePauseIfEmpty = SqlSchema.void({
     ),
 });
 
+/** The pause dropped, answering it where the queue stood paused. */
 const deletePause = SqlSchema.findAll({
   Request: Schema.Struct({ agentId: Schema.String }),
   Result: Schema.Struct({ agentId: Schema.String }),
   execute: ({ agentId }) =>
     Database.use((db) =>
       db
-        .delete(agentQueuePause)
-        .where(eq(agentQueuePause.agentId, agentId))
-        .returning({ agentId: agentQueuePause.agentId }),
+        .update(agentQueue)
+        .set({ pausedBecause: null, pausedRefusal: null })
+        .where(and(eq(agentQueue.agentId, agentId), isNotNull(agentQueue.pausedBecause)))
+        .returning({ agentId: agentQueue.agentId }),
     ),
 });
 
-/** The pause written over the queue's messages, where any stand; a queue already paused keeps the reason it paused for first. */
+/**
+ * The pause written over the queue's messages, where any stand; a queue
+ * already paused keeps the reason it paused for first. Note that a queue
+ * with messages has its row already, written by the change that queued them.
+ */
 const insertPause = SqlSchema.findAll({
   Request: Schema.Struct({
     agentId: Schema.String,
     because: Schema.Literals(PAUSES),
     refusal: Schema.NullOr(Schema.String),
-    now: Schema.Date,
   }),
   Result: Schema.Struct({ agentId: Schema.String }),
-  execute: ({ agentId, because, refusal, now }) =>
+  execute: ({ agentId, because, refusal }) =>
     Database.use((db) =>
       db
-        .insert(agentQueuePause)
-        .select((qb) =>
-          qb
-            .select({
-              agentId: sql<string>`${agentId}::uuid`.as("agent_id"),
-              because: sql<QueuePause>`${because}::text`.as("because"),
-              refusal: sql<HostedApiError | null>`${refusal}::text`.as("refusal"),
-              pausedAt: sql<Date>`${now}::timestamptz`.as("paused_at"),
-            })
-            .from(queuedMessage)
-            .where(eq(queuedMessage.agentId, agentId))
-            .limit(1),
+        .update(agentQueue)
+        .set({ pausedBecause: because, pausedRefusal: refusal as HostedApiError | null })
+        .where(
+          and(
+            eq(agentQueue.agentId, agentId),
+            isNull(agentQueue.pausedBecause),
+            exists(
+              db
+                .select({ id: queuedMessage.id })
+                .from(queuedMessage)
+                .where(eq(queuedMessage.agentId, agentId)),
+            ),
+          ),
         )
-        .onConflictDoNothing({ target: agentQueuePause.agentId })
-        .returning({ agentId: agentQueuePause.agentId }),
+        .returning({ agentId: agentQueue.agentId }),
     ),
 });
 
-/** The queue's revision moved on by one, answering the revision it moved to. */
-const bumpRevision = SqlSchema.findAll({
+/** The queue's revision moved on by one, writing its row on its first change. */
+const bumpRevision = SqlSchema.void({
   Request: Schema.Struct({ agentId: Schema.String }),
-  Result: Schema.Struct({ revision: Schema.Number }),
   execute: ({ agentId }) =>
     Database.use((db) =>
       db
-        .insert(agentQueueRevision)
+        .insert(agentQueue)
         .values({ agentId, revision: 1 })
         .onConflictDoUpdate({
-          target: agentQueueRevision.agentId,
-          set: { revision: sql`${agentQueueRevision.revision} + 1` },
-        })
-        .returning({ revision: agentQueueRevision.revision }),
-    ),
-});
-
-const findRevision = SqlSchema.findAll({
-  Request: Schema.Struct({ agentId: Schema.String }),
-  Result: Schema.Struct({ revision: Schema.Number }),
-  execute: ({ agentId }) =>
-    Database.use((db) =>
-      db
-        .select({ revision: agentQueueRevision.revision })
-        .from(agentQueueRevision)
-        .where(eq(agentQueueRevision.agentId, agentId)),
+          target: agentQueue.agentId,
+          set: { revision: sql`${agentQueue.revision} + 1` },
+        }),
     ),
 });
 
@@ -494,43 +490,31 @@ function reaches(userId: string, agentId: string): AgentQueueEffect<boolean> {
   return Effect.map(findReached({ userId, agentId }), (rows) => rows.length > 0);
 }
 
-/** The queue's three parts as they stand, read inside a caller's transaction. */
-function queueRead(agentId: string): AgentQueueEffect<AgentQueueRead> {
-  return Effect.gen(function* () {
-    const rows = yield* findMessages({ agentId });
-    const [pause] = yield* findPause({ agentId });
-    const [revision] = yield* findRevision({ agentId });
-    return {
-      messages: rows.map(messageOf),
-      paused:
-        pause === undefined
-          ? undefined
-          : {
-              because: pause.because,
-              // SAFETY: the column is written only from a hosted refusal's word for itself.
-              refusal: (pause.refusal ?? undefined) as HostedApiError | undefined,
-            },
-      revision: revision?.revision ?? 0,
-    };
-  });
-}
-
 /**
  * The agent's queue as it stands, its messages in order, its pause, and its
  * revision, for a caller that already asked whether the reader reaches the
- * agent. Note that the three are read as one, holding the queue's lock
- * shared, which every write holds whole, so no read joins rows from before a
- * write to a revision from after it.
+ * agent. Note that the revision is read before the messages, so a read
+ * never names a revision newer than the messages it lists, which is all a
+ * window drawing its own changes over the queue until it stands at their
+ * revision asks.
  */
 export function agentQueueNow(agentId: string): AgentQueueEffect<AgentQueueRead> {
-  return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.andThen(
-        client`select pg_advisory_xact_lock_shared(hashtextextended(${agentId}, 7))`,
-        queueRead(agentId),
-      ),
-    ),
-  );
+  return Effect.gen(function* () {
+    const [row] = yield* findQueueRow({ agentId });
+    const rows = yield* findMessages({ agentId });
+    return {
+      messages: rows.map(messageOf),
+      paused:
+        row?.pausedBecause === null || row === undefined
+          ? undefined
+          : {
+              because: row.pausedBecause,
+              // SAFETY: the column is written only from a hosted refusal's word for itself.
+              refusal: (row.pausedRefusal ?? undefined) as HostedApiError | undefined,
+            },
+      revision: row?.revision ?? 0,
+    };
+  });
 }
 
 /**
@@ -769,32 +753,21 @@ export function resumeAgentQueue(
 /**
  * The agent's queue paused for `because` where it holds a message, naming
  * the refusal for a hand-off refused; a queue already paused keeps the reason
- * it paused for first, and an empty queue is not paused. Answers whether
- * this pause is the one that now stands.
+ * it paused for first, and an empty queue is not paused.
  */
 export function pauseAgentQueue(
   agentId: string,
   because: QueuePause,
   refusal?: HostedApiError,
-): AgentQueueEffect<boolean> {
-  return underQueueLock(
-    agentId,
-    Effect.gen(function* () {
-      const now = yield* DateTime.nowAsDate;
-      const paused = yield* insertPause({ agentId, because, refusal: refusal ?? null, now });
-      return paused.length > 0;
-    }),
-    (paused) => paused,
-  );
-}
-
-/** A pause the service wrote taken back, as a Stop that stopped nothing takes back the one it wrote first. */
-export function liftAgentQueuePause(agentId: string): AgentQueueEffect<void> {
+): AgentQueueEffect<void> {
   return Effect.asVoid(
     underQueueLock(
       agentId,
-      Effect.map(deletePause({ agentId }), (lifted) => lifted.length > 0),
-      (lifted) => lifted,
+      Effect.map(
+        insertPause({ agentId, because, refusal: refusal ?? null }),
+        (paused) => paused.length > 0,
+      ),
+      (paused) => paused,
     ),
   );
 }
@@ -810,7 +783,7 @@ export function claimQueueHead(agentId: string): AgentQueueEffect<Option.Option<
   return underQueueLock(
     agentId,
     Effect.gen(function* () {
-      const queue = yield* queueRead(agentId);
+      const queue = yield* agentQueueNow(agentId);
       const now = yield* DateTime.nowAsDate;
       if (queue.paused !== undefined) return Option.none();
       if (queue.messages.some((message) => claimedAt(message, now))) return Option.none();
@@ -866,12 +839,10 @@ export function refuseQueuedMessage(
       agentId,
       Effect.gen(function* () {
         const wasReleased = yield* released(agentId, message);
-        const now = yield* DateTime.nowAsDate;
         const paused = yield* insertPause({
           agentId,
           because: QUEUE_PAUSE.REFUSED,
           refusal,
-          now,
         });
         return wasReleased || paused.length > 0;
       }),
@@ -906,9 +877,14 @@ const findUnpausedQueues = SqlSchema.findAll({
           and(
             sql`not ${exists(
               db
-                .select({ agentId: agentQueuePause.agentId })
-                .from(agentQueuePause)
-                .where(eq(agentQueuePause.agentId, queuedMessage.agentId)),
+                .select({ agentId: agentQueue.agentId })
+                .from(agentQueue)
+                .where(
+                  and(
+                    eq(agentQueue.agentId, queuedMessage.agentId),
+                    isNotNull(agentQueue.pausedBecause),
+                  ),
+                ),
             )}`,
             // Note that an agent at work is left out before the bound, so busy queues never crowd out an idle one.
             sql`not ${exists(

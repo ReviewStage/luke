@@ -128,21 +128,17 @@ export function queueOnPage(agentId: string) {
   });
 }
 
-/** When the next of the queue's edits or sends lapses, in epoch milliseconds, which moves it with no row written; none where none stands. */
-export function queueLapseAt(agentId: string) {
-  return Effect.gen(function* () {
-    const read = yield* agentQueueNow(agentId);
-    const now = yield* DateTime.nowAsDate;
-    const lapses = read.messages.flatMap((message) => [
-      ...(heldAt(message, now) && message.heldUntil !== undefined
-        ? [message.heldUntil.getTime()]
-        : []),
-      ...(claimedAt(message, now) && message.claimedAt !== undefined
-        ? [message.claimedAt.getTime() + LINE_GRACE_MILLIS]
-        : []),
-    ]);
-    return lapses.length === 0 ? undefined : Math.min(...lapses);
-  });
+/** When the next of the queue's edits or sends lapses after `now`, in epoch milliseconds, which moves it with no row written; none where none stands. */
+export function queueLapseOf(read: AgentQueueRead, now: Date): number | undefined {
+  const lapses = read.messages.flatMap((message) => [
+    ...(heldAt(message, now) && message.heldUntil !== undefined
+      ? [message.heldUntil.getTime()]
+      : []),
+    ...(claimedAt(message, now) && message.claimedAt !== undefined
+      ? [message.claimedAt.getTime() + LINE_GRACE_MILLIS]
+      : []),
+  ]);
+  return lapses.length === 0 ? undefined : Math.min(...lapses);
 }
 
 /** Whether the agent is at work, as its status reads: starting, a turn running, or a message sent to it awaiting its turn. */

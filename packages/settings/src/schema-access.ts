@@ -60,6 +60,7 @@ export function isAppSettingField(value: UnparsedWireValue): value is AppSetting
  */
 export const ACCOUNT_PREFERENCE_FIELDS = [
   APP_SETTING_SCHEMA.linkOpen.field,
+  APP_SETTING_SCHEMA.agentEnter.field,
 ] as const satisfies readonly AppSettingField[];
 
 export type AccountPreferenceField = (typeof ACCOUNT_PREFERENCE_FIELDS)[number];
@@ -70,9 +71,10 @@ export type AccountPreferences = Partial<Pick<StoredAppSettings, AccountPreferen
  * The preferences the snapshot's shared `preferences` part carries, which a
  * write replaces whole: none since the voice went with calls, though the
  * part stays on the wire, because v0.18.0 refuses a snapshot without it.
- * Note that `linkOpen` rides a part of its own beside it, because a build
- * from before it reads this part and writes it back whole: a choice inside
- * it would be refused by the older reader and cleared by the older writer.
+ * Note that each preference rides a part of its own beside it
+ * (`OWN_PART_FIELDS`), because a build from before it reads this part and
+ * writes it back whole: a choice inside it would be refused by the older
+ * reader and cleared by the older writer.
  */
 const SHARED_PREFERENCE_FIELDS = [] as const satisfies readonly AccountPreferenceField[];
 
@@ -80,8 +82,13 @@ const ACCOUNT_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(ACCOUNT_PREFER
 
 const SHARED_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(SHARED_PREFERENCE_FIELDS);
 
-/** The snapshot's own part for where the account's Luke links open. */
-const LINK_OPEN_PART = APP_SETTING_SCHEMA.linkOpen.field;
+/** The preferences each riding a part of the snapshot of its own, named as the preference is: where the account's Luke links open, and what Enter does in an agent's box while it works. */
+const OWN_PART_FIELDS = [
+  APP_SETTING_SCHEMA.linkOpen.field,
+  APP_SETTING_SCHEMA.agentEnter.field,
+] as const satisfies readonly AccountPreferenceField[];
+
+type OwnPartField = (typeof OWN_PART_FIELDS)[number];
 
 /** Where a preferences record came from: the account's stored row, or a client's or the service's wire. */
 const PREFERENCE_SOURCE = {
@@ -141,32 +148,56 @@ export function accountPreferencesFromStored(
   return parseAccountPreferences(value, ACCOUNT_PREFERENCE_FIELD_SET, PREFERENCE_SOURCE.STORED);
 }
 
-/** Where the account's links open, as a write's own part names it; nothing where it names no choice. */
-export function linkOpenFromWire(value: UnparsedWireValue): AccountPreferences["linkOpen"] {
-  const parsed = APP_SETTING_SCHEMA.linkOpen.guard(value);
-  return parsed.valid ? parsed.value : undefined;
+/** One preference as a write's own part for it names it; nothing where it names no choice this build knows. */
+export function ownPreferenceFromWire<Field extends OwnPartField>(
+  field: Field,
+  value: UnparsedWireValue,
+): AccountPreferences[Field] {
+  const parsed = APP_SETTING_SCHEMA[field].guard(value);
+  // SAFETY: the field's own guard read the value as that preference's stored shape.
+  return (parsed.valid ? parsed.value : undefined) as AccountPreferences[Field];
 }
 
 /**
  * The parts of the snapshot an account's preferences travel in: the shared
- * part, and the link choice's own where one is held. A device that never
- * chose sends no link part, so it cannot clear another device's choice.
+ * part, and each own part's choice where one is held. A device that never
+ * chose sends no part for it, so it cannot clear another device's choice.
  */
-export interface AccountPreferencesParts {
-  preferences: AccountPreferences;
-  linkOpen?: NonNullable<AccountPreferences["linkOpen"]>;
+export type AccountPreferencesParts = { preferences: AccountPreferences } & {
+  [Field in OwnPartField]?: NonNullable<AccountPreferences[Field]>;
+};
+
+/** The own parts' choices a record holds, by field, leaving out those it holds none for. */
+function ownChoices(record: Partial<Record<OwnPartField, UnparsedWireValue>>): AccountPreferences {
+  const chosen: Record<string, UnparsedWireValue> = {};
+  for (const field of OWN_PART_FIELDS) {
+    if (record[field] !== undefined) chosen[field] = record[field];
+  }
+  // SAFETY: each value is an own part's choice, read by its guard where it came off a wire.
+  return chosen as AccountPreferences;
+}
+
+/** An account's preferences without its own parts' choices: its shared part. */
+function sharedOf(preferences: AccountPreferences): AccountPreferences {
+  const shared: Record<string, UnparsedWireValue> = { ...preferences };
+  for (const field of OWN_PART_FIELDS) delete shared[field];
+  // SAFETY: what is left is the record's shared preferences, as they were.
+  return shared as AccountPreferences;
 }
 
 /** An account's preferences split into the parts of the snapshot that carry them. */
 export function accountPreferencesParts(preferences: AccountPreferences): AccountPreferencesParts {
-  const { [LINK_OPEN_PART]: linkOpen, ...shared } = preferences;
-  return { preferences: shared, ...(linkOpen === undefined ? undefined : { linkOpen }) };
+  // SAFETY: `ownChoices` leaves out every own part the record holds no choice for.
+  return {
+    preferences: sharedOf(preferences),
+    ...ownChoices(preferences),
+  } as AccountPreferencesParts;
 }
 
 /**
  * An account's preferences joined from the snapshot's parts: nothing where
- * the shared part is refused, and the link part passed over where it names
- * no choice this build knows, since a newer service's choice must not cost
+ * the shared part is refused, and an own part passed over where it names no
+ * choice this build knows, since a newer service's choice must not cost
  * this device the shared part beside it.
  */
 export function accountPreferencesFromParts(
@@ -174,15 +205,16 @@ export function accountPreferencesFromParts(
 ): AccountPreferences | undefined {
   const shared = accountPreferencesFromWire(snapshot.preferences);
   if (shared === undefined) return undefined;
-  const linkOpen = linkOpenFromWire(snapshot[LINK_OPEN_PART]);
-  return { ...shared, ...(linkOpen === undefined ? undefined : { [LINK_OPEN_PART]: linkOpen }) };
+  const owned: Record<string, UnparsedWireValue> = {};
+  for (const field of OWN_PART_FIELDS) owned[field] = ownPreferenceFromWire(field, snapshot[field]);
+  return { ...shared, ...ownChoices(owned) };
 }
 
 /**
  * The preferences a snapshot stands for, as a device merges them over its
  * own. Note that the shared part counts only once written (`updatedAt`): a
  * device takes no unwritten shared part over its own, so its own shared
- * preferences stand in for it. The link part is written apart and never
+ * preferences stand in for it. An own part is written apart and never
  * cleared on the service, only chosen again, so one the snapshot holds is
  * taken either way, and a choice made on the web reaches a Mac before any
  * shared part was written; one it lacks was never written by anyone, so the
@@ -194,42 +226,49 @@ export function snapshotAccountPreferences(
   sharedWritten: boolean,
   local: AccountPreferences,
 ): AccountPreferences {
-  const remoteParts = accountPreferencesParts(remote);
-  const localParts = accountPreferencesParts(local);
-  const shared = sharedWritten ? remoteParts.preferences : localParts.preferences;
-  const linkOpen = remoteParts.linkOpen ?? localParts.linkOpen;
-  return { ...shared, ...(linkOpen === undefined ? undefined : { [LINK_OPEN_PART]: linkOpen }) };
+  const shared = sharedWritten ? sharedOf(remote) : sharedOf(local);
+  return { ...shared, ...ownChoices(local), ...ownChoices(remote) };
 }
 
 /**
- * What a device writes of its preferences. A link choice it held when it
- * last synced and has since cleared is written as the default, since a
- * write without the link part leaves the service's choice standing, and the
- * next sync would bring back the choice the device let go of; one it never
- * held is left out, so it clears no other device's.
+ * What a device writes of its preferences. An own part's choice it held
+ * when it last synced and has since cleared is written as the default,
+ * since a write without that part leaves the service's choice standing, and
+ * the next sync would bring back the choice the device let go of; one it
+ * never held is left out, so it clears no other device's.
  */
 export function accountPreferencesToWrite(
   local: AccountPreferences,
   baseline: AccountPreferences | undefined,
 ): AccountPreferences {
-  const cleared = local[LINK_OPEN_PART] === undefined && baseline?.[LINK_OPEN_PART] !== undefined;
-  return cleared ? { ...local, [LINK_OPEN_PART]: APP_SETTING_SCHEMA.linkOpen.default } : local;
+  const written: Record<string, UnparsedWireValue> = { ...local };
+  for (const field of OWN_PART_FIELDS) {
+    if (local[field] === undefined && baseline?.[field] !== undefined) {
+      written[field] = APP_SETTING_SCHEMA[field].default;
+    }
+  }
+  // SAFETY: each value is the device's own choice or the preference's default.
+  return written as AccountPreferences;
 }
 
 /**
  * What a device pushes as one of its own preferences changes: what it
- * writes, less a link choice it has not changed since it last synced, since
- * the service may hold a newer one another device made meanwhile, which a
- * push of the shared part beside it must not put back.
+ * writes, less an own part's choice it has not changed since it last
+ * synced, since the service may hold a newer one another device made
+ * meanwhile, which a push of the part beside it must not put back.
  */
 export function accountPreferencesToPush(
   local: AccountPreferences,
   baseline: AccountPreferences | undefined,
 ): AccountPreferences {
-  const written = accountPreferencesToWrite(local, baseline);
-  if (written[LINK_OPEN_PART] !== baseline?.[LINK_OPEN_PART]) return written;
-  const { [LINK_OPEN_PART]: _unchanged, ...rest } = written;
-  return rest;
+  const written: Record<string, UnparsedWireValue> = {
+    ...accountPreferencesToWrite(local, baseline),
+  };
+  for (const field of OWN_PART_FIELDS) {
+    if (written[field] === baseline?.[field]) delete written[field];
+  }
+  // SAFETY: what is left is what the device writes, less its unchanged own parts.
+  return written as AccountPreferences;
 }
 
 const SettingsResetScopeSchema = Schema.Literals(Object.values(SETTINGS_RESET_SCOPE));
