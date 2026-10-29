@@ -159,8 +159,9 @@ import type { RunMode } from "./run-mode.js";
  * the next message restores again, never starting the agent afresh. One
  * that names none, its saved state expired, starts the agent afresh with no
  * harness session, what a restore left unfinished there set aside in its
- * folder rather than gone on from or removed. Either is told the agent ahead of its first message, as
- * is why its last turn's work could not be saved
+ * folder rather than gone on from or removed, to go with the folder as all
+ * the pack leaves out does. Either is told the agent ahead of its first
+ * message, as is why its last turn's work could not be saved
  * (`local-agent-first-lines.ts`). A discard that removes the folder lets go
  * of the agent's record. A discard deletes any VM still standing before it
  * removes the agent's folder. The runner runs on the VM's
@@ -909,7 +910,9 @@ export function composeLocalAgents(
          * longer holds that generation, so it can never finish: the path it
          * stands at now, none where the restore made no checkout. Note that it
          * is moved rather than gone on from, since it may be incomplete, and
-         * never removed, since it may hold the last of the agent's work.
+         * not removed here, since it may hold the last of the agent's work,
+         * which the agent is told where to find; it stays with the folder,
+         * and goes with it, as all the pack leaves out does.
          */
         const unrestoredSetAside = (
           agentId: string,
