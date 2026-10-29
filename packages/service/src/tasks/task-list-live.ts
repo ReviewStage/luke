@@ -90,6 +90,7 @@ function tasksStatement(userId: string) {
           parentTaskId: task.parentTaskId,
           mode: task.mode,
           mergePolicy: task.mergePolicy,
+          running: task.running,
           blocked: taskBlockedFor(userId),
         },
         {
