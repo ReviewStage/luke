@@ -190,10 +190,10 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * them, and once stopped the source is archived, by the coding agent that
  * continued it or else the member, which is logged where it fails; a source
  * eve would not stop stands unarchived. A fork of a pilot takes over nothing.
- * A continue of an agent a
- * pilot started, such as a sub-pilot, reports to that pilot as its source
- * did, whoever continues it; every other continue or fork records only the
- * coding agent whose `start_agent` asks as its starter.
+ * A member's continue of an agent a pilot started, such as a sub-pilot,
+ * reports to that pilot as its source did; every other Start records only
+ * the coding agent whose `start_agent` asks as its starter, the one its note
+ * tells it to report to.
  * An ask that names a branch has its agent's checkout cloned at that branch
  * rather than the default one, which the agent's row keeps; the branch is
  * read on GitHub through the same installation before anything is made, so
@@ -1143,8 +1143,12 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   const takesOver = continued && from.source.kind === AGENT_KIND.PILOT ? from.source : undefined;
   const place =
     takesOver !== undefined && brief.taskId !== null ? { ...brief, kind: AGENT_KIND.PILOT } : brief;
-  // A continue of an agent a pilot started reports to that pilot, whoever continues it.
-  const pilotStarter = continued ? yield* pilotStarterOf(userId, from.source) : undefined;
+  // A member's continue of an agent a pilot started reports to that pilot; an agent's reports to
+  // the agent that asks, whom its note names.
+  const pilotStarter =
+    continued && ask.startedBy === undefined
+      ? yield* pilotStarterOf(userId, from.source)
+      : undefined;
   // Where it runs, the runtime, and the payer are decided as the agent is made, by the starter's account, its source or task, and its model, and never change.
   const where = yield* machineOfStart(userId, from?.source, landing.task);
   const runtime = yield* startRuntimeOf(userId, choice.model, keys, where.asked);
@@ -1155,7 +1159,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       automationId: ask.automationId,
       automationOrigin: ask.automationOrigin,
       startedFrom: landing.startedFrom,
-      startedByAgentId: pilotStarter ?? ask.startedBy?.id,
+      startedByAgentId: ask.startedBy?.id ?? pilotStarter,
       takesOverFrom: takesOver?.id,
       title,
       idempotencyKey: ask.idempotencyKey,
