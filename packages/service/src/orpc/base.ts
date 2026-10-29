@@ -30,7 +30,8 @@ import { hostedContract } from "@luke/features/contract";
 import { middlewareGen, type WithEffectContext } from "@orpc/experimental-effect";
 import { implement } from "@orpc/server";
 import type { ResponseHeadersHandlerPluginContext } from "@orpc/server/plugins";
-import { Context, Effect, Option, References, Result } from "effect";
+import { Context, Effect, Option, References, Result, Tracer } from "effect";
+import { Headers, HttpTraceContext } from "effect/http";
 import {
   admittedHostVersion,
   hostCallerOf,
@@ -71,26 +72,46 @@ interface HostedSessionCaller extends HostedCaller {
 }
 
 /**
- * Every log line a procedure writes carries its path as `procedure`, so a
- * store failure (`http/store-failure.ts`) names the route it was met on.
- * Note that the annotation is set on the services handed to the handler, not
- * with `Effect.annotateLogs` around `next()`, because `next` runs the handler
- * as a fiber of its own, which an annotation of this one never reaches.
+ * Every procedure runs under a server span named by its path, whose parent
+ * is the caller's trace as its `traceparent` names it, and every log line it
+ * writes carries its path as `procedure`, so a store failure
+ * (`http/store-failure.ts`) names the route it was met on, and the span's
+ * trace id as `traceId`, so a caller's failure report and the server's lines
+ * for the same call are found by one id. A request with no `traceparent`, or
+ * one that does not parse, starts a trace of its own.
+ *
+ * Note that the caller's trace is read for correlation alone: its trace id is
+ * continued and its sampling flag followed, as Sentry's own propagation does
+ * (`observability/sentry.ts`'s `sentryTelemetry`), and no other header value
+ * reaches a span or a log line. An unsampled call is a span that records
+ * nothing but still names the caller's trace id, so its lines carry it too.
+ *
+ * Note that the span and the annotations are set on the services handed to
+ * the handler, not with `Effect.withSpan` or `Effect.annotateLogs` around
+ * `next()`, because `next` runs the handler as a fiber of its own, which
+ * neither of this one's reaches.
  */
-const procedureAnnotated = middlewareGen<HostedContext, WithEffectContext<WebServices>>(function* ({
+const procedureTraced = middlewareGen<HostedContext, WithEffectContext<WebServices>>(function* ({
   context,
   path,
   next,
 }) {
-  const annotated = Context.add(context["effect/context"], References.CurrentLogAnnotations, {
-    ...Context.get(context["effect/context"], References.CurrentLogAnnotations),
-    procedure: path.join("."),
+  const procedure = path.join(".");
+  const caller = HttpTraceContext.w3c(Headers.fromInput(context.request.headers));
+  const options = { kind: "server", parent: Option.getOrUndefined(caller) } as const;
+  return yield* Effect.useSpan(procedure, options, (span) => {
+    const services = context["effect/context"];
+    const annotated = Context.add(services, References.CurrentLogAnnotations, {
+      ...Context.get(services, References.CurrentLogAnnotations),
+      procedure,
+      traceId: span.traceId,
+    });
+    return next({ context: { "effect/context": Context.add(annotated, Tracer.ParentSpan, span) } });
   });
-  return yield* next({ context: { "effect/context": annotated } });
 });
 
 /** The hosted contract to implement, every procedure taking the context above. */
-export const hosted = implement(hostedContract).$context<HostedContext>().use(procedureAnnotated);
+export const hosted = implement(hostedContract).$context<HostedContext>().use(procedureTraced);
 
 /** The caller by its bearer, or with no `Authorization` at all, the browser's session cookie (`auth/bearer.ts`'s `resolveHostedUserId`). */
 export function accountMiddleware(resolveUserId: UserIdResolver) {

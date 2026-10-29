@@ -1168,7 +1168,10 @@ browser's or app's user agent, and the query's text; every line they log,
 with the values it was logged under, such as the ids of the agent, the
 conversation, and the turn it is about; counts and timings; and, each minute, whether the scheduled sweep ran. They do
 not send a request's headers or body, the values of local variables, or the IP
-address a request came from. Luke's agents send what Sentry's SDK collects by
+address a request came from, except the trace id a request names in its
+`traceparent` header, which its trace, its errors, and its log lines carry, in
+Sentry and in our service's own logs alike, so the app's report of a request
+that failed and the service's record of the same request share one id. Luke's agents send what Sentry's SDK collects by
 default, apart from request bodies and what a model is sent or answers: every
 error they did not handle or that ended work they started apart from a turn,
 with its message, stack trace, the lines of code around it, and the values of

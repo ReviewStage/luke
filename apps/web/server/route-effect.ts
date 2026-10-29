@@ -1,7 +1,7 @@
 import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
 import { cookieOriginGuard } from "@luke/service/http/origin-guard";
 import { sentryReportedFetch } from "@luke/service/observability/sentry";
-import type { Route, WebRoutes } from "@luke/service/route";
+import { type Route, traceIdAnnotated, type WebRoutes } from "@luke/service/route";
 import type { WebServices } from "@luke/service/runtime";
 import { waitUntil } from "@vercel/functions";
 import type { Context, Layer } from "effect";
@@ -63,14 +63,19 @@ export function routeFromWebServices(
  *
  * The router's own request logger is disabled: a function's request line is
  * already the platform's to record, and a URL Luke wrote to its own output is
- * a place a token in a query could land.
+ * a place a token in a query could land. Every line a route writes carries
+ * its request's trace id (`traceIdAnnotated`), the caller's where its
+ * `traceparent` named one.
  */
 export function routeFromHttpRouter(
   routes: WebRoutes<WebServices>,
   beside?: Layer.Layer<NativeAgentSessions, never, WebServices>,
 ): Route {
   return routeFromWebServices((context) => {
-    const { handler } = HttpRouter.toWebHandler(routes, { disableLogger: true });
+    const { handler } = HttpRouter.toWebHandler(routes, {
+      disableLogger: true,
+      middleware: traceIdAnnotated,
+    });
     return (incoming: Request) => handler(incoming, context);
   }, beside);
 }
