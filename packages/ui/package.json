@@ -21,6 +21,7 @@
     "./landed": "./src/components/landed/landed.js",
     "./daily-bars": "./src/chart/daily-bars.js",
     "./markdown": "./src/markdown/markdown.js",
+    "./mcp-app": "./src/components/mcp-app/mcp-app.js",
     "./markdown-class": "./src/markdown/markdown-class.js",
     "./markdown-words": "./src/markdown/markdown-words.js",
     "./virtual-rows": "./src/components/virtual-rows/virtual-rows.js",
@@ -81,6 +82,9 @@
     "@luke/features": "workspace:*",
     "@luke/settings": "workspace:*",
     "@luke/wire": "workspace:*",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/core": "2.4.0",
+    "@modelcontextprotocol/ext-apps": "2.0.4",
     "@tanstack/react-virtual": "3.14.21",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
@@ -95,7 +99,8 @@
     "recharts": "3.8.0",
     "remark-gfm": "4.0.1",
     "streamdown": "2.7.0",
-    "tailwind-merge": "3.7.0"
+    "tailwind-merge": "3.7.0",
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

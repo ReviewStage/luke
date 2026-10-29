@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect } from "effect";
-import { listMcpTools, MCP_TOOLS_FAILURE } from "./mcp-tools.js";
+import {
+  listMcpToolSchemas,
+  listMcpTools,
+  MCP_TOOLS_FAILURE,
+  readMcpAppResource,
+} from "./mcp-tools.js";
 
 /**
  * What the tools read keeps of a provider's MCP server: each tool's title in
@@ -28,8 +33,8 @@ function refusingServer(status: number, code: number, message: string) {
   );
 }
 
-/** A server whose `tools/list` answers `tools`, as one JSON body per request. */
-function listingServer(tools: readonly unknown[]) {
+/** A server whose `tools/list` answers `tools`, and whose `resources/read` answers `contents`, as one JSON body per request. */
+function listingServer(tools: readonly unknown[], contents: readonly unknown[] = []) {
   return fakeHttpClientLayer(async (_url, init) => {
     // The session's end, and a notification, answer nothing.
     if ((init.method ?? "GET") !== "POST") return new Response(null, { status: 200 });
@@ -42,7 +47,9 @@ function listingServer(tools: readonly unknown[]) {
     const result =
       message.method === "tools/list"
         ? { tools }
-        : { protocolVersion: "2025-06-18", capabilities: {} };
+        : message.method === "resources/read"
+          ? { contents }
+          : { protocolVersion: "2025-06-18", capabilities: {} };
     return Response.json({ jsonrpc: "2.0", id: message.id, result });
   });
 }
@@ -570,5 +577,57 @@ it.effect("an error status with no JSON-RPC error is unreachable", () =>
 
     assert.equal(failure.reason, MCP_TOOLS_FAILURE.UNREACHABLE);
     assert.equal(failure.serverMessage, undefined);
+  }),
+);
+
+it.effect(
+  "a tool keeps the MCP App it names, by `_meta.ui` or the older flat key, and no other",
+  () =>
+    Effect.gen(function* () {
+      const tools = yield* listMcpToolSchemas(URL, TOKEN).pipe(
+        Effect.provide(
+          listingServer([
+            {
+              name: "chart",
+              _meta: { ui: { resourceUri: "ui://charts/chart.html", visibility: ["app"] } },
+            },
+            { name: "board", _meta: { "ui/resourceUri": "ui://boards/board.html" } },
+            { name: "page", _meta: { ui: { resourceUri: "https://example.test/page.html" } } },
+          ]),
+        ),
+      );
+
+      assert.deepEqual(
+        tools.map((tool) => [tool.name, tool.ui]),
+        [
+          ["chart", { resourceUri: "ui://charts/chart.html", visibility: ["app"] }],
+          ["board", { resourceUri: "ui://boards/board.html" }],
+          ["page", undefined],
+        ],
+      );
+    }),
+);
+
+it.effect("an app's resource answers its HTML text, with the `_meta.ui` it carries", () =>
+  Effect.gen(function* () {
+    const csp = { connectDomains: ["https://api.example.test"] };
+    const app = yield* readMcpAppResource(URL, TOKEN, "ui://charts/chart.html").pipe(
+      Effect.provide(
+        listingServer(
+          [],
+          [
+            { uri: "ui://charts/chart.png", mimeType: "image/png", blob: "iVBORw0KGgo=" },
+            {
+              uri: "ui://charts/chart.html",
+              mimeType: "text/html;profile=mcp-app",
+              text: "<!doctype html><p>chart</p>",
+              _meta: { ui: { csp } },
+            },
+          ],
+        ),
+      ),
+    );
+
+    assert.deepEqual(app, { html: "<!doctype html><p>chart</p>", ui: { csp } });
   }),
 );

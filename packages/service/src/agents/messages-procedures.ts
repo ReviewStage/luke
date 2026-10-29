@@ -69,6 +69,12 @@ import {
   pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
+import {
+  type ConnectionRefusal,
+  callConnectionTool,
+  readConnectionToolApp,
+} from "../integrations/connection-door.js";
+import { appMayCall } from "../integrations/mcp-tools.js";
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
 import { cutMessage, wholePartOf } from "./coder-host/part-cut.js";
 import { startedBlank } from "./coder-host/status.js";
@@ -94,6 +100,7 @@ import {
   transcriptNow,
   transcriptPast,
 } from "./coder-host/transcript.js";
+import type { AdmittedConversation } from "./eve-host/conversation.js";
 import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
 
 /** oRPC's own code for an input its schema refused. */
@@ -114,6 +121,29 @@ const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string
   };
   return { agent: agent.value, target };
 });
+
+/**
+ * The agent the path names, admitted as its starter, where the caller is the
+ * starter: an app reads and calls on the starter's own grant, so it is
+ * drawn for them alone, and anyone else is not found, as an agent they
+ * cannot see is.
+ */
+const startersAgent = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, id: string) {
+  const { agent, target } = yield* reachedAgent(userId, id);
+  if (agent.userId !== userId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const admitted: AdmittedConversation = {
+    caller: userId,
+    target,
+    runtimeSessionId: undefined,
+    timeZone: undefined,
+  };
+  return admitted;
+});
+
+/** A refusal of an app's call as the MCP error result the app reads, as an agent's refused call reads it (`luke-mcp/app.ts`). */
+function refusedAppCall(refusal: ConnectionRefusal) {
+  return { content: [{ type: "text", text: JSON.stringify(refusal) }], isError: true };
+}
 
 /** The delegation call the path names, or not found for one that is no call id. */
 const callNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -434,6 +464,28 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
     agentPart: signedIn.agentPart.effect(function* ({ input, context }) {
       const { target } = yield* reachedAgent(context.userId, input.id);
       return yield* partAnswer(target, input.message, input.index);
+    }),
+
+    agentToolApp: signedIn.agentToolApp.effect(function* ({ input, context }) {
+      const admitted = yield* startersAgent(context.userId, input.id);
+      const app = yield* readConnectionToolApp(admitted, input.connection, input.tool);
+      if (Result.isFailure(app)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return app.success;
+    }),
+
+    agentToolAppCall: signedIn.agentToolAppCall.effect(function* ({ input, context }) {
+      const { params, body } = input;
+      const admitted = yield* startersAgent(context.userId, params.id);
+      const called = yield* callConnectionTool(
+        admitted,
+        params.connection,
+        body.name,
+        body.arguments ?? {},
+        appMayCall,
+      );
+      return {
+        result: Result.isSuccess(called) ? called.success : refusedAppCall(called.failure),
+      };
     }),
 
     agentWorkerPart: signedIn.agentWorkerPart.effect(function* ({ input, context }) {

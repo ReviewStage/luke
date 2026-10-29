@@ -564,6 +564,8 @@ function fakeService() {
         asked.push(`part:${agentId}:${messageId}:${index}:${callId ?? ""}`);
         return { part: { type: "reasoning", text: "Whole." } };
       }),
+    agentToolApp: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.NOT_FOUND }),
+    agentToolAppCall: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.NOT_FOUND }),
     markInboxItemRead: (itemId) =>
       Effect.sync(() => {
         asked.push(`inbox-read:${itemId}`);

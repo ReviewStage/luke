@@ -28,6 +28,11 @@ import {
   MAXIMUM_ATTACHMENTS_BODY_BYTES,
 } from "../agent-wire.js";
 import { transcriptNowAnswerSchema } from "../live-wire.js";
+import {
+  agentToolAppAnswerSchema,
+  agentToolAppCallAnswerSchema,
+  agentToolAppCallRequestSchema,
+} from "../mcp-app-wire.js";
 import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
 
 /** A message is its words, its files, and a key: the bound's characters at JSON's widest escape, the files, and room for the keys around them. */
@@ -51,6 +56,19 @@ const transcriptQuery = { after: queryValue };
 
 /** An agent's or a worker's transcript, read past a cursor, held, or at once where `wait=none` asks (`TRANSCRIPT_NOW_QUERY`), its heavy parts cut where `parts=cut` asks (`TRANSCRIPT_PARTS_QUERY`). */
 const agentTranscriptQuery = { ...transcriptQuery, wait: queryValue, parts: queryValue };
+
+/** One tool of one of an agent's connections, by the connection's name and the tool's, each a path segment the handler checks. */
+const byTool = {
+  id: EffectSchema.String,
+  connection: EffectSchema.String,
+  tool: EffectSchema.String,
+};
+
+/** One of an agent's connections, by its name, a path segment the handler checks. */
+const byConnection = { id: EffectSchema.String, connection: EffectSchema.String };
+
+/** An app's call is a tool's name and its arguments, which a single-file app's own reads stay well under. */
+const TOOL_APP_CALL_BODY_BYTES = 256 * 1_024;
 
 /** One part of a transcript's message, by the message's id and the part's index, each a path segment the handler checks. */
 const byPart = { message: EffectSchema.String, index: EffectSchema.String };
@@ -117,6 +135,28 @@ export const messagesContract = {
     )
     .input(EffectSchema.Struct({ ...byId, ...byPart }))
     .output(EffectSchema.flip(agentPartAnswerSchema)),
+  /** The MCP App a tool of one of the agent's connections ships, read from the provider on the starter's grant for the starter alone (`mcp-app-wire.ts`). */
+  agentToolApp: hostedProcedure
+    .meta(
+      openapi({
+        method: HTTP_METHOD.GET,
+        path: "/api/agents/{id}/tool-apps/{connection}/{tool}",
+      }),
+    )
+    .input(EffectSchema.Struct(byTool))
+    .output(EffectSchema.flip(agentToolAppAnswerSchema)),
+  /** A call an agent's tool's app asks of its own server, forwarded on the same connection for the starter alone. */
+  agentToolAppCall: hostedProcedure
+    .meta(bodyCap(TOOL_APP_CALL_BODY_BYTES))
+    .meta(
+      openapi({
+        method: HTTP_METHOD.POST,
+        path: "/api/agents/{id}/tool-apps/{connection}/calls",
+        inputStructure: "detailed",
+      }),
+    )
+    .input(exactBodyInput(EffectSchema.Struct(byConnection), agentToolAppCallRequestSchema))
+    .output(EffectSchema.flip(agentToolAppCallAnswerSchema)),
   /** One part of a message of an agent's worker's transcript, whole, read at once. */
   agentWorkerPart: hostedProcedure
     .meta(

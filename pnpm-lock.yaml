@@ -1159,6 +1159,15 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
+      '@modelcontextprotocol/client':
+        specifier: 2.4.0
+        version: 2.4.0
+      '@modelcontextprotocol/core':
+        specifier: 2.4.0
+        version: 2.4.0
+      '@modelcontextprotocol/ext-apps':
+        specifier: 2.0.4
+        version: 2.0.4(@modelcontextprotocol/client@2.4.0)(@modelcontextprotocol/core@2.4.0)(react-dom@19.2.8)(react@19.2.8)(zod@4.5.4)
       '@tanstack/react-virtual':
         specifier: 3.14.21
         version: 3.14.21(react-dom@19.2.8)(react@19.2.8)
@@ -1204,6 +1213,9 @@ importers:
       tailwind-merge:
         specifier: 3.7.0
         version: 3.7.0
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
@@ -2549,6 +2561,32 @@ packages:
 
   '@mermaid-js/parser@1.2.1':
     resolution: {integrity: sha512-n12NohV3mrUyUL2o93IgG/ifeW9FTyeJn3zDxkhwa8MJ9Fxg3HQMlA3RiGmD/3UnJvheztkjjQAjA2T4LmUcpw==}
+
+  '@modelcontextprotocol/client@2.4.0':
+    resolution: {integrity: sha512-LgrD2OphHuG12vfKFKz6SOnq7bKHQmhGJIAYdD+MZBn2npHEyry6uD8zvktodtl5CQM85MO0anUyD9JwmUmxww==}
+    engines: {node: '>=20'}
+
+  '@modelcontextprotocol/core@2.4.0':
+    resolution: {integrity: sha512-z8QBKqdfXLPzkLQuG4xp8hrVEMm1PZ1IgxMN2sMbJiFiAKOWXnAzogXn2W4aqIBlP1ea6U5yiqVquvUNM1Cj6Q==}
+    engines: {node: '>=20'}
+
+  '@modelcontextprotocol/ext-apps@2.0.4':
+    resolution: {integrity: sha512-B+PcbuGiaf0e5I3uy4iO5tS3Abo+5w8JvZFzHMzQdq9yVwP836zJkw2+KCGOQ0r4TM1fuQi4JdnbuWjkS4aBvg==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@modelcontextprotocol/client': ^2.0.0
+      '@modelcontextprotocol/core': ^2.0.0
+      '@modelcontextprotocol/server': ^2.0.0
+      react: ^17.0.0 || ^18.0.0 || ^19.0.0
+      react-dom: ^17.0.0 || ^18.0.0 || ^19.0.0
+      zod: ^4.2.0
+    peerDependenciesMeta:
+      '@modelcontextprotocol/server':
+        optional: true
+      react:
+        optional: true
+      react-dom:
+        optional: true
 
   '@modelcontextprotocol/sdk@1.32.1':
     resolution: {integrity: sha512-2DdE+SJDtzLEEWzY1ZjY7Q+VcPhcV1KisD3zI4u0XZyktsjHum1mwbMI+JaulUBi2OZk+KJAi2uPXzxichPkdw==}
@@ -9085,6 +9123,30 @@ snapshots:
     dependencies:
       '@chevrotain/types': 11.1.2
 
+  '@modelcontextprotocol/client@2.4.0':
+    dependencies:
+      '@modelcontextprotocol/core': 2.4.0
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.1.1
+      jose: 6.2.9
+      pkce-challenge: 5.0.1
+      zod: 4.5.4
+
+  '@modelcontextprotocol/core@2.4.0':
+    dependencies:
+      zod: 4.5.4
+
+  '@modelcontextprotocol/ext-apps@2.0.4(@modelcontextprotocol/client@2.4.0)(@modelcontextprotocol/core@2.4.0)(react-dom@19.2.8)(react@19.2.8)(zod@4.5.4)':
+    dependencies:
+      '@modelcontextprotocol/client': 2.4.0
+      '@modelcontextprotocol/core': 2.4.0
+      '@standard-schema/spec': 1.1.0
+      zod: 4.5.4
+    optionalDependencies:
+      react: 19.2.8
+      react-dom: 19.2.8(react@19.2.8)
+
   '@modelcontextprotocol/sdk@1.32.1(zod@4.5.4)':
     dependencies:
       '@hono/node-server': 2.1.5(hono@4.13.13)
@@ -11081,7 +11143,7 @@ snapshots:
     optionalDependencies:
       drizzle-kit: 1.0.0-rc.4
       drizzle-orm: 1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4)(@effect/sql-pglite@4.0.4)(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4)
-      next: 16.3.1(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8)(react@19.2.8)
+      next: 16.3.1(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8)(react@19.2.8)(sass@1.51.0)
       pg: 8.23.0
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
@@ -13183,7 +13245,7 @@ snapshots:
     dependencies:
       content-type: 2.1.0
 
-  next@16.3.1(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8)(react@19.2.8):
+  next@16.3.1(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(react-dom@19.2.8)(react@19.2.8)(sass@1.51.0):
     dependencies:
       '@next/env': 16.3.1
       '@swc/helpers': 0.5.23
@@ -13203,6 +13265,7 @@ snapshots:
       '@next/swc-win32-arm64-msvc': 16.3.1
       '@next/swc-win32-x64-msvc': 16.3.1
       '@opentelemetry/api': 1.9.1
+      sass: 1.51.0
       sharp: 0.35.3(@types/node@26.2.0)
     transitivePeerDependencies:
       - '@babel/core'

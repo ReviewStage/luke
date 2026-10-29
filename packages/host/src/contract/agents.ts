@@ -50,6 +50,10 @@ import {
   agentServersParamsSchema,
   agentStartParamsSchema,
   agentStopParamsSchema,
+  agentToolAppCallParamsSchema,
+  agentToolAppCallViewSchema,
+  agentToolAppParamsSchema,
+  agentToolAppViewSchema,
   agentTranscriptKeySchema,
   agentTranscriptOlderAnswerSchema,
   agentTranscriptOlderParamsSchema,
@@ -140,6 +144,14 @@ export const agentActsContract = {
   [AGENT_ACT_KIND.AGENTS_PART]: actProcedure("Could not read the agent's output on this system.")
     .input(exactInput(agentPartParamsSchema))
     .output(EffectSchema.flip(agentPartViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_TOOL_APP]: actProcedure("Could not read the tool's app on this system.")
+    .input(exactInput(agentToolAppParamsSchema))
+    .output(EffectSchema.flip(agentToolAppViewSchema)),
+  [AGENT_ACT_KIND.AGENTS_TOOL_APP_CALL]: actProcedure(
+    "Could not call the app's tool on this system.",
+  )
+    .input(exactInput(agentToolAppCallParamsSchema))
+    .output(EffectSchema.flip(agentToolAppCallViewSchema)),
   [AGENT_ACT_KIND.AGENTS_TRANSCRIPT_OLDER]: actProcedure(
     "Could not read the agent's earlier messages on this system.",
   )

@@ -20,6 +20,8 @@
     "./automation-wire": "./src/automation-wire.js",
     "./automation-view": "./src/automation-view.js",
     "./credential-redaction": "./src/credential-redaction.js",
+    "./mcp-app-frame": "./src/mcp-app-frame.js",
+    "./mcp-app-wire": "./src/mcp-app-wire.js",
     "./memory-wire": "./src/memory-wire.js",
     "./sentry-addresses": "./src/sentry-addresses.js",
     "./sentry-breadcrumbs": "./src/sentry-breadcrumbs.js",

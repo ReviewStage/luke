@@ -42,6 +42,8 @@ import {
 import {
   type Heard,
   LINEAR_AND_NOTION_CONNECT,
+  LINEAR_APP_TOOLS,
+  LINEAR_BOARD_APP,
   linearServer,
   linearTokenOf,
   REJECTED_TEAM,
@@ -51,6 +53,7 @@ import {
   connectionInstructions,
   listConnectionTools,
   nativeAgentConnections,
+  readConnectionToolApp,
 } from "./connection-door.js";
 import type { ConnectorService } from "./integration-connect.js";
 import {
@@ -61,6 +64,7 @@ import {
 import { INTEGRATION_GRANT_HOLDER, integrationUnavailable } from "./integration-token.js";
 import { storeTools } from "./integration-tool-store.js";
 import { INTEGRATION } from "./integrations.js";
+import { appMayCall } from "./mcp-tools.js";
 
 /**
  * A native agent's integration servers, listed and called through their
@@ -313,6 +317,41 @@ it.layer(getTestDB())("the integrations' door", (it) => {
           { name: "fail", arguments: {} },
         ]);
         assert.ok(heard.bearers.every((each) => each === `Bearer ${linearTokenOf(member.userId)}`));
+      }),
+  );
+
+  it.effect(
+    "a tool's app is read from the resource its kept list names, and a tool only its app may call is the app's alone",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* memberWithLinear;
+        const heard = hearing();
+        const services = Layer.mergeAll(
+          NO_GITHUB,
+          LINEAR_AND_NOTION_CONNECT,
+          linearServer(linearTokenOf(member.userId), heard, LINEAR_APP_TOOLS),
+        );
+        const call = (tool: string, callable?: typeof appMayCall) =>
+          callConnectionTool(member.admitted, LINEAR, tool, {}, callable).pipe(
+            Effect.provide(services),
+          );
+
+        // The agent's call keeps the list that names the board's app.
+        yield* call("show_board");
+        const app = yield* readConnectionToolApp(member.admitted, LINEAR, "show_board").pipe(
+          Effect.provide(services),
+        );
+        const byModel = yield* call("move_card");
+        const byApp = yield* call("move_card", appMayCall);
+
+        assert.ok(Result.isSuccess(app));
+        assert.deepEqual(app.success, { html: LINEAR_BOARD_APP.html });
+        assert.ok(Result.isFailure(byModel));
+        assert.ok(Result.isSuccess(byApp));
+        assert.deepEqual(
+          heard.calls.map((each) => each.name),
+          ["show_board", "move_card"],
+        );
       }),
   );
 

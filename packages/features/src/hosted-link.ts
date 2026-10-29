@@ -72,6 +72,7 @@ export const HOSTED_DEADLINE = {
   START: "start",
   CHAPTERS: "chapters",
   BROWSER_OPEN: "browser-open",
+  TOOL_APP: "tool-app",
 } as const;
 
 export type HostedDeadline = (typeof HOSTED_DEADLINE)[keyof typeof HOSTED_DEADLINE];
@@ -87,7 +88,9 @@ export type HostedDeadline = (typeof HOSTED_DEADLINE)[keyof typeof HOSTED_DEADLI
  * Generate of a pull request's chapters outlasts the function it runs in
  * (`@luke/service/chapters/chapters-function`'s 240 seconds), and a Browser
  * tab opened in an agent's browser outlasts its sandbox's resume (a minute)
- * and its bridge's bound (twenty seconds, `agent-browser.ts`).
+ * and its bridge's bound (twenty seconds, `agent-browser.ts`), and an MCP
+ * App's read or call outlasts the grant's token read and the provider's
+ * session around it (`@luke/service`'s `connection-door.ts`).
  */
 const LONG_DEADLINE_MS = {
   [HOSTED_DEADLINE.HELD]: 35_000,
@@ -95,6 +98,7 @@ const LONG_DEADLINE_MS = {
   [HOSTED_DEADLINE.START]: 120_000,
   [HOSTED_DEADLINE.CHAPTERS]: 250_000,
   [HOSTED_DEADLINE.BROWSER_OPEN]: 120_000,
+  [HOSTED_DEADLINE.TOOL_APP]: 120_000,
 } as const satisfies Record<Exclude<HostedDeadline, typeof HOSTED_DEADLINE.USUAL>, number>;
 
 /** The content type the link names a JSON body with, which the account call writes itself. */

@@ -5,7 +5,9 @@
  * session, so a client of Luke's speaks to it as it speaks to a provider.
  * Its tools answer fixed results: a JSON text, structured content, a
  * picture, and an error of the tool's own; `list_issues` refuses one team
- * with a JSON-RPC error instead. Vercel Connect is a fake that
+ * with a JSON-RPC error instead. A suite may list `LINEAR_APP_TOOLS` too:
+ * a board that ships an MCP App, whose HTML its `resources/read` serves,
+ * and a tool only that app may call. Vercel Connect is a fake that
  * issues each account a token naming it, for Linear and Notion; every
  * other provider is one this deployment never set up.
  */
@@ -20,6 +22,7 @@ import {
   ErrorCode,
   ListToolsRequestSchema,
   McpError,
+  ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Effect, Redacted } from "effect";
 import type { ConnectorService } from "../integrations/integration-connect.js";
@@ -77,6 +80,28 @@ const LINEAR_TOOLS = [
   { name: "attach", description: "Attaches files.", inputSchema: { type: "object" } },
 ];
 
+/** The MCP App Linear's board ships, at the resource its tool names. */
+export const LINEAR_BOARD_APP = {
+  uri: "ui://linear/board.html",
+  html: "<!doctype html><p>Board</p>",
+} as const;
+
+/** The board that ships an app, and the tool only the app may call. */
+export const LINEAR_APP_TOOLS = [
+  {
+    name: "show_board",
+    description: "Shows a team's board.",
+    inputSchema: { type: "object" },
+    _meta: { ui: { resourceUri: LINEAR_BOARD_APP.uri } },
+  },
+  {
+    name: "move_card",
+    description: "Moves a card on the board.",
+    inputSchema: { type: "object" },
+    _meta: { ui: { resourceUri: LINEAR_BOARD_APP.uri, visibility: ["app"] } },
+  },
+];
+
 /** The team `list_issues` refuses with a JSON-RPC error, after the session listed its tools. */
 export const REJECTED_TEAM = "REJECT";
 
@@ -106,9 +131,23 @@ export function linearServer(
     }
     const server = new Server(
       { name: "linear-fake", version: "1.0.0" },
-      { capabilities: { tools: {} } },
+      { capabilities: { tools: {}, resources: {} } },
     );
     server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [...tools] }));
+    server.setRequestHandler(ReadResourceRequestSchema, (request) => {
+      if (request.params.uri !== LINEAR_BOARD_APP.uri) {
+        throw new McpError(ErrorCode.InvalidParams, "Unknown resource.");
+      }
+      return {
+        contents: [
+          {
+            uri: LINEAR_BOARD_APP.uri,
+            mimeType: "text/html;profile=mcp-app",
+            text: LINEAR_BOARD_APP.html,
+          },
+        ],
+      };
+    });
     server.setRequestHandler(CallToolRequestSchema, (request): CallToolResult => {
       heard.calls.push({ name: request.params.name, arguments: request.params.arguments });
       switch (request.params.name) {

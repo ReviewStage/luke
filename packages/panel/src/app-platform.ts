@@ -53,6 +53,8 @@ export interface AppPlatform {
   focusPanel(): void;
   /** The address one version of an agent's page is drawn from, in a sandboxed frame. */
   pageFrameUrl(page: FramedPage): string;
+  /** The address of the document an integration tool's MCP App is drawn inside (`@luke/features/mcp-app-frame`), where the shell serves one: a shell that serves none draws no app. */
+  mcpAppFrameUrl?(): string;
   /**
    * The folder the panel's static files are served from (the harness
    * marks), as an absolute address ending in `/`: the shell's to

@@ -67,7 +67,7 @@ import {
   connectionInstructions,
   listConnectionTools,
 } from "../../integrations/connection-door.js";
-import type { McpToolSchema } from "../../integrations/mcp-tools.js";
+import { type McpToolSchema, modelMayCall } from "../../integrations/mcp-tools.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
@@ -393,14 +393,14 @@ function refusedCall(refusal: ConnectionRefusal): WireRecord {
   return { content: [{ type: "text", text: JSON.stringify(refusal) }], isError: true };
 }
 
-/** One integration's server, named by its connection. */
+/** One integration's server, named by its connection: a tool whose MCP App alone may call it is left out of its list, as the extension asks. */
 function integrationServer(connection: string): McpServer {
   return {
     name: connection,
     instructions: (admitted) => connectionInstructions(admitted, connection),
     listTools: (admitted) =>
       Effect.map(listConnectionTools(admitted, connection), (tools) =>
-        Result.succeed({ tools: tools.map(listedIntegrationTool) }),
+        Result.succeed({ tools: tools.filter(modelMayCall).map(listedIntegrationTool) }),
       ),
     callTool: (admitted, params) => {
       const call = readEither(CallParamsSchema, DROPPING_EXCESS)(params);

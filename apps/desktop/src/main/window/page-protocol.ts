@@ -1,3 +1,8 @@
+import {
+  isMcpAppFrameUrl,
+  MCP_APP_FRAME_HEADERS,
+  MCP_APP_FRAME_HTML,
+} from "@luke/features/mcp-app-frame";
 import { withPageFind } from "@luke/features/page-find";
 import { framedPageOf, PAGE_SCHEME } from "@luke/features/page-frame";
 import { PAGE_RESPONSE_HEADERS } from "@luke/features/page-policy";
@@ -12,7 +17,10 @@ import type { CustomScheme } from "electron";
  * scheme of its own, read from the service by this process on the account's
  * bearer and answered whole, under the page policy `@luke/features/page-policy`
  * states for every server of a page, with the find's script ahead of it
- * (`@luke/features/page-find`), which ⌘F in the panel finds through. The
+ * (`@luke/features/page-find`), which ⌘F in the panel finds through. Beside
+ * the pages it serves the one document an integration tool's MCP App is
+ * drawn inside (`@luke/features/mcp-app-frame`), under that document's own
+ * policy, at the one address it names. The
  * privileges mark the scheme standard and secure and nothing more: no fetch
  * from another document, no service worker, no CORS.
  */
@@ -26,14 +34,18 @@ export const PAGE_SCHEME_PRIVILEGES: CustomScheme = {
 const NOT_FOUND = 404;
 
 /**
- * The answer to one request of the scheme: the version the address names,
- * under the page policy, or not found for an address that names none and a
- * version the service did not answer.
+ * The answer to one request of the scheme: the MCP App frame's document at
+ * its address, the version the address names under the page policy, or not
+ * found for an address that names neither and a version the service did not
+ * answer.
  */
 export function pageResponse(
   url: string,
   readPage: (page: TasksPageParams) => Effect.Effect<TasksPageAnswer>,
 ): Effect.Effect<Response> {
+  if (isMcpAppFrameUrl(url)) {
+    return Effect.succeed(new Response(MCP_APP_FRAME_HTML, { headers: MCP_APP_FRAME_HEADERS }));
+  }
   const framed = framedPageOf(url);
   if (framed === undefined) return Effect.succeed(new Response(null, { status: NOT_FOUND }));
   return Effect.map(readPage(framed), (answer) =>

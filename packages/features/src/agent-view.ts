@@ -57,6 +57,11 @@ import {
   inboxStartRequestSchema,
 } from "./inbox-wire.js";
 import { lukeToolsAnswerSchema } from "./luke-tools-wire.js";
+import {
+  agentToolAppAnswerSchema,
+  agentToolAppCallAnswerSchema,
+  agentToolAppCallRequestSchema,
+} from "./mcp-app-wire.js";
 import { memoriesAnswerSchema, memoryIdSchema } from "./memory-wire.js";
 import { modelChoiceSchema, modelProviderSchema, modelsAnswerSchema } from "./models-wire.js";
 import {
@@ -773,6 +778,37 @@ export type AgentPartParams = typeof agentPartParamsSchema.Type;
 export const agentPartViewSchema = EffectSchema.Union([agentPartAnswerSchema, failed]);
 
 export type AgentPartView = typeof agentPartViewSchema.Type;
+
+/** The MCP App one of an agent's integration tools ships, by the connection the agent called it on and the tool's own name (`mcp-app-wire.ts`). */
+export const agentToolAppParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  connection: EffectSchema.NonEmptyString,
+  tool: EffectSchema.NonEmptyString,
+});
+
+export type AgentToolAppParams = typeof agentToolAppParamsSchema.Type;
+
+/** The app, as the window hears it, or why there is none: for the agent's starter alone, whose grant it is read on. */
+export const agentToolAppViewSchema = EffectSchema.Union([agentToolAppAnswerSchema, failed]);
+
+export type AgentToolAppView = typeof agentToolAppViewSchema.Type;
+
+/** A call an agent's tool's app asks of its own server, on the connection the agent called the tool on. */
+export const agentToolAppCallParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  connection: EffectSchema.NonEmptyString,
+  ...agentToolAppCallRequestSchema.fields,
+});
+
+export type AgentToolAppCallParams = typeof agentToolAppCallParamsSchema.Type;
+
+/** What the server answered the app, as the window hears it, or why the call was not made. */
+export const agentToolAppCallViewSchema = EffectSchema.Union([
+  agentToolAppCallAnswerSchema,
+  failed,
+]);
+
+export type AgentToolAppCallView = typeof agentToolAppCallViewSchema.Type;
 
 /**
  * The image, or the file an inbox answer carried, as the window hears it:

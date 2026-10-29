@@ -139,6 +139,10 @@ export const AGENT_ACT_KIND = {
   AGENTS_TRANSCRIPT: "agents.transcript",
   /** One part of a message of a transcript, whole: what its followed page carried cut, fetched as the window opens it. */
   AGENTS_PART: "agents.part",
+  /** The MCP App an integration tool's call ships, read from its provider as the call's row is drawn, for the agent's starter alone. */
+  AGENTS_TOOL_APP: "agents.toolApp",
+  /** A call that app asks of its own server, forwarded on the connection the agent called the tool on. */
+  AGENTS_TOOL_APP_CALL: "agents.toolAppCall",
   /** The page of a followed transcript below the oldest message the window holds, as its newest or last older page named it; or why there is none. */
   AGENTS_TRANSCRIPT_OLDER: "agents.transcriptOlder",
   AGENTS_MESSAGE: "agents.message",

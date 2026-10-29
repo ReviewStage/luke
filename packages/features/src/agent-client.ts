@@ -39,6 +39,10 @@ import {
   type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
   type AgentReviewOptionsAnswerView,
+  type AgentToolAppCallParams,
+  type AgentToolAppCallView,
+  type AgentToolAppParams,
+  type AgentToolAppView,
   type AgentWorkspaceListParams,
   type DevicePresenceAnswerView,
   type DictationTranscribeAnswerView,
@@ -859,6 +863,43 @@ export class HostedAgentClient {
         ? askHosted(this.#hosted.messages.agentPart, part)
         : askHosted(this.#hosted.messages.agentWorkerPart, { ...part, call: callId });
     return hostedAnswer(asked, ROW_REFUSALS);
+  }
+
+  /**
+   * The MCP App a tool of one of the agent's connections ships, read from
+   * the provider on the starter's grant: not found where the account is not
+   * the agent's starter, the agent is not handed the connection, or the tool
+   * ships no app; unanswered for anything else.
+   */
+  agentToolApp({
+    agentId,
+    connection,
+    tool,
+  }: AgentToolAppParams): Effect.Effect<AgentToolAppView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(
+        this.#hosted.messages.agentToolApp,
+        { id: agentId, connection, tool },
+        HOSTED_DEADLINE.TOOL_APP,
+      ),
+      ROW_REFUSALS,
+    );
+  }
+
+  /** A call an agent's tool's app asks of its own server, on the same connection: the server's MCP result, its refusal an error result; not found or unanswered as `agentToolApp` says. */
+  agentToolAppCall({
+    agentId,
+    connection,
+    ...call
+  }: AgentToolAppCallParams): Effect.Effect<AgentToolAppCallView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(
+        this.#hosted.messages.agentToolAppCall,
+        { params: { id: agentId, connection }, body: call },
+        HOSTED_DEADLINE.TOOL_APP,
+      ),
+      ROW_REFUSALS,
+    );
   }
 
   /**

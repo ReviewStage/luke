@@ -27,6 +27,8 @@ import {
   type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
   type AgentReviewOptionsAnswerView,
+  type AgentToolAppCallView,
+  type AgentToolAppView,
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptPage,
   ARCHIVE_DRAWN,
@@ -58,6 +60,8 @@ import {
   agentServersParamsSchema,
   agentStartParamsSchema,
   agentStopParamsSchema,
+  agentToolAppCallParamsSchema,
+  agentToolAppParamsSchema,
   agentTranscriptKeySchema,
   agentTranscriptOlderParamsSchema,
   agentWorkspaceListParamsSchema,
@@ -187,6 +191,8 @@ export type AgentClient = Pick<
   | "startFrom"
   | "messagesNow"
   | "agentPart"
+  | "agentToolApp"
+  | "agentToolAppCall"
   | "messagesNewest"
   | "messagesBefore"
   | "agentTranscriptLive"
@@ -1025,6 +1031,26 @@ function composed(
         );
         const answer = yield* asked(client.agentPart(agentId, messageId, index, callId));
         return carried<AgentPartView>(answer);
+      }),
+    [GATEWAY_METHOD.AGENTS_TOOL_APP]: (params) =>
+      Effect.gen(function* () {
+        const app = yield* readParams(
+          agentToolAppParamsSchema,
+          params,
+          "reading a tool's app names the agent, the connection, and the tool",
+        );
+        const answer = yield* asked(client.agentToolApp(app));
+        return carried<AgentToolAppView>(answer);
+      }),
+    [GATEWAY_METHOD.AGENTS_TOOL_APP_CALL]: (params) =>
+      Effect.gen(function* () {
+        const call = yield* readParams(
+          agentToolAppCallParamsSchema,
+          params,
+          "a tool's app's call names the agent, the connection, and the tool it calls",
+        );
+        const answer = yield* asked(client.agentToolAppCall(call));
+        return carried<AgentToolAppCallView>(answer);
       }),
     [GATEWAY_METHOD.AGENTS_INBOX_ANSWER]: (params) =>
       Effect.gen(function* () {

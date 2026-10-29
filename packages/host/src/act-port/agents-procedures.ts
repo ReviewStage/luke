@@ -51,6 +51,10 @@ import {
   type AgentServersParams,
   type AgentStartParams,
   type AgentStopParams,
+  type AgentToolAppCallParams,
+  type AgentToolAppCallView,
+  type AgentToolAppParams,
+  type AgentToolAppView,
   type AgentTranscriptChanged,
   type AgentTranscriptKey,
   type AgentTranscriptOlderAnswer,
@@ -87,6 +91,8 @@ export interface AgentProceduresDependencies {
     agentMessages(params: AgentMessagesParams): Effect.Effect<AgentMessagesAnswerView>;
     agentMessage(params: AgentMessageParams): Effect.Effect<AgentAgentAnswer>;
     agentPart(params: AgentPartParams): Effect.Effect<AgentPartView>;
+    agentToolApp(params: AgentToolAppParams): Effect.Effect<AgentToolAppView>;
+    agentToolAppCall(params: AgentToolAppCallParams): Effect.Effect<AgentToolAppCallView>;
     /** A transcript followed at the host from its start, its pages heard through `onTranscriptChanged`; following again starts over. */
     transcriptFollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
     transcriptUnfollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
@@ -328,6 +334,20 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.agentPart(input);
     }),
+    [AGENT_ACT_KIND.AGENTS_TOOL_APP]: actPort[AGENT_ACT_KIND.AGENTS_TOOL_APP].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.agentToolApp(input);
+    }),
+    [AGENT_ACT_KIND.AGENTS_TOOL_APP_CALL]: actPort[AGENT_ACT_KIND.AGENTS_TOOL_APP_CALL].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.agentToolAppCall(input);
+      },
+    ),
     [AGENT_ACT_KIND.AGENTS_TRANSCRIPT]: actPort[AGENT_ACT_KIND.AGENTS_TRANSCRIPT].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());

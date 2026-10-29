@@ -62,6 +62,10 @@ import {
   type AgentServersParams,
   type AgentStartParams,
   type AgentStopParams,
+  type AgentToolAppCallParams,
+  type AgentToolAppCallView,
+  type AgentToolAppParams,
+  type AgentToolAppView,
   type AgentTranscriptChanged,
   type AgentTranscriptKey,
   type AgentTranscriptOlderAnswer,
@@ -93,6 +97,8 @@ import {
   agentPullRequestViewedAnswerViewSchema,
   agentPullRequestWriteAnswerViewSchema,
   agentReviewOptionsAnswerViewSchema,
+  agentToolAppCallViewSchema,
+  agentToolAppViewSchema,
   agentTranscriptChangedSchema,
   agentTranscriptOlderAnswerSchema,
   type ChatGptSignInAnswerView,
@@ -876,6 +882,10 @@ export interface HostOperator {
   agentPicture(params: AgentPictureParams): Effect.Effect<AgentInboxAttachmentView>;
   /** One part of a message of an agent's transcript or one of its workers', read whole under the account: what the page carried cut, or why there is none. */
   agentPart(params: AgentPartParams): Effect.Effect<AgentPartView>;
+  /** The MCP App one of an agent's integration tools ships, read from its provider for the agent's starter. */
+  agentToolApp(params: AgentToolAppParams): Effect.Effect<AgentToolAppView>;
+  /** A call an agent's tool's app asks of its own server, forwarded on the same connection. */
+  agentToolAppCall(params: AgentToolAppCallParams): Effect.Effect<AgentToolAppCallView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onAccountAccessChanged(listener: (access: AppAccessSlice) => void): () => void;
@@ -2257,6 +2267,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.AGENTS_PART, params),
         answerOf(agentPartViewSchema, AGENT_UNANSWERED),
+      ),
+    agentToolApp: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AGENTS_TOOL_APP, params),
+        answerOf(agentToolAppViewSchema, AGENT_UNANSWERED),
+      ),
+    agentToolAppCall: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AGENTS_TOOL_APP_CALL, params),
+        answerOf(agentToolAppCallViewSchema, AGENT_UNANSWERED),
       ),
     onSettingsChanged: (listener) =>
       on(

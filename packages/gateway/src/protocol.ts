@@ -385,6 +385,10 @@ export const GATEWAY_METHOD = {
   AGENTS_PICTURE: "agents.picture",
   /** One part of a message of an agent's transcript or one of its workers', whole, fetched under the account: what the page carried cut, or why there is none. */
   AGENTS_PART: "agents.part",
+  /** The MCP App one of an agent's integration tools ships, read under the account, the agent's starter: its HTML, or why there is none. */
+  AGENTS_TOOL_APP: "agents.toolApp",
+  /** A call an agent's tool's MCP App asks of its own server, forwarded under the account on the same connection: the server's MCP result, or why the call was not made. */
+  AGENTS_TOOL_APP_CALL: "agents.toolAppCall",
   /**
    * A coding agent's terminals (`@luke/features/terminal-view`): its shells
    * listed, started, named, and ended, and its sandbox resumed on the

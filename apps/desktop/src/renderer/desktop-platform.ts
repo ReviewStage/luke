@@ -2,6 +2,7 @@
  * desktop-platform.ts -- what the desktop's shell answers for the panel: each capability as the act or the preload event main already serves.
  */
 
+import { MCP_APP_FRAME_URL } from "@luke/features/mcp-app-frame";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { ACT_KIND } from "@luke/host/acts";
 import { askAct, pressAct, tellAct } from "@luke/panel/act";
@@ -22,7 +23,8 @@ const tellUnsavedWork = (): void =>
  * and the browser are main's, reached over the act channel, and so is a
  * cloud Browser tab's live view, which arrives on a port of its own; the menu bar,
  * the shortcut recording, and the counted events over the bridge's own
- * entries; a page is drawn from the `luke-page:` scheme main serves; the
+ * entries; a page, and the document an MCP App is drawn inside, are drawn
+ * from the `luke-page:` scheme main serves; the
  * static files are the build's copies beside the document; and the session
  * recording is the desktop's own (`session-replay.ts`).
  * Each reads the bridge as it is called, so this is built before the bridge
@@ -34,6 +36,7 @@ export const DESKTOP_PLATFORM: AppPlatform = {
   saveFile: ({ name, text }) => askAct(ACT_KIND.WINDOW_SAVE_FILE, { name, text }),
   focusPanel: () => tellAct(ACT_KIND.WINDOW_FOCUS_PANEL),
   pageFrameUrl,
+  mcpAppFrameUrl: () => MCP_APP_FRAME_URL,
   assetBase: () => new URL(".", document.baseURI).href,
   onMenuCommand: (listener) => appBridge().onMenuCommand(listener),
   recordSurfaceEvent: (name, properties) => appBridge().recordSurfaceEvent(name, properties),

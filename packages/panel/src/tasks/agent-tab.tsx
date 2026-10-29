@@ -183,6 +183,7 @@ import type { SkillSource } from "./skill-picker.js";
 import { SkillCard } from "./skill-ref.js";
 import { PlanGlyph } from "./tab-look.js";
 import { useMentionDoors } from "./task-mentions.js";
+import { ToolCallApp } from "./tool-apps.js";
 import {
   calledAgent,
   cardTitle,
@@ -570,6 +571,7 @@ function ToolCallView({
         cut={cut}
       />
       <CallPictures tool={part.tool} input={part.input} output={part.output} />
+      <ToolCallApp part={part} />
     </>
   );
 }

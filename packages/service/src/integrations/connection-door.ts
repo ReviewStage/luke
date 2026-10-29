@@ -81,8 +81,11 @@ import {
   callMcpTool,
   listMcpToolSchemas,
   MCP_TOOLS_FAILURE,
+  type McpAppResource,
   type McpToolSchema,
   type McpToolsFailure,
+  modelMayCall,
+  readMcpAppResource,
 } from "./mcp-tools.js";
 
 /** What the door runs against, every one of which a web function's runtime provides. */
@@ -133,6 +136,9 @@ interface HandedConnection {
 
 /** What a call of a connection's tool answered: the provider's own MCP result, as it sent it, or why there is none. */
 type ConnectionCall = Result.Result<WireRecord, ConnectionRefusal>;
+
+/** What a read of a connection's tool's MCP App answered: its HTML and what its resource asks of the host, or why there is none. */
+type ConnectionApp = Result.Result<McpAppResource, ConnectionRefusal>;
 
 function refused(error: string, extra: Partial<ConnectionRefusal> = {}): ConnectionRefusal {
   return { status: ACTION_RESULT_STATUS.REJECTED, error, ...extra };
@@ -413,10 +419,12 @@ export function listConnectionTools(
 
 /**
  * One call of a connection's tool with its input, on the member's own
- * grant: the provider's MCP result as it sent it, its own error among them.
+ * grant, where `callable` admits it (a call of the model's by default; an
+ * MCP App's own asks `appMayCall`): the provider's MCP result as it sent it,
+ * its own error among them.
  * A connection the agent is not handed, one the member has not connected,
- * a tool the server lists none of, and a session that failed are each
- * refused. The tools the session listed are kept on the grant, so the next
+ * a tool the server lists none of or `callable` refuses, and a session that
+ * failed are each refused. The tools the session listed are kept on the grant, so the next
  * launch's listing shows what the provider lists now.
  */
 export function callConnectionTool(
@@ -424,6 +432,7 @@ export function callConnectionTool(
   name: string,
   tool: string,
   input: WireRecord,
+  callable: (tool: McpToolSchema) => boolean = modelMayCall,
 ): Effect.Effect<ConnectionCall, never, ConnectionDoorServices> {
   return Effect.gen(function* () {
     const connection = yield* handedConnection(admitted, name);
@@ -435,7 +444,7 @@ export function callConnectionTool(
     const from = yield* DateTime.nowAsDate;
     const url = INTEGRATION[connection.value.provider].MCP_URL;
     const read = yield* onGrantToken(connection.value, grant.success, (token) =>
-      callMcpTool(url, token, tool, input),
+      callMcpTool(url, token, tool, input, callable),
     );
     if (Result.isFailure(read)) return Result.fail(read.failure);
     const call = read.success;
@@ -458,6 +467,53 @@ export function callConnectionTool(
     Effect.catchCause((cause) =>
       Effect.as(
         Effect.logWarning(`integration server ${name} call failed: ${causeKind(cause)}`),
+        Result.fail(
+          refused("Luke could not reach this integration just now; try again in a moment."),
+        ),
+      ),
+    ),
+  );
+}
+
+/**
+ * The MCP App a connection's tool ships (`mcp-tools.ts`), read on the
+ * member's own grant: the `ui://` resource the tool's kept list names
+ * (`integration-tool-store.ts`), which every call of a tool keeps current,
+ * read from the provider's server in one session. A connection the agent is
+ * not handed, one the member has not connected, a tool whose kept list names
+ * no app, and a session that failed are each refused. The HTML is read for
+ * the window that draws it and kept nowhere.
+ */
+export function readConnectionToolApp(
+  admitted: AdmittedConversation,
+  name: string,
+  tool: string,
+): Effect.Effect<ConnectionApp, never, ConnectionDoorServices> {
+  return Effect.gen(function* () {
+    const connection = yield* handedConnection(admitted, name);
+    if (Option.isNone(connection)) {
+      return Result.fail(refused(`Connection "${name}" is not available to this agent.`));
+    }
+    const grant = yield* connectionGrant(admitted, connection.value);
+    if (Result.isFailure(grant)) return Result.fail(grant.failure);
+    const kept = yield* readStoredTools(grant.success);
+    const uri = kept?.tools.find((each) => each.name === tool)?.ui?.resourceUri;
+    if (uri === undefined) {
+      return Result.fail(refused(`The tool "${tool}" of "${name}" ships no app.`));
+    }
+    const url = INTEGRATION[connection.value.provider].MCP_URL;
+    const read = yield* onGrantToken(connection.value, grant.success, (token) =>
+      readMcpAppResource(url, token, uri),
+    );
+    if (Result.isFailure(read)) return Result.fail(read.failure);
+    const app = read.success;
+    return Result.isSuccess(app)
+      ? Result.succeed(app.success)
+      : Result.fail(refused(sessionFailed(name, "read an app of", app.failure)));
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.as(
+        Effect.logWarning(`integration server ${name} app read failed: ${causeKind(cause)}`),
         Result.fail(
           refused("Luke could not reach this integration just now; try again in a moment."),
         ),

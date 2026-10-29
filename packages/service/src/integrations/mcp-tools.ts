@@ -23,6 +23,13 @@
  * schemas the server declared, untouched, and `callMcpTool` finds one tool
  * by name and calls it, answering the server's own result.
  *
+ * A tool may ship an interactive UI under the MCP Apps extension
+ * (modelcontextprotocol.io/docs/extensions/apps): its `_meta.ui` names a
+ * `ui://` resource, which a host reads with `resources/read` and draws in a
+ * sandboxed frame. A tool's schema keeps that resource's address and who may
+ * call the tool (`ui`), and `readMcpAppResource` reads the resource's HTML,
+ * with what its own `_meta.ui` asks of the host that draws it.
+ *
  * Every failure is one word. The one thing kept of what the server said is
  * the first line of a JSON-RPC error's message, bounded, and only where it
  * carries neither the bearer nor anything shaped like a credential: that
@@ -62,7 +69,23 @@ const MCP_METHOD = {
   INITIALIZED: "notifications/initialized",
   TOOLS_LIST: "tools/list",
   TOOLS_CALL: "tools/call",
+  RESOURCES_READ: "resources/read",
 } as const;
+
+/** The scheme an MCP App's UI resource is named under. */
+const UI_SCHEME = "ui://";
+
+/** The `_meta` key a tool named its UI resource under before `_meta.ui`, which a server may still send alone. */
+const LEGACY_UI_KEY = "ui/resourceUri";
+
+/** Who may call a tool that has a UI: the model, the app drawn from it, or, where it names neither, both. */
+const MCP_APP_VISIBILITY = {
+  MODEL: "model",
+  APP: "app",
+} as const;
+
+/** The most of an app's HTML read: a single-file bundle runs to a few hundred kilobytes, and the window is handed it whole. */
+const APP_HTML_MAX_CHARS = 2_000_000;
 
 /**
  * The most pages of tools read, so a server that never ends its cursor
@@ -172,16 +195,29 @@ const ToolsPage = Schema.Struct({
       annotations: Schema.optionalKey(WireValueSchema),
       inputSchema: Schema.optionalKey(WireValueSchema),
       outputSchema: Schema.optionalKey(WireValueSchema),
+      _meta: Schema.optionalKey(WireValueSchema),
     }),
   ),
   nextCursor: Schema.optionalKey(Schema.String),
+});
+
+/** What `resources/read` answers: each content the resource holds, of which an app's HTML is text. */
+const ResourceContents = Schema.Struct({
+  contents: Schema.Array(
+    Schema.Struct({
+      uri: Schema.String,
+      mimeType: Schema.optionalKey(Schema.String),
+      text: Schema.optionalKey(Schema.String),
+      _meta: Schema.optionalKey(WireValueSchema),
+    }),
+  ),
 });
 
 type RpcAnswerType = typeof RpcAnswer.Type;
 
 const decodeAnswerText = Schema.decodeUnknownOption(Schema.fromJsonString(RpcAnswer));
 
-/** What a request names besides its method: the handshake's terms, the page of tools asked for, or the tool called and its input. */
+/** What a request names besides its method: the handshake's terms, the page of tools asked for, the tool called and its input, or the resource read. */
 interface RpcParams {
   readonly protocolVersion?: string;
   readonly capabilities?: Readonly<Record<string, never>>;
@@ -189,7 +225,18 @@ interface RpcParams {
   readonly cursor?: string;
   readonly name?: string;
   readonly arguments?: WireRecord;
+  readonly uri?: string;
 }
+
+const VisibilitySchema = Schema.Array(Schema.Literals(Object.values(MCP_APP_VISIBILITY)));
+
+/** What a tool declares of its UI under MCP Apps: the `ui://` resource it is drawn from, and who may call it, where it said. */
+const McpToolUiSchema = Schema.Struct({
+  resourceUri: Schema.String,
+  visibility: Schema.optionalKey(VisibilitySchema),
+});
+
+type McpToolUi = typeof McpToolUiSchema.Type;
 
 /** One tool as the server listed it, for a model to call: its name, its title and words, its hints, and the schemas it declared, as the server wrote them. */
 export const McpToolSchemaSchema = Schema.Struct({
@@ -199,9 +246,16 @@ export const McpToolSchemaSchema = Schema.Struct({
   annotations: Schema.optionalKey(WireRecordShapeSchema),
   inputSchema: Schema.optionalKey(WireValueSchema),
   outputSchema: Schema.optionalKey(WireValueSchema),
+  ui: Schema.optionalKey(McpToolUiSchema),
 });
 
 export type McpToolSchema = typeof McpToolSchemaSchema.Type;
+
+/** One MCP App's UI as its server serves it: its HTML, and what the resource's own `_meta.ui` asks of the host that draws it (the domains its policy may name, the permissions it asks, whether it wants a border), as the server sent it. */
+export interface McpAppResource {
+  readonly html: string;
+  readonly ui?: WireRecord;
+}
 
 /** What a call of one tool answered: every tool the server listed in the call's session, and the server's own result where it lists one under the name. */
 export type McpToolCall =
@@ -216,6 +270,8 @@ export type McpToolCall =
 type ListedTool = (typeof ToolsPage.Type)["tools"][number];
 const decodePage = Schema.decodeUnknownOption(ToolsPage);
 const decodeWireValue = Schema.decodeUnknownOption(WireValueSchema);
+const decodeVisibility = Schema.decodeUnknownOption(VisibilitySchema);
+const decodeContents = Schema.decodeUnknownOption(ResourceContents);
 
 /** The JSON-RPC answers a response carries: its body whole, or each event's `data:` lines joined. */
 function answersOf(contentType: string, body: string): readonly RpcAnswerType[] {
@@ -434,8 +490,37 @@ function listedTools(send: McpSend): Effect.Effect<readonly ListedTool[], McpToo
   });
 }
 
-/** A listed tool as a model is shown it: its name, its title, words, and hints, and its schemas untouched. */
+/**
+ * The UI a tool declares under MCP Apps: the `ui://` resource its `_meta.ui`
+ * names, else the one its older flat key names, with who may call it where
+ * `_meta.ui` says so readably; none where it names no `ui://` resource.
+ */
+function toolUi(meta: UnparsedWireValue): McpToolUi | undefined {
+  if (!isRecord(meta)) return undefined;
+  const ui = isRecord(meta.ui) ? meta.ui : {};
+  const resourceUri = [ui.resourceUri, meta[LEGACY_UI_KEY]]
+    .filter(isWireString)
+    .find((uri) => uri.startsWith(UI_SCHEME));
+  if (resourceUri === undefined) return undefined;
+  const visibility = Option.getOrUndefined(decodeVisibility(ui.visibility));
+  return { resourceUri, ...(visibility !== undefined ? { visibility } : undefined) };
+}
+
+/** Whether the model may call a tool: any but one whose UI says only its app may. */
+export function modelMayCall(tool: McpToolSchema): boolean {
+  const visibility = tool.ui?.visibility;
+  return visibility === undefined || visibility.includes(MCP_APP_VISIBILITY.MODEL);
+}
+
+/** Whether a tool's app may call a tool of its server: any but one whose UI says only the model may. */
+export function appMayCall(tool: McpToolSchema): boolean {
+  const visibility = tool.ui?.visibility;
+  return visibility === undefined || visibility.includes(MCP_APP_VISIBILITY.APP);
+}
+
+/** A listed tool as a model is shown it: its name, its title, words, and hints, and its schemas untouched, with the UI it declares. */
 function toolSchema(tool: ListedTool): McpToolSchema {
+  const ui = toolUi(tool._meta);
   return {
     name: tool.name,
     ...(isWireString(tool.title) ? { title: tool.title } : undefined),
@@ -443,6 +528,7 @@ function toolSchema(tool: ListedTool): McpToolSchema {
     ...(isRecord(tool.annotations) ? { annotations: tool.annotations } : undefined),
     ...(tool.inputSchema !== undefined ? { inputSchema: tool.inputSchema } : undefined),
     ...(tool.outputSchema !== undefined ? { outputSchema: tool.outputSchema } : undefined),
+    ...(ui !== undefined ? { ui } : undefined),
   };
 }
 
@@ -480,7 +566,8 @@ export const listMcpToolSchemas = /* @__PURE__ */ Effect.fn("web/listMcpToolSche
 
 /**
  * One call of the tool the server at `url` lists under `name`, with
- * `input`, under the bearer `token`, in one session: the server's own
+ * `input`, under the bearer `token`, in one session, where `callable` admits
+ * it (the model, by default): the server's own
  * result, which may be its tool's error, beside every tool it lists, which
  * the session reads first to find the tool; why no call was made as
  * `inMcpSession` says, with the tools listed where the call itself failed.
@@ -490,11 +577,13 @@ export const callMcpTool = /* @__PURE__ */ Effect.fn("web/callMcpTool")(function
   token: string,
   name: string,
   input: WireRecord,
+  callable: (tool: McpToolSchema) => boolean = modelMayCall,
 ): Effect.fn.Return<McpToolCall, McpToolsFailure, HttpClient.HttpClient> {
   return yield* inMcpSession(url, token, CALL_TIMEOUT, (send) =>
     Effect.gen(function* () {
       const tools = (yield* listedTools(send)).map(toolSchema);
-      const tool = tools.find((each) => each.name === name);
+      // A tool the caller may not call, by who the tool's UI says may (`modelMayCall`, `appMayCall`), is called no more than one the server lists none of.
+      const tool = tools.find((each) => each.name === name && callable(each));
       if (tool === undefined) return { called: false, tools } as const;
       const called = Effect.gen(function* () {
         const result = yield* send(MCP_METHOD.TOOLS_CALL, { name, arguments: input });
@@ -515,6 +604,35 @@ export const callMcpTool = /* @__PURE__ */ Effect.fn("web/callMcpTool")(function
             listed: tools,
           }),
       );
+    }),
+  );
+});
+
+/**
+ * The HTML of the MCP App resource at `uri` on the server at `url`, under
+ * the bearer `token`, in one session: the first content of the resource that
+ * is HTML text, bounded, with the `_meta.ui` it carries; `unreadable` where
+ * the resource holds none, or more than the window is handed; why no
+ * resource was read otherwise as `inMcpSession` says. A resource's base64
+ * `blob` is not read.
+ */
+export const readMcpAppResource = /* @__PURE__ */ Effect.fn("web/readMcpAppResource")(function* (
+  url: string,
+  token: string,
+  uri: string,
+): Effect.fn.Return<McpAppResource, McpToolsFailure, HttpClient.HttpClient> {
+  return yield* inMcpSession(url, token, READ_TIMEOUT, (send) =>
+    Effect.gen(function* () {
+      const result = yield* send(MCP_METHOD.RESOURCES_READ, { uri });
+      const contents = Option.getOrUndefined(decodeContents(result))?.contents ?? [];
+      const content = contents.find(
+        (each) => each.text !== undefined && (each.mimeType ?? "text/html").startsWith("text/html"),
+      );
+      if (content?.text === undefined || content.text.length > APP_HTML_MAX_CHARS) {
+        return yield* unreadable;
+      }
+      const ui = isRecord(content._meta) ? content._meta.ui : undefined;
+      return { html: content.text, ...(isRecord(ui) ? { ui } : undefined) };
     }),
   );
 });
