@@ -29,9 +29,9 @@ test("a turn's heading and the card it hangs read one clock on a Mac set to 24 h
   const endedAt = new Date(2026, 9, 8, 15, 42).getTime();
 
   const card = renderToStaticMarkup(
-    createElement(TurnCard, { startedAt, endedAt, record: {}, models: [] }),
+    createElement(TurnCard, { startedAt, endedAt, now, record: {}, models: [] }),
   );
 
   assert.equal(callHeading(endedAt, now), "Today, 3:42 PM");
-  assert.match(card, /Oct 8, 2026, 2:32 PM → 3:42 PM/u);
+  assert.match(card, /Today, 2:32 – 3:42 PM · 1h 10m/u);
 });
