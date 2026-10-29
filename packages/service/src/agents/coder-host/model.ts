@@ -4,6 +4,7 @@ import {
   PROVIDER_KEY_UNREADABLE,
   type ProviderKeyUnreadable,
 } from "@luke/database/models/provider-key-seal";
+import { redactCredentials } from "@luke/features/credential-redaction";
 import { MODEL_PROVIDER, type ModelChoice, type ModelProvider } from "@luke/features/models-wire";
 import {
   FAST_ACCESS,
@@ -11,13 +12,14 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeyStatus,
 } from "@luke/features/provider-key-wire";
+import { failureKind } from "@luke/runtime/effect";
 import {
   APICallError,
   type LanguageModel,
   type LanguageModelMiddleware,
   wrapLanguageModel,
 } from "ai";
-import { Redacted, Result } from "effect";
+import { Effect, Redacted, Result } from "effect";
 import type { AgentModelOptionsDefinition } from "eve";
 import {
   FAST_PROVIDERS,
@@ -105,6 +107,9 @@ const ANTHROPIC_NO_CREDIT = /credit balance/iu;
 /** The Anthropic provider option a fast step asks its speed by; a call without it runs at standard speed, and the SDK sends fast mode's beta only beside it. */
 const ANTHROPIC_SPEED_OPTION = "speed";
 
+/** How much of the provider's words a refusal of the account's key keeps after its own. */
+const PROVIDER_WORDS_CHARS = 120;
+
 const PROVIDER_REFUSAL_STATUS = {
   UNAUTHORIZED: 401,
   TOO_MANY_REQUESTS: 429,
@@ -125,6 +130,8 @@ interface AccountKeyStanding {
   readonly fastAccess?: FastAccess;
   /** Writes what a fast call showed of the key's organization, on the same terms as `report`. */
   readonly reportFast?: (access: FastAccess) => Promise<void>;
+  /** Writes a line to the deployment's logs through the edge's runner, since the middleware has no fiber to compose into. */
+  readonly said: (line: Effect.Effect<void>) => Promise<void>;
 }
 
 /** One provider's API key the account saved, opened, for a call beside its agents (`account-keys.ts`'s `ownKeyOf`). */
@@ -207,15 +214,24 @@ function accountKeyStatusOf(failure: APICallError): ProviderKeyStatus | undefine
 /**
  * The account's key's standing kept as each call settles: a call that goes
  * through reads verified, a refusal of the key or its billing reads as that
- * and fails the step in words naming the account's key, and any other
- * failure is left as it was. Note that a report is awaited but never
- * thrown, because the row's status is the account's view of its key and no
- * reason to fail a step.
+ * and fails the step in words naming the account's key, followed by the
+ * provider's status and its own words redacted, which is the turn's cause,
+ * and is logged; any other failure is left as it was. Note that a report is
+ * awaited but never thrown, because the row's status is the account's view
+ * of its key and no reason to fail a step; one that fails is logged.
  */
 function accountKeyMiddleware(standing: AccountKeyStanding): LanguageModelMiddleware {
   const settle = async (status: ProviderKeyStatus) => {
     if (status === standing.status) return;
-    await standing.report(status).catch(() => undefined);
+    await standing
+      .report(status)
+      .catch((failure: unknown) =>
+        standing.said(
+          Effect.logWarning(
+            `The account key's status ${status} was not written: ${failureKind(failure)}`,
+          ),
+        ),
+      );
   };
   const settled = async <A>(call: () => PromiseLike<A>): Promise<A> => {
     let answer: A;
@@ -226,11 +242,20 @@ function accountKeyMiddleware(standing: AccountKeyStanding): LanguageModelMiddle
       const status = accountKeyStatusOf(failure);
       if (status === undefined) throw failure;
       await settle(status);
-      throw new Error(
+      // Redacted before the cut, so a cut never leaves the head of a credential standing.
+      const words = redactCredentials(failure.message).slice(0, PROVIDER_WORDS_CHARS).trim();
+      const cause = `${failure.statusCode ?? "no status"} ${words}`;
+      const refusal =
         status === PROVIDER_KEY_STATUS.INVALID
           ? CODER_REFUSAL.ACCOUNT_KEY_REFUSED
-          : CODER_REFUSAL.ACCOUNT_KEY_NO_QUOTA,
+          : CODER_REFUSAL.ACCOUNT_KEY_NO_QUOTA;
+      await standing.said(
+        Effect.logError(`The provider refused the account's own key: ${cause}`).pipe(
+          Effect.annotateLogs({ failure: status }),
+        ),
       );
+      // Note that the cause is the provider's words alone, never the error, which carries the request's body.
+      throw new Error(`${refusal} (${cause})`, { cause: new Error(cause) });
     }
     await settle(PROVIDER_KEY_STATUS.VERIFIED);
     return answer;

@@ -51,7 +51,7 @@ const setUp = Effect.gen(function* () {
   const relay = new StreamRelay({
     writer,
     now: () => at,
-    report: (message) => refusals.push(message),
+    report: (message) => Effect.sync(() => void refusals.push(message)),
   });
   const standing: RelayStanding = {
     sessionId: `wrun_${randomUUID()}`,

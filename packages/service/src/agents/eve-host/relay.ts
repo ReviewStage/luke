@@ -8,6 +8,7 @@ import {
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import { CONNECTION_TOOL } from "@luke/features/agent-tools";
 import { redactCredentials } from "@luke/features/credential-redaction";
+import { failureKind, reportUnexpected } from "@luke/runtime/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import {
@@ -152,6 +153,8 @@ interface RelayTurnState {
 /** What one session's relay keeps: the turns still under way, by eve's own turn id. */
 export interface RelayState {
   readonly turns: Readonly<Record<string, RelayTurnState>>;
+  /** Whether the hook has said that it drops the session's events, the session not admitted, which it says once a session. */
+  readonly unadmittedSaid?: true;
 }
 
 export const EMPTY_RELAY_STATE: RelayState = { turns: {} };
@@ -201,8 +204,8 @@ interface StreamRelaySeams {
   /** The writes the relay makes. */
   readonly writer: Pick<StoreWriter, "consumeAll" | "enqueueTurn" | "takeAwaitingLine">;
   readonly now: () => number;
-  /** Where a write the writer refused is said; the relay never throws into eve's turn. */
-  readonly report: (message: string) => void;
+  /** Where a write the writer refused is said, under the event's ids; the relay never throws into eve's turn. */
+  readonly report: (message: string) => Effect.Effect<void>;
 }
 
 /** The task's turn origin for each kind of turn a request opens, as the queued row records it. */
@@ -298,10 +301,16 @@ const readFailureDetailWords = Schema.decodeUnknownOption(FailureDetailWordsSche
 /** How much of eve's failure message the row keeps, and how much of its details' key list, inside the writer's own 500. */
 const FAILURE_DETAIL_BOUNDS = { MESSAGE_CHARS: 200, KEYS_CHARS: 120 } as const;
 
+/** The kind an unexpected failure of the relay's own writes is reported under. */
+const RELAY_STORE_FAILURE = "relay_store_failure";
+
 type TurnFailedData = Extract<MessageStreamEvent, { readonly type: "turn.failed" }>["data"];
 
+/** What eve says of a failure, a turn's or a whole session's, which carry the same three fields. */
+export type EveFailure = Pick<TurnFailedData, "code" | "details" | "message">;
+
 /**
- * Why eve failed the turn, as the row keeps it: eve's own code, the sorted
+ * Why eve failed the turn or its session, as the row keeps it: eve's own code, the sorted
  * key names of its details so the next reader knows what eve offers, the
  * fixed words above where the details carry them, and eve's `message`
  * redacted and cut, which is where a bare `MODEL_CALL_FAILED` gets its
@@ -309,7 +318,7 @@ type TurnFailedData = Extract<MessageStreamEvent, { readonly type: "turn.failed"
  * carries the same code, message, and details as the `turn.failed` it
  * precedes, so nothing is kept from it.
  */
-function failureDetailOf(data: TurnFailedData): string {
+export function failureDetailOf(data: EveFailure): string {
   const words = [data.code];
   const keys = Object.keys(data.details ?? {})
     .sort()
@@ -688,8 +697,30 @@ export class StreamRelay {
   handle(event: MessageStreamEvent, standing: RelayStanding): RelayEffect<void> {
     const eveTurnId = turnIdOf(event);
     const read = Effect.suspend(() => this.#read(event, standing));
-    if (eveTurnId === undefined) return read;
-    return Effect.andThen(this.#landDue(eveTurnId, event.type, standing), read);
+    const handled =
+      eveTurnId === undefined
+        ? read
+        : Effect.andThen(this.#landDue(eveTurnId, event.type, standing), read);
+    const ids = {
+      conversationId: standing.target.conversationId,
+      sandboxSessionId: standing.sessionId,
+      ...(eveTurnId !== undefined
+        ? { turnId: hostTurnId(standing.sessionId, eveTurnId) }
+        : undefined),
+    };
+    return handled.pipe(
+      // Note that what the store could not do at all is still eve's to retry, so it is said here
+      // and reported, because the turn otherwise stands running until the sweep's bound.
+      Effect.tapError((failure) =>
+        Effect.logError(`a ${event.type} event was not relayed: ${failureKind(failure)}`).pipe(
+          Effect.andThen(
+            reportUnexpected(RELAY_STORE_FAILURE, { ...ids, error: failureKind(failure) }),
+          ),
+          Effect.annotateLogs({ failure: TURN_FAILURE.PERSISTENCE }),
+        ),
+      ),
+      Effect.annotateLogs(ids),
+    );
   }
 
   #landDue(
@@ -725,6 +756,7 @@ export class StreamRelay {
         const { turnId, stepIndex, actions } = event.data;
         return Effect.suspend(() => {
           const requested: RequestedCall[] = [];
+          const unstored: string[] = [];
           for (const action of actions) {
             const call = requestedCallOf(action);
             if (!call) continue;
@@ -733,11 +765,22 @@ export class StreamRelay {
             const stored =
               parentCallId === undefined
                 ? { name: call.name, input }
-                : this.#nestedCall(turnId, call.name, input, parentCallId, standing, requested);
+                : this.#nestedCall(
+                    turnId,
+                    call.name,
+                    input,
+                    parentCallId,
+                    standing,
+                    requested,
+                    unstored,
+                  );
             if (!stored) continue;
             requested.push({ callId: call.callId, name: stored.name, input: stored.input });
           }
-          return this.#toolCalls(turnId, stepIndex, requested, standing);
+          return Effect.andThen(
+            Effect.forEach(unstored, this.#seams.report, { discard: true }),
+            this.#toolCalls(turnId, stepIndex, requested, standing),
+          );
         });
       }
       case "action.result": {
@@ -863,7 +906,7 @@ export class StreamRelay {
       if (state.turns[eveTurnId]) return;
       const kind = standing.turn;
       if (kind === undefined) {
-        this.#seams.report(
+        yield* this.#seams.report(
           `Turn ${eveTurnId} of session ${standing.sessionId} named no kind of turn and is not recorded.`,
         );
         return;
@@ -897,7 +940,7 @@ export class StreamRelay {
         ...(standing.toolSetHash !== undefined ? { toolSetHash: standing.toolSetHash } : undefined),
       });
       if (Result.isFailure(queued)) {
-        this.#seams.report(
+        yield* this.#seams.report(
           `The store refused to queue turn ${eveTurnId}: ${queued.failure.refusal}.`,
         );
         standing.state.update((state) => this.#without(state, eveTurnId));
@@ -1011,7 +1054,8 @@ export class StreamRelay {
    * its fixed name and envelope (`../connection-tools.ts`), so both the
    * wrapper and the call Linear answered stand in the transcript. A nested
    * call under anything else, or of no Linear tool, has no name the record
-   * holds and is left out, its wrapper standing for it.
+   * holds and is left out, its wrapper standing for it, and why is added to
+   * `unstored` for the caller to report.
    */
   #nestedCall(
     eveTurnId: string,
@@ -1020,6 +1064,7 @@ export class StreamRelay {
     parentCallId: string,
     standing: RelayStanding,
     requested: readonly RequestedCall[],
+    unstored: string[],
   ): { readonly name: string; readonly input: UnparsedWireValue } | undefined {
     const parent =
       heldCallName(standing.state.get(), eveTurnId, parentCallId) ??
@@ -1027,7 +1072,7 @@ export class StreamRelay {
     const stored =
       parent === CONNECTION_TOOL.EXECUTE ? storedRemoteCall(name, input, parentCallId) : undefined;
     if (stored === undefined && standing.state.get().turns[eveTurnId] !== undefined) {
-      this.#seams.report(
+      unstored.push(
         `A nested call of turn ${eveTurnId} under ${parent ?? "no held call"} has no stored name and is not recorded.`,
       );
     }
@@ -1170,7 +1215,15 @@ export class StreamRelay {
   ): RelayEffect<void> {
     return Effect.gen({ self: this }, function* () {
       const turn = standing.state.get().turns[eveTurnId];
-      if (!turn) return;
+      // A failure eve tells of a turn the relay holds nothing of, never started here or already sealed, is said rather than dropped.
+      if (!turn) {
+        if (ended === RUN_STATUS.FAILED) {
+          yield* this.#seams.report(
+            `A failed end of turn ${eveTurnId}, which the relay does not hold, is not recorded: ${failureDetail ?? "no detail"}`,
+          );
+        }
+        return;
+      }
       let status = ended;
       let failure: TurnFailure | undefined =
         ended === RUN_STATUS.FAILED ? TURN_FAILURE.MODEL : undefined;
@@ -1232,6 +1285,11 @@ export class StreamRelay {
       // that settles it, which a dropped turn would answer with nothing.
       if (!sealed) return;
       standing.state.update((state) => this.#without(state, eveTurnId));
+      if (status === RUN_STATUS.FAILED) {
+        yield* Effect.logError(`a turn failed: ${failureDetail ?? "no detail"}`).pipe(
+          Effect.annotateLogs({ failure: failure ?? TURN_FAILURE.MODEL }),
+        );
+      }
     });
   }
 
@@ -1307,15 +1365,17 @@ export class StreamRelay {
       ];
       if (events.length === 0) return [];
       const results = yield* this.#seams.writer.consumeAll(standing.target, events);
-      const taken = events.map((event, index) => {
+      const taken = events.map((_event, index) => {
         const result = results[index];
-        if (result !== undefined && Result.isFailure(result)) {
-          this.#seams.report(
-            `The store refused a ${event.kind} event of turn ${event.turnId}: ${result.failure.refusal}.`,
-          );
-        }
         return result !== undefined && Result.isSuccess(result);
       });
+      for (const [index, event] of events.entries()) {
+        const result = results[index];
+        if (result === undefined || Result.isSuccess(result)) continue;
+        yield* this.#seams.report(
+          `The store refused a ${event.kind} event of turn ${event.turnId}: ${result.failure.refusal}.`,
+        );
+      }
       const journaled = events.some(
         (event, index) => taken[index] === true && JOURNAL_EVENTS.has(event.kind),
       );
