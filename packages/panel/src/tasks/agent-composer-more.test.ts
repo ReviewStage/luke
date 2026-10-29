@@ -103,7 +103,6 @@ function Box({ status }: { status: AgentStatus }): ReactNode {
     taskId: "plan-1",
     messages: [],
     send: () => new Promise(ignore),
-    onStatus: ignore,
   });
   const [choice, choose] = useState({ model: "anthropic/claude-opus-5.5", effort: "high" });
   return createElement(AgentComposer, {

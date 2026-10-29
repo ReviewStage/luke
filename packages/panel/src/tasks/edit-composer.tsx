@@ -228,7 +228,7 @@ export function EditComposer({
         servers={undefined}
         published={undefined}
         doors={edit.doors}
-        onStop={() => Promise.resolve()}
+        onStop={() => Promise.resolve(false)}
         keywords={edit.keywords}
         skills={edit.skills}
         sendable={!line.reading}

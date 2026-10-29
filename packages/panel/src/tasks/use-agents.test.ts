@@ -2,14 +2,19 @@
 
 import assert from "node:assert/strict";
 import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
-import { AGENT_BRIEF, AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
+import {
+  AGENT_BRIEF,
+  AGENT_RUNTIME,
+  AGENT_STATUS,
+  type AgentSummary,
+} from "@luke/features/agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "@luke/features/pull-request-chapters-view";
 import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActPayload } from "@luke/host/contract";
-import { ACTION_RESULT_STATUS, type ActionResult, type WireBoundaryInput } from "@luke/wire";
+import { ACTION_RESULT_STATUS, type WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -17,13 +22,7 @@ import { afterEach, test, vi } from "vitest";
 import type { ActHandle } from "../act.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
-import {
-  type AgentsControl,
-  ARCHIVE_DRAWN,
-  MODELS_READ,
-  useAgents,
-  withPendingAgents,
-} from "./use-agents.js";
+import { type AgentsControl, MODELS_READ, useAgents } from "./use-agents.js";
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -44,7 +43,6 @@ interface Standing {
   agentId?: string;
   repository: string | null;
   listedAgents?: readonly AgentSummary[];
-  viewedAgents?: readonly AgentSummary[];
 }
 
 /** Any kind the hook asks. */
@@ -107,7 +105,6 @@ function mount(
       agentId: held.agentId,
       repository: held.repository,
       listedAgents: held.listedAgents,
-      viewedAgents: held.viewedAgents,
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
       onStarted: (agentId) => started.push(agentId),
@@ -182,7 +179,7 @@ test("a read of the models that never answers is said as failed past its bound, 
   }
 });
 
-test("the task's agents the followed list carries draw before its list is read, and the read adds the archived ones", async () => {
+test("the task's agents are the followed list's, the archived among them, drawn before the read, which lays under each only what it alone says", async () => {
   const OTHER_TASK = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
   const elsewhere = { ...STARTED, id: "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", planId: OTHER_TASK };
   const archived = {
@@ -191,108 +188,29 @@ test("the task's agents the followed list carries draw before its list is read, 
     status: AGENT_STATUS.COMPLETED,
     archivedAt: 2,
   };
-  const tab = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [elsewhere, STARTED] });
+  const renamed = { ...STARTED, title: "Invite expiry job" };
+  const tab = mount({
+    taskId: TASK,
+    repository: "acme/relay",
+    listedAgents: [elsewhere, renamed, archived],
+  });
   const read = Promise.withResolvers<WireBoundaryInput>();
   tab.answer(ACT_KIND.AGENTS_LIST, read.promise);
   await tab.mount();
 
   assert.deepEqual(tab.control().agentIds, [AGENT]);
-
-  read.resolve({ agents: [STARTED, archived] });
-  await settle();
-  assert.deepEqual(tab.control().agentIds, [AGENT]);
   assert.deepEqual(
     tab.control().archived?.map((agent) => agent.id),
     [archived.id],
   );
-});
 
-test("a rename draws the new name at once, and the name it replaced comes back when the service refuses it", async () => {
-  const titled = { ...STARTED, title: "Fix the invite email" };
-  const tab = mount({ taskId: TASK, repository: "acme/relay" });
-  tab.answer(ACT_KIND.AGENTS_LIST, { agents: [titled] });
-  const renamed = Promise.withResolvers<WireBoundaryInput>();
-  tab.answer(ACT_KIND.AGENTS_RENAME, renamed.promise);
-  await tab.mount();
-
-  let took: Promise<boolean> | undefined;
-  act(() => {
-    took = tab.control().onRename(AGENT, "Invite email subject");
-  });
+  // The read was taken before the rename the list carries, and alone names the runtime.
+  read.resolve({ agents: [{ ...STARTED, runtime: AGENT_RUNTIME.CLAUDE_CODE }, archived] });
   await settle();
   assert.deepEqual(
-    tab.control().agents?.map((agent) => agent.title),
-    ["Invite email subject"],
+    tab.control().agents?.map((agent) => [agent.title, agent.runtime]),
+    [["Invite expiry job", AGENT_RUNTIME.CLAUDE_CODE]],
   );
-
-  renamed.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-  await settle();
-  assert.equal(await took, false);
-  assert.deepEqual(
-    tab.control().agents?.map((agent) => agent.title),
-    ["Fix the invite email"],
-  );
-});
-
-test("an archive moves the agent under Archived at once, and back among the standing when the service refuses it", async () => {
-  const tab = mount({ taskId: TASK, repository: "acme/relay" });
-  tab.answer(ACT_KIND.AGENTS_LIST, { agents: [STARTED] });
-  const archived = Promise.withResolvers<WireBoundaryInput>();
-  tab.answer(ACT_KIND.AGENTS_ARCHIVE, archived.promise);
-  await tab.mount();
-
-  act(() => {
-    void tab.control().onArchive(AGENT, true);
-  });
-  await settle();
-  assert.deepEqual(tab.control().agentIds, []);
-  assert.deepEqual(
-    tab.control().archived?.map((agent) => agent.id),
-    [AGENT],
-  );
-
-  archived.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-  await settle();
-  assert.deepEqual(tab.control().agentIds, [AGENT]);
-  assert.deepEqual(tab.control().archived, []);
-});
-
-test("an archive a dialog asked about waits on the answer, so the dialog still stands to say a refusal", async () => {
-  const tab = mount({ taskId: TASK, repository: "acme/relay" });
-  tab.answer(ACT_KIND.AGENTS_LIST, { agents: [STARTED] });
-  const archived = Promise.withResolvers<WireBoundaryInput>();
-  tab.answer(ACT_KIND.AGENTS_ARCHIVE, archived.promise);
-  await tab.mount();
-
-  let result: Promise<ActionResult> | undefined;
-  act(() => {
-    result = tab.control().onArchive(AGENT, true, ARCHIVE_DRAWN.ON_ANSWER);
-  });
-  await settle();
-  assert.deepEqual(tab.control().agentIds, [AGENT], "the agent stands while the answer is out");
-
-  archived.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-  await settle();
-  assert.equal((await result)?.status, ACTION_RESULT_STATUS.REJECTED);
-  assert.deepEqual(tab.control().agentIds, [AGENT]);
-});
-
-test("a name given an agent another list draws stands over that list until it carries the name", async () => {
-  const taskless = { ...STARTED, planId: null, title: "Nightly triage" };
-  const tab = mount({ taskId: undefined, repository: null, viewedAgents: [taskless] });
-  tab.answer(ACT_KIND.AGENTS_RENAME, { agent: { ...taskless, title: "Morning triage" } });
-  await tab.mount();
-
-  const drawn = () =>
-    withPendingAgents([taskless], tab.control().pending).map((agent) => agent.title);
-  await act(async () => {
-    assert.equal(await tab.control().onRename(AGENT, "Morning triage"), true);
-  });
-  await settle();
-  assert.deepEqual(drawn(), ["Morning triage"]);
-
-  await tab.stand({ viewedAgents: [{ ...taskless, title: "Morning triage" }] });
-  assert.deepEqual(drawn(), ["Nightly triage"]);
 });
 
 test("a draft asks nothing of the service, one per plan, until its first message starts the agent on those words as its prompt under the draft's key, with the MCP servers it switched off, opening its tab", async () => {
@@ -373,8 +291,8 @@ test("a draft asks nothing of the service, one per plan, until its first message
   assert.equal(tab.control().draft?.id, other, "another plan's draft stands");
 });
 
-test("a plan's Start stands its agent's tab at once under the press's key, which gives way to the agent once made, without reading the list again, or to nothing where it was refused", async () => {
-  const tab = mount({ taskId: TASK, repository: "acme/relay" });
+test("a plan's Start stands its agent's tab at once under the press's key, which gives way to the agent the list carries once made, or to nothing where it was refused", async () => {
+  const tab = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
   tab.answer(ACT_KIND.AGENTS_LIST, { agents: [] });
   let land: (answer: WireBoundaryInput) => void = () => undefined;
   tab.answer(
@@ -394,16 +312,13 @@ test("a plan's Start stands its agent's tab at once under the press's key, which
   assert.deepEqual(tab.control().agentIds, ["key-1"]);
   assert.deepEqual(tab.started, ["key-1"], "its tab is chosen on the press");
 
+  // The host answers the Start once the list carries its agent.
+  await tab.stand({ listedAgents: [STARTED] });
   await act(async () => land({ agent: STARTED }));
   await settle();
   assert.equal(tab.control().start.pending, undefined);
   assert.deepEqual(tab.control().agentIds, [AGENT]);
   assert.deepEqual(tab.started, ["key-1", AGENT]);
-  assert.equal(
-    tab.asked.filter((each) => each.kind === ACT_KIND.AGENTS_LIST).length,
-    1,
-    "the list already read is joined the agent rather than read again",
-  );
 
   let refused: Failure | undefined;
   await act(async () => {
@@ -415,54 +330,6 @@ test("a plan's Start stands its agent's tab at once under the press's key, which
     refused?.text,
     "That model isn't offered any more. Choose another.",
     "and answers why",
-  );
-});
-
-test("a plan's Start on a task whose list did not read stands its tab at once, and every agent Starts made among the task's agents until a read lands", async () => {
-  const tab = mount({ taskId: TASK, repository: "acme/relay" });
-  let land: (answer: WireBoundaryInput) => void = () => undefined;
-  tab.answer(
-    ACT_KIND.AGENTS_START,
-    new Promise<WireBoundaryInput>((resolve) => {
-      land = resolve;
-    }),
-  );
-  await tab.mount();
-  assert.equal(tab.control().listFailed, true, "the list did not read");
-
-  act(() => {
-    void tab.control().start.onPress();
-  });
-  await settle();
-  assert.deepEqual(tab.control().agentIds, ["key-1"]);
-
-  await act(async () => land({ agent: STARTED }));
-  await settle();
-  assert.deepEqual(tab.control().agentIds, [AGENT], "the agent stands though no read landed");
-  assert.deepEqual(tab.started, ["key-1", AGENT]);
-  assert.equal(
-    tab.asked.filter((each) => each.kind === ACT_KIND.AGENTS_LIST).length,
-    2,
-    "and the list is read again",
-  );
-
-  // A second Start while the list still does not read stands beside the first.
-  const second = { ...STARTED, id: "9d2b7b5e-4e3f-4e9c-9c77-7a5d8b3f4c32", createdAt: 2 };
-  tab.answer(ACT_KIND.AGENTS_START, { agent: second });
-  act(() => {
-    void tab.control().start.onPress();
-  });
-  await settle();
-  assert.deepEqual(tab.control().agentIds, [AGENT, second.id]);
-
-  const other = { ...STARTED, id: "0e1f2a3b-4c5d-4e6f-8a7b-9c0d1e2f3a4b", createdAt: 0 };
-  tab.answer(ACT_KIND.AGENTS_LIST, { agents: [other, STARTED, second] });
-  act(() => tab.control().onRetryList());
-  await settle();
-  assert.deepEqual(
-    tab.control().agentIds,
-    [other.id, AGENT, second.id],
-    "a read that lands is the list",
   );
 });
 
@@ -555,7 +422,7 @@ test("a draft of files alone waits while another plan is open, but no relaunch b
   assert.equal(after.control().draft, undefined);
 });
 
-test("with no plan open, the agent named is read as its page and held as a list of one, so its title from a transcript page moves it", async () => {
+test("with no plan open, the agent named is read as its page and held as a list of one, which the followed list's row of it stands over once it carries it", async () => {
   const taskless = { ...STARTED, planId: null, status: AGENT_STATUS.RUNNING };
   const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
   tab.answer(ACT_KIND.AGENTS_PAGE, {
@@ -577,7 +444,7 @@ test("with no plan open, the agent named is read as its page and held as a list 
     tab.control().agents?.map((agent) => [agent.id, agent.planId, agent.status]),
     [[AGENT, null, AGENT_STATUS.RUNNING]],
   );
-  act(() => tab.control().onTitle(AGENT, "Sweep the flaky tests"));
+  await tab.stand({ listedAgents: [{ ...taskless, title: "Sweep the flaky tests" }] });
   assert.equal(tab.control().agents?.[0]?.title, "Sweep the flaky tests");
 });
 
@@ -1235,58 +1102,6 @@ test("no continue is offered while no Start could run: a task naming no reposito
   bare.answer(ACT_KIND.AGENTS_LIST, { agents: [] });
   await bare.mount();
   assert.equal(bare.control().continueAgent, undefined);
-});
-
-test("what an agent's transcript said of it before its task's agents were read stands over the list's answer, which was read as it stood before", async () => {
-  let answer: (value: WireBoundaryInput) => void = () => undefined;
-  const tab = mount({ taskId: TASK, repository: null });
-  tab.answer(
-    ACT_KIND.AGENTS_LIST,
-    new Promise<WireBoundaryInput>((resolve) => {
-      answer = resolve;
-    }),
-  );
-  await tab.mount();
-  assert.equal(tab.control().agents, undefined, "the agents are still being read");
-
-  // The tab follows its agent from the id, so its page lands before the list does.
-  act(() => tab.control().onStatus(AGENT, { status: AGENT_STATUS.COMPLETED }));
-  act(() => tab.control().onTitle(AGENT, "Invite expiry job"));
-  answer({ agents: [{ ...STARTED, status: AGENT_STATUS.RUNNING }] });
-  await settle();
-
-  assert.deepEqual(
-    tab.control().agents?.map((agent) => [agent.id, agent.status, agent.title]),
-    [[AGENT, AGENT_STATUS.COMPLETED, "Invite expiry job"]],
-  );
-});
-
-test("what an agent's transcript said before its task's agents were read outlasts a read of them that failed, and stands over the one that lands", async () => {
-  let fail: (value: WireBoundaryInput) => void = () => undefined;
-  const tab = mount({ taskId: TASK, repository: null });
-  tab.answer(
-    ACT_KIND.AGENTS_LIST,
-    new Promise<WireBoundaryInput>((resolve) => {
-      fail = resolve;
-    }),
-  );
-  await tab.mount();
-  act(() => tab.control().onStatus(AGENT, { status: AGENT_STATUS.COMPLETED }));
-  act(() => tab.control().onTitle(AGENT, "Invite expiry job"));
-  fail({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-  await settle();
-  assert.equal(tab.control().agents, undefined, "the read failed");
-
-  tab.answer(ACT_KIND.AGENTS_LIST, {
-    agents: [{ ...STARTED, status: AGENT_STATUS.RUNNING }],
-  });
-  act(() => tab.control().onRetryList());
-  await settle();
-
-  assert.deepEqual(
-    tab.control().agents?.map((agent) => [agent.id, agent.status, agent.title]),
-    [[AGENT, AGENT_STATUS.COMPLETED, "Invite expiry job"]],
-  );
 });
 
 test("a delete that landed takes the agent out of the list, and a read already out that still holds it does not bring it back", async () => {

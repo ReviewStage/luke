@@ -138,9 +138,9 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
         ),
     ),
   );
-  // Every agent on a task, while the list is followed live, is the notices'
-  // to hold in place of the watch's own reads, and a task the list no longer
-  // holds takes its agents with it.
+  // Every agent on a task, the archived left out, while the list is followed
+  // live, is the notices' to hold in place of the watch's own reads, and a
+  // task the list no longer holds takes its agents with it.
   yield* Effect.forkScoped(
     Stream.runForEach(
       Stream.changes(Stream.map(state.changes, (document) => document.tasks.taskAgents)),
@@ -149,7 +149,10 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
           Effect.sync(() => {
             if (agents === undefined) return;
             const taskIds = state.snapshot().tasks.tasks.map((each) => each.id);
-            notices.observeFollowed(agents, taskIds);
+            notices.observeFollowed(
+              agents.filter((agent) => agent.archivedAt === undefined),
+              taskIds,
+            );
           }),
           (defect) =>
             Effect.sync(() =>

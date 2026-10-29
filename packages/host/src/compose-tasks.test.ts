@@ -12,12 +12,7 @@ import {
 } from "@luke/features";
 import { browserTabsPlaceId } from "@luke/features/agent-browser-tab-wire";
 import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
-import {
-  AGENT_BRIEF,
-  AGENT_STATUS,
-  PULL_REQUEST_STATE,
-  type TasklessAgent,
-} from "@luke/features/agent-wire";
+import { AGENT_STATUS, PULL_REQUEST_STATE, type TasklessAgent } from "@luke/features/agent-wire";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
@@ -92,6 +87,7 @@ import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient } from "./compose-tasks.js";
 import { FIXTURE_IDS, FIXTURE_PAGE } from "./fixture-stage.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
+import { agentListRow } from "./testing/task-list-rows.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SECTION_ID = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
@@ -3692,38 +3688,7 @@ function rowOfTask(each: Task) {
 
 /** One agent of the plan, or of none, as the agents statement delivers its row, started `ago` before the list is read, with no turn yet. */
 function agentRow(planId: string | null, ago: number) {
-  return {
-    id: "3f1d2c4b-5a6e-4f70-8a91-b2c3d4e5f607",
-    planId,
-    workspaceId: "workspace-personal",
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    contextWindow: null,
-    title: "Invite flow",
-    brief: AGENT_BRIEF.PLAN,
-    repository: "acme/relay",
-    starterId: "user-dana",
-    starterName: "Dana",
-    automationId: null,
-    automationName: null,
-    archivedAt: null,
-    archivedBy: null,
-    archiverName: null,
-    disabledServers: null,
-    published: null,
-    startedFrom: null,
-    pinnedAt: null,
-    pinPosition: null,
-    createdAt: LIVE_NOW - ago,
-    turnId: null,
-    turnStatus: null,
-    cancelRequested: null,
-    queuedAt: null,
-    startedAt: null,
-    settledAt: null,
-    turnSessionEnded: null,
-    awaitingLineAt: null,
-  };
+  return agentListRow(planId, LIVE_NOW - ago);
 }
 
 it.effect(

@@ -278,14 +278,14 @@ export function ContinuedComposerNote({
   agent: AgentSummary;
   doors: ContinuedDoors;
   /** Stops the agent, while it has a turn to stop; settles once the service has answered. */
-  stop?: (() => Promise<void>) | undefined;
+  stop?: (() => Promise<unknown>) | undefined;
   control: AgentsControl;
   /** Whether the tab is on screen, which the archive's question goes with. */
   shown: boolean;
 }): React.JSX.Element {
   const [stopping, setStopping] = useState(false);
   const archive = useAgentArchive(agent, control, shown);
-  const pressStop = (run: () => Promise<void>) => {
+  const pressStop = (run: () => Promise<unknown>) => {
     setStopping(true);
     run().finally(() => setStopping(false));
   };

@@ -920,9 +920,10 @@ export type AgentSummary = typeof agentSummarySchema.Type;
 /** A started, stopped, or changed agent (POST, PATCH). */
 /**
  * The id of the transaction a write on the agent committed in, as Postgres
- * counts it, in decimal: present where a Start, a rename, an archive, or a
- * pin changed a row, so the desktop following the task list waits for it to
- * arrive before it confirms the write, as Neon's mutations guide says.
+ * counts it, in decimal: present where a Start, a rename, an archive, a pin,
+ * a change of model, or a switch of MCP servers changed a row, so the
+ * desktop following the task list waits for it to arrive before it confirms
+ * the write, as Neon's mutations guide says.
  */
 const agentTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
 

@@ -462,10 +462,23 @@ export const agentServersParamsSchema = EffectSchema.Struct({
 
 export type AgentServersParams = typeof agentServersParamsSchema.Type;
 
-/** One agent archived or brought back, as the window asks it: the agent and which. */
+/**
+ * When an archive is drawn: at once, before the service answers, or once
+ * it has, as a dialog that asked does, since the agent leaving would take
+ * the dialog, and the refusal it would say, with it.
+ */
+export const ARCHIVE_DRAWN = {
+  AT_ONCE: "at-once",
+  ON_ANSWER: "on-answer",
+} as const;
+
+export type ArchiveDrawn = (typeof ARCHIVE_DRAWN)[keyof typeof ARCHIVE_DRAWN];
+
+/** One agent archived or brought back, as the window asks it: the agent, which, and when it is drawn, at once where it says none. */
 export const agentArchiveParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
   ...agentArchiveRequestSchema.fields,
+  drawn: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(ARCHIVE_DRAWN))),
 });
 
 export type AgentArchiveParams = typeof agentArchiveParamsSchema.Type;

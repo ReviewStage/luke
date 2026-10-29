@@ -3,9 +3,7 @@ import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-
 import {
   AGENT_PAYER,
   AGENT_RUNTIME,
-  AGENT_STATUS,
   type AgentPullRequest,
-  type AgentSummary,
   type AgentTranscriptMessage,
   CHECK_SUMMARY,
   CONTEXT_WINDOW,
@@ -55,7 +53,6 @@ import {
   transcriptRowKey,
   unreadOpeningLine,
   unreadSentLines,
-  withAgentRun,
 } from "./agent-model.js";
 
 test("a model is named by the catalog where it has been read, else by its own id made readable, either way without Claude before its name", () => {
@@ -864,35 +861,4 @@ test("a message to a teammate's agent its starter's own key refused names the st
       },
     ],
   );
-});
-
-test("a page that reads an agent as the list already holds it answers the list as it was, and one that moves it moves only that agent", () => {
-  const agent = (id: string): AgentSummary => ({
-    id,
-    planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    title: id,
-    createdAt: 1,
-    status: AGENT_STATUS.RUNNING,
-    turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c99",
-    runStartedAt: 5,
-  });
-  const agents = [agent("a"), agent("b")];
-  assert.equal(
-    withAgentRun(agents, "a", { status: AGENT_STATUS.RUNNING, runStartedAt: 5 }),
-    agents,
-  );
-  assert.equal(
-    withAgentRun(agents, "unknown", {
-      status: AGENT_STATUS.COMPLETED,
-    }),
-    agents,
-  );
-  const ended = withAgentRun(agents, "a", {
-    status: AGENT_STATUS.COMPLETED,
-  });
-  assert.equal(ended[0]?.status, AGENT_STATUS.COMPLETED);
-  assert.equal(ended[0]?.runStartedAt, undefined);
-  assert.equal(ended[1], agents[1]);
 });

@@ -760,16 +760,12 @@ test("a column kept while the plan, the Inbox, and the Call stood in it reads wi
 });
 
 test("a column whose last agent is archived shows a new agent's draft standing alone", async () => {
-  let listed: readonly AgentSummary[] = [RUNNING_AGENT];
   const archived = { ...RUNNING_AGENT, archivedAt: 5 };
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: withAgents([RUNNING_AGENT]) },
     {
-      [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
-      [ACT_KIND.AGENTS_ARCHIVE]: () => {
-        listed = [archived];
-        return Promise.resolve({ agent: archived });
-      },
+      [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
+      [ACT_KIND.AGENTS_ARCHIVE]: () => Promise.resolve({ agent: archived }),
     },
   );
   await settle();
@@ -777,6 +773,8 @@ test("a column whose last agent is archived shows a new agent's draft standing a
   act(() => column().onChoose({ agent: AGENT_ID }));
   assert.deepEqual(column().tab, { agent: AGENT_ID });
 
+  // The host draws the archive on the list as it is asked.
+  tab.stand({ tasks: withAgents([archived]) });
   await act(() => tab.control().agents.onArchive(AGENT_ID, true));
   await settle();
   const draft = { draft: tab.control().agents.draft?.id ?? assert.fail("no draft opened") };
@@ -1074,17 +1072,13 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
       changedFiles: 2,
     },
   };
-  let listed: readonly AgentSummary[] = [EARLIER, RUNNING_AGENT];
+  const archived = { ...EARLIER, archivedAt: 5 };
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: withAgents([EARLIER, RUNNING_AGENT]) },
     {
-      [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
+      [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [EARLIER, RUNNING_AGENT] }),
       [ACT_KIND.AGENTS_PULL_REQUEST]: () => Promise.resolve(shared),
-      [ACT_KIND.AGENTS_ARCHIVE]: () => {
-        const archived = { ...EARLIER, archivedAt: 5 };
-        listed = [archived, RUNNING_AGENT];
-        return Promise.resolve({ agent: archived });
-      },
+      [ACT_KIND.AGENTS_ARCHIVE]: () => Promise.resolve({ agent: archived }),
     },
   );
   await settle();
@@ -1103,6 +1097,7 @@ test("a link to an agent's Pull request tab, on a pull request another of the ta
   assert.deepEqual(tab.control().sidePanel.changes, [{ changes: EARLIER.id }]);
 
   // Archived, the earlier agent's tab is no longer drawn, so the link opens the later agent's own.
+  tab.stand({ tasks: withAgents([archived, RUNNING_AGENT]) });
   await act(() => tab.control().agents.onArchive(EARLIER.id, true));
   await settle();
   open(AGENT_ID);
@@ -2372,6 +2367,11 @@ function listed(): TasksView["tasks"][number] {
   return summary;
 }
 
+/** The task listed and open, its agents as the list followed live carries them. */
+function withAgents(agents: readonly AgentSummary[]): TasksView {
+  return { ...OPEN, tasks: [listed()], taskAgents: agents };
+}
+
 /** The view a launch starts on: nothing open, and the list not yet read. */
 const LAUNCHING: TasksView = { ...IDLE_TASKS_VIEW, listStatus: TASKS_READ.READING };
 
@@ -2608,53 +2608,6 @@ test("one agent's pins are asked one after another, so the service hears an Unpi
 
   assert.deepEqual(first, [true]);
   assert.deepEqual(asked(), [true, false]);
-});
-
-test("an agent with no task is renamed and archived in the sidebar's list at once, and put back where the service refuses", async () => {
-  const taskless = {
-    id: "agent-9",
-    planId: null,
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    title: "Nightly triage",
-    createdAt: 1,
-    status: AGENT_STATUS.COMPLETED,
-    turnId: null,
-    automationId: null,
-    workspaceId: "workspace-1",
-    repository: null,
-    activityAt: 1,
-  };
-  const renamed = Promise.withResolvers<PortActResult<typeof ACT_KIND.AGENTS_RENAME>>();
-  const archived = Promise.withResolvers<PortActResult<typeof ACT_KIND.AGENTS_ARCHIVE>>();
-  const tab = mount(
-    { shown: true, tasks: { ...listRead([]), tasklessAgents: [taskless] } },
-    {
-      [ACT_KIND.AGENTS_RENAME]: () => renamed.promise,
-      [ACT_KIND.AGENTS_ARCHIVE]: () => archived.promise,
-    },
-  );
-  await settle();
-  const listed = () => {
-    const { standing, archived: gone } = tab.control().listedAgents;
-    return {
-      standing: standing.map((agent) => agent.title),
-      archived: gone.map((agent) => agent.title),
-    };
-  };
-
-  await act(async () => {
-    void tab.control().agents.onRename(taskless.id, "Morning triage");
-    void tab.control().agents.onArchive(taskless.id, true);
-  });
-  assert.deepEqual(listed(), { standing: [], archived: ["Morning triage"] });
-
-  await act(async () => {
-    renamed.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND });
-    archived.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND });
-  });
-  await settle();
-  assert.deepEqual(listed(), { standing: ["Nightly triage"], archived: [] });
 });
 
 test("an agent's pin still waiting its turn when the account changes is never asked, so it lands on no one else's pins", async () => {
@@ -2955,7 +2908,7 @@ test("New task's Agent mode sends one start carrying the agent, its words and mo
 test("archiving a task's last agent opens no draft while the archive is out, so a refused one brings the agent back alone", async () => {
   const archived = Promise.withResolvers<PortActResult<typeof ACT_KIND.AGENTS_ARCHIVE>>();
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: withAgents([RUNNING_AGENT]) },
     {
       [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
       [ACT_KIND.AGENTS_ARCHIVE]: () => archived.promise,
@@ -2964,12 +2917,16 @@ test("archiving a task's last agent opens no draft while the archive is out, so 
   await settle();
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
 
+  // The host draws the archive on the list as it is asked, and takes it back as the service refuses it.
   await act(async () => {
     void tab.control().agents.onArchive(AGENT_ID, true);
   });
+  tab.stand({ tasks: withAgents([{ ...RUNNING_AGENT, archivedAt: 5 }]) });
+  await settle();
   assert.deepEqual(tab.control().mainTabs.tabs, [], "the agent leaves at once");
   assert.equal(tab.control().agents.draft, undefined, "no draft opens while the archive is out");
 
+  tab.stand({ tasks: withAgents([RUNNING_AGENT]) });
   await act(async () => archived.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND }));
   await settle();
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
@@ -3263,30 +3220,26 @@ test("an agent refused as New task's Agent mode started its task opens the task 
 });
 
 test("an agent's title first landing on a task still Untitled reads the tasks again, so the name it took shows; a titled task asks nothing", async () => {
-  const untitled: TasksView = {
-    ...OPEN,
-    document: { status: TASKS_READ.READY, task: { ...TASK, name: "Untitled" } },
-  };
+  const viewOf = (name: string, title: string | null): TasksView => ({
+    ...withAgents([{ ...RUNNING_AGENT, title }]),
+    tasks: [{ ...listed(), name }],
+    document: { status: TASKS_READ.READY, task: { ...TASK, name } },
+  });
   const refreshes = (tab: ReturnType<typeof mount>) =>
     tab.told.filter((kind) => kind === ACT_KIND.TASKS_REFRESH).length;
-  const tab = mount(
-    { shown: true, tasks: untitled },
-    { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-  );
+  const answers = { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) };
+  const tab = mount({ shown: true, tasks: viewOf("Untitled", null) }, answers);
   await settle();
   const before = refreshes(tab);
-  act(() => tab.control().agents.onTitle(AGENT_ID, "Fix token refresh"));
+  tab.stand({ tasks: viewOf("Untitled", "Fix token refresh") });
   await settle();
   const landed = refreshes(tab) - before;
   closeWindow();
 
-  const named = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
-  );
+  const named = mount({ shown: true, tasks: viewOf(TASK.name, null) }, answers);
   await settle();
   const namedBefore = refreshes(named);
-  act(() => named.control().agents.onTitle(AGENT_ID, "Fix token refresh"));
+  named.stand({ tasks: viewOf(TASK.name, "Fix token refresh") });
   await settle();
 
   assert.equal(landed, 1);

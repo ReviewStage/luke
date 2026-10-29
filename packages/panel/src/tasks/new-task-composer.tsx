@@ -504,7 +504,7 @@ export function NewTaskComposer({
         skills={skills}
         published={undefined}
         doors={{ openGitHub: () => undefined, copy: () => undefined }}
-        onStop={() => Promise.resolve()}
+        onStop={() => Promise.resolve(false)}
         onKey={onKey}
         onLeave={onLeave}
         focusedByOwner={focusedByOwner}

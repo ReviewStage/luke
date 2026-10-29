@@ -106,7 +106,6 @@ function Box({
     taskId: "plan-1",
     messages,
     send: sender,
-    onStatus: ignore,
   });
   return createElement(
     "div",

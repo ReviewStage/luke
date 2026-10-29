@@ -353,7 +353,6 @@ function Box({ sender, skills }: { sender: MessageSender; skills: SkillSource })
     taskId: TASK_ID,
     messages: [],
     send: sender,
-    onStatus: ignore,
   });
   return createElement(AgentComposer, { ...QUIET_COMPOSER, agentId: SELF_ID, composer, skills });
 }

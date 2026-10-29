@@ -2426,7 +2426,7 @@ function AgentTabView({
   startedAt: number | undefined;
   /** When each of its running workers began, as their rows count from it; none while the tab is off screen. */
   delegationStarts: ReadonlyMap<string, number> | undefined;
-  onStop: () => Promise<void>;
+  onStop: () => Promise<boolean>;
   /** Brings the agent back from the archive; present exactly while it is archived, when no message is sent. */
   onUnarchive?: (() => void | Promise<void>) | undefined;
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
@@ -2795,8 +2795,6 @@ export function AgentTab(props: AgentTabProps): React.JSX.Element {
     transcript: { kind: TRANSCRIPT_KIND.AGENT, agentId },
     shown,
     follower: control.transcripts,
-    onStatus: control.onStatus,
-    onTitle: control.onTitle,
   });
   const { messages, pageStatus, runStartedAt, subagentTitles } = transcript;
   // Note that what is held is dated by the page it was read from, never by
@@ -2869,7 +2867,6 @@ function AgentTabBody({
     rewind: control.onRewind,
     payer: planPayerOf(agent.runtime),
     starter,
-    onStatus: control.onStatus,
   });
   const model = useAgentModel({ agent, choose: control.onChoose });
   const servers = useAgentServers({
@@ -3083,8 +3080,6 @@ export function AgentSubagentTab({
     shown,
     follower: control.transcripts,
     onStatus: (_agentId, next) => onStatus(next.status),
-    // A worker's page names the worker's conversation, which is no title of the agent's.
-    onTitle: () => undefined,
   });
   const { messages, pageStatus, runStartedAt, pageTitle } = transcript;
   // A worker runs as its agent does, so a command it ran on a Mac ran on its agent's starter's.

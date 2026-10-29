@@ -617,7 +617,7 @@ function pinnedRows(
   );
   const taskAgentRows = tasks.taskAgentPins.flatMap((pin): PinnedRow[] => {
     const task = tasks.listed.tasks.find((each) => each.id === pin.taskId);
-    const agent = tasks.taskAgents.find((each) => each.id === pin.agentId);
+    const agent = tasks.liveAgents?.find((each) => each.id === pin.agentId);
     if (task === undefined || agent === undefined) return [];
     const drawn = agentPinOf(pin, agent, tasks);
     return [

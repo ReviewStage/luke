@@ -331,12 +331,10 @@ export function useAgentTranscript(input: {
   follower: TranscriptFollower;
   /** How an older page is read; the window's own where none is named. */
   older?: TranscriptOlderReader | undefined;
-  /** A page said where the agent stands now, and since when, which is newer than the list. */
-  onStatus: (agentId: string, run: AgentRun) => void;
-  /** A page said what the agent is titled now, which the list may have read before the title landed. */
-  onTitle: (agentId: string, title: string | null) => void;
+  /** A page said where a worker stands now, and since when, which no list holds; none for an agent, which the task list says. */
+  onStatus?: ((agentId: string, run: AgentRun) => void) | undefined;
 }): AgentTranscriptControl {
-  const { shown, follower, onStatus, onTitle } = input;
+  const { shown, follower, onStatus } = input;
   const [held, setHeld] = useState<Held>(() => fresh(input.transcript));
   // Note that another transcript's tab starts from nothing of this one's.
   const changed = !sameTranscript(held.transcript, input.transcript);
@@ -345,8 +343,8 @@ export function useAgentTranscript(input: {
   const transcript = changed ? input.transcript : held.transcript;
   const [attempt, setAttempt] = useState(0);
   const older = input.older ?? windowTranscriptOlder;
-  const latest = useRef({ follower, onStatus, onTitle, older });
-  latest.current = { follower, onStatus, onTitle, older };
+  const latest = useRef({ follower, onStatus, older });
+  latest.current = { follower, onStatus, older };
   // The follow standing, as it is timed; none while the tab follows nothing.
   const timing = useRef<FollowTiming | undefined>(undefined);
 
@@ -369,8 +367,7 @@ export function useAgentTranscript(input: {
       if (timed.heard === 0) timed.held = page.held === true;
       timed.heard += 1;
       timed.page = page;
-      latest.current.onStatus(agentId, page);
-      latest.current.onTitle(agentId, page.title);
+      latest.current.onStatus?.(agentId, page);
     });
     return () => {
       if (timing.current === timed) timing.current = undefined;

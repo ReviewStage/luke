@@ -62,7 +62,7 @@ import { WorkingLine } from "./working-time.js";
  */
 
 /** A draft has nothing to stop and has published nothing, so its box's Stop and doors answer nothing. */
-const NOTHING_TO_STOP = () => Promise.resolve();
+const NOTHING_TO_STOP = () => Promise.resolve(false);
 const NO_DOORS = { openGitHub: () => undefined, copy: () => undefined };
 
 /** What a fork's working line names its source as where the task does not list it. */

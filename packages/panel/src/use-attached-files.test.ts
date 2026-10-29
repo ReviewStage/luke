@@ -37,7 +37,6 @@ function AgentBox(): ReactNode {
     taskId: "plan-1",
     messages: [],
     send: () => new Promise<AgentAgentAnswer>(ignore),
-    onStatus: ignore,
   });
   return createElement(AgentComposer, { ...QUIET_COMPOSER, composer, skills: undefined });
 }

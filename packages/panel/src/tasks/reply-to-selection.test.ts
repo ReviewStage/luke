@@ -115,7 +115,6 @@ function Tab({ sender }: { sender: MessageSender }): ReactNode {
     taskId: "plan-1",
     messages: [],
     send: sender,
-    onStatus: ignore,
   });
   return createElement(
     "section",

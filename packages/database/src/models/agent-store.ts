@@ -829,14 +829,14 @@ const updateAgentChoiceRow = SqlSchema.findOneOption({
     effort: Schema.String,
     contextWindow: contextWindowSchema,
   }),
-  Result: AgentRowSchema,
+  Result: CommittedAgentRowSchema,
   execute: ({ userId, agentId, model, effort, contextWindow }) =>
     Database.use((db) =>
       db
         .update(agentTable)
         .set({ model, effort, contextWindow })
         .where(reachableAgent(userId, agentId))
-        .returning(AGENT_COLUMNS),
+        .returning({ ...AGENT_COLUMNS, txid: TXID }),
     ),
 });
 
@@ -846,14 +846,14 @@ const updateAgentServersRow = SqlSchema.findOneOption({
     agentId: Schema.String,
     disabledServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
   }),
-  Result: AgentRowSchema,
+  Result: CommittedAgentRowSchema,
   execute: ({ userId, agentId, disabledServers }) =>
     Database.use((db) =>
       db
         .update(agentTable)
         .set({ disabledServers })
         .where(reachableAgent(userId, agentId))
-        .returning(AGENT_COLUMNS),
+        .returning({ ...AGENT_COLUMNS, txid: TXID }),
     ),
 });
 
@@ -2486,13 +2486,25 @@ export function updateAgentChoice(
   agentId: string,
   choice: ModelChoice,
 ): AgentStoreEffect<Option.Option<Agent>> {
-  return updateAgentChoiceRow({
-    userId,
-    agentId,
-    model: choice.model,
-    effort: choice.effort,
-    contextWindow: choice.contextWindow ?? CONTEXT_WINDOW.LONG,
-  });
+  return Effect.map(updateAgentChoiceCommitted(userId, agentId, choice), Option.map(agentOf));
+}
+
+/** The agent given another model, as `updateAgentChoice` gives it, and the transaction its row was written in. */
+export function updateAgentChoiceCommitted(
+  userId: string,
+  agentId: string,
+  choice: ModelChoice,
+): AgentStoreEffect<Option.Option<AgentCommitted>> {
+  return Effect.map(
+    updateAgentChoiceRow({
+      userId,
+      agentId,
+      model: choice.model,
+      effort: choice.effort,
+      contextWindow: choice.contextWindow ?? CONTEXT_WINDOW.LONG,
+    }),
+    Option.map(({ txid, ...agent }) => ({ agent, txid })),
+  );
 }
 
 /** The MCP servers switched off for the agent, the whole list, which its next turn on is not handed; nothing for an agent of a workspace the account is not in. */
@@ -2501,11 +2513,22 @@ export function updateAgentServers(
   agentId: string,
   disabledServers: readonly string[],
 ): AgentStoreEffect<Option.Option<Agent>> {
-  return updateAgentServersRow({
-    userId,
-    agentId,
-    disabledServers: storedServers(disabledServers),
-  });
+  return Effect.map(
+    updateAgentServersCommitted(userId, agentId, disabledServers),
+    Option.map(agentOf),
+  );
+}
+
+/** The agent's MCP servers switched, as `updateAgentServers` switches them, and the transaction its row was written in. */
+export function updateAgentServersCommitted(
+  userId: string,
+  agentId: string,
+  disabledServers: readonly string[],
+): AgentStoreEffect<Option.Option<AgentCommitted>> {
+  return Effect.map(
+    updateAgentServersRow({ userId, agentId, disabledServers: storedServers(disabledServers) }),
+    Option.map(({ txid, ...agent }) => ({ agent, txid })),
+  );
 }
 
 /**

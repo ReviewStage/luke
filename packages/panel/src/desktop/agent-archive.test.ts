@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import { MOTION_DELAY_MS } from "@luke/brand";
+import { ARCHIVE_DRAWN } from "@luke/features/agent-view";
 import { AGENT_ARCHIVER, AGENT_STATUS, type AgentArchivedBy } from "@luke/features/agent-wire";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { ARCHIVE_DRAWN } from "../tasks/use-agents.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl } from "../testing/tasks-control.js";

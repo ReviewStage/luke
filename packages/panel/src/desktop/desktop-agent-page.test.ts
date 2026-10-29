@@ -2026,7 +2026,7 @@ test("a fork's Pull request tab offers no Run, since its head's branch name woul
   );
 });
 
-test("Archive on the page's ⋯ reads an agent at rest again and archives it unasked, its composer giving way to Unarchive", async () => {
+test("Archive on the page's ⋯ reads an agent at rest again and archives it unasked", async () => {
   const page = mount();
   await settle();
   const archive = pageMenuItem(page, "Archive");
@@ -2035,10 +2035,6 @@ test("Archive on the page's ⋯ reads an agent at rest again and archives it una
 
   assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: true }]);
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
-  assert.ok(
-    [...page.querySelectorAll("button")].some((each) => each.textContent === "Unarchive"),
-    "the archived agent offers Unarchive",
-  );
 });
 
 test("Archive on the page's ⋯ archives the reader's own agent at once while it works, asking nothing", async () => {
@@ -2102,7 +2098,6 @@ test("Rename on the page's ⋯ turns the title into its name's field, and the na
     told.filter((each) => each.kind === ACT_KIND.AGENTS_RENAME).map((each) => each.payload),
     [{ agentId: AGENT_ID, title: "Sweep the slow tests" }],
   );
-  assert.equal(page.querySelector("h1")?.textContent, "Sweep the slow tests");
 });
 
 /** A registry whose atoms wait on this clock, as the window's wait on its own. */

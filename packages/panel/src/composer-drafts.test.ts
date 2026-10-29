@@ -649,7 +649,7 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
     activeTaskId: open.plan.id,
     chosenPin: pinned ? pin : undefined,
     taskAgentPins: pinned ? [{ agentId: open.agent.id, taskId: open.plan.id, pinnedAt: 5 }] : [],
-    taskAgents: [open.agent],
+    liveAgents: [open.agent],
     mainTabs: {
       ...tasksControl().mainTabs,
       tabs: [pin.tab],
@@ -1256,7 +1256,6 @@ test("files attached in this window stay as its draft when another window lets t
       taskId: INVITES.plan.id,
       messages: [],
       send: NEVER_ANSWERED,
-      onStatus: () => undefined,
     });
     return null;
   }
