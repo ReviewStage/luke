@@ -518,8 +518,18 @@ both files once it has; a restore that fails deletes nothing, is said in plain
 words, and is tried again with the agent's next message. Luke's log on your
 Mac names each save's and each restore's size, digest, generation, and how
 long it took, never what it holds.
-For now the agent's folder stays on your Mac between turns, saved or not. To
-run them, the app downloads smolvm from its GitHub release once, keeps it in
+Once a turn's save has landed, your Mac keeps the agent's folder for 15
+minutes, so a message soon after goes on from it, or for less while your
+disk has under a tenth free, then deletes it, and the agent's next turn
+brings its save back. A folder whose save did not land stays until a later
+one does. An agent you archive or delete loses its folder, its machine, and
+its token from your Mac as soon as the archive reaches it, or within minutes
+of your Mac's next being online once our service no longer lists the agent;
+a folder whose save has not landed is saved first where it can be, and one
+that still is not is kept wherever the Mac's check finds work in it that no
+remote has, or cannot tell, for seven days, and then deleted. Only the agents this copy of Luke started are
+ever touched, never another copy's sharing your Mac. To run them, the app
+downloads smolvm from its GitHub release once, keeps it in
 Luke's own folder on your Mac only once it matches the checksum Luke pins,
 checks the files it runs against those checksums again before each use, and
 pulls the public sandbox image our hosts run. An agent that ran directly on
@@ -540,9 +550,14 @@ ended it. As on This Mac, as each turn ends the host saves the agent's
 unpushed work, its session files, and its attachments, encrypted on the box
 under the agent's own key, straight to Luke's private store, on the same
 terms and for as long; a save that fails leaves its file, already encrypted,
-in the host's own state folder until it uploads. For now the agent's folder
-stays on the box between turns, saved or not. The agent sees only a
-placeholder. Its `git` and
+in the host's own state folder until it uploads. As on This Mac, the host
+deletes the agent's folder 15 minutes after a turn whose save landed, or
+sooner while its disk is nearly full, and an archived or deleted agent's
+folder, machine, and token once the archive reaches it or our service no
+longer lists the agent; a folder whose save has not landed is saved first
+where it can be, and otherwise kept for seven days, then deleted. The agent
+sees only a placeholder.
+Its `git` and
 `gh` send that placeholder, and smolvm, on the box, puts the real token in
 place of it only on HTTPS requests to GitHub. The token is never logged and
 never written to the conversation's record. As on This Mac, a Claude Code agent's plan
