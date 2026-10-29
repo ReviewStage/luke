@@ -630,6 +630,47 @@ const findOwnAgentId = SqlSchema.findOneOption({
     ),
 });
 
+/** The pilots that took over from the agent before, by continuing it. */
+const earlierPilot = alias(agentTable, "earlier_pilot");
+
+/**
+ * The account's unarchived agents a pilot started, or any pilot that took
+ * over from it before, moved to the one that takes over from it now. Note
+ * that the earlier pilots' are moved too, because a pilot continued again
+ * is taken over by its latest continue, which its agents report to.
+ */
+const updateTakenOver = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, from: Schema.String, to: Schema.String }),
+  execute: ({ userId, from, to }) =>
+    Database.use((db) =>
+      db
+        .update(agentTable)
+        .set({ startedByAgentId: to })
+        .where(
+          and(
+            or(
+              eq(agentTable.startedByAgentId, from),
+              inArray(
+                agentTable.startedByAgentId,
+                db
+                  .select({ id: earlierPilot.id })
+                  .from(earlierPilot)
+                  .where(
+                    and(
+                      eq(earlierPilot.kind, AGENT_KIND.PILOT),
+                      sql`${earlierPilot.startedFrom} ->> 'agentId' = ${from}`,
+                      sql`${earlierPilot.startedFrom} ->> 'messageId' is null`,
+                    ),
+                  ),
+              ),
+            ),
+            eq(agentTable.userId, userId),
+            isNull(agentTable.archivedAt),
+          ),
+        ),
+    ),
+});
+
 /** The account's unarchived agents one agent started, moved to another as their starter. */
 const updateStartedBy = SqlSchema.void({
   Request: Schema.Struct({ userId: Schema.String, from: Schema.String, to: Schema.String }),
@@ -2032,8 +2073,9 @@ const deleteConversationRow = SqlSchema.void({
  * the plan text or the prompt, the repository, the automation whose run
  * started it with that run, and the account's own agent whose `start_agent`
  * started it, as handed. A continue of a pilot takes over its agents in the
- * same transaction: the account's agents it started that stand unarchived
- * report to the new pilot from then on. A Start whose key the account has already used answers the agent
+ * same transaction: the account's agents it started, or any pilot that
+ * took over from it before started, that stand unarchived report to the
+ * new pilot from then on. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
  * A Start of the member's operator answers the one standing in the
  * workspace where there is one, whatever its key, and writes nothing; one
@@ -2105,7 +2147,7 @@ export function createAgent(
           const { txid, ...row } = inserted.value;
           // The pilot's agents report to the one that continues it from the moment it stands.
           if (started.takesOverFrom !== undefined) {
-            yield* updateStartedBy({ userId, from: started.takesOverFrom, to: row.id });
+            yield* updateTakenOver({ userId, from: started.takesOverFrom, to: row.id });
           }
           return Option.some({ agent: row, created: true, txid });
         }
