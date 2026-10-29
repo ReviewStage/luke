@@ -446,7 +446,8 @@ interface AutomationsViewControl {
  * The coding agent New task's Agent mode starts on the task it started:
  * the key its start carries, which the card keeps for a press asking the
  * same again (`new-task-composer.tsx`), its prompt, the files attached, and
- * the model its chip named, none for the account's default.
+ * the model picked on its chip, none where the chip was left on the
+ * account's default, so the service runs the default it holds at the start.
  */
 export interface NewTaskAgent {
   readonly idempotencyKey: string;
@@ -455,7 +456,7 @@ export interface NewTaskAgent {
   readonly choice: ModelChoice | undefined;
 }
 
-/** The agent a task's start starts on it, as the act carries it: the card's key, the prompt, the files where any, and the chip's model where it named one. */
+/** The agent a task's start starts on it, as the act carries it: the card's key, the prompt, the files where any, and the chip's model where one was picked. */
 function agentRequest(handed: NewTaskAgent) {
   return {
     idempotencyKey: handed.idempotencyKey,
@@ -505,8 +506,9 @@ export interface NewTaskPreset {
 /**
  * What New task's card held as it pressed Start, which it hands its start
  * so a card opened again on a refusal starts where it was left: the
- * repository, the model on its chip, and the press it
- * made, whose key a Retry asking the same carries again.
+ * repository, the model picked on its chip, none where it was left on the
+ * account's default, and the press it made, whose key a Retry asking the
+ * same carries again.
  */
 interface NewTaskCardKept {
   /** What the card started, which it opens again for; a task's agent where none is named. */

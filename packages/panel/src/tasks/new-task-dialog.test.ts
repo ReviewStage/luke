@@ -296,7 +296,7 @@ test("the card, named New task, holds the composer with its words focused, the r
   );
 });
 
-test("Return starts the task without planning, Untitled, on the repository last used, and an agent on the words with the chip's model", async () => {
+test("Return starts the task without planning, Untitled, on the repository last used, and an agent on the words naming no model while the chip is unpicked", async () => {
   const card = await mount();
   assert.equal(card.startButton().disabled, true, "an empty box starts nothing");
   card.type("  Make the sidebar keep its folds.  ");
@@ -307,7 +307,7 @@ test("Return starts the task without planning, Untitled, on the repository last 
   assert.deepEqual(agent, {
     prompt: "Make the sidebar keep its folds.",
     attachments: [],
-    choice: DEFAULT_CHOICE,
+    choice: undefined,
   });
   assert.ok(idempotencyKey, "the agent's start carries the card's key");
 });
