@@ -35,6 +35,9 @@ import { readTreeStopped } from "./task-store.js";
 
 type WakeupEffect<A> = Effect.Effect<A, QueryError | Schema.SchemaError, DatabaseServices>;
 
+/** How many batches one claim locks at most, so wakeups held for a stopped tree free their places for others without the claim's work growing unbounded. */
+const MAX_CLAIM_ROUNDS = 5;
+
 /** One wakeup as a release names it: the instant it comes due and the prompt delivered then. */
 export interface AgentWakeup {
   readonly at: Date;
@@ -192,7 +195,9 @@ export function replaceAgentWakeups(
  * `next` should this delivery fail, after deleting those claimed
  * `maxAttempts` times already and an archived agent's. A wakeup held while
  * its agent's pilot tree is stopped is not claimed: it is due again at
- * `next`, its attempts as they stood.
+ * `next`, its attempts as they stood, and its place in the batch goes to the
+ * next wakeup due, over at most `MAX_CLAIM_ROUNDS` batches, so held wakeups
+ * never starve the others.
  */
 export function claimDueAgentWakeups(
   now: Date,
@@ -204,13 +209,18 @@ export function claimDueAgentWakeups(
     client.withTransaction(
       Effect.gen(function* () {
         yield* deleteSpent({ maxAttempts });
-        const due = yield* lockDue({ now, limit });
-        const held = yield* heldOf(due);
-        const claimed = due.filter((row) => !held.has(row.id));
+        const claimed: ClaimedAgentWakeup[] = [];
+        // A held wakeup's next delivery moves past `now`, so the next batch reaches past it.
+        for (let round = 0; round < MAX_CLAIM_ROUNDS && claimed.length < limit; round++) {
+          const due = yield* lockDue({ now, limit: limit - claimed.length });
+          const held = yield* heldOf(due);
+          claimed.push(...due.filter((row) => !held.has(row.id)));
+          if (held.size === 0) break;
+          yield* holdDelivery({ ids: [...held], next });
+        }
         if (claimed.length > 0) {
           yield* writeNextDelivery({ ids: claimed.map((row) => row.id), next });
         }
-        if (held.size > 0) yield* holdDelivery({ ids: [...held], next });
         return claimed;
       }),
     ),
