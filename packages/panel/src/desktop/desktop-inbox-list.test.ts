@@ -6,14 +6,10 @@ import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
   INBOX_FIELD,
-  INBOX_IMAGE_TYPE,
   INBOX_REPLY,
   INBOX_STATUS,
   type InboxItem,
-  type InboxMessage,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
-import { pageFrameUrl } from "@luke/features/page-frame";
 import { TASK_STATUS } from "@luke/features/task-wire";
 import type { AppInboxTask, AppInboxTaskHolding } from "@luke/host/app-state";
 import { Effect } from "effect";
@@ -37,7 +33,6 @@ import {
   confirmClose,
   EXPIRY,
   EXPIRY_ASK,
-  FUNNEL,
   foldedCounts,
   GROUPING_KEY,
   headerNamed,
@@ -78,7 +73,6 @@ import {
   SHOW_KEY,
   SORT_KEY,
   SWEEP_AGENT,
-  saying,
   settle,
   showScope,
   standKeymap,
@@ -163,19 +157,6 @@ test("the list holds every plan's items under the sidebar's group header for eac
   assert.deepEqual(listed(page), oneRun);
 });
 
-/** Presses Media previews in the view's menu, handing back whether it stood checked before. */
-function toggleMediaPreviews(page: HTMLElement): string | null {
-  const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
-  act(() => options?.click());
-  const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')].find(
-    (each) => each.textContent?.includes("Media previews"),
-  );
-  assert.ok(item, "the view's menu offers Media previews");
-  const checked = item.getAttribute("aria-checked");
-  act(() => item.click());
-  return checked;
-}
-
 test("Second line in the view's menu, checked at first, makes every row one line once unchecked, its title alone, and the choice outlives a relaunch", async () => {
   let { page } = mount();
   await settle();
@@ -203,144 +184,6 @@ test("Second line in the view's menu, checked at first, makes every row one line
   ({ page } = mount());
   await settle();
   assert.equal(described("Alert at 80%?"), false, "the choice outlives a relaunch");
-});
-
-test("rows show no media until Media previews is checked in the view's menu, then the pictures and pages each item carries under its preview, and the choice outlives a relaunch", async () => {
-  const shot = {
-    attachmentId: "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c70",
-    name: "The chart.png",
-    mediaType: INBOX_IMAGE_TYPE.PNG,
-  };
-  const funnel = linkOf({ kind: LINK_PLACE.PAGE, planId: BILLING.id, pageId: FUNNEL.id }, "acme");
-  world.inboxes.set(BILLING.id, [
-    saying(THRESHOLD, `Compare [@Invite funnel](${funnel}).`, [shot]),
-    RETRY,
-  ]);
-  const mediaOf = (page: HTMLElement, title: string) => {
-    const strip = rowNamed(page, title).querySelector(".luke-list-row-attachments");
-    if (strip === null) return null;
-    return [...strip.children].map(
-      (tile) =>
-        tile.querySelector("img")?.getAttribute("src") ??
-        tile.querySelector("iframe")?.getAttribute("src") ??
-        "",
-    );
-  };
-  const landImages = async () => {
-    await settle();
-    for (const land of world.imageReads.splice(0)) land();
-    await settle();
-  };
-  let { page } = mount();
-  await landImages();
-  assert.equal(mediaOf(page, "Alert at 80%?"), null, "no media stand until asked for");
-
-  assert.equal(toggleMediaPreviews(page), "false");
-  await landImages();
-  assert.deepEqual(mediaOf(page, "Alert at 80%?"), [
-    pageFrameUrl({ taskId: BILLING.id, pageId: FUNNEL.id, version: FUNNEL.version }),
-    "data:image/png;base64,iVBORw0KGgo=",
-  ]);
-  assert.equal(mediaOf(page, "Expire after 7 days?"), null, "an item carrying none shows none");
-  assert.equal(
-    rowNamed(page, "Alert at 80%?").querySelector(".luke-list-row-description")?.textContent,
-    "Retry 3 times over an hour (recommended) / Retry once",
-    "the preview's words stand over the media",
-  );
-
-  act(() => world.root?.unmount());
-  world.root = undefined;
-  ({ page } = mount());
-  await landImages();
-  assert.equal(mediaOf(page, "Alert at 80%?")?.length, 2);
-  assert.equal(toggleMediaPreviews(page), "true");
-  assert.equal(mediaOf(page, "Alert at 80%?"), null);
-});
-
-test("a row's page is drawn at its newest version, read again once its item changes, as when its agent shows the page anew, holding its place until each version loads", async () => {
-  const funnel = linkOf({ kind: LINK_PLACE.PAGE, planId: INVITES.id, pageId: FUNNEL.id }, "acme");
-  const words = `See [the funnel](${funnel}).`;
-  world.inboxes.set(INVITES.id, [saying(EXPIRY, words)]);
-  world.taskPages.set(INVITES.id, [FUNNEL]);
-  const frame = (page: HTMLElement) =>
-    rowNamed(page, "Expire after 7 days?").querySelector("iframe")?.getAttribute("src");
-  const { page } = mount();
-  await settle();
-  toggleMediaPreviews(page);
-  await settle();
-  assert.equal(
-    frame(page),
-    pageFrameUrl({ taskId: INVITES.id, pageId: FUNNEL.id, version: FUNNEL.version }),
-  );
-  const tile = () =>
-    rowNamed(page, "Expire after 7 days?").querySelector("iframe")?.parentElement?.dataset.loaded;
-  const loads = () =>
-    act(() => {
-      rowNamed(page, "Expire after 7 days?")
-        .querySelector("iframe")
-        ?.dispatchEvent(new Event("load", { bubbles: false }));
-    });
-  loads();
-  assert.equal(tile(), "true");
-
-  world.taskPages.set(INVITES.id, [{ ...FUNNEL, version: 3 }]);
-  world.inboxes.set(INVITES.id, [{ ...saying(EXPIRY, words), updatedAt: 6_000 }]);
-  act(() =>
-    world.setHolding([
-      { taskId: INVITES.id, items: 1, updatedAt: 6_000 },
-      { taskId: BILLING.id, items: 2, updatedAt: 5_000 },
-    ]),
-  );
-  await settle();
-  assert.equal(frame(page), pageFrameUrl({ taskId: INVITES.id, pageId: FUNNEL.id, version: 3 }));
-  assert.equal(tile(), "false", "the new version holds its place until it loads");
-  loads();
-  assert.equal(tile(), "true");
-});
-
-test("a row's picture is let go once its item is reposted carrying no media, so the picture shown again is read anew and holds its place until it lands", async () => {
-  const shot = {
-    attachmentId: "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c73",
-    name: "The chart.png",
-    mediaType: INBOX_IMAGE_TYPE.PNG,
-  };
-  const words = "Here is the chart.";
-  const picture = (page: HTMLElement) =>
-    rowNamed(page, "Expire after 7 days?")
-      .querySelector(".luke-list-row-attachments img")
-      ?.getAttribute("src");
-  const repost = async (files: InboxMessage["files"], revision: number, updatedAt: number) => {
-    world.inboxes.set(INVITES.id, [{ ...saying(EXPIRY, words, files), revision, updatedAt }]);
-    act(() =>
-      world.setHolding([
-        { taskId: INVITES.id, items: 1, updatedAt },
-        { taskId: BILLING.id, items: 2, updatedAt: 5_000 },
-      ]),
-    );
-    await settle();
-  };
-  const land = async () => {
-    for (const each of world.imageReads.splice(0)) each();
-    await settle();
-  };
-  world.inboxes.set(INVITES.id, [saying(EXPIRY, words, [shot])]);
-  const { page } = mount();
-  await settle();
-  toggleMediaPreviews(page);
-  await settle();
-  await land();
-  assert.equal(picture(page), "data:image/png;base64,iVBORw0KGgo=");
-
-  await repost([], 2, 6_000);
-  assert.equal(picture(page), undefined, "the reposted item carries no media");
-  await repost([shot], 3, 7_000);
-  assert.equal(
-    picture(page),
-    undefined,
-    "the picture let go holds its place until it is read anew",
-  );
-  await land();
-  assert.equal(picture(page), "data:image/png;base64,iVBORw0KGgo=");
 });
 
 /** ⌘-clicks the row of the item so titled, as a Mac's list chooses a row in or out. */
@@ -1451,7 +1294,6 @@ test("Mark all as read in the view's menu, under Group by, marks every unread it
     "Whose",
     "—",
     "Second line",
-    "Media previews",
     "—",
     "Mark all as read",
   ]);

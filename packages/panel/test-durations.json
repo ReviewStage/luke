@@ -241,7 +241,6 @@
   "src/tasks/inbox-list-menu.test.ts": 910,
   "src/tasks/inbox-list-selectable.test.ts": 684,
   "src/tasks/inbox-model.test.ts": 49,
-  "src/tasks/inbox-row-media.test.ts": 60,
   "src/tasks/inbox-settling.test.ts": 86,
   "src/tasks/live-chip-names.test.ts": 364,
   "src/tasks/mac-terminal-tab.test.ts": 2327,

@@ -81,7 +81,6 @@ import {
   ClockArrowUpIcon,
   GLYPH,
   HourglassIcon,
-  ImagesIcon,
   InboxIcon,
   ListIcon,
   MailIcon,
@@ -162,7 +161,6 @@ import {
   type InboxStatusGroupKind,
   type InboxWhose,
   inboxLineKind,
-  inboxMedia,
   inboxPreview,
   inboxShownTicks,
   isDone,
@@ -171,12 +169,6 @@ import {
   NEEDS_YOU,
   needsYou as needsYouOf,
 } from "./inbox-model.js";
-import {
-  RowMedia,
-  type RowMediaReads,
-  useRowMediaAsks,
-  useRowMediaReads,
-} from "./inbox-row-media.js";
 import { type InboxListMark, InboxSelectionBar } from "./inbox-selection.js";
 import { PlanGlyph } from "./tab-look.js";
 import { cardTitle } from "./tool-call-model.js";
@@ -224,9 +216,7 @@ import { cardTitle } from "./tool-call-model.js";
  * change first or the oldest first; Whose, everyone's
  * items, the developer's own, or one teammate's by face and name, which a
  * chip over the list then says, its × listing everyone's again; each
- * choice checked; Media previews, off until first pressed and checked while
- * each row shows the pictures and pages its item carries, drawn small under
- * its preview (`inbox-row-media.tsx`); and under them Mark all as read,
+ * choice checked; and under them Mark all as read,
  * which clears the dots alone. Every
  * choice is kept across launches. Grouped by person, each person's items
  * stand under their face, the reader's own first as You. Grouped by
@@ -267,14 +257,8 @@ const SWIPE_WORDS = { READ: "Read", UNREAD: "Unread" } as const;
 /** What the view's menu offers to clear every dot with. */
 const MARK_ALL_READ = "Mark all as read";
 
-/** What the view's menu offers to show or hide the media under each row's preview with. */
-const MEDIA_PREVIEWS = "Media previews";
-
 /** What the view's menu offers to show or hide each row's second line with, its rows one line where it is off. */
 const SECOND_LINE = "Second line";
-
-/** The items whose media the rows show while they show none, kept as one so the reads see no change. */
-const NO_ITEMS: readonly string[] = [];
 
 /** What the list's placeholder rows say to a reader while its items are first read. */
 const READING_ITEMS = "Reading your inbox…";
@@ -400,9 +384,7 @@ function drawnWidth(width: number, alone: boolean): string | undefined {
  * but task. Its menu, opened by the row's ⋯, a right-click, and the menu key
  * alike (`ListRow`'s `menu`), offers
  * Copy link, the item's link under the task or the agent that holds it, where
- * the list hands down a workspace to write it under. Where the list hands
- * down its media reads (`media`), the row shows the pictures and pages its
- * item carries under its preview (`inbox-row-media.tsx`). Where the list
+ * the list hands down a workspace to write it under. Where the list
  * hands down `onClose`, an open item's row offers to close it without an
  * answer, asked first (`inbox-close.tsx`), as the last item of its menu.
  */
@@ -418,7 +400,6 @@ export function InboxItemRow({
   chip = false,
   line = true,
   muted = false,
-  media,
   ref,
   selectKey,
   onChoose,
@@ -444,8 +425,6 @@ export function InboxItemRow({
   line?: boolean;
   /** Whether the row is drawn gray, its item done with (`isDone`), as the Inbox's own list draws it; nothing says so in words, since its marks and its card do. */
   muted?: boolean;
-  /** The list's reads of its rows' media, where the row shows its item's; none where it shows none. */
-  media?: RowMediaReads | undefined;
   /** Handed the row's press, by which the list finds the row of an item. */
   ref?: React.RefCallback<HTMLElement> | undefined;
   /** What the row is chosen by where its list chooses rows (`SelectionRegion`); none where it is never chosen. */
@@ -469,8 +448,6 @@ export function InboxItemRow({
   const preview = inboxPreview(item, nameOf, ticked);
   const addressedTo = inboxAddressedTo(item);
   const addressee = usePerson(addressedTo);
-  const carried = useMemo(() => inboxMedia(item), [item]);
-  useRowMediaAsks(item.id, item.updatedAt, carried, media);
   // Note that U acts only on the chosen item, so only its row names the chord.
   const { close, groups } = useInboxItemActions(item, {
     onMark: onMark === undefined ? undefined : (_item, next) => onMark(listed, next),
@@ -514,11 +491,6 @@ export function InboxItemRow({
               : undefined
           }
           leadAt={LIST_ROW_LEAD.LINE}
-          attachments={
-            !line || media === undefined || carried.length === 0 ? undefined : (
-              <RowMedia media={carried} reads={media} />
-            )
-          }
           meta={
             <InboxItemEnd
               listed={listed}
@@ -747,7 +719,7 @@ function whoseEntries(
  * offers, Needs you and All, the one shown checked;
  * then, on the window's Inbox, Group by and Order by, each a submenu with its
  * choice checked; Whose, Anyone, Me, or a teammate by face and name;
- * Media previews; and Mark all as read at its foot.
+ * and Mark all as read at its foot.
  */
 function ViewOptions({
   shown,
@@ -809,7 +781,7 @@ function markAllEntries(readAll: InboxReadAll): MenuEntry[] {
   ];
 }
 
-/** The window's Inbox's own groups of its view's menu, after its scopes: Group by and Order by, Whose, and Media previews. */
+/** The window's Inbox's own groups of its view's menu, after its scopes: Group by and Order by, and Whose. */
 function windowEntries(
   choices: InboxViewChoices,
   reader: ReturnType<typeof useMemberDirectory>,
@@ -858,12 +830,6 @@ function windowEntries(
       icon: <Rows2Icon />,
       checked: choices.secondLine,
       onSelect: () => choices.onSecondLine(!choices.secondLine),
-    },
-    {
-      label: MEDIA_PREVIEWS,
-      icon: <ImagesIcon />,
-      checked: choices.mediaPreviews,
-      onSelect: () => choices.onMediaPreviews(!choices.mediaPreviews),
     },
   ];
   return [view, whose, looks];
@@ -1580,13 +1546,6 @@ export function InboxList({
   // Note that the rows of every group are one Tab stop that ↑↓ walk.
   const roving = useRovingKeys<HTMLDivElement>();
   const rovingBody = useMemo(() => joinRefs(bodyRef, roving.ref), [roving.ref]);
-  // Note that only the window's Inbox shows its rows' media, as its view's menu chooses; a task's own shows none.
-  // The reads hold the pictures of the items listed alone, and none while the rows show no media.
-  const previews = head.view?.choices.mediaPreviews === true;
-  const mediaReads = useRowMediaReads(
-    previews ? listedItems(view).map(({ item }) => item.id) : NO_ITEMS,
-  );
-  const media = previews ? mediaReads : undefined;
   const edge = useResizeEdge({
     side: RESIZE_EDGE_SIDE.RIGHT,
     width,
@@ -1612,7 +1571,6 @@ export function InboxList({
       chip={head.view !== undefined && view.grouping !== INBOX_GROUPING.TASK}
       line={head.view?.choices.secondLine !== false}
       muted={isDone(listed.item)}
-      media={media}
       ref={leaving ? undefined : rows.hold(listed.item.id)}
       selectKey={leaving ? undefined : listed.item.id}
       onChoose={onChoose}
