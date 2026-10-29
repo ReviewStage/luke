@@ -1436,6 +1436,53 @@ test("start_agent from another agent refuses, in words the model acts on and sta
   assert.equal(eve.sent.length, 0, "no refusal opens a session");
 });
 
+test("start_agent refuses a coder continuing the pilot that started it, directly or through the coder between them, starting nothing, and still forks it", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const pilot = await claimed(caller.userId, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    taskId: tasks.invitations,
+    planSnapshot: "# Teammate invitations",
+    prompt: null,
+    kind: AGENT_KIND.PILOT,
+  });
+  const coder = await claimed(caller.userId, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    taskId: tasks.invitations,
+    planSnapshot: "# Teammate invitations",
+    prompt: null,
+    startedByAgentId: pilot.id,
+  });
+  const grandchild = await claimed(caller.userId, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    taskId: tasks.invitations,
+    planSnapshot: "# Teammate invitations",
+    prompt: null,
+    startedByAgentId: coder.id,
+  });
+  await saidTurnOn(pilot, "Handed the invitations on.");
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), coder, eve.services);
+  const deepCall = await peerCaller(hostOf(true), grandchild, eve.services);
+  const [messageId] = tailMessageIds(await call(CODER_TOOL.READ_AGENT, { agentId: pilot.id }));
+  assert.ok(messageId !== undefined);
+
+  assert.deepEqual(await call(CODER_TOOL.START_AGENT, { from: { agentId: pilot.id } }, "call-up"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: START_AGENT_REFUSAL.STARTER_CONTINUE,
+  });
+  assert.deepEqual(
+    await deepCall(CODER_TOOL.START_AGENT, { from: { agentId: pilot.id } }, "call-up-deep"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_AGENT_REFUSAL.STARTER_CONTINUE },
+  );
+  assert.equal(eve.sent.length, 0, "no refusal opens a session");
+  const forked = await call(CODER_TOOL.START_AGENT, { from: { agentId: pilot.id, messageId } });
+  assert.equal(forked.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(forked));
+});
+
 /** A teammate's agent on the task given, started on the branch given, its session recorded. */
 async function agentOnBranch(
   userId: string,
