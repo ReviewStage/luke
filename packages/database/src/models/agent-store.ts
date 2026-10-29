@@ -209,7 +209,7 @@ export interface Agent {
   readonly author: AgentAuthor | null;
   /** How its repository was reached as it started: the workspace's GitHub App, or its starter's own token. */
   readonly githubAccess: GitHubAccess;
-  /** What the agent is: a coder, or its member's operator. */
+  /** What the agent is: a coder, a task's pilot, or its member's operator. */
   readonly kind: AgentKind;
   readonly createdAt: Date;
   /** Where its runner runs: a Vercel Sandbox, or its starter's Mac; a Vercel Sandbox where unsaid. */
@@ -278,16 +278,16 @@ export type AgentBriefText =
 
 /**
  * Where a Start puts the agent: on a task, whose workspace it joins and
- * whose text or the developer's prompt it is handed, or in a workspace with
- * no task, as an automation's run puts one, handed a prompt, since there is
- * no plan to hand it; or, as the member's operator alone, in a workspace
- * with no task and handed nothing.
+ * whose text or the developer's prompt it is handed, a coder or the task's
+ * pilot; or in a workspace with no task, as an automation's run puts one,
+ * handed a prompt, since there is no plan to hand it; or, as the member's
+ * operator alone, in a workspace with no task and handed nothing.
  */
 export type AgentPlace =
   | (AgentBriefText & {
       readonly taskId: string;
       readonly organizationId?: undefined;
-      readonly kind?: typeof AGENT_KIND.CODER | undefined;
+      readonly kind?: typeof AGENT_KIND.CODER | typeof AGENT_KIND.PILOT | undefined;
     })
   | {
       readonly taskId: null;

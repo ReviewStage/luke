@@ -15,6 +15,7 @@ import {
   type AgentArchivedBy,
   type AgentStatus,
   type AgentSummary,
+  agentKindSchema,
   agentPullRequestSchema,
   agentSummarySchema,
   CONTEXT_WINDOW,
@@ -124,8 +125,8 @@ const agentLiveRowSchema = EffectSchema.Struct({
   effort: EffectSchema.String,
   contextWindow: EffectSchema.NullOr(EffectSchema.String),
   title: EffectSchema.NullOr(EffectSchema.String),
-  /** What kind of agent it is, a coder or a member's operator; absent from a statement before operators. */
-  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_KIND))),
+  /** What kind of agent it is, a coder, a task's pilot, or a member's operator; absent from a statement before operators. */
+  kind: EffectSchema.optionalKey(agentKindSchema),
   /** Whether the agent was handed a prompt rather than its plan. */
   /** What the agent was handed as its first message: the plan, the developer's prompt, or nothing, for one started blank. */
   brief: EffectSchema.Literals(Object.values(AGENT_BRIEF)),

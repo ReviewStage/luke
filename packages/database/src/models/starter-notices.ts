@@ -88,14 +88,14 @@ const AGENT_COLUMNS = {
   agentAutomationName: agentAutomationNameSql(agentTable),
 };
 
-/** A starter that can answer: a coder standing, whose own newest turn did not fail. */
+/** A starter that can answer: a coder or a pilot standing, whose own newest turn did not fail. */
 function answeringStarter() {
   const newest = sql`(select ${starterTurn.status} from ${turns} as ${sql.identifier(STARTER_TURN)}
     where ${starterTurn.conversationId} = ${starter.conversationId}
     order by ${starterTurn.queuedAt} desc, ${starterTurn.id} desc limit 1)`;
   return and(
     isNull(starter.archivedAt),
-    eq(starter.kind, AGENT_KIND.CODER),
+    ne(starter.kind, AGENT_KIND.OPERATOR),
     sql`${newest} is distinct from ${TURN_STATUS.FAILED}`,
   );
 }

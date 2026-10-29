@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { MESSAGE_ROLE } from "@luke/wire";
+import { Schema } from "effect";
 import { test } from "vitest";
 import {
   type AgentTranscriptMessage,
+  agentKindSchema,
   applyMessagesPage,
   DEVICE_STANDING,
   deviceStanding,
@@ -55,5 +57,14 @@ test("a device reads as there until it has missed four beats, and as unknown, ne
       DEVICE_STANDING.UNKNOWN,
       DEVICE_STANDING.OFFLINE,
     ],
+  );
+});
+
+test("an agent's kind this build knows reads as itself, and one a later service adds reads as a coder rather than refused", () => {
+  const read = Schema.decodeUnknownSync(agentKindSchema);
+
+  assert.deepEqual(
+    ["operator", "pilot", "navigator"].map((kind) => read(kind)),
+    ["operator", "pilot", "coder"],
   );
 });
