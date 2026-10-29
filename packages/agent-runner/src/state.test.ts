@@ -183,7 +183,9 @@ it.effect(
         chmodSync(join(agent, "attachments/line"), 0o555);
 
         const pack = join(root, "state.tar.zst");
-        yield* packState(agent, pack);
+        const packed = yield* packState(agent, pack);
+        // Note that the base the pack names is what a device commits beside it, and the commit a restore makes the repository at.
+        assert.equal(packed.base, base);
         yield* verifyState(agent, pack);
 
         const fresh = join(root, "fresh");

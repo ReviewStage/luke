@@ -8,6 +8,8 @@ import {
   type DeviceAgentLaunchSecrets,
   type DeviceAgentLine,
   type DeviceAgentRequest,
+  type DeviceAgentStateCommitRequest,
+  type DeviceAgentStateSaveAnswer,
   type DeviceArch,
   type DeviceCapability,
   type DeviceIsolation,
@@ -25,6 +27,7 @@ import {
   askHosted,
   HOSTED_DEADLINE,
   type HostedClient,
+  type HostedFailure,
   type HostedRefused,
   hostedClient,
 } from "./hosted-link.js";
@@ -32,7 +35,7 @@ import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
- * device-agent-client.ts -- a local agent's Mac as it asks the service (`contract/device-agents.ts`): it registers and beats, reads which of its agents should still stand, holds a read for its lines and one for its requests, claims each by its id, and settles a line or answers a request.
+ * device-agent-client.ts -- a local agent's Mac as it asks the service (`contract/device-agents.ts`): it registers and beats, reads which of its agents should still stand, holds a read for its lines and one for its requests, claims each by its id, settles a line or answers a request, and saves its agents' state.
  *
  * Each is a procedure of the hosted contract over the one account call, so
  * the bearer is read fresh per attempt and a 401 is renewed and retried
@@ -41,7 +44,9 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
  * `DEVICE_AGENT_NOT_CLAIMED` (another claim took it, its caller withdrew it,
  * or the account's experiment is off) and one unanswered nothing; a
  * register, a settle, or an answer not taken is false, and a beat or a
- * read of the live agents not taken is nothing. A host also
+ * read of the live agents not taken is nothing. A save of an agent's
+ * state, or its commit, refused says whether a newer save made it stale,
+ * and one unanswered, or refused as unavailable, is nothing. A host also
  * asks the runner token route for a GitHub token for one of its agents
  * (`githubToken`), on the same credential, its device secret.
  */
@@ -62,6 +67,35 @@ export interface DeviceAgentClaimedLine {
 /** A beat the service took: the ids of the launches it holds the device to, none from a service before the field (`deviceAgentBeatAnswerSchema`). */
 export interface DeviceAgentBeat {
   readonly openLaunches?: readonly string[] | undefined;
+}
+
+/** How the service refused a save of an agent's state, or its commit. */
+export const DEVICE_AGENT_STATE_REFUSAL = {
+  /** A newer save of the agent's landed since the generation it named, so no save from that one ever will. */
+  STALE: "stale",
+  /** Any other refusal: the agent is not this device's, or the path's grant lapsed. */
+  REFUSED: "refused",
+} as const;
+
+type DeviceAgentStateRefusal =
+  (typeof DEVICE_AGENT_STATE_REFUSAL)[keyof typeof DEVICE_AGENT_STATE_REFUSAL];
+
+/** A save or commit of an agent's state the service refused, and how. */
+export interface DeviceAgentStateRefused {
+  readonly refusal: DeviceAgentStateRefusal;
+}
+
+/** A save's or commit's failure as its caller reads it: refused, and how, or nothing where it was not answered or the service could not take it now. */
+function stateRefusalOf(failed: HostedFailure): DeviceAgentStateRefused | undefined {
+  if (failed._tag !== "HostedRefused" || failed.refusal === HOSTED_API_ERROR.UNAVAILABLE) {
+    return undefined;
+  }
+  return {
+    refusal:
+      failed.refusal === HOSTED_API_ERROR.AGENT_STATE_STALE
+        ? DEVICE_AGENT_STATE_REFUSAL.STALE
+        : DEVICE_AGENT_STATE_REFUSAL.REFUSED,
+  };
 }
 
 /** What a Mac registers as: its name, its platform and architecture, its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, which harnesses it is signed in to, the lines beyond the first it takes, and where its setup stands until it is ready. */
@@ -404,6 +438,45 @@ export class HostedDeviceAgentClient {
       Effect.catch((failed) =>
         Effect.succeed(failed._tag === "HostedRefused" ? DEVICE_AGENT_NOT_CLAIMED : undefined),
       ),
+    );
+  }
+
+  /**
+   * A save of the agent's state asked for, from the generation its state
+   * stands at, none where it has none: the path its bundle goes to, its one
+   * upload, and the agent's state key; refused, or nothing where unanswered.
+   */
+  saveState(
+    deviceId: string,
+    agentId: string,
+    fromGeneration: number | null,
+  ): Effect.Effect<
+    DeviceAgentStateSaveAnswer | DeviceAgentStateRefused | undefined,
+    never,
+    HttpClient.HttpClient
+  > {
+    return askHosted(this.#hosted.deviceAgents.saveState, {
+      deviceId,
+      agentId,
+      fromGeneration,
+    }).pipe(
+      Effect.map((answer): DeviceAgentStateSaveAnswer => answer),
+      Effect.catch((failed) => Effect.succeed(stateRefusalOf(failed))),
+    );
+  }
+
+  /**
+   * A save the device uploaded, committed: the generation it was kept as;
+   * refused, or nothing where unanswered. The same commit asked again is
+   * answered the same generation.
+   */
+  commitState(
+    deviceId: string,
+    commit: Omit<DeviceAgentStateCommitRequest, "deviceId">,
+  ): Effect.Effect<number | DeviceAgentStateRefused | undefined, never, HttpClient.HttpClient> {
+    return askHosted(this.#hosted.deviceAgents.commitState, { deviceId, ...commit }).pipe(
+      Effect.map((answer): number => answer.generation),
+      Effect.catch((failed) => Effect.succeed(stateRefusalOf(failed))),
     );
   }
 

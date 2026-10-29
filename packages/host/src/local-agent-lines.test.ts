@@ -1,16 +1,21 @@
 /**
- * local-agent-lines.test.ts -- the follower as a device sees its lines: a discard line takes the agent's folder off the disk, unless the platform's check finds work in it, and a line of a kind it does not know is settled without holding back the lines after it.
+ * local-agent-lines.test.ts -- the follower as a device sees its lines: a discard line takes the agent's folder off the disk, unless the platform's check finds work in it, a line of a kind it does not know is settled without holding back the lines after it, and a launch's runner ending saves the agent's state, packed in its VM before the VM goes and committed once uploaded, its bundle kept and tried again where the upload fails, and a pack over its cap refused in plain words.
  *
  * The follower runs over the real client, its held read and claims answered
  * by a scripted service, so an answer is decoded as the wire decodes it; on
  * a real temporary folder, so what a line leaves on the disk is what the
  * test reads; and over a scripted spawner, on the test's clock. Each test
- * waits for the service to take the discard's settle, never on the clock,
- * since nothing on the way there sleeps and the disk answers in its own
- * time. Synthetic ids throughout.
+ * waits for the service to take a line's settle, never on the clock, since
+ * nothing on the way there sleeps and the disk answers in its own time,
+ * but for the save tried again on a later beat, which moves the clock. A
+ * save's pack is written by the scripted VM, sealed by the device's own
+ * seal, and opened by the test with `node:crypto` alone. Synthetic ids,
+ * keys and bytes throughout.
  */
 
 import assert from "node:assert/strict";
+import { createDecipheriv, createHash } from "node:crypto";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
@@ -18,6 +23,7 @@ import { fixedBearer, HOSTED_SERVICE_PATH, HostedDeviceAgentClient } from "@luke
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
+  DEVICE_CAPABILITY,
   DEVICE_ISOLATION,
   DEVICE_PLATFORM,
   type DeviceAgentLine,
@@ -25,11 +31,14 @@ import {
 } from "@luke/features/device-agent-wire";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { ConfigProvider, Deferred, Effect, Exit, Layer } from "effect";
+import { ConfigProvider, Deferred, Duration, Effect, Exit, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
+import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
-import { fakeSandbox } from "./testing/fake-sandbox.js";
+import { readLocalAgentState } from "./local-agent-state.js";
+import { sealAgentState } from "./node/agent-state-seal.js";
+import { fakeSandbox, VM_EXEC } from "./testing/fake-sandbox.js";
 import { type Script, scriptedSpawner } from "./testing/scripted-spawner.js";
 
 const SERVICE = "https://luke.test";
@@ -137,6 +146,7 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script, vmLe
         deviceCapabilities: [],
         worktreeScript: () => "exit 0",
         unsavedWorkScript: unsavedWork === undefined ? undefined : () => UNSAVED_WORK_SCRIPT,
+        stateSealed: () => Effect.die("this device saves no state"),
       }),
     );
     const composer = yield* composeLocalAgents({
@@ -223,6 +233,275 @@ it.effect(
         assert.equal(yield* fileSystem.exists(folder), false);
         assert.equal(yield* fileSystem.exists(owned), true);
         assert.deepEqual(settled, [DISCARD.id]);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+const LAUNCH: DeviceAgentLine = {
+  id: "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d",
+  agentId: AGENT_ID,
+  seq: 1,
+  kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
+  payload: {},
+};
+/** The agent's state key as the service answers it: 32 bytes, in standard base64. */
+const STATE_KEY = Buffer.alloc(32, 7).toString("base64");
+/** What the scripted VM's pack writes, standing in for a pack's bytes. */
+const PACK_BYTES = "a pack of the agent's state\n";
+/** The base the scripted VM's pack names. */
+const BASE = "1".repeat(40);
+const OVER_CAP =
+  "the agent's state holds 612.0 MB, over the 500.0 MB a pack may hold. Its largest parts: home/.claude/projects (600.0 MB).";
+
+/** The bundle's bytes opened as a restore opens them: a version byte, a 12-byte nonce, the pack, and a 16-byte tag. */
+function opened(bundle: Uint8Array): string {
+  const bytes = Buffer.from(bundle);
+  assert.equal(bytes[0], 1);
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    Buffer.from(STATE_KEY, "base64"),
+    bytes.subarray(1, 13),
+  );
+  decipher.setAuthTag(bytes.subarray(bytes.length - 16));
+  return Buffer.concat([
+    decipher.update(bytes.subarray(13, bytes.length - 16)),
+    decipher.final(),
+  ]).toString();
+}
+
+/**
+ * The follower on a host that saves its agents' state, one launch line
+ * handed once, whose runner ends at once: its VM's pack writes the pack and
+ * names its base, or answers as the script given, and its verify passes;
+ * the store refuses as many uploads as `uploadsRefused` says before it
+ * takes one. With what happened in order (the VM's state commands, its
+ * delete, the uploads and the commits), the bodies the service took, the
+ * bytes the store took, the folder, the device's record of the agent's
+ * saves, what waits for the launch's settle, and whether the device has
+ * said a save landed, which it says once it has recorded it.
+ */
+const saving = (options: { readonly pack?: Script; readonly uploadsRefused?: number } = {}) =>
+  Effect.gen(function* () {
+    const root = yield* temporaryDirectoryScoped("luke-agent-saves-");
+    const home = path.join(root, "home");
+    const stateRoot = path.join(root, "state");
+    const layout = deviceAgentLayout(home, AGENT_ID);
+    const happened: string[] = [];
+    const saves: unknown[] = [];
+    const commits: unknown[] = [];
+    const uploads: Uint8Array[] = [];
+    const reported: string[] = [];
+    const launchSettled = Deferred.makeUnsafe<void>();
+    let refusing = options.uploadsRefused ?? 0;
+    let linesRead = 0;
+    const fetchLike = async (url: string | URL | Request, init?: RequestInit) => {
+      const { host, pathname } = new URL(String(url));
+      if (host === "store.test") {
+        uploads.push(new Uint8Array(await new Response(init?.body).arrayBuffer()));
+        happened.push("upload");
+        return new Response(null, { status: refusing-- > 0 ? 500 : 200 });
+      }
+      const body = init?.body === undefined ? {} : JSON.parse(String(init.body));
+      switch (pathname) {
+        case HOSTED_SERVICE_PATH.DEVICE_AGENT_DEVICES:
+        case HOSTED_SERVICE_PATH.DEVICE_AGENT_PRESENCE:
+          return json({ done: true });
+        case HOSTED_SERVICE_PATH.DEVICE_AGENT_LINE_CLAIM:
+          return json({
+            line: {
+              ...LAUNCH,
+              payload: {
+                checkoutPath: layout.checkoutPath,
+                repository: null,
+                startBranch: null,
+                firstSequence: 0,
+              },
+            },
+            secrets: { env: { LUKE_RUNNER_TOKEN: "runner-secret" }, stdin: "{}\n" },
+          });
+        case HOSTED_SERVICE_PATH.DEVICE_AGENT_LINES:
+          if (init?.method === "POST") {
+            if (body.id === LAUNCH.id) Deferred.doneUnsafe(launchSettled, Exit.void);
+            return json({ done: true });
+          }
+          return linesRead++ === 0 ? json({ lines: [LAUNCH] }) : held();
+        case HOSTED_SERVICE_PATH.DEVICE_AGENT_STATE_SAVE:
+          saves.push(body);
+          return json({
+            path: `agent-state/${AGENT_ID}/grant-${saves.length}`,
+            upload: {
+              url: `https://store.test/upload/${saves.length}`,
+              headers: { "x-api-version": "13" },
+              expiresAt: Date.UTC(2026, 9, 29, 21),
+              maxBytes: 500 * 1024 * 1024,
+            },
+            key: STATE_KEY,
+          });
+        case HOSTED_SERVICE_PATH.DEVICE_AGENT_STATE_COMMIT:
+          happened.push("commit");
+          commits.push(body);
+          return json({ generation: commits.length });
+        default:
+          return held();
+      }
+    };
+    const pack = path.join(layout.temp, "state.pack");
+    const spawner = scriptedSpawner((program, args) => {
+      if (program === "/bin/bash" && args[0] === "-l") {
+        return { stdout: "/usr/bin:/bin", exitCode: 0 };
+      }
+      if (program === "/opt/luke/launch") return { exitCode: 0 };
+      if (program !== VM_EXEC) return undefined;
+      const action = args[3];
+      if (action !== undefined) happened.push(action);
+      if (action !== "pack") return { exitCode: 0 };
+      return (
+        options.pack ?? {
+          stdout: `agent-runner state pack: wrote 28 bytes\nagent-runner state pack: base ${BASE}\n`,
+          exitCode: 0,
+          until: Effect.sync(() => writeFileSync(pack, PACK_BYTES)),
+        }
+      );
+    });
+    const vm = fakeSandbox();
+    const services = Layer.mergeAll(
+      spawner.layer,
+      NodePath.layer,
+      NodeFileSystem.layer,
+      fakeHttpClientLayer(fetchLike),
+      Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME: home, SHELL: "/bin/bash" })),
+      Layer.succeed(Reporter, { report: (line) => reported.push(line) }),
+      Layer.succeed(LocalAgentPlatform, {
+        launch: () => ({ command: "/opt/luke/launch", args: [], env: {} }),
+        sandbox: {
+          ...vm.sandbox,
+          deleted: (agentId) =>
+            Effect.andThen(
+              Effect.sync(() => happened.push("deleted")),
+              vm.sandbox.deleted(agentId),
+            ),
+        },
+        formerlyDirect: false,
+        runnerBundle: "/opt/luke/agent-runner.mjs",
+        runnerEnv: {},
+        deviceName: "rack-1",
+        devicePlatform: DEVICE_PLATFORM.LINUX,
+        deviceArch: DEVICE_ARCH.X64,
+        deviceIsolation: DEVICE_ISOLATION.SANDBOX,
+        deviceCapabilities: [DEVICE_CAPABILITY.DISCARD, DEVICE_CAPABILITY.AGENT_STATE],
+        worktreeScript: () => "exit 0",
+        stateSealed: sealAgentState,
+      }),
+    );
+    const composer = yield* composeLocalAgents({
+      kernel: { stateRoot, createId: () => DEVICE_ID, runMode: { sendsNetwork: true } },
+      account: { capabilitiesActive: () => true },
+      accountId: () => DEVICE_ID,
+      deviceId: DEVICE_ID,
+      switchedOn: Effect.succeed(true),
+      client: new HostedDeviceAgentClient({
+        credential: fixedBearer("device-token"),
+        serviceBaseUrl: SERVICE,
+      }),
+    }).pipe(Effect.provide(services));
+    yield* composer.lifetime;
+    const saveRecord = Effect.map(
+      readLocalAgentState(stateRoot).pipe(Effect.provide(services)),
+      (state) => state.saves?.[AGENT_ID],
+    );
+    return {
+      happened,
+      saves,
+      commits,
+      uploads,
+      layout,
+      bundle: path.join(stateRoot, "agent-state", AGENT_ID),
+      saveRecord,
+      launchSettled: Deferred.await(launchSettled),
+      saved: () => reported.some((line) => line.includes("saved as generation")),
+    };
+  });
+
+it.effect(
+  "a runner's end packs and verifies the agent's state in its VM before the VM is deleted, then uploads it sealed under the agent's key and commits it, recording the generation",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { happened, saves, commits, uploads, bundle, saveRecord, launchSettled } =
+          yield* saving();
+        yield* launchSettled;
+
+        assert.deepEqual(happened, ["pack", "verify", "deleted", "upload", "commit"]);
+        assert.deepEqual(saves, [{ deviceId: DEVICE_ID, agentId: AGENT_ID, fromGeneration: null }]);
+        const [uploaded] = uploads;
+        assert.ok(uploaded !== undefined);
+        assert.equal(opened(uploaded), PACK_BYTES);
+        assert.deepEqual(commits, [
+          {
+            deviceId: DEVICE_ID,
+            agentId: AGENT_ID,
+            fromGeneration: null,
+            path: `agent-state/${AGENT_ID}/grant-1`,
+            bytes: uploaded.length,
+            sha256: createHash("sha256").update(uploaded).digest("hex"),
+            baseCommit: BASE,
+          },
+        ]);
+        assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, generation: 1 });
+        const fileSystem = yield* FileSystem.FileSystem;
+        assert.equal(yield* fileSystem.exists(bundle), false, "the committed bundle is still kept");
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a save whose upload fails keeps the folder and its sealed bundle outside it, and a later beat uploads it again and commits it",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { happened, uploads, layout, bundle, saveRecord, launchSettled, saved } =
+          yield* saving({ uploadsRefused: 1 });
+        yield* launchSettled;
+
+        const fileSystem = yield* FileSystem.FileSystem;
+        assert.deepEqual(happened, ["pack", "verify", "deleted", "upload"]);
+        assert.equal(yield* fileSystem.exists(layout.folder), true);
+        assert.equal(yield* fileSystem.exists(bundle), true, "the sealed bundle is not kept");
+        assert.ok(!bundle.startsWith(`${layout.folder}/`));
+        const waiting = yield* saveRecord;
+        assert.equal(waiting?.generation, undefined);
+        assert.equal(waiting?.pending?.bytes, uploads[0]?.length);
+
+        // Note that the bundle is tried again a minute after the failed upload, on the beat after.
+        for (let round = 0; round < 40 && !saved(); round += 1) {
+          yield* TestClock.adjust(Duration.seconds(5));
+          yield* Effect.yieldNow.pipe(Effect.repeat({ times: 500, until: saved }));
+        }
+        assert.ok(saved(), "the bundle was never committed");
+
+        assert.deepEqual(happened, ["pack", "verify", "deleted", "upload", "upload", "commit"]);
+        assert.deepEqual(uploads[1], uploads[0]);
+        assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, generation: 1 });
+        assert.equal(yield* fileSystem.exists(bundle), false);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a pack over its cap is refused in the pack's own words, kept in the agent's record, the folder kept and nothing uploaded",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { happened, saves, layout, saveRecord, launchSettled } = yield* saving({
+          pack: { stderr: `agent-runner state: ${OVER_CAP}\n`, exitCode: 3 },
+        });
+        yield* launchSettled;
+
+        const fileSystem = yield* FileSystem.FileSystem;
+        assert.deepEqual(happened, ["pack", "deleted"]);
+        assert.deepEqual(saves, []);
+        assert.equal(yield* fileSystem.exists(layout.folder), true);
+        assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, unsaved: { why: OVER_CAP } });
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );
