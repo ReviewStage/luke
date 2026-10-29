@@ -143,6 +143,8 @@ export interface AgentTranscriptControl {
   delegations: ReadonlyMap<string, number>;
   /** Where each of the agent's workers stands, by the call that started it, as its own session reads and the last page said; none on a worker's, and from a service older than it. */
   subagents: ReadonlyMap<string, AgentSubagentStanding>;
+  /** The messages as the follow's first page drew them: what was written before the reader looked, which stands as it is, where what a later page adds arrives. */
+  standing: readonly AgentTranscriptMessage[];
   /** Whether a read is out, with nothing held yet to draw. */
   reading: boolean;
   /** Whether the last read did not answer, so the tab offers to try again. */
@@ -176,6 +178,7 @@ interface Held {
   subagentTitles: ReadonlyMap<string, string>;
   delegations: ReadonlyMap<string, number>;
   subagents: ReadonlyMap<string, AgentSubagentStanding>;
+  standing: readonly AgentTranscriptMessage[];
   /** The rewind the newest page held was read at; none before a page landed or where the transcript was never rewound. */
   rewound: number | undefined;
   failed: boolean;
@@ -202,6 +205,7 @@ function fresh(transcript: AgentTranscriptKey): Held {
     subagentTitles: new Map(),
     delegations: new Map(),
     subagents: new Map(),
+    standing: [],
     rewound: undefined,
     failed: false,
     failedWith: undefined,
@@ -262,9 +266,10 @@ function joined(was: Held, page: HeardTranscriptPage): Held {
   const replaces =
     page.newest === true &&
     (was.messages.length === 0 || !meets(was.messages, page) || page.rewound !== was.rewound);
+  const messages = replaces ? page.messages : applyMessagesPage(was.messages, page.messages);
   return {
     ...was,
-    messages: replaces ? page.messages : applyMessagesPage(was.messages, page.messages),
+    messages,
     before: replaces ? page.before : was.before,
     olderOut: replaces ? undefined : was.olderOut,
     // Note that a failure is the failed cursor's, so a page that replaces the cursor lets it go.
@@ -295,6 +300,8 @@ function joined(was: Held, page: HeardTranscriptPage): Held {
       (page.subagents ?? []).map((standing) => [standing.callId, standing]),
       sameStanding,
     ),
+    // Note that what stands is taken at the newest page alone, since it is what was written while nobody followed, and every page after it is what the reader watched land.
+    standing: page.newest === true ? messages : was.standing,
     failed: false,
     failedWith: undefined,
   };
@@ -458,6 +465,7 @@ export function useAgentTranscript(input: {
     subagentTitles: held.subagentTitles,
     delegations: held.delegations,
     subagents: held.subagents,
+    standing: held.standing,
     reading: shown && !held.failed && held.messages.length === 0 && writing,
     failed: held.failed,
     failedWith: held.failedWith,
