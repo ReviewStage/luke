@@ -130,11 +130,11 @@ interface InVm {
   readonly shellVariables: Readonly<Record<string, string>>;
 }
 
-/** One of the agent's turns as it ends: the account and device it ran under, its launch line, and the VM it ran in. */
+/** One of the agent's turns as it ends: the account and device it ran under, its launch line, none for a sweep's save of a folder no turn's end saved, and the VM it ran in. */
 interface EndingTurn extends InVm {
   readonly userId: string;
   readonly deviceId: string;
-  readonly lineId: string;
+  readonly lineId?: string | undefined;
 }
 
 /** A launch's restore of the agent's saved state: the account it runs under, the agent's VM, and the generation it restores. */
@@ -252,7 +252,7 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
       });
 
     /** The agent recorded as unsaved where the turn of the launch line given ended with no bundle of its own sealed, as a runner that ended with the app or the gate did. */
-    const unsavedMarked = (userId: string, agentId: string, lineId: string) =>
+    const unsavedMarked = (userId: string, agentId: string, lineId: string | undefined) =>
       saveChanged(userId, agentId, (save) =>
         save.pending?.lineId === lineId ? save : { ...save, unsaved: save.unsaved ?? {} },
       );
@@ -498,9 +498,10 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
      * The pack the turn's VM wrote, read once the VM is gone: a save asked
      * for from the generation the agent's folder stands at, the pack sealed
      * under the agent's key, the key the answer carries or the one held,
-     * into its bundle, superseding any an earlier turn left waiting, and the
-     * bundle sent. A refusal, or no key to seal under, leaves the folder
-     * unsaved with nothing waiting.
+     * into its bundle, superseding any an earlier turn left waiting, the
+     * turn's end (`since`) recorded beside it, from which a sweep counts the
+     * folder's warm window, and the bundle sent. A refusal, or no key to seal
+     * under, leaves the folder unsaved with nothing waiting.
      */
     const sealedAndSent = (turn: EndingTurn, baseCommit: string | null, since: number) =>
       Effect.gen(function* () {
@@ -543,7 +544,7 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
           return yield* notSaved(userId, agentId, sealed.failure.detail, sealed.failure.detail);
         }
         const pending: PendingSave = {
-          lineId: turn.lineId,
+          ...(turn.lineId === undefined ? {} : { lineId: turn.lineId }),
           fromGeneration,
           baseCommit,
           ...sealed.success,
@@ -552,6 +553,7 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
         yield* saveChanged(userId, agentId, ({ unsaved: _unsaved, ...save }) => ({
           ...save,
           pending,
+          endedAt: since,
         }));
         retries.delete(agentId);
         // Note that a save the service did not answer is asked again on the beat rather than at once.

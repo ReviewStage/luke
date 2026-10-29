@@ -7,6 +7,7 @@ import {
 } from "@luke/features/device-agent-wire";
 import type { LocalAgentPlatformSeam } from "../effect/seams.js";
 import { openAgentState, sealAgentState } from "../node/agent-state-seal.js";
+import { diskFree } from "../node/disk-free.js";
 import { agentWorktreeScript, cloneFolder, worktreesRoot } from "../node/open-on-mac.js";
 import { smolvmSandbox } from "../node/smolvm-sandbox.js";
 import type { HostOs } from "./host-os.js";
@@ -81,5 +82,6 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
     unsavedWorkScript: options.os.unsavedWorkScript,
     stateSealed: sealAgentState,
     stateOpened: openAgentState,
+    diskFree,
   };
 }

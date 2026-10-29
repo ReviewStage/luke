@@ -140,9 +140,10 @@ export type { ListSelection } from "../selection/list-selection.js";
  * open and fold them, as a tree's keys do.
  *
  * A row's metadata stands at its middle, or, in a list read as a mail
- * app's is (`LIST_ROW_META.TITLE`), at the end of its title's line, the
- * description running the row's whole width under both and its leading
- * mark level with the title. A row's acts stand beside it, or, in a list
+ * app's is (`LIST_ROW_META.TITLE`), at the end of its first line, its
+ * title's or its lead's where that stands over the title, the lines under
+ * it running the row's whole width and its leading mark level with the
+ * first. A row's acts stand beside it, or, in a list
  * that offers them only to the row in hand (`LIST_ROW_ACTIONS.HOVER`), in
  * its metadata's place while the pointer rests on it or it holds the
  * keyboard, the metadata stepping aside as a sidebar row's time does for
@@ -166,10 +167,10 @@ export type { ListSelection } from "../selection/list-selection.js";
  * of a glyph and a name, cut short at a short name's width, the
  * description's words following it on the same line, as a mail app tags a
  * thread with its mailbox. A fuller row may stand it on a line of its own
- * instead (`LIST_ROW_LEAD.LINE`), between its title and its description,
- * its glyph and its whole name in the description's quieter ink, as a
- * mail app names a thread's sender over its preview, so neither the name
- * nor the preview is cut short to make room for the other. A fuller row
+ * instead (`LIST_ROW_LEAD.ABOVE`), over its title, its glyph and its whole
+ * name in the description's quieter ink, the time at that line's end, as a
+ * mail app names a thread's sender over its subject, so neither the name
+ * nor the title is cut short to make room for the other. A fuller row
  * that keeps to two lines may lead its description with the plain words
  * instead (`LIST_ROW_LEAD.INLINE`), its glyph and its whole name in the
  * description's ink, a middle dot, then the description, as a two-line
@@ -207,11 +208,11 @@ export const LIST_ROW_ACTIONS = {
 
 export type ListRowActions = (typeof LIST_ROW_ACTIONS)[keyof typeof LIST_ROW_ACTIONS];
 
-/** Where what a row belongs to stands: a chip leading its description's line, its plain words leading that line, or a line of its own over the description. */
+/** Where what a row belongs to stands: a chip leading its description's line, its plain words leading that line, or a line of its own over the title. */
 export const LIST_ROW_LEAD = {
   DESCRIPTION: "description",
   INLINE: "inline",
-  LINE: "line",
+  ABOVE: "above",
 } as const;
 
 export type ListRowLeadAt = (typeof LIST_ROW_LEAD)[keyof typeof LIST_ROW_LEAD];
@@ -223,10 +224,10 @@ export interface ListRowSwipe {
   readonly onAct: () => void;
 }
 
-/** What a row belongs to, as the chip before its description names it: its glyph and its name. */
+/** What a row belongs to, as the chip before its description names it: its glyph and its name, words but for a placeholder row's block. */
 export interface ListRowLead {
   readonly icon: ReactNode;
-  readonly label: string;
+  readonly label: ReactNode;
 }
 
 /** What a hint hands the press it wraps: when to show and go, and what it says of the press. */
@@ -362,17 +363,16 @@ const CHEVRON_CLASS =
 /**
  * What a row belongs to: a small chip of a glyph and a name cut short at a
  * short name's width leading its description, the glyph and the name bare
- * leading it, or a line of its own between
- * its title and its description, its glyph and its whole name in the
- * description's quieter ink, with no chip round it.
+ * leading it, or a line of its own over its title, its glyph and its whole
+ * name in the description's quieter ink, with no chip round it.
  */
 const LEAD_CLASS = {
   [LIST_ROW_LEAD.DESCRIPTION]:
     "luke-list-row-lead me-luke-4 inline-flex max-w-list-row-lead items-center gap-luke-2 rounded-luke-6 bg-fill-strong px-luke-4 py-0 align-bottom text-muted-foreground",
   [LIST_ROW_LEAD.INLINE]:
     "luke-list-row-lead inline-flex max-w-full items-center gap-luke-4 align-bottom text-muted-foreground",
-  [LIST_ROW_LEAD.LINE]:
-    "luke-list-row-lead flex items-center gap-luke-4 text-caption text-muted-foreground",
+  [LIST_ROW_LEAD.ABOVE]:
+    "luke-list-row-lead flex min-w-0 items-center gap-luke-4 text-caption text-muted-foreground",
 } as const satisfies Record<ListRowLeadAt, string>;
 
 /** What stands between a lead's plain words and the description they lead. */
@@ -562,7 +562,7 @@ export function ListRow({
   description?: ReactNode;
   /** What the row belongs to, drawn as a chip of its glyph and its name before the description, on its line. */
   lead?: ListRowLead | undefined;
-  /** Where the lead stands: a chip before the description, on its line, or a line of its own between the title and the description. */
+  /** Where the lead stands: a chip before the description, on its line, or a line of its own over the title. */
   leadAt?: ListRowLeadAt | undefined;
   /** Metadata at the row's end, before its acts ("2h ago", "Owner"). */
   meta?: ReactNode;
@@ -650,7 +650,7 @@ export function ListRow({
     menu?.subject ??
     (named === undefined
       ? undefined
-      : { mark: leading, name: named, detail: plainWords(description) ?? lead?.label });
+      : { mark: leading, name: named, detail: plainWords(description) ?? plainWords(lead?.label) });
   const rowMenu = useRowMenu(menu === undefined ? undefined : { ...menu, subject }, {
     disabled,
     opener: onPress ? pressElement : undefined,
@@ -679,7 +679,7 @@ export function ListRow({
     },
     [descriptionMeasured, describedDense],
   );
-  const [leadMeasured, leadClipped] = useClipped(lead?.label);
+  const [leadMeasured, leadClipped] = useClipped(plainWords(lead?.label));
   const heading = (
     <span
       ref={titleMeasured}
@@ -721,6 +721,9 @@ export function ListRow({
         </span>
       </span>
     );
+  // Note that a lead over the title takes the first line, the one the metadata ends.
+  const above = leadAt === LIST_ROW_LEAD.ABOVE && lead !== undefined;
+  const firstLine = above ? leadMark : heading;
   const face = (
     <>
       {said(leading) ? (
@@ -731,20 +734,20 @@ export function ListRow({
       <span className="luke-list-row-text col-[text] min-w-0">
         {metaAt === LIST_ROW_META.TITLE ? (
           <span className="luke-list-row-head">
-            {heading}
+            {firstLine}
             {end}
           </span>
         ) : (
-          heading
+          firstLine
         )}
-        {leadAt === LIST_ROW_LEAD.LINE ? leadMark : null}
-        {said(description) || (leadAt !== LIST_ROW_LEAD.LINE && lead !== undefined) ? (
+        {above ? heading : null}
+        {said(description) || (!above && lead !== undefined) ? (
           <span
             ref={described}
             className="luke-list-row-description"
             data-overflow={describedDense ? String(descriptionClipped) : undefined}
           >
-            {leadAt === LIST_ROW_LEAD.LINE ? null : leadMark}
+            {above ? null : leadMark}
             {leadAt === LIST_ROW_LEAD.INLINE && lead !== undefined && said(description)
               ? LEAD_SEPARATOR
               : null}

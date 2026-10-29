@@ -1310,13 +1310,15 @@ export function writtenOn(item: InboxItem, id: string) {
   });
 }
 
-/** A row's two lines as a reader meets them: whether its first holds its title and its time, and the muted words of its second. */
+/** A row's lines as a reader meets them: whether its title stands on a line of its own under the first, its task line, which holds its time, and the muted words of its last. */
 export function rowLines(page: HTMLElement, title: string): [boolean, string | null | undefined] {
   const row = rowNamed(page, title);
   const head = row.querySelector(".luke-list-row-head");
-  const first =
-    head?.querySelector(ROW_TITLE)?.textContent === title && head.querySelector("time") !== null;
-  return [first, row.querySelector(".luke-list-row-description")?.textContent];
+  const titled =
+    row.querySelector(ROW_TITLE)?.textContent === title &&
+    head?.querySelector(ROW_TITLE) === null &&
+    head.querySelector("time") !== null;
+  return [titled, row.querySelector(".luke-list-row-description")?.textContent];
 }
 
 /** A row's right-click menu as it reads: each item's words, its key where it names one, a rule between groups. */

@@ -19,6 +19,7 @@ import {
   type Effect,
   Layer,
   Logger,
+  type Option,
   type Path,
   type Result,
   type Stream,
@@ -226,6 +227,16 @@ export interface LocalAgentSandbox {
   readonly deleted: (
     agentId: string,
   ) => Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner | FileSystem>;
+  /**
+   * The agents smolvm keeps a machine for, by id, whoever made it; none
+   * where it could not list its machines, so no agent is taken as holding
+   * none where it may.
+   */
+  readonly machines: Effect.Effect<
+    Option.Option<ReadonlySet<string>>,
+    never,
+    ChildProcessSpawner.ChildProcessSpawner
+  >;
   /** The agent's GitHub token written where its VM's bindings read it, replacing the last, so a renewal needs no restart. */
   readonly githubToken: (
     agentId: string,
@@ -335,6 +346,12 @@ export interface LocalAgentPlatformSeam {
     readonly bytes: number;
     readonly sha256: string;
   }) => Effect.Effect<void, LocalAgentStateUnopened>;
+  /**
+   * The share of the disk holding the folder given that stands free, from 0
+   * to 1; none where it could not be read. A sweep lets a saved agent's
+   * folder go before its warm window ends where it runs low.
+   */
+  readonly diskFree: (folder: string) => Effect.Effect<Option.Option<number>>;
   /**
    * Whether agents on this device may have run directly on it, before every
    * agent ran in a VM: This Mac's did, a host's never. On such a device the

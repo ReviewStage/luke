@@ -8,7 +8,7 @@ import { WorkingMark } from "../working-mark/working-mark.js";
 /**
  * task-agents-mark.tsx -- the one icon a task's row ends with: how its agents stand, most pressing first.
  *
- * An agent that failed wears the failed triangle every failure wears; an
+ * An agent that failed wears the failed mark every failure wears; an
  * agent at work, the working mark; and else the pull request they left, in GitHub's
  * glyph and colour for where it stands: open in the success green, a draft
  * in the muted ink, merged in the merged purple, closed in the danger red.

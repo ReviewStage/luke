@@ -433,8 +433,9 @@ function mountLinked(userId: string) {
 }
 
 function button(page: HTMLElement, text: string): HTMLButtonElement {
+  // Note that a row is found by its title, since an Inbox item's row reads its task line first.
   const found = [...page.querySelectorAll("button")].find((each) =>
-    each.textContent?.startsWith(text),
+    (each.querySelector(".luke-list-row-title") ?? each).textContent?.startsWith(text),
   );
   assert.ok(found, `${text} stands`);
   return found;
@@ -507,13 +508,13 @@ test("each row opens what it names: an agent its tab, an item the Inbox on it, a
   assert.deepEqual(opened.tasks, [DASHBOARD.id]);
 });
 
-test("a waiting item is the Inbox's own row: its task named on a line of its own over its preview, its time at the end, and its card hung beside it, which names the agent its row leaves out", async () => {
+test("a waiting item is the Inbox's own row: its task named on a line of its own over its title, its time at that line's end, and its card hung beside it, which names the agent its row leaves out", async () => {
   const { page } = mount(CHARLES.userId);
   await settle();
 
   const row = button(page, "Retry 429s too?");
   assert.equal(row.querySelector(".home-row-context"), null, "no task name at the row's end");
-  const lead = row.querySelector('.luke-list-row-lead[data-at="line"]');
+  const lead = row.querySelector('.luke-list-row-lead[data-at="above"]');
   assert.equal(lead?.textContent, RETRIES.name);
   assert.equal(
     lead?.closest(".luke-list-row-description"),

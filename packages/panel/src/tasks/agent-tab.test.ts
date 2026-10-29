@@ -344,7 +344,7 @@ const FAILURE_LINES: readonly {
       failedPart("run_on_mac", { command: "pnpm test" }),
       toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
     ],
-    label: "2 tool calls, a call failed",
+    label: "2 tool calls, 1 failed",
   },
   {
     name: "a stopped turn's run of calls that all answered",
@@ -362,7 +362,16 @@ const FAILURE_LINES: readonly {
       toolPart("read_file", { filePath: "src/new.ts" }, { content: "export {}" }),
       { type: "text", text: "Read it." },
     ],
-    label: "2 tool calls, 1 message, a call failed",
+    label: "2 tool calls, 1 message, 1 failed",
+  },
+  {
+    name: "a finished turn's lead holding two calls that failed",
+    parts: [
+      failedPart("run_on_mac", { command: "pnpm test" }),
+      failedPart("read_file", { filePath: "src/new.ts" }),
+      { type: "text", text: "Neither ran." },
+    ],
+    label: "2 tool calls, 2 failed",
   },
   {
     name: "a finished turn's lead whose calls all answered",
@@ -391,15 +400,18 @@ const FAILURE_LINES: readonly {
         },
       ],
     ]),
-    label: "1 tool call, 1 subagent, a call failed",
+    label: "1 tool call, 1 subagent, 1 failed",
   },
 ];
 
 for (const { name, parts, standings, label } of FAILURE_LINES) {
-  test(`a closed fold's line wears the failed mark where a call it holds failed: ${name}`, () => {
+  test(`a closed fold's line wears the failed mark and says how many failed where calls it holds failed: ${name}`, () => {
     const { container } = drawn(assistant(parts), false, standings);
     const line = container.querySelector("[data-turn-fold] > summary");
     assert.deepEqual(failureOn(line), { marked: label !== undefined, label });
+    // The label's last part is how many failed, which the line says in words beside its mark.
+    const failed = label?.slice(label.lastIndexOf(", ") + 2);
+    if (failed !== undefined) assert.ok(line?.textContent?.endsWith(failed), failed);
   });
 }
 

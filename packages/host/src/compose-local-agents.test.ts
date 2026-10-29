@@ -33,7 +33,7 @@ import {
   deviceAgentLayout,
 } from "@luke/features/device-agent-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Clock, ConfigProvider, Deferred, Duration, Effect, Layer } from "effect";
+import { Clock, ConfigProvider, Deferred, Duration, Effect, Layer, Option } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { systemError } from "effect/PlatformError";
 import { TestClock } from "effect/testing";
@@ -219,6 +219,7 @@ const followingDevice = (
       requests: () => Effect.never,
       claimRequest: () => Effect.succeed({ claimed: false as const }),
       answerRequest: () => Effect.succeed(true),
+      liveAgents: () => Effect.succeed(undefined),
       githubToken: (agentId: string) =>
         Effect.sync(() => {
           asked.push(agentId);
@@ -302,6 +303,7 @@ const followingDevice = (
         worktreeScript: () => "exit 0",
         stateSealed: () => Effect.die("this device saves no state"),
         stateOpened: () => Effect.die("this device restores no state"),
+        diskFree: () => Effect.succeed(Option.none()),
       }),
     );
     const clock = options.clock ?? (yield* Clock.Clock);
