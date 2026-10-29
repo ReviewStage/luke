@@ -74,9 +74,9 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * While the Pilot experiment is on, a task's card offers Pilot or Agent at
  * the head row's end, set to Pilot: how the task is worked, kept on the task
  * as it starts (`TASK_MODE`). A pick holds for this card alone, and a refused
- * card opened again holds the one it was pressed with. A bare task and an
- * automation's agent are worked by agents, so ⌘Return on an empty box names
- * no mode, and an automation's card offers none.
+ * card opened again holds the one it was pressed with. A bare task takes
+ * the mode picked too, so one started as a pilot task stands as one before
+ * any agent is started on it. An automation's card offers none.
  *
  * The words are a coding agent's prompt. Start stands once there are
  * words or files, and a repository, without which it is held and
@@ -480,8 +480,8 @@ export function NewTaskComposer({
       card: { ...(forAutomation ? { purpose } : undefined), repository, choice, press, words },
     });
   };
-  // ⌘Return on a box with nothing in it starts a bare task: no call and no agent.
-  const bare = () => begin();
+  // ⌘Return on a box with nothing in it starts a bare task: no call and no agent, in the mode picked.
+  const bare = () => begin(asked === undefined ? {} : { mode: asked });
   const startsBare = !forAutomation && !filled;
 
   const onKey = (event: KeyboardEvent): boolean => {
