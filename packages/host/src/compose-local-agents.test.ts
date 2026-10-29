@@ -327,11 +327,13 @@ const followingDevice = (
   });
 
 it.effect(
-  "a device registers as sandboxed, signed in to nothing, and launches its agent in a VM with a GitHub token from Luke, its commit identity set in its repository first",
+  "a device registers as sandboxed, signed in to nothing, and launches its agent in a VM with a GitHub token from Luke, its commit identity set in its repository first, keeping the agent as one it made",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { registered, spawned, asked, tokens } = yield* followingDevice(() => Effect.void);
+        const { registered, spawned, asked, tokens, files } = yield* followingDevice(
+          () => Effect.void,
+        );
         yield* until(() => spawned.some((each) => each.program === VM_RUNNER));
 
         // Note that no login of the device's reaches a VM, so the service pays with the sign-in saved in Luke, or refuses.
@@ -353,6 +355,11 @@ it.effect(
         );
         assert.deepEqual(asked, [AGENT_ID]);
         assert.deepEqual(tokens, ["ghs_fixture_1"]);
+        // Note that the uninstall removes the agents this record names, and no other Luke install's.
+        assert.ok(
+          files.has(`${STATE_ROOT}/owned-agents/${AGENT_ID}`),
+          "the launch keeps the agent in the device's record of the agents it made",
+        );
         const runner = spawned.find((each) => each.program === VM_RUNNER);
         assert.equal(runner?.env?.LUKE_RUNNER_TOKEN, SECRET_ENV.LUKE_RUNNER_TOKEN);
         assert.equal(

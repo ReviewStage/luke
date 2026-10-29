@@ -218,10 +218,10 @@ export interface LocalAgentSandbox {
   readonly stopped: (
     agentId: string,
   ) => Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner>;
-  /** The agent's VM deleted, and the token kept for it beside it; its folder is the follower's to remove. */
+  /** The agent's VM deleted, and the token kept for it beside it; its folder is the follower's to remove. Whether the VM is gone, since one left standing stays in the record an uninstall deletes by. */
   readonly deleted: (
     agentId: string,
-  ) => Effect.Effect<void, never, ChildProcessSpawner.ChildProcessSpawner | FileSystem>;
+  ) => Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner | FileSystem>;
   /** The agent's GitHub token written where its VM's bindings read it, replacing the last, so a renewal needs no restart. */
   readonly githubToken: (
     agentId: string,

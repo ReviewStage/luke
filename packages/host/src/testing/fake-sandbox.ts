@@ -42,7 +42,7 @@ export function fakeSandbox(ready: LocalAgentSandbox["ready"] = () => Effect.voi
     }),
     signalled: (agentId) => Effect.sync(() => void signalled.push(agentId)),
     stopped: (agentId) => Effect.sync(() => stopped.push(agentId)).pipe(Effect.as(true)),
-    deleted: (agentId) => Effect.sync(() => deleted.push(agentId)),
+    deleted: (agentId) => Effect.sync(() => deleted.push(agentId)).pipe(Effect.as(true)),
     githubToken: (_agentId, token) => Effect.sync(() => tokens.push(token)),
     deviceGit: () => ({}),
   };
