@@ -7,16 +7,14 @@
  * back as the panel's own answer. A task's or an agent's inbox is followed
  * while a panel holds its stream open: the host follows one on the first stream of it and
  * lets it go with the last, and every change it tells reaches every stream
- * of it. Every item the account reaches is followed the same way, one
- * follow for every stream, told by the plans and agents that moved, and a
- * stream that opens on it is told every one held. How many streams stand
- * open of each, and the account's items as told so far, is all else held
- * here; the notices (`@luke/host/agent-notices`) watch what waits across
- * the account on a read of their own.
+ * of it. How many streams stand open of each is all else held here. Every
+ * item the account reaches reaches a panel on app state, never here, so a
+ * panel asks only that it be read again; the notices
+ * (`@luke/host/agent-notices`) watch what waits across the account on a
+ * read of their own.
  */
 
 import type {
-  AgentAccountItems,
   AgentInboxAnsweredView,
   AgentInboxAnswerParams,
   AgentInboxAttachmentParams,
@@ -45,10 +43,8 @@ export interface AgentInboxProceduresDependencies {
     agentInboxFollow(scope: AgentInboxScope): Effect.Effect<void>;
     agentInboxUnfollow(scope: AgentInboxScope): Effect.Effect<void>;
     onInboxChanged(listener: (changed: AgentInboxChanged) => void): () => void;
-    /** Every item the account reaches followed at the host, heard through `onAccountItemsChanged`; following again starts over, told whole. */
-    agentAccountItemsFollow(): Effect.Effect<void>;
-    agentAccountItemsUnfollow(): Effect.Effect<void>;
-    onAccountItemsChanged(listener: (told: AgentAccountItems) => void): () => void;
+    /** Every item the account reaches read again at once, as Try again asks. */
+    agentInboxItemsRetry(): Effect.Effect<void>;
     agentInboxAnswer(params: AgentInboxAnswerParams): Effect.Effect<AgentInboxAnsweredView>;
     agentInboxClose(params: AgentInboxCloseParams): Effect.Effect<AgentInboxAnsweredView>;
     agentInboxMessage(params: AgentInboxMessageParams): Effect.Effect<AgentInboxMessagedView>;
@@ -67,30 +63,11 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
   return actor.panel ? Effect.void : Effect.fail(refused());
 }
 
-/** The one key the account's items are followed under, since they are the signed-in account's. */
-const ACCOUNT_ITEMS = "account";
-
-/**
- * What a stream that opens on the account's items is told: every scope
- * held, the scopes that moved told over those before, and one told with no
- * items left out. A whole change or a failure stands for itself.
- */
-function itemsFolded(held: AgentAccountItems, told: AgentAccountItems): AgentAccountItems {
-  if ("failure" in held || "failure" in told || told.whole) return told;
-  const moved = told.scopes.map((each) => each.scope);
-  const kept = held.scopes.filter(
-    (each) => !moved.some((scope) => scope.kind === each.scope.kind && scope.id === each.scope.id),
-  );
-  return { whole: true, scopes: [...kept, ...told.scopes].filter((each) => each.items.length > 0) };
-}
-
 export function agentInboxProcedures(dependencies: AgentInboxProceduresDependencies) {
   const { host } = dependencies;
   /** Every inbox a window holds a stream open of, so the host lets one go only with the last. */
   const openInboxes: OpenFollows<AgentInboxChanged["inbox"], AgentInboxScope> =
     MutableHashMap.empty();
-  /** The account's items while any window holds a stream of them open, every change told so far folded into one. */
-  const openItems: OpenFollows<AgentAccountItems> = MutableHashMap.empty();
   return {
     [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: actPort[
       AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
@@ -112,23 +89,11 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
       );
       return streamed(yield* Stream.toAsyncIterableEffect(changes));
     }),
-    [AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW]: actPort[
-      AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEMS_RETRY]: actPort[
+      AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEMS_RETRY
     ].effect(function* ({ context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const told = followedStream(
-        {
-          keyOf: () => ACCOUNT_ITEMS,
-          follow: host.agentAccountItemsFollow,
-          unfollow: host.agentAccountItemsUnfollow,
-          onChanged: host.onAccountItemsChanged,
-          valueOf: (changed: AgentAccountItems) => Option.some(changed),
-          fold: itemsFolded,
-        },
-        openItems,
-        undefined,
-      );
-      return streamed(yield* Stream.toAsyncIterableEffect(told));
+      yield* host.agentInboxItemsRetry();
     }),
     [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ANSWER]: actPort[
       AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ANSWER

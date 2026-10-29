@@ -2,6 +2,7 @@
  * app-state-store.ts -- the one document every window of a client is drawn from: the store that holds it, the push that carries it out, and the patches that move it.
  */
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { LIVE_READ } from "@luke/features/live-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { HostCapability } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/settings/microphone";
@@ -9,7 +10,7 @@ import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
 import type { BuildCommit } from "@luke/settings/update";
 import { keepIdentity } from "@luke/wire";
 import { type Context, Effect, type Scope, Stream, SubscriptionRef } from "effect";
-import { type AppState, NO_ACCESS } from "../app-state.js";
+import { type AppState, NO_ACCESS, UNREAD } from "../app-state.js";
 import type { HostBootstrap } from "../host-operator.js";
 import type { RunMode } from "../run-mode.js";
 import { idleUpdateSnapshot } from "../update-service.js";
@@ -219,6 +220,7 @@ export function initialAppState(
     tasks: IDLE_TASKS_VIEW,
     agents: { unseen: [] },
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], agents: [], failedRuns: [] },
+    [LIVE_READ.INBOX_ITEMS]: UNREAD,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     network: { online: true },

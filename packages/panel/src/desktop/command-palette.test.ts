@@ -31,6 +31,7 @@ import { PLAN_ACTOR, TASK_TREE_ENTRY, type Task, type TaskSummary } from "@luke/
 import type { TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import type { AppHostRead, AppInboxItems } from "@luke/host/app-state";
 import type { PortActResult } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
@@ -62,18 +63,21 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/
 import {
   fakeActPort,
   fakeActPortAnswering,
-  fakeActPortCalls,
   fakeAppBridge,
   refusedOnPort,
   type SentPortAct,
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
+import {
+  DESKTOP_CAPABILITIES,
+  handCapabilities,
+  handInboxItems,
+  handState,
+} from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { keyPressed, reportEventTiming } from "../testing/event-timing.js";
-import { followedInboxes } from "../testing/followed-inboxes.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
@@ -132,33 +136,32 @@ function openPalette(
   page?: { agentId: string; workspaceId: string },
   capabilities: readonly HostCapability[] = DESKTOP_CAPABILITIES,
   tab: PanelTab = PANEL_TAB.TASKS,
+  /** A registry of its own, so the palette reads main's document anew as the test handed it; the window's shared one where none is given. */
+  registry?: AtomRegistry.AtomRegistry,
 ): Sent {
   const sent: Sent = { tabs: [], views: [] };
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
   roots.push(root);
-  act(() =>
-    root.render(
-      createElement(WindowPalette, {
-        available: true,
-        tab,
-        onTabChange: (tab) => sent.tabs.push(tab),
-        tasks,
-        settings: {
-          rows: {
-            settings: settingsView(),
-            accountDrawn: true,
-            capabilities,
-          },
-          capabilities,
-          onViewChange: (view) => sent.views.push(view),
-        },
-        readFiles,
-        page,
-      }),
-    ),
-  );
+  const palette = createElement(WindowPalette, {
+    available: true,
+    tab,
+    onTabChange: (tab) => sent.tabs.push(tab),
+    tasks,
+    settings: {
+      rows: {
+        settings: settingsView(),
+        accountDrawn: true,
+        capabilities,
+      },
+      capabilities,
+      onViewChange: (view) => sent.views.push(view),
+    },
+    readFiles,
+    page,
+  });
+  act(() => root.render(registry === undefined ? palette : onRegistry(registry, palette)));
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
   });
@@ -3001,33 +3004,38 @@ const PREVIEWS: InboxItem = {
   settledAt: 9_000,
 };
 
-/** The palette over a window whose listed workspace's task holds the items main pushes as `inbox` says, main's word of it last changed at `changed`, every Inbox item it opens recorded. */
-function paletteOverInbox(inbox: () => AgentInboxChanged["inbox"], changed = 9_000) {
-  const main = followedInboxes((scope) =>
-    scope.kind === INBOX_SCOPE_KIND.PLAN && scope.id === ROTATION.id ? inbox() : undefined,
-  );
-  fakeActPort({ ...fakeActPortCalls(), ...main.procedures });
+/** The account's feed holding the items given on the listed workspace's task, or refused. */
+function fedOf(inbox: AgentInboxChanged["inbox"]): AppHostRead<AppInboxItems> {
+  if ("failure" in inbox) return { failed: true };
+  return {
+    rows: { [INBOX_SCOPE_KIND.PLAN]: { [ROTATION.id]: inbox.items }, [INBOX_SCOPE_KIND.AGENT]: {} },
+  };
+}
+
+/** The palette over a window whose listed workspace's task holds the items the account's feed holds as `inbox` says, main's word of it last changed at `changed`, every Inbox item it opens recorded; and how the feed moves. */
+function paletteOverInbox(inbox: AgentInboxChanged["inbox"], changed = 9_000) {
+  const deliver = handInboxItems(fedOf(inbox));
   const opened: InboxChoice[] = [];
   const tasks = tasksControl({
     tasks: [ROTATION],
     inboxTasks: [{ taskId: ROTATION.id, items: 2, updatedAt: changed }],
   });
-  openPalette({
-    ...tasks,
-    inboxView: { ...tasks.inboxView, onOpenItem: (choice) => opened.push(choice) },
-  });
-  return { main, opened };
+  openPalette(
+    { ...tasks, inboxView: { ...tasks.inboxView, onOpenItem: (choice) => opened.push(choice) } },
+    undefined,
+    undefined,
+    DESKTOP_CAPABILITIES,
+    PANEL_TAB.TASKS,
+    AtomRegistry.make(),
+  );
+  return { deliver: (next: AgentInboxChanged["inbox"]) => deliver(fedOf(next)), opened };
 }
 
-test("the Inbox is followed only once it is searched, and then lists what needs you first, each item beside its task", async () => {
-  const { main } = paletteOverInbox(() => ({ items: [PREVIEWS, ROTATE] }));
-  await settle();
-  assert.deepEqual(main.asked, [], "opening the palette follows no inbox");
-
+test("the Inbox searched lists what needs you first, each item beside its task", async () => {
+  paletteOverInbox({ items: [PREVIEWS, ROTATE] });
   chooseFilter("Inbox");
   await settle();
 
-  assert.deepEqual(main.asked, [`${INBOX_SCOPE_KIND.PLAN}:${ROTATION.id}`]);
   assert.deepEqual(rows(), [
     "Which webhook secret should rotate? · Billing usage alerts",
     "Use acme.dev for previews? · Billing usage alerts",
@@ -3035,7 +3043,7 @@ test("the Inbox is followed only once it is searched, and then lists what needs 
 });
 
 test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its Inbox row and its time at its end, and its card hung beside it", async () => {
-  paletteOverInbox(() => ({ items: [PREVIEWS, ROTATE] }));
+  paletteOverInbox({ items: [PREVIEWS, ROTATE] });
   chooseFilter("Inbox");
   await settle();
 
@@ -3060,7 +3068,7 @@ test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its I
 });
 
 test("an Inbox item is found under All by words its thread says, which its row says beside its task", async () => {
-  paletteOverInbox(() => ({ items: [PREVIEWS, ROTATE] }));
+  paletteOverInbox({ items: [PREVIEWS, ROTATE] });
 
   type("stripe");
   await settle();
@@ -3071,7 +3079,7 @@ test("an Inbox item is found under All by words its thread says, which its row s
 });
 
 test("choosing an Inbox item opens it in the Inbox, as a notification's would", async () => {
-  const { opened } = paletteOverInbox(() => ({ items: [PREVIEWS, ROTATE] }));
+  const { opened } = paletteOverInbox({ items: [PREVIEWS, ROTATE] });
   chooseFilter("Inbox");
   await settle();
 
@@ -3084,7 +3092,7 @@ test("choosing an Inbox item opens it in the Inbox, as a notification's would", 
 });
 
 test("an Inbox that could not be read says so, rather than that nothing matches", async () => {
-  paletteOverInbox(() => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
+  paletteOverInbox({ failure: AGENT_CALL_FAILURE.UNANSWERED });
   chooseFilter("Inbox");
   await settle();
 
@@ -3092,7 +3100,7 @@ test("an Inbox that could not be read says so, rather than that nothing matches"
 });
 
 test("a query its title half answers says the thread's words that answer the rest, never the title again", async () => {
-  paletteOverInbox(() => ({ items: [PREVIEWS, ROTATE] }));
+  paletteOverInbox({ items: [PREVIEWS, ROTATE] });
   chooseFilter("Inbox");
 
   type("rotate stripe");
@@ -3138,7 +3146,7 @@ test("an Inbox item is found by a form's field and the value it was answered wit
     ],
     settledAt: 4_000,
   };
-  paletteOverInbox(() => ({ items: [PORT] }));
+  paletteOverInbox({ items: [PORT] });
   chooseFilter("Inbox");
 
   type("587");
@@ -3148,8 +3156,8 @@ test("an Inbox item is found by a form's field and the value it was answered wit
   assert.deepEqual(rows(), ["Which mail server? · Billing usage alerts · SMTP port"]);
 });
 
-test("while main says a task's inbox changed later than its push, a query it does not answer says the inbox is still being read", async () => {
-  const { main } = paletteOverInbox(() => ({ items: [PREVIEWS] }), 12_000);
+test("while main says a task's inbox changed later than the feed holds it, a query it does not answer says the inbox is still being read", async () => {
+  const { deliver } = paletteOverInbox({ items: [PREVIEWS] }, 12_000);
   chooseFilter("Inbox");
 
   type("webhook");
@@ -3157,15 +3165,13 @@ test("while main says a task's inbox changed later than its push, a query it doe
   assert.equal(emptyLine(), "Reading your inbox");
 
   const fresh = { ...ROTATE, updatedAt: 12_000 };
-  act(() =>
-    main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: ROTATION.id }, { items: [PREVIEWS, fresh] }),
-  );
+  act(() => deliver({ items: [PREVIEWS, fresh] }));
   await settle();
   assert.deepEqual(rows(), ["Which webhook secret should rotate? · Billing usage alerts"]);
 });
 
 test("an Inbox that could not be read says so in the Inbox's own group, beside the rows other groups matched, and its Retry reads it again", async () => {
-  paletteOverInbox(() => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
+  paletteOverInbox({ failure: AGENT_CALL_FAILURE.UNANSWERED });
 
   type("billing");
   await settle();

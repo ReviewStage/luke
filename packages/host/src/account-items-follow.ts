@@ -1,9 +1,4 @@
-import {
-  AGENT_CALL_FAILURE,
-  type AgentAccountItems,
-  type AgentScopeItems,
-  INBOX_SCOPE_KIND,
-} from "@luke/features/agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import {
   ACCOUNT_INBOX_ITEMS,
@@ -14,37 +9,21 @@ import {
   inboxInOrder,
   inboxOfLiveRows,
 } from "@luke/features/live-wire";
-import {
-  Duration,
-  Effect,
-  Equal,
-  MutableHashMap,
-  Option,
-  RcMap,
-  Ref,
-  type Scope,
-  Stream,
-  SubscriptionRef,
-} from "effect";
+import { Effect, Ref } from "effect";
+import type { AppHostRead, AppInboxItems } from "./app-state.js";
 import { type InboxReads, itemsRead } from "./inbox-collections.js";
-import {
-  followTakingRows,
-  LIVE_RESTART,
-  LIVE_STATE,
-  restarting,
-  type TxWait,
-} from "./live-follow.js";
-import { InboxScopeKey } from "./scope-inbox-follow.js";
+import { followTakingRows, restarting, type TxWait } from "./live-follow.js";
 
 /**
- * account-items-follow.ts -- every inbox item the account reaches, whole, followed over the service's one held poll and told to a window by the plans and agents that moved.
+ * account-items-follow.ts -- every inbox item the account reaches, whole, followed over the service's one held poll for the signed-in session and told whole as it moves.
  *
  * The host follows the account's items read (`/api/live/inbox-items`,
- * `live-follow.ts`) once a window follows it. Each answer carries where
+ * `live-follow.ts`) for as long as the session's account reads stand
+ * (`live-collection.ts`'s `accountReads`). Each answer carries where
  * every item stands (`stamps`), which is the whole set, and the items
  * changed since the instant the poll named (`since`) whole; the poll is
  * held on the stamps alone (`ACCOUNT_INBOX_ITEMS.HELD_ON`). The follow
- * keeps every item it was sent, grouped by its plan, or by its agent where
+ * keeps every item it was sent, with the plan it is on, or its agent where
  * that has no task, and asks each poll past the latest change it holds.
  *
  * Some moves change a stamp without resending its item. A read mark and a
@@ -54,18 +33,12 @@ import { InboxScopeKey } from "./scope-inbox-follow.js";
  * and dropped.
  *
  * The items stand in a collection among the reads an inbox write reaches
- * (`inbox-collections.ts`), each answer taken as its poll answers, so a
- * window is told them as they stand after each answer and each write drawn
- * over them: every plan and agent holding any as the follow starts
- * (`whole`), then only those that moved, one holding nothing now with no
- * items. A read refused as signed out ends the follow, which is read again
- * after `LIVE_RESTART`, and told whole again. A window's follow outlives a
- * sign-out: it is told there are none, and the next account's items whole
- * once one signs in (`followSignedInItems`).
+ * (`inbox-collections.ts`), each answer taken as its poll answers, and are
+ * told whole, by plan and agent, after each answer and each write drawn
+ * over them. A read the service refused, or a follow that stopped, is read
+ * again after `LIVE_RESTART`, keeping what it told; one refused before it
+ * ever answered is told as failed.
  */
-
-/** How long a follow no reader holds is kept, so a window coming back finds it standing. */
-const IDLE = Duration.seconds(30);
 
 /**
  * What of a stamp moves only with its item resent, so a stamp moving on any
@@ -77,38 +50,25 @@ const RESENT_ON = ["revision", "version", "status", "updatedAt", "waitsOn", "mes
 /** A read the service did not answer, `gone` where it never will again. */
 type SealFailure = { readonly failure: string; readonly gone?: boolean };
 
-/** One item as the follow holds it: whole, the stamp it was last sent with, its read mark and channel kept current, and the plan or agent it is grouped under. */
+/** The kind of holder an item is on: a plan, or an agent with no task. */
+type HolderKind = (typeof INBOX_SCOPE_KIND)[keyof typeof INBOX_SCOPE_KIND];
+
+/** One item as the follow holds it: whole, the stamp it was last sent with, its read mark and channel kept current, and the plan or agent it is on. */
 interface HeldItem {
   readonly item: InboxItem;
   readonly sent: InboxItemStamp;
-  readonly scope: InboxScopeKey;
+  readonly kind: HolderKind;
+  readonly holder: string;
 }
 
 /** Every item held, by its id. */
 type Held = ReadonlyMap<string, HeldItem>;
-
-/** A follow before its first rows, with the items they hold, or stopped for good. */
-type LiveState =
-  | { readonly kind: typeof LIVE_STATE.WAITING }
-  | { readonly kind: typeof LIVE_STATE.STANDING; readonly held: Held }
-  | { readonly kind: typeof LIVE_STATE.BROKEN };
-
-/** What an account's read is answered from: its follow, or that the service answered none. */
-type Standing =
-  | {
-      readonly kind: typeof LIVE_STATE.LIVE;
-      readonly items: SubscriptionRef.SubscriptionRef<LiveState>;
-    }
-  | { readonly kind: typeof LIVE_STATE.BROKEN };
 
 /** What the next poll asks: the instant it is sent every item changed since, none for every item, and whether it asks past no digest, so an item whose stamp moved alone is sent. */
 interface Asking {
   readonly since: number | undefined;
   readonly again: boolean;
 }
-
-/** Every plan's and agent's items, each in the held read's order. */
-type Scopes = MutableHashMap.MutableHashMap<InboxScopeKey, readonly InboxItem[]>;
 
 export interface AccountItemsDependencies {
   /** The account's items read for the account named, those changed since `since` whole, its rows inline where `poll`, held past `after` where it names one; signed out, or a failure where the service answered none. */
@@ -118,18 +78,15 @@ export interface AccountItemsDependencies {
     poll: boolean,
     after?: string,
   ) => Effect.Effect<AccountInboxItemsLiveAnswer | SealFailure>;
-  /** The reads an inbox write reaches, among which each account's stands while it is followed. */
+  /** The reads an inbox write reaches, among which the account's stands while it is followed. */
   readonly reads: InboxReads;
 }
 
-/** Each account's follow, by its id, held while a window reads it and a while after. */
-export type AccountItems = RcMap.RcMap<string, Standing>;
-
 /** The plan an item's stamp names, or its agent where it has no task. */
-function scopeOf(stamp: InboxItemStamp): InboxScopeKey {
+function holderOf(stamp: InboxItemStamp): Pick<HeldItem, "kind" | "holder"> {
   return stamp.planId === null
-    ? new InboxScopeKey({ kind: INBOX_SCOPE_KIND.AGENT, id: stamp.agentId })
-    : new InboxScopeKey({ kind: INBOX_SCOPE_KIND.PLAN, id: stamp.planId });
+    ? { kind: INBOX_SCOPE_KIND.AGENT, holder: stamp.agentId }
+    : { kind: INBOX_SCOPE_KIND.PLAN, holder: stamp.planId };
 }
 
 /**
@@ -146,13 +103,13 @@ function heldAfter(
   const next = new Map<string, HeldItem>();
   const unsent: InboxItemStamp[] = [];
   for (const stamp of rows.stamps) {
-    const scope = scopeOf(stamp);
+    const on = holderOf(stamp);
     const before = held.get(stamp.id);
     const item = sent.get(stamp.id);
     if (item !== undefined) {
-      // Note that an item sent again as it stood stays the object held, so the plan it is on is told only when it moved.
+      // Note that an item sent again as it stood stays the object held, so its holder's list keeps its identity where nothing moved.
       const same = before !== undefined && JSON.stringify(before.item) === JSON.stringify(item);
-      next.set(stamp.id, { item: same ? before.item : item, sent: stamp, scope });
+      next.set(stamp.id, { item: same ? before.item : item, sent: stamp, ...on });
       continue;
     }
     if (before === undefined) {
@@ -167,7 +124,7 @@ function heldAfter(
             item: { ...before.item, unread: stamp.unread, channelId: stamp.channelId },
             sent: { ...before.sent, unread: stamp.unread, channelId: stamp.channelId },
           };
-    next.set(stamp.id, { item: patched.item, sent: patched.sent, scope });
+    next.set(stamp.id, { item: patched.item, sent: patched.sent, ...on });
   }
   return { held: next, unsent };
 }
@@ -180,177 +137,102 @@ function sinceOf(held: Held, again: readonly InboxItemStamp[]): number | undefin
   return since;
 }
 
-/** Every plan's and agent's items held, each in the order the held read answers a scope's. */
-function scopesOf(held: Held): Scopes {
-  const grouped = MutableHashMap.empty<InboxScopeKey, InboxItem[]>();
-  for (const { item, scope } of held.values()) {
-    const items = MutableHashMap.get(grouped, scope);
-    if (Option.isSome(items)) items.value.push(item);
-    else MutableHashMap.set(grouped, scope, [item]);
+/** Every item held, as `shown` draws it where it holds it, by its plan or agent, each holder's in the order its own read answers them. */
+function inboxItemsOf(held: Held, shown: ReadonlyMap<string, InboxItem>): AppInboxItems {
+  const grouped = {
+    [INBOX_SCOPE_KIND.PLAN]: new Map<string, InboxItem[]>(),
+    [INBOX_SCOPE_KIND.AGENT]: new Map<string, InboxItem[]>(),
+  };
+  for (const [id, { item, kind, holder }] of held) {
+    const drawn = shown.get(id) ?? item;
+    const items = grouped[kind].get(holder);
+    if (items === undefined) grouped[kind].set(holder, [drawn]);
+    else items.push(drawn);
   }
-  const scopes: Scopes = MutableHashMap.empty();
-  for (const [scope, items] of grouped) MutableHashMap.set(scopes, scope, inboxInOrder(items));
-  return scopes;
-}
-
-/** A scope's items as the window is told them. */
-function toldScope(scope: InboxScopeKey, items: readonly InboxItem[]): AgentScopeItems {
-  return { scope: { kind: scope.kind, id: scope.id }, items };
-}
-
-/** Whether two lists hold the same items, each as it stands, in the same order. */
-function sameItems(one: readonly InboxItem[], other: readonly InboxItem[]): boolean {
-  return (
-    one.length === other.length && one.every((item, index) => Equal.equals(item, other[index]))
-  );
-}
-
-/** What the window is told of `now`: every scope where nothing was told before, else the scopes that moved since `before`, one gone with no items. */
-function toldOf(before: Scopes | undefined, now: Scopes): AgentAccountItems {
-  if (before === undefined) {
-    return { whole: true, scopes: [...now].map(([scope, items]) => toldScope(scope, items)) };
-  }
-  const moved: AgentScopeItems[] = [];
-  for (const [scope, items] of now) {
-    const was = MutableHashMap.get(before, scope);
-    if (Option.isNone(was) || !sameItems(was.value, items)) moved.push(toldScope(scope, items));
-  }
-  for (const [scope] of before) {
-    if (!MutableHashMap.has(now, scope)) moved.push(toldScope(scope, []));
-  }
-  return { whole: false, scopes: moved };
-}
-
-/** The map a composer holds for as long as it stands. */
-export function accountItems(
-  dependencies: AccountItemsDependencies,
-): Effect.Effect<AccountItems, never, Scope.Scope> {
-  return RcMap.make({
-    idleTimeToLive: IDLE,
-    lookup: (userId: string) =>
-      Effect.gen(function* () {
-        const first = yield* dependencies.seal(userId, undefined, false);
-        if ("failure" in first) return { kind: LIVE_STATE.BROKEN } as const;
-        const items = yield* SubscriptionRef.make<LiveState>({ kind: LIVE_STATE.WAITING });
-        const asking = yield* Ref.make<Asking>({ since: undefined, again: false });
-        const read = yield* itemsRead();
-        let wait: TxWait | undefined;
-        /** Every item as the read last answered it, with the stamp it was sent with and its scope. */
-        let held: Held | undefined;
-        /** The stamps last asked for again, so a stamp whose item the service does not send is asked for once rather than every poll. */
-        let askedFor: string | undefined;
-        /** The items as they stand, a standing write's among them, each under the scope the read answered it in. */
-        const drawn = Effect.suspend(() => {
-          if (held === undefined) return Effect.void;
-          const shown = new Map(read.shown().map((item) => [item.id, item]));
-          const now = new Map(
-            [...held].map(([id, kept]) => [id, { ...kept, item: shown.get(id) ?? kept.item }]),
-          );
-          return SubscriptionRef.set(items, { kind: LIVE_STATE.STANDING, held: now });
-        });
-        yield* dependencies.reads.stand({
-          draw: read.draw,
-          take: read.take,
-          txWait: () => wait,
-          drawn,
-          accountWide: true,
-        });
-        // Note that a poll already held when a stamp moved alone asks again only once it answers, by the hold's end at the latest.
-        const landed = (decoded: AccountInboxItemsLiveRows) =>
-          Effect.gen(function* () {
-            const after = heldAfter(held ?? new Map(), decoded);
-            held = after.held;
-            read.items.answer([...after.held.values()].map((kept) => kept.item));
-            const unsent = after.unsent.length === 0 ? undefined : JSON.stringify(after.unsent);
-            const again = unsent !== undefined && unsent !== askedFor;
-            askedFor = unsent;
-            yield* Ref.set(asking, {
-              since: sinceOf(after.held, again ? after.unsent : []),
-              again,
-            });
-            yield* drawn;
-          });
-        const taken = followTakingRows(
-          {
-            poll: (after) =>
-              Effect.flatMap(
-                Ref.getAndUpdate(asking, (asked) => ({ ...asked, again: false })),
-                ({ since, again }) =>
-                  dependencies.seal(userId, since, true, again ? undefined : after),
-              ),
-            onTxWait: (handed) => {
-              wait = handed;
-            },
-            heldOn: ACCOUNT_INBOX_ITEMS.HELD_ON,
-          },
-          first,
-          accountInboxItemsLiveRowsSchema,
-          landed,
-        );
-        yield* Effect.forkScoped(
-          taken.pipe(
-            Effect.catch(() => Effect.void),
-            Effect.ensuring(SubscriptionRef.set(items, { kind: LIVE_STATE.BROKEN })),
-          ),
-        );
-        return { kind: LIVE_STATE.LIVE, items } as const;
-      }),
-  });
+  const ordered = (holders: ReadonlyMap<string, InboxItem[]>) =>
+    Object.fromEntries([...holders].map(([holder, items]) => [holder, inboxInOrder(items)]));
+  return {
+    [INBOX_SCOPE_KIND.PLAN]: ordered(grouped[INBOX_SCOPE_KIND.PLAN]),
+    [INBOX_SCOPE_KIND.AGENT]: ordered(grouped[INBOX_SCOPE_KIND.AGENT]),
+  };
 }
 
 /**
- * Every item the account `userId` reaches, told by plan and agent until the
- * fiber is let go: every one holding any once the first rows land, then
- * those that moved. A read the service refused, or a follow that stopped,
- * is let go and read again after `LIVE_RESTART`, and told whole again.
+ * Every item the account `userId` reaches, told whole until the fiber is
+ * let go: once the first rows land, then after each answer and each write
+ * drawn over them. A read the service refused, or a follow that stopped, is
+ * read again after `LIVE_RESTART`; one refused before any answer is told
+ * as failed, and one after keeps what was told.
  */
 export function followAccountItems(
-  items: AccountItems,
+  dependencies: AccountItemsDependencies,
   userId: string,
-  tell: (told: AgentAccountItems) => Effect.Effect<void>,
+  tell: (read: AppHostRead<AppInboxItems>) => Effect.Effect<void>,
 ): Effect.Effect<void> {
+  /** Whether any read answered, so a later refusal keeps what was told. */
+  let answered = false;
   const attempt = Effect.scoped(
     Effect.gen(function* () {
-      const standing = yield* RcMap.get(items, userId);
-      if (standing.kind === LIVE_STATE.BROKEN) return;
-      yield* SubscriptionRef.changes(standing.items).pipe(
-        Stream.takeWhile((state) => state.kind !== LIVE_STATE.BROKEN),
-        Stream.filter((state) => state.kind === LIVE_STATE.STANDING),
-        Stream.map((state) => scopesOf(state.held)),
-        Stream.mapAccum(
-          (): Scopes | undefined => undefined,
-          (before, now) => [now, [toldOf(before, now)]] as const,
-        ),
-        Stream.filter((told) => !("whole" in told) || told.whole || told.scopes.length > 0),
-        Stream.runForEach(tell),
-      );
+      const first = yield* dependencies.seal(userId, undefined, false);
+      if ("failure" in first) {
+        if (!answered) yield* tell({ failed: true });
+        return true;
+      }
+      const asking = yield* Ref.make<Asking>({ since: undefined, again: false });
+      const read = yield* itemsRead();
+      let wait: TxWait | undefined;
+      /** Every item as the read last answered it, with the stamp it was sent with and its holder. */
+      let held: Held | undefined;
+      /** The stamps last asked for again, so a stamp whose item the service does not send is asked for once rather than every poll. */
+      let askedFor: string | undefined;
+      /** The items as they stand, a standing write's among them, each on the holder the read answered it on. */
+      const drawn = Effect.suspend(() => {
+        if (held === undefined) return Effect.void;
+        answered = true;
+        const shown = new Map(read.shown().map((item) => [item.id, item]));
+        return tell({ rows: inboxItemsOf(held, shown) });
+      });
+      yield* dependencies.reads.stand({
+        draw: read.draw,
+        take: read.take,
+        txWait: () => wait,
+        drawn,
+        accountWide: true,
+      });
+      // Note that a poll already held when a stamp moved alone asks again only once it answers, by the hold's end at the latest.
+      const landed = (decoded: AccountInboxItemsLiveRows) =>
+        Effect.gen(function* () {
+          const after = heldAfter(held ?? new Map(), decoded);
+          held = after.held;
+          read.items.answer([...after.held.values()].map((kept) => kept.item));
+          const unsent = after.unsent.length === 0 ? undefined : JSON.stringify(after.unsent);
+          const again = unsent !== undefined && unsent !== askedFor;
+          askedFor = unsent;
+          yield* Ref.set(asking, {
+            since: sinceOf(after.held, again ? after.unsent : []),
+            again,
+          });
+          yield* drawn;
+        });
+      yield* followTakingRows(
+        {
+          poll: (after) =>
+            Effect.flatMap(
+              Ref.getAndUpdate(asking, (asked) => ({ ...asked, again: false })),
+              ({ since, again }) =>
+                dependencies.seal(userId, since, true, again ? undefined : after),
+            ),
+          onTxWait: (handed) => {
+            wait = handed;
+          },
+          heldOn: ACCOUNT_INBOX_ITEMS.HELD_ON,
+        },
+        first,
+        accountInboxItemsLiveRowsSchema,
+        landed,
+      ).pipe(Effect.catch(() => Effect.void));
+      return true;
     }),
   );
-  return restarting(attempt.pipe(Effect.andThen(RcMap.invalidate(items, userId)), Effect.as(true)));
-}
-
-/**
- * The items of whoever `signedIn` names, until the fiber is let go: told
- * unanswered while nobody is, then followed for whoever signs in next,
- * looked for every `LIVE_RESTART`. Note that the window's stream stays open
- * through a sign-out, and is followed again by nothing else, so this is
- * what tells it the next account's items whole.
- */
-export function followSignedInItems(
-  items: AccountItems,
-  signedIn: () => string | undefined,
-  tell: (told: AgentAccountItems) => Effect.Effect<void>,
-): Effect.Effect<void> {
-  const account: Effect.Effect<string> = Effect.suspend(() => {
-    const userId = signedIn();
-    return userId === undefined
-      ? Effect.andThen(Effect.sleep(LIVE_RESTART), account)
-      : Effect.succeed(userId);
-  });
-  return Effect.suspend(() =>
-    Effect.andThen(
-      signedIn() === undefined ? tell({ failure: AGENT_CALL_FAILURE.UNANSWERED }) : Effect.void,
-      Effect.flatMap(account, (userId) => followAccountItems(items, userId, tell)),
-    ),
-  );
+  return restarting(attempt);
 }

@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { ARROW_KEY_BASELINE, ARROW_KEY_EXEMPTIONS } from "../shared/arrow-key-guard.ts";
 import { BUSY_BASELINE } from "../shared/busy-guard.ts";
+import { UNMIGRATED_FOLLOWS } from "../shared/host-read-guard.ts";
 import { KEPT_STORAGE_BASELINE, NOT_VIEW_STORAGE } from "../shared/kept-guard.ts";
 import { isDoorFile, LUCIDE_BASELINE } from "../shared/lucide-guard.ts";
 import { PRESS_LISTENER_BASELINE } from "../shared/press-listener-guard.ts";
@@ -56,6 +57,7 @@ async function antiSlopListProblems(root: string): Promise<readonly string[]> {
     keptBaseline,
     keptAllowed,
     { name: "busy-baseline.json", paths: Object.keys(BUSY_BASELINE) },
+    { name: "follows-unmigrated.json", paths: Object.keys(UNMIGRATED_FOLLOWS) },
     { name: "press-listener-baseline.json", paths: Object.keys(PRESS_LISTENER_BASELINE) },
     { name: "arrow-keys.json's baseline", paths: Object.keys(ARROW_KEY_BASELINE) },
     { name: "arrow-keys.json's exemptions", paths: ARROW_KEY_EXEMPTIONS },

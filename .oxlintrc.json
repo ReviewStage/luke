@@ -24,6 +24,7 @@
     "anti-slop/no-direct-view-storage": "error",
     "anti-slop/no-document-press-listener": "error",
     "anti-slop/no-focused-or-skipped-test": "error",
+    "anti-slop/no-follow-outside-host-read": "error",
     "anti-slop/no-hand-written-arrow-keys": "error",
     "anti-slop/no-hand-written-live-region": "error",
     "anti-slop/no-internal-vi-mock": "error",
