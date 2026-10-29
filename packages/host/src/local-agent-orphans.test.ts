@@ -5,11 +5,15 @@
  * its machines in a set, on a real temporary folder, against a fake service
  * whose live-agents read answers what each test lists, read by read, and
  * never answers past the last, so a test knows a pass is over once the next
- * read is asked. Synthetic ids throughout.
+ * read is asked. Note that the disk answers on no clock of the test's, so
+ * the clock is moved only once nothing asked of the disk waits unanswered,
+ * or a slow disk would let it run past a pass's window while the pass waits
+ * on the disk. Synthetic ids throughout.
  */
 
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { DeviceAgentClaimedLine } from "@luke/features";
@@ -54,6 +58,26 @@ const AGENT = {
   OTHER_INSTALL: "4e5f6071-8293-4a41-8d5e-6f7a8b9c0d1e",
   RECENT: "5f607182-93a4-4b52-9e6f-7a8b9c0d1e2f",
 } as const;
+
+/** How many turns in a row must find nothing asked of the disk unanswered before the follower is taken to wait on the clock alone. */
+const QUIET_TURNS = 3;
+
+/** Whether a request this process made of the disk is still unanswered. */
+const diskAsked = () =>
+  process.getActiveResourcesInfo().some((resource) => resource.startsWith("FSReq"));
+
+/**
+ * The follower's fibers given their turns, and the disk its time, until
+ * `QUIET_TURNS` turns in a row find nothing asked of the disk unanswered, so
+ * a test moves the clock only while the follower waits on it and never
+ * while the disk keeps it, however slow the disk.
+ */
+const settled = Effect.gen(function* () {
+  for (let quiet = 0; quiet < QUIET_TURNS; ) {
+    yield* Effect.promise(() => nextTurn());
+    quiet = diskAsked() ? 0 : quiet + 1;
+  }
+});
 
 /** An id for the `index`th of many agents. */
 const agentNumbered = (index: number) =>
@@ -263,17 +287,16 @@ const following = (input: {
 
     /**
      * The first `count` reads answered, and the clock moved on a second at a
-     * time, the follower's fibers and the disk they wait on, which waits on
-     * no clock, given their turn between, until the `count`th pass is over,
-     * which it is once the read after it is asked.
+     * time, each move once the follower has `settled`, until the `count`th
+     * pass is over, which it is once the read after it is asked.
      */
     const passed = (count: number) =>
       Effect.gen(function* () {
         for (const gate of gates.slice(0, count)) Deferred.doneUnsafe(gate, Exit.void);
         // Note that two passes stand five minutes apart, and each round moves the clock a second.
         for (let round = 0; round < 20 * 60 * count && reads <= count; round += 1) {
+          yield* settled;
           yield* TestClock.adjust(Duration.seconds(1));
-          for (let turn = 0; turn < 4; turn += 1) yield* Effect.yieldNow;
         }
         assert.ok(reads > count, `the follower read ${reads} times, short of ${count + 1}`);
       });
