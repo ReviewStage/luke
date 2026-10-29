@@ -330,11 +330,13 @@ const ROW_CLASS =
 
 /**
  * The fold's chevron, a control of its own standing over the leading mark's
- * cell, past the press's inset, beside the press rather than in it; its
- * place past the inset and its reveal are `list-row.css`'s.
+ * cell, beside the press rather than in it, at least a glyph's size; its box
+ * is the mark's, set in from the cell's edges by the press's inset and the
+ * mark's gap, and that place and its reveal are `list-row.css`'s, so no
+ * margin or self-alignment is spelled here to outrank them.
  */
 const FOLD_CLASS =
-  "luke-list-row-fold col-[leading] row-1 z-1 m-0 grid size-control-icon cursor-press place-items-center justify-self-start rounded-control border-0 bg-transparent p-0 text-muted-foreground";
+  "luke-list-row-fold col-[leading] row-1 z-1 grid min-h-control-icon min-w-control-icon cursor-press place-items-center rounded-control border-0 bg-transparent p-0 text-muted-foreground";
 
 /** Which way a key asks a row's fold to stand: → open, ← folded. */
 const FOLD_KEY_OPENS: Readonly<Record<string, boolean>> = { ArrowRight: true, ArrowLeft: false };
