@@ -20,6 +20,7 @@ import {
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
+  ListRowCount,
   type ListRowFold,
   type MenuRow,
   nextRowOrHead,
@@ -35,7 +36,7 @@ import {
 } from "@luke/ui";
 import { type AssigneeFace, accountActor, assigneeFace, creatorActor } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
-import { repositoryLabel } from "@luke/ui/task-list-model";
+import { type ChildTaskCount, repositoryLabel } from "@luke/ui/task-list-model";
 import {
   DOCUMENT_REGION,
   RENAME_FAILED_NOTE,
@@ -779,6 +780,7 @@ export function SidebarTask({
   faces = EVERY_FACE,
   depth,
   fold,
+  childCount,
   onOpen,
 }: {
   tasks: TasksControl;
@@ -801,6 +803,8 @@ export function SidebarTask({
   depth?: number | undefined;
   /** The child tasks nested under the row, which it folds; none where the list holds none. */
   fold?: ListRowFold | undefined;
+  /** How many of the task's child tasks are finished, of all of them, said before its time; none where it has none. */
+  childCount?: ChildTaskCount | undefined;
   onOpen: () => void;
 }): React.JSX.Element {
   const rename = useInlineRename(task.id, tasks.onRenameTask);
@@ -884,6 +888,13 @@ export function SidebarTask({
                 {worn === undefined ? null : <AssigneeFaceMark face={worn} heard={false} />}
                 {drafted ? <DraftMark /> : null}
                 <TaskRowStatus task={task} />
+                {childCount === undefined ? null : (
+                  <ListRowCount
+                    settled={childCount.finished}
+                    total={childCount.total}
+                    label={`${childCount.finished} of ${childCount.total} child tasks finished`}
+                  />
+                )}
                 <Time at={at} now={now} hint={false} />
               </span>
             )

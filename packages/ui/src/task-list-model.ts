@@ -486,3 +486,37 @@ export function drawnTaskRows(
   for (const node of taskRowTree(rows)) draw(node, 0);
   return drawn;
 }
+
+/** How many of a task's child tasks are finished, of all of them. */
+export interface ChildTaskCount {
+  readonly finished: number;
+  readonly total: number;
+}
+
+/** Whether a task has settled: done, or canceled, which is as settled as done. */
+function finished(task: TaskSummary): boolean {
+  return task.status === TASK_STATUS.DONE || task.status === TASK_STATUS.CANCELED;
+}
+
+/**
+ * How many of each parent's child tasks are finished (done or canceled),
+ * by the parent's id, for the parents with any. Note that only a task's
+ * direct children count, never theirs, and that `tasks` is every task the
+ * workspace holds rather than the rows a view draws, since the view
+ * hides the finished ones by default and the count is how many of them there are.
+ */
+export function childTaskCounts(
+  tasks: readonly TaskSummary[],
+): ReadonlyMap<string, ChildTaskCount> {
+  const counts = new Map<string, ChildTaskCount>();
+  for (const task of tasks) {
+    const { id, parentTaskId } = task;
+    if (parentTaskId === undefined || parentTaskId === id) continue;
+    const was = counts.get(parentTaskId) ?? { finished: 0, total: 0 };
+    counts.set(parentTaskId, {
+      finished: was.finished + (finished(task) ? 1 : 0),
+      total: was.total + 1,
+    });
+  }
+  return counts;
+}

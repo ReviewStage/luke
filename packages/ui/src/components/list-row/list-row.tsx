@@ -35,6 +35,7 @@ import {
   selectionRoot,
   useListSelection,
 } from "../selection/list-selection.js";
+import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 import { useRowSwipe } from "./use-row-swipe.js";
 
 export type { ListRowMenu } from "../row-menu/row-menu.js";
@@ -257,6 +258,32 @@ export interface ListRowFold {
   readonly onOpenChange: (open: boolean) => void;
   /** What the fold holds, said as the chevron's name ("Child tasks of Ship the release"). */
   readonly label: string;
+}
+
+/**
+ * How many of the things a row holds are settled, of all of them, as a row
+ * says it at its end ("2/5"), before its time: figures in the muted ink,
+ * whose words a screen reader hears whole (`label`, "2 of 5 child tasks
+ * finished") in place of the figures.
+ */
+export function ListRowCount({
+  settled,
+  total,
+  label,
+}: {
+  readonly settled: number;
+  readonly total: number;
+  /** What the figures count, said whole to a reader who hears no figures. */
+  readonly label: string;
+}): React.JSX.Element {
+  return (
+    <span className="luke-list-row-count me-tight-gap flex-none tabular-nums">
+      <span aria-hidden="true">
+        {settled}/{total}
+      </span>
+      <VisuallyHidden>{label}</VisuallyHidden>
+    </span>
+  );
 }
 
 /** How a list stands: its rows apart on the ground, or edge to edge in a card. */

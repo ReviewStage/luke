@@ -10,6 +10,7 @@ import {
   List,
   type ListDensity,
   ListRow,
+  ListRowCount,
   type MenuEntry,
   MoreButton,
   PencilIcon,
@@ -145,7 +146,18 @@ function NestedRows(): React.JSX.Element {
             key={task.id}
             leading={<GLYPH.TIME />}
             title={task.name}
-            meta={task.updated}
+            meta={
+              <>
+                {folds ? (
+                  <ListRowCount
+                    settled={task.id === "launch" ? 1 : 0}
+                    total={NESTED.filter((child) => child.parent === task.id).length}
+                    label={`Child tasks of ${task.name}, partly finished`}
+                  />
+                ) : null}
+                {task.updated}
+              </>
+            }
             ink={LIST_ROW_INK.SIDEBAR}
             depth={depthOf(task.parent)}
             fold={
