@@ -60,7 +60,7 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
   return {
     launch: vm.launch,
     sandbox: vm.sandbox,
-    runnerBundle: `${runnerFolder}/${RUNNER_BUNDLE}`,
+    runnerBundle: `${vm.runnerFolder}/${RUNNER_BUNDLE}`,
     runnerEnv: { [RUNNER_ENV.PLACE]: RUNNER_PLACE.HOST },
     formerlyDirect: options.os.formerlyDirect,
     deviceName: options.os.deviceName(),
