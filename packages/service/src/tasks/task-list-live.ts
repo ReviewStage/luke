@@ -85,6 +85,7 @@ function tasksStatement(userId: string) {
           creatorActor: task.creatorActor,
           creatorAgentId: task.creatorAgentId,
           parentTaskId: task.parentTaskId,
+          mode: task.mode,
         },
         {
           pinnedAt: taskPin.pinnedAt,

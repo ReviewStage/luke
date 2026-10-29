@@ -104,6 +104,8 @@ const taskLiveRowSchema = EffectSchema.Struct({
   creatorAgentId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   /** The task this one is a child of; null for a task at the top. Absent from a service before child tasks. */
   parentTaskId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  /** How the task is worked; absent from a service before modes. */
+  mode: plan.mode,
 });
 
 /** Who archived an agent as its row holds it. */
@@ -373,6 +375,7 @@ function taskSummaryOf(
     ...(row.parentTaskId === undefined || row.parentTaskId === null
       ? undefined
       : { parentTaskId: row.parentTaskId }),
+    ...(row.mode === undefined ? undefined : { mode: row.mode }),
     ...(agents === undefined ? undefined : { agents: agentsSummaryOf(agents, now) }),
   };
 }

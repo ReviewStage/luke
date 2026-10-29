@@ -47,6 +47,8 @@ import { trimmedText } from "./text-schema.js";
  * the workspace it starts in, or none for the account's first one.
  * A task may be the child of another, to any depth, which its summary names
  * by id.
+ * A task is worked by its agents or by a pilot (`TASK_MODE`), which its
+ * summary names.
  * The starting account and the conversation a task resumes in are the
  * service's own and never travel here.
  *
@@ -129,9 +131,24 @@ export const TASK_PRIORITY_ORDER: readonly TaskPriority[] = [
   TASK_PRIORITY.NONE,
 ];
 
+/**
+ * How a task is worked: by the agents its members start on it, or by one
+ * pilot agent that breaks it into child tasks and runs agents on them. A
+ * task's mode is fixed as it starts; every task from before it is worked by
+ * agents.
+ */
+export const TASK_MODE = {
+  AGENT: "agent",
+  PILOT: "pilot",
+} as const;
+
+export type TaskMode = (typeof TASK_MODE)[keyof typeof TASK_MODE];
+
 export const taskStatusSchema = EffectSchema.Literals(Object.values(TASK_STATUS));
 
 export const taskPrioritySchema = EffectSchema.Literals(Object.values(TASK_PRIORITY));
+
+export const taskModeSchema = EffectSchema.Literals(Object.values(TASK_MODE));
 
 /**
  * The member a task is assigned to, by their account's id, as a start or a
@@ -498,6 +515,8 @@ const taskSummaryFields = {
   runsOn: EffectSchema.optionalKey(taskRunsOnSchema),
   /** The task this one is a child of; absent for a task at the top, and from a service before child tasks. */
   parentTaskId: EffectSchema.optionalKey(wireUuidSchema),
+  /** How the task is worked; absent from a service before modes, where every task is worked by its agents. */
+  mode: EffectSchema.optionalKey(taskModeSchema),
 };
 
 /** How much of a task's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */

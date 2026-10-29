@@ -3,9 +3,11 @@ import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-reposito
 import type { PlanAgentEdit } from "@luke/features/plan-template";
 import {
   PLAN_ACTOR,
+  TASK_MODE,
   TASK_PRIORITY,
   TASK_STATUS,
   type TaskCreatorActor,
+  type TaskMode,
   type TaskPriority,
   type TaskStatus,
 } from "@luke/features/task-wire";
@@ -70,6 +72,8 @@ export const task = pgTable(
     parentTaskId: uuid("parent_task_id").references((): AnyPgColumn => task.id, {
       onDelete: "set null",
     }),
+    /** How the task is worked (`TASK_MODE`): by its agents, or by a pilot; fixed as it starts. */
+    mode: text("mode").$type<TaskMode>().notNull().default(TASK_MODE.AGENT),
     /** Where the task stands (`TASK_STATUS`). */
     status: text("status").$type<TaskStatus>().notNull().default(TASK_STATUS.TODO),
     /** How much the task matters (`TASK_PRIORITY`); none until someone weighs it. */
