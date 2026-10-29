@@ -157,8 +157,12 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import {
+  MERGE_POLICY,
+  type MergePolicy,
   TASK_LIST_ARCHIVED,
+  TASK_MODE,
   TASK_STATUS,
+  taskAnswerSchema,
   taskDeleteAnswerSchema,
   taskListAnswerSchema,
   taskStartAnswerSchema,
@@ -218,6 +222,7 @@ import { answerInboxAsk, closeInboxItem, postInboxThread } from "../inbox/inbox-
 import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import type { WebServices } from "../runtime.js";
+import { MERGE_POLICY_NOTICE } from "../tasks/merge-policy-notice.js";
 import { tasksProcedures } from "../tasks/tasks-procedures.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
@@ -4611,6 +4616,43 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         assert.equal(archived.status, HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(yield* Queue.poll(sandboxes.stops), Option.none());
+      }),
+  );
+
+  it.effect(
+    "a merge-policy switch is refused on a task that is no pilot tree's top, and on a top pilot task is written and told to its pilot in the member's words, once per move",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, task, agent, sessionId, ask } = yield* startedAgent(eve, {
+          running: false,
+        });
+        const switched = (mergePolicy: MergePolicy) =>
+          ask(request(TASK(task.id), owner, { method: "PATCH", body: { mergePolicy } }));
+        assert.equal((yield* switched(MERGE_POLICY.HOLD)).status, HOSTED_HTTP_STATUS.BAD_REQUEST);
+        yield* Database.use((db) =>
+          db.update(taskTable).set({ mode: TASK_MODE.PILOT }).where(eq(taskTable.id, task.id)),
+        );
+        yield* Database.use((db) =>
+          db.update(agentTable).set({ kind: AGENT_KIND.PILOT }).where(eq(agentTable.id, agent.id)),
+        );
+        const sends = eve.sent.length;
+
+        const held = yield* switched(MERGE_POLICY.HOLD);
+        assert.equal(held.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(held.body));
+        assert.equal(
+          readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.OK, held).plan.mergePolicy,
+          MERGE_POLICY.HOLD,
+        );
+        assert.deepEqual(
+          eve.sent
+            .slice(sends)
+            .map((each) => [each.authorization, each.sessionId, each.message.message]),
+          [[`Bearer ${owner}`, sessionId, MERGE_POLICY_NOTICE[MERGE_POLICY.HOLD]]],
+        );
+        // The same switch again moves nothing, so the pilot hears nothing more.
+        yield* switched(MERGE_POLICY.HOLD);
+        assert.equal(eve.sent.length, sends + 1);
       }),
   );
 

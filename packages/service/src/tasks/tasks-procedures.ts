@@ -104,6 +104,7 @@ import {
 import { logStoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import { archiveAskedStatus } from "./archive-settle.js";
+import { tellPilotOfMergePolicy } from "./merge-policy-notice.js";
 import {
   PLAN_SAVE_REFUSAL,
   PLAN_SAVE_STATUS,
@@ -150,6 +151,13 @@ const reachedTask = /* @__PURE__ */ Effect.fnUntraced(function* (
   const reached = yield* hostedStoreOrUnavailable(readTaskHeader(userId, taskId));
   if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return reached.value;
+});
+
+/** A top pilot task, whose merge policy a switch changes; any other task's is refused, a child's being its top task's. */
+const topPilotTask = /* @__PURE__ */ Effect.fnUntraced(function* (stored: TaskHeader) {
+  if (stored.mode !== TASK_MODE.PILOT || stored.parentTaskId !== null) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
 });
 
 /** A move the workspace's GitHub refused under the plan's lock, carried out of the store's change as the procedure's refusal. */
@@ -583,6 +591,11 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * the row names under its lock, so one changed meanwhile is the one
      * confirmed.
      *
+     * A merge policy is switched on a pilot task at the top of its tree
+     * alone, and refused as an invalid request on any other; one that moves
+     * is told to the task's pilot as the member's words once it is written
+     * (`merge-policy-notice.ts`).
+     *
      * A plan is archived no longer; an archive an older build asks for
      * stops every coding agent of the plan first, as a Stop stops one, then
      * settles the plan instead, and an unarchive puts it back to work
@@ -628,6 +641,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       }
       // Where its agents run is set at creation, so a change that names another place is refused before anything is stopped.
       yield* runsOnChange(userId, taskId, changes.runsOn);
+      // A merge policy is a pilot tree's, set on its top task alone, whose children follow it.
+      if (changes.mergePolicy !== undefined) {
+        yield* topPilotTask(yield* reachedTask(userId, taskId));
+      }
       const archiving = changes.archived === true;
       if (archiving) {
         const agents = yield* hostedStoreOrUnavailable(listAgents(userId, taskId));
@@ -663,6 +680,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           ...(status === undefined ? undefined : { status }),
           ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
           ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
+          ...(changes.mergePolicy === undefined ? undefined : { mergePolicy: changes.mergePolicy }),
         },
         organizationId === undefined ? undefined : movedRepositoryReached(organizationId, userId),
       ).pipe(
@@ -675,7 +693,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         ),
       );
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const { task: plan, txid } = task.value;
+      const { task: plan, txid, mergePolicyMoved } = task.value;
+      // The pilot is told only of a policy that moved under the row's lock, so a repeat of the same switch wakes no one.
+      if (mergePolicyMoved) yield* tellPilotOfMergePolicy(seams, request, writer, userId, taskId);
       return txid === undefined ? { plan } : { plan, txid };
     }),
 
