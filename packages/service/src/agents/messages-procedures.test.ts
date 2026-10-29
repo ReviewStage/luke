@@ -9,14 +9,14 @@
  * message has, as invalid; a body past its cap is too large; and a path
  * the router serves under another method is refused as such. The held
  * reads themselves, answered when something moves and let go at the hold,
- * are `coding-agents-app.test.ts`'s, over a real dialect.
+ * are `agents-app.test.ts`'s, over a real dialect.
  */
 
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { HOSTED_API_ERROR } from "@luke/features";
-import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS } from "@luke/features/agent-wire";
 import { Context, Effect, Option } from "effect";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
@@ -107,7 +107,7 @@ it.effect(
   "a message whose words run past the bound is too long, one that does not read or names a key no message has is invalid, and a body past its cap is too large",
   () =>
     Effect.gen(function* () {
-      const long = "x".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1);
+      const long = "x".repeat(AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1);
       assert.deepEqual(
         yield* answer(MESSAGES, {
           method: "POST",
@@ -120,7 +120,7 @@ it.effect(
         yield* answer("/api/agents/not-an-id/messages", {
           method: "POST",
           body: JSON.stringify({
-            text: "x".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+            text: "x".repeat(AGENT_BOUNDS.MAX_MESSAGE_CHARS),
             clientKey: "key-1",
           }),
         }),

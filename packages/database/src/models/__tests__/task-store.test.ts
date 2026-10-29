@@ -1,18 +1,17 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
-import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { PLAN_ACTOR, TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
+import type { StoredPullRequest } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
 import { channel } from "../../schemas/channel.js";
-import type { StoredPullRequest } from "../../schemas/coding-agent.js";
 import { inboxItem } from "../../schemas/inbox.js";
 import { task } from "../../schemas/task.js";
 import { taskPin } from "../../schemas/task-pin.js";
@@ -24,8 +23,8 @@ import {
   openTaskAgent,
   openWorkspace,
 } from "../../testing/index.js";
+import { archiveAgent, recordAgentPublished } from "../agent-store.js";
 import { ensureGeneralChannel } from "../channel-store.js";
-import { archiveCodingAgent, recordCodingAgentPublished } from "../coding-agent-store.js";
 import {
   assignUnassignedTask,
   beginTaskWork,
@@ -296,17 +295,14 @@ it.layer(getTestDB())("an untitled plan's name", (it) => {
 });
 
 it.layer(getTestDB())("a plan's starting text", (it) => {
-  it.effect("a plan starts as the template, and one started without planning starts empty", () =>
+  it.effect("a plan starts empty", () =>
     Effect.gen(function* () {
       const owner = yield* openAccount;
       const organizationId = yield* openWorkspace(owner);
-      const planned = yield* createTask(owner, { organizationId });
-      const unplanned = yield* createTask(owner, { organizationId, planning: false });
+      const started = yield* createTask(owner, { organizationId });
 
-      const opened = (taskId: string) =>
-        Effect.map(readTask(owner, taskId), (read) => Option.getOrUndefined(read)?.task.document);
-      assert.equal((yield* opened(planned.id))?.body, DEFAULT_PLAN_TEMPLATE);
-      assert.deepEqual(yield* opened(unplanned.id), { body: "", assumptions: [] });
+      const read = yield* readTask(owner, started.id);
+      assert.deepEqual(Option.getOrUndefined(read)?.task.document, { body: "", assumptions: [] });
     }),
   );
 });
@@ -347,11 +343,6 @@ it.layer(getTestDB())("a plan's brief", (it) => {
         });
         const unbriefed = yield* createTask(owner, { organizationId });
         const blank = yield* createTask(owner, { organizationId, brief: "   " });
-        const unplanned = yield* createTask(owner, {
-          organizationId,
-          planning: false,
-          brief: "Fix the typo in the invite email.",
-        });
 
         const briefOf = (taskId: string) =>
           Effect.map(readTask(owner, taskId), (read) => Option.getOrUndefined(read)?.brief);
@@ -361,7 +352,6 @@ it.layer(getTestDB())("a plan's brief", (it) => {
         );
         assert.equal(yield* briefOf(unbriefed.id), undefined);
         assert.equal(yield* briefOf(blank.id), undefined);
-        assert.equal(yield* briefOf(unplanned.id), "Fix the typo in the invite email.");
       }),
   );
 });
@@ -834,12 +824,12 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         yield* beginTaskWork(dean, taskId);
 
         // No merged pull request yet: the reader's row keeps none, the other's is still open.
-        yield* recordCodingAgentPublished(dean, merged, pullRequestIn(PULL_REQUEST_STATE.OPEN));
+        yield* recordAgentPublished(dean, merged, pullRequestIn(PULL_REQUEST_STATE.OPEN));
         assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.IN_PROGRESS);
 
         // Merged, but the guard reads one standing agent at work, and sees only the standing ones.
-        yield* recordCodingAgentPublished(dean, merged, pullRequestIn(PULL_REQUEST_STATE.MERGED));
+        yield* recordAgentPublished(dean, merged, pullRequestIn(PULL_REQUEST_STATE.MERGED));
         const seen: string[] = [];
         const readerBusy = (agents: readonly { readonly id: string }[]) =>
           Effect.sync(() => {
@@ -869,18 +859,18 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         const { dean, taskId, workspace } = yield* openSharedTask;
         const merged = yield* openTaskAgent(dean, workspace, taskId);
         const drafting = yield* openTaskAgent(dean, workspace, taskId);
-        yield* recordCodingAgentPublished(dean, merged, pullRequestIn(PULL_REQUEST_STATE.MERGED));
-        yield* recordCodingAgentPublished(dean, drafting, pullRequestIn(PULL_REQUEST_STATE.DRAFT));
+        yield* recordAgentPublished(dean, merged, pullRequestIn(PULL_REQUEST_STATE.MERGED));
+        yield* recordAgentPublished(dean, drafting, pullRequestIn(PULL_REQUEST_STATE.DRAFT));
 
         assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
-        yield* recordCodingAgentPublished(dean, drafting, pullRequestIn(PULL_REQUEST_STATE.OPEN));
+        yield* recordAgentPublished(dean, drafting, pullRequestIn(PULL_REQUEST_STATE.OPEN));
         assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
 
         // Archived, the draft's agent is left out, and so would the merged one be.
-        yield* archiveCodingAgent(dean, drafting, true);
-        yield* archiveCodingAgent(dean, merged, true);
+        yield* archiveAgent(dean, drafting, true);
+        yield* archiveAgent(dean, merged, true);
         assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
-        yield* archiveCodingAgent(dean, merged, false);
+        yield* archiveAgent(dean, merged, false);
 
         // A question open for the developer holds the task; a notice does not.
         const question = yield* openInboxItem(dean, workspace, taskId, merged, true);
@@ -905,7 +895,7 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         const { dean, taskId, workspace } = yield* openSharedTask;
         const outsider = yield* openAccount;
         const merged = yield* openTaskAgent(dean, workspace, taskId);
-        yield* recordCodingAgentPublished(dean, merged, pullRequestIn(PULL_REQUEST_STATE.MERGED));
+        yield* recordAgentPublished(dean, merged, pullRequestIn(PULL_REQUEST_STATE.MERGED));
 
         assert.equal(yield* finishTaskWork(outsider, taskId, everyoneIdle), false);
         yield* updateTask(dean, taskId, { status: TASK_STATUS.CANCELED });

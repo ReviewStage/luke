@@ -9,7 +9,6 @@ import {
   GATEWAY_METHOD,
   type GatewayEventKind,
 } from "@luke/gateway";
-import { LIVE_VOICE } from "@luke/live";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { SETTINGS_RESET_SCOPE, THEME } from "@luke/settings";
 import { isRecord, type WireValue } from "@luke/wire";
@@ -67,8 +66,6 @@ const sendingSettings = Effect.fnUntraced(function* (packaged: boolean) {
     credential: NO_CREDENTIAL,
     readAccountKey: () => Effect.succeed(undefined),
     confirmAccount: () => Effect.void,
-    setVoice: () => Effect.void,
-    endLiveSession: Effect.void,
   });
   // The lifetime arms the counted events, where usage data is shared, and counts this launch.
   yield* settings.lifetime;
@@ -120,13 +117,12 @@ it.effect(
     }).pipe(Effect.provide([NodeFileSystem.layer, NodePath.layer])),
 );
 
-/** One browser tab's settings concern over the shared state root: what it sent its panel, and each voice it handed the live source. */
+/** One browser tab's settings concern over the shared state root, and what it sent its panel. */
 const tabOver = Effect.fnUntraced(function* (
   stateRoot: string,
   changedElsewhere: Layer.Layer<never> | Layer.Layer<SettingsChangedElsewhere>,
 ) {
   const sent = yield* Queue.unbounded<{ kind: GatewayEventKind; payload: WireValue }>();
-  const voices = yield* Queue.unbounded<string | undefined>();
   const machine = Layer.mergeAll(
     Layer.succeed(
       HostKernelTag,
@@ -155,11 +151,9 @@ const tabOver = Effect.fnUntraced(function* (
     credential: NO_CREDENTIAL,
     readAccountKey: () => Effect.succeed(undefined),
     confirmAccount: () => Effect.void,
-    setVoice: (voice) => Queue.offer(voices, voice),
-    endLiveSession: Effect.void,
   });
   yield* settings.lifetime;
-  return { settings, sent, voices };
+  return { settings, sent };
 });
 
 /** A writing tab, and a reading tab whose shell says the file changed each time `signal` is offered. */
@@ -194,40 +188,6 @@ it.effect(
           : undefined;
       assert.equal(sentTheme, THEME.DARK);
       assert.equal((yield* reader.settings.store.snapshot()).stored.theme, THEME.DARK);
-    }).pipe(
-      Effect.provideService(FetchHttpClient.Fetch, async () => new Response(null, { status: 204 })),
-      Effect.provide([NodeFileSystem.layer, NodePath.layer]),
-    ),
-);
-
-it.effect("a voice another tab chose reaches this tab's live source", () =>
-  Effect.gen(function* () {
-    const { writer, reader, signal } = yield* twoTabs();
-    yield* reader.settings.store.snapshot();
-
-    yield* writer.settings.store.set("voice", LIVE_VOICE.CEDAR);
-    Queue.offerUnsafe(signal, undefined);
-
-    assert.equal(yield* Queue.take(reader.voices), LIVE_VOICE.CEDAR);
-  }).pipe(
-    Effect.provideService(FetchHttpClient.Fetch, async () => new Response(null, { status: 204 })),
-    Effect.provide([NodeFileSystem.layer, NodePath.layer]),
-  ),
-);
-
-it.effect(
-  "a voice another tab chose reaches this tab's live source after this tab wrote another setting",
-  () =>
-    Effect.gen(function* () {
-      const { writer, reader, signal } = yield* twoTabs();
-      yield* reader.settings.store.snapshot();
-
-      yield* writer.settings.store.set("voice", LIVE_VOICE.CEDAR);
-      // This tab's own write reads the file first, and so already holds the voice before the signal lands.
-      yield* reader.settings.store.set("theme", THEME.DARK);
-      Queue.offerUnsafe(signal, undefined);
-
-      assert.equal(yield* Queue.take(reader.voices), LIVE_VOICE.CEDAR);
     }).pipe(
       Effect.provideService(FetchHttpClient.Fetch, async () => new Response(null, { status: 204 })),
       Effect.provide([NodeFileSystem.layer, NodePath.layer]),

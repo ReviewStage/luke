@@ -16,13 +16,7 @@ import {
   setConversationDeletedAt,
   type TurnInsertRow,
 } from "@luke/database/testing";
-import {
-  MESSAGE_AUTHOR,
-  MESSAGE_CHANNEL,
-  MESSAGE_ROLE,
-  TURN_ORIGIN,
-  TURN_STATUS,
-} from "@luke/wire";
+import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { type ToolSet, tool } from "ai";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
@@ -51,7 +45,7 @@ const TOOLS: ToolSet = {
   }),
 };
 
-const TYPED_ASK = { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED } as const;
+const TYPED_ASK = { channel: MESSAGE_CHANNEL.TYPED } as const;
 
 interface ConversationOverrides {
   readonly kind?: NonNullable<ConversationRow["kind"]>;

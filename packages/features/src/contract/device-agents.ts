@@ -16,6 +16,7 @@ import { Schema as EffectSchema } from "effect";
 import {
   DEVICE_AGENT_BOUNDS,
   deviceAgentAnswerRequestSchema,
+  deviceAgentBeatAnswerSchema,
   deviceAgentBeatRequestSchema,
   deviceAgentClaimRequestSchema,
   deviceAgentDeviceRequestSchema,
@@ -62,7 +63,7 @@ export const deviceAgentsContract = {
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_PRESENCE }))
     .input(exactInput(deviceAgentBeatRequestSchema))
-    .output(EffectSchema.flip(deviceAgentDoneAnswerSchema)),
+    .output(EffectSchema.flip(deviceAgentBeatAnswerSchema)),
   lines: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_LINES }))
     .input(deviceAgentDeviceRequestSchema)

@@ -12,15 +12,15 @@ import { shownSettingsView } from "./settings-rows.js";
  * and a page an experiment holds only while the account has it on.
  */
 
-test("a link to the Voice page shows Voice on the desktop and Profile on a platform without voice", () => {
-  const withoutVoice = DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.VOICE);
+test("a link to the Keyboard shortcuts page shows it on the desktop and Profile on a platform without the desktop app", () => {
+  const browser = DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP);
 
   assert.equal(
-    shownSettingsView(SETTINGS_VIEW.VOICE, DESKTOP_CAPABILITIES, NO_EXPERIMENTS),
-    SETTINGS_VIEW.VOICE,
+    shownSettingsView(SETTINGS_VIEW.SHORTCUTS, DESKTOP_CAPABILITIES, NO_EXPERIMENTS),
+    SETTINGS_VIEW.SHORTCUTS,
   );
   assert.equal(
-    shownSettingsView(SETTINGS_VIEW.VOICE, withoutVoice, NO_EXPERIMENTS),
+    shownSettingsView(SETTINGS_VIEW.SHORTCUTS, browser, NO_EXPERIMENTS),
     SETTINGS_VIEW.ACCOUNT,
   );
   assert.equal(
@@ -29,19 +29,20 @@ test("a link to the Voice page shows Voice on the desktop and Profile on a platf
   );
 });
 
-test("a link to the Memory page shows Memory only while the account has the Memory experiment on, and Profile otherwise", () => {
-  const memoryOn = { [EXPERIMENT.MEMORY]: true };
-
-  assert.equal(
-    shownSettingsView(SETTINGS_VIEW.MEMORY, DESKTOP_CAPABILITIES, memoryOn),
-    SETTINGS_VIEW.MEMORY,
-  );
-  assert.equal(
-    shownSettingsView(SETTINGS_VIEW.MEMORY, DESKTOP_CAPABILITIES, NO_EXPERIMENTS),
-    SETTINGS_VIEW.ACCOUNT,
-  );
-  assert.equal(
-    shownSettingsView(SETTINGS_VIEW.MEMORY, DESKTOP_CAPABILITIES, { [EXPERIMENT.MEMORY]: false }),
-    SETTINGS_VIEW.ACCOUNT,
-  );
-});
+test.each([
+  { name: "Memory", view: SETTINGS_VIEW.MEMORY, experiment: EXPERIMENT.MEMORY },
+  { name: "Hosts", view: SETTINGS_VIEW.HOSTS, experiment: EXPERIMENT.LOCAL_AGENTS },
+])(
+  "a link to the $name page shows it only while the account has its experiment on, and Profile otherwise",
+  ({ view, experiment }) => {
+    assert.equal(shownSettingsView(view, DESKTOP_CAPABILITIES, { [experiment]: true }), view);
+    assert.equal(
+      shownSettingsView(view, DESKTOP_CAPABILITIES, NO_EXPERIMENTS),
+      SETTINGS_VIEW.ACCOUNT,
+    );
+    assert.equal(
+      shownSettingsView(view, DESKTOP_CAPABILITIES, { [experiment]: false }),
+      SETTINGS_VIEW.ACCOUNT,
+    );
+  },
+);

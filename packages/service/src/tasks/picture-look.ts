@@ -20,8 +20,7 @@ import type { PlanDocumentBinding } from "./plan-notes.js";
  * reads what each picture shows in its alt text and caption. Most never need
  * more, and a picture is a large cost in a model's context, so the picture
  * itself is not sent with the plan: the model names one by its address when
- * the words are not enough, as the planning model looks at its whiteboard
- * (`board-look.ts`).
+ * the words are not enough.
  *
  * The picture is read as the account the turn runs as, through the plan's
  * membership gate (`readPlanAttachment`), and only under the plan the

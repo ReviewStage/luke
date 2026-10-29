@@ -3,7 +3,7 @@ import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/feat
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import * as Atom from "effect/reactivity/Atom";
 import { appStateDerivedAtom } from "../use-app-state.js";
-import { agentStillWriting } from "./coding-agent-model.js";
+import { agentStillWriting } from "./agent-model.js";
 
 /**
  * use-task-work.ts -- every agent a task holds and every pull request they opened, as the cards naming them read them, where the task's row names only the first few.

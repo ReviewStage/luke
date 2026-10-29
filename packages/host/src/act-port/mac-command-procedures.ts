@@ -7,8 +7,8 @@ import { type ActSender, actPort } from "./base.js";
  * mac-command-procedures.ts -- the developer's answer to a command an agent asked to run on this Mac, as a client answers it.
  *
  * The answer is carried to the host, which holds the ask and runs or
- * refuses the command by it. Only a panel draws the prompt, so the voice and
- * call windows are refused. An ask no longer waiting, answered already or
+ * refuses the command by it. Only a panel draws the prompt, so any other
+ * window is refused. An ask no longer waiting, answered already or
  * timed out, is answered all the same, since the prompt goes with it.
  */
 export interface MacCommandProceduresDependencies {

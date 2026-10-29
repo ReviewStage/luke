@@ -15,7 +15,7 @@
  */
 
 import { sameShape, TURN_ROW_DEPTH, type TurnRow } from "@luke/features/turn-rows";
-import type { AgentPart, TurnStretch } from "./coding-agent-model.js";
+import type { AgentPart, TurnStretch } from "./agent-model.js";
 
 /** How many of a turn's rows, and lines that reached it, one piece of it holds. */
 export const PIECE_ROWS = 6;

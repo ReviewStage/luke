@@ -26,14 +26,6 @@ export const CLIENT = {
 
 export type Client = (typeof CLIENT)[keyof typeof CLIENT];
 
-/** Which of the desktop's windows a scene shoots: the panel's, or the floating call window. */
-export const WINDOW = {
-  PANEL: "panel",
-  CALL: "call",
-} as const;
-
-export type SceneWindow = (typeof WINDOW)[keyof typeof WINDOW];
-
 /** What a step does. */
 export const STEP = {
   /** Presses a chord, Playwright's spelling (`ControlOrMeta+K`), as the client presses it (`pressedOn`). */
@@ -85,9 +77,7 @@ export interface Scene {
   readonly sidebar?: true;
   /** The clients that draw it; both where absent. */
   readonly clients?: readonly Client[];
-  /** The desktop window it shoots; the panel's where absent. */
-  readonly window?: SceneWindow;
-  /** Drawn only on the Mac (the call window, the video tile, a Page tab's HTML), so skipped on Linux with a note. */
+  /** Drawn only on the Mac (the video tile, a Page tab's HTML), so skipped on Linux with a note. */
   readonly macOnly?: true;
 }
 
@@ -99,8 +89,6 @@ const PLACE = {
   PERSON: "Person",
   AGENT: "Agent",
   TERMINAL: "Terminal",
-  CALL: "Call",
-  VOICE: "Voice",
   SETTINGS: "Settings",
   ADMIN: "Admin",
   AUTOMATIONS: "Automations",
@@ -258,7 +246,6 @@ export const SCENES: readonly Scene[] = [
     ],
   },
   // The plan's other faces.
-  { id: "plan-board", place: PLACE.PLAN, title: "The whiteboard", profile: "tasks-board" },
   {
     id: "plan-transcript",
     place: PLACE.PLAN,
@@ -420,44 +407,6 @@ export const SCENES: readonly Scene[] = [
     clients: DESKTOP_ONLY,
     macOnly: true,
   },
-  {
-    id: "call-panel",
-    place: PLACE.CALL,
-    title: "Mid-call, video off",
-    profile: "agent-call",
-    clients: DESKTOP_ONLY,
-    macOnly: true,
-  },
-  {
-    id: "call-window",
-    place: PLACE.CALL,
-    title: "The floating call window",
-    profile: "agent-call",
-    clients: DESKTOP_ONLY,
-    window: WINDOW.CALL,
-    macOnly: true,
-  },
-  {
-    id: "call-video",
-    place: PLACE.CALL,
-    title: "The video tile",
-    profile: "agent-call-video",
-    clients: DESKTOP_ONLY,
-    macOnly: true,
-  },
-  // The voice, as a fixture run stages it. Note that the voice profiles stage no call and no window of
-  // their own: the hidden voice window draws nothing, and the call window opens only on a call profile's
-  // staged call (`packages/host/src/fixture-stage.ts`). What they steer is the panel's voice notice
-  // (`packages/panel/src/window-voice.tsx`), where Luke speaking, alone or over the developer, only hides
-  // the failure lines, so the panel draws the idle window as it does unstaged; Output off draws the volume
-  // hint over it, the one picture they give. The web client has no voice at all.
-  {
-    id: "voice-muted",
-    place: PLACE.VOICE,
-    title: "Output off: the volume hint",
-    profile: "muted",
-    clients: DESKTOP_ONLY,
-  },
   // Settings, page by page.
   { id: "settings-account", place: PLACE.SETTINGS, title: "Account", profile: "settings-account" },
   {
@@ -467,6 +416,12 @@ export const SCENES: readonly Scene[] = [
     profile: "settings-workspace",
   },
   { id: "settings-agents", place: PLACE.SETTINGS, title: "Agents", profile: "settings-agents" },
+  {
+    id: "settings-hosts",
+    place: PLACE.SETTINGS,
+    title: "Hosts",
+    profile: "settings-hosts",
+  },
   {
     id: "settings-integrations",
     place: PLACE.SETTINGS,

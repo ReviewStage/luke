@@ -20,11 +20,9 @@ Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const DAY = {
   day: "2026-10-17",
-  "coding-agents": 12.5,
+  agents: 12.5,
   luke: 3,
-  voice: 0.5,
   dictation: 0.01,
-  avatar: 0,
 };
 
 /** A synthetic week: one priced model, one the catalog does not price, and one account. */
@@ -40,7 +38,6 @@ function cost(overrides: Partial<AdminCost> = {}): AdminCost {
     },
     perAccount: { accounts: 4, meanUsd: 4.0025, medianUsd: 1.5 },
     perMergedPullRequest: { mergedPullRequests: 2, spendUsd: 8.005 },
-    voice: { minutes: 10, spendUsd: 0.5, unpricedMinutes: 0 },
     daily: [DAY],
     byModel: [
       {
@@ -158,7 +155,6 @@ test("each headline tile reads its figure and its hint under its name", async ()
   expect(cardOf(page, "List-price equivalent per merged PR")).toBe(
     "List-price equivalent per merged PR$8.01the window's whole figure over 2 PRs merged",
   );
-  expect(cardOf(page, "Voice minutes")).toBe("Voice minutes10$0.50 at gpt-live-1's list price");
 });
 
 test("every dollar figure is said to be a list-price equivalent, not what Luke pays", async () => {
@@ -169,9 +165,7 @@ test("every dollar figure is said to be a list-price equivalent, not what Luke p
     "List prices leave out discounts, credits, plan fees, and which key paid.",
   );
   expect(page.textContent).not.toMatch(/\bspend\b/i);
-  expect(page.textContent).toContain(
-    "Voice is priced at gpt-live-1's $0.05 a minute, dictation at gpt-transcribe's $0.0045",
-  );
+  expect(page.textContent).toContain("Dictation is priced at gpt-transcribe's $0.0045 a minute.");
 });
 
 test("a model the catalog does not price reads as unpriced, never as dollars", async () => {
@@ -181,14 +175,6 @@ test("a model the catalog does not price reads as unpriced, never as dollars", a
     ["anthropic/claude-test", "$15.50", "3M"],
     ["openai/retired-test", "Unpriced", "2.5M"],
   ]);
-});
-
-test("a short call on an unpriced Live model still says it is there", async () => {
-  const page = await openCost(cost({ voice: { minutes: 0.2, spendUsd: 0, unpricedMinutes: 0.2 } }));
-
-  expect(cardOf(page, "Voice minutes")).toBe(
-    "Voice minutes<1$0.00 at list price · <1 min on an unpriced model",
-  );
 });
 
 test("a catalog that could not be read says no model token was priced", async () => {

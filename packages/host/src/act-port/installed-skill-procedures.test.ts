@@ -12,16 +12,15 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
 /**
  * Settings › Skills' acts through the act port as a window calls them: a
  * panel's list and install reach the host with what the page names and hear
- * its answer; the voice and call windows, and a frame this build does not
+ * its answer; any other window, and a frame this build does not
  * trust, are refused in each kind's own words before the host is asked;
  * and a payload off the kind's schema is refused at the port. Synthetic ids.
  */
 
 const SENDER = Symbol("window");
 
-const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
-const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
-const CALL: ActSender = { ...PANEL, panel: false, call: true };
+const PANEL: ActSender = { sender: SENDER, panel: true };
+const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
 const WORKSPACE_ID = "workspace-stage";
 
@@ -125,10 +124,9 @@ it("a panel's list, install, and share reach the host with what the page names, 
   ]);
 });
 
-it("the voice and call windows, and a frame this build does not trust, are refused in each kind's own words, and the host is not asked", async () => {
+it("a window that is not a panel, and a frame this build does not trust, are refused in each kind's own words, and the host is not asked", async () => {
   for (const { actor, trusted } of [
-    { actor: VOICE, trusted: true },
-    { actor: CALL, trusted: true },
+    { actor: OTHER_WINDOW, trusted: true },
     { actor: PANEL, trusted: false },
   ]) {
     const { list, install, share, asked } = windowPort(actor, { trusted });

@@ -1,8 +1,8 @@
-import { CODING_AGENT_KIND, type CodingAgentKind } from "./coding-agent-wire.js";
+import { AGENT_KIND, type AgentKind } from "./agent-wire.js";
 import { type CatalogModel, MODEL_PROVIDER } from "./models-wire.js";
 
 /**
- * model-label.ts -- a model as a tab, a menu, or a notification names it: the catalog's own name, or the id's own name spelled out; and an agent by its title, its automation, or its model.
+ * model-label.ts -- a model as a tab, a menu, or a notification names it: the catalog's own name, or the id's own name spelled out; an agent by its title, its automation, or its model; and whether an automation's run started it.
  *
  * Shared by the panel, which draws the tabs and the Start menu, the main
  * process, which posts the notification an agent's end is announced in, and
@@ -28,10 +28,9 @@ const GPT = "gpt";
 const MAKER_WORD = "Claude ";
 
 /**
- * A recorded model as the catalog names it. Note that what Luke runs on its
- * own OpenAI key records OpenAI's own id where it names no catalog id: a
- * call's voice model (`gpt-live-1`), and the brain's turn rows written before
- * it named its model by the catalog's id. The catalog names those under their
+ * A recorded model as the catalog names it. Note that what Luke ran on its
+ * own OpenAI key recorded OpenAI's own id where it named no catalog id: the
+ * brain's turn rows written before it named its model by the catalog's id. The catalog names those under their
  * provider, which is how a card reads whose mark the model wears; an id that
  * already names one is kept.
  */
@@ -75,7 +74,7 @@ export const OPERATOR_NAME = "Luke";
 /** What names an agent: what kind it is, its title, the automation whose run started it, and the model it runs on. */
 interface NamedAgent {
   /** What kind of agent it is; an operator is named Luke whatever else it holds. Absent for a coder, as the wire leaves it. */
-  readonly kind?: CodingAgentKind | undefined;
+  readonly kind?: AgentKind | undefined;
   readonly title: string | null;
   readonly model: string;
   /** The name of the automation whose run started the agent, as the run started it; none for one started by hand. */
@@ -91,7 +90,7 @@ interface NamedAgent {
  * every one; a query names it as `agentGivenNameSql` does.
  */
 export function agentGivenName(agent: Pick<NamedAgent, "kind">): string | undefined {
-  return agent.kind === CODING_AGENT_KIND.OPERATOR ? OPERATOR_NAME : undefined;
+  return agent.kind === AGENT_KIND.OPERATOR ? OPERATOR_NAME : undefined;
 }
 
 /**
@@ -110,4 +109,31 @@ export function agentName(agent: NamedAgent, models?: readonly CatalogModel[]): 
     agent.automationOrigin?.name ??
     modelLabel(agent.model, models)
   );
+}
+
+/** What says an automation's run started an agent: the run's origin, by its name, and the automation's id. */
+interface AutomationStarted extends Pick<NamedAgent, "automationName" | "automationOrigin"> {
+  /** The automation whose run started the agent; none for one started by hand or once that automation is deleted. */
+  readonly automationId?: string | null | undefined;
+}
+
+/** The run of an automation that started an agent, by the name its automation had then. */
+export interface AutomationRun {
+  /** None for an agent from before the run's origin was kept, which only its automation's id names. */
+  readonly name?: string;
+}
+
+/**
+ * The automation's run that started the agent, or none for one started by
+ * hand: the one answer to whether an automation started it, the window's
+ * and the service's alike, as a query reads it through
+ * `agentAutomationRunSql`. Note that it reads the run's origin first,
+ * because the automation's id goes null once the automation is deleted
+ * while its run's origin stays; the id answers which automation to open.
+ */
+export function automationRun(agent: AutomationStarted): AutomationRun | undefined {
+  const name = agent.automationName ?? agent.automationOrigin?.name;
+  if (name !== undefined) return { name };
+  // The id covers agents from before the origin column, which name no run.
+  return (agent.automationId ?? null) === null ? undefined : {};
 }

@@ -38,14 +38,13 @@ const ACTIVITY_CHART = {
     label: "Plan revisions",
     color: "var(--luke-color-chart-2)",
   },
-  [ACTIVITY_FEATURE.CALLS_HELD]: { label: "Calls held", color: "var(--luke-color-chart-3)" },
   [ACTIVITY_FEATURE.INBOX_ANSWERED]: {
     label: "Inbox items answered",
-    color: "var(--luke-color-chart-4)",
+    color: "var(--luke-color-chart-3)",
   },
   [ACTIVITY_FEATURE.AUTOMATION_RUNS]: {
     label: "Automation runs",
-    color: "var(--luke-color-chart-5)",
+    color: "var(--luke-color-chart-4)",
   },
 } satisfies ChartConfig & Record<ActivityFeature, { label: string; color: string }>;
 

@@ -3,10 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
-import {
-  createCodingAgent,
-  recordCodingAgentRunnerToken,
-} from "@luke/database/models/coding-agent-store";
+import { createAgent, recordAgentRunnerToken } from "@luke/database/models/agent-store";
 import { queueDeviceAgentLine } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import {
@@ -23,11 +20,7 @@ import {
 import { user } from "@luke/database/schemas/auth";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
-import {
-  CODING_AGENT_MACHINE,
-  CODING_AGENT_PAYER,
-  type CodingAgentPayer,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE, AGENT_PAYER, type AgentPayer } from "@luke/features/agent-wire";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
@@ -155,7 +148,7 @@ const standing = Effect.gen(function* () {
 /** A coding agent on the runtime and payer given, its runner's bearer recorded. */
 const agentOn = (
   runtime: ConversationRuntime,
-  payer: CodingAgentPayer,
+  payer: AgentPayer,
   model = "openai/gpt-5.5",
   onMac?: { readonly codex: boolean },
 ) =>
@@ -173,7 +166,7 @@ const agentOn = (
         signedIn: { codex: onMac.codex },
       });
     }
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model,
@@ -183,15 +176,15 @@ const agentOn = (
       prompt: null,
       runtime,
       payer,
-      ...(onMac === undefined ? undefined : { machine: CODING_AGENT_MACHINE.DEVICE, deviceId }),
+      ...(onMac === undefined ? undefined : { machine: AGENT_MACHINE.DEVICE, deviceId }),
     });
     const agent = Option.getOrThrow(started).agent;
     const bearer = randomBytes(32).toString("base64url");
-    yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
+    yield* recordAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
     return { userId, agentId: agent.id, bearer, deviceId };
   });
 
-const codexOnPlan = agentOn(CONVERSATION_RUNTIME.CODEX, CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION);
+const codexOnPlan = agentOn(CONVERSATION_RUNTIME.CODEX, AGENT_PAYER.CHATGPT_SUBSCRIPTION);
 
 /** The account's ChatGPT sign-in, its access token `access-0` good for the minutes given. */
 const signIn = (userId: string, minutesLeft: number) =>
@@ -279,13 +272,13 @@ it.layer(getTestDB())("the runner's token route", (it) => {
         );
 
         const others = [
-          agentOn(CONVERSATION_RUNTIME.CODEX, CODING_AGENT_PAYER.API_KEY),
+          agentOn(CONVERSATION_RUNTIME.CODEX, AGENT_PAYER.API_KEY),
           agentOn(
             CONVERSATION_RUNTIME.CLAUDE_CODE,
-            CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+            AGENT_PAYER.CLAUDE_SUBSCRIPTION,
             "anthropic/claude-opus-5.5",
           ),
-          agentOn(CONVERSATION_RUNTIME.CLAUDE_CODE, CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION),
+          agentOn(CONVERSATION_RUNTIME.CLAUDE_CODE, AGENT_PAYER.CHATGPT_SUBSCRIPTION),
         ];
         for (const other of others) {
           const { userId, bearer } = yield* other;
@@ -295,7 +288,7 @@ it.layer(getTestDB())("the runner's token route", (it) => {
           assert.deepEqual(refused.body, { error: HOSTED_API_ERROR.NOT_PERMITTED });
         }
 
-        yield* recordCodingAgentRunnerToken(agent.userId, agent.agentId, null);
+        yield* recordAgentRunnerToken(agent.userId, agent.agentId, null);
         assert.deepEqual((yield* ask(agent.bearer)).body, invalid);
         assert.equal(openai.state.renewals, 0);
       }),
@@ -308,7 +301,7 @@ it.layer(getTestDB())("the runner's token route", (it) => {
         const { ask } = yield* standing;
         const agent = yield* agentOn(
           CONVERSATION_RUNTIME.CODEX,
-          CODING_AGENT_PAYER.MAC_SIGN_IN,
+          AGENT_PAYER.MAC_SIGN_IN,
           "openai/gpt-5.5",
           { codex: true },
         );
@@ -347,7 +340,7 @@ it.layer(getTestDB())("the runner's token route", (it) => {
         const agent = yield* codexOnPlan;
         yield* signIn(agent.userId, 60);
         const bearer = `${HOST_WIRE.DEVICE_SECRET_PREFIX}${randomBytes(32).toString("base64url")}`;
-        yield* recordCodingAgentRunnerToken(agent.userId, agent.agentId, runnerTokenDigest(bearer));
+        yield* recordAgentRunnerToken(agent.userId, agent.agentId, runnerTokenDigest(bearer));
 
         assert.deepEqual((yield* ask(bearer)).body, { accessToken: "access-0" });
       }),
@@ -524,7 +517,7 @@ const agentOnDevice = (
   deviceId: string,
 ) =>
   Effect.gen(function* () {
-    const started = yield* createCodingAgent(member.userId, {
+    const started = yield* createAgent(member.userId, {
       taskId: member.taskId,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -533,8 +526,8 @@ const agentOnDevice = (
       planSnapshot: "# Teammate invitations\n",
       prompt: null,
       runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-      payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
-      machine: CODING_AGENT_MACHINE.DEVICE,
+      payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+      machine: AGENT_MACHINE.DEVICE,
       deviceId,
     });
     return Option.getOrThrow(started).agent.id;

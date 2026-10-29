@@ -1,11 +1,4 @@
 import {
-  type AutomationPresetName,
-  automationPreset,
-  type CodeReviewSettings,
-  readCodeReviewSettings,
-  withCodeReviewSettings,
-} from "@luke/features/automation-code-review";
-import {
   type AutomationDraft,
   automationDraft,
   changeOf,
@@ -21,7 +14,6 @@ import {
   filterAdmitted,
   filterValuesOf,
   type GitHubTriggerSettings,
-  presetDraft,
   repositoryHeld,
   SCHEDULE_KIND,
   type ScheduleDraft,
@@ -87,7 +79,6 @@ import {
   TERM,
 } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -160,7 +151,6 @@ import {
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { GLYPH } from "@luke/ui/icons";
 import { useDisclosure } from "@luke/ui/use-disclosure";
-import { useOptimisticSettingWrite } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
 import { HistoryIcon, PlayIcon, SaveIcon, ZapIcon } from "lucide-react";
@@ -178,7 +168,6 @@ import { useAppCommand } from "../app-commands.js";
 import { useScreenRef, useScreenSplit } from "../column-split.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
-import { ExperimentTag, SendFeedbackButton, useSendFeedbackItem } from "../experiment-marks.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { useCreator } from "../member-directory.js";
 import { useOpenSettings } from "../open-settings.js";
@@ -196,7 +185,6 @@ import { mentionableAgent } from "../tasks/task-mentions.js";
 import { useKnownNames } from "../tasks/use-known-names.js";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
 import { AutomationRunsPanel, AutomationRunsScreen } from "./automation-runs-panel.js";
@@ -289,8 +277,6 @@ export interface AutomationWrites {
   remove(automationId: string): Promise<AutomationDeletedView>;
   /** Mints a webhook's secret again, answering it once for this page to show. */
   newWebhookSecret(automationId: string): Promise<AutomationView>;
-  /** Reads the list again, as a Run now settling moves an automation's newest run. */
-  reload(): void;
 }
 
 /** The kinds of schedule as the picker offers them, in its order. */
@@ -381,7 +367,7 @@ const SAVE_REFUSAL_WORDS = {
 } as const satisfies Record<AutomationCallFailure, string>;
 
 /** Why a Run now did not start a run, as the line under the name says it. */
-const RUN_REFUSAL_WORDS = {
+export const RUN_REFUSAL_WORDS = {
   ...SAVE_REFUSAL_WORDS,
   [AUTOMATION_CALL_FAILURE.UNANSWERED]: "Could not run it now. Try again.",
   [AUTOMATION_CALL_FAILURE.NOT_PERMITTED]:
@@ -401,15 +387,11 @@ const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
 /**
  * An automation's on/off switch, the list row's and the editor's alike. It
- * flips at once, from a local value, and a write the service refuses puts it
- * back and says why in a FAILED toast, as a settings switch does; it never
- * rests for a write.
- *
- * Note that its writes go one at a time, because the service reads and writes
- * each request on its own, so two in flight could commit in either order and
- * leave the opposite of the last press. A press made while one is out waits for
- * it, only the newest waiting press is sent, and one that would only repeat
- * what the burst just sent is not.
+ * reads the automation as the host draws it, which a press turns at once and
+ * a write the service refuses turns back (`@luke/host`'s
+ * `automation-collections.ts`), and says why in a FAILED toast, as a settings
+ * switch does; it never rests for a write. Writes to one automation go to the
+ * service in the order pressed, which the host keeps.
  */
 export function AutomationSwitch({
   automation,
@@ -419,43 +401,19 @@ export function AutomationSwitch({
   write: (enabled: boolean) => Promise<AutomationView>;
 }): React.JSX.Element {
   const toast = useToast();
-  const tail = useRef<Promise<unknown>>(Promise.resolve());
-  const newest = useRef(0);
-  const sent = useRef<boolean | undefined>(undefined);
-  const send = (enabled: boolean, press: number): Promise<ActionResult> => {
-    if (press !== newest.current || sent.current === enabled) return Promise.resolve(ACCEPTED);
-    sent.current = enabled;
-    const settle = () => {
-      if (press === newest.current) sent.current = undefined;
-    };
-    return write(enabled).then(
-      (answer): ActionResult => {
-        const reason = toggleRefusal(answer, enabled);
-        if (reason !== undefined) sent.current = undefined;
-        settle();
-        return reason === undefined ? ACCEPTED : { status: ACTION_RESULT_STATUS.REJECTED, reason };
-      },
-      (error: unknown) => {
-        sent.current = undefined;
-        throw error;
-      },
-    );
+  const turn = (enabled: boolean) => {
+    write(enabled).then((answer) => {
+      const reason = toggleRefusal(answer, enabled);
+      if (reason !== undefined) {
+        toast({ words: reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      }
+    });
   };
-  const { value, run } = useOptimisticSettingWrite(
-    automation.enabled,
-    (enabled) => {
-      const press = ++newest.current;
-      const answered = tail.current.then(() => send(enabled, press));
-      tail.current = answered.catch(() => undefined);
-      return answered;
-    },
-    (words) => toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
-  );
   return (
     <Switch
-      checked={value}
-      label={value ? `Turn off ${automation.name}` : `Turn on ${automation.name}`}
-      onChange={run}
+      checked={automation.enabled}
+      label={automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`}
+      onChange={turn}
       {...NO_CONTEXT_MENU}
     />
   );
@@ -1033,16 +991,47 @@ function EditorTitle({
 /** What the editor's ⋯ is called. */
 const ACTIONS_THING = "Automation";
 
-/** The editor's ⋯: Copy link, the automation's, where the page hands down a workspace, and Delete, red, which asks first. */
+/** Run now, as an automation's row and its editor's ⋯ offer it, dimmed while one is out. */
+export function runNowAction(running: boolean, onRunNow: () => void): MenuAction {
+  return { label: "Run now", icon: <PlayIcon />, disabled: running, onSelect: onRunNow };
+}
+
+/**
+ * An automation's own acts, as its row and its editor's ⋯ offer them alike:
+ * Copy link, where the page hands down a workspace; Run now, where it can
+ * run; and Delete, red, which asks first, last and alone.
+ */
+export function automationActionGroups({
+  copyLink,
+  runNow,
+  onDelete,
+}: {
+  copyLink: MenuAction | undefined;
+  runNow: MenuAction | undefined;
+  onDelete: () => void;
+}): MenuAction[][] {
+  return [
+    copyLink === undefined ? [] : [copyLink],
+    runNow === undefined ? [] : [runNow],
+    [{ label: "Delete", icon: <GLYPH.DELETE />, onSelect: onDelete, danger: true }],
+  ].filter((group) => group.length > 0);
+}
+
+/** The editor's ⋯: the automation's own acts (`automationActionGroups`), under whatever a phone leads it with. */
 function AutomationActions({
   automation,
   onDelete,
+  running,
+  onRunNow,
   lead = [],
   heading,
 }: {
-  /** The automation, whose link and Delete the menu offers; none on a new automation's page, a phone's alone. */
+  /** The automation, whose link, Run now, and Delete the menu offers; none on a new automation's page, a phone's alone. */
   automation: AutomationSummary | undefined;
   onDelete: () => void;
+  /** Whether a Run now is out. */
+  running: boolean;
+  onRunNow: () => void;
   /** Groups over the automation's own, as a phone's ⋯ leads with the toolbar's acts (`EditorToolbar`); none elsewhere. */
   lead?: readonly MenuAction[][];
   /** Muted over the items: where the draft stands, on a phone. */
@@ -1050,16 +1039,14 @@ function AutomationActions({
 }): React.JSX.Element {
   const menu = useMenu(true);
   const linkItem = useCopyLinkItem();
-  const copyLink =
+  const own =
     automation === undefined
-      ? undefined
-      : linkItem({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
-  const remove: MenuAction = {
-    label: "Delete",
-    icon: <GLYPH.DELETE />,
-    onSelect: onDelete,
-    danger: true,
-  };
+      ? []
+      : automationActionGroups({
+          copyLink: linkItem({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id }),
+          runNow: runNowAction(running, onRunNow),
+          onDelete,
+        });
   return (
     <>
       <MoreButton thing={ACTIONS_THING} {...menu.trigger()} />
@@ -1068,11 +1055,7 @@ function AutomationActions({
           label={moreLabel(ACTIONS_THING)}
           menu={menu.drawn}
           heading={heading}
-          groups={[
-            ...lead,
-            ...(copyLink === undefined ? [] : [[copyLink]]),
-            ...(automation === undefined ? [] : [[remove]]),
-          ].filter((group) => group.length > 0)}
+          groups={[...lead, ...own].filter((group) => group.length > 0)}
           onClose={menu.close}
         />
       )}
@@ -1083,18 +1066,16 @@ function AutomationActions({
 /**
  * The editor's toolbar: the crumb back to the list leading it, the
  * automation's name after it once the page's header has scrolled away
- * (`pickUp`), and `tag` after that, with the page's acts at its end. Its own
+ * (`pickUp`), with the page's acts at its end. Its own
  * width, which a container query reads, folds its acts' words before they
  * crowd its crumbs.
  */
 function EditorToolbarFrame({
   pickUp,
-  tag,
   onBack,
   children,
 }: {
   pickUp: ToolbarPickUp;
-  tag?: ReactNode;
   onBack: () => void;
   children: ReactNode;
 }): React.JSX.Element {
@@ -1103,7 +1084,6 @@ function EditorToolbarFrame({
       <Toolbar
         trail={[{ label: AUTOMATIONS_PLACE, icon: <ZapIcon />, onPress: onBack }]}
         pickUp={pickUp}
-        tag={tag}
         actions={children}
       />
     </div>
@@ -1149,7 +1129,6 @@ const RUNS_LABEL = "Runs";
 function EditorToolbar({
   automation,
   pickUp,
-  codeReview,
   dirty,
   saving,
   saveRefused,
@@ -1165,8 +1144,6 @@ function EditorToolbar({
   automation: AutomationSummary | undefined;
   /** The page's name as the bar picks it up from the header. */
   pickUp: ToolbarPickUp;
-  /** Whether it is a code review, an experiment still, whose page says so with the tag and Send feedback. */
-  codeReview: boolean;
   dirty: boolean;
   saving: boolean;
   /** Whether the last save was refused, read as its ring leaves: one that was not lands on a check. */
@@ -1183,7 +1160,6 @@ function EditorToolbar({
   narrow: boolean;
 }): React.JSX.Element {
   const runsLabel = runs.shown ? "Hide runs" : "Show runs";
-  const feedback = useSendFeedbackItem(EXPERIMENT.CODE_REVIEW);
   const status =
     automation === undefined
       ? "Not created yet"
@@ -1203,9 +1179,6 @@ function EditorToolbar({
           disabled: saving || !(automation === undefined || dirty),
           onSelect: onSave,
         },
-        ...(automation === undefined
-          ? []
-          : [{ label: "Run now", icon: <PlayIcon />, disabled: running, onSelect: onRunNow }]),
       ],
       automation === undefined
         ? []
@@ -1219,18 +1192,18 @@ function EditorToolbar({
             },
           ],
       [{ label: RUNS_LABEL, icon: <HistoryIcon />, onSelect: runs.onPress }],
-      codeReview ? [feedback] : [],
     ];
     return (
       <PhoneHead
         place="automation"
         start={<AutomationsBack onBack={onBack} />}
         pickUp={pickUp}
-        tag={codeReview ? <ExperimentTag narrow /> : null}
         end={
           <AutomationActions
             automation={automation}
             onDelete={onDelete}
+            running={running}
+            onRunNow={onRunNow}
             lead={lead.filter((group) => group.length > 0)}
             heading={status}
           />
@@ -1239,12 +1212,7 @@ function EditorToolbar({
     );
   }
   return (
-    <EditorToolbarFrame
-      pickUp={pickUp}
-      tag={codeReview ? <ExperimentTag narrow={narrow} /> : null}
-      onBack={onBack}
-    >
-      {codeReview ? <SendFeedbackButton experiment={EXPERIMENT.CODE_REVIEW} /> : null}
+    <EditorToolbarFrame pickUp={pickUp} onBack={onBack}>
       <EditorStatus>
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
           {status}
@@ -1273,7 +1241,12 @@ function EditorToolbar({
       {automation === undefined ? null : (
         <>
           <AutomationSwitch automation={automation} write={onToggle} />
-          <AutomationActions automation={automation} onDelete={onDelete} />
+          <AutomationActions
+            automation={automation}
+            onDelete={onDelete}
+            running={running}
+            onRunNow={onRunNow}
+          />
         </>
       )}
       {/* The Runs panel's toggle, the side panel's own button and chord at the window's top right; in a narrow room, the way to the runs' own screen. */}
@@ -1306,7 +1279,7 @@ const SENDER_CHOICES: readonly { value: GitHubSender; label: string; detail?: st
   {
     value: GITHUB_SENDER.LUKE_AGENTS,
     label: "From Luke's agents",
-    detail: "What Luke's coding agents open, as you or as the workspace's GitHub App.",
+    detail: "What Luke's agents open, as you or as the workspace's GitHub App.",
   },
   {
     value: GITHUB_SENDER.OTHER_BOTS,
@@ -1570,80 +1543,6 @@ function SentryRows({
         )}
       </SettingsRow>
     </>
-  );
-}
-
-/** The most findings a review may be set to post, as its picker offers them. */
-const MOST_FINDINGS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((most) => ({
-  value: most,
-  label: String(most),
-}));
-
-/** The most findings a review may post, read back from its picker's row. */
-function mostFindingsOf(raw: string): number | undefined {
-  return MOST_FINDINGS.find((option) => String(option.value) === raw)?.value;
-}
-
-/**
- * A code review's own settings, modelled on Cursor Bugbot's, as a card of
- * Settings rows: whether a clean first review says so, the most findings it
- * posts, the rules file it reads, and whether it pushes fixes. Each is a
- * line the task opens with, written back as it changes, so the task stays
- * the one place the review is described; when it runs and on whose pull
- * requests are the Trigger card's.
- */
-function CodeReviewGroup({
-  settings,
-  onSettings,
-}: {
-  settings: CodeReviewSettings;
-  onSettings: (settings: CodeReviewSettings) => void;
-}): React.JSX.Element {
-  // The rules file's Escape lets go of the caret and keeps the press, as every field's here does.
-  const rulesFile = useRef<HTMLInputElement>(null);
-  return (
-    <SettingsSection title="Code review">
-      <SwitchRow
-        label="Comment when no issues are found"
-        detail="Only on a pull request's first review."
-        checked={settings.commentWhenClean}
-        onChange={(commentWhenClean) => onSettings({ ...settings, commentWhenClean })}
-      />
-      <SelectRow
-        width={CHIP_WIDTH.MIN_FIELD}
-        label="Most findings"
-        detail="Per review, most severe first."
-        value={settings.mostFindings}
-        options={MOST_FINDINGS}
-        parse={mostFindingsOf}
-        onChange={(mostFindings) => onSettings({ ...settings, mostFindings })}
-      />
-      <SettingsRow
-        label="Rules file"
-        description="Read from the base branch, beside AGENTS.md and CLAUDE.md."
-      >
-        {(control) => (
-          <span className={AUTOMATION_FIELD}>
-            <TextField
-              ref={rulesFile}
-              label="Rules file"
-              describedBy={control["aria-describedby"]}
-              font={TEXT_FIELD_FONT.MONO}
-              spellCheck={false}
-              value={settings.rulesFile}
-              onEscape={() => rulesFile.current?.blur()}
-              onChange={(text) => onSettings({ ...settings, rulesFile: text })}
-            />
-          </span>
-        )}
-      </SettingsRow>
-      <SwitchRow
-        label="Fix what it finds"
-        detail="Pushes its fixes to the pull request as Luke. Luke's own pushes start no review."
-        checked={settings.fix}
-        onChange={(fix) => onSettings({ ...settings, fix })}
-      />
-    </SettingsSection>
   );
 }
 
@@ -2176,7 +2075,6 @@ function EditorForm({
   shownSecret,
   onSecret,
   savedAgentId,
-  codeReviewOn,
   sentry,
   onDraft,
   onUnreadableTime,
@@ -2193,8 +2091,6 @@ function EditorForm({
   onSecret: (secret: string | undefined) => void;
   /** The agent its runs go to as saved, while the draft is still on the repository it was saved on; none otherwise. */
   savedAgentId: string | null;
-  /** Whether the account has Code review's experiment on, without which no code review's settings stand apart from its prompt. */
-  codeReviewOn: boolean;
   /** The workspace's Sentry, whose trigger is offered only where this deployment holds the integration. */
   sentry: SentryOffer;
   onDraft: (patch: Partial<AutomationDraft>) => void;
@@ -2210,8 +2106,6 @@ function EditorForm({
             : trigger,
         )
       : TRIGGERS;
-  // A code review's own settings are the lines its task opens with, so its card reads them there and writes them back.
-  const review = codeReviewOn ? readCodeReviewSettings(draft.prompt) : undefined;
   // The prompt's Escape lets go of the caret and keeps the press, as every field's here does.
   const prompt = useRef<HTMLTextAreaElement>(null);
   // The form is the area its reveals move, so the groups under a trigger's rows glide as they unroll.
@@ -2304,12 +2198,6 @@ function EditorForm({
             }
           </RevealChoice>
         </SettingsSection>
-        {review === undefined ? null : (
-          <CodeReviewGroup
-            settings={review}
-            onSettings={(next) => onDraft({ prompt: withCodeReviewSettings(draft.prompt, next) })}
-          />
-        )}
         <SettingsSection title={EDITOR_SECTION.PROMPT} frame={SETTINGS_SECTION_FRAME.NONE}>
           <TextArea
             ref={prompt}
@@ -2540,8 +2428,7 @@ const EDITOR_SCREENS: NarrowColumns = {
 
 /**
  * One automation's page, or a new one's where none is given. A new one,
- * opened from a suggestion on the list, starts filled in from its preset;
- * once made, it is handed to `onCreated`, which stands its own page where
+ * once made, is handed to `onCreated`, which stands its own page where
  * this one stood. A deleted one is handed to `onDeleted`, which goes back
  * to the list.
  *
@@ -2555,7 +2442,6 @@ const EDITOR_SCREENS: NarrowColumns = {
  */
 export function AutomationEditor({
   automation,
-  preset,
   workspace,
   offersOwner,
   repositories,
@@ -2572,8 +2458,6 @@ export function AutomationEditor({
   sentry,
 }: {
   automation: AutomationSummary | undefined;
-  /** The preset a new automation starts filled in from, as the list's suggestion it was opened from names it; none for a blank one. */
-  preset?: AutomationPresetName | undefined;
   workspace: Workspace | undefined;
   /** Whether the workspace is shared, so an automation in it may be the workspace's rather than its maker's. */
   offersOwner: boolean;
@@ -2603,23 +2487,18 @@ export function AutomationEditor({
   sentry: SentryOffer;
 }): React.JSX.Element {
   const runs = useAutomationRuns(automation?.id);
-  const codeReviewOn = useExperiment(EXPERIMENT.CODE_REVIEW);
   const linkedRun = linked?.runId;
   const [running, setRunning] = useState(false);
   const [defaults] = useState<DraftDefaults>(() => ({
     timezone: readerZone(),
     owner: AUTOMATION_SCOPE.PERSONAL,
   }));
-  // A new automation starts in the repository the workspace's plans were about lately, as a new plan does,
-  // filled in from the preset of the suggestion it was opened from.
-  const [start] = useState(() => {
-    if (automation !== undefined) return automationDraft(automation, defaults);
-    const blank = {
-      ...automationDraft(undefined, defaults),
-      repository: repositories.recent[0] ?? null,
-    };
-    return preset === undefined ? blank : presetDraft(blank, automationPreset(preset));
-  });
+  // A new automation starts in the repository the workspace's plans were about lately, as a new plan does.
+  const [start] = useState(() =>
+    automation !== undefined
+      ? automationDraft(automation, defaults)
+      : { ...automationDraft(undefined, defaults), repository: repositories.recent[0] ?? null },
+  );
   const [draft, setDraft] = useState(start);
   const [shownProblems, setShownProblems] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -2711,8 +2590,6 @@ export function AutomationEditor({
     setRefusal(undefined);
     runs.runNow().then((answer) => {
       setRunning(false);
-      // The automation's newest run moved, so the list it stands in is read again too.
-      writes.reload();
       if ("failure" in answer) setRefusal(RUN_REFUSAL_WORDS[answer.failure]);
     });
   };
@@ -2785,7 +2662,6 @@ export function AutomationEditor({
               draft.name.trim() ||
               (automation === undefined ? NEW_AUTOMATION : UNTITLED_AUTOMATION),
           }}
-          codeReview={codeReviewOn && readCodeReviewSettings(draft.prompt) !== undefined}
           dirty={dirty}
           saving={saving}
           saveRefused={refusal !== undefined}
@@ -2821,7 +2697,6 @@ export function AutomationEditor({
             shownSecret={shownSecret}
             onSecret={setShownSecret}
             savedAgentId={savedAgentId}
-            codeReviewOn={codeReviewOn}
             sentry={sentry}
             onDraft={editDraft}
             onUnreadableTime={setUnreadableTime}

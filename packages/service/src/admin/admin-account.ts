@@ -2,8 +2,8 @@
  * admin-account.ts -- what a maintainer supports one account from, folded from its rows.
  *
  * The account page's support sections: when the account was last seen, how
- * much it did over the window (tasks, coding agents and their pull requests,
- * call minutes), its newest agents, its workspaces, its keys and
+ * much it did over the window (tasks, coding agents and their pull
+ * requests), its newest agents, its workspaces, its keys and
  * connections, its coding-agent defaults and experiments, and a timeline of
  * what failed for it recently. Every value is a count, a status, a model or
  * effort, or one of the service's own enumerated words; nothing the account
@@ -19,8 +19,7 @@
 
 import type { GitHubInstallationStatus } from "@luke/database/github-installation-vocabulary";
 import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
-import type { CodingAgentLatestTurn } from "@luke/database/models/coding-agent-store";
-import type { VoiceCloseReason } from "@luke/database/voice-vocabulary";
+import type { AgentLatestTurn } from "@luke/database/models/agent-store";
 import {
   ADMIN_FAILURE_KIND,
   ADMIN_PULL_REQUEST,
@@ -34,16 +33,16 @@ import type {
   AdminAccountProviderKey,
   AdminAccountSupport,
 } from "@luke/features/admin-answer-wire";
-import type { AutomationRunReason } from "@luke/features/automation-wire";
 import {
-  CODING_AGENT_STATUS,
+  AGENT_STATUS,
   type ContextWindow,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
+import type { AutomationRunReason } from "@luke/features/automation-wire";
 import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
 import { EXPERIMENTS, type ExperimentChoices } from "@luke/settings";
-import { codingAgentFailureOf, codingAgentStatusOf } from "../agents/coder-host/status.js";
+import { agentFailureOf, agentStatusOf } from "../agents/coder-host/status.js";
 import { lastSeenInstant } from "./admin-users.js";
 
 /** How many of the account's newest coding agents the page lists. */
@@ -60,8 +59,6 @@ export const ADMIN_ACCOUNT_STATUS_READ_LIMIT = 2000;
 /** How many recent failures the timeline lists, and how many each source contributes at most. */
 export const ADMIN_ACCOUNT_FAILURES_LIMIT = 20;
 
-const SECONDS_PER_MINUTE = 60;
-
 /** One coding agent as the queries read it: the fields the page may show, and what its status is read from. */
 export interface AdminAccountAgentSource {
   id: string;
@@ -73,7 +70,7 @@ export interface AdminAccountAgentSource {
   contextWindow: ContextWindow;
   /** The state of its pull request as GitHub last answered, alone; null where none was found. */
   pullRequestState: PullRequestState | null;
-  turn: CodingAgentLatestTurn | undefined;
+  turn: AgentLatestTurn | undefined;
   awaitingLineAt: Date | undefined;
 }
 
@@ -96,7 +93,6 @@ export interface AdminAccountSource {
     agentsStarted: number;
     pullRequestsOpened: number;
     pullRequestsMerged: number;
-    callSeconds: number;
   };
   /**
    * The window's agents, at most `ADMIN_ACCOUNT_STATUS_READ_LIMIT`, newest
@@ -115,8 +111,6 @@ export interface AdminAccountSource {
     contextWindow: ContextWindow | null;
     experiments: ExperimentChoices;
   } | null;
-  /** The window's newest dropped calls, at most the timeline's bound. */
-  droppedCalls: readonly { at: Date; reason: VoiceCloseReason }[];
   /** The window's newest failed runs of the account's automations, at most the timeline's bound. */
   failedRuns: readonly { at: Date; reason: AutomationRunReason | null }[];
 }
@@ -131,13 +125,12 @@ function pullRequestOf(state: PullRequestState | null): AdminPullRequest {
 
 /** One agent with its status read at `now`, and its failure class where it failed. */
 function agentOf(source: AdminAccountAgentSource, now: number): AdminAccountAgent {
-  const status = codingAgentStatusOf(source.turn, {
+  const status = agentStatusOf(source.turn, {
     createdAt: source.createdAt,
     now,
     awaitingLineAt: source.awaitingLineAt,
   });
-  const failure =
-    status === CODING_AGENT_STATUS.FAILED ? (codingAgentFailureOf(source.turn) ?? null) : null;
+  const failure = status === AGENT_STATUS.FAILED ? (agentFailureOf(source.turn) ?? null) : null;
   return {
     id: source.id,
     createdAt: source.createdAt.getTime(),
@@ -161,7 +154,7 @@ function agentFailures(
   for (const agent of source.windowAgents) {
     const read = agentOf(agent, now);
     const at = (agent.turn?.settledAt ?? agent.createdAt).getTime();
-    if (read.status !== CODING_AGENT_STATUS.FAILED || at < windowStart) continue;
+    if (read.status !== AGENT_STATUS.FAILED || at < windowStart) continue;
     failures.push({ kind: ADMIN_FAILURE_KIND.AGENT, at, reason: read.failure });
   }
   return failures;
@@ -221,13 +214,6 @@ export function buildAdminAccountSupport(
 
   const failures = [
     ...agentFailures(source, now, windowStart),
-    ...source.droppedCalls.map(
-      (call): AdminAccountFailure => ({
-        kind: ADMIN_FAILURE_KIND.CALL,
-        at: call.at.getTime(),
-        reason: call.reason,
-      }),
-    ),
     ...credentialFailures(source, windowStart),
     ...source.failedRuns.map(
       (run): AdminAccountFailure => ({
@@ -245,12 +231,10 @@ export function buildAdminAccountSupport(
     totals: {
       tasksCreated: source.totals.tasksCreated,
       agentsStarted: source.totals.agentsStarted,
-      agentsFailed: windowRead.filter((agent) => agent.status === CODING_AGENT_STATUS.FAILED)
-        .length,
+      agentsFailed: windowRead.filter((agent) => agent.status === AGENT_STATUS.FAILED).length,
       agentsRead: windowRead.length,
       pullRequestsOpened: source.totals.pullRequestsOpened,
       pullRequestsMerged: source.totals.pullRequestsMerged,
-      callMinutes: Math.round(source.totals.callSeconds / SECONDS_PER_MINUTE),
     },
     recentAgents: source.recentAgents.map((agent) => agentOf(agent, now)),
     workspaces: source.workspaces.map((workspace) => ({

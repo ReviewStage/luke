@@ -1,14 +1,8 @@
-import {
-  githubRepositoryIssuesAnswerSchema,
-  workspaceTokenRepositorySchema,
-} from "@luke/features/github-repositories-wire";
-import { linearIssueSummarySchema } from "@luke/features/linear-wire";
+import { workspaceTokenRepositorySchema } from "@luke/features/github-repositories-wire";
 import { workspaceSentryAnswerSchema } from "@luke/features/sentry-install-wire";
 import {
   type TasksWorkspaceInvitationsAnswer,
   type TasksWorkspaceMembersAnswer,
-  tasksGitHubIssuesParamsSchema,
-  tasksLinearIssuesParamsSchema,
   tasksWorkspaceCreateParamsSchema,
   tasksWorkspaceInvitationCancelParamsSchema,
   tasksWorkspaceInviteParamsSchema,
@@ -89,21 +83,6 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceParamsSchema))
     .output(EffectSchema.Void),
-  [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_CONNECT]: actProcedure(
-    "Could not connect Linear to that workspace on this system.",
-  )
-    .input(exactInput(tasksWorkspaceParamsSchema))
-    .output(EffectSchema.Void),
-  [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_DISCONNECT]: actProcedure(
-    "Could not disconnect Linear from that workspace on this system.",
-  )
-    .input(exactInput(tasksWorkspaceParamsSchema))
-    .output(EffectSchema.Void),
-  [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_ISSUES]: actProcedure(
-    "Could not read that workspace's Linear issues on this system.",
-  )
-    .input(exactInput(tasksLinearIssuesParamsSchema))
-    .output(EffectSchema.flip(EffectSchema.Array(linearIssueSummarySchema))),
   [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ]: actProcedure(
     "Could not read that workspace's Sentry on this system.",
   )
@@ -119,11 +98,6 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceSentryDisconnectParamsSchema))
     .output(EffectSchema.flip(workspaceSentryAnswerSchema)),
-  [WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_ISSUES]: actProcedure(
-    "Could not read that repository's issues on this system.",
-  )
-    .input(exactInput(tasksGitHubIssuesParamsSchema))
-    .output(EffectSchema.flip(githubRepositoryIssuesAnswerSchema)),
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ]: actProcedure(
     "Could not read that workspace's members on this system.",
   )

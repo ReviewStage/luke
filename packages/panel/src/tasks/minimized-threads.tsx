@@ -1,4 +1,4 @@
-import type { ReviewThread } from "@luke/features/coding-agent-wire";
+import type { ReviewThread } from "@luke/features/agent-wire";
 import { DISCLOSURE_SUMMARY, DisclosureSummary, Tooltip } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { CircleCheckIcon, CircleIcon } from "lucide-react";
@@ -8,7 +8,7 @@ import { Fold, FoldBody } from "../ai-elements/fold.js";
 import { useNamer } from "./pull-request-people.js";
 
 /**
- * minimized-threads.tsx -- a line's cards drawn small while Minimize inline comments is on, a review thread's or one of Luke's notes in a File tab, as stage-cli draws them: one chip at the end of the line, the faces of who wrote on it, how many comments, and whether every thread is resolved, which shows the threads or puts them away.
+ * minimized-threads.tsx -- a line's review threads drawn small while Minimize inline comments is on, as stage-cli draws them: one chip at the end of the line, the faces of who wrote on it, how many comments, and whether every thread is resolved, which shows the threads or puts them away.
  *
  * The chip stands in a row of no height of its own, floated up over the end
  * of the line it is on, so the diff reads as if the line held no comments;
@@ -45,11 +45,9 @@ function writersOf(threads: readonly ReviewThread[]) {
  * who wrote them, and how many, said whole to a screen reader with what
  * pressing it does; and the cards it folds, drawn under it once shown. Note
  * that a fold is what lets the tab's find reach the cards while they are
- * put away, and open the line whose words it brings into view. Review
- * threads (`MinimizedThreads`) and Luke's notes in a File tab
- * (`file-note.tsx`) stand on it alike.
+ * put away, and open the line whose words it brings into view.
  */
-export function MinimizedChip({
+function MinimizedChip({
   label,
   faces,
   count,
@@ -102,7 +100,7 @@ export function MinimizedChip({
 }
 
 /** What pressing a chip does, as its label ends: shows the cards, or puts them away. */
-export function chipPress(shown: boolean): string {
+function chipPress(shown: boolean): string {
   return shown ? CHIP_WORDS.HIDE : CHIP_WORDS.SHOW;
 }
 

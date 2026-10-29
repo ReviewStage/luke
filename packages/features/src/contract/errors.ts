@@ -15,7 +15,7 @@
 
 import type { ErrorMapItem } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
-import { localAgentRefusalSchema, refusedDeviceSchema } from "../coding-agent-wire.js";
+import { localAgentRefusalSchema, refusedDeviceSchema } from "../agent-wire.js";
 import { hostUpgradeNeededDataSchema } from "../host-wire.js";
 import { installedSkillRefusedDataSchema } from "../installed-skill-route-wire.js";
 import { modelProviderSchema } from "../models-wire.js";
@@ -128,7 +128,6 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.NOT_PERMITTED]: {},
   [HOSTED_API_ERROR.ALREADY_INVITED]: {},
   [HOSTED_API_ERROR.SANDBOX_STOPPED]: {},
-  [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: {},
   [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: { data: installedSkillRefusedData },
   [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: { data: installedSkillRefusedData },
   [HOSTED_API_ERROR.CHANNEL_NAME_TAKEN]: {},

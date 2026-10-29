@@ -2,7 +2,7 @@
  * service.ts -- the terminal relay as a WebSocket service: one socket per attached shell, admitted under the account's bearer from the desktop or under its session cookie from one of the deployment's own pages, and piped by `relay.ts`.
  *
  * The function exports the `http.Server` this builds, and Vercel upgrades
- * WebSockets into it, as it does the voice service's. An upgrade is refused
+ * WebSockets into it. An upgrade is refused
  * before any socket stands where it is not the relay's path; where it
  * carries neither credential `http/relay-upgrade.ts` takes, the desktop's
  * bearer with no `Origin` or the session cookie of a page on one of the

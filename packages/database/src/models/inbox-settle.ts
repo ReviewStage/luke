@@ -42,7 +42,7 @@ import type { AnyPgTable } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { agentTable } from "../schemas/agent.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { inboxMessage } from "../schemas/inbox-message.js";
 import { task } from "../schemas/task.js";
@@ -167,14 +167,14 @@ function qualified(table: AnyPgTable, column: AnyColumn) {
 
 const ITEM_AGENT = qualified(inboxItem, inboxItem.agentId);
 const ITEM_TASK = qualified(inboxItem, inboxItem.taskId);
-const AGENT_ID = qualified(codingAgent, codingAgent.id);
-const AGENT_ARCHIVED_AT = qualified(codingAgent, codingAgent.archivedAt);
+const AGENT_ID = qualified(agentTable, agentTable.id);
+const AGENT_ARCHIVED_AT = qualified(agentTable, agentTable.archivedAt);
 const TASK_ID = qualified(task, task.id);
 const TASK_STATUS_COLUMN = qualified(task, task.status);
 const TASK_COMPLETED_AT = qualified(task, task.completedAt);
 
 /** Whether the item's agent stands archived: the other act that settles an item a task's settle closed. */
-const AGENT_STILL_ARCHIVED = sql`exists (select 1 from ${codingAgent} where ${AGENT_ID} = ${ITEM_AGENT} and ${AGENT_ARCHIVED_AT} is not null)`;
+const AGENT_STILL_ARCHIVED = sql`exists (select 1 from ${agentTable} where ${AGENT_ID} = ${ITEM_AGENT} and ${AGENT_ARCHIVED_AT} is not null)`;
 
 /** Whether the item's task stands Done or Canceled: the other act that settles an item an archive closed. */
 const TASK_STILL_SETTLED = sql`exists (select 1 from ${task} where ${TASK_ID} = ${ITEM_TASK} and ${TASK_STATUS_COLUMN} in (${TASK_STATUS.DONE}, ${TASK_STATUS.CANCELED}) and ${TASK_COMPLETED_AT} is not null)`;
@@ -207,9 +207,9 @@ const lockOtherActRows = SqlSchema.void({
         db.select({ id: column }).from(inboxItem).where(settledBy(request));
       return request.by === SETTLE_BY.TASK
         ? db
-            .select({ id: codingAgent.id })
-            .from(codingAgent)
-            .where(inArray(codingAgent.id, settled(inboxItem.agentId)))
+            .select({ id: agentTable.id })
+            .from(agentTable)
+            .where(inArray(agentTable.id, settled(inboxItem.agentId)))
             .for("share")
         : db
             .select({ id: task.id })
@@ -236,7 +236,7 @@ const handOverSettledItems = SqlSchema.findAll({
           request.by === SETTLE_BY.TASK
             ? {
                 closedReason: INBOX_SETTLED_REASON.AGENT_ARCHIVED,
-                settledAt: sql`(select ${AGENT_ARCHIVED_AT} from ${codingAgent} where ${AGENT_ID} = ${ITEM_AGENT})`,
+                settledAt: sql`(select ${AGENT_ARCHIVED_AT} from ${agentTable} where ${AGENT_ID} = ${ITEM_AGENT})`,
               }
             : {
                 closedReason: sql`(select case ${TASK_STATUS_COLUMN} when ${TASK_STATUS.DONE} then ${INBOX_SETTLED_REASON.TASK_DONE}::text else ${INBOX_SETTLED_REASON.TASK_CANCELED}::text end from ${task} where ${TASK_ID} = ${ITEM_TASK})`,

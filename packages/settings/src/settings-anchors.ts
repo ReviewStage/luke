@@ -30,16 +30,17 @@ export const SETTINGS_SEARCH_ROW = {
   GITHUB_ACCESS: "github-access",
   DELETE_ACCOUNT: "delete-account",
   MICROPHONE: "microphone",
-  PLAN_TEMPLATE: "plan-template",
   MEMORY: "memory",
-  CODING_AGENT_MODEL: "coding-agent-model",
-  CODING_AGENT_EFFORT: "coding-agent-effort",
-  CODING_AGENT_FAST: "coding-agent-fast",
+  AGENT_MODEL: "agent-model",
+  AGENT_EFFORT: "agent-effort",
+  AGENT_FAST: "agent-fast",
   CHAPTERS_MODEL: "chapters-model",
   API_KEY_ANTHROPIC: "api-key-anthropic",
   API_KEY_OPENAI: "api-key-openai",
   /** Skills' Add a skill row. */
   ADD_SKILL: "add-skill",
+  /** Hosts' Add hosts button, under its list. */
+  ADD_HOSTS: "add-hosts",
   /** The Workspace page's identity row, where an owner or an admin renames the workspace. */
   WORKSPACE_RENAME: "workspace-rename",
 } as const;
@@ -52,9 +53,6 @@ export const SETTINGS_SEARCH_ROW = {
  * without one.
  */
 export const EXPERIMENT_ANCHOR = {
-  [EXPERIMENT.BROWSER]: "experiment-browser",
-  [EXPERIMENT.CODE_REVIEW]: "experiment-code-review",
-  [EXPERIMENT.VIDEO_CALLS]: "experiment-video-calls",
   [EXPERIMENT.OPERATOR]: "experiment-operator",
   [EXPERIMENT.MEMORY]: "experiment-memory",
   [EXPERIMENT.LOCAL_AGENTS]: "experiment-local-agents",

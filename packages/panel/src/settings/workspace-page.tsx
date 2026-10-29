@@ -1,5 +1,4 @@
-import { INTEGRATION_STATUS_WORDS } from "@luke/features/integration-status-words";
-import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
+import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import type {
   WorkspaceSentry,
@@ -93,7 +92,8 @@ import { useAct } from "../act.js";
 import { streamFrom } from "../act-stream.js";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, YouBadge } from "../actor-ref.js";
 import { actPort } from "../app-bridge.js";
-import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
+import { useCopyToast } from "../copy-feedback.js";
+import { copyLinkItem, useChordLinks } from "../copy-link-item.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { sharedWords } from "../desktop/workspace-ref.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
@@ -140,10 +140,8 @@ import {
  * Manage on GitHub opens the one GitHub page that both adds an account and
  * chooses an account's repositories, where which accounts and repositories
  * Luke reaches is managed, so nothing here disconnects one. A member sees
- * the same list, or is told to ask. Linear, which plans start from: an
- * owner or an admin connects it once for every member, and disconnects it
- * from its ⋯; a member sees whether it is connected. Last, anyone but the owner leaves, and the
- * owner hands the workspace to an admin first.
+ * the same list, or is told to ask. Last, anyone but the owner leaves, and
+ * the owner hands the workspace to an admin first.
  *
  * Its rows are the Settings kit's: a row's one constructive act stands at
  * its end, and the rest are its ⋯'s (`menu-row.tsx`), each act that cannot
@@ -286,14 +284,7 @@ const GITHUB_MARK = (
   </SettingsRowMark>
 );
 
-/** Linear's own mark, which leads its row as GitHub's leads GitHub's. */
-const LINEAR_MARK = (
-  <SettingsRowMark>
-    <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />
-  </SettingsRowMark>
-);
-
-/** Sentry's own mark, which leads its row as Linear's leads Linear's. */
+/** Sentry's own mark, which leads its row as GitHub's leads GitHub's. */
 const SENTRY_MARK = (
   <SettingsRowMark>
     <ProviderMark provider={INTEGRATION_PROVIDER.SENTRY} />
@@ -310,15 +301,6 @@ const SENTRY_LINE = {
 /** One connected GitHub account as the page lists it: its login, whether its installation is active, and its id where the service named it. */
 type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
   Partial<Pick<WorkspaceGithubInstallation, "installationId">>;
-
-/** What the Linear row's line says, by where the workspace's Linear stands and who is reading it. */
-const LINEAR_LINE = {
-  CONNECTED: "Connected for everyone in this workspace",
-  EXPIRED: INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED],
-  EXPIRED_MEMBER: `${INTEGRATION_STATUS_WORDS[INTEGRATION_STATUS.EXPIRED]}. Ask an owner or admin.`,
-  MANAGES: "Not connected.",
-  MEMBER: "Not connected. Ask an owner or admin.",
-} as const;
 
 /**
  * What a refused act answers in the dialog that asked: its refusal's own
@@ -349,7 +331,6 @@ const INVITATION_ROW_SKELETON: SettingsRowSkeletonShape = {
 /** The services the Workspace connections group draws a row for, in order, each by its own row. */
 const WORKSPACE_INTEGRATIONS = [
   { service: INTEGRATION_PROVIDER.GITHUB, Row: WorkspaceGitHub },
-  { service: INTEGRATION_PROVIDER.LINEAR, Row: WorkspaceLinear },
   { service: INTEGRATION_PROVIDER.SENTRY, Row: WorkspaceSentryRow },
 ] as const;
 
@@ -449,8 +430,8 @@ function useMembersRead(workspace: Workspace) {
 /**
  * One member's row: their face, their name with You on the reader's own,
  * their email under it, and their role as the row's value in one column,
- * then in its ⋯ their profile, where the window offers one, Copy link to
- * their person page, and what the reader may do to them (`memberActs`).
+ * then in its ⋯ Copy link to their person page, their profile, where the
+ * window offers one, and what the reader may do to them (`memberActs`).
  * Make admin and Make member take hold at once, since either is undone by
  * the other; Make owner and Remove from workspace ask first. A role change
  * refused is said under the row. A row with no ⋯ in a list where others
@@ -496,7 +477,13 @@ function MemberRow({
   };
   const openPerson = useOpenPerson();
   const copy = useCopyToast();
+  const chord = useChordLinks();
   const profileActs = [
+    copyLinkItem(
+      copy,
+      linkOf({ kind: LINK_PLACE.PERSON, userId }, workspace.slug ?? workspaceId),
+      chord,
+    ),
     ...(openPerson === undefined
       ? []
       : [
@@ -506,15 +493,6 @@ function MemberRow({
             onSelect: () => openPerson(userId, member.name, workspaceId),
           },
         ]),
-    {
-      label: LINK_COPY.LABEL,
-      icon: <GLYPH.LINK />,
-      onSelect: () =>
-        copy(
-          linkOf({ kind: LINK_PLACE.PERSON, userId }, workspace.slug ?? workspaceId),
-          LINK_COPY.COPIED,
-        ),
-    },
   ];
   const roleActs = [
     ...(may.promote
@@ -1195,6 +1173,7 @@ function Invitations({
         <MenuRow
           key={one.id}
           thing={one.email}
+          alone
           actions={[
             {
               label: "Cancel invitation",
@@ -1318,7 +1297,7 @@ function ManagedGitHub({
   const { act } = useAct();
   const workspaceId = workspace.id;
   const [refusal, setRefusal] = useState<string>();
-  // Note that a second press while the browser is being sent is taken as none, as Linear's is.
+  // Note that a second press while the browser is being sent is taken as none, because an install begun again replaces the first one's intent.
   const [opening, setOpening] = useState(false);
   const underWay = useRef(false);
   const open = () => {
@@ -1422,123 +1401,6 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
   );
 }
 
-/** The workspace's Linear row's line: whether its one connection stands. */
-function linearLine(linear: Workspace["linear"], manages: boolean): React.ReactNode {
-  if (linear === undefined) return manages ? LINEAR_LINE.MANAGES : LINEAR_LINE.MEMBER;
-  return linear.active ? (
-    <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-      {LINEAR_LINE.CONNECTED}
-    </SettingsRowStateLine>
-  ) : (
-    <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION}>
-      {manages ? LINEAR_LINE.EXPIRED : LINEAR_LINE.EXPIRED_MEMBER}
-    </SettingsRowStateLine>
-  );
-}
-
-/**
- * The workspace's Linear, for an owner or an admin: Connect while none is,
- * or Reconnect once its sign-in expired, which opens Linear's
- * sign-in in the browser, a sign-in that could not be begun saying why
- * under the row; and a ⋯ once one stands, as Settings › Integrations keeps
- * a connected row quiet, whose menu holds Disconnect, which asks first. A
- * plan already started from an issue keeps what it read. The row is
- * `MenuRow`'s `SettingsRow` led by Linear's mark, its press the outline
- * `Button`.
- */
-function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Element {
-  const { act } = useAct();
-  const { linear } = workspace;
-  const workspaceId = workspace.id;
-  const [refusal, setRefusal] = useState<string>();
-  // Note that a second press while the browser is being sent is taken as
-  // none, because a sign-in begun again replaces the first one's state.
-  const [connecting, setConnecting] = useState(false);
-  const underWay = useRef(false);
-  const connect = () => {
-    if (underWay.current) return;
-    underWay.current = true;
-    setConnecting(true);
-    setRefusal(undefined);
-    act(ACT_KIND.WORKSPACE_LINEAR_CONNECT, { workspaceId })
-      .catch((refused: Error) => setRefusal(refused.message))
-      .finally(() => {
-        underWay.current = false;
-        setConnecting(false);
-      });
-  };
-  const disconnect = useConfirmDialog({ subject: linear !== undefined, surfaceOpen: true }, () =>
-    act(ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, { workspaceId }).then(() => ACCEPTED, refusedWith),
-  );
-  const actions =
-    linear === undefined
-      ? []
-      : [
-          [
-            {
-              label: "Disconnect",
-              icon: <GLYPH.DISCONNECT />,
-              danger: true,
-              onSelect: disconnect.ask,
-            },
-          ],
-        ];
-  return (
-    <Stack gap={GAP.NONE}>
-      <MenuRow
-        thing="Linear"
-        actions={actions}
-        row={{
-          leading: LINEAR_MARK,
-          label: "Linear",
-          description: linearLine(linear, true),
-          error: refusal,
-          control:
-            linear?.active === true ? null : (
-              <Button
-                variant={BUTTON_VARIANT.OUTLINE}
-                busy={connecting}
-                busyLabel="Connecting"
-                onClick={connect}
-              >
-                {linear === undefined ? "Connect" : "Reconnect"}
-              </Button>
-            ),
-        }}
-      />
-      <ConfirmDialog
-        open
-        confirm={disconnect}
-        question={{
-          title: `Disconnect Linear from ${workspace.name}?`,
-          body: "Nobody in the workspace can start a task from an issue until Linear is connected again.",
-          verb: "Disconnect",
-          running: "Disconnecting",
-          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
-        }}
-      />
-    </Stack>
-  );
-}
-
-/**
- * The workspace's Linear: an owner's or an admin's to connect for
- * everyone, and for a member, read only, whether it is connected or the ask
- * to have it.
- */
-function WorkspaceLinear({ workspace }: { workspace: Workspace }): React.JSX.Element {
-  if (managesWorkspace(workspace)) return <ManagedLinear workspace={workspace} />;
-  return (
-    <SettingsRow
-      leading={LINEAR_MARK}
-      label="Linear"
-      description={linearLine(workspace.linear, false)}
-    >
-      {() => null}
-    </SettingsRow>
-  );
-}
-
 /** The Sentry row's line: the organizations it is installed on, or the ask to install it. */
 function sentryLine(sentry: WorkspaceSentry, manages: boolean): React.ReactNode {
   if (sentry.installations.length === 0) return manages ? SENTRY_LINE.MANAGES : SENTRY_LINE.MEMBER;
@@ -1605,9 +1467,12 @@ function ManagedSentry({
   );
   const actions = [
     sentry.installations.map((installation) => ({
+      // Note that a lone installation's act stands as a button of its own, so it says only Disconnect.
       label:
-        installation.account === undefined ? "Disconnect" : `Disconnect ${installation.account}`,
-      icon: <TrashIcon />,
+        installation.account === undefined || sentry.installations.length === 1
+          ? "Disconnect"
+          : `Disconnect ${installation.account}`,
+      icon: <GLYPH.DISCONNECT />,
       danger: true,
       onSelect: () => {
         setLeaving(installation);
@@ -1619,6 +1484,7 @@ function ManagedSentry({
     <Stack gap={GAP.NONE}>
       <MenuRow
         thing="Sentry"
+        alone
         actions={actions}
         row={{
           leading: SENTRY_MARK,

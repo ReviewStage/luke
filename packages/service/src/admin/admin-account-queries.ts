@@ -12,28 +12,22 @@
 
 import { Database, type DatabaseServices, type QueryError } from "@luke/database/core/query";
 import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
-import {
-  awaitingLinesOfReached,
-  latestTurnsOfReached,
-} from "@luke/database/models/coding-agent-store";
+import { awaitingLinesOfReached, latestTurnsOfReached } from "@luke/database/models/agent-store";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { utcDayKey } from "@luke/database/models/quota";
 import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
+import { agentTable } from "@luke/database/schemas/agent";
 import { member, organization, session } from "@luke/database/schemas/auth";
 import { automation, automationRun } from "@luke/database/schemas/automation";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { integrationConnection } from "@luke/database/schemas/integration";
 import { personalWorkspace } from "@luke/database/schemas/personal-workspace";
 import { accountPreference } from "@luke/database/schemas/preferences";
 import { turns } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
-import { voiceSessionUsage } from "@luke/database/schemas/usage";
-import { voiceSessions } from "@luke/database/schemas/voice";
-import { VOICE_CLOSE_REASON } from "@luke/database/voice-vocabulary";
 import type { AdminMetricsWindow } from "@luke/features/admin-wire";
+import { CONTEXT_WINDOW, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { AUTOMATION_RUN_REASON, AUTOMATION_RUN_STATUS } from "@luke/features/automation-wire";
-import { CONTEXT_WINDOW, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   FAST_ACCESS,
@@ -56,7 +50,6 @@ import {
   max,
   or,
   sql,
-  sum,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
@@ -73,13 +66,11 @@ import { AggregateColumnSchema } from "./admin-queries.js";
 
 type AdminQueryFailure = QueryError | Schema.SchemaError;
 
-const NullableAggregateColumnSchema = Schema.NullOr(AggregateColumnSchema);
-
 /** The account, and the instant the window opens: its first UTC day's midnight. */
 const WindowRequestSchema = Schema.Struct({ userId: Schema.String, windowStart: Schema.Date });
 
 /** The state of an agent's pull request alone, out of the row GitHub's answer was kept in. */
-const PULL_REQUEST_STATE_OF = sql<string | null>`${codingAgent.published} ->> 'state'`;
+const PULL_REQUEST_STATE_OF = sql<string | null>`${agentTable.published} ->> 'state'`;
 
 const findSessionSeen = SqlSchema.findOneOption({
   Request: Schema.String,
@@ -122,14 +113,14 @@ const findAgentTotals = SqlSchema.findOneOption({
       db
         .select({
           started: count(),
-          opened: count(codingAgent.published),
+          opened: count(agentTable.published),
           merged: sql<number>`count(*) filter (where ${PULL_REQUEST_STATE_OF} = ${PULL_REQUEST_STATE.MERGED})`,
         })
-        .from(codingAgent)
+        .from(agentTable)
         .where(
           and(
-            eq(codingAgent.userId, request.userId),
-            gte(codingAgent.createdAt, request.windowStart),
+            eq(agentTable.userId, request.userId),
+            gte(agentTable.createdAt, request.windowStart),
           ),
         ),
     ),
@@ -149,13 +140,13 @@ const AgentRowSchema = Schema.Struct({
 type AgentRow = typeof AgentRowSchema.Type;
 
 const AGENT_COLUMNS = {
-  id: codingAgent.id,
-  conversationId: codingAgent.conversationId,
-  createdAt: codingAgent.createdAt,
-  repository: codingAgent.repository,
-  model: codingAgent.model,
-  effort: codingAgent.effort,
-  contextWindow: codingAgent.contextWindow,
+  id: agentTable.id,
+  conversationId: agentTable.conversationId,
+  createdAt: agentTable.createdAt,
+  repository: agentTable.repository,
+  model: agentTable.model,
+  effort: agentTable.effort,
+  contextWindow: agentTable.contextWindow,
   pullRequestState: PULL_REQUEST_STATE_OF,
 };
 
@@ -177,21 +168,21 @@ const findAgents = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select(AGENT_COLUMNS)
-        .from(codingAgent)
+        .from(agentTable)
         .where(
           and(
-            eq(codingAgent.userId, request.userId),
+            eq(agentTable.userId, request.userId),
             request.windowStart === null
               ? undefined
               : or(
-                  gte(codingAgent.createdAt, request.windowStart),
+                  gte(agentTable.createdAt, request.windowStart),
                   exists(
                     db
                       .select({ id: turns.id })
                       .from(turns)
                       .where(
                         and(
-                          eq(turns.conversationId, codingAgent.conversationId),
+                          eq(turns.conversationId, agentTable.conversationId),
                           gte(turns.settledAt, request.windowStart),
                         ),
                       ),
@@ -199,47 +190,8 @@ const findAgents = SqlSchema.findAll({
                 ),
           ),
         )
-        .orderBy(desc(codingAgent.createdAt), desc(codingAgent.id))
+        .orderBy(desc(agentTable.createdAt), desc(agentTable.id))
         .limit(request.limit),
-    ),
-});
-
-/** Seconds of call time the voice service reported for the account inside the window. */
-const findCallSeconds = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, windowStartMs: Schema.Number }),
-  Result: Schema.Struct({ seconds: NullableAggregateColumnSchema }),
-  execute: (request) =>
-    Database.use((db) =>
-      db
-        .select({ seconds: sum(voiceSessionUsage.seconds) })
-        .from(voiceSessionUsage)
-        .where(
-          and(
-            eq(voiceSessionUsage.userId, request.userId),
-            gte(voiceSessionUsage.recordedAt, request.windowStartMs),
-          ),
-        ),
-    ),
-});
-
-/** The window's calls that ended on a lost connection, newest first. */
-const findDroppedCalls = SqlSchema.findAll({
-  Request: WindowRequestSchema,
-  Result: Schema.Struct({ at: InstantColumnSchema }),
-  execute: (request) =>
-    Database.use((db) =>
-      db
-        .select({ at: voiceSessions.closedAt })
-        .from(voiceSessions)
-        .where(
-          and(
-            eq(voiceSessions.userId, request.userId),
-            eq(voiceSessions.closeReason, VOICE_CLOSE_REASON.CONNECTION_LOST),
-            gte(voiceSessions.closedAt, request.windowStart),
-          ),
-        )
-        .orderBy(desc(voiceSessions.closedAt))
-        .limit(ADMIN_ACCOUNT_FAILURES_LIMIT),
     ),
 });
 
@@ -465,8 +417,6 @@ export function readAdminAccountSource(input: {
       agentTotals,
       windowRows,
       recentRows,
-      callSeconds,
-      droppedCalls,
       memberships,
       installations,
       providerKeys,
@@ -480,8 +430,6 @@ export function readAdminAccountSource(input: {
         findAgentTotals(window),
         findAgents({ userId, windowStart, limit: ADMIN_ACCOUNT_STATUS_READ_LIMIT }),
         findAgents({ userId, windowStart: null, limit: ADMIN_RECENT_AGENTS_LIMIT }),
-        findCallSeconds({ userId, windowStartMs: windowStart.getTime() }),
-        findDroppedCalls(window),
         findMemberships(userId),
         findInstallations(userId),
         findProviderKeys(userId),
@@ -511,7 +459,6 @@ export function readAdminAccountSource(input: {
         agentsStarted: totals?.started ?? 0,
         pullRequestsOpened: totals?.opened ?? 0,
         pullRequestsMerged: totals?.merged ?? 0,
-        callSeconds: Option.getOrUndefined(callSeconds)?.seconds ?? 0,
       },
       ...agents,
       workspaces: memberships.map((membership) => ({
@@ -532,10 +479,6 @@ export function readAdminAccountSource(input: {
               contextWindow: chosen.contextWindow,
               experiments: experimentChoicesFrom(chosen.experiments ?? undefined) ?? NO_EXPERIMENTS,
             },
-      droppedCalls: droppedCalls.map((call) => ({
-        at: call.at,
-        reason: VOICE_CLOSE_REASON.CONNECTION_LOST,
-      })),
       failedRuns,
     };
   });

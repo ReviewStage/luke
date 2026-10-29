@@ -2,15 +2,17 @@ import { type ReactNode, useState } from "react";
 import { useUntilFound } from "../../use-until-found.js";
 import { CARD_CORNER, CARD_LOOK, CARD_PADDING, Card } from "../card/card.js";
 import { ShowMoreRow } from "../show-more-row/show-more-row.js";
-import { TEXT_ELEMENT, TEXT_FONT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
+import { SubjectLine } from "../subject-line/subject-line.js";
+import { TEXT_ELEMENT, TEXT_FONT, TEXT_VARIANT, Text } from "../text/text.js";
 
 /**
  * event-card.tsx -- what another service said, as a transcript draws it: a head naming who did what to which thing, their words, and the notes they left on its lines.
  *
  * A line a service steered into an agent, a pull request's review or a
  * failed check, is drawn as this compact card rather than as the prompt
- * the agent read: one head line in the caption's size, which the caller
- * fills with who did it and the thing's chip, the words they wrote under
+ * the agent read: one head line in the caption's size (`SubjectLine`), who
+ * did it whole and then the thing's chip, which takes the rest of the line,
+ * the words they wrote under
  * it, and then each note they left on a line, its place over its words.
  * The card draws the frame and the order; the words, the chip, and each
  * place's link are the caller's, drawn as its own markdown and chips are.
@@ -48,13 +50,16 @@ function NoteRow({ note }: { note: EventCardNote }): React.JSX.Element {
 
 /** What a service said, framed: its head, its words where it wrote any, and its notes, the first few standing. */
 export function EventCard({
-  head,
+  lead,
+  subject,
   children,
   notes = NO_NOTES,
   ...attributes
 }: {
-  /** Who did what, to which thing, as one line. */
-  head: ReactNode;
+  /** Who did what, in words kept whole: "@octocat reviewed". */
+  lead: ReactNode;
+  /** The chip, or link, of the thing they did it to, which takes the rest of the head's line. */
+  subject?: ReactNode;
   /** Their words, where they wrote any. */
   children?: ReactNode;
   notes?: readonly EventCardNote[] | undefined;
@@ -70,9 +75,7 @@ export function EventCard({
       padding={CARD_PADDING.COMPACT}
       className="flex min-w-0 flex-col gap-luke-8"
     >
-      <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-        {head}
-      </Text>
+      <SubjectLine lead={lead}>{subject}</SubjectLine>
       {children == null ? null : <div className="min-w-0">{children}</div>}
       {notes.length === 0 ? null : (
         <ul className="m-0 flex min-w-0 list-none flex-col gap-luke-8 p-0">

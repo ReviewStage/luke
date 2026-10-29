@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { PUSH, type PushEvent } from "@luke/host/contract";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { WebContents } from "electron";
 import { test } from "vitest";
 import { followSwipes } from "./swipe-navigation";
 import { windowPushes } from "./window-pushes";
+
+/** A Luke link to a task, as the system hands one to the app. */
+const LINK = { workspace: "workspace-1", place: { kind: LINK_PLACE.TASK, planId: "task-1" } };
 
 /**
  * A panel window's swipes as its page meets them: the swipe Logi Options+
@@ -23,10 +27,10 @@ function swipedWindow() {
   const swipe = (direction: string) => window.emit("swipe", {}, direction);
   /** Everything pushed to the page so far, the stream then ended. */
   const sent = async (): Promise<PushEvent[]> => {
-    windowPushes.push(webContents, PUSH.CALL_WINDOW_MOVED, undefined);
+    windowPushes.push(webContents, PUSH.SHOW_LINK, LINK);
     const pushed: PushEvent[] = [];
     for await (const event of stream) {
-      if (event.push === PUSH.CALL_WINDOW_MOVED) break;
+      if (event.push === PUSH.SHOW_LINK) break;
       pushed.push(event);
     }
     return pushed;

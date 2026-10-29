@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { codeReviewPreset } from "@luke/features/automation-code-review";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
@@ -20,7 +20,6 @@ import {
   type AutomationSummary,
   type AutomationWorkspaceRun,
 } from "@luke/features/automation-wire";
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
@@ -36,12 +35,10 @@ import {
 } from "@luke/features/trigger-catalog";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import type { PortActResult } from "@luke/host/contract";
-import { EXPERIMENT, type Experiment } from "@luke/settings";
+import type { Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { experimentsOn } from "@luke/settings/testing";
-import { CARD_PRESS_SELECTOR, PROFILE } from "@luke/ui";
+import { PROFILE } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -55,16 +52,9 @@ import {
   type LeaveAsk,
   useLeaveGuard,
 } from "../tasks/use-tasks-tab.js";
-import {
-  type AnyAct,
-  FAKE_ANSWER,
-  type FakeActAnswer,
-  fakeActs,
-  fakeAppBridge,
-  fakeAppBridgeCalls,
-} from "../testing/app-bridge.js";
+import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { deliveryOf, handState, stateWith } from "../testing/app-state.js";
+import { handState } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -232,10 +222,20 @@ function pushStanding(): void {
   }
 }
 
+/**
+ * What stands pushed to every page following a workspace's list, as the host
+ * draws a write on it before the write answers (`@luke/host`'s
+ * `automation-collections.ts`).
+ */
+function drawWrite(): void {
+  for (const follower of listFollowers()) {
+    if (follower.closed) continue;
+    follower.push({ automations: standing.filter((each) => each.workspaceId === follower.id) });
+  }
+}
+
 /** Whether a read of the list is held unanswered, so only the writes' answers draw. */
 let listHeld = false;
-/** The creates held unanswered, each committed and answered by its resolver, where creates are held at all. */
-let heldCreates: (() => void)[] | undefined;
 /** The changes held unanswered, each answered by its resolver, where changes are held at all. */
 let heldChanges: (() => void)[] | undefined;
 /** Every workspace whose list was read, in order. */
@@ -249,9 +249,9 @@ let deletes: string[] = [];
 /** Every ask for a workspace's agents, as the act carried it. */
 let agentsAsked: unknown[] = [];
 /** The workspace's newest agents on the repository, as a read with no words answers them. */
-let workspaceAgents: readonly CodingAgentSummary[] = [];
+let workspaceAgents: readonly AgentSummary[] = [];
 /** The agents a search for `words` finds, as the service answers it. */
-let agentsFound: (words: string) => readonly CodingAgentSummary[] = () => [];
+let agentsFound: (words: string) => readonly AgentSummary[] = () => [];
 /** The service's runs of every automation, newest first, as a read of one's runs answers them. */
 let runs: AutomationRunSummary[] = [];
 /** Every run of the workspace's automations, as its Runs tab's follow pushes them. */
@@ -320,7 +320,6 @@ beforeEach(() => {
   lists = [];
   listHeld = false;
   heldChanges = undefined;
-  heldCreates = undefined;
   listed = [];
   changes = [];
   creates = [];
@@ -381,13 +380,10 @@ beforeEach(() => {
         }
         const automation = { ...was, ...change };
         standing = standing.map((each) => (each.id === automationId ? automation : each));
-        if (heldChanges === undefined) {
-          return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { automation } });
-        }
-        // A held write answers in words of its own, so which answer drew is told by the row's name.
+        drawWrite();
+        const done = { status: FAKE_ANSWER.DONE, value: { automation } } as const;
+        if (heldChanges === undefined) return Promise.resolve(done);
         const held = heldChanges;
-        const told = { ...automation, name: `${was.name}, write ${held.length + 1}` };
-        const done = { status: FAKE_ANSWER.DONE, value: { automation: told } };
         return new Promise((resolve) => held.push(() => resolve(done)));
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_CREATE) {
@@ -409,16 +405,8 @@ beforeEach(() => {
         const value = hooked
           ? { automation: made, webhookSecret: MADE_SECRET }
           : { automation: made };
-        if (heldCreates !== undefined) {
-          const held = heldCreates;
-          return new Promise((resolve) =>
-            held.push(() => {
-              standing = [made, ...standing];
-              resolve({ status: FAKE_ANSWER.DONE, value });
-            }),
-          );
-        }
         standing = [made, ...standing];
+        drawWrite();
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
@@ -486,9 +474,10 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.AUTOMATIONS_DELETE) {
         deletes.push(request.payload.automationId);
         standing = standing.filter((each) => each.id !== request.payload.automationId);
+        drawWrite();
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { deleted: true } });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
+      if (request.kind === ACT_KIND.AGENTS_MODELS) {
         catalogReads += 1;
         const value = catalogRefused
           ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
@@ -499,13 +488,13 @@ beforeEach(() => {
             };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
+      if (request.kind === ACT_KIND.AGENTS_DEFAULT_READ) {
         const value = defaultRefused
           ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
           : { choice: DEFAULT_CHOICE };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+      if (request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST) {
         agentsAsked.push(request.payload);
         const { words } = request.payload;
         if (words === undefined ? agentListRefused : agentSearchRefused) {
@@ -685,94 +674,6 @@ test("a switch turns its automation off, and the row takes the service's answer 
   const row = rowOf(page, "Nightly flaky-test sweep");
   assert.equal(row.querySelector(".automation-row-when")?.textContent, "Off");
   assert.equal(row.querySelector("[role=switch]")?.getAttribute("aria-checked"), "false");
-});
-
-test("a switch flips at once, before the service answers, and a press made meanwhile waits its turn", async () => {
-  heldChanges = [];
-  const page = mount();
-  await settle();
-  const sweep = () =>
-    rowOf(page, "Nightly flaky-test sweep").querySelector<HTMLButtonElement>("[role=switch]");
-  const press = () => act(() => sweep()?.click());
-
-  press();
-  await settle();
-  assert.equal(
-    sweep()?.getAttribute("aria-checked"),
-    "false",
-    "it reads off while the write is out",
-  );
-  press();
-  await settle();
-  assert.equal(changes.length, 1, "the second press sends nothing while the first is out");
-  assert.equal(sweep()?.getAttribute("aria-checked"), "true", "but the switch already shows it");
-
-  heldChanges[0]?.();
-  await settle();
-
-  assert.deepEqual(changes, [
-    { automationId: SWEEP.id, change: { enabled: false } },
-    { automationId: SWEEP.id, change: { enabled: true } },
-  ]);
-});
-
-test("presses made while a write is out send only the newest, and none that repeats what was sent", async () => {
-  heldChanges = [];
-  const page = mount();
-  await settle();
-  const press = () =>
-    act(() =>
-      rowOf(page, "Nightly flaky-test sweep")
-        .querySelector<HTMLButtonElement>("[role=switch]")
-        ?.click(),
-    );
-
-  press();
-  press();
-  press();
-  await settle();
-  heldChanges[0]?.();
-  await settle();
-
-  assert.deepEqual(changes, [{ automationId: SWEEP.id, change: { enabled: false } }]);
-});
-
-test("a switch the service refuses in the editor reads its new state at once, then goes back", async () => {
-  changeRefusal = AUTOMATION_CALL_FAILURE.NOT_PERMITTED;
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  await settle();
-
-  act(() => page.querySelector<HTMLButtonElement>("[role=switch]")?.click());
-
-  assert.equal(
-    page.querySelector("[role=switch]")?.getAttribute("aria-checked"),
-    "false",
-    "it flipped before the refusal came",
-  );
-  await settle();
-  assert.equal(page.querySelector("[role=switch]")?.getAttribute("aria-checked"), "true");
-});
-
-test("a switch's answer landing after a list pushed since it was sent draws nothing over the push", async () => {
-  heldChanges = [];
-  const page = mount();
-  await settle();
-  act(() => automationRows(page)[0]?.querySelector<HTMLButtonElement>("[role=switch]")?.click());
-  await settle();
-
-  // Another window renames it meanwhile, and the host pushes the list before the switch answers.
-  standing = standing.map((each) =>
-    each.id === SWEEP.id ? { ...each, name: "Sweep, as another window left it" } : each,
-  );
-  pushStanding();
-  await settle();
-  heldChanges[0]?.();
-  await settle();
-
-  assert.equal(
-    page.querySelector(".automation-row-name")?.textContent,
-    "Sweep, as another window left it",
-  );
 });
 
 test("what changed elsewhere is drawn as the host pushes it, and a switch reads nothing again", async () => {
@@ -1219,13 +1120,6 @@ function pick(page: HTMLElement, label: string, option: string): void {
   act(() => row.click());
 }
 
-/** The titles of the page's cards, in order. */
-function cards(page: HTMLElement): string[] {
-  return [...page.querySelectorAll("section[aria-labelledby] h2")].map(
-    (title) => title.textContent ?? "",
-  );
-}
-
 /** The switch named, wherever it is drawn. */
 function switchNamed(name: string): HTMLButtonElement {
   const found = document.querySelector<HTMLButtonElement>(`[role=switch][aria-label="${name}"]`);
@@ -1361,25 +1255,6 @@ test("a new automation is created only once it is named and told its task, and t
     archiveSuccessful: false,
     repositories: ["acme/ledger"],
   });
-  assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
-  assert.deepEqual(headings(page), ["Morning triage"]);
-});
-
-test("a new automation whose answer lands after a list pushed before it was made still stands as its own page", async () => {
-  heldCreates = [];
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
-  await settle();
-  type(page.querySelector("input[aria-label='Automation name']"), "Morning triage");
-  type(page.querySelector("textarea[aria-label='Prompt']"), "Triage the issues opened overnight.");
-  act(() => button("Create automation").click());
-  await settle();
-
-  // Something else moves the list while the create is out, before it is made.
-  pushStanding();
-  await settle();
-  heldCreates[0]?.();
-  await settle();
-
   assert.equal(places.at(-1)?.kind, AUTOMATIONS_PAGE.EDIT);
   assert.deepEqual(headings(page), ["Morning triage"]);
 });
@@ -1793,56 +1668,6 @@ test("the Runs panel's edge resizes it within its bounds, and the width stands o
   await settle();
   assert.equal(pane()?.style.width, "280px");
   window.localStorage.clear();
-});
-
-/** A code review as its preset makes it, standing in the workspace. */
-const REVIEW = automation(10, {
-  name: "Code review",
-  action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: codeReviewPreset().prompt },
-});
-
-/** Whether the page wears the Experimental tag and offers Send feedback, each or neither. */
-function saysExperimental(page: HTMLElement): boolean {
-  const tagged = page.querySelector(".experiment-tag")?.textContent === "Experimental";
-  const feedback = [...page.querySelectorAll("button")].some(
-    (each) => each.textContent === "Send feedback",
-  );
-  assert.equal(tagged, feedback, "the tag and Send feedback stand together");
-  return tagged;
-}
-
-test("the list and an automation's page are no experiment, so neither wears the Experimental tag or offers Send feedback", async () => {
-  const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
-  await settle();
-  assert.equal(saysExperimental(list), false);
-  act(() => root?.unmount());
-
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  await settle();
-  assert.equal(saysExperimental(page), false);
-});
-
-test("a code review's page says it is an experiment while Code review is on, its Send feedback about Code review, and is a plain automation's page, its settings in its prompt alone, while it is off", async () => {
-  standing = [DIGEST, SWEEP, REVIEW];
-  handState(experimentsOn(EXPERIMENT.CODE_REVIEW));
-  const on = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: REVIEW.id });
-  await settle();
-  assert.equal(saysExperimental(on), true);
-  assert.ok(cards(on).includes("Code review"));
-  act(() => button("Send feedback").click());
-  assert.deepEqual(feedbackAbout, [EXPERIMENT.CODE_REVIEW]);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  handState({});
-  const off = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: REVIEW.id });
-  await settle();
-  assert.equal(saysExperimental(off), false);
-  assert.ok(!cards(off).includes("Code review"));
-  assert.match(
-    off.querySelector<HTMLTextAreaElement>("textarea[aria-label='Prompt']")?.value ?? "",
-    /^Code review settings:/u,
-  );
 });
 
 /** The pill the pointer resting on `element` raises, or nothing where it raises none. */
@@ -3105,7 +2930,7 @@ test("a right-click on an automation's switch opens no menu, and Escape from its
   assert.equal(document.activeElement, press);
 });
 
-test("an automation row's ⋯, its right-click and the menu key open the same menu, whose Copy link copies its link", async () => {
+test("an automation row's ⋯, its right-click and the menu key open the same menu, whose Copy link copies its link and whose Run now runs it", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
   const row = rowOf(page, SWEEP.name);
@@ -3144,7 +2969,7 @@ test("an automation row's ⋯, its right-click and the menu key open the same me
     assert.equal(openMenus()[0]?.getAttribute("aria-label"), "Automation actions");
     assert.deepEqual(
       items().map((item) => item.textContent),
-      ["Copy link", "Show details⌥↓", "Delete"],
+      ["Copy link", "Run now", "Show details⌥↓", "Delete"],
     );
     await closeMenu();
   }
@@ -3152,6 +2977,11 @@ test("an automation row's ⋯, its right-click and the menu key open the same me
   await settle();
   await act(async () => menuItem("Copy link").click());
   assert.equal(copied.at(-1), `https://tryluke.dev/${WORKSPACE.id}/automation/${SWEEP.id}`);
+  doors[0]?.();
+  await settle();
+  await act(async () => menuItem("Run now").click());
+  await settle();
+  assert.deepEqual(runsAsked, [SWEEP.id]);
 });
 
 test("a link to a run shows the Runs panel a reader folded, its run marked current, a fold after it stands, and the link opened again shows it again", async () => {
@@ -3230,206 +3060,6 @@ test("a link to a run opens its automation's editor with that run marked current
     ),
     [null, "true"],
   );
-});
-
-test("an automation whose task opens with no code review settings shows no Code review card", async () => {
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
-  await settle();
-
-  assert.ok(!cards(page).includes("Code review"));
-});
-
-/** The suggestion named, under the list. */
-function suggestion(page: HTMLElement, name: string): HTMLButtonElement {
-  const found = [
-    ...page.querySelectorAll<HTMLButtonElement>(
-      `[aria-label='Suggested'] .automation-suggestion ${CARD_PRESS_SELECTOR}`,
-    ),
-  ].find((each) => each.querySelector(".automation-suggestion-name")?.textContent === name);
-  assert.ok(found, `no suggestion ${name}`);
-  return found;
-}
-
-test("Code review is suggested under an empty list as under a full one, and a blank new automation offers no preset of its own", async () => {
-  handState(experimentsOn(EXPERIMENT.CODE_REVIEW));
-  standing = [];
-  const empty = mount();
-  await settle();
-  assert.match(empty.textContent ?? "", /No automations yet\./u);
-  assert.ok(suggestion(empty, "Code review"));
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  standing = [DIGEST, SWEEP, FAILING];
-  const full = mount();
-  await settle();
-  assert.equal(rows(full).length, 3);
-  assert.ok(suggestion(full, "Code review"));
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  const blank = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
-  await settle();
-  assert.deepEqual(cards(blank).slice(0, 3), ["Sharing", "Trigger", "Prompt"]);
-  assert.equal(
-    blank.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
-    "",
-  );
-});
-
-test("while Code review is off nothing is suggested, under an empty list or a full one, and a page sent to its preset goes back to the list", async () => {
-  handState({});
-  standing = [];
-  const empty = mount();
-  await settle();
-  assert.match(empty.textContent ?? "", /No automations yet\./u);
-  assert.equal(empty.querySelector("[aria-label='Suggested']"), null);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  standing = [DIGEST, SWEEP, FAILING];
-  const full = mount();
-  await settle();
-  assert.equal(rows(full).length, 3);
-  assert.equal(full.querySelector("[aria-label='Suggested']"), null);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  const sent = mountPages({ kind: AUTOMATIONS_PAGE.NEW, preset: "code-review" });
-  await settle();
-  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
-  assert.equal(sent.querySelector("input[aria-label='Automation name']"), null);
-});
-
-test("a Code review draft goes back to the list once Code review turns off while it stands, asking once first where it was written in, so no review is made with the experiment off", async () => {
-  const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    requestAppState: () => Promise.resolve(stateWith(experimentsOn(EXPERIMENT.CODE_REVIEW), {})),
-    onAppState: (heard: (delivery: AppStateDelivery) => void) => {
-      const listener = (snapshot: AppStateSnapshot) => heard(deliveryOf(snapshot));
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  });
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
-  await settle();
-  act(() => suggestion(page, "Code review").click());
-  await settle();
-  type(page.querySelector("input[aria-label='Automation name']"), "Review it all");
-
-  act(() => {
-    for (const listener of listeners) listener(stateWith({}, {}));
-  });
-  await settle();
-  assert.ok(leaveAsked(), "the leave question stands before the written draft is lost");
-  act(() => button("Cancel").click());
-  await settle();
-  // The window draws again with nothing moved, as any delivery of its state draws it, which asks nothing again.
-  act(() => sendTo({ kind: AUTOMATIONS_PAGE.NEW, preset: "code-review" }));
-  await settle();
-  assert.equal(
-    leaveAsked(),
-    undefined,
-    "Cancel keeps the draft until the place or the experiment moves",
-  );
-  assert.equal(
-    page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
-    "Review it all",
-  );
-
-  act(() => {
-    for (const listener of listeners)
-      listener(stateWith(experimentsOn(EXPERIMENT.CODE_REVIEW), {}));
-  });
-  await settle();
-  act(() => {
-    for (const listener of listeners) listener(stateWith({}, {}));
-  });
-  await settle();
-  assert.ok(leaveAsked(), "turned off again, it asks again");
-  act(() => button("Leave").click());
-  await settle();
-
-  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
-  assert.equal(page.querySelector("input[aria-label='Automation name']"), null);
-  assert.deepEqual(creates, []);
-});
-
-test("a new automation started from the Code review suggestion is made on pull requests opened or updated, archiving its successful runs, at most five at once and fifty a day", async () => {
-  handState(experimentsOn(EXPERIMENT.CODE_REVIEW));
-  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
-  await settle();
-
-  act(() => suggestion(page, "Code review").click());
-  await settle();
-  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.NEW, preset: "code-review" });
-  // Note that the page opens filled in, so a Create pressed straight away saves the review.
-  // Note that the owner is chosen first, as Dean asked, then its trigger and its own settings.
-  assert.deepEqual(cards(page).slice(0, 3), ["Sharing", "Trigger", "Code review"]);
-  assert.equal(
-    page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
-    "Code review",
-  );
-  assert.equal(
-    pickerDetail(page, "Type"),
-    "When a pull request by people or Luke's agents is opened, marked ready, or pushed to in acme/ledger",
-  );
-  // Its own settings, Cursor Bugbot's kind, in a card of their own and written into the lines its task opens with.
-  assert.ok(cards(page).includes("Code review"));
-  act(() => switchNamed("Comment when no issues are found").click());
-  pick(page, "Most findings", "3");
-  const rulesFile = page.querySelector<HTMLInputElement>("input[aria-label='Rules file']");
-  // Note that the field is described by its row's words, so a screen reader reads where the file is read from.
-  assert.equal(
-    document.getElementById(rulesFile?.getAttribute("aria-describedby") ?? "")?.textContent,
-    "Read from the base branch, beside AGENTS.md and CLAUDE.md.",
-  );
-  type(rulesFile, ".cursor/BUGBOT.md");
-  act(() => button("Create automation").click());
-  await settle();
-
-  const made = creates[0];
-  assert.ok(made, "the automation is made");
-  assert.deepEqual(
-    {
-      name: made.name,
-      trigger: made.trigger,
-      archiveSuccessful: made.archiveSuccessful,
-      guards: made.guards,
-      target: made.target,
-      repositories: made.repositories,
-    },
-    {
-      name: "Code review",
-      trigger: {
-        kind: AUTOMATION_TRIGGER.GITHUB,
-        event: "pull-request-updated",
-        senders: ["people", "luke-agents"],
-        moments: ["opened", "ready", "pushed"],
-        drafts: false,
-        forks: false,
-      },
-      archiveSuccessful: true,
-      guards: { maxConcurrentRuns: 5, dailyRunCap: 50 },
-      target: { kind: AUTOMATION_TARGET.NEW_AGENT },
-      repositories: ["acme/ledger"],
-    },
-  );
-  assert.match(made.action.prompt, /post what you find as one GitHub review/u);
-  assert.ok(
-    made.action.prompt.startsWith(
-      [
-        "Code review settings:",
-        "- Comment when you find nothing: no",
-        "- Most findings to post: 3",
-        "- Rules file: .cursor/BUGBOT.md",
-        "- Fix what you find: no",
-      ].join("\n"),
-    ),
-    "the settings open the task the agent is handed",
-  );
-  assert.equal(made.action.choice, undefined, "it runs on the creator's own model");
 });
 
 /**

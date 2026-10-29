@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "@luke/database/models/provider-key-seal";
 import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted } from "effect";
-import { BRAIN_HOST_ENVIRONMENT } from "./agents/brain-host/bounds.js";
+import { EVE_HOST_ENVIRONMENT } from "./agents/eve-host/bounds.js";
 import { GITHUB_APP_ENVIRONMENT } from "./auth/auth-deployment.js";
 import { text } from "./core.js";
 import { CRON_ENVIRONMENT } from "./maintenance/maintenance-bounds.js";
@@ -93,14 +93,13 @@ export function namedIn(
 /**
  * `EVE_DEPLOYMENT_SECRET` as an environment record holds it, under the rule
  * the layer below reads it by, for a reader that holds the record rather
- * than the service: the voice function's exchange and the admin dashboard's
- * health list. Nothing where it is unset, blank, or the cron's own value.
+ * than the service: the admin dashboard's health list. Nothing where it is unset, blank, or the cron's own value.
  */
 export function eveDeploymentSecretIn(
   environment: Readonly<Record<string, string | undefined>>,
 ): Redacted.Redacted | undefined {
   return eveSecretApart(
-    namedIn(environment, BRAIN_HOST_ENVIRONMENT.DEPLOYMENT_SECRET),
+    namedIn(environment, EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET),
     namedIn(environment, CRON_ENVIRONMENT.CRON_SECRET),
   );
 }
@@ -126,7 +125,7 @@ export const hostedEnvironment = Layer.effect(
       posthogProjectApiKey: Config.option(Config.Redacted(POSTHOG_ENVIRONMENT.PROJECT_API_KEY)),
       posthogIngestHost: Config.option(Config.String(POSTHOG_ENVIRONMENT.HOST)),
       cronSecret: Config.option(Config.Redacted(CRON_ENVIRONMENT.CRON_SECRET)),
-      eveDeploymentSecret: Config.option(Config.Redacted(BRAIN_HOST_ENVIRONMENT.DEPLOYMENT_SECRET)),
+      eveDeploymentSecret: Config.option(Config.Redacted(EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET)),
       githubWebhookSecret: Config.option(Config.Redacted(GITHUB_APP_ENVIRONMENT.WEBHOOK_SECRET)),
       providerKeyEncryptionKeys: Config.option(
         Config.Redacted(PROVIDER_KEY_ENCRYPTION_ENVIRONMENT.KEYS),

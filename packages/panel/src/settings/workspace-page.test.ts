@@ -82,7 +82,7 @@ import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page.j
  * every workspace's GitHub group, the first one's too, holds GitHub:
  * an owner's or an admin's to connect, or to manage on GitHub from its one
  * button once connected, its accounts listed under it, and a member's to
- * read, and Linear beside it, disconnected from its ⋯. Synthetic accounts.
+ * read. Synthetic accounts.
  */
 
 const OWNER: WorkspaceMember = {
@@ -142,8 +142,6 @@ let refuseLaterReads = false;
 let inviteHeld: Promise<void> | undefined;
 /** Whether the browser could not be opened on GitHub's page. */
 let refuseGitHubOpen = false;
-/** Where the next Linear sign-in waits before the browser is sent, so a test can hold it on the wire. */
-let linearConnectHeld: Promise<void> | undefined;
 /** The workspace's Sentry on a deployment that holds no Sentry integration, which every test reads unless it says otherwise. */
 const SENTRY_NOT_SET_UP: WorkspaceSentry = { configured: false, installations: [] };
 /** The workspace's Sentry as the service answers it; none where the read is refused. */
@@ -298,13 +296,6 @@ function answer(request: Asked): Promise<Answered> {
     case ACT_KIND.WORKSPACE_INVITATION_CANCEL:
       invitations = invitations.filter((one) => one.id !== request.payload.invitationId);
       return Promise.resolve(done(invitations));
-    case ACT_KIND.WORKSPACE_LINEAR_CONNECT:
-      if (linearConnectHeld !== undefined) {
-        const held = linearConnectHeld;
-        linearConnectHeld = undefined;
-        return held.then(() => done(undefined));
-      }
-      return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
     case ACT_KIND.WORKSPACE_SENTRY_READ:
       if (sentry === undefined) {
         return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not read." });
@@ -543,7 +534,6 @@ beforeEach(() => {
   refuseLaterReads = false;
   inviteHeld = undefined;
   refuseGitHubOpen = false;
-  linearConnectHeld = undefined;
   sentry = SENTRY_NOT_SET_UP;
   refuseRename = false;
   refusePhoto = false;
@@ -727,8 +717,14 @@ function rowActions(row: HTMLElement): string[] {
   return items;
 }
 
-/** Chooses `label` from the ⋯ on `row`. */
+/** Chooses `label` from the ⋯ on `row`, or presses its button of that name where the row's one act stands alone. */
 async function chooseAction(row: HTMLElement, label: string): Promise<void> {
+  const lone = row.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  if (lone !== null) {
+    act(() => lone.click());
+    await settle();
+    return;
+  }
   const ellipsis =
     row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
     assert.fail("the row draws no ⋯");
@@ -1170,7 +1166,7 @@ test("before the workspaces are read, placeholder sections stand in the page's s
   assert.deepEqual(sections, [
     [false, 1],
     [true, 1],
-    [true, 3],
+    [true, 2],
   ]);
 });
 
@@ -1598,11 +1594,9 @@ const rowWords = (row: HTMLElement) => [
     : row.querySelector("small")?.textContent,
 ];
 
-/** What every GitHub row of the Integrations group says, in order: every row but Linear's, which the group holds beside them. */
+/** What every row of the Integrations group says, in order. */
 const integrationRows = (page: HTMLElement) =>
-  [...githubGroup(page).querySelectorAll<HTMLElement>(ROWS)]
-    .map(rowWords)
-    .filter(([name]) => name !== "Linear");
+  [...githubGroup(page).querySelectorAll<HTMLElement>(ROWS)].map(rowWords);
 
 /** The words of every button a row draws. */
 const rowButtons = (row: HTMLElement) =>
@@ -1625,9 +1619,6 @@ const githubSent = () =>
 /** The words GitHub's row says once an account is connected: to an owner or an admin, and to a member. */
 const MANAGES_ON_GITHUB = "Add accounts and choose repositories on GitHub.";
 const MANAGED_ON_GITHUB = "Accounts and repositories are managed on GitHub.";
-
-/** A connected workspace whose Linear is connected too. */
-const WITH_LINEAR: Workspace = { ...CONNECTED, linear: { active: true } };
 
 test("an owner or an admin of a connected workspace sees GitHub's row, led by its mark, with Add repository, one Manage on GitHub, and no menu, and every account connected under it", async () => {
   for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
@@ -1699,9 +1690,9 @@ test("a service from before several connections names one GitHub account alone, 
   assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Add repository", "Manage on GitHub"]);
 });
 
-test("Escape in Linear's menu hands focus back to its ⋯", async () => {
-  const { page } = await mount(WITH_LINEAR);
-  const ellipsis = ellipsisOn(rowNamed(page, "Linear"));
+test("Escape in a member's menu hands focus back to its ⋯", async () => {
+  const { page } = await mount(ACME);
+  const ellipsis = ellipsisOn(memberNamed(page, "Sam"));
 
   act(() => ellipsis.click());
   const firstFocused = document.activeElement?.textContent;
@@ -1711,7 +1702,7 @@ test("Escape in Linear's menu hands focus back to its ⋯", async () => {
     );
   });
 
-  assert.equal(firstFocused, "Disconnect");
+  assert.equal(firstFocused, "Copy link");
   assert.equal(document.activeElement, ellipsis);
   assert.equal(ellipsis.getAttribute("aria-expanded"), "false");
 });
@@ -2253,13 +2244,9 @@ test("Cancel invitation, drawn red, sends nothing while an invitation is on its 
 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
   const row = invitationRows(page)[0] ?? assert.fail("no pending invitation");
-  const ellipsis =
-    row.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ?? assert.fail();
-  act(() => ellipsis.click());
   const cancel =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (each) => each.textContent === "Cancel invitation",
-    ) ?? assert.fail("no Cancel invitation");
+    row.querySelector<HTMLButtonElement>('button[aria-label="Cancel invitation"]') ??
+    assert.fail("no Cancel invitation");
   act(() => cancel.click());
   release();
   await settle();
@@ -2306,12 +2293,12 @@ test("an address already invited is said under the form, and a member is offered
 });
 
 test("a row's menu left open on one workspace closes when another is listed in its place", async () => {
-  const { page, relist } = await mount(WITH_LINEAR);
-  act(() => ellipsisOn(rowNamed(page, "Linear")).click());
+  const { page, relist } = await mount(ACME);
+  act(() => ellipsisOn(memberNamed(page, "Sam")).click());
   const opened = document.querySelector('[role="menu"]:not([data-leaving])') !== null;
 
   await relist({
-    ...WITH_LINEAR,
+    ...CONNECTED,
     id: "workspace-beta",
     name: "Beta",
     github: { login: "beta", active: true },
@@ -2320,7 +2307,6 @@ test("a row's menu left open on one workspace closes when another is listed in i
 
   assert.equal(opened, true);
   assert.equal(document.querySelector('[role="menu"]:not([data-leaving])'), null);
-  assert.equal(ellipsisOn(rowNamed(page, "Linear")).getAttribute("aria-expanded"), "false");
 });
 
 test("a workspaces read that failed says so with Retry, which asks for them again", () => {
@@ -2387,94 +2373,6 @@ test("an invitations read that failed says so with Retry in the list's place, wh
   );
 });
 
-/** The workspace Linear connects and disconnects sent, by their payloads. */
-const linearSent = () =>
-  sent.flatMap((request) =>
-    request.kind === ACT_KIND.WORKSPACE_LINEAR_CONNECT ||
-    request.kind === ACT_KIND.WORKSPACE_LINEAR_DISCONNECT
-      ? [[request.kind, request.payload]]
-      : [],
-  );
-
-test("an admin's Linear row in Integrations connects Linear for the workspace at once, asking nothing first, and a second press while it starts begins no second sign-in", async () => {
-  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  const row = rowNamed(githubGroup(page), "Linear");
-  const before = rowWords(row);
-
-  act(() => {
-    button(row, "Connect").click();
-    button(row, "Connect").click();
-  });
-  await settle();
-
-  assert.deepEqual(before, ["Linear", "Not connected."]);
-  assert.equal(document.querySelector('[role="alertdialog"]'), null);
-  assert.deepEqual(linearSent(), [[ACT_KIND.WORKSPACE_LINEAR_CONNECT, { workspaceId: ACME.id }]]);
-});
-
-test("an admin's Linear Connect is named Connecting while the browser is sent, and Connect again once it is", async () => {
-  let release: () => void = () => undefined;
-  linearConnectHeld = new Promise<void>((resolve) => {
-    release = () => resolve();
-  });
-  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  const connect = button(rowNamed(githubGroup(page), "Linear"), "Connect");
-
-  act(() => connect.click());
-  const during = [connect.getAttribute("aria-label"), connect.getAttribute("aria-busy")];
-  release();
-  await settle();
-
-  assert.deepEqual(during, ["Connecting", "true"]);
-  assert.deepEqual(
-    [connect.getAttribute("aria-label"), connect.getAttribute("aria-busy")],
-    [null, null],
-  );
-  assert.equal(page.querySelector('[role="alert"]'), null);
-});
-
-test("a connected workspace's Linear reads connected for everyone and stands quiet, its ⋯ disconnects after asking, and a member sees it read only", async () => {
-  const connected = WITH_LINEAR;
-  const admin = await mount(connected);
-  const row = rowNamed(admin.page, "Linear");
-  const words = rowWords(row);
-  const controls = [...row.querySelectorAll("button")].map(
-    (each) => each.textContent || each.getAttribute("aria-label"),
-  );
-
-  await chooseAction(row, "Disconnect");
-  await confirm("Disconnect");
-  for (const root of roots.splice(0)) act(() => root.unmount());
-  const member = await mount({ ...connected, role: WORKSPACE_ROLE.MEMBER });
-  const memberRow = rowNamed(member.page, "Linear");
-  const unconnected = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
-
-  assert.deepEqual(words, ["Linear", "Connected for everyone in this workspace"]);
-  assert.deepEqual(controls, ["Linear actions"]);
-  assert.deepEqual(linearSent(), [
-    [ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, { workspaceId: connected.id }],
-  ]);
-  assert.deepEqual(rowButtons(memberRow), []);
-  assert.deepEqual(rowWords(rowNamed(unconnected.page, "Linear")), [
-    "Linear",
-    "Not connected. Ask an owner or admin.",
-  ]);
-});
-
-test("a workspace's Linear whose sign-in expired says so, offering an admin Reconnect and telling a member to ask", async () => {
-  const expired: Workspace = { ...CONNECTED, linear: { active: false } };
-  const admin = rowNamed((await mount(expired)).page, "Linear");
-  const member = rowNamed(
-    (await mount({ ...expired, role: WORKSPACE_ROLE.MEMBER })).page,
-    "Linear",
-  );
-
-  assert.deepEqual(rowWords(admin), ["Linear", "Sign-in expired"]);
-  assert.ok(button(admin, "Reconnect"));
-  assert.deepEqual(rowWords(member), ["Linear", "Sign-in expired. Ask an owner or admin."]);
-  assert.deepEqual(rowButtons(member), []);
-});
-
 /** The workspace Sentry installs and disconnects sent, by their payloads. */
 const sentrySent = () =>
   sent.flatMap((request) =>
@@ -2522,7 +2420,7 @@ test("a Disconnect still being asked is dismissed once a read finds its installa
   sentry = SENTRY_INSTALLED;
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
-  await chooseAction(rowNamed(githubGroup(page), "Sentry"), "Disconnect acme");
+  await chooseAction(rowNamed(githubGroup(page), "Sentry"), "Disconnect");
   const asked = document.querySelector('[role="alertdialog"]') !== null;
   sentry = { configured: true, installations: [] };
   act(() => {
@@ -2571,13 +2469,13 @@ test("an admin installs Sentry for the workspace from its row, which opens Sentr
   assert.deepEqual(sentrySent(), [[ACT_KIND.WORKSPACE_SENTRY_INSTALL, { workspaceId: ACME.id }]]);
 });
 
-test("an installed workspace's Sentry names its organization, its ⋯ disconnects it after asking, and a member sees it read only", async () => {
+test("an installed workspace's Sentry names its organization, its Disconnect button asks first, and a member sees it read only", async () => {
   sentry = SENTRY_INSTALLED;
   const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
   const row = rowNamed(githubGroup(admin.page), "Sentry");
   const words = rowWords(row);
 
-  await chooseAction(row, "Disconnect acme");
+  await chooseAction(row, "Disconnect");
   await confirm("Disconnect");
   const after = rowWords(rowNamed(githubGroup(admin.page), "Sentry"));
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -2597,13 +2495,13 @@ test("an installed workspace's Sentry names its organization, its ⋯ disconnect
   assert.deepEqual(rowButtons(memberRow), []);
 });
 
-test("in the window, each member's ⋯ opens their profile first, in the workspace the page shows", async () => {
+test("in the window, each member's ⋯ offers Copy link first, then opens their profile in the workspace the page shows", async () => {
   const opened: [string, string | undefined, string | undefined][] = [];
   const { page } = await mount(ACME, [], (userId, name, workspaceId) =>
     opened.push([userId, name, workspaceId]),
   );
 
-  assert.deepEqual(rowActions(memberNamed(page, "Sam")), ["Open profile", "Copy link"]);
+  assert.deepEqual(rowActions(memberNamed(page, "Sam")), ["Copy link", "Open profile"]);
   await chooseAction(memberNamed(page, "Sam"), "Open profile");
 
   assert.deepEqual(opened, [[MEMBER.userId, "Sam", ACME.id]]);

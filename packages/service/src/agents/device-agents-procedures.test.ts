@@ -9,16 +9,16 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
-import { createCodingAgent, latestTurnsOfReached } from "@luke/database/models/coding-agent-store";
+import { createAgent, latestTurnsOfReached } from "@luke/database/models/agent-store";
 import { devicesSeenSince } from "@luke/database/models/device-store";
 import { mintHostInstallToken, revokeHostInstallToken } from "@luke/database/models/host-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@luke/database/testing";
-import { BRAIN_RUN_EVENT, BRAIN_TURN_ORIGIN, BRAIN_TURN_TRIGGER } from "@luke/features/brain";
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import { HOST_WIRE } from "@luke/features/host-wire";
+import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { EXPERIMENT } from "@luke/settings";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
@@ -181,7 +181,7 @@ const enrolledHost = (userId: string) =>
 const agentRunningOn = (userId: string, deviceId: string | null) =>
   Effect.gen(function* () {
     const task = yield* startTask(userId, { name: "Invitations" });
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -189,7 +189,7 @@ const agentRunningOn = (userId: string, deviceId: string | null) =>
       planSnapshot: "# Invitations\n",
       prompt: null,
       repository: null,
-      ...(deviceId === null ? {} : { machine: CODING_AGENT_MACHINE.DEVICE, deviceId }),
+      ...(deviceId === null ? {} : { machine: AGENT_MACHINE.DEVICE, deviceId }),
     });
     const { conversationId } = Option.getOrThrow(started).agent;
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
@@ -199,10 +199,10 @@ const agentRunningOn = (userId: string, deviceId: string | null) =>
     yield* writer.consume(target, {
       conversationId: sessionKey(conversationId),
       turnId,
-      kind: BRAIN_RUN_EVENT.TURN_STARTED,
+      kind: RUN_EVENT.TURN_STARTED,
       sequence: 1,
-      origin: BRAIN_TURN_ORIGIN.TYPED,
-      trigger: BRAIN_TURN_TRIGGER.ASK,
+      origin: RUN_TURN_ORIGIN.TYPED,
+      trigger: TURN_TRIGGER.ASK,
       at: yield* Clock.currentTimeMillis,
     });
     return conversationId;
@@ -266,7 +266,7 @@ it.layer(getTestDB())("a local agent's Mac", (it) => {
         const host = yield* enrolledHost(owner);
         const otherHost = yield* enrolledHost(other);
 
-        const ownBeat = yield* statusOf(hostBeat(host.secret, host.deviceId));
+        const ownBeat = yield* answerOf(hostBeat(host.secret, host.deviceId));
         const otherDeviceBeat = yield* statusOf(hostBeat(host.secret, otherHost.deviceId));
         const followedByOther = yield* statusOf(
           request(otherHost.secret, PATH.LINES, {
@@ -280,7 +280,11 @@ it.layer(getTestDB())("a local agent's Mac", (it) => {
         const ownerList = yield* answerOf(request(owner, PATH.HOSTS));
         const otherList = yield* answerOf(request(other, PATH.HOSTS));
 
-        assert.equal(ownBeat, HOSTED_HTTP_STATUS.OK);
+        // Note that a beat answers the launches the service holds the device to, none for a host with no agent.
+        assert.deepEqual(ownBeat, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { done: true, openLaunches: [] },
+        });
         assert.deepEqual(
           [otherDeviceBeat, followedByOther],
           [HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_HTTP_STATUS.NOT_FOUND],

@@ -25,7 +25,6 @@ const FUNNEL_LABEL = {
   [FUNNEL_STEP.SIGNED_UP]: "Signed up",
   [FUNNEL_STEP.GITHUB_CONNECTED]: "GitHub connected",
   [FUNNEL_STEP.CREATED_TASK]: "Created a task",
-  [FUNNEL_STEP.HELD_CALL]: "Held a call",
   [FUNNEL_STEP.STARTED_AGENT]: "Started an agent",
   [FUNNEL_STEP.OPENED_PR]: "Opened a PR",
   [FUNNEL_STEP.MERGED_PR]: "Merged a PR",
@@ -33,9 +32,8 @@ const FUNNEL_LABEL = {
 
 const REACH_LABEL = {
   [REACH_FEATURE.TASKS]: "Tasks & plans",
-  [REACH_FEATURE.CODING_AGENTS]: "Coding agents",
+  [REACH_FEATURE.AGENTS]: "Agents",
   [REACH_FEATURE.INBOX]: "Inbox",
-  [REACH_FEATURE.VOICE_CALLS]: "Voice calls",
   [REACH_FEATURE.INTEGRATIONS]: "Integration connected",
   [REACH_FEATURE.AUTOMATIONS]: "Automations",
 } as const satisfies Record<ReachFeature, string>;
@@ -140,7 +138,7 @@ function ShareRowSkeleton({ label }: { label: string }): React.JSX.Element {
  * The window's new accounts, step by step: how many of them ever took each
  * step, and their share of everyone who signed up. Each step is counted on its
  * own, so a later step can stand taller than an earlier one: an account can
- * hold a call before it ever connects GitHub.
+ * create a task before it ever connects GitHub.
  */
 export function FunnelChart({
   funnel,

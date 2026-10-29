@@ -1,6 +1,14 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { TURN_ABANDON } from "@luke/database/models/abandoned-turns";
 import {
+  agentConversation,
+  awaitingLinesOfReached,
+  discardAgent,
+  latestTurnsOfReached,
+  readAgentByKey,
+  readVisibleAgent,
+} from "@luke/database/models/agent-store";
+import {
   type Automation,
   type AutomationRun,
   type AutomationRunOutcome,
@@ -17,19 +25,11 @@ import {
   subjectRunStartedSince,
   withAutomationLocked,
 } from "@luke/database/models/automation-store";
-import {
-  awaitingLinesOfReached,
-  codingAgentConversation,
-  discardCodingAgent,
-  latestTurnsOfReached,
-  readCodingAgent,
-  readCodingAgentByKey,
-} from "@luke/database/models/coding-agent-store";
 import { sentLineStands } from "@luke/database/models/message-reads";
-import { AUTOMATION_LINE_METADATA, storeWriter } from "@luke/database/models/writer";
-import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
+import { automationLineMetadata, storeWriter } from "@luke/database/models/writer";
+import type { StoredAutomationOrigin } from "@luke/database/schemas/agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { readCodeReviewSettings } from "@luke/features/automation-code-review";
+import { AGENT_BOUNDS, AGENT_STATUS, type AgentStatus } from "@luke/features/agent-wire";
 import {
   AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS,
   AUTOMATION_FIRING,
@@ -43,11 +43,6 @@ import {
   type GitHubTriggerEvent,
 } from "@luke/features/automation-wire";
 import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_STATUS,
-  type CodingAgentStatus,
-} from "@luke/features/coding-agent-wire";
-import {
   TRIGGER_CATALOG,
   TRIGGER_PROVIDER,
   type TriggerProvider,
@@ -56,11 +51,11 @@ import { failureKind } from "@luke/runtime/effect";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { AgentSessions, EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
-import { type StartServices, startCodingAgent } from "../agents/coder-host/start.js";
-import { codingAgentStatusOf } from "../agents/coder-host/status.js";
-import { steerCodingAgent } from "../agents/coder-host/steer.js";
+import { type StartServices, startAgent } from "../agents/coder-host/start.js";
+import { agentStatusOf } from "../agents/coder-host/status.js";
+import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import type { AgentSessions, EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { fenceable } from "../agents/fenced-text.js";
 import { HOSTED_API_ERROR } from "../http/http.js";
 import type { HostedRefusal } from "../http/http-effect.js";
@@ -108,7 +103,7 @@ const AUTOMATION_RUNS = {
 type ActedRun = AutomationRun & { readonly payload?: string | null };
 
 /** The most the agent's prompt spells, the bound a message to an agent is held to. */
-const PROMPT_BOUND = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS;
+const PROMPT_BOUND = AGENT_BOUNDS.MAX_MESSAGE_CHARS;
 
 /** What a webhook body's fence and lead line spell, with room. */
 const WEBHOOK_FRAME_CHARS = 256;
@@ -122,10 +117,7 @@ const INTEGRATION_FENCE = {
 const CUT_MARK = "\n… (cut to fit; the full body is the caller's to send again)";
 
 /** The statuses under which an agent counts against the concurrency guard. */
-const WORKING: ReadonlySet<CodingAgentStatus> = new Set([
-  CODING_AGENT_STATUS.STARTING,
-  CODING_AGENT_STATUS.RUNNING,
-]);
+const WORKING: ReadonlySet<AgentStatus> = new Set([AGENT_STATUS.STARTING, AGENT_STATUS.RUNNING]);
 
 /** eve's coding-agent service as the deployment acting for one account, or the refusal where this deployment cannot reach it. */
 export type EveForAccount = (
@@ -160,24 +152,18 @@ const SUBJECT_EVENTS: ReadonlySet<GitHubTriggerEvent> = new Set([
  * The fixed name of a run about one pull request or issue, its number and
  * title, `#2905 View commands`, which stays the same across pushes and is
  * what the subject is searched by; none for any other run, which the title
- * model names from the automation's prompt (`coder-host/title.ts`). A code
- * review's run, whose prompt opens with its settings, is `Review #2905 View
- * commands`, so it stands apart from the agents working on that pull request.
+ * model names from the automation's prompt (`coder-host/title.ts`).
  */
-function subjectTitle(automation: Automation, firing: AutomationFiring): string | undefined {
+function subjectTitle(firing: AutomationFiring): string | undefined {
   // An integration's event names its subject, one Sentry issue, by the title the provider gave it.
   if (firing.kind === AUTOMATION_FIRING.INTEGRATION) {
-    return firing.subject.title?.slice(0, CODING_AGENT_BOUNDS.MAX_TITLE_CHARS).trim() || undefined;
+    return firing.subject.title?.slice(0, AGENT_BOUNDS.MAX_TITLE_CHARS).trim() || undefined;
   }
   if (firing.kind !== AUTOMATION_FIRING.GITHUB || firing.number === undefined) return undefined;
   if (!SUBJECT_EVENTS.has(firing.event)) return undefined;
-  const numbered =
-    firing.title === undefined ? `#${firing.number}` : `#${firing.number} ${firing.title}`;
   const named =
-    readCodeReviewSettings(automation.action.prompt) === undefined
-      ? numbered
-      : `Review ${numbered}`;
-  return named.slice(0, CODING_AGENT_BOUNDS.MAX_TITLE_CHARS).trim();
+    firing.title === undefined ? `#${firing.number}` : `#${firing.number} ${firing.title}`;
+  return named.slice(0, AGENT_BOUNDS.MAX_TITLE_CHARS).trim();
 }
 
 /** Why this run was fired, in the words the agent's prompt closes with. */
@@ -227,7 +213,7 @@ function githubEventLines(run: ActedRun): readonly string[] {
 /**
  * What the agent is told where its automation fires on GitHub's events but
  * this run came without one, such as a run its owner asked for now: that no
- * event came, so a prompt that acts on one, the code review's among them,
+ * event came, so a prompt that acts on one
  * ends there rather than choosing an issue or a pull request of its own.
  */
 function missingEventLines(automation: Automation, run: ActedRun): readonly string[] {
@@ -362,7 +348,7 @@ const firingRepositoryHeld = Effect.fnUntraced(function* (
   if (automation.targetKind !== AUTOMATION_TARGET.SAME_AGENT || automation.targetAgentId === null) {
     return true;
   }
-  const agent = yield* readCodingAgent(automation.userId, automation.targetAgentId);
+  const agent = yield* readVisibleAgent(automation.userId, automation.targetAgentId);
   return Option.match(agent, {
     onNone: () => true,
     onSome: (held) => held.repository?.toLowerCase() === repository.toLowerCase(),
@@ -427,14 +413,14 @@ const steerClaimed = Effect.fnUntraced(function* (
   run: ActedRun,
   agentId: string,
 ) {
-  const found = yield* readCodingAgent(automation.userId, agentId);
+  const found = yield* readVisibleAgent(automation.userId, agentId);
   if (Option.isNone(found) || found.value.archivedAt !== null) {
     return yield* failedRun(run, AUTOMATION_RUN_REASON.AGENT_GONE);
   }
   const eve = yield* Effect.result(eveFor(automation.userId));
   if (Result.isFailure(eve)) return yield* failedRun(run, reasonOfSteerRefusal(eve.failure));
   const sent = yield* Effect.result(
-    steerCodingAgent(
+    steerAgent(
       eve.success,
       storeWriter({ tools: CODER_TOOL_SET }),
       automation.userId,
@@ -444,7 +430,7 @@ const steerClaimed = Effect.fnUntraced(function* (
         serverWords: automation.action.prompt,
         clientKey: run.id,
         sender: { kind: MESSAGE_SENDER.AUTOMATION, name: automation.name },
-        metadata: AUTOMATION_LINE_METADATA,
+        metadata: automationLineMetadata(run.firing),
       },
     ),
   );
@@ -464,11 +450,11 @@ const steerClaimed = Effect.fnUntraced(function* (
  */
 const workingAgents = Effect.fnUntraced(function* (automation: Automation, now: number) {
   // An agent's run is settled by the sweep past its bound, so a run older than that holds no agent at work.
-  const since = new Date(now - TURN_ABANDON.CODING_AGENT_AFTER_MS);
+  const since = new Date(now - TURN_ABANDON.AGENT_AFTER_MS);
   const started = yield* startedRunAgents(automation.id, since);
   const target =
     automation.targetKind === AUTOMATION_TARGET.SAME_AGENT && automation.targetAgentId !== null
-      ? yield* readCodingAgent(automation.userId, automation.targetAgentId)
+      ? yield* readVisibleAgent(automation.userId, automation.targetAgentId)
       : Option.none();
   const agents = [
     ...started.filter((agent) =>
@@ -489,7 +475,7 @@ const workingAgents = Effect.fnUntraced(function* (automation: Automation, now: 
   const awaiting = yield* awaitingLinesOfReached(conversations);
   return agents.filter((agent) =>
     WORKING.has(
-      codingAgentStatusOf(turns.get(agent.conversationId), {
+      agentStatusOf(turns.get(agent.conversationId), {
         createdAt: agent.createdAt,
         now,
         awaitingLineAt: awaiting.get(agent.conversationId),
@@ -618,8 +604,7 @@ const decide = (automationId: string, run: ActedRun) =>
  * the start's refusal in one fixed word. The agent starts in the
  * automation's workspace on no task, in the repository a GitHub event named
  * and on the first of its repositories otherwise, so
- * the automation's runs stand apart from the task it was made on and
- * group under the automation itself.
+ * the automation's runs group under the automation itself.
  */
 const startClaimed = Effect.fnUntraced(function* (
   eveFor: EveForAccount,
@@ -635,18 +620,15 @@ const startClaimed = Effect.fnUntraced(function* (
   }
   const repository = runRepository(automation, run);
   const { organizationId } = automation;
-  if (organizationId === null || repository === undefined) {
-    const reason =
-      organizationId === null
-        ? AUTOMATION_RUN_REASON.TASK_UNREACHABLE
-        : AUTOMATION_RUN_REASON.NO_REPOSITORY;
+  if (repository === undefined) {
+    const reason = AUTOMATION_RUN_REASON.NO_REPOSITORY;
     yield* failClaimedRun(run.id, reason);
     const outcome: AutomationRunOutcome = { status: AUTOMATION_RUN_STATUS.FAILED, reason };
     return outcome;
   }
   const handed = automationStart(automation, run);
   const start = yield* Effect.result(
-    startCodingAgent(eveFor(automation.userId), automation.userId, {
+    startAgent(eveFor(automation.userId), automation.userId, {
       taskId: null,
       organizationId,
       repository,
@@ -659,7 +641,7 @@ const startClaimed = Effect.fnUntraced(function* (
       serverWords: automation.action.prompt,
       automationId: automation.id,
       automationOrigin: handed.origin,
-      title: subjectTitle(automation, run.firing),
+      title: subjectTitle(run.firing),
     }),
   );
   if (Result.isSuccess(start)) {
@@ -754,7 +736,7 @@ export const recoverStrandedRun = /* @__PURE__ */ Effect.fn("web/recoverStranded
   // that agent holds the line it sent under its key, and of no other agent whatever its lines hold.
   if (stranded.claimedAgentId !== null) {
     // Read past the creator's gate, since a creator who left after the line landed still sent it.
-    const agent = yield* codingAgentConversation(stranded.claimedAgentId);
+    const agent = yield* agentConversation(stranded.claimedAgentId);
     const sent =
       Option.isSome(agent) &&
       (yield* sentLineStands(
@@ -769,7 +751,7 @@ export const recoverStrandedRun = /* @__PURE__ */ Effect.fn("web/recoverStranded
     yield* failClaimedRun(stranded.id, AUTOMATION_RUN_REASON.UNAVAILABLE);
     return;
   }
-  const started = yield* readCodingAgentByKey(stranded.userId, stranded.id);
+  const started = yield* readAgentByKey(stranded.userId, stranded.id);
   // Note that an agent made under the key whose session never ran a turn was never opened, the
   // function gone between making it and eve taking it, so it is let go rather than taken as started.
   const opened = Option.isSome(started)
@@ -779,6 +761,6 @@ export const recoverStrandedRun = /* @__PURE__ */ Effect.fn("web/recoverStranded
     yield* attachRunAgent(stranded.id, started.value.id);
     return;
   }
-  if (Option.isSome(started)) yield* discardCodingAgent(stranded.userId, started.value.id);
+  if (Option.isSome(started)) yield* discardAgent(stranded.userId, started.value.id);
   yield* failClaimedRun(stranded.id, AUTOMATION_RUN_REASON.UNAVAILABLE);
 });

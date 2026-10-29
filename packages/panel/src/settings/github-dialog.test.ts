@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import {
   GITHUB_TOKEN_REJECTION,
   GITHUB_TOKEN_STATUS,
@@ -67,7 +67,7 @@ beforeEach(() => {
       sent.push({ kind: ACT_KIND.GITHUB_TOKEN_READ, payload });
       if (unansweredReads > 0) {
         unansweredReads -= 1;
-        return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+        return Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
       }
       return Promise.resolve({ token: stored });
     },

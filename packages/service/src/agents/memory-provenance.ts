@@ -24,10 +24,10 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  type CodingAgent,
+  type Agent,
   lineSendersOf,
   RUNNING_TURN_STATUSES,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
 import {
   latestTurnsOf,
   listRecentMessages,
@@ -36,6 +36,7 @@ import {
 } from "@luke/database/models/message-reads";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { CLAUDE_CODE_TOOL, CODEX_TOOL } from "@luke/features/agent-tools";
+import { automationRun } from "@luke/features/model-label";
 import { toolPartName } from "@luke/wire/ui-messages";
 import { Effect } from "effect";
 import { MESSAGE_ROLE } from "../core.js";
@@ -88,19 +89,19 @@ function calledTool(part: {
  * relay writes it with no sender (`coder-host/start.ts`), while every line
  * a member sends keeps theirs.
  */
-const automationLine = (agent: CodingAgent, messageId: string) =>
+const automationLine = (agent: Agent, messageId: string) =>
   Effect.map(
     lineSendersOf({ userId: agent.userId, conversationId: agent.conversationId }, [messageId]),
     (senders) => {
       const sent = senders.get(messageId);
       return sent === undefined
-        ? agent.automationOrigin !== null
+        ? automationRun(agent) !== undefined
         : sent.kind === MESSAGE_SENDER.AUTOMATION;
     },
   );
 
 /** Whether the turn's opening line was an automation's run. */
-const openedByAutomation = (agent: CodingAgent, turnId: string) =>
+const openedByAutomation = (agent: Agent, turnId: string) =>
   Effect.gen(function* () {
     const openers = yield* listTurnOpeners(agent.userId, agent.conversationId, CODER_TOOL_SET, [
       turnId,
@@ -112,7 +113,7 @@ const openedByAutomation = (agent: CodingAgent, turnId: string) =>
   });
 
 /** Whether the turn's journal, which shares the turn's id as its key, holds a call of a web read. */
-const readTheWeb = (agent: CodingAgent, turnId: string) =>
+const readTheWeb = (agent: Agent, turnId: string) =>
   Effect.map(
     readMessageByClientId(agent.userId, agent.conversationId, CODER_TOOL_SET, turnId),
     (journal) => {
@@ -129,7 +130,7 @@ const readTheWeb = (agent: CodingAgent, turnId: string) =>
  * says the turn's words were a member's.
  */
 export function rememberRefusal(
-  agent: CodingAgent,
+  agent: Agent,
 ): Effect.Effect<string | undefined, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const turn = (yield* latestTurnsOf(agent.userId, [agent.conversationId])).get(
@@ -155,7 +156,7 @@ export function rememberRefusal(
  * a page that does not read, is no automation's.
  */
 export function newestLineIsAutomation(
-  agent: CodingAgent,
+  agent: Agent,
 ): Effect.Effect<boolean, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const read = yield* listRecentMessages(

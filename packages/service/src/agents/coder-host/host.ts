@@ -1,24 +1,23 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { settleEndedSession } from "@luke/database/models/abandoned-turns";
-import { askRecord } from "@luke/database/models/asks";
 import {
-  type CodingAgent,
+  type Agent,
   hasRepository,
   lineSendersOf,
-  readCodingAgentContext,
-  readCodingAgentOfConversation,
+  readAgentContext,
+  readAgentOfConversation,
   readDelegation,
-  recordCodingAgentCompaction,
-  recordCodingAgentStep,
-  updateCodingAgentBranch,
-} from "@luke/database/models/coding-agent-store";
+  recordAgentCompaction,
+  recordAgentStep,
+  updateAgentBranch,
+} from "@luke/database/models/agent-store";
 import { promptHashOf } from "@luke/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { listRecentMessages, type StoredMessageRecord } from "@luke/database/models/message-reads";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
+import type { ConversationTarget } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND, CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { Effect, Option, Result, type Schema } from "effect";
@@ -28,7 +27,6 @@ import type { SessionAuth, SessionContext } from "eve/context";
 import { MESSAGE_ROLE, type UnparsedWireValue, type WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import {
   ModelCatalog,
   type OfferedModel,
@@ -41,29 +39,22 @@ import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { endsTurn } from "../agent-runtime/sandbox.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
-import { turnKindOf } from "../brain-host/auth.js";
-import { BRAIN_HOST, type BrainHostTurn, RELAY_TURN } from "../brain-host/bounds.js";
+import { turnKindOf } from "../eve-host/auth.js";
+import { EVE_HOST, type EveHostTurn, RELAY_TURN } from "../eve-host/bounds.js";
 import {
   type AdmittedConversation,
   admitConversation,
   type ConversationAdmission,
   claimRuntimeSession,
   SESSION_STANDING,
-} from "../brain-host/conversation.js";
-import {
-  EVE_MOUNT,
-  type EveSessionsComposer,
-  eveSessionsComposer,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/conversation.js";
 import {
   foldedQuietly,
-  type RelayAskSeams,
   type RelayStanding,
   type RelayStateStore,
   StreamRelay,
-} from "../brain-host/relay.js";
-import { rotationSeedText } from "../brain-host/seed.js";
-import { carryStop } from "../brain-host/stop-carrier.js";
+} from "../eve-host/relay.js";
+import { rotationSeedText } from "../eve-host/seed.js";
 import { newestLineIsAutomation } from "../memory-provenance.js";
 import { memoryOnFor, seedMemoryText } from "../memory-tools.js";
 import { type ReadWebPageResult, ResearchBudget, runReadWebPage } from "../public-research.js";
@@ -73,13 +64,10 @@ import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import {
   type AgentToolCall,
-  type BoardTool,
-  runAgentBoard,
   runAgentComment,
   runAgentEditPlan,
   runAgentLookAtPicture,
   runAgentOpenPullRequest,
-  runAgentShowCode,
   runAgentShowImage,
   runAgentShowPage,
   runAgentTools,
@@ -109,7 +97,7 @@ import type { PlanEditResult } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import type { PullRequestToolResult } from "./pull-request.js";
 import { agentSkills } from "./skills.js";
-import { titleCodingAgent, titleSubagent } from "./title.js";
+import { titleAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
 import { flushDue, type TurnHanded } from "./turn-context.js";
 import {
@@ -128,10 +116,9 @@ import {
  * agent's, whose row names the model each step runs on, the repository its
  * sandbox checks out, and the plan its first message carried. The model is
  * read from the row at every step, so a later change to the row is the next
- * step's model. The relay into the store is the shared one, composed here
- * with no ask record: a message to a coding agent is written as a line
- * awaiting its turn by the message route, and the relay takes that line
- * into the turn that receives it, so nothing needs binding here. The
+ * step's model. The relay into the store is the shared one: a message to a
+ * coding agent is written as a line awaiting its turn by the message route,
+ * and the relay takes that line into the turn that receives it. The
  * agent's title is the host's one model call of its own: generated from its
  * opening as the relay writes it, and from its first exchange as one of its
  * first turns ends, written where no title stands yet, and never again, so
@@ -213,7 +200,7 @@ export interface CoderHost extends HostAdmission {
    */
   admitSandbox(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The agent the admitted conversation is, or the refusal for a conversation that is no agent's. */
-  agent(admitted: AdmittedConversation): HostEffect<Result.Result<CodingAgent, CoderRefusal>>;
+  agent(admitted: AdmittedConversation): HostEffect<Result.Result<Agent, CoderRefusal>>;
   /** The model one step of the turn named runs on, read from the agent's row now, with the window the catalog lists for it. */
   model(
     admitted: AdmittedConversation,
@@ -244,16 +231,16 @@ export interface CoderHost extends HostAdmission {
   /** The instructions the session runs under, with the hash its turns are recorded under, composed on whether the agent's token reads the repository's CI and whose its commits are, neither asked of GitHub for an agent with no repository; the text itself is stored nowhere. */
   prompt(
     admitted: AdmittedConversation,
-    agent: CodingAgent,
+    agent: Agent,
   ): Effect.Effect<CoderSessionPrompt, never, CheckoutServices>;
   /** The skills offered to the session as it starts: its repository's, none for an agent with no repository, then those its member installed, each source none where it could not be read (`skills.ts`). */
   skills(
     admitted: AdmittedConversation,
-    agent: CodingAgent,
+    agent: Agent,
   ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices>;
   /**
    * The conversation so far, for a session opened over a conversation with
-   * words already said, as the brain's rotation seeds one (`brain-host/seed.ts`):
+   * words already said, as the brain's rotation seeds one (`eve-host/seed.ts`):
    * a session opened afresh after its last one retired remembers what was
    * said. A line awaiting its turn is left out, since it is the message the
    * session opens with; nothing for a conversation with nothing else said.
@@ -364,7 +351,7 @@ export interface CoderHost extends HostAdmission {
     call: InboxCall,
   ): Effect.Effect<ThreadToolResult, never, DatabaseServices>;
   /** The kind of turn the current request opened, as its header named it; nothing for one that named none. */
-  turnKind(auth: SessionAuth): BrainHostTurn | undefined;
+  turnKind(auth: SessionAuth): EveHostTurn | undefined;
   /**
    * What a turn opens with as a user-role message of its own, which eve
    * appends to the history after what came before, so the system prompt,
@@ -416,23 +403,6 @@ export interface CoderHost extends HostAdmission {
     name: CommentToolName,
     input: UnparsedWireValue,
   ): Effect.Effect<WireRecord, never, DatabaseServices>;
-  /**
-   * Runs one `show_code` call (`../../tasks/show-code.ts`): lines of the
-   * checkout the session's sandbox opened with, read through the door given,
-   * and journaled with the call on the agent's own conversation, whatever
-   * kind of turn made it.
-   */
-  showCode(
-    admitted: AdmittedConversation,
-    input: UnparsedWireValue,
-    sandbox: () => Promise<RepositorySandbox>,
-  ): Effect.Effect<WireRecord, never, DatabaseServices>;
-  /** Runs one call of the whiteboard's tools (`../../tasks/board-tool.ts`, `../../tasks/board-look.ts`) on the agent's task, as the member whose turn it is. */
-  board(
-    admitted: AdmittedConversation,
-    tool: BoardTool,
-    input: UnparsedWireValue,
-  ): Effect.Effect<WireRecord, never, DatabaseServices>;
   /** Runs one `show_page` call (`../page-tool.ts`) on the agent's task, a page's path read from the session's sandbox through the door given. */
   showPage(
     admitted: AdmittedConversation,
@@ -447,7 +417,7 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<WireRecord, never, DatabaseServices>;
   /**
    * Runs one of the agent's tools about the workspace's coding agents
-   * (`../coding-agent-tools.ts`), the agent its session was admitted to as
+   * (`../agent-tools.ts`), the agent its session was admitted to as
    * the caller: a list of agents or of tasks, a message sent under the
    * call's own key, or a start on a task of its workspace under the same key, which reach eve as the deployment
    * acting for this agent's starter, and reach nothing where the deployment
@@ -459,12 +429,7 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<
     WireRecord,
     never,
-    | DatabaseServices
-    | HttpClient.HttpClient
-    | GitHubApp
-    | ModelCatalog
-    | WorkspaceLinearConnect
-    | SentryApp
+    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog | SentryApp
   >;
   /** Folds an event the store need hear nothing of into the session's relay state and answers whether it did, so the caller admits the session and relays only the rest: the relay's own quiet events (`foldedQuietly`), bar a compaction's end, which the agent's row records. */
   relaysQuietly(event: MessageStreamEvent, state: RelayStateStore): boolean;
@@ -478,7 +443,7 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
 }
 
-export type { AgentToolCall, BoardTool } from "./agent-doors.js";
+export type { AgentToolCall } from "./agent-doors.js";
 export type { InboxCall, ThreadToolResult } from "./inbox-door.js";
 export type { CoderTurnMessage } from "./turn-message.js";
 
@@ -541,7 +506,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
   const research = new ResearchBudget();
   const agentOf = (admitted: AdmittedConversation) =>
     Effect.map(
-      readCodingAgentOfConversation(admitted.target.userId, admitted.target.conversationId),
+      readAgentOfConversation(admitted.target.userId, admitted.target.conversationId),
       (found) =>
         Option.match(found, {
           onNone: () => Result.fail(CODER_REFUSAL.NO_AGENT),
@@ -590,7 +555,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
   /** The instructions the agent's session runs under, composed on what its row names, whether its token reads the repository's CI, and the co-author trailer where it writes as its developer. */
   const promptOf = (
-    agent: CodingAgent,
+    agent: Agent,
     ciReadable: boolean,
     coAuthor: string | undefined,
     workspace: string,
@@ -616,7 +581,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
   const recordContext = (
     event: MessageStreamEvent,
     userId: string,
-    agent: CodingAgent,
+    agent: Agent,
     prompt: CoderSessionPromptRecord,
   ) => {
     const written = Effect.suspend(() => {
@@ -636,10 +601,10 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
             },
             seams.now(),
           );
-          return step === undefined ? Effect.void : recordCodingAgentStep(userId, agent.id, step);
+          return step === undefined ? Effect.void : recordAgentStep(userId, agent.id, step);
         }
         case "compaction.completed":
-          return recordCodingAgentCompaction(userId, agent.id, new Date(seams.now()));
+          return recordAgentCompaction(userId, agent.id, new Date(seams.now()));
         default:
           return Effect.void;
       }
@@ -657,7 +622,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
    * a read failed, which is logged, so the turn still opens.
    */
   const flushOf = (
-    agent: CodingAgent,
+    agent: Agent,
     handed: TurnHanded,
   ): Effect.Effect<boolean, never, DatabaseServices | ModelCatalog> =>
     !isOperator(agent) || handed.opened !== true || handed.flushTold === true
@@ -666,7 +631,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           if (!(yield* memoryOnFor(agent.userId))) return false;
           // A turn an automation opens may keep nothing, so it is not told, and a member's later turn is.
           if (yield* newestLineIsAutomation(agent)) return false;
-          const context = yield* readCodingAgentContext(agent.userId, agent.id);
+          const context = yield* readAgentContext(agent.userId, agent.id);
           if (Option.isNone(context)) return false;
           const { model, contextWindow } = context.value;
           const windowTokens = contextWindowOf(yield* catalogNow, model, contextWindow);
@@ -676,57 +641,12 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           Effect.orElseSucceed(() => false),
         );
 
-  /**
-   * The ask record every turn binds the voice's asks to: each ask eve delivered into the
-   * turn learns the turn it ran in, which is what ties the transcript's line
-   * to it and what the voice follows the answer by, and a Stop the ask took
-   * while it waited is carried the moment its turn starts, by the deployment
-   * acting for the agent's starter on the coder's mount, since the hook that
-   * sees the start holds no bearer; a deployment with no secret or no origin
-   * for eve reports the Stop it could not carry. A typed turn takes it too,
-   * since a call's ask joins one under way (`channel.ts`'s
-   * `CODER_DEPLOYMENT_PRESENCE`): at its start that costs a binding of its
-   * delivery and a read of the Stops on it, two statements.
-   */
-  const turnAsks = (writer: StoreWriter, compose: EveSessionsComposer): RelayAskSeams => ({
-    binding: askRecord(),
-    stopTurn: (target, sessionId, eveTurnId, turnId) =>
-      Effect.suspend(() => {
-        const secret = seams.deploymentSecret();
-        const origin = seams.eveOrigin();
-        if (secret === undefined || origin === undefined) {
-          return Effect.logWarning(
-            `The Stop on turn ${eveTurnId} of session ${sessionId} could not be carried.`,
-          );
-        }
-        return carryStop(
-          {
-            // Composed to send no message at all: the deployment here cancels a turn and does nothing else.
-            eve: compose<never>({
-              origin,
-              caller: { secret, account: target.userId },
-              mount: EVE_MOUNT.CODER,
-            }),
-            writer,
-            now: seams.now,
-            report: (message) => console.warn(message),
-          },
-          target,
-          sessionId,
-          eveTurnId,
-          turnId,
-        );
-      }),
-  });
-
-  /** One event relayed through the shared relay, with the ask record beside it on the agent's own turns, which a call may join, and none on a worker's. */
+  /** One event relayed through the shared relay. */
   const relayEvent = (event: MessageStreamEvent, standing: RelayStanding) =>
     Effect.gen(function* () {
       const writer = yield* seams.writer();
-      const compose = yield* eveSessionsComposer;
       const relay = new StreamRelay({
         writer,
-        ...(standing.turn === RELAY_TURN.CHILD ? undefined : { asks: turnAsks(writer, compose) }),
         now: seams.now,
         report: (message) => console.warn(message),
       });
@@ -830,7 +750,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           admitted.target.userId,
           admitted.target.conversationId,
           CODER_TOOL_SET,
-          BRAIN_HOST.SEED_MESSAGES,
+          EVE_HOST.SEED_MESSAGES,
         );
         const records = read.ok ? read.value.filter((record) => !awaitsTurn(record)) : [];
         const speakers = yield* teammateSpeakers(admitted.target, records);
@@ -888,7 +808,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         // request's, so standing on it is recorded as no branch of its own: no pull request
         // and no GitHub delivery on that branch is taken for this agent's.
         const own = branch === agent.startBranch ? null : branch;
-        yield* updateCodingAgentBranch(admitted.target.userId, agent.id, own);
+        yield* updateAgentBranch(admitted.target.userId, agent.id, own);
       }).pipe(
         Effect.catch((failure) =>
           Effect.logWarning(
@@ -976,10 +896,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
     showPage: (admitted, input, sandbox) => runAgentShowPage(admitted, input, sandbox),
 
-    showCode: (admitted, input, sandbox) => runAgentShowCode(admitted, input, sandbox),
-
-    board: (admitted, tool, input) => runAgentBoard(admitted, tool, input),
-
     showImage: (admitted, input, sandbox) => runAgentShowImage(admitted, input, sandbox),
 
     agentTools: (admitted, call) => runAgentTools(seams, admitted, call),
@@ -1033,12 +949,15 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         if (agent.taskId !== null && endsTurn(event)) {
           yield* settleTaskIfFinished(admitted.target.userId, agent.taskId);
         }
-        if (agent.title !== null || !asksTitle(event)) return;
+        // An operator goes by Luke and is never titled, so no title model is asked for one.
+        if (agent.title !== null || agent.kind === AGENT_KIND.OPERATOR || !asksTitle(event)) {
+          return;
+        }
         // Note that the title is awaited here rather than forked, because eve's step, and the
         // function instance under it, end when the hook returns and take a detached call with them.
         // No model, as for an account that saved no API key, titles the agent from its opening's first words.
         yield* Effect.flatMap(seams.titleModel(admitted.target.userId, agent.model), (titleModel) =>
-          titleCodingAgent(titleModel, admitted.target, agent),
+          titleAgent(titleModel, admitted.target, agent),
         ).pipe(
           Effect.catch((failure) =>
             Effect.logWarning(`The agent's title was not written: ${failure._tag}`),

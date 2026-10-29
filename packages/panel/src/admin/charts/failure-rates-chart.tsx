@@ -18,12 +18,11 @@ import { partialDayKey } from "@luke/ui/daily-series";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { ChartEmpty, ChartFrame, ChartFrameSkeleton, SeriesLegend } from "./chart-frame.js";
 
-/** The four rates, in the order the legend names them. */
+/** The three rates, in the order the legend names them. */
 const FAILURE_RATES_CHART = {
   lukeTurns: { label: "Luke turns", color: "var(--luke-color-chart-1)" },
-  agentRuns: { label: "Coding-agent runs", color: "var(--luke-color-chart-2)" },
-  calls: { label: "Calls dropped", color: "var(--luke-color-chart-3)" },
-  automationRuns: { label: "Automation runs", color: "var(--luke-color-chart-4)" },
+  agentRuns: { label: "Agent runs", color: "var(--luke-color-chart-2)" },
+  automationRuns: { label: "Automation runs", color: "var(--luke-color-chart-3)" },
 } satisfies ChartConfig;
 
 type FailureSeries = keyof typeof FAILURE_RATES_CHART;
@@ -36,7 +35,7 @@ const FAILURE_RATES_TITLE = "Failure rate per day";
 /** The plot's height, which the chart and its skeleton both stand. */
 const FAILURE_RATES_PLOT_HEIGHT = "14rem";
 
-/** The four kinds of work by their line's ink, in the config's order. */
+/** The three kinds of work by their line's ink, in the config's order. */
 function FailureRatesLegend(): React.JSX.Element {
   return (
     <SeriesLegend
@@ -52,7 +51,7 @@ function FailureRatesLegend(): React.JSX.Element {
 /**
  * The window's daily failure rates. A day nothing of a kind ended on is a
  * gap in that kind's line rather than a zero, and a window where nothing
- * ended at all says so instead of drawing four empty lines.
+ * ended at all says so instead of drawing three empty lines.
  */
 export function FailureRatesChart({
   daily,

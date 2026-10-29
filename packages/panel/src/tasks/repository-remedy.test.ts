@@ -60,9 +60,9 @@ test("a missing credential's press lands on its harness's row in Agents, or atop
   assert.deepEqual(
     pressed([missing(MODEL_PROVIDER.ANTHROPIC), missing(MODEL_PROVIDER.OPENAI), missing()]),
     [
-      { page: SETTINGS_VIEW.CODING_AGENTS, section: SETTINGS_SECTION.CLAUDE },
-      { page: SETTINGS_VIEW.CODING_AGENTS, section: SETTINGS_SECTION.CODEX },
-      { page: SETTINGS_VIEW.CODING_AGENTS },
+      { page: SETTINGS_VIEW.AGENTS, section: SETTINGS_SECTION.CLAUDE },
+      { page: SETTINGS_VIEW.AGENTS, section: SETTINGS_SECTION.CODEX },
+      { page: SETTINGS_VIEW.AGENTS },
     ],
   );
 });

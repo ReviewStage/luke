@@ -10,7 +10,8 @@ import { NAV_CURRENT, NAV_ITEM_VARIANT, NavItem, NavItemLink } from "./nav-item.
  * nav-item.test.ts -- a nav item is a button named by its words, its count
  * read with its noun and left out at none; the place shown is announced as
  * the page, a search's find as the location; a menu's trigger says the
- * menu it drops and whether it stands; an unavailable item refuses its
+ * menu it drops and whether it stands; a place's own ⋯ stands beside its
+ * press, never inside it, so each is its own button; an unavailable item refuses its
  * press; a hint's words describe the item they hang from; and one that
  * keeps focus leaves it on the field that held it. A nav item link is a
  * link to its address, named by its words or its label, announced as the
@@ -115,6 +116,29 @@ test("a menu's trigger says it drops a menu, and whether the menu stands", () =>
   expect(trigger.getAttribute("aria-expanded")).toBe("true");
   act(() => trigger.click());
   expect(trigger.getAttribute("aria-expanded")).toBe("false");
+});
+
+test("a place's ⋯ is a button of its own beside the row's press, never inside it", () => {
+  const presses: string[] = [];
+  const container = mount(
+    createElement(NavItem, {
+      onClick: () => presses.push("row"),
+      actions: createElement(
+        "button",
+        { type: "button", "aria-label": "Channel actions", onClick: () => presses.push("more") },
+        "⋯",
+      ),
+      children: "launch",
+    }),
+  );
+  const buttons = [...container.querySelectorAll("button")];
+
+  expect(buttons.map((each) => each.getAttribute("aria-label") ?? each.textContent)).toEqual([
+    "launch",
+    "Channel actions",
+  ]);
+  act(() => buttons[1]?.click());
+  expect(presses).toEqual(["more"]);
 });
 
 test("an unavailable row refuses its press", () => {

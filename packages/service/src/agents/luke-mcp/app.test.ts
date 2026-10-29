@@ -4,20 +4,15 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { listAgentBrowserTabs } from "@luke/database/models/agent-browser-tabs";
-import { writeDrawing, writeScene } from "@luke/database/models/board-store";
-import {
-  createCodingAgent,
-  recordCodingAgentRunnerToken,
-} from "@luke/database/models/coding-agent-store";
+import { createAgent, recordAgentRunnerToken } from "@luke/database/models/agent-store";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { user } from "@luke/database/schemas/auth";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace, startTask } from "@luke/database/testing";
-import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
+import { AGENT_PAYER } from "@luke/features/agent-wire";
 import { BROWSER_AGENT_ACTION } from "@luke/features/browser-agent-actions";
 import { CHANNEL_TOOL } from "@luke/features/channel-wire";
-import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { PICTURE_MEDIA_TYPE, PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
@@ -41,10 +36,7 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
-import type {
-  IntegrationConnect,
-  WorkspaceLinearConnect,
-} from "../../integrations/integration-connect.js";
+import type { IntegrationConnect } from "../../integrations/integration-connect.js";
 import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
@@ -53,7 +45,6 @@ import { INTEGRATION } from "../../integrations/integrations.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import type { CommentToolName } from "../../tasks/comment-tools.js";
 import { PICTURE_LOOK_REFUSAL, pictureNotLooked } from "../../tasks/picture-look.js";
-import { runQueueQuestion } from "../../tasks/queue-question.js";
 import {
   agentBrowserTestLayer,
   fakeCdpPeer,
@@ -71,17 +62,14 @@ import {
   linearTokenOf,
 } from "../../testing/integration-mcp-fake.js";
 import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
 import { BROWSER_TOOL_REFUSAL } from "../browser/browser-tool.js";
 import {
   type AgentDoorSeams,
   type AgentToolCall,
-  runAgentBoard,
   runAgentComment,
   runAgentEditPlan,
   runAgentLookAtPicture,
   runAgentOpenPullRequest,
-  runAgentShowCode,
   runAgentShowImage,
   runAgentShowPage,
   runAgentTools,
@@ -90,9 +78,7 @@ import { postToInbox } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import { PLAN_EDIT_REFUSAL } from "../coder-host/plan-edit.js";
-import { type CallTool, runCallTool } from "../coder-host/tool-set.js";
-import { recordNativeTurnHanded } from "../coder-host/turn-message.js";
-import type { RepositorySandboxDoor } from "../repository-shell.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
 import {
   LUKE_INTEGRATION_MCP_PATH,
   LUKE_MCP_PATH,
@@ -185,21 +171,17 @@ function sandboxWith(files: Readonly<Record<string, string>>) {
 /** A sandbox no call opens: a tool that reads no file never asks for it. */
 const NO_SANDBOX: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
 
-/** A checkout no call opens: a tool that runs no command never asks for it. */
-const NO_CHECKOUT: RepositorySandboxDoor = () =>
-  Promise.reject(new Error("the checkout was opened"));
-
 /** The server's group over the test's database, the sandbox door and the browser given, and any services that stand in for the ones given, as a fetch a client is handed. */
 const standingOver = (
   sandbox: InboxSandboxDoor = NO_SANDBOX,
-  instead?: Layer.Layer<IntegrationConnect | WorkspaceLinearConnect | HttpClient.HttpClient>,
+  instead?: Layer.Layer<IntegrationConnect | HttpClient.HttpClient>,
   browser: LukeMcpBrowser = noSandboxBrowserLayer,
 ) =>
   Effect.gen(function* () {
     const base = yield* doorServices;
     const services = instead === undefined ? base : Layer.merge(base, instead);
     const web = HttpRouter.toWebHandler(
-      lukeMcpApp({ sandbox: () => ({ files: sandbox, repository: NO_CHECKOUT }), browser }).pipe(
+      lukeMcpApp({ sandbox: () => ({ files: sandbox }), browser }).pipe(
         HttpRouter.provideRequest(services),
       ),
       { disableLogger: true },
@@ -217,7 +199,7 @@ const agentWithBearer = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const task = yield* startTask(userId, { name: "Teammate invitations" });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
@@ -226,11 +208,11 @@ const agentWithBearer = Effect.gen(function* () {
     planSnapshot: "# Teammate invitations\n",
     prompt: null,
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-    payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+    payer: AGENT_PAYER.CLAUDE_SUBSCRIPTION,
   });
   const agent = Option.getOrThrow(started).agent;
   const bearer = randomBytes(32).toString("base64url");
-  yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
+  yield* recordAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
   return {
     userId,
     taskId: task.id,
@@ -246,7 +228,7 @@ const agentOnNoTaskWithBearer = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const organizationId = yield* openWorkspace(userId);
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: null,
     organizationId,
     planSnapshot: null,
@@ -256,11 +238,11 @@ const agentOnNoTaskWithBearer = Effect.gen(function* () {
     effort: "high",
     repository: null,
     runtime: CONVERSATION_RUNTIME.CODEX,
-    payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+    payer: AGENT_PAYER.CHATGPT_SUBSCRIPTION,
   });
   const agent = Option.getOrThrow(started).agent;
   const bearer = randomBytes(32).toString("base64url");
-  yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
+  yield* recordAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
   return { userId, agentId: agent.id, bearer };
 });
 
@@ -295,23 +277,6 @@ const agentInSandbox = Effect.gen(function* () {
   );
   return { ...agent, conversationId };
 });
-
-/** What the session's last message handed, as the send that wrote it to the runner records it (`runner-sessions.ts`): a spoken turn's words, or a typed turn's. */
-const handedTurn = (
-  agent: { readonly userId: string; readonly conversationId: string },
-  spoken: boolean,
-) =>
-  recordNativeTurnHanded(
-    { userId: agent.userId, conversationId: agent.conversationId },
-    spoken ? { spoken: true, callWords: true, opened: true } : { callWords: true, opened: true },
-  );
-
-/** The call's own tools, in the order the server lists them. */
-const CALL_TOOLS = [
-  "queue_question",
-  "withdraw_question",
-  "end_call",
-] as const satisfies readonly CallTool[];
 
 /** An SDK client connected under the bearer to the server at the path given, Luke's own unless another is named. */
 function connected(fetch: typeof globalThis.fetch, bearer: string, path: string = LUKE_MCP_PATH) {
@@ -363,9 +328,6 @@ const SERVED_TOOLS = [
   "show_image",
   "show_page",
   "read_page",
-  "show_code",
-  "draw_on_board",
-  "look_at_board",
   "start_agent",
   "stop_agent",
   "list_agents",
@@ -393,9 +355,6 @@ const SERVED_TOOLS = [
   "reopen_thread",
   "run_on_mac",
   "browser",
-  "queue_question",
-  "withdraw_question",
-  "end_call",
 ] as const;
 
 type ServedTool = (typeof SERVED_TOOLS)[number];
@@ -422,9 +381,7 @@ const commentTool =
  * a tool is to be this one's, so a tool routed to any other door, or to
  * none, answers otherwise.
  */
-const DOOR_OF: Readonly<
-  Record<Exclude<ServedTool, "run_on_mac" | "browser" | CallTool>, DirectCall>
-> = {
+const DOOR_OF: Readonly<Record<Exclude<ServedTool, "run_on_mac" | "browser">, DirectCall>> = {
   post_thread: (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox: NO_SANDBOX }),
   read_threads: (admitted, input) => runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
@@ -440,9 +397,6 @@ const DOOR_OF: Readonly<
   show_image: (admitted, input) => runAgentShowImage(admitted, input, NO_SANDBOX),
   show_page: (admitted, input) => runAgentShowPage(admitted, input, NO_SANDBOX),
   read_page: agentTool("read_page"),
-  show_code: (admitted, input) => runAgentShowCode(admitted, input, NO_CHECKOUT),
-  draw_on_board: (admitted, input) => runAgentBoard(admitted, "draw_on_board", input),
-  look_at_board: (admitted, input) => runAgentBoard(admitted, "look_at_board", input),
   start_agent: agentTool("start_agent"),
   stop_agent: agentTool("stop_agent"),
   list_agents: agentTool("list_agents"),
@@ -572,7 +526,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         params: { name: INBOX_TOOL.READ, arguments: {} },
       });
 
-      yield* recordCodingAgentRunnerToken(agent.userId, agent.agentId, null);
+      yield* recordAgentRunnerToken(agent.userId, agent.agentId, null);
       const after = yield* post(fetch, agent.bearer, {
         jsonrpc: "2.0",
         id: 3,
@@ -673,7 +627,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
   );
 
   it.effect(
-    "tools/list leaves out what eve offers no agent on no task and in no repository, the plan's, the board's, the comments', and the checkout's, and the memory where its starter has Memory off",
+    "tools/list leaves out what eve offers no agent on no task and in no repository, the plan's, the comments', and the checkout's, and the memory where its starter has Memory off",
     () =>
       Effect.gen(function* () {
         const fetch = yield* standing;
@@ -686,14 +640,11 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         const withheld = [
           "edit_plan",
           "look_at_picture",
-          "draw_on_board",
-          "look_at_board",
           "read_comments",
           "reply_to_comment",
           "resolve_thread",
           "reopen_thread",
           "open_pull_request",
-          "show_code",
           "list_open_asks",
           "remember",
           "recall",
@@ -796,10 +747,8 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         const client = yield* connected(fetch, agent.bearer);
 
         for (const [name, door] of Object.entries(DOOR_OF)) {
-          // A look at the whiteboard that takes nothing waits on the Mac's image; one that names anything is refused at once.
-          const input = name === "look_at_board" ? { probe: name } : {};
-          const called = yield* Effect.promise(() => client.callTool({ name, arguments: input }));
-          const direct = yield* door(admitted, unparsedWire(input), seams).pipe(
+          const called = yield* Effect.promise(() => client.callTool({ name, arguments: {} }));
+          const direct = yield* door(admitted, unparsedWire({}), seams).pipe(
             Effect.provide(yield* doorServices),
           );
           assert.deepEqual(firstJson(called), JSON.parse(JSON.stringify(direct)), name);
@@ -816,7 +765,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
         const client = yield* connected(fetch, agent.bearer);
-        // Note that a task's row is keyed on the call as a start and a message are (`CodingAgentCall`'s `clientKey`), and needs no eve to be made; on no repository, since no GitHub stands here to reach one.
+        // Note that a task's row is keyed on the call as a start and a message are (`AgentCall`'s `clientKey`), and needs no eve to be made; on no repository, since no GitHub stands here to reach one.
         const create = (input: Readonly<Record<string, string | null>>) =>
           Effect.promise(() => client.callTool({ name: "create_task", arguments: input }));
         const name = "Expire stale invitations";
@@ -830,49 +779,6 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         assert.equal(first.isError, false, JSON.stringify(first));
         assert.equal(firstJson(retried).task.id, firstJson(first).task.id);
         assert.notEqual(firstJson(later).task.id, firstJson(first).task.id);
-      }),
-  );
-
-  it.effect(
-    "the call's own tools run on a spoken turn, the one the session's last message handed, and are refused off one as eve's are",
-    () =>
-      Effect.gen(function* () {
-        const fetch = yield* standing;
-        const agent = yield* agentInSandbox;
-        const client = yield* connected(fetch, agent.bearer);
-        const call = (name: string, input: Readonly<Record<string, unknown>> = {}) =>
-          Effect.promise(() => client.callTool({ name, arguments: input }));
-        const question = {
-          question: "Should a withdrawn invite tell the invitee who withdrew it?",
-          recommendation: "No: just say the invite is no longer valid.",
-        };
-        const inputs = [question, { question: question.question }, {}] as const;
-
-        // Off a call, each refuses as eve's does, and queues or ends nothing.
-        for (const [index, name] of CALL_TOOLS.entries()) {
-          const called = yield* call(name, inputs[index]);
-          const refused = runCallTool(undefined, name, () => ({ status: "accepted" }));
-          assert.equal(called.isError, true, name);
-          assert.deepEqual(firstJson(called), refused, name);
-        }
-        // A call's spoken ask handed to the agent puts it on a spoken turn, where each runs.
-        yield* handedTurn(agent, true);
-        for (const [index, name] of CALL_TOOLS.entries()) {
-          const called = yield* call(name, inputs[index]);
-          assert.deepEqual([called.isError, firstJson(called).status], [false, "accepted"], name);
-        }
-        // An unreadable call on a spoken turn is the tool's own refusal, never the off-call one.
-        const unreadable = yield* call("queue_question", {});
-        assert.deepEqual(
-          [unreadable.isError, firstJson(unreadable)],
-          [true, runQueueQuestion(unparsedWire({}))],
-        );
-        // A line handed after the call's as a typed or unheard turn puts the agent back off a call.
-        yield* handedTurn(agent, false);
-        const after = yield* call("end_call");
-        yield* Effect.promise(() => client.close());
-
-        assert.deepEqual([after.isError, firstJson(after).status], [true, "rejected"]);
       }),
   );
 
@@ -969,37 +875,6 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
 
         assert.deepEqual(called.content, [
           { type: "text", text: JSON.stringify(pictureNotLooked(PICTURE_LOOK_REFUSAL.VIDEO)) },
-        ]);
-      }),
-  );
-
-  it.effect(
-    "a look at the agent's whiteboard comes back as its look's status and image content, never as text",
-    () =>
-      Effect.gen(function* () {
-        const fetch = yield* standing;
-        const agent = yield* agentWithBearer;
-        yield* writeDrawing(agent.userId, agent.taskId, [
-          { type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" },
-        ]);
-        yield* writeScene(
-          agent.userId,
-          agent.taskId,
-          [{ id: "api", type: BOARD_ELEMENT_TYPE.RECTANGLE, x: 0, y: 0, width: 200, height: 80 }],
-          1,
-          "iVBORw0KGgo=",
-        );
-        const client = yield* connected(fetch, agent.bearer);
-
-        const called = yield* Effect.promise(() =>
-          client.callTool({ name: "look_at_board", arguments: {} }),
-        );
-        yield* Effect.promise(() => client.close());
-
-        assert.equal(called.isError, false);
-        assert.deepEqual(called.content, [
-          { type: "text", text: '{"status":"looked"}' },
-          { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
         ]);
       }),
   );

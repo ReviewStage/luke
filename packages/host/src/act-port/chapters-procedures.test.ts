@@ -19,7 +19,7 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
  * calls them: a panel's read and Generate reach the host with the pull
  * request the tab names, and the panel hears the chapters or why there are
  * none; Settings' read and write of the chapters model reach it the same
- * way, a model outside the set refused at the port; the voice and call windows, and a frame this build does not trust,
+ * way, a model outside the set refused at the port; any other window, and a frame this build does not trust,
  * are refused in each kind's own words before the host is asked; and an
  * answer the kind's schema does not admit is refused rather than handed to
  * the tab. Synthetic ids and words.
@@ -28,9 +28,8 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
 // The platform's handle on the window that asked, which no procedure here reads.
 const SENDER = Symbol("window");
 
-const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
-const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
-const CALL: ActSender = { ...PANEL, panel: false, call: true };
+const PANEL: ActSender = { sender: SENDER, panel: true };
+const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
 const AGENT_ID = "6b1f3c2e-9d4a-4f1b-8c7d-2e3f4a5b6c7d";
 
@@ -125,10 +124,9 @@ it("a panel's read and Generate reach the host with the pull request the tab nam
   assert.deepEqual(asked, [`read:${AGENT_ID}`, `generate:${AGENT_ID}#11`]);
 });
 
-it("the voice and call windows, and a frame this build does not trust, are refused in each kind's own words, and the host is not asked", async () => {
+it("a window that is not a panel, and a frame this build does not trust, are refused in each kind's own words, and the host is not asked", async () => {
   for (const { actor, trusted } of [
-    { actor: VOICE, trusted: true },
-    { actor: CALL, trusted: true },
+    { actor: OTHER_WINDOW, trusted: true },
     { actor: PANEL, trusted: false },
   ]) {
     const { read, generate, asked } = windowPort(actor, { trusted });
@@ -165,8 +163,8 @@ it("a panel reads and writes the chapters model, and a model outside the set is 
   assert.deepEqual(asked, ["model", `model-write:${CHAPTERS_MODEL.OPUS}`]);
 });
 
-it("the voice window is refused the chapters model in each kind's own words", async () => {
-  const { readModel, writeModel, asked } = windowPort(VOICE);
+it("a window that is not a panel is refused the chapters model in each kind's own words", async () => {
+  const { readModel, writeModel, asked } = windowPort(OTHER_WINDOW);
   assert.deepEqual(await readModel(), { refused: MODEL_READ_REFUSAL });
   assert.deepEqual(await writeModel(CHAPTERS_MODEL.OPUS), { refused: MODEL_WRITE_REFUSAL });
   assert.deepEqual(asked, []);

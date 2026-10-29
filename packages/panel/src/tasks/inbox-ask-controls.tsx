@@ -40,6 +40,8 @@ import type { Actor } from "@luke/ui/actor-model";
 import { isComposingKey } from "@luke/ui/composing-key";
 import { CheckIcon, GLYPH, Undo2Icon } from "@luke/ui/icons";
 import { ActorLine, ActorRef } from "../actor-ref.js";
+import { MarkdownMessage } from "../markdown-message.js";
+import { INBOX_MISSING, type InboxMissing } from "./inbox-ask-words.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
 import {
   ANSWER_TONE,
@@ -50,6 +52,7 @@ import {
   doDecision,
   fieldValueOf,
   type InboxDraft,
+  RECOMMENDED,
   shownTicks,
   withDoPress,
   withStep,
@@ -58,6 +61,7 @@ import {
 import { ANSWER_STATUS_TONE } from "./inbox-stamp.js";
 import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
+import { useOpenLink } from "./use-open-link.js";
 
 /**
  * inbox-ask-controls.tsx -- what an ask asks for, drawn as the Inbox draws it: a `decide`'s options or its two presses, a `do`'s steps and presses, an `answer`'s fields, open or as an answer left them, and the words an ask stands at once it no longer waits.
@@ -67,11 +71,12 @@ import { SentWords } from "./skill-chip.js";
  * answered ask's stand as the answer left them, read-only and at full
  * strength. Enter on an option or in a field sends the box the controls
  * stand in (`DraftQuestion`), a form of several fields too, where Space or
- * a press picks an option. An ask's words, its options and its
- * steps, select and copy whether it is open or not (`ReadableControls`), a
- * drag over them picking and ticking nothing, and stand Reply over them as
- * the words around them do (`reply-to-selection.tsx`), a field's own
- * typing aside.
+ * a press picks an option. An ask's words, its options, its steps, and its
+ * fields' names, select and copy whether it is open or not
+ * (`ReadableControls`), as do the presses an answer gave and the values it
+ * filled in, a drag over them picking and ticking nothing, and stand Reply
+ * over them as the words around them do (`reply-to-selection.tsx`), a
+ * field's own typing aside.
  */
 
 /** An ask's box, in an Inbox thread, which gives way to its column. */
@@ -89,9 +94,6 @@ const INBOX_ASK_PRESSES = "inbox-ask-presses flex flex-wrap gap-control-gap";
 
 /** The words a choice's open options are named by, for a reader that does not see the question over them. */
 const CHOICE_LEGEND = "Options";
-
-/** The badge an option the agent recommends wears, a choice's or a form's select's. */
-const RECOMMENDED = "Recommended";
 
 /** A choice's options as `@luke/ui`'s ChoiceList draws them, each the agent recommends wearing its badge. */
 function choiceOptions(
@@ -208,10 +210,13 @@ function fieldFrame(field: InboxField, readOnly: boolean) {
 }
 
 /**
- * A text field's words as an answer gave them, in the field's own frame:
- * drawn as the agent's tab draws a sent message, so a mention they hold is
- * its chip, and empty where the field was left empty. Note that the
- * composer's editor is not loaded for it, since nothing is written here.
+ * A text or number field's value as an answer gave it, in the field's own
+ * frame: drawn as the agent's tab draws a sent message, so a mention it
+ * holds is its chip, and empty where the field was left empty. Note that
+ * the composer's editor is not loaded for it, since nothing is written
+ * here, and that a number is words here rather than a read-only field,
+ * since a reply quotes no selection inside a field
+ * (`reply-to-selection.tsx`).
  */
 function AnsweredText({
   control,
@@ -308,15 +313,21 @@ function InboxFormField({
           <FormField label={field.label} optional={optionalField(field)}>
             {(control) => (
               <div className="inbox-field-short max-w-inbox-field-short">
-                <TextField
-                  field={control}
-                  type={TEXT_FIELD_TYPE.NUMBER}
-                  maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
-                  value={value === undefined ? undefined : Number(value)}
-                  disabled={disabled}
-                  readOnly={readOnly}
-                  onChange={set}
-                />
+                {readOnly ? (
+                  <AnsweredText
+                    control={control}
+                    words={value === undefined ? "" : String(value)}
+                  />
+                ) : (
+                  <TextField
+                    field={control}
+                    type={TEXT_FIELD_TYPE.NUMBER}
+                    maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
+                    value={value === undefined ? undefined : Number(value)}
+                    disabled={disabled}
+                    onChange={set}
+                  />
+                )}
               </div>
             )}
           </FormField>
@@ -330,6 +341,7 @@ function InboxFormField({
               <ChoiceList
                 legend={field.label}
                 describedBy={control["aria-describedby"]}
+                required={control["aria-required"]}
                 options={(field.options ?? []).map((option) => ({
                   value: option,
                   label: option,
@@ -423,18 +435,58 @@ export function sendFromPane(pane: HTMLElement | null): void {
   pane?.querySelector<HTMLFormElement>("form.inbox-answer")?.requestSubmit();
 }
 
+/** What a field's own control matches, which takes the keyboard where the field is missing. */
+const FIELD_CONTROL = 'input, [contenteditable="true"], button:not([tabindex="-1"]):not(:disabled)';
+
+/**
+ * Takes the keyboard, in the answer box `box`, to what its unfinished
+ * answer lacks: the option a reader's Tab lands on, or the first of an
+ * ask's two presses; the missing field's first control; or the note line
+ * the box's words are written on, which stands outside the question's own.
+ */
+export function focusMissing(box: HTMLElement | null, missing: InboxMissing): void {
+  if (box === null) return;
+  switch (missing.kind) {
+    case INBOX_MISSING.OPTION: {
+      const rows = optionRows(box);
+      const option =
+        rows.find((row) => row.tabIndex === 0) ??
+        rows[0] ??
+        box.querySelector<HTMLElement>(`[${OPTIONS_ATTRIBUTE}] button`);
+      option?.focus();
+      return;
+    }
+    case INBOX_MISSING.FIELD: {
+      const field = [...box.querySelectorAll<HTMLElement>("[data-inbox-field-label]")].find(
+        (each) => each.dataset.inboxFieldLabel === missing.label,
+      );
+      field?.querySelector<HTMLElement>(FIELD_CONTROL)?.focus();
+      return;
+    }
+    case INBOX_MISSING.WORDS:
+      [...box.querySelectorAll<HTMLElement>('form.inbox-answer [contenteditable="true"]')]
+        .find((editor) => editor.closest("[data-inbox-draft-ask]") === null)
+        ?.focus();
+  }
+}
+
+/** Whether a key goes to a link, a step's say, whose own Enter opens it. */
+function opensLink(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && target.matches("a[href]");
+}
+
 /**
  * Enter in an open item's question, on an option or in a form's field,
  * sends the answer, and never presses the option it stands on, which Space
- * or a press picks. Shift+Enter is no send, and an editor's Enter is the
- * editor's own to hand on.
+ * or a press picks. Shift+Enter is no send, and an editor's Enter and a
+ * link's are their own to hand on.
  */
 function onResponseKey(
   pane: React.RefObject<HTMLElement | null>,
   event: React.KeyboardEvent,
 ): void {
   if (event.key !== "Enter" || event.shiftKey || event.altKey || isComposingKey(event)) return;
-  if (writesLines(event.target)) return;
+  if (writesLines(event.target) || opensLink(event.target)) return;
   // Note that the key is held back here, as it bubbles, which keeps a focused option's button from pressing it.
   event.preventDefault();
   sendFromPane(pane.current);
@@ -457,31 +509,55 @@ interface AskDoors {
   readonly onDraft: (draft: InboxDraft) => void;
 }
 
-/** A press closing an open ask, which attaches its answer to the reply while pressed, and takes it off pressed again. */
+/**
+ * A press of a two-press ask, open or as an answer left it, wearing the
+ * glyph of the way it goes (`ToneGlyph`) either way, so a press reads the
+ * same before and after it is given. Open, it attaches its answer to the
+ * reply while pressed and takes it off pressed again; with no `onPress`, it
+ * records the press given and takes none.
+ */
 function AskPress({
   label,
   variant = BUTTON_VARIANT.OUTLINE,
+  recommended = false,
+  tone,
   pressed,
-  disabled,
+  disabled = false,
   onPress,
 }: {
   label: string;
   variant?: typeof BUTTON_VARIANT.OUTLINE | typeof BUTTON_VARIANT.QUIET;
+  /** Whether the agent recommends it, which its badge says. */
+  recommended?: boolean;
+  tone: AnswerTone;
   pressed: boolean;
-  disabled: boolean;
-  onPress: () => void;
+  disabled?: boolean;
+  /** Attaches or takes off its answer; none where it records an answer already given. */
+  onPress?: (() => void) | undefined;
 }): React.JSX.Element {
   return (
     <Button
       variant={variant}
       size={BUTTON_SIZE.COMPACT}
+      badge={recommended ? RECOMMENDED : undefined}
       pressed={pressed}
       disabled={disabled}
+      readOnly={onPress === undefined}
+      icon={<ToneGlyph tone={tone} pressed={pressed} />}
       onClick={onPress}
     >
       {label}
     </Button>
   );
+}
+
+/**
+ * A to-do's step as its box's words: its inline Markdown drawn, bold, code,
+ * and links among it, a list or a fence in it run into the line (`inline`),
+ * and a link pressed opening its page without ticking the box (`TextLink`).
+ */
+function StepWords({ step }: { step: string }): React.JSX.Element {
+  return <MarkdownMessage words={step} inline openLink={useOpenLink()} />;
 }
 
 /** An ask's controls, whose words select and copy, and a Reply quotes as the words around them. */
@@ -530,13 +606,15 @@ function OpenControls({
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
       return decideButtons(ask) ? (
-        <div className={INBOX_ASK_PRESSES} data-inbox-options="">
-          {ask.options.map((option) => {
+        <div className={INBOX_ASK_PRESSES} {...{ [OPTIONS_ATTRIBUTE]: "" }}>
+          {ask.options.map((option, at) => {
             const picked = draft.choices.includes(option.label);
             return (
               <AskPress
                 key={option.label}
                 label={option.label}
+                recommended={recommendedLabels(ask).includes(option.label)}
+                tone={at === 0 ? ANSWER_TONE.AHEAD : ANSWER_TONE.BACK}
                 pressed={picked}
                 disabled={disabled}
                 onPress={() => onDraft({ ...draft, choices: picked ? [] : [option.label] })}
@@ -571,15 +649,17 @@ function OpenControls({
                     disabled={disabled}
                     onChange={() => onDraft(withStep(ask, draft, at))}
                   >
-                    {step}
+                    <StepWords step={step} />
                   </Checkbox>
                 </li>
               ))}
             </Stack>
           )}
-          <div className={INBOX_ASK_PRESSES}>
+          {/* Note that the two presses are the to-do's options, which Enter's way to what is missing finds. */}
+          <div className={INBOX_ASK_PRESSES} {...{ [OPTIONS_ATTRIBUTE]: "" }}>
             <AskPress
               label={ASK_PRESS.DONE}
+              tone={ANSWER_TONE.AHEAD}
               pressed={decision === INBOX_REPLY.DONE}
               disabled={disabled}
               onPress={() => onDraft(withDoPress(ask, draft, INBOX_REPLY.DONE))}
@@ -587,6 +667,7 @@ function OpenControls({
             <AskPress
               label={ASK_PRESS.NOT_DONE}
               variant={BUTTON_VARIANT.QUIET}
+              tone={ANSWER_TONE.BACK}
               pressed={decision === INBOX_REPLY.NOT_DONE}
               disabled={disabled}
               onPress={() => onDraft(withDoPress(ask, draft, INBOX_REPLY.NOT_DONE))}
@@ -611,12 +692,17 @@ function OpenControls({
   }
 }
 
-/** The glyph a press given wears in its answer's tone (`ANSWER_STATUS_TONE`): a check in green going ahead, a turn back in grey holding back. */
-function ToneGlyph({ tone }: { tone: AnswerTone }): React.JSX.Element {
+/**
+ * The glyph a press wears for the way it goes, as the answer's stamp does:
+ * a check going ahead, a turn back holding back. Only the press given spends
+ * its answer's tone (`ANSWER_STATUS_TONE`), green or grey; the rest wear
+ * their words' ink.
+ */
+function ToneGlyph({ tone, pressed }: { tone: AnswerTone; pressed: boolean }): React.JSX.Element {
   return (
     <span
       className="inbox-ask-pressed inline-flex text-tone-ink"
-      data-tone={ANSWER_STATUS_TONE[tone]}
+      data-tone={pressed ? ANSWER_STATUS_TONE[tone] : undefined}
     >
       {tone === ANSWER_TONE.AHEAD ? (
         <CheckIcon aria-hidden="true" />
@@ -624,35 +710,6 @@ function ToneGlyph({ tone }: { tone: AnswerTone }): React.JSX.Element {
         <Undo2Icon aria-hidden="true" />
       )}
     </span>
-  );
-}
-
-/**
- * A press of an answered ask as it was left: its look and words as it was
- * offered, the one given pressed and wearing its glyph, none of them
- * taking a press.
- */
-function AnsweredPress({
-  label,
-  variant = BUTTON_VARIANT.OUTLINE,
-  tone,
-  pressed,
-}: {
-  label: string;
-  variant?: typeof BUTTON_VARIANT.OUTLINE | typeof BUTTON_VARIANT.QUIET;
-  tone: AnswerTone;
-  pressed: boolean;
-}): React.JSX.Element {
-  return (
-    <Button
-      variant={variant}
-      size={BUTTON_SIZE.COMPACT}
-      pressed={pressed}
-      readOnly
-      icon={pressed ? <ToneGlyph tone={tone} /> : undefined}
-    >
-      {label}
-    </Button>
   );
 }
 
@@ -692,9 +749,10 @@ function LeftControls({
       return decideButtons(ask) ? (
         <div className={INBOX_ASK_PRESSES}>
           {ask.options.map((option, at) => (
-            <AnsweredPress
+            <AskPress
               key={option.label}
               label={option.label}
+              recommended={recommendedLabels(ask).includes(option.label)}
               tone={at === 0 ? ANSWER_TONE.AHEAD : ANSWER_TONE.BACK}
               pressed={draft.choices.includes(option.label)}
             />
@@ -714,19 +772,19 @@ function LeftControls({
                 // Steps have no key of their own, and are never reordered.
                 <li key={at} data-inbox-step="">
                   <Checkbox checked={ticked.has(at)} readOnly onChange={heldStill}>
-                    {step}
+                    <StepWords step={step} />
                   </Checkbox>
                 </li>
               ))}
             </Stack>
           )}
           <div className={INBOX_ASK_PRESSES}>
-            <AnsweredPress
+            <AskPress
               label={ASK_PRESS.DONE}
               tone={ANSWER_TONE.AHEAD}
               pressed={draft.press === INBOX_REPLY.DONE}
             />
-            <AnsweredPress
+            <AskPress
               label={ASK_PRESS.NOT_DONE}
               variant={BUTTON_VARIANT.QUIET}
               tone={ANSWER_TONE.BACK}
@@ -872,11 +930,9 @@ export function WithdrawnWords({
 export function WithdrawnWhy({ reason }: { reason: string | undefined }): React.JSX.Element | null {
   if (reason === undefined) return null;
   return (
-    // Note that its words may be quoted into a reply, as the agent's own words may.
     <p
       className="inbox-ask-why m-0 text-muted-foreground wrap-anywhere"
       data-inbox-withdrawn-why=""
-      {...{ [REPLY_SCOPE]: "" }}
     >
       {reason}
     </p>

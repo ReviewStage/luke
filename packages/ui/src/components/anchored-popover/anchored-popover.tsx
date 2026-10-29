@@ -67,13 +67,15 @@ export const POPOVER_BOUNDS = {
 export type PopoverBounds = (typeof POPOVER_BOUNDS)[keyof typeof POPOVER_BOUNDS];
 
 /**
- * The layer: over the anchor's neighbours, a small gap above the box that
+ * The layer: on the window's menu layer, as every menu stands, so no pane's
+ * own chrome beside it (a resize edge, a sticky head) draws over it or takes
+ * its presses; a small gap above the box that
  * holds the button, or below it where only there is room, its asked edge at
  * the inset and width it was measured to. What it holds draws its own
  * surface. `luke-anchored-popover` names it for what hangs in it.
  */
 const LAYER =
-  "luke-anchored-popover absolute z-2 data-[side=above]:bottom-[calc(100%+--spacing(1))] data-[side=below]:top-[calc(100%+--spacing(1))]";
+  "luke-anchored-popover absolute z-menu data-[side=above]:bottom-[calc(100%+--spacing(1))] data-[side=below]:top-[calc(100%+--spacing(1))]";
 
 /** The width a popover asks for unless its owner asks another, the desktop's searchable menu's own, which the room may narrow. */
 const DEFAULT_WIDTH = 340;

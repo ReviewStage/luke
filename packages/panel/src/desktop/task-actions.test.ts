@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   PLAN_ACTOR,
+  TASK_PRIORITY,
   TASK_STATUS,
   type Task,
   type TaskStatus,
@@ -11,6 +12,7 @@ import {
 } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { ProviderMark } from "@luke/ui";
 import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -18,9 +20,9 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test } from "vitest";
+import { runAppCommand } from "../app-commands.js";
 import { MemberDirectory } from "../member-directory.js";
 import { OpenPersonProvider } from "../person-door.js";
-import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -102,7 +104,7 @@ beforeEach(installScrollIntoView);
 
 afterEach(unmountAll);
 
-/** The open task's tab, every per-task press recorded; `PLAN` is open and `OTHER` beside it in the list. */
+/** The open task's tab, its side panel showing the plan, every per-task press recorded; `PLAN` is open and `OTHER` beside it in the list. */
 function openTab(
   repositories: Readonly<Record<string, string>> = {},
   deletes: () => Promise<ActionResult> = () =>
@@ -138,6 +140,7 @@ function openTab(
       return renames();
     },
     onMarkTask: (taskId, mark) => asked.marked.push([taskId, mark]),
+    sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
   });
   return { tasks, asked };
 }
@@ -151,7 +154,8 @@ function mount(element: ReactElement): HTMLElement {
   return container;
 }
 
-function mountToolbar(tasks: TasksControl): HTMLButtonElement {
+/** The task's page drawn, and the Plan tab's ⋯ in the side panel's bar, which drops the task's own menu. */
+function mountPlanTab(tasks: TasksControl): HTMLButtonElement {
   const container = mount(
     createElement(DesktopTasks, {
       summary: UNPINNED_SUMMARY,
@@ -159,8 +163,8 @@ function mountToolbar(tasks: TasksControl): HTMLButtonElement {
       tasks,
     }),
   );
-  const more = container.querySelector('[aria-label="Task actions"]');
-  assert.ok(more instanceof HTMLButtonElement);
+  const more = container.querySelector(".side-panel-bar .toolbar-tab-actions button");
+  assert.ok(more instanceof HTMLButtonElement, "the Plan tab's ⋯ stands in the panel's bar");
   return more;
 }
 
@@ -178,7 +182,6 @@ function sidebarTask(
       task,
       current,
       unread: false,
-      waiting: 0,
       now: task.updatedAt,
       onOpen: () => asked.opened.push(task.id),
     }),
@@ -253,7 +256,7 @@ async function confirmDelete(): Promise<void> {
 test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from a sidebar plan alike, and deletes on its answer", async () => {
   const { tasks, asked } = openTab();
 
-  const more = mountToolbar(tasks);
+  const more = mountPlanTab(tasks);
   openMenu(more);
   assert.equal(asking(), false);
   choose("Permanently delete");
@@ -282,9 +285,85 @@ test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from
 
   assert.deepEqual(asked.deleted, [TASK.id, OTHER.id]);
 });
+test("a question asked of one task does not outlive it: the delete the Plan tab's ⋯ asked for is withdrawn as another task opens in its place", () => {
+  const { tasks } = openTab();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const draw = (control: TasksControl) =>
+    act(() =>
+      root.render(
+        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: control }),
+      ),
+    );
+  draw(tasks);
+  const more = container.querySelector(".side-panel-bar .toolbar-tab-actions button");
+  assert.ok(more instanceof HTMLButtonElement);
+  openMenu(more);
+  choose("Permanently delete");
+  assert.equal(asking(), true);
+
+  const other: Task = { ...TASK, ...OTHER, document: TASK.document };
+  draw({
+    ...tasks,
+    activeTaskId: OTHER.id,
+    region: { kind: DOCUMENT_REGION.READY, task: other },
+  });
+  assert.equal(asking(), false, "the question went with the task it was asked of");
+});
+
+test("⌘K's Change repository shows the plan where the panel hides it, and the repository chip in the plan opens its menu for the ask once, not again on a later draw", () => {
+  const told: string[] = [];
+  const { tasks } = openTab({ [TASK.id]: "acme/app" });
+  const asked = (open: boolean): TasksControl => ({
+    ...tasks,
+    repositoryMenu: { taskId: TASK.id, request: 1 },
+    sidePanel: {
+      ...tasks.sidePanel,
+      open,
+      tab: open ? SIDE_PANEL_TAB.PLAN : SIDE_PANEL_TAB.COMMENTS,
+      onChoose: (tab) => told.push(`choose ${String(tab)}`),
+    },
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const draw = (control: TasksControl) =>
+    act(() =>
+      root.render(
+        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks: control }),
+      ),
+    );
+  draw(asked(false));
+  assert.deepEqual(told, [`choose ${SIDE_PANEL_TAB.PLAN}`], "the ask shows the plan first");
+
+  draw(asked(true));
+  const chip = () =>
+    [...container.querySelectorAll<HTMLButtonElement>(".plan-task-standing button")].find((each) =>
+      each.textContent?.includes("acme/app"),
+    );
+  assert.equal(
+    chip()?.getAttribute("aria-expanded"),
+    "true",
+    "the chip opens its menu for the ask",
+  );
+
+  // The chip drawn afresh, as another tab and back would, opens nothing for the ask already answered.
+  draw(asked(true));
+  act(() => {
+    chip()?.click();
+  });
+  assert.equal(chip()?.getAttribute("aria-expanded"), "false");
+  draw({ ...asked(true), region: { kind: DOCUMENT_REGION.READING } });
+  draw(asked(true));
+  assert.equal(chip()?.getAttribute("aria-expanded"), "false", "no second opening");
+});
+
 test("the plan's name reaches the recording only as masked text, never in an attribute", () => {
   const { tasks } = openTab();
-  openMenu(mountToolbar(tasks));
+  openMenu(mountPlanTab(tasks));
   choose("Permanently delete");
   const drawn = dialog()?.parentElement;
   assert.ok(drawn);
@@ -295,17 +374,20 @@ test("the plan's name reaches the recording only as masked text, never in an att
   }
 });
 
-/** The open task's tab on `tab`, `SHARED_PLAN` open as `me` reads it and `OTHER` beside it in the list. */
-function sharedTab(me: string, tab: MainTab | undefined = undefined): TasksControl {
-  const base = tasksControl();
+/** The open task's tab, `SHARED_PLAN` open as `me` reads it and `OTHER` beside it in the list, its column on no tab and its panel shut. */
+function sharedTab(me: string): TasksControl {
   return tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     me,
     tasks: [SHARED_TASK, OTHER],
     activeTaskId: SHARED_TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: SHARED_TASK },
-    mainTabs: { ...base.mainTabs, tabs: tab === undefined ? [] : [tab], tab },
   });
+}
+
+/** `tasks` with its side panel open on the plan, whose tab's ⋯ drops the task's menu. */
+function planShown(tasks: TasksControl): TasksControl {
+  return { ...tasks, sidePanel: { ...tasks.sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN } };
 }
 
 /** The lines under the open menu's items, each with its time left off. */
@@ -315,7 +397,7 @@ function menuFooter(): string[] {
 }
 
 test("the plan's ⋯ menu ends with who created the plan and who last edited it, the reader's own as you and a teammate's by name", () => {
-  openMenu(mountToolbar(sharedTab(DEAN.userId)));
+  openMenu(mountPlanTab(planShown(sharedTab(DEAN.userId))));
   assert.deepEqual(menuFooter(), ["Created by Charles Pan", "Last edited by you"]);
   // Each person stands on their face, their letter until a picture is read.
   const faces = document.querySelectorAll('[role="menu"] .luke-menu-footer .actor-mark');
@@ -333,7 +415,7 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
   );
   unmountAll();
 
-  openMenu(mountToolbar(sharedTab(CHARLES.userId)));
+  openMenu(mountPlanTab(planShown(sharedTab(CHARLES.userId))));
   assert.deepEqual(menuFooter(), ["Created by you", "Last edited by Dean Stratakos"]);
   unmountAll();
 
@@ -441,28 +523,26 @@ test("a sidebar task Luke or a coding agent made wears who is on it rather than 
   const { asked } = openTab();
   const listed = tasksControl({ me: DEAN.userId, tasks: [byAgent] });
   rightClick(mountSidebarTask(listed, byAgent, asked), 40, 60);
-  assert.equal(menuFooter()[0], "Created by Coding agent for you");
+  assert.equal(menuFooter()[0], "Created by Agent for you");
   unmountAll();
 });
 
-test("the task's ⋯ stands in the task's toolbar whichever tab its column shows", () => {
-  const drawn = (tab: MainTab | undefined) => {
-    const container = mount(
-      createElement(DesktopTasks, {
-        summary: UNPINNED_SUMMARY,
-        looks: NO_LOOKS,
-        tasks: sharedTab(DEAN.userId, tab),
-      }),
-    );
-    const toolbar = container.querySelector(".luke-toolbar");
-    const shown = ["Task actions"].filter(
-      (label) => toolbar?.querySelector(`[aria-label="${label}"]`) !== null,
-    );
-    unmountAll();
-    return shown;
-  };
+test("the task's toolbar draws no ⋯ of the task's, and ⌘⌫ still asks to delete the open task with the panel shut and no tab chosen", () => {
+  const container = mount(
+    createElement(DesktopTasks, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      tasks: sharedTab(DEAN.userId),
+    }),
+  );
+  assert.equal(container.querySelector('.luke-toolbar [aria-label="Task actions"]'), null);
+  assert.equal(container.querySelector(".side-panel-bar"), null, "the panel is shut");
 
-  assert.deepEqual(drawn(undefined), ["Task actions"]);
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.DELETE), "⌘⌫ is offered");
+  });
+  assert.equal(asking(), true, "⌘⌫ asks first");
+  assert.match(dialog()?.textContent ?? "", /Teammate invitations/u);
 });
 
 /** Dean's own workspace, with no GitHub connected, and the team's, whose GitHub reaches acme-corp's repositories. */
@@ -533,7 +613,7 @@ test("a sidebar plan whose repository belongs to another of the account's worksp
   );
   assert.deepEqual(
     [...card.querySelectorAll('.luke-hover-card-row[data-look="detail"]')].map(heard),
-    ["acme-corp/relay", "Repository belongs to Stage"],
+    ["Repository belongs to Stage"],
   );
 });
 
@@ -565,11 +645,11 @@ function installClipboard(): string[] {
   return copied;
 }
 
-test("Copy link copies the plan's address on tryluke.dev, alike from the toolbar's ⋯, the ⋯ beside its title, and its sidebar row, and says Link copied", async () => {
+test("Copy link copies the plan's address on tryluke.dev, alike from the Plan tab's ⋯, the Copy link button beside its title, and its sidebar row, and says Link copied", async () => {
   const copied = installClipboard();
   mount(createElement(ToastHost));
   const opened = openTab();
-  // The title's ⋯ stands over the plan, which the side panel shows.
+  // The title's Copy link button stands over the plan, which the side panel shows.
   const tasks: TasksControl = {
     ...opened.tasks,
     workspaces: [{ ...PERSONAL, slug: "dean" }],
@@ -582,12 +662,13 @@ test("Copy link copies the plan's address on tryluke.dev, alike from the toolbar
     await act(async () => item.click());
   };
 
-  openMenu(mountToolbar(tasks));
+  openMenu(mountPlanTab(tasks));
   await copyFromMenu();
-  const title = document.querySelector<HTMLButtonElement>('[aria-label="Title actions"]');
-  assert.ok(title, "the title has a ⋯");
-  openMenu(title);
-  await copyFromMenu();
+  const title = document.querySelector<HTMLButtonElement>(
+    '.luke-page-header-actions button[aria-label="Copy link"]',
+  );
+  assert.ok(title, "the title has a Copy link button");
+  await act(async () => title.click());
   unmountAll();
   mount(createElement(ToastHost));
   rightClick(mountSidebarTask(tasks, TASK, opened.asked), 40, 60);
@@ -630,7 +711,7 @@ test("a task's card says who created it where others share its workspace, the re
     createdBy: DEAN,
     origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" },
   } as const;
-  assert.deepEqual(details(byAgent, PERSONAL), ["Created by Coding agent for you"]);
+  assert.deepEqual(details(byAgent, PERSONAL), ["Created by Agent for you"]);
 });
 
 test("a task's card's creator line opens the creator's page in the window, and is words outside it", () => {
@@ -722,9 +803,23 @@ function installMembers(members: readonly { userId: string; name: string }[] | u
           ),
   });
 }
-test("Mark done marks a task with agents done at once, from its row's check and its menu alike, Cancel task, drawn red, cancels it, and a task already done offers neither Mark done nor its check", async () => {
+/** Where a task from a service with statuses stands before anything moves it. */
+const STANDING = { status: TASK_STATUS.TODO, priority: TASK_PRIORITY.NONE } as const;
+
+/** Opens the open menu's submenu `submenu`, then chooses `label` in it. */
+function chooseIn(submenu: string, label: string): void {
+  choose(submenu);
+  const item = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]')].find(
+    (candidate) => itemLabel(candidate) === label,
+  );
+  assert.ok(item, `${submenu} offers ${label}`);
+  act(() => item.click());
+}
+
+test("a row's Status, opened by a right-click or by S on the focused row, sets the task at the status picked, Done as the row's Mark done check does, asking nothing even where agents work on it, and checks the status it stands at", async () => {
   const working: TaskSummary = {
     ...OTHER,
+    ...STANDING,
     status: TASK_STATUS.IN_PROGRESS,
     agents: { total: 2, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
   };
@@ -752,10 +847,26 @@ test("Mark done marks a task with agents done at once, from its row's check and 
   assert.equal(asking(), false, "Mark done asks nothing, since it stops no agent");
   const rowButton = row.querySelector("ul > li > button");
   assert.ok(rowButton instanceof HTMLButtonElement);
+  // S on the focused row opens its menu on Status, the status it stands at checked.
+  act(() => rowButton.focus());
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.SET_STATUS), "the focused row answers S");
+  });
+  await act(async () => undefined);
+  assert.deepEqual(
+    [...document.querySelectorAll<HTMLElement>('[role="menu"] [aria-checked="true"]')].map(
+      itemLabel,
+    ),
+    ["In progress"],
+  );
+  // A press on the row closes the menu, and the next right-click opens it on its own items, not on Status.
+  act(() => rowButton.click());
   rightClick(rowButton, 40, 60);
-  choose("Mark done");
+  assert.equal(document.querySelector('[role="menu"][aria-label="Status"]'), null);
+  chooseIn("Status", "Done");
   rightClick(rowButton, 40, 60);
-  choose("Cancel task");
+  chooseIn("Status", "Canceled");
+  assert.equal(asking(), false, "no status asks anything");
   assert.deepEqual(settled, [
     [[working.id], TASK_STATUS.DONE],
     [[working.id], TASK_STATUS.DONE],
@@ -765,23 +876,29 @@ test("Mark done marks a task with agents done at once, from its row's check and 
   unmountAll();
   const doneRow = mount(sidebarTask(tasksControl({ tasks: [done] }), done, asked));
   assert.equal(doneButton(doneRow), null, "a done task's row offers no Mark done");
-  const doneRowButton = doneRow.querySelector("ul > li > button");
-  assert.ok(doneRowButton instanceof HTMLButtonElement);
-  rightClick(doneRowButton, 40, 60);
-  const labels = menuItems().map(itemLabel);
-  assert.equal(labels.includes("Mark done"), false);
-  assert.equal(labels.includes("Cancel task"), true);
 });
 
-test("the open task's ⋯ prints the chords of Copy plan, Mark done, and Permanently delete, which act on it, another task's menu prints none, and Open on GitHub wears the GitHub mark", () => {
+/** What the plan's chips stand for, which the Plan tab's menu leaves out and a row's keeps. */
+const CHIP_ITEMS = ["Status", "Priority", "Assignee", "Change repository"];
+
+test("the Plan tab's ⋯ prints the chords that act on the open task, and leaves Status, Priority, Assignee, and Change repository to the plan's chips, which a row keeps; another task's row prints only U, S, and P, which act on the focused row, and Open on GitHub wears the GitHub mark", () => {
   const { tasks, asked } = openTab({ [TASK.id]: "acme/app", [OTHER.id]: "acme/app" });
 
-  openMenu(mountToolbar(tasks));
+  openMenu(mountPlanTab(tasks));
   assert.deepEqual(itemChords(), [
-    ["Copy plan", "⇧⌘C"],
-    ["Mark done", "⇧⌘A"],
+    ["Copy plan", "⌥⌘C"],
+    ["Version history", "⌥⇧⌘H"],
+    ["Mark as unread", "U"],
+    ["Pin", "P"],
+    ["Open on GitHub", "⇧⌘O"],
     ["Permanently delete", "⌘⌫"],
   ]);
+  const offered = menuItems().map(itemLabel);
+  assert.deepEqual(
+    CHIP_ITEMS.filter((item) => offered.includes(item)),
+    [],
+    "the plan's chips stand for these",
+  );
   const github = menuItems().find((item) => itemLabel(item) === "Open on GitHub");
   assert.equal(
     github?.querySelector(".luke-menu-item-glyph")?.innerHTML,
@@ -790,13 +907,24 @@ test("the open task's ⋯ prints the chords of Copy plan, Mark done, and Permane
   );
 
   unmountAll();
-  rightClick(mountSidebarTask(tasks, OTHER, asked), 40, 60);
-  assert.ok(menuItems().some((item) => itemLabel(item) === "Mark done"));
+  const other: TaskSummary = { ...OTHER, ...STANDING };
+  rightClick(mountSidebarTask(tasksControl({ tasks: [other] }), other, asked), 40, 60);
+  const row = menuItems().map(itemLabel);
+  assert.deepEqual(
+    CHIP_ITEMS.filter((item) => row.includes(item)),
+    CHIP_ITEMS,
+    "a row draws no chips, so its menu keeps them",
+  );
   // Note that Show details' ⌥↓ is the row's own key, which opens its card rather than acting on the task.
   assert.deepEqual(
     itemChords(),
-    [["Show details", "⌥↓"]],
-    "no chord acts on a task that is not open",
+    [
+      ["Mark as unread", "U"],
+      ["Status", "S"],
+      ["Pin", "P"],
+      ["Show details", "⌥↓"],
+    ],
+    "no chord but the focused row's letters acts on a task that is not open",
   );
 });
 

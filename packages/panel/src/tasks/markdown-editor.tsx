@@ -34,6 +34,7 @@ import { useAnnounceShown } from "../use-announce-shown.js";
 import { type OwnBlock, useBlockPicker } from "./block-picker.js";
 import type { EditorPictures } from "./editor-pictures.js";
 import { type MentionDoors, MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
+import { holderTaskId } from "./mention-holder.js";
 import { MENTION_MENU_SIDE, type MentionSource, useMentionPicker } from "./mention-picker.js";
 import { useSelectionToolbar } from "./selection-toolbar.js";
 import { useKnownNames } from "./use-known-names.js";
@@ -329,7 +330,7 @@ export function MarkdownEditor({
             pasted: (words) =>
               pastedMentionNode(words, mentions.doors.place, {
                 known,
-                taskId: mentions.source.taskId,
+                taskId: holderTaskId(mentions.source.holder),
                 text,
               }),
             namesMention: (target) =>

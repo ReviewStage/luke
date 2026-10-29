@@ -1,11 +1,12 @@
 import {
+  type AgentPullRequest,
+  type AgentPullRequestAnswer,
   CHECK_SUMMARY,
-  type CodingAgentPullRequest,
-  type CodingAgentPullRequestAnswer,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import {
+  BUTTON_SIZE,
   CHIP_LOOK,
   Chip,
   ChipName,
@@ -14,7 +15,7 @@ import {
   List,
   ListRow,
   linesCount,
-  ProviderMark,
+  MoreButton,
   RowHint,
   RowHintOptions,
   Tooltip,
@@ -23,10 +24,12 @@ import {
 import { GitBranchIcon, GLYPH } from "@luke/ui/icons";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import type { ReactNode } from "react";
+import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { LINK_COPY } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction, rowMenu } from "../desktop/action-menu.js";
-import { checkoutCommand, publishedUrl, pullRequestStateWord } from "./coding-agent-model.js";
+import { checkoutCommand, publishedUrl, pullRequestStateWord } from "./agent-model.js";
 import { MentionChipCard } from "./mention-chip.js";
+import { holderTaskId } from "./mention-holder.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { useLinkStanding } from "./use-link-standing.js";
@@ -44,9 +47,9 @@ import { linkPressOf } from "./use-open-link.js";
  * changes what the developer would do, and the lines added and removed. A
  * press of it opens its Pull request tab in the side panel
  * (`agent-pull-request-tab.tsx`) where a panel takes it, and GitHub's page
- * otherwise; a right-click offers what a press does not: the pull request
- * on GitHub, where the press opened its tab, copying its link, and copying
- * the branch's name or the command that checks it out. The pointer resting on it hangs the
+ * otherwise; a right-click offers what a press does not: copying its
+ * GitHub link, the branch's name, or the command that checks it out, and
+ * the pull request on GitHub, where the press opened its tab. The pointer resting on it hangs the
  * card the pull request's chip hangs (`mention-chip.tsx`): its key and
  * state, size, who opened it and when, branches, labels, and counts, as
  * the workspace's GitHub App answers them (`use-link-standing.ts`).
@@ -54,7 +57,7 @@ import { linkPressOf } from "./use-open-link.js";
  * With a branch pushed and no pull request yet, the box's foot wears a
  * chip naming the branch instead, after the + and in the composer's pill
  * (`../chip.tsx`), its name in the code face: a press opens it compared on
- * GitHub, and a right-click offers the same copies. A composer too narrow
+ * GitHub, and its ⋯ and right-click offer the same copies and Open on GitHub. A composer too narrow
  * for its words draws the chip's mark alone, its hint and label still
  * naming it; the chip stands in a box of the composer's own that its ⋯
  * finds it by. Nothing here is drawn before the service has said what
@@ -71,6 +74,8 @@ export interface PublishedDoors {
 }
 
 const MENU_LABEL = "Branch actions";
+/** What the branch's chip is, which names its ⋯. */
+const BRANCH_THING = "Branch";
 /** What the pull request's row is, which names its ⋯ and its menu. */
 const PUBLISHED_THING = "Pull request";
 const CHECKS_FAILING = "Checks failing";
@@ -78,55 +83,57 @@ const CHECKS_FAILING = "Checks failing";
 /** A pull request's state and lines, its mark first, a glyph's gap apart. */
 export const PUBLISHED_META_CLASS = "agent-published-meta inline-flex items-center gap-icon-gap";
 
-/** What a ⋯ and right-click offer: the pull request on GitHub where a press opens its tab instead, and its link to the clipboard, then the branch's name and the command that checks it out, each to the clipboard, where a branch is named. */
+/**
+ * What a ⋯ and right-click offer: the pull request's address on GitHub, its
+ * Copy GitHub link, where one stands, and the branch's name and the command
+ * that checks it out, each to the clipboard, where a branch is named; then
+ * `opens`, a page of GitHub's, opened there.
+ */
 function branchActions(
   branch: string | null,
   doors: PublishedDoors,
-  pullRequest: { url: string; opensOnGitHub: boolean } | undefined,
+  pullRequestUrl: string | undefined,
+  opens: string | undefined,
 ): MenuAction[][] {
-  const links: MenuAction[] = [];
-  if (pullRequest?.opensOnGitHub) {
-    links.push({
-      label: "Open on GitHub",
-      icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
-      onSelect: () => doors.openGitHub(pullRequest.url),
-    });
-  }
-  if (pullRequest !== undefined) {
-    links.push({
-      label: LINK_COPY.LABEL,
-      icon: <GLYPH.LINK />,
-      onSelect: () => doors.copy(pullRequest.url, LINK_COPY.COPIED),
-    });
-  }
-  const github: MenuAction[][] = links.length === 0 ? [] : [links];
-  const copies: MenuAction[][] =
-    branch === null
+  const copies: MenuAction[] = [
+    ...(pullRequestUrl === undefined
       ? []
       : [
-          [
-            {
-              label: "Copy branch name",
-              icon: <GLYPH.COPY />,
-              onSelect: () => doors.copy(branch, "Branch name copied"),
-            },
-            {
-              label: "Copy checkout command",
-              icon: <GLYPH.COPY />,
-              onSelect: () => doors.copy(checkoutCommand(branch), "Checkout command copied"),
-            },
-          ],
-        ];
-  return [...github, ...copies];
+          commandAction(
+            PANEL_COMMAND.COPY_GITHUB_LINK,
+            () => doors.copy(pullRequestUrl, LINK_COPY.COPIED),
+            false,
+          ),
+        ]),
+    ...(branch === null
+      ? []
+      : [
+          {
+            label: "Copy branch name",
+            icon: <GLYPH.COPY />,
+            onSelect: () => doors.copy(branch, "Branch name copied"),
+          },
+          {
+            label: "Copy checkout command",
+            icon: <GLYPH.COPY />,
+            onSelect: () => doors.copy(checkoutCommand(branch), "Checkout command copied"),
+          },
+        ]),
+  ];
+  const open: MenuAction[] =
+    opens === undefined
+      ? []
+      : [commandAction(PANEL_COMMAND.OPEN_ON_GITHUB, () => doors.openGitHub(opens), false)];
+  return [copies, open].filter((group) => group.length > 0);
 }
 
-/** What the box's foot wears while a branch stands with no pull request: the branch's chip, which opens it compared on GitHub, its right-click offering the copies; nothing otherwise, the pull request's row standing over the box instead. */
+/** What the box's foot wears while a branch stands with no pull request: the branch's chip, which opens it compared on GitHub, and its ⋯, which its right-click drops too, offering the copies and Open on GitHub; nothing otherwise, the pull request's row standing over the box instead. */
 export function BranchChip({
   published,
   doors,
   narrow = false,
 }: {
-  published: CodingAgentPullRequestAnswer | undefined;
+  published: AgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
   /** Whether the composer is too narrow for the chip's words, so it draws its mark alone. */
   narrow?: boolean;
@@ -136,6 +143,7 @@ export function BranchChip({
   if (published === undefined || url === undefined) return null;
   const { pullRequest, branch } = published;
   if (pullRequest !== null || branch === null) return null;
+  const actions = branchActions(branch, doors, undefined, url);
   return (
     <>
       <span className="contents">
@@ -155,14 +163,10 @@ export function BranchChip({
             <ChipName mono>{branch}</ChipName>
           </Chip>
         </Tooltip>
+        <MoreButton thing={BRANCH_THING} size={BUTTON_SIZE.COMPACT} {...menu.trigger()} />
       </span>
       {menu.drawn === undefined ? null : (
-        <ActionMenu
-          menu={menu.drawn}
-          groups={branchActions(branch, doors, undefined)}
-          label={MENU_LABEL}
-          onClose={menu.close}
-        />
+        <ActionMenu menu={menu.drawn} groups={actions} label={MENU_LABEL} onClose={menu.close} />
       )}
     </>
   );
@@ -189,17 +193,20 @@ export function PublishedRow({
   branch,
   doors,
 }: {
-  pullRequest: CodingAgentPullRequest;
+  pullRequest: AgentPullRequest;
   /** The branch the pull request is from, whose name and checkout its menu copies; none where it is not known. */
   branch: string | null;
   doors: PublishedDoors;
 }): ReactNode {
   const state = pullRequestStateWord(pullRequest);
   const inPanel = doors.openPullRequest;
-  const actions = branchActions(branch, doors, {
-    url: pullRequest.url,
-    opensOnGitHub: inPanel !== undefined,
-  });
+  // Note that Open on GitHub is offered only where a press opens the tab instead.
+  const actions = branchActions(
+    branch,
+    doors,
+    pullRequest.url,
+    inPanel === undefined ? undefined : pullRequest.url,
+  );
   const mentionDoors = useMentionDoors();
   const mention = {
     kind: MENTION_KIND.LINK,
@@ -207,7 +214,7 @@ export function PublishedRow({
     url: pullRequest.url,
   } as const;
   const standing = useLinkStanding(mention, {
-    taskId: mentionDoors.taskId,
+    taskId: holderTaskId(mentionDoors.holder),
     workspace: mentionDoors.place.workspace,
   });
   const card = (

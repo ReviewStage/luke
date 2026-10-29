@@ -4,9 +4,8 @@ import { Radio } from "@base-ui/react/radio";
 import { RadioGroup } from "@base-ui/react/radio-group";
 import type { ReactNode } from "react";
 import { cn } from "../../cn.js";
-import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
+import { pulsePress } from "../../press-pulse.js";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
-import { useClipped } from "../../use-clipped.js";
 import { Badge } from "../badge/badge.js";
 import {
   ROVING_ORIENTATION,
@@ -23,8 +22,7 @@ import {
  * first open one while none is) and leaves the group in one press, and the
  * arrow keys move along the open rows and choose as they go, wrapping at
  * either end. A press on the checked row does nothing, unless the list is
- * `clearable`, where it takes the choice back, or hears it (`onPressChecked`),
- * as a list of voices does to play the chosen one again. Picking several is a group of
+ * `clearable`, where it takes the choice back. Picking several is a group of
  * checkboxes in a fieldset, each its own Tab stop, toggled by a press or
  * Space, the arrow keys moving the keyboard along them without toggling.
  * Enter presses a row as a button's Enter does, unless what holds the list
@@ -43,11 +41,7 @@ import {
  * its rows `across`, side by side, as a yes beside a no. A `pill` list
  * draws its options as pills that wrap onto as many lines as they need,
  * the picked one tinted in the accent with a check before its words, for
- * short options with no detail, a form's select. A `picture` list stands its
- * options as faces in a grid, four to a line: each option's `mark` a round
- * picture ringed in the accent once picked, its label under it, faded out at
- * its end where the face is too narrow to hold it, for a set of people or
- * places to tell apart by their pictures.
+ * short options with no detail, a form's select.
  * A `card` list draws each option as a bordered card, ringed once picked: the
  * option's radio and label on its head, its `aside` at the head's end, and its
  * `below` under them, controls of its own that the card holds. The head alone
@@ -94,12 +88,11 @@ export const CHOICE_SELECT = {
 
 export type ChoiceSelect = (typeof CHOICE_SELECT)[keyof typeof CHOICE_SELECT];
 
-/** How an open list's rows are drawn: rows of words alone, rows led by the radio or checkbox each behaves as, pills that wrap, a check in the picked one, faces in a grid, or cards holding controls of their own. */
+/** How an open list's rows are drawn: rows of words alone, rows led by the radio or checkbox each behaves as, pills that wrap, a check in the picked one, or cards holding controls of their own. */
 export const CHOICE_LOOK = {
   PLAIN: "plain",
   MARKED: "marked",
   PILL: "pill",
-  PICTURE: "picture",
   CARD: "card",
 } as const;
 
@@ -118,9 +111,8 @@ export const CHOICE_NUMBERED_ROWS = 9;
 
 /**
  * A list's box: a column of rows with no box of its own. Rows across stand
- * side by side, pills wrap onto as many lines as they need, never jumping
- * between a line's end and the line under it, and faces stand in a grid,
- * four to a line. Each look names its own gap, so no two utilities set one.
+ * side by side, and pills wrap onto as many lines as they need, never
+ * jumping between a line's end and the line under it. Each look names its own gap, so no two utilities set one.
  */
 const LIST = "luke-choice-list min-w-0 m-0 p-0 [border:0] list-none";
 
@@ -128,7 +120,6 @@ const LIST_LOOK = {
   plain: "flex gap-1",
   marked: "flex gap-1",
   pill: "flex flex-row flex-wrap gap-1.5",
-  picture: "grid grid-cols-4 gap-x-2 gap-y-3",
   card: "flex gap-2",
 } as const satisfies Record<ChoiceLook, string>;
 
@@ -147,15 +138,13 @@ const ROW =
  * Each look's own row. A pill's corners are half its one-line height
  * rather than a full round, so a long option that wraps in a narrow column
  * stands as a rounded box instead of swelling into an ellipse, while a short
- * one is the same capsule as ever. A face is its picture over its name, in
- * the type of what holds the list; a card's row is its head's radio alone,
+ * one is the same capsule as ever. A card's row is its head's radio alone,
  * the card wearing the box.
  */
 const ROW_LOOK = {
   plain: "",
   marked: "",
   pill: "gap-icon-gap min-h-control py-1 px-3 rounded-[calc(var(--luke-control-height)/2)] text-caption leading-body",
-  picture: "flex-col gap-1 p-0 outline-none text-[length:inherit] leading-body",
   card: "p-0",
 } as const satisfies Record<ChoiceLook, string>;
 
@@ -191,20 +180,6 @@ const CONTROL_INK = {
 } as const;
 
 /**
- * A face's picture, round, ringed in the strong hairline, which thickens
- * under the pointer and turns the switch's accent once picked. The
- * keyboard's ring is drawn on the picture, outside the picked ring, since
- * the face itself has no box to ring (`choice-list.css`).
- */
-const FACE =
-  "overflow-hidden w-full max-w-[88px] aspect-square rounded-[50%] bg-border transition-[box-shadow] duration-(--luke-duration-hover) ease-motion-exit [&_img]:block [&_img]:size-full [&_img]:object-cover [&_img]:object-[50%_25%] [:hover:not(:disabled)>&]:[box-shadow:0_0_0_2px_var(--luke-color-border-strong)]";
-
-const FACE_RING = {
-  rest: "[box-shadow:inset_0_0_0_1px_var(--luke-color-border-strong)]",
-  picked: "[box-shadow:0_0_0_2px_var(--luke-color-switch-on)]",
-} as const;
-
-/**
  * A card holds its radio, what it says at the head's end, and controls of
  * its own under them, ringed once picked, and steps back whole while its
  * option is unavailable.
@@ -230,7 +205,7 @@ export interface ChoiceOption<Value extends string> {
    * what the option is, as a voice's "Feminine" does.
    */
   badgeTone?: StatusTone | undefined;
-  /** A picture before the words, a workspace's tile; a picture list's face. */
+  /** A picture before the words, a workspace's tile. */
   mark?: ReactNode;
   /** What hangs after the label on its line, a connected credential's check. */
   after?: ReactNode;
@@ -258,13 +233,13 @@ export interface ChoiceListOpen<Value extends string> extends ChoiceListBase<Val
   select?: ChoiceSelect | undefined;
   /** Whether a pick-one list's checked row, pressed again, takes the choice back. */
   clearable?: boolean | undefined;
-  /** Hears a press on a pick-one list's checked row that changes nothing, for a row that acts when pressed again. */
-  onPressChecked?: ((value: Value) => void) | undefined;
   disabled?: boolean | undefined;
   /** The id of the words that describe the whole group, a settings row's description. */
   describedBy?: string | undefined;
   /** Whether the group's last write was refused. */
   invalid?: boolean | undefined;
+  /** Whether a pick is to be made, as a form's field that is not optional asks (`FormField`'s `aria-required`). */
+  required?: boolean | undefined;
   /** Whether a write is in flight, which rests the group without disabling it. */
   busy?: boolean | undefined;
   /** Whether it records a choice made, drawn as it was open and taking nothing. */
@@ -391,23 +366,6 @@ function ChoiceWords({
   );
 }
 
-/** A face's name under its picture, faded where the face is too narrow to hold it, and set in the full ink once picked. */
-function PictureName({ name, picked }: { name: string; picked: boolean }): React.JSX.Element {
-  const [box, clipped] = useClipped(name);
-  return (
-    <span
-      ref={box}
-      className={cn(
-        "luke-choice-name overflow-hidden max-w-full text-caption leading-body whitespace-nowrap",
-        picked && "text-foreground font-emphasis",
-      )}
-      data-overflow={String(clipped)}
-    >
-      {name}
-    </span>
-  );
-}
-
 /** A marked row's radio or checkbox, filled in the accent, or in its tone, once checked. */
 function ChoiceControl({
   radio,
@@ -443,7 +401,7 @@ function ChoiceControl({
   );
 }
 
-/** What a row holds, by its look: a pill's check, a marked row's control, a mark, and its words or a face's name. */
+/** What a row holds, by its look: a pill's check, a marked row's control, a mark, and its words. */
 function RowInside({
   radio,
   option,
@@ -459,7 +417,6 @@ function RowInside({
   number: number | undefined;
   badgeTone: StatusTone;
 }): React.JSX.Element {
-  const picture = look === CHOICE_LOOK.PICTURE;
   return (
     <>
       {look === CHOICE_LOOK.PILL ? (
@@ -474,26 +431,14 @@ function RowInside({
         />
       ) : null}
       {option.mark === undefined ? null : (
-        <span
-          className={cn(
-            "luke-choice-mark inline-flex flex-none",
-            picture && FACE,
-            picture && (checked ? FACE_RING.picked : FACE_RING.rest),
-          )}
-        >
-          {option.mark}
-        </span>
+        <span className="luke-choice-mark inline-flex flex-none">{option.mark}</span>
       )}
-      {picture ? (
-        <PictureName name={option.label} picked={checked} />
-      ) : (
-        <ChoiceWords
-          option={option}
-          tone={option.badgeTone ?? badgeTone}
-          look={look}
-          number={number}
-        />
-      )}
+      <ChoiceWords
+        option={option}
+        tone={option.badgeTone ?? badgeTone}
+        look={look}
+        number={number}
+      />
     </>
   );
 }
@@ -505,6 +450,7 @@ function ChoiceRow({
   checked,
   tabStop,
   disabled,
+  readOnly,
   dims,
   look,
   across,
@@ -519,6 +465,14 @@ function ChoiceRow({
   /** Whether it is a Tab stop of its own, as each of a group of checkboxes is; a radio group's one stop is its keys' to keep. */
   tabStop: boolean;
   disabled: boolean;
+  /**
+   * Whether it records a pick rather than offering one: it takes no press
+   * and no Tab stop, as an unavailable row does, yet its words select, since
+   * it is read rather than pressed. Note that it refuses the press itself,
+   * through Base UI's `readOnly`, because a disabled row refuses the
+   * pointer too, which would keep a drag over its words from selecting.
+   */
+  readOnly: boolean;
   /** Whether an unavailable row fades, which a read-only list's and a card's do not. */
   dims: boolean;
   look: ChoiceLook;
@@ -539,30 +493,29 @@ function ChoiceRow({
     "data-value": option.value,
     ...rovingItem(),
     // Note that a radio is drawn out of the tab order, which quiets the group's own roving stop, so the stop its keys keep is the only one.
-    tabIndex: tabStop ? 0 : -1,
+    tabIndex: tabStop && !readOnly ? 0 : -1,
     className: cn(
       ROW,
       ROW_LOOK[look],
       across && !card && ROW_ACROSS,
-      "disabled:cursor-default",
+      "disabled:cursor-default aria-disabled:cursor-default",
       dims && "disabled:opacity-disabled",
     ),
     "data-tone": option.tone,
     disabled,
+    readOnly,
+    // Note that a read-only row is announced unavailable, as a disabled one is, which the roving keys pass over too.
+    "aria-disabled": readOnly || undefined,
     "aria-keyshortcuts": number === undefined ? undefined : String(number),
     onClick: (event: React.MouseEvent<HTMLElement> & { preventBaseUIHandler: () => void }) => {
       // Note that the list answers the press itself, because Base UI's own takes no choice back.
       event.preventBaseUIHandler();
-      // Note that a row's radio or box is what gives, as a checkbox's box does; a pill gives whole, a picture a little.
+      if (readOnly) return;
+      // Note that a row's radio or box is what gives, as a checkbox's box does; a pill gives whole.
       const control = event.currentTarget.querySelector<HTMLElement>(
         ":scope > .luke-choice-control",
       );
-      if (control !== null) pulsePress(control);
-      else
-        pulsePress(
-          event.currentTarget,
-          look === CHOICE_LOOK.PICTURE ? PRESS_PULSE.QUIET : PRESS_PULSE.CONTROL,
-        );
+      pulsePress(control ?? event.currentTarget);
       onPress();
     },
     // Note that Enter presses a row as a button's Enter does, which Base UI's radio and checkbox refuse.
@@ -629,6 +582,7 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
     readOnly = false,
     describedBy,
     invalid,
+    required,
     busy,
     focusRef,
     select = CHOICE_SELECT.ONE,
@@ -659,7 +613,6 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
   const press = (pressed: Value) => {
     const next = afterPress(props, pressed);
     if (next !== undefined) props.onChange(next);
-    else if (one) props.onPressChecked?.(pressed);
   };
   // Note that Base UI's own arrows never run, so a key pressed in a card's controls stays theirs.
   const onKeyDown = (
@@ -675,7 +628,8 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
       option={option}
       checked={value.includes(option.value)}
       tabStop={!one}
-      disabled={still || option.disabled === true}
+      disabled={disabled || option.disabled === true}
+      readOnly={readOnly}
       dims={!readOnly && look !== CHOICE_LOOK.CARD}
       look={look}
       across={flow === CHOICE_FLOW.ACROSS}
@@ -689,6 +643,7 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
     "aria-label": legend,
     "aria-describedby": describedBy,
     "aria-invalid": invalid,
+    "aria-required": required,
     "aria-busy": busy,
     className: listClass(look, flow),
     "data-flow": flow,

@@ -1,4 +1,4 @@
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readAgent } from "@luke/database/models/agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -8,12 +8,12 @@ import {
   type PlanCommentAsked,
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
-import { MESSAGE_AUTHOR, MESSAGE_CHANNEL } from "@luke/wire";
+import { MESSAGE_CHANNEL } from "@luke/wire";
 import { Effect, Option } from "effect";
-import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
-import { steerCodingAgent } from "../agents/coder-host/steer.js";
+import { steerAgent } from "../agents/coder-host/steer.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 
 /**
@@ -30,7 +30,7 @@ import { hostedStoreOrUnavailable } from "../http/http-effect.js";
  * member's own bearer from the desktop, and from a browser's session cookie
  * as the deployment acting for the member, which the channel admits for a
  * typed message and mints as the member's own principal
- * (`brain-host/auth.ts`'s `DEPLOYMENT_PRESENCE`). It is sent under a key
+ * (`eve-host/auth.ts`'s `DEPLOYMENT_PRESENCE`). It is sent under a key
  * drawn from the one the member's client made for the comment, so a comment
  * sent again is handed over once. A comment that mentions no agent hands
  * nothing to anyone, an \`@\` of Luke among it, and an agent's own reply
@@ -54,7 +54,7 @@ function writerName(entry: PlanCommentThread["entries"][number]): string {
     case PLAN_COMMENT_ACTOR.LUKE:
       return "Luke";
     case PLAN_COMMENT_ACTOR.AGENT:
-      return "A coding agent";
+      return "An agent";
     case PLAN_COMMENT_ACTOR.MEMBER:
       return entry.writer.by?.name ?? "A former member";
   }
@@ -93,7 +93,7 @@ export const askableAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   to: PlanCommentAsked,
 ) {
   if (to.actor !== PLAN_COMMENT_ACTOR.AGENT || to.agentId === undefined) return undefined;
-  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, to.agentId));
+  const agent = yield* hostedStoreOrUnavailable(readAgent(userId, to.agentId));
   if (Option.isNone(agent) || agent.value.taskId !== taskId || agent.value.archivedAt !== null) {
     return undefined;
   }
@@ -124,13 +124,12 @@ export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   const { userId, to, clientKey, text, threadId, words } = input;
   const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
   const writer = storeWriter({ tools: CODER_TOOL_SET });
-  yield* steerCodingAgent(eve, writer, userId, to, {
+  yield* steerAgent(eve, writer, userId, to, {
     text,
     serverWords: words,
     clientKey,
     sender: { kind: MESSAGE_SENDER.MEMBER, userId },
     metadata: {
-      author: MESSAGE_AUTHOR.DEVELOPER,
       channel: MESSAGE_CHANNEL.COMMENT,
       thread_id: threadId,
     },

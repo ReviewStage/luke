@@ -1,4 +1,5 @@
 import { PULL_REQUEST_CHAPTERS_FAILURE } from "@luke/database/pull-request-chapters-vocabulary";
+import type { AgentKind } from "@luke/features/agent-wire";
 import type { AutomationTriggerKind } from "@luke/features/automation-wire";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { Clock, Context, Effect, Layer, Option, Redacted } from "effect";
@@ -98,7 +99,6 @@ type Values<T> = T[keyof T];
 interface ServerEventProperties {
   [SERVER_EVENT.TASK_CREATE]: {
     source: Values<typeof SERVER_TASK_SOURCE>;
-    has_issue: boolean;
   };
   [SERVER_EVENT.AGENT_START]: {
     model: string;
@@ -106,6 +106,8 @@ interface ServerEventProperties {
     start_kind: Values<typeof SERVER_AGENT_START_KIND>;
     is_from_automation: boolean;
     has_task: boolean;
+    /** What the agent is, so a member's operator, started with no task, is not counted as a taskless coder. */
+    agent_kind: AgentKind;
   };
   [SERVER_EVENT.PULL_REQUEST_CREATE]: {
     opened_as: Values<typeof SERVER_PULL_REQUEST_OPENER>;

@@ -10,7 +10,7 @@
  * part was written and a pick is no part of it.
  */
 
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import type { TaskRunsOnRequest } from "@luke/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
@@ -71,11 +71,11 @@ const upsertPick = SqlSchema.void({
 
 /** The pick a row holds; none where it holds none, or a device row lost its id. */
 function pickOf(row: typeof PickRowSchema.Type): Option.Option<TaskRunsOnRequest> {
-  if (row.machine === CODING_AGENT_MACHINE.VERCEL) {
-    return Option.some({ machine: CODING_AGENT_MACHINE.VERCEL });
+  if (row.machine === AGENT_MACHINE.VERCEL) {
+    return Option.some({ machine: AGENT_MACHINE.VERCEL });
   }
-  if (row.machine === CODING_AGENT_MACHINE.DEVICE && row.deviceId !== null) {
-    return Option.some({ machine: CODING_AGENT_MACHINE.DEVICE, deviceId: row.deviceId });
+  if (row.machine === AGENT_MACHINE.DEVICE && row.deviceId !== null) {
+    return Option.some({ machine: AGENT_MACHINE.DEVICE, deviceId: row.deviceId });
   }
   return Option.none();
 }
@@ -95,6 +95,6 @@ export function keepRunsOnPick(
   return upsertPick({
     userId,
     machine: pick.machine,
-    deviceId: pick.machine === CODING_AGENT_MACHINE.DEVICE ? pick.deviceId : null,
+    deviceId: pick.machine === AGENT_MACHINE.DEVICE ? pick.deviceId : null,
   });
 }

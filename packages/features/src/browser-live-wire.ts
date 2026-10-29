@@ -1,8 +1,10 @@
 /**
  * browser-live-wire.ts -- a live view of one Browser tab in an agent's cloud browser, and its takeover: the socket a member's panel opens to the service, and the messages each side sends on it.
  *
- * One socket is one tab of one task (`agent-browser-tab-wire.ts`'s tab, by
- * its id). The desktop opens it from its main process under the account's
+ * One socket is one tab of one coding agent's browser
+ * (`agent-browser-tab-wire.ts`'s tab, by its id), whether the agent is on a
+ * task or on none. A desktop built before the agent was named names the
+ * tab's task instead, which the service still admits. The desktop opens it from its main process under the account's
  * bearer and with no `Origin`, as it opens a terminal; the web app opens it
  * from the deployment's own page, where the browser carries the session
  * cookie and names the page's origin, which the service holds to its own.
@@ -36,10 +38,14 @@ import { Schema as EffectSchema } from "effect";
 import { BROWSER_SHOWN_MAX_CHARS, isBrowserAddress } from "./browser-acts.js";
 import { countedNumber } from "./service-wire.js";
 
-/** The socket's path, and the query naming the task and the tab. */
+/**
+ * The socket's path, and the query naming the agent and the tab; `TASK` is
+ * what a desktop built before `AGENT` names in its place, read by the
+ * service alone.
+ */
 export const BROWSER_LIVE = {
   PATH: "/api/browser/live",
-  QUERY: { TASK: "task", TAB: "tab" },
+  QUERY: { AGENT: "agent", TASK: "task", TAB: "tab" },
 } as const;
 
 /** Why the service closed a socket, which the panel reads as the tab's state. */

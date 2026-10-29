@@ -18,7 +18,8 @@ import {
  * past an unavailable row, a press on its checked row keeping or clearing
  * the choice as asked; a pick-several list toggles each row on its own, the
  * arrows moving along it; a numbered list wears each row's key; a read-only
- * list keeps its pick checked and takes no press, key, or Tab;
+ * list keeps its pick checked and takes no press, key, or Tab, its words
+ * selecting under a drag;
  * a settled list names what was picked and takes no press; and Enter
  * presses a row and a card's own field keeps its caret, where Base UI's
  * radio and group would not.
@@ -194,22 +195,6 @@ test("a press chooses a row; a press on the checked row keeps it, unless the lis
   assert.equal(row(cleared, "Never retry").getAttribute("aria-checked"), "false");
 });
 
-test("a press on the checked row is heard by a list that listens for it, and changes nothing", () => {
-  const pressed: string[] = [];
-  const page = render(
-    createElement(ChoiceList<Retry>, {
-      legend: "Retries",
-      options: OPTIONS,
-      value: ["never"],
-      onChange: (next: readonly Retry[]) => pressed.push(`change:${next.join("+")}`),
-      onPressChecked: (value: Retry) => pressed.push(`again:${value}`),
-    }),
-  );
-  act(() => row(page, "Never retry").click());
-  act(() => row(page, "Retry 3 times").click());
-  assert.deepEqual(pressed, ["again:never", "change:three"]);
-});
-
 test("after a clearable list's pick is taken back, the arrows step from the row the keyboard is on", () => {
   const page = render(createElement(Held, { clearable: true }));
   const never = row(page, "Never retry");
@@ -275,22 +260,25 @@ test("an unavailable list changes nothing, by press or by key", () => {
   assert.equal(heard(page), "");
 });
 
-test("a read-only list keeps its pick checked and takes no press, key, or Tab", () => {
+test("a read-only list keeps its pick checked and takes no press, key, or Tab, yet a drag over its words selects them", () => {
   for (const select of [CHOICE_SELECT.ONE, CHOICE_SELECT.MANY]) {
     const page = render(
       createElement(Held, { select, readOnly: true, look: CHOICE_LOOK.MARKED, start: ["three"] }),
     );
     assert.deepEqual(
-      rows(page).map((each) => [each.getAttribute("aria-checked"), each.disabled]),
+      rows(page).map((each) => [each.getAttribute("aria-checked"), each.tabIndex]),
       [
-        ["true", true],
-        ["false", true],
-        ["false", true],
+        ["true", -1],
+        ["false", -1],
+        ["false", -1],
       ],
     );
     act(() => row(page, "Never retry").click());
     key(row(page, "Retry 3 times"), "ArrowDown");
     assert.equal(heard(page), "", "nothing is handed on");
+    const down = new MouseEvent("pointerdown", { bubbles: true, cancelable: true });
+    row(page, "Never retry").querySelector(".luke-choice-label")?.dispatchEvent(down);
+    assert.equal(down.defaultPrevented, false, "the pointer starts a selection on its words");
   }
   const page = render(createElement(Held, { readOnly: true, start: ["never"] }));
   assert.equal(page.querySelector('[role="radiogroup"]')?.getAttribute("aria-readonly"), "true");
@@ -317,31 +305,6 @@ test("a settled list names each option, the pick beside its note and the rest wi
     ],
   );
   assert.equal(rows(page).length, 0);
-});
-
-test("a picture list is a radio group of faces the arrows walk, each face's picture its mark", () => {
-  const container = render(
-    createElement(Held, {
-      look: CHOICE_LOOK.PICTURE,
-      start: ["three"],
-      options: [
-        { value: "three", label: "Atlas", mark: createElement("img", { alt: "", src: "a.png" }) },
-        { value: "never", label: "Orion", mark: createElement("img", { alt: "", src: "o.png" }) },
-      ],
-    }),
-  );
-  const faces = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
-  assert.deepEqual(
-    faces.map((face) => face.textContent),
-    ["Atlas", "Orion"],
-  );
-  assert.ok(faces[0]?.querySelector(".luke-choice-mark img"));
-  act(() => faces[0]?.focus());
-  act(() => {
-    faces[0]?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
-  });
-  assert.equal(faces[1]?.getAttribute("aria-checked"), "true");
-  assert.equal(document.activeElement, faces[1]);
 });
 
 test("a card list holds each option's controls under its radio, and a key pressed in them is theirs", () => {

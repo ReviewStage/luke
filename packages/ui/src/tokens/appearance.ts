@@ -7,8 +7,8 @@
  * applied to the machine's appearance itself (`nativeTheme.themeSource`), so
  * following the machine is following the setting. A sheet picks its inks by
  * `light-dark()`, which the root's theme decides through `color-scheme`. What
- * draws on a canvas or picks a theme in script, a diagram, a whiteboard, a
- * terminal, asks here instead of asking the media query, so a page drawn in a
+ * draws on a canvas or picks a theme in script, a diagram or a terminal,
+ * asks here instead of asking the media query, so a page drawn in a
  * chosen theme draws its canvases in that theme whatever the machine says.
  */
 

@@ -7,7 +7,7 @@ import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
 import { getTestDB, startTask } from "../../testing/index.js";
-import { createCodingAgent, recordCodingAgentRunnerToken } from "../coding-agent-store.js";
+import { createAgent, recordAgentRunnerToken } from "../agent-store.js";
 import {
   readNativeProjection,
   readNativeSequence,
@@ -28,7 +28,7 @@ const openConversation = Effect.gen(function* () {
   const digest = randomUUID();
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const task = yield* startTask(userId, { name: "Teammate invitations" });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
@@ -38,7 +38,7 @@ const openConversation = Effect.gen(function* () {
     repository: null,
   });
   const agent = Option.getOrThrow(started).agent;
-  assert.equal(yield* recordCodingAgentRunnerToken(userId, agent.id, digest), true);
+  assert.equal(yield* recordAgentRunnerToken(userId, agent.id, digest), true);
   return { userId, conversationId: agent.conversationId, agentId: agent.id, digest };
 });
 
@@ -123,11 +123,11 @@ it.layer(getTestDB())("the native projection's place", (it) => {
   it.effect("a runner whose bearer was retired, or replaced, is never applied for", () =>
     Effect.gen(function* () {
       const target = yield* openConversation;
-      yield* recordCodingAgentRunnerToken(target.userId, target.agentId, randomUUID());
+      yield* recordAgentRunnerToken(target.userId, target.agentId, randomUUID());
       const replaced = yield* withNativeProjection(target, target.digest, () =>
         Effect.succeed({ result: undefined, saved: { sequence: 1, projection: {} } }),
       );
-      yield* recordCodingAgentRunnerToken(target.userId, target.agentId, null);
+      yield* recordAgentRunnerToken(target.userId, target.agentId, null);
       const retired = yield* withNativeProjection(target, target.digest, () =>
         Effect.succeed({ result: undefined, saved: { sequence: 1, projection: {} } }),
       );

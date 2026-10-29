@@ -1,4 +1,4 @@
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import {
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
   type PullRequestChaptersAnswerView,
@@ -6,9 +6,9 @@ import {
 import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
 import { useCallback, useRef, useState } from "react";
 import { useAgentRead } from "./agent-changes-tab.js";
-import { agentStillWriting } from "./coding-agent-model.js";
+import { agentStillWriting } from "./agent-model.js";
 import { usePullRequestNumber } from "./pull-request-number.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 
 /**
  * chapters-read.ts -- a pull request's chapters as its Pull request tab holds them: the read, this window's own Generate, and the count the Chapters tab wears.
@@ -43,11 +43,11 @@ export interface ChaptersRead {
  */
 export function useChaptersRead(
   agentId: string,
-  control: CodingAgentsControl,
+  control: AgentsControl,
   shown: boolean,
 ): ChaptersRead {
   const status = control.agents?.find((each) => each.id === agentId)?.status;
-  const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
+  const ended = !agentStillWriting(status ?? AGENT_STATUS.RUNNING);
   const number = usePullRequestNumber();
   const read = useAgentRead(
     agentId,

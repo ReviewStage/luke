@@ -36,8 +36,8 @@
  * which the agent reads as it reads any tool's answer.
  */
 
-import { readCodingAgentOfConversation } from "@luke/database/models/coding-agent-store";
-import { CODING_AGENT_KIND, CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { readAgentOfConversation } from "@luke/database/models/agent-store";
+import { AGENT_KIND, AGENT_MACHINE } from "@luke/features/agent-wire";
 import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { MAC_COMMAND_BOUNDS } from "@luke/features/mac-command-wire";
 import { failureKind } from "@luke/runtime/effect";
@@ -69,8 +69,8 @@ import {
 } from "../../integrations/connection-door.js";
 import type { McpToolSchema } from "../../integrations/mcp-tools.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { memoryOnFor } from "../memory-tools.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
 import { lukeMcpCallKey } from "./call-key.js";
@@ -240,8 +240,8 @@ const TOOL_META = { "anthropic/maxResultSizeChars": 500_000 } as const;
 const NO_AGENT_OFFERED: LukeMcpOfferedTo = {
   taskId: null,
   repository: null,
-  kind: CODING_AGENT_KIND.CODER,
-  machine: CODING_AGENT_MACHINE.VERCEL,
+  kind: AGENT_KIND.CODER,
+  machine: AGENT_MACHINE.VERCEL,
 };
 
 /** The tool result where the door failed rather than refused. */
@@ -302,7 +302,6 @@ function callLukeTool(
     const sandbox = doors.sandbox(admitted);
     const context = {
       sandbox: sandbox.files,
-      repository: sandbox.repository,
       callKey: lukeMcpCallKey(admitted, name, input),
       seams,
     };
@@ -330,7 +329,7 @@ function listLukeTools(
   admitted: AdmittedConversation,
 ): Effect.Effect<RpcAnswer, never, LukeMcpServices> {
   const { userId, conversationId } = admitted.target;
-  return readCodingAgentOfConversation(userId, conversationId).pipe(
+  return readAgentOfConversation(userId, conversationId).pipe(
     Effect.flatMap((found) =>
       Effect.map(
         Option.isSome(found) ? memoryOnFor(found.value.userId) : Effect.succeed(false),

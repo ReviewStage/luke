@@ -10,28 +10,16 @@
  * transcripts still name.
  */
 
-import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "./board-vocabulary.js";
+import { AGENT_DELEGATE_TOOL, AGENT_MESSAGE_TOOL, AGENT_TODOS_TOOL } from "./agent-wire.js";
 import { CHANNEL_TOOL } from "./channel-wire.js";
-import {
-  AGENT_MESSAGE_TOOL,
-  CODING_AGENT_DELEGATE_TOOL,
-  CODING_AGENT_TODOS_TOOL,
-} from "./coding-agent-wire.js";
 import { INBOX_TOOL } from "./inbox-wire.js";
 import { SHOW_PAGE_TOOL_NAME } from "./page-wire.js";
 import { PLAN_COMMENT_TOOL } from "./plan-comment-wire.js";
 
 /** Every tool Luke authors or declares for a model, by the name the model calls it by. */
 export const AGENT_TOOL = {
-  // The brain's own, which its hosted resolver declares.
-  QUEUE_QUESTION: "queue_question",
-  WITHDRAW_QUESTION: "withdraw_question",
-  SHOW_CODE: "show_code",
-  DRAW_ON_BOARD: DRAW_ON_BOARD_TOOL_NAME,
-  LOOK_AT_BOARD: LOOK_AT_BOARD_TOOL_NAME,
   // A look at one of the plan's pictures, the planning model's and a coding agent's.
   LOOK_AT_PICTURE: "look_at_picture",
-  END_CALL: "end_call",
   // The tools about the workspace's coding agents, named for any agent offered them.
   LIST_AGENTS: "list_agents",
   READ_AGENT: "read_agent",
@@ -74,9 +62,9 @@ export const AGENT_TOOL = {
   GREP: "grep",
   APPLY_PATCH: "apply_patch",
   // A coding agent's own, and the delegation every agent makes.
-  DELEGATE: CODING_AGENT_DELEGATE_TOOL,
+  DELEGATE: AGENT_DELEGATE_TOOL,
   EDIT_PLAN: "edit_plan",
-  WRITE_TODOS: CODING_AGENT_TODOS_TOOL,
+  WRITE_TODOS: AGENT_TODOS_TOOL,
   POST_THREAD: INBOX_TOOL.POST,
   WITHDRAW_ASK: INBOX_TOOL.WITHDRAW,
   READ_THREADS: INBOX_TOOL.READ,
@@ -135,8 +123,11 @@ export const CONNECTION_TOOL = {
  * had the public reads, the planning model's four tools about the
  * task's coding agents, since named as `AGENT_TOOL`'s agent tools, the
  * four about the workspace's own issues, gone with them, the inbox's
- * post and read, since named for the channels a thread is posted to, and
- * the four of the workspace's Chat, removed with it.
+ * post and read, since named for the channels a thread is posted to,
+ * the four of the workspace's Chat, removed with it, the brain's lines of
+ * code put on the developer's screen and its two whiteboard tools, removed
+ * with the Code and Board tabs, and a voice call's question queue and
+ * hang-up, removed with GPT Live.
  */
 export const RETIRED_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -166,6 +157,14 @@ export const RETIRED_TOOL = {
   READ_CHAT: "read_chat",
   RESOLVE_ASK: "resolve_ask",
   EDIT_CHANNEL: "edit_channel",
+  // Code snippets and the task's whiteboard, removed with them.
+  SHOW_CODE: "show_code",
+  DRAW_ON_BOARD: "draw_on_board",
+  LOOK_AT_BOARD: "look_at_board",
+  // A voice call's own tools, removed with GPT Live.
+  QUEUE_QUESTION: "queue_question",
+  WITHDRAW_QUESTION: "withdraw_question",
+  END_CALL: "end_call",
 } as const;
 
 /**
@@ -198,6 +197,15 @@ export const CLAUDE_CODE_TOOL = {
   SKILL: "Skill",
   MONITOR: "Monitor",
   SCHEDULE_WAKEUP: "ScheduleWakeup",
+} as const;
+
+/**
+ * Claude Code's own tools no transcript records, by their CLI names:
+ * `ToolSearch` loads a deferred tool's schema before its first call, which is
+ * the harness reading its own catalog rather than work of the agent's.
+ */
+export const CLAUDE_CODE_UNRECORDED_TOOL = {
+  TOOL_SEARCH: "ToolSearch",
 } as const;
 
 /** What Claude Code puts before a tool of Luke's MCP server (`mcpServers.luke`): `mcp__luke__read_threads` is Luke's `read_threads`. */

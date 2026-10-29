@@ -26,10 +26,6 @@ export interface ActSender<Sender = unknown> {
   sender: Sender;
   /** A panel: Luke's window, which types asks and presses rows. */
   panel: boolean;
-  /** The hidden window the conversation lives in, and the one receiver of replies. */
-  voice: boolean;
-  /** The floating call window, which sends the call's controls and nothing else. */
-  call: boolean;
 }
 
 /** What every act procedure is called with, `Sender` being the platform's own handle on the window that asked. */

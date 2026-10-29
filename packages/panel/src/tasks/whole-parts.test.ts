@@ -2,17 +2,17 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentPartParams,
-  type CodingAgentPartView,
-} from "@luke/features/coding-agent-view";
+  AGENT_CALL_FAILURE,
+  type AgentPartParams,
+  type AgentPartView,
+} from "@luke/features/agent-view";
 import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentSummary,
+  AGENT_BRIEF,
+  AGENT_STATUS,
+  type AgentSummary,
+  type AgentTranscriptMessage,
   PART_CUT_FIELD,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -25,7 +25,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 
 /**
@@ -39,16 +39,16 @@ const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 
 const ACME: Pick<Workspace, "id" | "memberCount"> = { id: "workspace-acme", memberCount: 1 };
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Build",
   createdAt: 1_000,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
-  brief: CODING_AGENT_BRIEF.PROMPT,
+  brief: AGENT_BRIEF.PROMPT,
   startedBy: DEAN,
 };
 
@@ -65,7 +65,7 @@ const WHOLE_OUTPUT = "compiled the first file\ncompiled the middle file\ncompile
 const WHOLE_THOUGHT = "Start with the build. Then the middle of the thought. Then ship.";
 
 /** A turn whose thought and command output its page carried cut. */
-const CUT_TURN: CodingAgentMessage = {
+const CUT_TURN: AgentTranscriptMessage = {
   id: JOURNAL_ID,
   role: MESSAGE_ROLE.ASSISTANT,
   parts: [
@@ -90,7 +90,7 @@ const CUT_TURN: CodingAgentMessage = {
       tail: "compiled the last file",
     },
   ],
-  metadata: { author: "brain" },
+  metadata: { author: "model" },
   startedAt: 2_000,
   finishedAt: 9_000,
 };
@@ -121,18 +121,18 @@ async function settled(): Promise<void> {
 }
 
 /** The tab drawn over the cut turn, each part read whole answering as `answer` resolves, and the reads it was asked. */
-async function drawnTab(answer: (index: number) => Promise<CodingAgentPartView>) {
-  const asked: CodingAgentPartParams[] = [];
+async function drawnTab(answer: (index: number) => Promise<AgentPartView>) {
+  const asked: AgentPartParams[] = [];
   fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
       Promise.resolve([{ ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER }]),
-    [ACT_KIND.CODING_AGENTS_PART]: (payload: CodingAgentPartParams) => {
+    [ACT_KIND.AGENTS_PART]: (payload: AgentPartParams) => {
       asked.push(payload);
       return answer(payload.index);
     },
   });
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [AGENT],
     me: DEAN.userId,
     transcripts: pushedTranscripts(() => [
@@ -174,7 +174,7 @@ function press(summary: HTMLElement | null): void {
 }
 
 test("a cut command output is read whole only as its fold opens, says it is reading meanwhile, and is then drawn whole", async () => {
-  let land: (part: CodingAgentPartView) => void = () => undefined;
+  let land: (part: AgentPartView) => void = () => undefined;
   const { container, asked } = await drawnTab(
     () =>
       new Promise((resolve) => {
@@ -201,7 +201,7 @@ test("a cut thought is read whole as its fold opens, and one whose read fails dr
   const { container, asked } = await drawnTab((index) =>
     index === 1
       ? Promise.resolve({ part: { type: "reasoning", text: WHOLE_THOUGHT, state: "done" } })
-      : Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }),
+      : Promise.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND }),
   );
 
   press(container.querySelector<HTMLElement>(".reasoning > summary"));

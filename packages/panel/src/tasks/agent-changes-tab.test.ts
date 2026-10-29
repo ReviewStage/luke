@@ -3,17 +3,17 @@
 import assert from "node:assert/strict";
 import { MOTION_DURATION_MS } from "@luke/brand";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentPullRequestViewedAnswerView,
-} from "@luke/features/coding-agent-view";
+  AGENT_CALL_FAILURE,
+  type AgentPullRequestViewedAnswerView,
+} from "@luke/features/agent-view";
 import {
+  AGENT_STATUS,
+  type AgentChangedFile,
+  type AgentSummary,
   CHANGED_FILE_STATUS,
-  CODING_AGENT_STATUS,
-  type CodingAgentChangedFile,
-  type CodingAgentSummary,
   DIFF_SIDE,
   PATCH_OMITTED,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   FILE_VIEWED_STATE,
   PULL_REQUEST_ACTION,
@@ -68,10 +68,10 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
-import type { ChangesThreads } from "./agent-changes-tab.js";
+import type { ChangesReads, ChangesThreads } from "./agent-changes-tab.js";
 import { blobShaOf } from "./changes-model.js";
 import type { TreeShown } from "./file-view.js";
 import { OpenFileTabProvider } from "./open-file-tab.js";
@@ -93,14 +93,14 @@ import { OpenFileTabProvider } from "./open-file-tab.js";
  * files only.
  */
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Seat limit",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 
@@ -115,10 +115,7 @@ const PATCH = [
 const PAGE = "https://github.com/acme/relay/pull/7";
 
 /** A changed file of the pull request, modified with the seats patch unless told otherwise. */
-function changed(
-  path: string,
-  overrides: Partial<CodingAgentChangedFile> = {},
-): CodingAgentChangedFile {
+function changed(path: string, overrides: Partial<AgentChangedFile> = {}): AgentChangedFile {
   return {
     path,
     previousPath: null,
@@ -141,20 +138,20 @@ interface ImageCommits {
 let commits: ImageCommits = {};
 
 /** The pull request's files, in the order GitHub lists them, which is not the tree's. */
-let files: CodingAgentChangedFile[] = [changed("src/seats.ts")];
+let files: AgentChangedFile[] = [changed("src/seats.ts")];
 /** Whether the read stopped short of every file; it did not unless a test says so. */
 let truncated = false;
 
 /** How the service answers the read of the member's viewed marks; unanswered unless a test answers it. */
-let viewedAnswer: CodingAgentPullRequestViewedAnswerView = {
-  failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+let viewedAnswer: AgentPullRequestViewedAnswerView = {
+  failure: AGENT_CALL_FAILURE.UNANSWERED,
 };
 /** How many times the marks were read. */
 let viewedReads = 0;
 /** What the next read of the marks waits on, where a test holds it; none answers at once. */
 let viewedHeld: Promise<void> | undefined;
 
-const control = codingAgentsControl({
+const control = agentsControl({
   agents: [AGENT],
   agentIds: [AGENT.id],
   models: [],
@@ -254,7 +251,7 @@ beforeEach(() => {
   files = [changed("src/seats.ts")];
   truncated = false;
   commits = {};
-  viewedAnswer = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+  viewedAnswer = { failure: AGENT_CALL_FAILURE.UNANSWERED };
   viewedReads = 0;
   viewedHeld = undefined;
   boxWidth = 900;
@@ -307,6 +304,18 @@ interface DrawOptions {
   readonly openTab?: (path: string) => void;
 }
 
+/** The reads the view was last drawn with, which the Pull request tab's Refresh reads again. */
+let heldReads: ChangesReads | undefined;
+
+/** Reads the changes again as the Pull request tab's Refresh does, the one Refresh its screen offers, with the review threads. */
+async function refreshAsTheTab(threads?: ChangesThreads): Promise<void> {
+  act(() => {
+    heldReads?.ask();
+    threads?.refresh?.();
+  });
+  await flush();
+}
+
 /** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
 async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
   const { ChangesTabReading } = await import("../testing/changes-tab.js");
@@ -317,6 +326,9 @@ async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
     repository: options.repository ?? "acme/relay",
     tree: options.tree ?? { open: options.treeOpen ?? false, onToggle: () => undefined },
     threads: options.threads,
+    onReads: (reads) => {
+      heldReads = reads;
+    },
   });
   const opening =
     options.openTab === undefined
@@ -391,7 +403,9 @@ function typeSearch(words: string): void {
 
 /** The ⋯'s items, the menu opened. */
 function menuItems(): readonly HTMLButtonElement[] {
-  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  const options = document.querySelector<HTMLButtonElement>(
+    'button[aria-label="Files changed actions"]',
+  );
   act(() => options?.click());
   return [...document.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
 }
@@ -1006,7 +1020,7 @@ test("the ⋯ holds the pull request's actions alone, no file's, its looks set i
 
   assert.deepEqual(
     menuItems().map((item) => item.textContent),
-    ["Copy patch", "Download patch", "Refresh changes"],
+    ["Copy patch", "Download patch"],
   );
 });
 
@@ -1190,28 +1204,6 @@ test("a review thread is drawn under its line in its file, and one a push outdat
   );
 });
 
-test("Refresh changes reads the review threads again with the files, so the two describe the same push", async () => {
-  let threadReads = 0;
-  await drawTab({
-    threads: {
-      list: [],
-      draw: () => null,
-      refresh: () => {
-        threadReads += 1;
-      },
-    },
-  });
-
-  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
-  act(() => options?.click());
-  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent?.includes("Refresh changes"),
-  );
-  act(() => refresh?.click());
-
-  assert.equal(threadReads, 1);
-});
-
 test("a refresh that fails after the changes were read keeps the files drawn, says Could not refresh with Retry, and Retry reads again", async () => {
   let failing = false;
   const flaky = {
@@ -1237,19 +1229,8 @@ test("a refresh that fails after the changes were read keeps the files drawn, sa
   });
   assert.equal(refreshNote(), undefined);
 
-  const refresh = async () => {
-    const options = document.querySelector<HTMLButtonElement>(
-      'button[aria-label="Changes actions"]',
-    );
-    act(() => options?.click());
-    const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (each) => each.textContent?.includes("Refresh changes"),
-    );
-    act(() => item?.click());
-    await flush();
-  };
   failing = true;
-  await refresh();
+  await refreshAsTheTab();
 
   const note = refreshNote();
   assert.ok(note, "the refresh says it did not land");
@@ -1311,7 +1292,7 @@ function answerImages(refusing: Set<string> = new Set()): string[] {
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
-    [ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: ({ src }) => {
+    [ACT_KIND.AGENTS_GITHUB_IMAGE]: ({ src }) => {
       asked.push(src);
       if (refusing.has(src)) return Promise.reject(refusedOnPort("Unreachable."));
       return Promise.resolve({ contentType: "image/png", base64: btoa(src) });
@@ -1448,13 +1429,7 @@ test("an image side whose read did not land is asked for again when the changes 
   assert.match(slot.textContent ?? "", /This picture could not be read\./u);
 
   refusing.clear();
-  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
-  act(() => options?.click());
-  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent?.includes("Refresh changes"),
-  );
-  act(() => refresh?.click());
-  await flush();
+  await refreshAsTheTab();
   slot = await standNearView("logo.png");
 
   assert.deepEqual(asked, [after, after]);
@@ -1511,7 +1486,7 @@ test("an SVG moved with its contents unchanged offers no source, having no lines
   );
 });
 
-test("the comparison chosen for an image, and how far it is faded, outlast Refresh changes", async () => {
+test("the comparison chosen for an image, and how far it is faded, outlast a Refresh", async () => {
   vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
   answerImages();
   commits = { headSha: "9".repeat(40), baseSha: "a".repeat(40) };
@@ -1531,19 +1506,13 @@ test("the comparison chosen for an image, and how far it is faded, outlast Refre
     fade().dispatchEvent(new Event("input", { bubbles: true }));
   });
 
-  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
-  act(() => options?.click());
-  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent?.includes("Refresh changes"),
-  );
-  act(() => refresh?.click());
-  await flush();
+  await refreshAsTheTab();
   slot = await standNearView("logo.png");
 
   assert.equal(fade().value, "80");
 });
 
-test("after Refresh changes an image far from the view reads nothing until it comes near again", async () => {
+test("after a Refresh an image far from the view reads nothing until it comes near again", async () => {
   vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
   const asked = answerImages();
   commits = { headSha: "b".repeat(40) };
@@ -1561,13 +1530,7 @@ test("after Refresh changes an image far from the view reads nothing until it co
   slot.remove();
 
   commits = { headSha: "c".repeat(40) };
-  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
-  act(() => options?.click());
-  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent?.includes("Refresh changes"),
-  );
-  act(() => refresh?.click());
-  await flush();
+  await refreshAsTheTab();
   comeIntoView();
   await flush();
   assert.equal(asked.length, 1, "nothing is read while the file is far from the view");
@@ -1580,7 +1543,7 @@ test("after Refresh changes an image far from the view reads nothing until it co
 });
 
 /** The viewed marks the service names: the seats file viewed, the plan viewed and changed since, the readme not. */
-const MARKED: CodingAgentPullRequestViewedAnswerView = {
+const MARKED: AgentPullRequestViewedAnswerView = {
   outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
   files: [
     { path: "a.ts", state: FILE_VIEWED_STATE.VIEWED },
@@ -1604,7 +1567,7 @@ function answerMarks(answer: () => PullRequestWriteAnswer): PullRequestActionReq
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
-    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
+    [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
       asked.push(request);
       return Promise.resolve(answer());
     },
@@ -1852,19 +1815,13 @@ test("a member with no GitHub sign-in is offered one, and no Viewed box stands u
   assert.match(document.querySelector('[role="alert"]')?.textContent ?? "", /Sign in with GitHub/u);
 });
 
-test("the marks are read again with the files on Refresh changes, so the two describe the same push", async () => {
+test("the marks are read again with the files on a Refresh, so the two describe the same push", async () => {
   viewedAnswer = MARKED;
   files = [changed("a.ts")];
   await drawTab();
   assert.equal(viewedReads, 1);
 
-  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
-  act(() => options?.click());
-  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent?.includes("Refresh changes"),
-  );
-  act(() => refresh?.click());
-  await flush();
+  await refreshAsTheTab();
 
   assert.equal(viewedReads, 2);
 });
@@ -1882,7 +1839,7 @@ function holdMarks(): Array<{
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
-    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
+    [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
       const answered = Promise.withResolvers<PullRequestWriteAnswer>();
       held.push({ request, answer: answered.resolve });
       return answered.promise;
@@ -1929,13 +1886,7 @@ test("a read asked before a mark settled never undoes it, and a read that does n
   // A refresh's read stays out while the member marks the file and GitHub takes it.
   const reading = Promise.withResolvers<void>();
   viewedHeld = reading.promise;
-  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
-  act(() => options?.click());
-  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent?.includes("Refresh changes"),
-  );
-  act(() => refresh?.click());
-  await flush();
+  await refreshAsTheTab();
   act(() => viewedBox("c.ts").click());
   await flush();
   held[0]?.answer(DONE);
@@ -1946,12 +1897,7 @@ test("a read asked before a mark settled never undoes it, and a read that does n
 
   viewedHeld = undefined;
   viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED };
-  act(() => options?.click());
-  const again = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent?.includes("Refresh changes"),
-  );
-  act(() => again?.click());
-  await flush();
+  await refreshAsTheTab();
   assert.equal(header("c.ts").querySelector(".diff-list-viewed") === null, true);
 });
 
@@ -2337,7 +2283,7 @@ test("no file is read whole for an agent on no task, a head not named, or a task
     undefined,
     "another repository",
   );
-  const taskless = codingAgentsControl({
+  const taskless = agentsControl({
     agents: [{ ...AGENT, planId: null }],
     agentIds: [AGENT.id],
     models: [],
@@ -2553,13 +2499,7 @@ test("a whole file read for an earlier answer, landing after a refresh, leaves t
 
   act(() => expand("src/seats.ts")?.click());
   await flush();
-  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
-  act(() => options?.click());
-  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent?.includes("Refresh changes"),
-  );
-  act(() => refresh?.click());
-  await flush();
+  await refreshAsTheTab();
   act(() => expand("src/plan.ts")?.click());
   await flush();
   assert.notEqual(lastDrawn().files.find((file) => file.path === "src/plan.ts")?.whole, undefined);

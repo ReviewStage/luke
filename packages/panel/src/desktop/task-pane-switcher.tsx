@@ -31,8 +31,10 @@ import { PhoneHead } from "./phone-head.js";
  * its glyph alone, is named for where it goes, the list the task was opened
  * from on the task's own views, or Activity on a tab chosen there; the
  * title, centred between the two corners, names the task, or the tab shown;
- * and the ⋯ holds the views as a checked group, then what the tab
- * shown offers, then the task's own actions (`task-actions.tsx`).
+ * and the ⋯ holds the views as a checked group, then the menu of what is on
+ * screen: the task's own on the Plan view (`task-actions.tsx`), the chosen
+ * agent's on Agents (`agent-actions.tsx`), and the tab's on one chosen from
+ * Activity, as its own ⋯ offers it where a bar stands.
  */
 
 /** The three views of a task on a phone. */
@@ -122,7 +124,7 @@ export function TaskHead({
   title: string;
   /** The task's name as a field in the title's place while it is renamed, `title` then being the task's name. */
   rename?: TaskHeadRename | undefined;
-  /** The row's one ⋯ (`TaskActions`). */
+  /** The row's one ⋯ (`PlaceMore`). */
   actions: React.ReactNode;
 }): React.JSX.Element {
   return (

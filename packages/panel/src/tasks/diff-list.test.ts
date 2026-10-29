@@ -8,10 +8,11 @@ import {
   DIFF_LINE_HEIGHT,
   INLINE_DIFF,
 } from "@luke/settings/diff-view";
+import { getSharedHighlighter } from "@pierre/diffs";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeAll, test } from "vitest";
 import { sideBundles } from "../bundle-loader.js";
 import {
   type DiffLook,
@@ -19,6 +20,7 @@ import {
   GAP_CONTROL,
   GAP_CONTROL_ATTRIBUTE,
 } from "../diff-view/contract.js";
+import { preferredHighlighter } from "../diff-view/highlight-pool.js";
 import { diffView } from "../diff-view/index.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -71,6 +73,17 @@ const ENTRY: DiffListEntry = {
 };
 
 const roots: Root[] = [];
+
+beforeAll(async () => {
+  // Note that the highlighter is loaded first, in the look's themes and on the
+  // highlighter the bundle picks, because Pierre draws no file until it is,
+  // and a cold load takes longer than the two frames `settle` waits.
+  await getSharedHighlighter({
+    themes: [LOOK.themes.dark, LOOK.themes.light],
+    langs: ["typescript"],
+    preferredHighlighter: preferredHighlighter(),
+  });
+});
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());

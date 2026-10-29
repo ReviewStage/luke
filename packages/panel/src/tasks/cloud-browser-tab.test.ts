@@ -50,7 +50,7 @@ import {
 
 /**
  * The side panel's cloud Browser tabs: the task's tabs as the service lists
- * them, read only while the Browser tab experiment is on; each drawn in the
+ * them, read only while a panel lists them; each drawn in the
  * strip, kept chosen while the list is on its way, and closed in this window
  * alone; and one tab's pane, which waits quietly for the page, draws it once
  * a frame arrives, takes the tab over and hands it back, and steers it from
@@ -70,7 +70,7 @@ const OTHER_TAB = "6b1f2a3c-4d5e-4f6a-8b7c-9d0e1f2a3b4c";
 
 const LISTED: AgentBrowserTab = {
   id: TAB,
-  agentId: null,
+  agentId: AGENT_ID,
   address: "https://example.com/sign-in",
   title: "Sign in",
   openedBy: { kind: "agent" },
@@ -149,7 +149,7 @@ function pushedFollow<View>(): {
   };
 }
 
-test("the task's cloud Browser tabs are read once and then followed live, the agent's pointer moving with them, let go as no reader stands, and not read at all while the experiment is off", async () => {
+test("the task's cloud Browser tabs are read once and then followed live, the agent's pointer moving with them, let go as no reader stands, and not read at all while nothing lists them", async () => {
   const asked: SentPortAct[] = [];
   const follow = pushedFollow<{ tabs: readonly AgentBrowserTab[] } | { failure: string }>();
   fakeActPortAnswering((request) => {
@@ -162,7 +162,7 @@ test("the task's cloud Browser tabs are read once and then followed live, the ag
   });
   let read: readonly AgentBrowserTab[] | undefined;
   function Probe({ listing }: { listing: boolean }) {
-    read = useCloudBrowserTabs(TASK, listing);
+    read = useCloudBrowserTabs({ taskId: TASK }, listing);
     return null;
   }
 
@@ -222,7 +222,7 @@ test("a follow the host refused is read and followed again on the beat, so the t
   });
   let read: readonly AgentBrowserTab[] | undefined;
   function Probe() {
-    read = useCloudBrowserTabs(TASK, true);
+    read = useCloudBrowserTabs({ taskId: TASK }, true);
     return null;
   }
   try {
@@ -248,7 +248,7 @@ test("a follow the host refused is read and followed again on the beat, so the t
 test("a listed cloud Browser tab stands in the strip, stays chosen while the list is on its way, and closes in this window alone", () => {
   let control: SidePanelControl | undefined;
   function Probe({ listed }: { listed: readonly string[] | undefined }) {
-    control = useSidePanel(undefined, USED, [], [], [], [], [], undefined, listed);
+    control = useSidePanel(undefined, USED, [], [], [], [], undefined, listed);
     return null;
   }
   const current = () => {
@@ -283,7 +283,7 @@ test("a cloud Browser tab's pane spins while it waits for the page, draws it onc
   let listener: BrowserLiveListener | undefined;
   fakeAppPlatform({
     openBrowserLive: (target, heard) => {
-      assert.deepEqual(target, { taskId: TASK, tabId: TAB });
+      assert.deepEqual(target, { agentId: AGENT_ID, tabId: TAB });
       listener = heard;
       return { send: (text) => sent.push(JSON.parse(text)), close: () => undefined };
     },
@@ -305,7 +305,6 @@ test("a cloud Browser tab's pane spins while it waits for the page, draws it onc
 
   draw(
     createElement(CloudBrowserPane, {
-      taskId: TASK,
       tab: LISTED,
       owner: LUKE_OWNER,
       shown: true,
@@ -371,7 +370,6 @@ test("a pane's view closes while its window's page is hidden, and a new one open
   try {
     draw(
       createElement(CloudBrowserPane, {
-        taskId: TASK,
         tab: LISTED,
         owner: LUKE_OWNER,
         shown: true,
@@ -421,7 +419,6 @@ it.effect(
           onRegistry(
             registry,
             createElement(CloudBrowserPane, {
-              taskId: TASK,
               tab: LISTED,
               owner: LUKE_OWNER,
               shown: true,
@@ -457,7 +454,6 @@ test("while the member drives, a paste reaches the page as text, Control-V and â
   });
   draw(
     createElement(CloudBrowserPane, {
-      taskId: TASK,
       tab: LISTED,
       owner: LUKE_OWNER,
       shown: true,
@@ -521,7 +517,6 @@ test("off a Mac, while the member drives, a Ctrl chord the window has a command 
   });
   draw(
     createElement(CloudBrowserPane, {
-      taskId: TASK,
       tab: LISTED,
       owner: LUKE_OWNER,
       shown: true,
@@ -581,11 +576,11 @@ test("a tab the member opened here is listed before the service lists it, and le
   });
   let read: readonly AgentBrowserTab[] | undefined;
   function Probe() {
-    read = useCloudBrowserTabs(TASK, true);
+    read = useCloudBrowserTabs({ taskId: TASK }, true);
     return null;
   }
 
-  noteOpenedCloudTab(TASK, opened);
+  noteOpenedCloudTab({ taskId: TASK }, opened);
   draw(createElement(Probe));
   await settle();
   assert.deepEqual(
@@ -644,7 +639,7 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
   const owner = { name: "Invite expiry", icon: createElement("span") };
   draw(
     createElement(CloudBrowserDraftPane, {
-      taskId: TASK,
+      place: { taskId: TASK },
       draft: { id: "draft-1", agentId: AGENT_ID },
       owner,
       onOpened: (tab) => handed.push(tab),
@@ -665,7 +660,7 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
   assert.deepEqual(asked, [], "typing opens nothing");
 
   await pressEnter();
-  assert.deepEqual(asked, [{ taskId: TASK, agentId: AGENT_ID, address: "http://localhost:3000/" }]);
+  assert.deepEqual(asked, [{ agentId: AGENT_ID, address: "http://localhost:3000/" }]);
   assert.equal(
     document.querySelector(".cloud-browser-standing [role='alert']")?.textContent,
     "Invite expiry hasn't opened its sandbox yet. Try again once it has started working.",
@@ -702,7 +697,7 @@ test("in a draft, Escape clears the typed address first and discards the draft o
   let discarded = 0;
   draw(
     createElement(CloudBrowserDraftPane, {
-      taskId: TASK,
+      place: { taskId: TASK },
       draft: { id: "draft-1", agentId: AGENT_ID },
       owner: { name: "Invite expiry", icon: createElement("span") },
       onOpened: () => undefined,
@@ -747,7 +742,6 @@ test("a live tab's bar opens a typed address and steps back, forward, and reload
   };
   draw(
     createElement(CloudBrowserPane, {
-      taskId: TASK,
       tab: LISTED,
       owner: LUKE_OWNER,
       shown: true,
@@ -795,7 +789,6 @@ test("a bar's steps say why they are off while the tab is not live, reachable by
   });
   draw(
     createElement(CloudBrowserPane, {
-      taskId: TASK,
       tab: LISTED,
       owner: LUKE_OWNER,
       shown: true,
@@ -851,7 +844,7 @@ test("plain words typed in a cloud tab's bar search the web, in a draft and on a
 
   const draft = draw(
     createElement(CloudBrowserDraftPane, {
-      taskId: TASK,
+      place: { taskId: TASK },
       draft: { id: "draft-1", agentId: AGENT_ID },
       owner: { name: "Invite emails", icon: createElement("span") },
       onOpened: () => undefined,
@@ -865,11 +858,10 @@ test("plain words typed in a cloud tab's bar search the web, in a draft and on a
   );
   typeAddress("acme pricing");
   await pressEnter();
-  assert.deepEqual(asked, [{ taskId: TASK, agentId: AGENT_ID, address: search }]);
+  assert.deepEqual(asked, [{ agentId: AGENT_ID, address: search }]);
 
   draft.rerender(
     createElement(CloudBrowserPane, {
-      taskId: TASK,
       tab: LISTED,
       owner: LUKE_OWNER,
       shown: true,
@@ -895,7 +887,7 @@ test("on a phone a Browser tab's bar keeps its address alone, the task's header'
   fakeActPort({});
   const { element, handed } = onPhone(
     createElement(CloudBrowserDraftPane, {
-      taskId: TASK,
+      place: { taskId: TASK },
       draft: { id: "draft-1", agentId: AGENT_ID },
       owner: { name: "Invite expiry", icon: createElement("span") },
       onOpened: () => undefined,
@@ -936,7 +928,6 @@ it.effect(
           onRegistry(
             registry,
             createElement(CloudBrowserPane, {
-              taskId: TASK,
               tab: { ...LISTED, lastActedAt: 0 },
               owner: { name: "Ada", icon: createElement("span") },
               shown: true,

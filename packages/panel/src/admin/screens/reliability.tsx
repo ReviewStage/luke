@@ -11,8 +11,8 @@ import {
   ADMIN_RELIABILITY_WINDOWS,
   type AdminMetricsWindow,
 } from "@luke/features/admin-wire";
+import { AGENT_FAILURE, type AgentFailure } from "@luke/features/agent-wire";
 import { AUTOMATION_RUN_REASON, type AutomationRunReason } from "@luke/features/automation-wire";
-import { CODING_AGENT_FAILURE, type CodingAgentFailure } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { formatCount, formatPercent } from "@luke/features/number-format";
@@ -90,18 +90,18 @@ const SKELETON_PROVIDER_WIDTH = "192px";
 
 /** A coding agent's failure class, as the breakdown names it. */
 const AGENT_FAILURE_LABEL = {
-  [CODING_AGENT_FAILURE.MODEL]: "Model call",
-  [CODING_AGENT_FAILURE.SANDBOX]: "Sandbox or checkout",
-  [CODING_AGENT_FAILURE.GITHUB]: "GitHub",
-  [CODING_AGENT_FAILURE.ABANDONED]: "Abandoned by the sweep",
-  [CODING_AGENT_FAILURE.PROVIDER_KEY]: "Account's own API key",
-  [CODING_AGENT_FAILURE.NOT_STARTED]: "Never started",
-  [CODING_AGENT_FAILURE.FAST_ON_OWN_KEY]: "Fast on own key",
-  [CODING_AGENT_FAILURE.FAST_NOT_ENABLED]: "Fast not enabled",
-  [CODING_AGENT_FAILURE.CONTEXT_OVERFLOW]: "Context too long",
-  [CODING_AGENT_FAILURE.SESSION_ENDED]: "Session ended",
-  [CODING_AGENT_FAILURE.OTHER]: "Other",
-} as const satisfies Record<CodingAgentFailure, string>;
+  [AGENT_FAILURE.MODEL]: "Model call",
+  [AGENT_FAILURE.SANDBOX]: "Sandbox or checkout",
+  [AGENT_FAILURE.GITHUB]: "GitHub",
+  [AGENT_FAILURE.ABANDONED]: "Abandoned by the sweep",
+  [AGENT_FAILURE.PROVIDER_KEY]: "Account's own API key",
+  [AGENT_FAILURE.NOT_STARTED]: "Never started",
+  [AGENT_FAILURE.FAST_ON_OWN_KEY]: "Fast on own key",
+  [AGENT_FAILURE.FAST_NOT_ENABLED]: "Fast not enabled",
+  [AGENT_FAILURE.CONTEXT_OVERFLOW]: "Context too long",
+  [AGENT_FAILURE.SESSION_ENDED]: "Session ended",
+  [AGENT_FAILURE.OTHER]: "Other",
+} as const satisfies Record<AgentFailure, string>;
 
 /** An automation run's skip or failure reason, as the breakdown names it. */
 const AUTOMATION_REASON_LABEL = {
@@ -233,7 +233,7 @@ const FAILURE_STATS: readonly StatSpec<AdminReliability>[] = [
   },
   {
     key: "agent-runs",
-    label: () => "Coding-agent runs failed",
+    label: () => "Agent runs failed",
     value: ({ headline }) => formatPercent(share(headline.agentRuns), RATE_PLACES),
     hint: ({ headline, windowDays }) => ofHint(headline.agentRuns, "runs", windowDays),
   },
@@ -242,12 +242,6 @@ const FAILURE_STATS: readonly StatSpec<AdminReliability>[] = [
     label: () => "Abandoned by the sweep",
     value: ({ headline }) => formatCount(headline.abandonedTurns),
     hint: () => "turns past their bound",
-  },
-  {
-    key: "calls",
-    label: () => "Calls dropped",
-    value: ({ headline }) => formatPercent(share(headline.calls), RATE_PLACES),
-    hint: ({ headline, windowDays }) => ofHint(headline.calls, "calls", windowDays),
   },
   {
     key: "automation-runs",
@@ -274,14 +268,14 @@ interface Breakdown {
 /** The two breakdowns, side by side in this order. */
 const BREAKDOWNS: readonly Breakdown[] = [
   {
-    title: "Coding-agent failures by class",
+    title: "Agent failures by class",
     series: AGENT_FAILURES_SERIES,
     rows: (reliability) =>
       reliability.agentFailures.map((row) => ({
         label: AGENT_FAILURE_LABEL[row.failure],
         counts: { count: row.count },
       })),
-    empty: "No coding-agent run failed in this window.",
+    empty: "No agent run failed in this window.",
   },
   {
     title: "Automation skips and failures by reason",
@@ -331,7 +325,7 @@ function AttentionNote({
       A broken key, integration, or GitHub installation fails the account's agents quietly. Last
       changed is when the newest broken row last changed: a key's last answer from its provider, or
       an integration's or installation's last update, which a sign-in retried and not finished also
-      moves. Agents failed counts the account's coding agents with a failed run in the last{" "}
+      moves. Agents failed counts the account's agents with a failed run in the last{" "}
       {ADMIN_ATTENTION_AGENT_DAYS} days.
       {attention !== undefined && attention.total > attention.accounts.length
         ? ` Only the ${formatCount(attention.accounts.length)} newest of ${formatCount(attention.total)} are listed.`

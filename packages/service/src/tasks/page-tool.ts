@@ -38,9 +38,9 @@ import { logStoreFailure } from "../http/store-failure.js";
  * HTML, which the model wrote and need not read again.
  *
  * Note that the account and what the page stands on are the binding the
- * service built from the conversation, never an argument, exactly as
- * `draw_on_board`'s are: the conversation's task, or, for a coding agent on
- * no task, the agent itself, whose pages are its own. Every outcome is a result the model reads, never a failure of the
+ * service built from the conversation, never an argument: the
+ * conversation's task, or, for a coding agent on no task, the agent itself,
+ * whose pages are its own. Every outcome is a result the model reads, never a failure of the
  * call, and a refusal says how to mend the call.
  */
 

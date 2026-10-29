@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
+import type { AgentAgentAnswer } from "@luke/features/agent-view";
 import type { TaskFileRequest } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -72,13 +72,13 @@ async function settle(): Promise<void> {
 }
 
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: "Invitations",
   workspace: "acme",
   repository: "acme/relay",
   text: () => "## Goal\n\nInvite by email.\n",
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: { workspace: "acme", repository: "acme/relay" },
     anchors: new Set(["goal"]),
     onOpenTask: ignore,
@@ -118,7 +118,6 @@ function Box({ sender }: { sender: MessageSender }): ReactNode {
     taskId: TASK_ID,
     messages: [],
     send: sender,
-    onStatus: ignore,
   });
   return createElement(AgentComposer, {
     ...QUIET_COMPOSER,
@@ -132,7 +131,7 @@ async function page({ box = true }: { box?: boolean } = {}) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
     sent.push(text);
-    return new Promise<CodingAgentAgentAnswer>(ignore);
+    return new Promise<AgentAgentAnswer>(ignore);
   };
   const container = document.createElement("div");
   document.body.append(container);
@@ -146,8 +145,6 @@ async function page({ box = true }: { box?: boolean } = {}) {
           createElement(FileTab, {
             key: "file",
             file: { path: "src/invite.ts", range: undefined, opened: 1 },
-            snippet: undefined,
-            notes: { notes: [], folded: [], onFold: ignore, taskId: undefined },
             readFile,
             onRead: ignore,
           }),

@@ -1,5 +1,5 @@
 import type { AgentNoticeDoorsSurface } from "@luke/host/agent-notices";
-import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@luke/voice/settings-controls";
+import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@luke/settings/settings-controls";
 import { app, Notification } from "electron";
 
 /**

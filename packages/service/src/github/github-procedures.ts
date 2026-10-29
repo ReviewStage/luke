@@ -43,10 +43,11 @@
  *
  * Beside it, one repository of the workspace's installation is read by the
  * workspace and its name, for a place no plan names, such as an agent an
- * automation started: `GET /api/github/repositories/tree`, one folder of it,
- * and `GET /api/github/repositories/skills`, the skills a developer may
- * choose of it, each answered exactly as a plan's own read answers
- * (`tasks/task-tree.ts`, `tasks/task-skills.ts`) to a member of the
+ * automation started: `GET /api/github/repositories/file`, a window of one
+ * file of it, `GET /api/github/repositories/tree`, one folder of it, and
+ * `GET /api/github/repositories/skills`, the skills a developer may choose
+ * of it, each answered exactly as a plan's own read answers
+ * (`tasks/task-file.ts`, `tasks/task-tree.ts`, `tasks/task-skills.ts`) to a member of the
  * workspace, through the same reach of its installation; a workspace the
  * account is not in is not found, and a repository the installation does
  * not reach is refused as a plan's is, inside the answer.
@@ -67,15 +68,6 @@
  * (`issues.ts`); an installation that does not grant the App issues
  * answers none, as an unreached repository does, so a link to an issue
  * there draws its address.
- *
- * And the issues New task's picker offers of such a repository,
- * `GET /api/github/repositories/issues`, on the same token: its open issues
- * newest changed first, those GitHub's search finds for the `query` named,
- * or the one issue `number` names, which wins where both are named
- * (`issues.ts`), to a member of the workspace. An installation that has not
- * granted the App issues answers ungranted with its settings page on
- * GitHub, never an empty list, so the picker can say why; a repository the
- * installation does not reach has no issues.
  *
  * Every caller is resolved, and the claim's body bound checked, on the
  * resource's implementer rather than the procedure's, so they run before
@@ -105,8 +97,6 @@ import type { GitHubIssueSummary } from "@luke/features";
 import { GITHUB_CONNECT_PAGE } from "@luke/features/github-connection-wire";
 import {
   GITHUB_ACCESS,
-  type GitHubRepositoryIssuesAnswer,
-  type RepositoryIssuesAsk,
   type WorkspaceTokenRepositoriesAnswer,
 } from "@luke/features/github-repositories-wire";
 import { managesWorkspace } from "@luke/features/workspace-role";
@@ -123,21 +113,18 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted, sessionMiddleware } from "../orpc/base.js";
+import { readRepositoryFileWindow } from "../tasks/task-file.js";
+import { fileWindowOf } from "../tasks/task-files-procedures.js";
 import { readWorkspaceSkills } from "../tasks/task-skills.js";
 import { readRepositoryTree } from "../tasks/task-tree.js";
-import {
-  GitHubApp,
-  type GitHubWorkspaceReadFailure,
-  ISSUE_ACCESS,
-  markRefusedToken,
-} from "./github-app.js";
+import { GitHubApp, type GitHubWorkspaceReadFailure, markRefusedToken } from "./github-app.js";
 import {
   githubReachOrRefusal,
   githubReadOrRefusal,
   logWorkspaceReadFailure,
 } from "./github-refusal.js";
 import type { GitHubUnlink } from "./github-unlink.js";
-import { issueByNumber, issuePick, openIssues, searchIssues } from "./issues.js";
+import { issueByNumber } from "./issues.js";
 import { PullRequestLinkKey, PullRequestLinks } from "./pull-request-links.js";
 
 /**
@@ -347,39 +334,6 @@ const issueOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Option.getOrNull(found);
 });
 
-/** The issues of a repository the workspace's installation reaches, as the picker asked, or ungranted where its installation grants the App no issues. */
-const issuesOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
-  place: RepositoryPlace,
-  ask: RepositoryIssuesAsk,
-): Effect.fn.Return<
-  GitHubRepositoryIssuesAnswer,
-  GitHubWorkspaceReadFailure,
-  GitHubRepositoriesServices
-> {
-  const app = yield* GitHubApp;
-  const access = yield* app.repositoryIssueAccess(
-    place.workspaceId,
-    place.repository,
-    place.member,
-  );
-  if (access.kind === ISSUE_ACCESS.UNGRANTED) {
-    return { ungranted: { settingsUrl: access.settingsUrl } };
-  }
-  if (access.kind === ISSUE_ACCESS.UNREACHED) return { issues: [] };
-  const { token } = access;
-  const fullName = access.repository.fullName;
-  if (ask.number !== undefined) {
-    return { issues: Option.toArray(yield* issuePick(token, fullName, ask.number)) };
-  }
-  const words = ask.query?.trim() ?? "";
-  return {
-    issues:
-      words === ""
-        ? yield* openIssues(token, fullName)
-        : yield* searchIssues(token, fullName, words),
-  };
-});
-
 /**
  * The session's own GitHub link removed: a session Better Auth refuses, or
  * holds too old to unlink with, is unauthenticated, which the Mac answers
@@ -481,6 +435,16 @@ export function githubProcedures(seams: GitHubProcedureSeams) {
         : removeTokenRepository(context.userId, input.workspaceId, input.repository);
       return yield* tokenRepositoriesOf(context.userId, input.workspaceId);
     }),
+    repositoryFile: signedIn.repositoryFile.effect(function* ({ context, input }) {
+      const place = yield* memberPlace(context.userId, input);
+      const window = yield* fileWindowOf(input);
+      return yield* readRepositoryFileWindow(
+        place.workspaceId,
+        place.repository,
+        place.member,
+        window,
+      );
+    }),
     repositoryTree: signedIn.repositoryTree.effect(function* ({ context, input }) {
       const place = yield* memberPlace(context.userId, input);
       return yield* readRepositoryTree(place.workspaceId, place.repository, place.member, {
@@ -514,10 +478,6 @@ export function githubProcedures(seams: GitHubProcedureSeams) {
     repositoryIssue: signedIn.repositoryIssue.effect(function* ({ context, input }) {
       const place = yield* memberPlace(context.userId, input);
       return { issue: yield* githubReadOrRefusal(issueOfPlace(place, input.number)) };
-    }),
-    repositoryIssues: signedIn.repositoryIssues.effect(function* ({ context, input }) {
-      const place = yield* memberPlace(context.userId, input);
-      return yield* githubReadOrRefusal(issuesOfPlace(place, input));
     }),
   };
 }

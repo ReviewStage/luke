@@ -507,24 +507,7 @@ test("a coding agent's hosted public reads draw as the web reads they are: a sea
   });
 });
 
-test("an agent's task calls draw from their parts: a shown range by its file and lines, a question by its words", () => {
-  const shown = toolCallView({
-    tool: "show_code",
-    input: { path: "src/invites.ts", startLine: 12, endLine: 30 },
-    output: undefined,
-  });
-  assert.deepEqual(
-    [shown.kind, shown.subject],
-    [CALL_KIND.SHOW_CODE, "src/invites.ts, Lines 12–30"],
-  );
-  const asked = toolCallView({
-    tool: "queue_question",
-    input: { question: "Who can invite?", recommendation: "Admins." },
-    output: undefined,
-  });
-  assert.deepEqual([asked.kind, asked.subject], [CALL_KIND.QUEUE_QUESTION, "Who can invite?"]);
-  const looked = toolCallView({ tool: "look_at_board", input: {}, output: { image: "…" } });
-  assert.deepEqual([looked.kind, looked.output], [CALL_KIND.LOOK_AT_BOARD, undefined]);
+test("an agent's task calls draw from their parts", () => {
   const started = (input: Record<string, string>) =>
     toolCallView({ tool: "start_coding_agent", input, output: undefined }).subject;
   assert.deepEqual(

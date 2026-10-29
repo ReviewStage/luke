@@ -4,7 +4,7 @@
  * connection, and what the deployment is configured with.
  *
  * Every number is an aggregate of rows the service already writes for its own
- * operation — turns, coding agents, voice sessions, automation runs, and the
+ * operation — turns, coding agents, automation runs, and the
  * status words on provider keys, integration connections, and GitHub
  * installations — read by a maintainer on their own service. Failures are
  * named only by the fixed words those rows carry, never by a failed turn's
@@ -30,8 +30,8 @@ import {
   adminMetricsScope,
   adminMetricsWindow,
 } from "@luke/features/admin-wire";
+import type { AgentFailure } from "@luke/features/agent-wire";
 import type { AutomationRunReason } from "@luke/features/automation-wire";
-import type { CodingAgentFailure } from "@luke/features/coding-agent-wire";
 import { Clock, Effect } from "effect";
 import { lastNDayKeys, sum } from "./admin-metrics.js";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
@@ -50,10 +50,9 @@ export interface AdminReliabilitySource {
     lukeTurns: ReadonlyMap<string, AdminFailureCount>;
     agentRuns: ReadonlyMap<string, AdminFailureCount>;
     abandonedTurns: ReadonlyMap<string, number>;
-    calls: ReadonlyMap<string, AdminFailureCount>;
     automationRuns: ReadonlyMap<string, AdminAutomationCount>;
   };
-  agentFailures: ReadonlyMap<CodingAgentFailure, number>;
+  agentFailures: ReadonlyMap<AgentFailure, number>;
   automationReasons: ReadonlyMap<
     AutomationRunReason | null,
     { readonly skipped: number; readonly failed: number }
@@ -92,7 +91,6 @@ export function buildAdminReliability(
 
   const lukeTurns = of(source.daily.lukeTurns, NO_FAILURES);
   const agentRuns = of(source.daily.agentRuns, NO_FAILURES);
-  const calls = of(source.daily.calls, NO_FAILURES);
   const automationRuns = of(source.daily.automationRuns, NO_AUTOMATION_RUNS);
 
   return {
@@ -102,7 +100,6 @@ export function buildAdminReliability(
       lukeTurns: totalOf(lukeTurns),
       agentRuns: totalOf(agentRuns),
       abandonedTurns: sum(of(source.daily.abandonedTurns, 0)),
-      calls: totalOf(calls),
       automationRuns: {
         ...totalOf(automationRuns),
         skipped: sum(automationRuns.map((count) => count.skipped)),
@@ -112,7 +109,6 @@ export function buildAdminReliability(
       day,
       lukeTurns: failureShare(lukeTurns[index] ?? NO_FAILURES),
       agentRuns: failureShare(agentRuns[index] ?? NO_FAILURES),
-      calls: failureShare(calls[index] ?? NO_FAILURES),
       automationRuns: failureShare(automationRuns[index] ?? NO_AUTOMATION_RUNS),
     })),
     agentFailures: [...source.agentFailures]

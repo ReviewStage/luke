@@ -16,7 +16,7 @@ import { buildAdminOverview, emptyOverviewSource } from "./admin-overview.js";
  * days with the seven before, whatever the window; the funnel and reach keep
  * the vocabulary's order with shares of their own bases, and no share of
  * nobody; and the most active accounts keep their rank with their counts
- * joined, call seconds read as whole minutes.
+ * joined.
  */
 
 /** Wednesday 2026-10-21 at noon UTC. */
@@ -34,7 +34,7 @@ test("the chart's days are the window's own, every feature zero-filled, today la
       ...emptyOverviewSource(),
       daily: dailyOf([
         [DAILY_COUNT.AGENTS_STARTED, { "2026-10-21": 4, "2026-10-14": 9 }],
-        [DAILY_COUNT.CALLS_HELD, { "2026-10-15": 2 }],
+        [DAILY_COUNT.INBOX_ANSWERED, { "2026-10-15": 2 }],
       ]),
     },
     NOW,
@@ -57,8 +57,7 @@ test("the chart's days are the window's own, every feature zero-filled, today la
     day: "2026-10-15",
     [ACTIVITY_FEATURE.AGENTS_STARTED]: 0,
     [ACTIVITY_FEATURE.PLAN_REVISIONS]: 0,
-    [ACTIVITY_FEATURE.CALLS_HELD]: 2,
-    [ACTIVITY_FEATURE.INBOX_ANSWERED]: 0,
+    [ACTIVITY_FEATURE.INBOX_ANSWERED]: 2,
     [ACTIVITY_FEATURE.AUTOMATION_RUNS]: 0,
   });
   assert.equal(overview.activity.daily.at(-1)?.[ACTIVITY_FEATURE.AGENTS_STARTED], 4);
@@ -101,7 +100,7 @@ test("the funnel and reach keep their order, with shares of their bases and none
         [FUNNEL_STEP.SIGNED_UP, 10],
         [FUNNEL_STEP.CREATED_TASK, 5],
       ]),
-      reach: new Map([[REACH_FEATURE.CODING_AGENTS, 3]]),
+      reach: new Map([[REACH_FEATURE.AGENTS, 3]]),
     },
     NOW,
     ADMIN_METRICS_WINDOW.MONTH,
@@ -113,7 +112,6 @@ test("the funnel and reach keep their order, with shares of their bases and none
       [FUNNEL_STEP.SIGNED_UP, 10, 1],
       [FUNNEL_STEP.GITHUB_CONNECTED, 0, 0],
       [FUNNEL_STEP.CREATED_TASK, 5, 0.5],
-      [FUNNEL_STEP.HELD_CALL, 0, 0],
       [FUNNEL_STEP.STARTED_AGENT, 0, 0],
       [FUNNEL_STEP.OPENED_PR, 0, 0],
       [FUNNEL_STEP.MERGED_PR, 0, 0],
@@ -124,9 +122,8 @@ test("the funnel and reach keep their order, with shares of their bases and none
     overview.reach.features.map((row) => [row.feature, row.share]),
     [
       [REACH_FEATURE.TASKS, 0],
-      [REACH_FEATURE.CODING_AGENTS, 0.75],
+      [REACH_FEATURE.AGENTS, 0.75],
       [REACH_FEATURE.INBOX, 0],
-      [REACH_FEATURE.VOICE_CALLS, 0],
       [REACH_FEATURE.INTEGRATIONS, 0],
       [REACH_FEATURE.AUTOMATIONS, 0],
     ],
@@ -137,7 +134,7 @@ test("the funnel and reach keep their order, with shares of their bases and none
   assert.ok(quiet.reach.features.every((row) => row.share === null));
 });
 
-test("the most active keep their rank, their counts joined and call seconds read as minutes", () => {
+test("the most active keep their rank, their counts joined", () => {
   const account = { email: "", image: null, admin: false };
   const overview = buildAdminOverview(
     {
@@ -153,7 +150,6 @@ test("the most active keep their rank, their counts joined and call seconds read
           ["bob", 1],
         ]),
         prsMerged: new Map([["ada", 2]]),
-        callSeconds: new Map([["ada", 150]]),
         lastSeenAt: new Map([["bob", 1_000]]),
       },
     },
@@ -168,12 +164,11 @@ test("the most active keep their rank, their counts joined and call seconds read
       row.tasks,
       row.agents,
       row.prsMerged,
-      row.callMinutes,
       row.lastSeenAt,
     ]),
     [
-      ["ada", 6, 4, 9, 2, 3, null],
-      ["bob", 2, 0, 1, 0, 0, 1_000],
+      ["ada", 6, 4, 9, 2, null],
+      ["bob", 2, 0, 1, 0, 1_000],
     ],
   );
 });

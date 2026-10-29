@@ -21,7 +21,6 @@ import { editorBundleLanded, installEditorLayout } from "../testing/composer.js"
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { FileNoteAnnotation } from "./file-note.js";
 import { PlanBody } from "./plan-body.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -30,9 +29,9 @@ import { VersionView } from "./version-view.js";
 
 /**
  * plain-links.test.ts -- a link the window has no chip for is one plain
- * link wherever words are drawn: a transcript, the plan read and edited, a
- * version, and Luke's note. A bare address says its host and path with a
- * ↗, a labelled one its label, and a plain link pressed in the plan, a version, or a note opens in the
+ * link wherever words are drawn: a transcript, the plan read and edited, and
+ * a version. A bare address says its host and path with a ↗, a labelled one
+ * its label, and a plain link pressed in the plan or a version opens in the
  * browser without opening the section's editor. Synthetic plan and
  * repository.
  */
@@ -63,13 +62,13 @@ const PLAIN = [
 ];
 
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: "Invitations",
   workspace: "acme",
   repository: REPOSITORY,
   text: () => TASK.document.body,
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: { workspace: "acme", repository: REPOSITORY },
     anchors: new Set(["rollout"]),
     onOpenTask: () => undefined,
@@ -131,7 +130,7 @@ function Version(): ReactNode {
     viewing: {
       line: {
         seq: 2,
-        lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 2, duringCall: true },
+        lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 2, duringCall: false },
         startedAt: 1,
         changes: 1,
       },
@@ -142,22 +141,11 @@ function Version(): ReactNode {
   });
 }
 
-/** Luke's note on a File tab's lines. */
-function Note(): ReactNode {
-  const note = { callId: "call-1", shownAt: 0, startLine: 3, endLine: 5, note: WORDS };
-  return createElement(FileNoteAnnotation, {
-    note,
-    notes: { notes: [note], folded: [], onFold: () => undefined, taskId: undefined },
-    minimized: undefined,
-  });
-}
-
-test("a transcript, the plan, a version, and a note draw a link they have no chip for as one plain link, a bare address cut short", () => {
+test("a transcript, the plan, and a version draw a link they have no chip for as one plain link, a bare address cut short", () => {
   const surfaces = [
     drawn(createElement(TranscriptWords, { text: WORDS })),
-    drawn(createElement(PlanBody, { task: TASK, live: false, sectionLinks: SECTION_LINKS })),
+    drawn(createElement(PlanBody, { task: TASK, sectionLinks: SECTION_LINKS })),
     drawn(createElement(Version)),
-    drawn(createElement(Note)),
   ];
 
   for (const surface of surfaces) {
@@ -170,7 +158,6 @@ test("the plan's editor draws a plain link as every place does, whole", async ()
   const container = drawn(
     createElement(PlanBody, {
       task: TASK,
-      live: false,
       onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
       sectionLinks: SECTION_LINKS,
     }),
@@ -190,7 +177,6 @@ test("a plain link pressed in the plan opens in the browser and opens no editor"
   const container = drawn(
     createElement(PlanBody, {
       task: TASK,
-      live: false,
       onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
       sectionLinks: SECTION_LINKS,
     }),
@@ -208,18 +194,16 @@ test("a plain link pressed in the plan opens in the browser and opens no editor"
   assert.equal(container.querySelector(".plan-document-text"), null);
 });
 
-test("a plain link pressed in a version or a note opens in the browser", () => {
-  for (const surface of [drawn(createElement(Version)), drawn(createElement(Note))]) {
-    sent = [];
-    const docs = [...surface.querySelectorAll<HTMLElement>(".luke-text-link")].find(
-      (link) => link.textContent === "the docs",
-    );
-    assert.ok(docs !== undefined);
+test("a plain link pressed in a version opens in the browser", () => {
+  const surface = drawn(createElement(Version));
+  const docs = [...surface.querySelectorAll<HTMLElement>(".luke-text-link")].find(
+    (link) => link.textContent === "the docs",
+  );
+  assert.ok(docs !== undefined);
 
-    act(() => docs.click());
+  act(() => docs.click());
 
-    assert.deepEqual(sent, [{ kind: ACT_KIND.WEB_OPEN, payload: { url: DOCS } }]);
-  }
+  assert.deepEqual(sent, [{ kind: ACT_KIND.WEB_OPEN, payload: { url: DOCS } }]);
 });
 
 test("a bare address an edit or a change marks inside is drawn whole, its caret and its marks where they stand", () => {
@@ -253,7 +237,6 @@ test("a plain link to an address the window refuses to open is drawn going nowhe
         ...TASK,
         document: { body: `## Rollout\n\n[the long page](${long})`, assumptions: [] },
       },
-      live: false,
       sectionLinks: SECTION_LINKS,
     }),
   );

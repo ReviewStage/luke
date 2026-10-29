@@ -227,9 +227,19 @@ and each message arrives as a new turn; in Luke, a worker's
 - **Merged**: if any PR builds on this one, restack (Step 3), which also
   retargets the PR above to `main`. Archive the merged PR's worker now, as the
   table says.
+- **Worker ended** (Luke only): a line from Luke, not the worker, naming a
+  worker of yours whose turn failed, or that someone else stopped or
+  archived. No report will come from it on its own, so act now unless its PR
+  already merged: read it with `read_agent`, then continue a failed worker
+  as the table's "Continue a dead or stalled worker" row says. For one the
+  user stopped or archived, ask the user whether to go on before you
+  continue it. Each ending is told once, so do not wait for a second line.
 
-If a worker has gone quiet far longer than its work plausibly takes, send it
-one message asking for status, and check on it as the table says. If the
+In Luke, a worker that fails, is stopped, or is archived is reported to you
+as above, but one whose runner hangs is reported only once Luke abandons its
+turn, a day later. So if a worker has gone quiet far longer than its work
+plausibly takes, send it one message asking for status, and check on it as
+the table says. If the
 message is refused because its session has ended, the worker is dead (in
 Luke it now reads `failed`). Continue it yourself, as the table's "Continue
 a dead or stalled worker" row says; do not ask the user to.

@@ -1,6 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { type CodingAgent, readCodingAgentRouting } from "@luke/database/models/coding-agent-store";
-import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
+import { type Agent, readAgentRouting } from "@luke/database/models/agent-store";
+import { replaceAgentWakeups } from "@luke/database/models/agent-wakeups";
 import {
   REWIND_REFUSAL,
   readRewindable,
@@ -17,7 +17,7 @@ import {
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
 import { admitsPlanWriter, controlsAgent } from "../agent-reach.js";
-import { EVE_RESET_OUTCOME } from "../brain-host/eve-sessions.js";
+import { EVE_RESET_OUTCOME } from "../eve-host/eve-sessions.js";
 import { isNativeRuntime } from "./native-runtime.js";
 import { runnerHalted } from "./runtime-sessions.js";
 import { cancelledTurn, type EveReach, eveFor } from "./stop.js";
@@ -50,14 +50,14 @@ const stoppedForRewind = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Effect.Effect<StoreWriter>,
   request: Request,
   account: string,
-  agent: CodingAgent,
+  agent: Agent,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   // Wakeups a released wait left belong to the work the rewind drops.
-  yield* hostedStoreOrUnavailable(replaceCodingAgentWakeups(agent.id, []));
+  yield* hostedStoreOrUnavailable(replaceAgentWakeups(agent.id, []));
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) return;
-  const routing = yield* hostedStoreOrUnavailable(readCodingAgentRouting(agent.userId, agent.id));
+  const routing = yield* hostedStoreOrUnavailable(readAgentRouting(agent.userId, agent.id));
   const runtime = Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE;
   if (isNativeRuntime(runtime)) {
     if (!(yield* runnerHalted(agent, runtime, sessionId))) {
@@ -85,7 +85,7 @@ export const rewoundAgent = /* @__PURE__ */ Effect.fn("web/rewoundAgent")(functi
   writer: Effect.Effect<StoreWriter>,
   request: Request,
   account: string,
-  agent: CodingAgent,
+  agent: Agent,
   messageId: string,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   // An agent on its starter's own GitHub token takes words from its starter alone, and so is rewound by them alone.

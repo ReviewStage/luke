@@ -3,25 +3,22 @@ import type { UnparsedWireValue } from "@luke/wire";
 import type { AppSettingId, DescribedSetting } from "@luke/wire/app-settings";
 import type { HostCapability } from "./capabilities.js";
 import type { ExperimentChoices } from "./experiments.js";
-import type { RuntimeStatus } from "./status.js";
 
 export const SETTINGS_PAGE = {
   /** Who is signed in and the ways out, the page Settings opens on. */
   ACCOUNT: "account",
-  /** The voice and its controls, under a pointer to Codex's row in Agents, where the OpenAI key a call runs on is kept. */
-  VOICE: "voice",
   APPEARANCE: "appearance",
   /** The window's own shortcuts, listed to be found rather than changed. */
   SHORTCUTS: "shortcuts",
-  /** The Markdown the account's new tasks start from, which is the account's on the service rather than a stored setting. */
-  PLAN_TEMPLATE: "plan-template",
   /** What the workspace's coding agents remember, shared by its members, which is the workspace's on the service rather than a stored setting. */
   MEMORY: "memory",
   /**
    * The coding agents' default model and effort and the account's own provider API keys, which are the account's on
    * the service rather than stored settings.
    */
-  CODING_AGENTS: "coding-agents",
+  AGENTS: "agents",
+  /** The member's own machines that run their local agents, Linux servers and Macs alike, each the service's rather than a stored setting. */
+  HOSTS: "hosts",
   /** The services the account connects for its agents, each the account's on the service rather than a stored setting. */
   INTEGRATIONS: "integrations",
   /** The skills the account installs into Luke for its agents, its own and its workspace's, each the service's rather than a stored setting. */
@@ -40,17 +37,13 @@ export type SettingsPage = (typeof SETTINGS_PAGE)[keyof typeof SETTINGS_PAGE];
 
 /**
  * Which run of rows inside a page draws a setting. A page is not always one
- * list: the Voice page draws its controls below the permission that lets Luke
- * listen, and a setting has to say which run it stands in rather than leave
- * the section to pick its own members.
+ * list: This Mac draws its microphone's route under the permission that lets
+ * Luke listen, and a setting has to say which run it stands in rather than
+ * leave the section to pick its own members.
  */
 export const SETTING_SECTION = {
   /** The page's own plain run of rows, for a page that has only one. */
   MAIN: "main",
-  /** The voice controls, below the permission that lets Luke listen. */
-  CONTROLS: "controls",
-  /** The Video calls experiment's own rows, drawn beneath its switch on the Experimental page. */
-  VIDEO_CALLS: "video-calls",
   /** What a diff marks, the first group of how code and diffs are drawn under Appearance's own rows: its layout, changed words, indicators, and backgrounds. */
   DIFF: "diff",
   /** How lines run, the second: wrap, numbers, and minimized comments. */
@@ -59,16 +52,19 @@ export const SETTING_SECTION = {
   TEXT: "text",
   /** Where the account's Luke links open, a group of its own on Account, under who is signed in. */
   LINKS: "links",
-  /** Whether this Luke counts how its features are used, a group of its own on Account, under Links. */
+  /** What New task does once a task starts, a group of its own on Account, under Links. */
+  TASKS: "tasks",
+  /** Whether this Luke counts how its features are used, a group of its own on Account, under Tasks. */
   PRIVACY: "privacy",
   /** Whether Luke opens as this Mac starts, a group of its own on This Mac, under its own rows. */
   STARTUP: "startup",
+  /** The microphone dictation listens on, a group of its own on This Mac, under the permission that lets Luke listen. */
+  MICROPHONE: "microphone",
 } as const;
 
 export type SettingSection = (typeof SETTING_SECTION)[keyof typeof SETTING_SECTION];
 
 export const SETTINGS_RESET_SCOPE = {
-  VOICE: "voice",
   APPEARANCE: "appearance",
 } as const;
 
@@ -82,8 +78,6 @@ export type SettingsResetScope = (typeof SETTINGS_RESET_SCOPE)[keyof typeof SETT
 export const SETTING_SIDE_EFFECT = {
   NONE: "none",
   LOGIN_ITEM: "login-item",
-  VOICE: "voice",
-  MEDIA_DUCK: "media-duck",
   USAGE_DATA: "usage-data",
 } as const;
 
@@ -118,31 +112,18 @@ export interface SettingGuardResult<Value> {
  * can no longer lead to a page without its row.
  */
 export interface SettingsVisibility {
-  /** The runtime facts a row's own condition is judged from, and the experiments the account has on. */
-  settings: RuntimeStatus & { experiments: ExperimentChoices };
-  /**
-   * Voice available and the microphone granted: until both, the Voice page
-   * holds only the way in.
-   */
-  voiceControlsDrawn: boolean;
+  /** The experiments the account has on, which a gated feature's row stands on. */
+  settings: { experiments: ExperimentChoices };
   /** Whether the Account section stands. */
   accountDrawn: boolean;
   /** What the platform offers, which a platform feature's row stands on. */
   capabilities: readonly HostCapability[];
 }
 
-/** One option a row's control draws: the token it stores by, the words it shows, and the picture beside them or the clip it plays where it has one. */
+/** One option a row's control draws: the token it stores by, and the words it shows. */
 export interface SettingOption {
   value: string;
   label: string;
-  /** The address of its picture, such as an avatar's face. A set whose every option has one is chosen from the pictures. */
-  picture?: string;
-  /** The path of a clip that lets it be heard before it is chosen, such as a voice's, under the panel's asset base. */
-  sample?: string;
-  /** The heading it stands under where the set is drawn in groups, such as a voice's language. */
-  group?: string;
-  /** A short word of what it is, drawn at the end of its row where the control has room for one. */
-  tag?: string;
 }
 
 /**

@@ -1,11 +1,10 @@
-import { CHECK_SUMMARY } from "@luke/features/coding-agent-wire";
+import { CHECK_SUMMARY } from "@luke/features/agent-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
 import { THING_KIND, type Thing, type ThingKind, type ThingOf } from "@luke/features/thing-kind";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { DocumentIcon, ProviderMark } from "@luke/ui";
+import { ProviderMark } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
 import { CalendarIcon, GLYPH, HashIcon, MessageSquareIcon, ShieldUserIcon } from "@luke/ui/icons";
-import { fileName } from "@luke/voice/code-pane-model";
 import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, automationActor } from "../actor-ref.js";
@@ -13,8 +12,9 @@ import { useAutomation } from "../automation-directory.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { usePerson } from "../member-directory.js";
 import { APP_SLICE, APP_STATE_HELD, useAppSlice } from "../use-app-state.js";
+import { providerOf } from "./agent-model.js";
 import { WorkspaceDirectory } from "./chip-cards.js";
-import { providerOf } from "./coding-agent-model.js";
+import { fileName } from "./file-ref-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { InboxItemChipGlyph } from "./inbox-item-chip.js";
 import { IssueMark } from "./issue-mark.js";
@@ -59,9 +59,8 @@ export interface ThingMarkAt {
   readonly standing: LinkStanding | undefined;
 }
 
-/** The tiles of a plan's agents as their tabs wear them, by the plan's id. */
+/** The tiles of a plan's agents as their tabs wear them; none for an agent not of the plan. */
 export interface AgentTiles {
-  readonly taskId: string;
   readonly tileOf: (agentId: string) => Actor | undefined;
 }
 
@@ -99,22 +98,14 @@ function harnessMark(model: string | undefined, settled = false): ReactNode {
  * archived agent's or one past the few its task's row names, the one read
  * for it (`ReadAgentModel`).
  */
-function KnownAgentMark({
-  agentId,
-  taskId,
-  at,
-}: {
-  agentId: string;
-  taskId: string | undefined;
-  at: ThingMarkAt;
-}): ReactNode {
+function KnownAgentMark({ agentId, at }: { agentId: string; at: ThingMarkAt }): ReactNode {
   const workspaceId = useWordsWorkspaceId(at.where);
   const held = useAppSlice(APP_STATE_HELD);
   const model = at.known.agentModels.get(agentId);
   // Note that nothing is read before main's document lands, because the agent may be among those it lists.
   if (model !== undefined || !held) return harnessMark(model);
   return (
-    <ReadAgentModel agentId={agentId} taskId={taskId} workspaceId={workspaceId} name={at.name}>
+    <ReadAgentModel agentId={agentId} taskId={undefined} workspaceId={workspaceId} name={at.name}>
       {harnessMark}
     </ReadAgentModel>
   );
@@ -129,13 +120,12 @@ function AgentThingMark({
   at: ThingMarkAt;
 }): React.JSX.Element {
   const { tiles } = at;
-  const tile =
-    tiles !== undefined && agent.taskId === tiles.taskId ? tiles.tileOf(agent.agentId) : undefined;
+  const tile = tiles?.tileOf(agent.agentId);
   // Note that a tile the page knows no harness of, its agents not yet read say, gives way to the mark read for it.
   const harnessless =
     tile === undefined || (tile.kind === ACTOR_KIND.AGENT && tile.provider === undefined);
   return harnessless ? (
-    <KnownAgentMark agentId={agent.agentId} taskId={agent.taskId} at={at} />
+    <KnownAgentMark agentId={agent.agentId} at={at} />
   ) : (
     <ActorMark actor={tile} size={ACTOR_SIZE.INLINE} />
   );
@@ -216,7 +206,6 @@ const THING_MARK: ThingMarks = {
   [THING_KIND.SECTION]: () => <HashIcon aria-hidden="true" />,
   [THING_KIND.VERSION]: (version) => <PlanMark taskId={version.planId} />,
   [THING_KIND.COMMENT]: () => <GLYPH.COMMENT />,
-  [THING_KIND.TURN]: () => <DocumentIcon />,
   [THING_KIND.PAGE]: () => <GLYPH.PAGE />,
   [THING_KIND.AGENT]: (agent, at) => <AgentThingMark agent={agent} at={at} />,
   [THING_KIND.WORKER]: () => <GLYPH.AGENT />,

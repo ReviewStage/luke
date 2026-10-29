@@ -1,8 +1,8 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { writeDelegation } from "@luke/database/models/coding-agent-store";
+import { writeDelegation } from "@luke/database/models/agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import type { ConversationTarget } from "@luke/database/models/writer";
-import { codingAgentDelegationInputSchema } from "@luke/features/coding-agent-wire";
+import { agentDelegationInputSchema } from "@luke/features/agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { Effect, Result, type Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -11,7 +11,7 @@ import {
   type OfferedModel,
   validateModelChoice,
 } from "../../providers/model-catalog.js";
-import { openChildConversation } from "../brain-host/conversation.js";
+import { openChildConversation } from "../eve-host/conversation.js";
 
 /**
  * delegation.ts -- what a coding agent chooses for a worker: the model and effort, checked as a Start checks its own.
@@ -33,7 +33,7 @@ import { openChildConversation } from "../brain-host/conversation.js";
 export const DELEGATE_TOOL = {
   description:
     "Hand one scoped subagent task to a read-only worker that reads your checkout, your uncommitted edits included, or your working folder where you work in no repository: it searches, reads files, runs commands that change nothing from a shell with no network, and reads the web, and it cannot push, run a command on the developer's Mac, or drive the browser. Name the model and effort it runs on, or leave either to your own. The call returns a receipt at once, and the worker's complete answer reaches you on its own later as that subagent task's result, without task_wait: keep working while it runs, and call task_wait only where nothing is left to do but hold your reply until the answer arrives. Several calls in one step run at once.",
-  inputSchema: codingAgentDelegationInputSchema,
+  inputSchema: agentDelegationInputSchema,
 } as const;
 
 /** What the agent asked for a worker: a model and an effort, each absent where it left it to its own. */

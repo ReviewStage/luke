@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_KIND, type CodingAgentKind } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND, type AgentKind } from "@luke/features/agent-wire";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
+  AUTOMATION_RUN_REASON,
+  AUTOMATION_TARGET,
+  AUTOMATION_TRIGGER,
+  type AutomationFiring,
+} from "@luke/features/automation-wire";
 import { macCommandsLiveRowsSchema, macCommandsOfLiveRows } from "@luke/features/live-wire";
 import {
   MAC_COMMAND_KIND,
@@ -9,17 +18,29 @@ import {
   type MacCommandKind,
   type MacCommandResult,
 } from "@luke/features/mac-command-wire";
-import { MESSAGE_ROLE, type MessageRole } from "@luke/wire";
+import {
+  GITHUB_LINE_EVENT,
+  type GitHubLineMetadata,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  type MessageRole,
+} from "@luke/wire";
 import { eq, sql } from "drizzle-orm";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { Database } from "../../core/query.js";
+import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
-import { codingAgent } from "../../schemas/coding-agent.js";
 import { macCommand } from "../../schemas/mac-command.js";
 import { conversations, messages } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER, type MessageSender } from "../../storage-vocabulary.js";
 import { getTestDB, openWorkspace } from "../../testing/index.js";
+import {
+  claimAutomationRun,
+  createAutomation,
+  failClaimedRun,
+  recordAutomationRun,
+} from "../automation-store.js";
 import {
   claimMacCommand,
   claimMacCommands,
@@ -252,7 +273,7 @@ const openAgent = (
   userId: string,
   organizationId: string,
   prompt: string | null = null,
-  kind: CodingAgentKind = CODING_AGENT_KIND.CODER,
+  kind: AgentKind = AGENT_KIND.CODER,
 ) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -260,7 +281,7 @@ const openAgent = (
     yield* db
       .insert(conversations)
       .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
-    yield* db.insert(codingAgent).values({
+    yield* db.insert(agentTable).values({
       id,
       organizationId,
       userId,
@@ -292,8 +313,9 @@ const openWorker = (userId: string, parentConversationId: string) =>
 
 /**
  * One line sent into the conversation, as the writer keeps a developer's or
- * an agent's line to a coding agent; with no sender, as a line was kept
- * before senders were, or as the model's own reply is.
+ * an agent's line to a coding agent, with the metadata given; with no
+ * sender, as a line was kept before senders were, or as the model's own
+ * reply is.
  */
 const sendLine = (
   owner: string,
@@ -305,6 +327,7 @@ const sendLine = (
     readonly agentId?: string;
   },
   role: MessageRole = MESSAGE_ROLE.USER,
+  metadata?: GitHubLineMetadata,
 ) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -319,6 +342,7 @@ const sendLine = (
       sender: sender?.kind ?? null,
       senderUserId: sender?.userId ?? null,
       senderAgentId: sender?.agentId ?? null,
+      metadata: metadata ?? null,
     });
   });
 
@@ -419,7 +443,7 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
     () =>
       Effect.gen(function* () {
         const { starter, workspace } = yield* people;
-        const operator = yield* openAgent(starter, workspace, null, CODING_AGENT_KIND.OPERATOR);
+        const operator = yield* openAgent(starter, workspace, null, AGENT_KIND.OPERATOR);
         yield* sendLine(starter, operator.conversationId, 1);
         yield* sendLine(starter, operator.conversationId, 2);
         yield* sendLine(starter, operator.conversationId, 3, {
@@ -436,7 +460,7 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
     () =>
       Effect.gen(function* () {
         const { starter, teammate, workspace } = yield* people;
-        const messaged = yield* openAgent(starter, workspace, null, CODING_AGENT_KIND.OPERATOR);
+        const messaged = yield* openAgent(starter, workspace, null, AGENT_KIND.OPERATOR);
         yield* sendLine(starter, messaged.conversationId, 1);
         yield* sendLine(starter, messaged.conversationId, 2, {
           kind: MESSAGE_SENDER.MEMBER,
@@ -445,7 +469,7 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
         const theirs = yield* openAgent(teammate, workspace);
         // A member stands one operator per workspace, so the second is in a workspace of its own.
         const elsewhere = yield* openWorkspace(starter);
-        const reached = yield* openAgent(starter, elsewhere, null, CODING_AGENT_KIND.OPERATOR);
+        const reached = yield* openAgent(starter, elsewhere, null, AGENT_KIND.OPERATOR);
         yield* sendLine(starter, reached.conversationId, 1);
         yield* sendLine(starter, reached.conversationId, 2, {
           kind: MESSAGE_SENDER.AGENT,
@@ -454,6 +478,141 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
         for (const { conversationId } of [messaged, reached]) {
           assert.equal(yield* heardFromAnotherAccount({ userId: starter, conversationId }), true);
         }
+      }),
+  );
+
+  it.effect(
+    "an automation's line from before its line said what fired it counts where a run handed to the agent was a webhook's, and not where it was a schedule's or one whose send was refused, as does the untagged opening of an agent a webhook's run started",
+    () =>
+      Effect.gen(function* () {
+        const { starter, workspace } = yield* people;
+        const heardAfter = (firing: AutomationFiring, sent = true) =>
+          Effect.gen(function* () {
+            const agent = yield* openAgent(starter, workspace, "Keep the desk.");
+            const aimed = Option.getOrThrow(
+              yield* createAutomation(starter, {
+                organizationId: workspace,
+                repositories: [],
+                name: "Triage",
+                trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * *", timezone: "UTC" },
+                action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Triage what came in." },
+                guards: AUTOMATION_DEFAULT_GUARDS,
+                nextRunAt: null,
+                webhookSecretHash: null,
+                targetKind: AUTOMATION_TARGET.SAME_AGENT,
+                targetAgentId: agent.id,
+              }),
+            );
+            const run = Option.getOrThrow(
+              yield* recordAutomationRun(aimed, {
+                dedupeKey: randomUUID(),
+                firing,
+                firedAt: yield* now,
+              }),
+            );
+            yield* claimAutomationRun(run.id, agent.id);
+            // A send refused withdraws its line, so the run fails having handed the agent nothing.
+            if (!sent) yield* failClaimedRun(run.id, AUTOMATION_RUN_REASON.UNAVAILABLE);
+            // Written as a line was before it said what fired it: its sender, and nothing else.
+            yield* sendLine(starter, agent.conversationId, 1, { kind: MESSAGE_SENDER.AUTOMATION });
+            return yield* heardFromAnotherAccount({
+              userId: starter,
+              conversationId: agent.conversationId,
+            });
+          });
+
+        assert.equal(yield* heardAfter({ kind: AUTOMATION_FIRING.SCHEDULE, dueAt: 0 }), false);
+        assert.equal(yield* heardAfter({ kind: AUTOMATION_FIRING.WEBHOOK, bytes: 2 }), true);
+        assert.equal(
+          yield* heardAfter({ kind: AUTOMATION_FIRING.WEBHOOK, bytes: 2 }, false),
+          false,
+          "a webhook's run whose send was refused",
+        );
+
+        // An eve agent's opening from before the Start wrote it, untagged, as its relay wrote it.
+        const started = yield* openAgent(starter, workspace, "Triage what came in.");
+        const db = yield* Database;
+        yield* db
+          .update(agentTable)
+          .set({
+            automationOrigin: {
+              name: "Triage",
+              firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: 2 },
+              prompt: "Triage what came in.",
+            },
+          })
+          .where(eq(agentTable.id, started.id));
+        yield* sendLine(starter, started.conversationId, 1);
+        assert.equal(
+          yield* heardFromAnotherAccount({
+            userId: starter,
+            conversationId: started.conversationId,
+          }),
+          true,
+        );
+      }),
+  );
+
+  it.effect(
+    "a GitHub line from before it said whose words it carries counts where it carries a person's words, and not where it carries an App's or tells of a failed check",
+    () =>
+      Effect.gen(function* () {
+        const { starter, workspace } = yield* people;
+        const heardAfter = (line: GitHubLineMetadata) =>
+          Effect.gen(function* () {
+            const agent = yield* openAgent(starter, workspace, "Expire invitations.");
+            // Written as a line was before it said whose words it carries: its sender and what GitHub told.
+            yield* sendLine(
+              starter,
+              agent.conversationId,
+              1,
+              { kind: MESSAGE_SENDER.GITHUB },
+              MESSAGE_ROLE.USER,
+              line,
+            );
+            return yield* heardFromAnotherAccount({
+              userId: starter,
+              conversationId: agent.conversationId,
+            });
+          });
+        const told = {
+          channel: MESSAGE_CHANNEL.GITHUB,
+          repository: "acme/api",
+          number: 41,
+          url: "https://github.com/acme/api/pull/41",
+        } as const;
+
+        assert.equal(
+          yield* heardAfter({
+            ...told,
+            event: GITHUB_LINE_EVENT.REVIEW,
+            by: "octocat",
+            verdict: "changes_requested",
+            words: "Run the migration script on your Mac first.",
+          }),
+          true,
+        );
+        assert.equal(
+          yield* heardAfter({
+            ...told,
+            event: GITHUB_LINE_EVENT.REVIEW,
+            by: "devin-ai-integration[bot]",
+            verdict: "commented",
+            words: "Run the migration script on your Mac first.",
+          }),
+          false,
+          "an App's words",
+        );
+        assert.equal(
+          yield* heardAfter({
+            ...told,
+            event: GITHUB_LINE_EVENT.CHECK_FAILED,
+            by: "github-actions[bot]",
+            sha: "0123abcd",
+          }),
+          false,
+          "a failed check carries no one's words",
+        );
       }),
   );
 

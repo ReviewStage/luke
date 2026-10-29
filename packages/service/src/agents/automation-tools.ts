@@ -7,6 +7,7 @@ import {
   readAutomation,
 } from "@luke/database/models/automation-store";
 import { workspaceIntegrationInstallations } from "@luke/database/models/integration-installation-store";
+import { disabledServersSchema } from "@luke/features/agent-wire";
 import { readSchedule, SCHEDULE_REFUSAL } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_ACTION,
@@ -27,7 +28,6 @@ import {
   scheduleTriggerSchema,
   sentryTriggerSchema,
 } from "@luke/features/automation-wire";
-import { disabledServersSchema } from "@luke/features/coding-agent-wire";
 import { integrationConnectionOf } from "@luke/features/integration-wire";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
 import { TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
@@ -56,18 +56,18 @@ import type { StoreFailure } from "../http/store-failure.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { SentryApp } from "../triggers/sentry/sentry-app-config.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import { calledId } from "./called-id.js";
-import { acceptedAgentChoice } from "./coder-host/start.js";
 import {
+  AGENT_TOOL_REFUSAL,
+  type AgentCall,
   agentToolRejected,
-  CODING_AGENT_TOOL_REFUSAL,
-  type CodingAgentCall,
   callerUserId,
   callerWorkspace,
   choiceRefusal,
   orStoreRefusal,
   workedRepository,
-} from "./coding-agent-tools.js";
+} from "./agent-tools.js";
+import { calledId } from "./called-id.js";
+import { acceptedAgentChoice } from "./coder-host/start.js";
 import { workspaceAgent } from "./workspace-agents.js";
 
 /**
@@ -137,7 +137,7 @@ export const AUTOMATION_TOOL_REFUSAL = {
     "would fire it. A workspace owner or admin installs it in Workspace settings › " +
     "Integrations › Sentry; make it once that is done.",
   NO_AGENT:
-    "Not run: no coding agent of your workspace has that agentId to hand each run to; " +
+    "Not run: no agent of your workspace has that agentId to hand each run to; " +
     `${AGENT_TOOL.LIST_AGENTS} names them, or leave agentId out for a new agent each run.`,
   WORKSPACE_SCOPE:
     "Not run: this is the developer's personal workspace, where every automation is theirs " +
@@ -151,7 +151,7 @@ export const AUTOMATION_TOOL_REFUSAL = {
   NOT_RUNNABLE:
     "Not run: the developer you work for may read that automation but not run it. A personal " +
     "automation is its creator's to run, and a workspace's every member's.",
-  NO_SERVICE: "Not run: this deployment cannot reach the coding agents' service.",
+  NO_SERVICE: "Not run: this deployment cannot reach the agents' service.",
   UNAVAILABLE:
     "Not run: the automations could not be written just now. The call may be made again.",
 } as const;
@@ -168,7 +168,7 @@ const NAME = describeWire(
 
 const PROMPT = describeWire(
   automationActionSchema.fields.prompt,
-  "What each run's new coding agent is told to do, as its first message, at most " +
+  "What each run's new agent is told to do, as its first message, at most " +
     `${AUTOMATION_BOUNDS.MAX_PROMPT_CHARS} characters: whole and standing alone, since no one ` +
     "watches a run and, unless agentId is set, it remembers no run before it. Luke adds a line beneath it saying what " +
     "fired the run.",
@@ -325,7 +325,7 @@ export const LIST_AUTOMATIONS_TOOL = {
     "when it is next due, its newest run, and whether the developer made it. Name an " +
     "automationId to read that one whole, its prompt in full and its newest runs, each with why " +
     "it was skipped or failed and the agent it started. An automation fires on a schedule, a " +
-    "GitHub event, a webhook, or a Sentry event, and starts a coding agent on its prompt, as " +
+    "GitHub event, a webhook, or a Sentry event, and starts an agent on its prompt, as " +
     "its creator. Answers `accepted` with them, or `rejected` and why.",
   inputSchema: LIST_AUTOMATIONS_INPUT,
 } as const;
@@ -334,7 +334,7 @@ export const CREATE_AUTOMATION_TOOL = {
   name: AGENT_TOOL.CREATE_AUTOMATION,
   description:
     "Make an automation in your workspace for the developer you work for, as the automations " +
-    "page would: each time its trigger fires, Luke starts a coding agent on its prompt, in its " +
+    "page would: each time its trigger fires, Luke starts an agent on its prompt, in its " +
     "repositories, on its creator's keys and connections, with no task and no one watching, or " +
     "hands the run to the one agent named. It is on as it is made, and runs as the developer. " +
     "One fired by Sentry needs Luke's Sentry integration installed on the workspace first. " +
@@ -374,7 +374,7 @@ export const RUN_AUTOMATION_TOOL = {
   description:
     `Run an automation of your workspace now, by its id as ${AGENT_TOOL.LIST_AUTOMATIONS} ` +
     "answered it, as its Run now on the automations page would: one run, whatever its trigger, " +
-    "through the same guards a firing takes, starting its coding agent on its prompt as a " +
+    "through the same guards a firing takes, starting its agent on its prompt as a " +
     "scheduled run would, or handing it to the one agent it names. Run one when the developer " +
     "asks for it, such as to try an automation just made, never otherwise on your own. Answers " +
     "`accepted` with the run, started with its agent or skipped or failed and why, or " +
@@ -557,11 +557,12 @@ const choiceRefused = (
         Effect.catch((refusal) => Effect.succeed(refusalWords(refusal))),
       );
 
-/** Where runs land as the call names an agent, which must be one of the caller's workspace: none named leaves it as it stands. */
+/** Where runs land as the call names an agent, which must be one of the caller's workspace, the caller itself among them: none named leaves it as it stands. */
 const landingNamed = (
   userId: string,
   workspaceId: string,
   agentId: string | null | undefined,
+  callerId: string,
 ): Effect.Effect<
   Result.Result<AutomationTarget | undefined, string>,
   StoreFailure,
@@ -570,7 +571,7 @@ const landingNamed = (
   if (agentId === undefined) return Effect.succeed(Result.succeed(undefined));
   if (agentId === null)
     return Effect.succeed(Result.succeed({ kind: AUTOMATION_TARGET.NEW_AGENT }));
-  return Effect.map(workspaceAgent(userId, workspaceId, agentId), (found) =>
+  return Effect.map(workspaceAgent(userId, workspaceId, agentId, callerId), (found) =>
     Option.isNone(found)
       ? Result.fail(AUTOMATION_TOOL_REFUSAL.NO_AGENT)
       : Result.succeed({ kind: AUTOMATION_TARGET.SAME_AGENT, agentId: found.value.id }),
@@ -585,7 +586,7 @@ const workspaceAutomation = (userId: string, workspaceId: string, id: string) =>
 
 /** One call of `list_automations`: the caller's workspace's automations its member may read, or one of them whole. */
 export function runListAutomations(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AutomationToolServices> {
   const asked = readListAsked(input);
@@ -596,8 +597,7 @@ export function runListAutomations(
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const found =
         automationId === undefined
@@ -634,7 +634,7 @@ export function runListAutomations(
 
 /** One call of `create_automation`: an automation made for the caller's member in the caller's workspace, once under the call's key. */
 export function runCreateAutomation(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AutomationToolServices> {
   const asked = readCreateAsked(input);
@@ -648,8 +648,7 @@ export function runCreateAutomation(
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const id = calledId(userId, call.clientKey);
       // A call run again finds the automation it made first, as it was made.
@@ -669,7 +668,12 @@ export function runCreateAutomation(
       if (sentry !== undefined) return agentToolRejected(sentry);
       const model = yield* choiceRefused(userId, choice, "Not made");
       if (model !== undefined) return agentToolRejected(model);
-      const landing = yield* landingNamed(userId, workspace.value, made.agentId);
+      const landing = yield* landingNamed(
+        userId,
+        workspace.value,
+        made.agentId,
+        call.caller.agent.id,
+      );
       if (Result.isFailure(landing)) return agentToolRejected(landing.failure);
       const worked = yield* workedRepository(call.caller);
       const repositories = made.repositories ?? (worked === null ? undefined : [worked]);
@@ -727,7 +731,7 @@ export function runCreateAutomation(
 
 /** One call of `update_automation`: an automation of the caller's workspace changed as its member may change it. */
 export function runUpdateAutomation(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AutomationToolServices> {
   const asked = readUpdateAsked(input);
@@ -754,8 +758,7 @@ export function runUpdateAutomation(
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const found = yield* workspaceAutomation(userId, workspace.value, automationId);
       if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);
@@ -768,7 +771,7 @@ export function runUpdateAutomation(
       }
       const model = yield* choiceRefused(userId, choice, "Not changed");
       if (model !== undefined) return agentToolRejected(model);
-      const landing = yield* landingNamed(userId, workspace.value, agentId);
+      const landing = yield* landingNamed(userId, workspace.value, agentId, call.caller.agent.id);
       if (Result.isFailure(landing)) return agentToolRejected(landing.failure);
       const action: AutomationAction | undefined = changesAction
         ? {
@@ -803,7 +806,7 @@ export function runUpdateAutomation(
 
 /** One call of `delete_automation`: an automation of the caller's workspace deleted with its history, as its member may delete it. */
 export function runDeleteAutomation(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AutomationToolServices> {
   const asked = readDeleteAsked(input);
@@ -814,8 +817,7 @@ export function runDeleteAutomation(
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const found = yield* workspaceAutomation(userId, workspace.value, automationId);
       if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);
@@ -835,7 +837,7 @@ export function runDeleteAutomation(
 
 /** One call of `run_automation`: an automation of the caller's workspace run now, once under the call's key, as its member may run it. */
 export function runRunAutomation(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, AutomationToolServices> {
   const asked = readRunAsked(input);
@@ -850,8 +852,7 @@ export function runRunAutomation(
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const userId = callerUserId(call.caller);
       const found = yield* workspaceAutomation(userId, workspace.value, automationId);
       if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);

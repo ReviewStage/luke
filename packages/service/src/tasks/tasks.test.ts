@@ -20,8 +20,7 @@ import {
 } from "@luke/database/testing";
 import { noDatabase } from "@luke/database/testing/no-database";
 import { planSections } from "@luke/features/plan-document";
-import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
-import { PLAN_HEADING, type PlanNote } from "@luke/features/plan-template";
+import type { PlanNote } from "@luke/features/plan-template";
 import { type PlanDocument, TASK_STATUS } from "@luke/features/task-wire";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -63,10 +62,10 @@ const INVITATIONS_HARD_PART = "- A withdrawn invite's link never grants access."
 
 /** Notes that write an invitations draft into a plan: its context, a hard part, an open question, and an assumption. */
 const INVITATIONS_NOTES: readonly PlanNote[] = [
-  added(PLAN_HEADING.CONTEXT, INVITATIONS_CONTEXT),
-  added(PLAN_HEADING.HARD_PARTS, INVITATIONS_HARD_PART),
-  added(PLAN_HEADING.OPEN_QUESTIONS, "- Who can withdraw an invite?"),
-  added(PLAN_HEADING.ASSUMPTIONS, "- Invites reuse `memberships` with a `pending` state."),
+  added("Context", INVITATIONS_CONTEXT),
+  added("Hard parts", INVITATIONS_HARD_PART),
+  added("Open questions", "- Who can withdraw an invite?"),
+  added("Assumptions", "- Invites reuse `memberships` with a `pending` state."),
 ];
 
 const EMPTY_STATE_CONTEXT =
@@ -74,8 +73,8 @@ const EMPTY_STATE_CONTEXT =
 
 /** Notes that write a small copy change into a plan: its context and its goal. */
 const EMPTY_STATE_NOTES: readonly PlanNote[] = [
-  added(PLAN_HEADING.CONTEXT, EMPTY_STATE_CONTEXT),
-  added(PLAN_HEADING.GOAL, 'The empty list reads "No plans yet. Start one with New plan."'),
+  added("Context", EMPTY_STATE_CONTEXT),
+  added("Goal", 'The empty list reads "No plans yet. Start one with New plan."'),
 ];
 
 const openUser = Effect.gen(function* () {
@@ -175,7 +174,6 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
             "\n\n- Invites reuse `memberships` with a `pending` state.",
           ),
         );
-        assert.equal(sectionText(body, "Goal"), sectionText(DEFAULT_PLAN_TEMPLATE, "Goal"));
       }),
   );
 
@@ -188,7 +186,7 @@ it.layer(getTestDB())("named plans and the notes that write them", (it) => {
         yield* makeDocumentTask(taskId, INVITATIONS_TEXT);
 
         const result = yield* saveNotes(bound(userId, taskId), [
-          added(PLAN_HEADING.GOAL, "- Pending invites show in settings."),
+          added("Goal", "- Pending invites show in settings."),
         ]);
 
         const { body, assumptions } = savedDocument(result);

@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import {
-  CODING_AGENT_ARCHIVER,
-  CODING_AGENT_KIND,
-  PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_ARCHIVER, AGENT_KIND, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { INBOX_ASK_STATUS, INBOX_STATUS } from "@luke/features/inbox-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
 import { eq } from "drizzle-orm";
@@ -17,15 +13,15 @@ import { inboxItem } from "../../schemas/inbox.js";
 import { inboxMessage } from "../../schemas/inbox-message.js";
 import { getTestDB, openInboxItem, openTaskAgent, openWorkspace } from "../../testing/index.js";
 import {
-  archiveCodingAgent,
-  archiveIdleCodingAgent,
+  archiveAgent,
+  archiveIdleAgent,
   archiveOperatorAgent,
-  archiveUnmovedCodingAgent,
-  readCodingAgent,
-  recordCodingAgentPublished,
+  archiveUnmovedAgent,
+  readAgent,
+  recordAgentPublished,
   restoreOperatorAgent,
-  unarchiveCodingAgentFrom,
-} from "../coding-agent-store.js";
+  unarchiveAgentFrom,
+} from "../agent-store.js";
 import { beginTaskWork, createTask, finishTaskWork, updateTask } from "../task-store.js";
 
 /**
@@ -167,7 +163,7 @@ it.layer(getTestDB())("an inbox item settling with its task", (it) => {
       const workspace = yield* openWorkspace(dean);
       const { id: taskId } = yield* createTask(dean, { organizationId: workspace });
       const agentId = yield* openTaskAgent(dean, workspace, taskId);
-      yield* recordCodingAgentPublished(dean, agentId, {
+      yield* recordAgentPublished(dean, agentId, {
         number: 42,
         title: "Teammate invitations",
         url: "https://github.com/acme/api/pull/42",
@@ -188,7 +184,7 @@ it.layer(getTestDB())("an inbox item settling with its task", (it) => {
 /** The agent's archive as it stands, failing the test where it stands unarchived. */
 const archivedAtOf = (userId: string, agentId: string) =>
   Effect.map(
-    readCodingAgent(userId, agentId),
+    readAgent(userId, agentId),
     (agent) => Option.getOrUndefined(agent)?.archivedAt ?? assert.fail("the agent is not archived"),
   );
 
@@ -196,24 +192,24 @@ const archivedAtOf = (userId: string, agentId: string) =>
 const ARCHIVES = [
   {
     name: "an archive by hand, undone by hand",
-    archive: (userId: string, agentId: string) => archiveCodingAgent(userId, agentId, true),
-    unarchive: (userId: string, agentId: string) => archiveCodingAgent(userId, agentId, false),
+    archive: (userId: string, agentId: string) => archiveAgent(userId, agentId, true),
+    unarchive: (userId: string, agentId: string) => archiveAgent(userId, agentId, false),
   },
   {
     name: "an archive of an idle agent, undone from the archive read",
     archive: (userId: string, agentId: string) =>
-      archiveIdleCodingAgent(userId, agentId, { by: CODING_AGENT_ARCHIVER.MEMBER, userId }, () =>
+      archiveIdleAgent(userId, agentId, { by: AGENT_ARCHIVER.MEMBER, userId }, () =>
         Effect.succeed(true),
       ),
     unarchive: (userId: string, agentId: string) =>
       Effect.flatMap(archivedAtOf(userId, agentId), (archivedAt) =>
-        unarchiveCodingAgentFrom(userId, agentId, archivedAt),
+        unarchiveAgentFrom(userId, agentId, archivedAt),
       ),
   },
   {
     name: "an archive of an agent nothing woke, undone by hand",
-    archive: (userId: string, agentId: string) => archiveUnmovedCodingAgent(userId, agentId, 1),
-    unarchive: (userId: string, agentId: string) => archiveCodingAgent(userId, agentId, false),
+    archive: (userId: string, agentId: string) => archiveUnmovedAgent(userId, agentId, 1),
+    unarchive: (userId: string, agentId: string) => archiveAgent(userId, agentId, false),
   },
 ] as const;
 
@@ -250,12 +246,12 @@ it.layer(getTestDB())("an inbox item settling with its agent", (it) => {
       Effect.gen(function* () {
         const dean = yield* openAccount;
         const workspace = yield* openWorkspace(dean);
-        const reset = yield* openTaskAgent(dean, workspace, null, CODING_AGENT_KIND.OPERATOR);
+        const reset = yield* openTaskAgent(dean, workspace, null, AGENT_KIND.OPERATOR);
         const asked = yield* openInboxItem(dean, workspace, null, reset, true);
 
         assert.equal(Option.isSome(yield* archiveOperatorAgent(dean, workspace, reset)), true);
         yield* assertSettled([asked], "Its agent was archived.");
-        const fresh = yield* openTaskAgent(dean, workspace, null, CODING_AGENT_KIND.OPERATOR);
+        const fresh = yield* openTaskAgent(dean, workspace, null, AGENT_KIND.OPERATOR);
         const freshAsked = yield* openInboxItem(dean, workspace, null, fresh, true);
 
         assert.equal(
@@ -279,19 +275,19 @@ it.layer(getTestDB())("an inbox item settled by both its task and its agent", (i
         // Done, then the agent archived: moving the task back leaves the item to the archive.
         const doneFirst = yield* openTaskWithItems(dean, workspace);
         yield* updateTask(dean, doneFirst.taskId, { status: TASK_STATUS.DONE });
-        yield* archiveCodingAgent(dean, doneFirst.agentId, true);
+        yield* archiveAgent(dean, doneFirst.agentId, true);
         yield* updateTask(dean, doneFirst.taskId, { status: TASK_STATUS.IN_PROGRESS });
         yield* assertSettled(doneFirst.items, "Its agent was archived.");
-        yield* archiveCodingAgent(dean, doneFirst.agentId, false);
+        yield* archiveAgent(dean, doneFirst.agentId, false);
         yield* assertOpen(doneFirst.items);
 
         // The agent archived, then done: bringing the agent back leaves the item to the task.
         yield* TestClock.adjust("1 minute");
         const archivedFirst = yield* openTaskWithItems(dean, workspace);
-        yield* archiveCodingAgent(dean, archivedFirst.agentId, true);
+        yield* archiveAgent(dean, archivedFirst.agentId, true);
         yield* TestClock.adjust("1 minute");
         yield* updateTask(dean, archivedFirst.taskId, { status: TASK_STATUS.DONE });
-        yield* archiveCodingAgent(dean, archivedFirst.agentId, false);
+        yield* archiveAgent(dean, archivedFirst.agentId, false);
         yield* assertSettled(archivedFirst.items, "Its task is done.");
         yield* updateTask(dean, archivedFirst.taskId, { status: TASK_STATUS.IN_PROGRESS });
         yield* assertOpen(archivedFirst.items);

@@ -56,7 +56,11 @@ import {
   SCROLL_OVERSCROLL,
   SCROLL_SIZE,
   ScrollArea,
+  SELECT_BOX_PLACE,
+  SelectionBar,
+  SelectionRegion,
   Stack,
+  selectionRun,
   TASK_AGENTS_MARK_SIZE,
   TaskAgentsMark,
   TaskPriorityMark,
@@ -97,7 +101,6 @@ import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { newTaskAction } from "../tasks/inbox-list.js";
-import { TaskIssueTagChip } from "../tasks/task-issue-links.js";
 import {
   NO_ASSIGNEE_WORDS,
   TASK_PRIORITY_WORDS,
@@ -120,7 +123,7 @@ import {
 import { useTasksWaiting } from "./places-waiting.js";
 import { type QuickAddLine, QuickAddLines, useQuickAdd } from "./quick-add.js";
 import { groupCount } from "./sidebar-fold.js";
-import { useTaskMenuItems } from "./task-actions.js";
+import { TASK_MENU_SURFACE, useTaskMenuItems } from "./task-actions.js";
 import {
   AssigneeChip,
   CreatorFace,
@@ -137,6 +140,7 @@ import {
   OlderCompleted,
   type TasksViewFrame,
 } from "./tasks-page-options.js";
+import { type ChosenTasks, chosenRowMenu, useTasksSelection } from "./tasks-selection.js";
 import { useHeldTasks } from "./use-held-tasks.js";
 import { useRowDrag } from "./use-row-drag.js";
 
@@ -153,8 +157,7 @@ import { useRowDrag } from "./use-row-drag.js";
  * running past the card's edge: the chips that change its priority and its
  * assignee where it stands, their marks alone as the List draws them, the
  * assignee's left off under an assignee's column, its repository, the one
- * icon of how its agents stand (`TaskAgentsMark`), and the issues it
- * links, and a ⋯ at their end dropping the task's own menu, the sidebar
+ * icon of how its agents stand (`TaskAgentsMark`), and a ⋯ at their end dropping the task's own menu, the sidebar
  * row's, which a right-click and the menu key drop too (`useRowMenu`) and
  * whose Rename makes the card's name its field. A press anywhere else opens the task. A card hangs no
  * card for the whole task, since it already says what that card would;
@@ -170,7 +173,17 @@ import { useRowDrag } from "./use-row-drag.js";
  * Canceled once asked for. A task archived is off the board, as it is off
  * the sidebar's list. A task from a service before statuses stands under
  * Todo, where a task starts, and is sent nothing until it is dragged.
- * Escape closes the board, as it closes the Automations page.
+ * Escape closes the board, as it closes the Automations page, but for
+ * while cards are chosen, when it chooses none.
+ *
+ * Cards are chosen together (`SelectionRegion`): by the box that takes the
+ * key's place at a card's start under the pointer and stays on every card
+ * while any is chosen, by X on the card in hand, and by ⌘-click, across
+ * columns; a ⇧-click or ⇧↑↓ chooses a run within the card's own column
+ * (`selectionRun`), as Linear's board does. While any is chosen, a bar at the
+ * page's foot marks them done, sets their status, or moves them to a section,
+ * as the List's does (`tasks-selection.tsx`), and a card chosen among
+ * several offers those acts from its ⋯ and a right-click.
  *
  * A narrow room, a phone's, has no width for columns side by side, nor a
  * second column in sight to drag a card onto: it stands one column at a
@@ -224,7 +237,7 @@ const BOARD =
 
 /** A card, raised off its column's well, a draft's as a task's. */
 const BOARD_CARD =
-  "tasks-board-card flex flex-col gap-item-gap pt-row-inset pr-row-inset pb-item-gap pl-list-inset";
+  "tasks-board-card group/board-card flex flex-col gap-item-gap pt-row-inset pr-row-inset pb-item-gap pl-list-inset";
 
 /** The status's mark before the name, on the name's first line; the name wraps beside it. */
 const BOARD_CARD_TITLE =
@@ -237,6 +250,18 @@ const BOARD_NAME =
 /** What did not land, under a card. */
 const BOARD_CARD_NOTE = "tasks-board-card-note text-caption text-danger";
 
+/**
+ * The card's key, at the start of its first line, which gives its place to
+ * the card's box (`SELECT_BOX_PLACE.CARD_HEAD`) for as long as the box shows:
+ * the card under the pointer or reached from the keyboard, the box itself
+ * under the pointer, or the box at rest while the board is being chosen from.
+ * It starts where the box does, drawn out as the status chip under it is
+ * and stood in by the box's inset in that chip, so the key, the box, and the
+ * status mark line up on one edge of the card.
+ */
+const BOARD_CARD_KEY =
+  "tasks-board-card-key flex ms-[calc(var(--spacing-select-box-inset)-var(--luke-space-4))] group-has-[.luke-card-press:hover]/board-card:invisible group-has-[.luke-card-press:focus-visible]/board-card:invisible group-has-[.luke-select-box:hover]/board-card:invisible group-has-[.luke-select-box[data-shown=true]]/board-card:invisible";
+
 /** A card's foot, standing over its press, which lets the pointer through between its pills. */
 const BOARD_CARD_FOOT =
   "tasks-board-card-foot pointer-events-none relative z-1 flex min-w-0 items-end gap-tight-gap";
@@ -244,20 +269,6 @@ const BOARD_CARD_FOOT =
 /** A card's pills, wrapping onto as many lines as they take, each taking the pointer but its agents' icon, which is no press and lets one through to the card's. */
 const BOARD_CARD_PILLS =
   "tasks-board-card-pills flex min-w-0 flex-auto flex-wrap items-center gap-luke-6 [&>:not(.task-agents-mark)]:pointer-events-auto";
-
-/**
- * The issues a card's task links, oldest first, a tag each among its pills
- * (`../tasks/task-issue-links.tsx`). Nothing for a task that links none.
- */
-function TaskBoardTags({ task }: { task: TaskSummary }): React.JSX.Element {
-  return (
-    <>
-      {(task.issues ?? []).map((tag) => (
-        <TaskIssueTagChip key={tag.id} tag={tag} taskId={task.id} repository={task.repository} />
-      ))}
-    </>
-  );
-}
 
 /**
  * A card's repository as a pill: its owner's picture and its own name, its
@@ -298,8 +309,8 @@ function TaskBoardRepository({
  * status's mark before its name, which wraps; and a row under it, wrapping
  * onto as many lines as they take, so nothing is cut off at the card's edge:
  * its priority's and its assignee's marks, drawn as the List draws them, then
- * pills for its repository and the issues it links, each a press of its own
- * and each hanging its own card where it has more to say, and the icon of
+ * a pill for its repository, a press of its own
+ * hanging its own card, and the icon of
  * how its agents stand, rather than one card for the whole task, which
  * says nothing the card does not. Its ⋯ stands at the pills' end, dropping
  * the task's own menu, which a right-click opens too. One press, under its
@@ -313,6 +324,7 @@ function TaskBoardCard({
   properties,
   waiting,
   now,
+  chosen,
   onOpen,
   onStanding,
 }: {
@@ -324,6 +336,8 @@ function TaskBoardCard({
   /** How many of its questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
   waiting: number;
   now: number;
+  /** The selection it stands in, where it is one of several chosen: how many, and what the bar does to them all. */
+  chosen: ChosenTasks | undefined;
   onOpen: () => void;
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
@@ -335,19 +349,23 @@ function TaskBoardCard({
     rename: rename.begin,
     drawn: true,
     unread: reads.markedUnread(task.id),
+    surface: TASK_MENU_SURFACE.ROW,
   });
   const press = useRef<HTMLButtonElement | null>(null);
   const nameId = useId();
   const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);
   const repository = task.repository === null ? undefined : repositoryLabel(task.repository, []);
+  const own = {
+    ...rowMenu("Task", actions.groups(), tasks.shown),
+    footer: actions.footer,
+    subject: taskSubject(task, repository, key),
+  };
   const menu = useRowMenu(
     rename.editing
       ? undefined
-      : {
-          ...rowMenu("Task", actions.groups(), tasks.shown),
-          footer: actions.footer,
-          subject: taskSubject(task, repository, key),
-        },
+      : chosen === undefined
+        ? own
+        : chosenRowMenu(own.thing, chosen, tasks.shown),
     { disabled: actions.deletion.busy, opener: press },
   );
   const drawn = (property: TaskProperty) => properties.includes(property);
@@ -369,7 +387,9 @@ function TaskBoardCard({
       {/* Note that the first line stands under the card's press, but for the creator's face, which hangs their card. */}
       <span className="tasks-board-card-head flex min-h-luke-20 items-center gap-item-gap text-muted-foreground">
         {drawn(TASK_PROPERTY.KEY) ? (
-          <TaskKey workspaceName={workspaceName} number={task.number} decorative />
+          <span className={BOARD_CARD_KEY}>
+            <TaskKey workspaceName={workspaceName} number={task.number} decorative />
+          </span>
         ) : null}
         <span className="tasks-board-card-marks ml-auto inline-flex min-w-0 items-center gap-item-gap text-caption text-muted-foreground tabular-nums">
           {drawn(TASK_PROPERTY.WAITING) && waiting > 0 ? (
@@ -418,6 +438,8 @@ function TaskBoardCard({
           <CardPress
             ref={press}
             disabled={actions.deletion.busy}
+            selectKey={task.id}
+            selectBox={SELECT_BOX_PLACE.CARD_HEAD}
             roving
             onPress={() => {
               menu.close(false);
@@ -448,13 +470,8 @@ function TaskBoardCard({
             <TaskBoardRepository tasks={tasks} repository={task.repository} />
           )}
           {drawn(TASK_PROPERTY.AGENTS) ? (
-            <TaskAgentsMark
-              agents={task.agents}
-              waiting={waiting}
-              size={TASK_AGENTS_MARK_SIZE.MEDIUM}
-            />
+            <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
           ) : null}
-          <TaskBoardTags task={task} />
         </div>
         <span className="tasks-board-card-more pointer-events-auto flex flex-none">
           {menu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
@@ -573,6 +590,7 @@ function TaskBoardColumnView({
   people,
   waitingOn,
   now,
+  chosenOf,
   onOpen,
   onStanding,
   onShowOlder,
@@ -590,6 +608,8 @@ function TaskBoardColumnView({
   /** How many of a task's questions wait on the reader, by its id (`useTasksWaiting`). */
   waitingOn: ReadonlyMap<string, number>;
   now: number;
+  /** The selection a card of the task stands in, where it is one of several chosen (`useTasksSelection`). */
+  chosenOf: (taskId: string) => ChosenTasks | undefined;
   onOpen: (task: TaskSummary) => void;
   onStanding: (task: TaskSummary, standing: TaskStanding) => void;
   /** Shows every settled task, as the column's "+ N older" line asks. */
@@ -631,6 +651,7 @@ function TaskBoardColumnView({
       className="tasks-board-column flex min-h-0 w-tasks-board-column flex-none flex-col px-item-gap pt-tight-gap pb-item-gap"
       data-task-column={value}
       data-row-drop={value}
+      {...selectionRun()}
       aria-label={words}
       id={narrow ? panelId : undefined}
       role={narrow ? "tabpanel" : undefined}
@@ -688,6 +709,7 @@ function TaskBoardColumnView({
                   properties={drawn(task)}
                   waiting={waitingOn.get(task.id) ?? 0}
                   now={now}
+                  chosen={chosenOf(task.id)}
                   onOpen={() => onOpen(task)}
                   onStanding={(standing) => onStanding(task, standing)}
                 />
@@ -755,6 +777,14 @@ export function TasksBoard({
   }, [chosenStands]);
   const shown = chosenStands ? chosen : values.includes(FIRST_SHOWN) ? FIRST_SHOWN : values[0];
   const panelId = `${ids}panel`;
+  const drawnColumns = narrow
+    ? columns.filter((column) => columnValue(column.head) === shown)
+    : columns;
+  // Note that only cards drawn stay chosen, so a task the filter or another tab's column took away is never acted on.
+  const selection = useTasksSelection(
+    tasks,
+    new Set(drawnColumns.flatMap((column) => column.tasks.map(taskIdOf))),
+  );
   const tabs =
     narrow && columns.length > 0 ? (
       <div className="tasks-board-tabs flex min-w-0 grow basis-full flex-col">
@@ -814,14 +844,17 @@ export function TasksBoard({
         <ErrorState onRetry={tasks.onRetryList}>{REFRESH_FAILED_WORDS}</ErrorState>
       ) : null}
       <ListMotion root={board}>
-        <div ref={board} className={BOARD} data-row-drop-scope="" {...crossing}>
-          {columns.length === 0 ? (
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              {NONE_STANDING}
-            </Text>
-          ) : null}
-          {(narrow ? columns.filter((column) => columnValue(column.head) === shown) : columns).map(
-            (column) => (
+        <SelectionRegion
+          id={selection.regionId}
+          selection={{ selected: selection.selected, onChange: selection.onChange }}
+        >
+          <div ref={board} className={BOARD} data-row-drop-scope="" {...crossing}>
+            {columns.length === 0 ? (
+              <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                {NONE_STANDING}
+              </Text>
+            ) : null}
+            {drawnColumns.map((column) => (
               <TaskBoardColumnView
                 key={columnValue(column.head)}
                 tasks={tasks}
@@ -834,14 +867,27 @@ export function TasksBoard({
                 people={people}
                 waitingOn={waitingOn}
                 now={now}
+                chosenOf={selection.chosenOf}
                 onOpen={(task) => tasks.onSelect(task.id)}
                 onStanding={setStanding}
                 onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}
               />
-            ),
-          )}
-        </div>
+            ))}
+          </div>
+        </SelectionRegion>
       </ListMotion>
+      {/* Note that the bar floats over the columns' feet, taking no height from them, and stays across the page's width however far the board scrolls sideways. */}
+      <div className="tasks-board-selection pointer-events-none sticky bottom-luke-16 left-0 z-4 h-0 w-[100cqw]">
+        <div className="absolute inset-x-0 bottom-0 flex justify-center *:pointer-events-auto">
+          <SelectionBar
+            count={selection.selected.size}
+            acts={selection.acts}
+            onClear={selection.onClear}
+            controls={selection.regionId}
+          />
+        </div>
+      </div>
+      {selection.dialog}
     </CollectionPage>
   );
 }

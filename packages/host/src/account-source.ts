@@ -66,9 +66,9 @@ export interface AccountSession {
    */
   readonly confirmAccount?: (() => Effect.Effect<void>) | undefined;
   /**
-   * The account's own token reads, where the source holds a token: the
-   * voice credential's renewal reads them. A source that holds none reads
-   * nothing.
+   * The account's own token reads, where the source holds a token: who it
+   * answers for, which the settings key the account's preferences by. A
+   * source that holds none reads nothing.
    */
   readonly token: AccountToken;
   /** What a hosted client's call carries for the account. */

@@ -203,6 +203,8 @@ export interface MenuSubmenu {
   label: string;
   icon?: React.JSX.Element;
   items: readonly MenuAction[];
+  /** Printed muted before its chevron: the shortcut that opens it, as the app draws it. */
+  hint?: React.ReactNode;
 }
 
 /** One line of a menu: an action, or a submenu of them. */
@@ -932,6 +934,7 @@ function besideMenu(item: HTMLElement | null, side: string): number {
 function Submenu({
   entry,
   open,
+  entering = false,
   layer,
   seen,
   leaving,
@@ -942,6 +945,8 @@ function Submenu({
 }: {
   entry: MenuSubmenu;
   open: boolean;
+  /** Whether it stands open as its menu does, the keyboard taken into it (`MenuProps`'s `openOn`). */
+  entering?: boolean;
   /** The layer its menu stands in, which it stands in too. */
   layer: MenuLayer;
   /** What can be seen of the window as its menu was hung, which it is held inside too. */
@@ -955,7 +960,7 @@ function Submenu({
   onChoose: (action: MenuAction) => void;
 }): React.JSX.Element {
   const trigger = useRef<HTMLDivElement | null>(null);
-  const focusInto = useRef(false);
+  const focusInto = useRef(entering);
   // Note that the popup is held in state too, because Base UI's portal draws it a render after the submenu opens.
   const [popup, setPopup] = useState<HTMLDivElement | null>(null);
   // Note that a submenu gone lets the menu's surface go only while it is still its own, because the pointer opens the next submenu before this one's exit has played, and the next one's surface must stand.
@@ -1012,7 +1017,7 @@ function Submenu({
         className="luke-menu-item"
         {...rovingItem()}
         data-open={open ? "true" : undefined}
-        endClassName={endSlot(false, false)}
+        endClassName={endSlot(entry.hint !== undefined, false)}
         onPointerEnter={(event) => {
           if (event.pointerType !== "touch") onOpen(false);
         }}
@@ -1031,6 +1036,9 @@ function Submenu({
       >
         <MenuGlyph>{entry.icon}</MenuGlyph>
         <OneLine className="luke-menu-item-label min-w-0 flex-1">{entry.label}</OneLine>
+        {entry.hint === undefined ? null : (
+          <span className="luke-menu-item-hint">{entry.hint}</span>
+        )}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
         ref={drawn}
@@ -1080,6 +1088,8 @@ interface MenuProps {
   groups: readonly (readonly MenuEntry[])[];
   /** Whether it opens on its checked item, as a pop-up opens on its value, rather than on its first. */
   openOnChecked?: boolean;
+  /** The submenu it opens standing on, by its label, the keyboard taken into it, as a key that opens a row's menu at its Status does; none opens it on its own items. */
+  openOn?: string | undefined;
   /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
   onClose: (returnFocus: boolean) => void;
 }
@@ -1105,6 +1115,7 @@ function FloatingMenu({
   footer,
   groups,
   openOnChecked = false,
+  openOn,
   onClose,
 }: MenuProps): React.JSX.Element {
   const { id, placement, opener, leaving, ref: hold } = menu;
@@ -1119,15 +1130,15 @@ function FloatingMenu({
     },
     [hold],
   );
-  const [submenu, setSubmenu] = useState<string | undefined>(undefined);
+  const [submenu, setSubmenu] = useState<string | undefined>(openOn);
   // Note that the keys walk the items the menu draws, and the tab order is Base UI's, since Tab closes a menu.
   const roving = useRovingKeys<HTMLDivElement>({ stop: ROVING_STOP.NONE });
   const submenuElement = useRef<HTMLDivElement | null>(null);
-  // Opened again while it was leaving, the menu stands with no submenu, as one opened anew does.
+  // Opened again while it was leaving, the menu stands as one opened anew does: on the submenu asked, or none.
   const [wasLeaving, setWasLeaving] = useState(leaving);
   if (wasLeaving !== leaving) {
     setWasLeaving(leaving);
-    if (!leaving) setSubmenu(undefined);
+    if (!leaving) setSubmenu(openOn);
   }
   // Note that what can be seen is read once as the menu is hung, because a
   // rectangle new on every render would have Base UI place the menu again
@@ -1258,6 +1269,7 @@ function FloatingMenu({
                     key={entry.label}
                     entry={entry}
                     open={submenu === entry.label && !leaving}
+                    entering={openOn === entry.label}
                     layer={layer}
                     seen={seen}
                     leaving={leaving}
@@ -1494,22 +1506,23 @@ function MenuSheet({
   footer,
   groups,
   openOnChecked = false,
+  openOn,
   onClose,
 }: MenuProps): React.JSX.Element {
   const { id, opener, leaving, ref: hold } = menu;
   // Note that the submenu standing is held by its name and read from `groups` each render, so a value that stays reads and toggles as its owner now draws it.
-  const [opened, setOpened] = useState<string | undefined>(undefined);
+  const [opened, setOpened] = useState<string | undefined>(openOn);
   const page = groups
     .flat()
     .find((entry): entry is MenuSubmenu => "items" in entry && entry.label === opened);
   const setPage = (submenu: MenuSubmenu | undefined) => setOpened(submenu?.label);
   // The submenu just left, whose row takes focus back.
   const backTo = useRef<string | undefined>(undefined);
-  // Opened again while it was leaving, the sheet stands on its first page, as one opened anew does.
+  // Opened again while it was leaving, the sheet stands as one opened anew does: on the submenu asked, or its first page.
   const [wasLeaving, setWasLeaving] = useState(leaving);
   if (wasLeaving !== leaving) {
     setWasLeaving(leaving);
-    if (!leaving) setOpened(undefined);
+    if (!leaving) setOpened(openOn);
   }
   const roving = useRovingKeys<HTMLDivElement>({ stop: ROVING_STOP.NONE });
   const [list, setList] = useState<HTMLDivElement | null>(null);

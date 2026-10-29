@@ -32,7 +32,8 @@
  * knows (`DEVICE_CAPABILITY`), so a newer follower's list is never refused.
  * A held read answers what waits for that Mac (`GET /api/device-agents/lines`,
  * `GET /api/device-agents/requests`), a claim takes one row by its id, a
- * launch line's secrets with it, and a settle or an answer keeps what the
+ * launch line's secrets with it, a line's claim asked again under the
+ * token it first carried answers that line again, and a settle or an answer keeps what the
  * Mac said of a row it claimed.
  */
 
@@ -40,6 +41,7 @@ import { accountExperimentOn } from "@luke/database/models/account-store";
 import {
   answerDeviceAgentRequest,
   claimDeviceAgentRequest,
+  openDeviceAgentLaunches,
 } from "@luke/database/models/device-agent-store";
 import { beatDevice, registerDevice } from "@luke/database/models/device-store";
 import { enrollHost, enrollOwnDevice, HOST_ENROLL_REFUSAL } from "@luke/database/models/host-store";
@@ -177,9 +179,14 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
     }),
     beat: deviceAgents.beat.effect(function* ({ context, input }) {
       yield* followed(context, input.deviceId);
-      return yield* keptOrNotFound(
+      yield* keptOrNotFound(
         yield* hostedStoreOrUnavailable(beatDevice(context.userId, input.deviceId, input.signedIn)),
       );
+      // Note that the launches are read after the beat is written, so a claim the device finished before it sent the beat is among them.
+      const openLaunches = yield* hostedStoreOrUnavailable(
+        openDeviceAgentLaunches(context.userId, input.deviceId),
+      );
+      return { ...DONE, openLaunches };
     }),
     lines: deviceAgents.lines.effect(function* ({ context, input }) {
       yield* followed(context, input.deviceId);
@@ -191,7 +198,7 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
     claimLine: deviceAgents.claimLine.effect(function* ({ context, input }) {
       yield* followed(context, input.deviceId);
       const claimed = yield* hostedStoreOrUnavailable(
-        claimedDeviceAgentLine(context.userId, input.deviceId, input.id),
+        claimedDeviceAgentLine(context.userId, input.deviceId, input.id, input.claimToken),
       );
       if (Option.isNone(claimed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return claimed.value;

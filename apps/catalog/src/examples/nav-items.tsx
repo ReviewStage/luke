@@ -2,11 +2,14 @@ import {
   AVATAR_SIZE,
   Avatar,
   Badge,
+  BUTTON_SIZE,
   ChevronDownIcon,
   ComposeIcon,
   FolderIcon,
   GearIcon,
   InboxIcon,
+  MoreButton,
+  NAV_COUNT_TONE,
   NAV_CURRENT,
   NAV_ITEM_VARIANT,
   NavItem,
@@ -22,7 +25,8 @@ import { CatalogSection } from "../section";
 
 /**
  * nav-items.tsx -- a sidebar's places with their counts, marks, and chords,
- * the one shown, one unavailable, one unread; an account's menu trigger;
+ * the one shown, one unavailable, one unread; a place whose ⋯ comes in
+ * over its count under the pointer; an account's menu trigger;
  * links with addresses of their own; long names in a narrow column; and
  * rows while the places they list are read.
  */
@@ -48,7 +52,7 @@ function Places(): React.JSX.Element {
       </NavItem>
       <NavItem
         icon={<FolderIcon />}
-        count={{ value: 3, noun: "waiting on you", tone: STATUS_TONE.ATTENTION }}
+        count={{ value: 3, noun: "for you", tone: NAV_COUNT_TONE.UNREAD }}
         shortcut={<Chord keys="⇧⌘I" />}
         {...place("inbox")}
       >
@@ -78,6 +82,22 @@ function Account(): React.JSX.Element {
         mark={<ChevronDownIcon />}
       >
         Ada Lovelace
+      </NavItem>
+    </div>
+  );
+}
+
+/** A place with acts of its own: its ⋯ stands over its count while it is hovered or reached for. */
+function WithActions(): React.JSX.Element {
+  const menu = useMenu(true);
+  return (
+    <div className="catalog-narrow">
+      <NavItem
+        icon={<GearIcon />}
+        count={{ value: 2, noun: "waiting on you", tone: STATUS_TONE.ATTENTION }}
+        actions={<MoreButton thing="Channel" size={BUTTON_SIZE.COMPACT} {...menu.trigger()} />}
+      >
+        launch
       </NavItem>
     </div>
   );
@@ -113,6 +133,9 @@ function NavItems(): React.JSX.Element {
     <>
       <CatalogSection id="nav-item-places" title="Places, with counts, marks, and chords">
         <Places />
+      </CatalogSection>
+      <CatalogSection id="nav-item-actions" title="A place with a ⋯ of its own">
+        <WithActions />
       </CatalogSection>
       <CatalogSection id="nav-item-identity" title="Who: a menu's trigger">
         <Account />

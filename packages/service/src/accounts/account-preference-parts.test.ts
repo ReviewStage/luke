@@ -6,15 +6,8 @@ import {
   deleteAccount,
   readAccountPreferences,
   readAccountRole,
-  readPlanTemplate,
-  restorePlanTemplate,
   writeAccountPreferences,
-  writePlanTemplate,
 } from "@luke/database/models/account-store";
-import {
-  listTemplateRevisions,
-  readTemplateRevision,
-} from "@luke/database/models/plan-template-revisions";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
@@ -99,11 +92,6 @@ const openAccounts = Effect.gen(function* () {
     readRole: readAccountRole,
     accountFastOffer,
     writePreferences: writeAccountPreferences,
-    readPlanTemplate,
-    writePlanTemplate,
-    listPlanTemplateRevisions: listTemplateRevisions,
-    readPlanTemplateRevision: readTemplateRevision,
-    restorePlanTemplate,
   });
   return { owner, other, ask: (request: Request) => answer(procedures, request) };
 });
@@ -154,18 +142,14 @@ it.layer(getTestDB())("the preferences snapshot's experiments part", (it) => {
       const { owner, ask } = yield* openAccounts;
       assert.deepEqual(partOf(yield* ask(request(owner)), "experiments"), {});
 
-      const turnedOn = yield* ask(
-        request(owner, { experiments: { [EXPERIMENT.CODE_REVIEW]: true } }),
-      );
-      assert.deepEqual(partOf(turnedOn, "experiments"), { [EXPERIMENT.CODE_REVIEW]: true });
+      const turnedOn = yield* ask(request(owner, { experiments: { [EXPERIMENT.MEMORY]: true } }));
+      assert.deepEqual(partOf(turnedOn, "experiments"), { [EXPERIMENT.MEMORY]: true });
 
-      // The voice's own write leaves the experiments standing, and the experiments' leaves the voice.
-      yield* ask(request(owner, { preferences: { voice: "cedar" } }));
-      const turnedOff = yield* ask(
-        request(owner, { experiments: { [EXPERIMENT.CODE_REVIEW]: false } }),
-      );
-      assert.deepEqual(partOf(turnedOff, "experiments"), { [EXPERIMENT.CODE_REVIEW]: false });
-      assert.deepEqual(partOf(turnedOff, "preferences"), { voice: "cedar" });
+      // The shared part's own write leaves the experiments standing.
+      const shared = yield* ask(request(owner, { preferences: {} }));
+      assert.deepEqual(partOf(shared, "experiments"), { [EXPERIMENT.MEMORY]: true });
+      const turnedOff = yield* ask(request(owner, { experiments: { [EXPERIMENT.MEMORY]: false } }));
+      assert.deepEqual(partOf(turnedOff, "experiments"), { [EXPERIMENT.MEMORY]: false });
     }),
   );
 
@@ -173,17 +157,17 @@ it.layer(getTestDB())("the preferences snapshot's experiments part", (it) => {
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts;
       const newer = yield* ask(
-        request(owner, { experiments: { [EXPERIMENT.CODE_REVIEW]: true, newer: true } }),
+        request(owner, { experiments: { [EXPERIMENT.MEMORY]: true, newer: true } }),
       );
-      assert.deepEqual(partOf(newer, "experiments"), { [EXPERIMENT.CODE_REVIEW]: true });
+      assert.deepEqual(partOf(newer, "experiments"), { [EXPERIMENT.MEMORY]: true });
 
-      const refused = yield* ask(request(owner, { experiments: [EXPERIMENT.CODE_REVIEW] }));
+      const refused = yield* ask(request(owner, { experiments: [EXPERIMENT.MEMORY] }));
       assert.deepEqual(refused, {
         status: HOSTED_HTTP_STATUS.BAD_REQUEST,
         body: { error: HOSTED_API_ERROR.INVALID_REQUEST },
       });
       assert.deepEqual(partOf(yield* ask(request(owner)), "experiments"), {
-        [EXPERIMENT.CODE_REVIEW]: true,
+        [EXPERIMENT.MEMORY]: true,
       });
     }),
   );
@@ -191,7 +175,7 @@ it.layer(getTestDB())("the preferences snapshot's experiments part", (it) => {
   it.effect("answers the bearer's own account's choices and no other's", () =>
     Effect.gen(function* () {
       const { owner, other, ask } = yield* openAccounts;
-      yield* ask(request(owner, { experiments: { [EXPERIMENT.CODE_REVIEW]: true } }));
+      yield* ask(request(owner, { experiments: { [EXPERIMENT.MEMORY]: true } }));
       assert.deepEqual(partOf(yield* ask(request(other)), "experiments"), {});
     }),
   );
@@ -206,7 +190,7 @@ it.layer(getTestDB())("the preferences snapshot's link part", (it) => {
       const chosen = yield* ask(request(owner, { linkOpen: LINK_OPEN.MAC_APP }));
       assert.equal(partOf(chosen, "linkOpen"), LINK_OPEN.MAC_APP);
       assert.deepEqual(partOf(chosen, "preferences"), {});
-      // Note that a Mac reads the instant as a snapshot to take over its own voice, which this write carried none of.
+      // Note that a Mac reads the instant as a snapshot to take over its own shared part, which this write carried none of.
       assert.equal(partOf(chosen, "updatedAt"), undefined);
       assert.equal(partOf(yield* ask(request(other)), "linkOpen"), undefined);
     }),
@@ -215,10 +199,11 @@ it.layer(getTestDB())("the preferences snapshot's link part", (it) => {
   it.effect("stands through the shared part a build that predates it writes back whole", () =>
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts;
-      yield* ask(request(owner, { preferences: { voice: "cedar" }, linkOpen: LINK_OPEN.MAC_APP }));
+      yield* ask(request(owner, { preferences: {}, linkOpen: LINK_OPEN.MAC_APP }));
 
+      // Note that the voice an older build still writes is a preference this deployment no longer keeps.
       const olderBuild = yield* ask(request(owner, { preferences: { voice: "marin" } }));
-      assert.deepEqual(partOf(olderBuild, "preferences"), { voice: "marin" });
+      assert.deepEqual(partOf(olderBuild, "preferences"), {});
       assert.equal(partOf(olderBuild, "linkOpen"), LINK_OPEN.MAC_APP);
 
       const backToBrowser = yield* ask(request(owner, { linkOpen: LINK_OPEN.BROWSER }));
@@ -229,8 +214,8 @@ it.layer(getTestDB())("the preferences snapshot's link part", (it) => {
   it.effect("the shared part passes over a preference this deployment does not know", () =>
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts;
-      const newer = yield* ask(request(owner, { preferences: { voice: "cedar", newer: true } }));
-      assert.deepEqual(partOf(newer, "preferences"), { voice: "cedar" });
+      const newer = yield* ask(request(owner, { preferences: { newer: true } }));
+      assert.deepEqual(partOf(newer, "preferences"), {});
     }),
   );
 

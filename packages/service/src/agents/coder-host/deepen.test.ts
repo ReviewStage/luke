@@ -28,7 +28,6 @@ test("a write, a pull request, and a shell command that may reach git or a scrip
     CODER_TOOL.READ_FILE,
     CODER_TOOL.GLOB,
     CODER_TOOL.GREP,
-    CODER_TOOL.SHOW_CODE,
     CODER_TOOL.SHOW_PAGE,
   ]) {
     assert.equal(deepensCheckout(tool, unparsedWire({ path: "src/index.ts" })), false, tool);

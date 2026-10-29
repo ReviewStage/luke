@@ -1,28 +1,22 @@
 import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
-import type { Board } from "@luke/features/board-wire";
 import {
-  CODING_AGENT_STATUS,
-  type CodingAgentPullRequest,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
-import { LINK_PLACE } from "@luke/features/link-grammar";
+  AGENT_MACHINE,
+  AGENT_STATUS,
+  type AgentPullRequest,
+  type AgentStatus,
+  type AgentSummary,
+} from "@luke/features/agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
-import type { CodeRef } from "@luke/features/task-wire";
-import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@luke/features/terminal-entry";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
+import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CloseIcon,
   CollapseIcon,
   ConfirmDialog,
-  EmptyState,
-  ERROR_STATE_PLACEMENT,
-  ErrorState,
   ExpandIcon,
   Fill,
   IconButton,
@@ -47,7 +41,6 @@ import {
   useConfirmDialog,
   useResizeEdge,
 } from "@luke/ui";
-import { LUKE_ACTOR } from "@luke/ui/actor-model";
 import { ListIcon } from "@luke/ui/icons";
 import {
   agentOfTab,
@@ -70,8 +63,6 @@ import {
   type TerminalStripTab,
   tabKey,
 } from "@luke/ui/tab-strip-model";
-import type { CodeFeedCallSource } from "@luke/voice/code-pane-model";
-import { type ShownFile, shownFiles } from "@luke/voice/code-pane-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import {
   Fragment,
@@ -87,16 +78,23 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useAct } from "../act.js";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
-import { useAppCommand } from "../app-commands.js";
+import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
+import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
 import { FindScope } from "../find-in-tab.js";
 import { drawnVisibly, focusSeek } from "../focus-seek.js";
 import { panelTabPlace } from "../links-at-hand.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { centreWithin } from "../scroll-within.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
+import {
+  agentGlyphState,
+  agentName,
+  agentStateWords,
+  subagentActor,
+} from "../tasks/agent-model.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab.js";
 import {
@@ -107,7 +105,6 @@ import {
   heldLatest,
   lastFinished,
 } from "../tasks/agent-tab-card.js";
-import { peopleOf } from "../tasks/changes-card.js";
 import {
   CloudBrowserDraftPane,
   type CloudBrowserOwner,
@@ -120,15 +117,6 @@ import {
   useCloudBrowserDrafts,
   useCloudBrowserTabs,
 } from "../tasks/cloud-browser-tabs.js";
-import { CodePane, centreWithin } from "../tasks/code-pane.js";
-import {
-  agentGlyphState,
-  agentName,
-  agentStateWords,
-  subagentActor,
-} from "../tasks/coding-agent-model.js";
-import { fileLook, newestFileNote } from "../tasks/file-ref.js";
-import { snippetOf } from "../tasks/file-tab-model.js";
 import { FileView, type TreeShown } from "../tasks/file-view.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
 import {
@@ -139,6 +127,7 @@ import {
 import { OpenFileTabProvider } from "../tasks/open-file-tab.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { PlanCommentsTab } from "../tasks/plan-comments.js";
+import { peopleOf } from "../tasks/pull-request-card.js";
 import { ofPullRequestTab, pullRequestOfTab } from "../tasks/pull-request-number.js";
 import {
   AgentGlyph,
@@ -148,7 +137,6 @@ import {
   TAB_KIND,
   tabLook,
 } from "../tasks/tab-look.js";
-import { TaskBoard } from "../tasks/task-board.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { TerminalStanding } from "../tasks/terminal-shells.js";
 import { TerminalTab } from "../tasks/terminal-tab.js";
@@ -156,9 +144,10 @@ import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-mode
 import {
   agentTranscript,
   readWholeTranscript,
+  TRANSCRIPT_COPY,
   type TranscriptCopy,
 } from "../tasks/transcript-copy.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import { PullRequestsOnGitHub } from "../tasks/use-open-link.js";
 import {
   type DrawnTabs,
@@ -169,6 +158,7 @@ import {
   type FixedSidePanelTab,
   isPinnable,
   type OpenFile,
+  type PinHolder,
   PULL_REQUEST_VIEW,
   type PullRequestView,
   SIDE_PANEL_TAB,
@@ -176,11 +166,12 @@ import {
   SIDE_PANEL_WIDTH,
   type SidePanelControl,
   type SidePanelTab,
+  sameHolder,
 } from "../tasks/use-side-panel.js";
-import { useCapability, useExperiment } from "../use-app-state.js";
-import type { MenuAction } from "./action-menu.js";
+import { useCapability } from "../use-app-state.js";
 import { useAgentTerminalDoors } from "./agent-actions.js";
 import { useFileTreeWidth } from "./folded-groups.js";
+import { AgentMenuTab } from "./main-tabs.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
 import { paneTiming } from "./pane-motion.js";
 import { PhoneBack, PhoneHead, PlaceMore } from "./phone-head.js";
@@ -188,10 +179,13 @@ import {
   type AddEntry,
   AddTabButton,
   AddTabSkeleton,
+  type DocumentMenu,
   DoorsTab,
   entryRow,
   HandTabActionsContext,
   type HeldTranscripts,
+  handedCommand,
+  type ShownTab,
   type TabActionGroups,
   type TabDoors,
   type TabLook,
@@ -199,25 +193,12 @@ import {
   TabSkeleton,
   type TabViews,
   type TranscriptCopier,
-  tabActionItems,
-  tabContentGroups,
   useTranscriptCopier,
   type WorkerStandings,
 } from "./strip-tabs.js";
 import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { type CardSubject, tabCard } from "./tab-card.js";
 import { TabStrip } from "./tab-strip.js";
-
-/**
- * What a phone's header is handed of the tab the panel shows (`task-pane-switcher.tsx`):
- * what it is called, and, read as the header's ⋯ opens, what it offers on what
- * it shows, which its own ⋯ offers where the panel's bar stands.
- */
-export interface ShownTab {
-  readonly label: string;
-  /** Its actions as the ⋯ at `opener` drops them, an item opening a menu of the tab's own under it. */
-  readonly groups: (opener: HTMLElement) => MenuAction[][];
-}
 
 /** A phone's Activity, as the panel's strip is handed it: where it lists the tabs, how a row's press leaves the list, and where the tab shown is handed on. */
 interface StripActivity {
@@ -247,9 +228,12 @@ interface StripActivity {
  * an agent's or a subagent's closes only the view: the agent goes on as it
  * was, and the "+" opens its tab again; closing a draft's lets the draft
  * go, nothing of it having been started. Every tab's right-click offers
- * Close and Close others, a fixed tab's, an agent's, and a file's Pin to the
- * sidebar, and a transcript's tab its two copies. The task's own actions stay in
- * the task's toolbar and never come into the panel. Where a delegated
+ * Close and Close others, the Inbox's, the Comments', an agent's, and a
+ * file's Pin to the sidebar, and a transcript's tab its two copies. The Plan
+ * tab shows the task, so its ⋯ in the bar and its right-click offer the
+ * task's own document menu, handed in whole (`planMenu`): the task's Pin
+ * stands there in a Pin tab's place, since the tab that shows the task is
+ * what stands for it in the sidebar. Where a delegated
  * worker stands is what its own tab's pages say, kept here for its glyph
  * while the panel is drawn, and taken as running until a page says
  * otherwise. What an agent's or a delegated worker's tab last drew is kept
@@ -260,24 +244,6 @@ interface StripActivity {
  * window's layout at once, and the panel keeps drawing what it held until its
  * exit has played (`useSidePanelDrawing`); its arrivals are pane-motion.tsx's.
  */
-
-/** What the Code tab says while Luke has shown no code on the task. */
-const NO_CODE_LINE = "No code yet.";
-
-/** What the Code tab says where the task's code could not be read and none is held. */
-const UNREAD_CODE_LINE = "The code could not be read.";
-
-/**
- * The calls the Code tab's feed groups its code under: none, since every
- * call is an agent's now and drawn in that agent's tab, so the feed heads
- * each code by the turn that showed it.
- */
-const NO_CODE_CALLS: readonly CodeFeedCallSource[] = [];
-
-/** The task's code read that did not land, and its retry, which the Code tab offers while it holds no code. */
-interface CodeFailed {
-  readonly onRetry: () => void;
-}
 
 /**
  * What the panel leaves the document beside it, as desktop.css declares it
@@ -313,11 +279,10 @@ const NO_PAGES: readonly PageLine[] = [];
 
 /**
  * What the panel stands beside: a plan's page, whose panel holds every kind
- * of tab, or the page of an agent no plan holds, whose panel holds that
- * agent's workers, its Pull request, and its Terminal, the Code a call
- * into it showed where it has no task to hold it, and no plan's Board,
- * Call, files, or pages. A tab of an agent's page is no plan's to
- * pin, so none is offered. Beside the window's Inbox it stands for the
+ * of tab, or an agent's own page, whose panel holds that agent's workers,
+ * its Pull request, its Terminal, and its own Inbox, and no plan or comments,
+ * which are a task's alone. A tab of an agent's page is pinned where the
+ * sidebar draws it, on the agent or on its task (`pinOn`). Beside the window's Inbox it stands for the
  * chosen item's task, holding what the item opened there, the task's
  * files, pages, and Pull requests, and none of the kinds its page draws
  * from what it holds, the fixed three and Terminal; nor is a tab of it
@@ -333,9 +298,15 @@ export const SIDE_PANEL_HOLDER = {
 
 export type SidePanelHolder = (typeof SIDE_PANEL_HOLDER)[keyof typeof SIDE_PANEL_HOLDER];
 
-/** What the panel's pages stand on: the agent on no task an agent's page holds the panel under, else the task. */
-function pagePlaceOf(holder: SidePanelHolder, id: string): PagePlace {
+/** What the panel's pages and cloud Browser tabs stand on: the agent an agent's page holds the panel under, else the task. */
+function holderPlaceOf(holder: SidePanelHolder, id: string): PagePlace {
   return holder === SIDE_PANEL_HOLDER.AGENT ? { agentId: id } : { taskId: id };
+}
+
+/** A repository as the panel reads it where it stands for no task: the workspace whose installation reaches it, and the repository, `owner/name`. */
+export interface PanelRepositoryPlace {
+  readonly workspaceId: string;
+  readonly repository: string;
 }
 
 /** No fixed kind, the same array every render. */
@@ -344,36 +315,31 @@ const NO_KINDS: readonly FixedSidePanelTab[] = [];
 /** No Terminal tab, as the Inbox's panel draws. */
 const NO_TERMINALS: readonly TerminalStripTab[] = [];
 
-/** The Code tab alone, which an agent's page offers while a call into it showed code. */
-const CODE_KINDS: readonly FixedSidePanelTab[] = [SIDE_PANEL_TAB.CODE];
+/** An agent's page's one fixed kind: its own Inbox, the plan's and its comments' being a task's alone. */
+const AGENT_KINDS: readonly FixedSidePanelTab[] = [SIDE_PANEL_TAB.INBOX];
 
 /** The fixed kinds each holder's panel offers. */
 const HOLDER_KINDS = {
   [SIDE_PANEL_HOLDER.TASK]: SIDE_PANEL_TABS,
-  [SIDE_PANEL_HOLDER.AGENT]: CODE_KINDS,
+  [SIDE_PANEL_HOLDER.AGENT]: AGENT_KINDS,
   [SIDE_PANEL_HOLDER.INBOX]: NO_KINDS,
 } as const satisfies Record<SidePanelHolder, readonly FixedSidePanelTab[]>;
 
 /**
  * The fixed kinds a holder's panel offers: the Inbox only on a task holding an
- * agent, and an agent's page Code only while a call into its agent showed
- * some. The panel's "+" and ⌘K both ask here, so neither offers a tab that
+ * agent. The panel's "+" and ⌘K both ask here, so neither offers a tab that
  * would open blank.
  */
 export function offeredPanelKinds(
   holder: SidePanelHolder,
-  drawn: { readonly inbox: boolean; readonly code: boolean },
+  drawn: { readonly inbox: boolean },
 ): readonly FixedSidePanelTab[] {
-  return HOLDER_KINDS[holder].filter(
-    (kind) =>
-      (kind !== SIDE_PANEL_TAB.INBOX || drawn.inbox) &&
-      (kind !== SIDE_PANEL_TAB.CODE || holder === SIDE_PANEL_HOLDER.TASK || drawn.code),
-  );
+  return HOLDER_KINDS[holder].filter((kind) => kind !== SIDE_PANEL_TAB.INBOX || drawn.inbox);
 }
 
 /** Whether a task's panel offers its Inbox: it holds an agent, an archived one among them, or already holds the tab, since only an agent posts. */
 export function inboxOffered(
-  agents: Pick<CodingAgentsControl, "heldIds">,
+  agents: Pick<AgentsControl, "heldIds">,
   panel: Pick<SidePanelControl, "tabs">,
 ): boolean {
   return (agents.heldIds?.length ?? 0) > 0 || panel.tabs.includes(SIDE_PANEL_TAB.INBOX);
@@ -425,7 +391,6 @@ const NO_SUBAGENTS: readonly string[] = [];
 
 /** The "+" menu's sections after the fixed kinds, which the task's summary lists under the same headings. */
 export const ADD_SECTION = {
-  FILES: "Files",
   PULL_REQUESTS: "Pull requests",
   PAGES: "Pages",
   TERMINAL: "Terminal",
@@ -435,13 +400,13 @@ export const ADD_SECTION = {
 /** A coding agent whose cloud browser the "+" offers a new tab in: the agent, and whose browser it is as the tab will say. */
 interface CloudBrowserOffer {
   readonly agentId: string;
-  readonly agent: CodingAgentSummary;
+  readonly agent: AgentSummary;
   readonly owner: CloudBrowserOwner;
 }
 
 /** An agent's terminal as the "+" offers it: the agent, and whether ⌘J would open its Terminal tab from here. */
 export interface TerminalOffer {
-  readonly agent: CodingAgentSummary;
+  readonly agent: AgentSummary;
   readonly label: string;
   readonly showsOnChord: boolean;
 }
@@ -449,9 +414,9 @@ export interface TerminalOffer {
 /** An agent's Changes tab as the "+" offers it: the agent, its name as its own tab wears it, and the pull request the tab draws. */
 export interface ChangesOffer {
   readonly agentId: string;
-  readonly agent: CodingAgentSummary;
+  readonly agent: AgentSummary;
   readonly label: string;
-  readonly pullRequest: CodingAgentPullRequest;
+  readonly pullRequest: AgentPullRequest;
 }
 
 /** What the chosen tab's body hands its toolbar's ⋯ (`useHandedTabActions`), and the tab it was drawn for, which alone offers them. */
@@ -476,9 +441,6 @@ type DrawnCloudBrowser = { readonly id: string; readonly owner: CloudBrowserOwne
 /** No cloud Browser tab on the task, the same array every render. */
 const NO_CLOUD_BROWSERS: readonly DrawnCloudBrowser[] = [];
 
-/** Whose browser a cloud Browser tab of the task's own is in. */
-const LUKE_NAME = "Luke";
-
 /** What a draft of a tab in an agent's browser is called, until it opens a page. */
 const NEW_CLOUD_TAB = "New tab";
 
@@ -499,8 +461,8 @@ const NO_OPEN_CHANGES: readonly ChangesStripTab[] = [];
  * agent is archived.
  */
 function everyTaskAgent(
-  agents: Pick<CodingAgentsControl, "agents" | "archived">,
-): readonly CodingAgentSummary[] {
+  agents: Pick<AgentsControl, "agents" | "archived">,
+): readonly AgentSummary[] {
   const listed = agents.agents ?? [];
   // Note that an agent's own page lists its agent among `agents` archived or not, so each is taken once.
   const archived = (agents.archived ?? []).filter(
@@ -519,7 +481,7 @@ function everyTaskAgent(
  * and its tab be opened before an earlier one shares it.
  */
 function changesAgentOf(
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   agentId: string,
   open: readonly ChangesStripTab[],
 ): string {
@@ -545,7 +507,7 @@ function changesAgentOf(
  * same files. `open` is the Changes tabs open on the task.
  */
 export function changesOffers(
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   open: readonly ChangesStripTab[] = NO_OPEN_CHANGES,
 ): readonly ChangesOffer[] {
   const offered = new Set<string>();
@@ -570,7 +532,7 @@ export function changesOffers(
  * agent's read landed first. `open` is the Changes tabs open on the task.
  */
 export function changesTabOf(
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   agentId: string,
   open: readonly ChangesStripTab[],
   number?: number,
@@ -590,7 +552,7 @@ export function changesTabOf(
  */
 export function showPullRequest(
   panel: Pick<SidePanelControl, "changes" | "onPreview" | "onPullRequestView">,
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   agentId: string,
   view: PullRequestView,
   number?: number,
@@ -607,11 +569,8 @@ export function showPullRequest(
  * theirs themselves, hand none.
  */
 export interface PanelCards {
-  readonly agents: CodingAgentsControl;
+  readonly agents: AgentsControl;
   readonly held: HeldTranscripts;
-  /** Every code Luke showed on the task, whose newest note on a file its row's card says. */
-  readonly shown: readonly TaskCodeShowing[];
-  readonly repository: string | null;
   /** The open plan, or the agent on no task, whose pages a page row's card previews. */
   readonly pagePlace: PagePlace;
   /** The agent whose tab the plan's column shows, whose card follows its run. */
@@ -622,7 +581,7 @@ export interface PanelCards {
 
 /** An agent's tab card as a row of its browser hangs it, named as the row names the agent. */
 function agentRowCard(
-  agent: CodingAgentSummary,
+  agent: AgentSummary,
   label: string,
   cards: PanelCards | undefined,
 ): React.ReactNode {
@@ -681,13 +640,10 @@ function kindRow(tab: FixedSidePanelTab, plan: PlanStanding | undefined): MenuRo
 /**
  * What the panel may open, as its "+" menu offers it, the task's summary
  * lists it (`task-summary.tsx`), and ⌘K finds it: the fixed kinds given,
- * every one for the "+" and those the task has used for the summary; then,
- * under Files, each file an agent showed on the task, by name with its
- * folder beside it. Each row wears its tab's own look (`tab-look.tsx`): a
- * file as every place names a file (`file-ref.tsx`). Picking a row whose tab is open chooses
- * that tab rather than opening another, as a browser's tab search does, so
- * no row says it is open; a file not open opens through the panel's one
- * door for a file on the newest snippet of it. Then, under Pull requests,
+ * every one for the "+" and those the task has used for the summary. Each
+ * row wears its tab's own look (`tab-look.tsx`). Picking a row whose tab is
+ * open chooses that tab rather than opening another, as a browser's tab
+ * search does, so no row says it is open. Then, under Pull requests,
  * each agent's pull request (`changesOffers`), named as its Pull request tab
  * is, by its number and title (a kind still spelled `changes`, as the tab
  * of its files alone was), with the agent whose it is beside it, found by
@@ -697,7 +653,6 @@ function kindRow(tab: FixedSidePanelTab, plan: PlanStanding | undefined): MenuRo
 export function panelEntries(input: {
   panel: SidePanelControl;
   kinds: readonly FixedSidePanelTab[];
-  files: readonly ShownFile[];
   /** The agents' Changes tabs on offer; none where the caller offers none. */
   changes?: readonly ChangesOffer[];
   /** The plan's pages, each by its newest version, which the "+" offers; none where the caller offers none. */
@@ -708,9 +663,9 @@ export function panelEntries(input: {
     readonly onNew: (agentId: string) => void;
   };
   /**
-   * Where a new Browser tab may open, while the Browser tab experiment is
-   * on: each of the task's coding agents' cloud browsers, the one viewed
-   * first, drafted through `onAgent`; none where the caller offers none.
+   * Where a new Browser tab may open: each of the task's coding agents'
+   * cloud browsers, the one viewed first, drafted through `onAgent`; none
+   * where the caller offers none.
    */
   browsers?: {
     readonly agents: readonly CloudBrowserOffer[];
@@ -721,33 +676,11 @@ export function panelEntries(input: {
   /** What the rows' cards read, where the caller hangs them; none where it hangs its own. */
   cards?: PanelCards | undefined;
 }): AddEntry[] {
-  const { panel, files, changes = [], pages = [], cards } = input;
+  const { panel, changes = [], pages = [], cards } = input;
   const kinds = input.kinds.map((kind) => ({
     row: kindRow(kind, input.plan),
     onPick: () => panel.onChoose(kind),
   }));
-  // Note that a file's row is named by its place in the list, because a path
-  // may spell a kind's word or another row's id, and the list only grows.
-  const fileRows = files.map((ref, at) => {
-    const tab = panel.files.find((file) => file.path === ref.path);
-    const open = tab !== undefined;
-    // Note that the card's note is of the revision the row opens: the open tab's, else the one shown.
-    const commit = open ? tab.commit : ref.commit;
-    const card =
-      cards === undefined
-        ? undefined
-        : hungCard({
-            kind: TAB_KIND.FILE,
-            path: ref.path,
-            note: newestFileNote(cards.shown, ref.path, { repository: cards.repository, commit }),
-          });
-    return {
-      row: { id: String(at), ...fileLook(ref.path), section: ADD_SECTION.FILES },
-      card,
-      onPick: () =>
-        open ? panel.onOpenFile({ path: ref.path }) : panel.onOpenFile(ref, ref.commit),
-    };
-  });
   // Note that a pull request's row is named by its page, because an agent's
   // id already names the agent's own row in the task's summary.
   const changesRows = changes.map(({ agentId, label, pullRequest }) => {
@@ -824,16 +757,15 @@ export function panelEntries(input: {
     onPick: () => input.terminals?.onNew(agent.id),
   }));
   const browserRows = browserEntries(input.browsers, cards);
-  return [...kinds, ...fileRows, ...changesRows, ...pageRows, ...terminalRows, ...browserRows];
+  return [...kinds, ...changesRows, ...pageRows, ...terminalRows, ...browserRows];
 }
 
 /**
  * What a holder's panel offers by its "+" rules (`panelEntries`): the kinds
- * `offeredPanelKinds` lets it, each file Luke showed on the task, each of
- * the task's agents' pull requests, the plan's pages, a terminal for each
+ * `offeredPanelKinds` lets it, each of the task's agents' pull requests, the plan's pages, a terminal for each
  * agent where the platform runs them and the panel is not the Inbox's, and
- * a new Browser tab in each agent's cloud browser, the one viewed first,
- * on a task's own panel while the experiment is on. The panel's "+" and
+ * a new Browser tab in each cloud agent's browser, the one viewed first,
+ * on a task's panel, or in its own agent's on an agent's page. The panel's "+" and
  * ⌘K's "This task" both ask here, so neither offers what the other does
  * not.
  */
@@ -841,19 +773,16 @@ export function panelOffers(input: {
   holder: SidePanelHolder;
   taskId: string;
   panel: SidePanelControl;
-  agents: CodingAgentsControl;
-  shownCode: readonly TaskCodeShowing[];
+  agents: AgentsControl;
   pages: readonly PageLine[];
   /** Adds a shell to an agent's sandbox; none where the platform runs no terminals. */
   onNewTerminal: ((agentId: string) => void) | undefined;
-  /** Whether the Browser tab experiment is on. */
-  browsers: boolean;
   /** The agent whose browser a new tab is offered in first: the one the panel or the column shows. */
   viewedAgent: string | undefined;
   plan: PlanStanding | undefined;
   cards: PanelCards;
 }): AddEntry[] {
-  const { holder, taskId, panel, agents, shownCode, onNewTerminal, cards } = input;
+  const { holder, taskId, panel, agents, onNewTerminal, cards } = input;
   const changes = panel.changes.filter((each) =>
     drawsChanges(each, { taskAgents: agents.heldIds }),
   );
@@ -861,19 +790,19 @@ export function panelOffers(input: {
     const subject = agentSubject(agents, agentId, cards.held, false);
     return { name: subject.name, icon: <AgentGlyph agent={subject.agent} /> };
   };
+  // Note that an agent on a Mac is offered none, because only a cloud sandbox runs a browser,
+  // and that an agent's page offers its own agent's browser alone, whose id it holds the panel under.
   const cloudOffers: readonly CloudBrowserOffer[] =
-    !input.browsers || holder !== SIDE_PANEL_HOLDER.TASK
+    holder === SIDE_PANEL_HOLDER.INBOX
       ? []
-      : [...(agents.agents ?? [])]
+      : (agents.agents ?? [])
+          .filter((agent) => agent.machine !== AGENT_MACHINE.DEVICE)
+          .filter((agent) => holder !== SIDE_PANEL_HOLDER.AGENT || agent.id === taskId)
           .sort((a, b) => Number(b.id === input.viewedAgent) - Number(a.id === input.viewedAgent))
           .map((agent) => ({ agentId: agent.id, agent, owner: ownerOf(agent.id) }));
   return panelEntries({
     panel,
-    kinds: offeredPanelKinds(holder, {
-      inbox: inboxOffered(agents, panel),
-      code: shownCode.length > 0,
-    }),
-    files: shownFiles(shownCode),
+    kinds: offeredPanelKinds(holder, { inbox: inboxOffered(agents, panel) }),
     changes: changesOffers(agents, changes),
     pages: input.pages,
     // Note that a panel that draws no Terminal, the Inbox's among them, offers none.
@@ -883,7 +812,9 @@ export function panelOffers(input: {
     browsers: {
       agents: cloudOffers,
       onAgent: (agentId: string) =>
-        panel.onChoose({ cloudBrowser: startCloudDraft(taskId, agentId).id }),
+        panel.onChoose({
+          cloudBrowser: startCloudDraft(holderPlaceOf(holder, taskId), agentId).id,
+        }),
     },
     plan: input.plan,
     cards,
@@ -907,7 +838,7 @@ function planOf(input: {
 }
 
 /** A Pull request tab's look, named by its pull request's number and title as the task's agents last read it, wearing its mark for where it stands. */
-function changesLook(tab: ChangesStripTab, agents: CodingAgentsControl): KindLook {
+function changesLook(tab: ChangesStripTab, agents: AgentsControl): KindLook {
   return tabLook({ kind: TAB_KIND.CHANGES, pullRequest: pullRequestOfTab(agents, tab) });
 }
 
@@ -916,7 +847,7 @@ function changesLook(tab: ChangesStripTab, agents: CodingAgentsControl): KindLoo
  * would open its Terminal tab from the panel's own tab (`terminal-entry.ts`).
  */
 function terminalOffers(
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   panel: Pick<SidePanelControl, "tab" | "lastTerminal">,
 ): readonly TerminalOffer[] {
   const listed = agents.agents ?? [];
@@ -943,6 +874,8 @@ export interface DrawnTab {
   /** Closes the tab, as its × does. */
   close: () => void;
   copy?: ((copy: TranscriptCopy) => void) | undefined;
+  /** The agent a transcript's tab beside the Inbox shows, whose own menu its tab offers. */
+  agent?: AgentSummary | undefined;
 }
 
 /**
@@ -958,18 +891,14 @@ export interface DrawnTab {
 function stripTabs(input: {
   panel: SidePanelControl;
   unread: readonly StripTab[];
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   subagents: readonly DrawnSubagent[];
   files: readonly OpenFile[];
   changes: readonly ChangesStripTab[];
   pages: readonly DrawnPage[];
   terminals: readonly TerminalStripTab[];
-  /** The task's agents' cloud Browser tabs, as the service lists them. */
+  /** The holder's cloud Browser tabs, as the service lists them: the agent's, or the task's agents'. */
   cloudBrowsers: readonly DrawnCloudBrowser[];
-  /** Every code Luke showed on the task, whose newest note on a file its tab's card says. */
-  shown: readonly TaskCodeShowing[];
-  /** The task's repository, whose showings alone a file tab's card reads its note from. */
-  repository: string | null;
   held: HeldTranscripts;
   copied: TranscriptCopier;
   /** Opens an agent's tab in the plan's column, as a card naming the agent offers. */
@@ -978,7 +907,7 @@ function stripTabs(input: {
   onCloseMacTerminal: (tab: MacTerminalStripTab) => void;
   /** The agent whose tab the plan's column shows, whose card follows its run. */
   shownAgent: string | undefined;
-  /** The open plan, or the agent on no task, whose pages a page tab's card previews. */
+  /** The open plan, or the agent on no task, whose pages a page tab's card previews, and whose panel a closed cloud Browser draft leaves. */
   pagePlace: PagePlace;
   /** The task the panel stands beside, whose name and status its Plan tab wears; none where it is not known. */
   plan: PlanStanding | undefined;
@@ -993,8 +922,8 @@ function stripTabs(input: {
   /** The task's Inbox as its board reads, which its tab's card says; none beside anything but a task's page. */
   inbox: InboxBoardView | undefined;
 }): DrawnTab[] {
-  const { panel, unread, agents, subagents, files, changes, pages, terminals, shown, held } = input;
-  const { repository, copied, onOpenAgent, shownAgent, pagePlace } = input;
+  const { panel, unread, agents, subagents, files, changes, pages, terminals, held } = input;
+  const { copied, onOpenAgent, shownAgent, pagePlace } = input;
   const { cloudBrowsers } = input;
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const models = agents.models ?? [];
@@ -1055,20 +984,14 @@ function stripTabs(input: {
     };
   });
   // A file's tab hangs the file's card, as every place naming the file does.
-  const fileTabs = files.map(({ path, commit }) => {
-    const note = newestFileNote(shown, path, { repository, commit });
-    return {
-      tab: { file: path },
-      look: look(
-        { file: path },
-        {
-          ...tabLook({ kind: TAB_KIND.FILE, path }),
-          card: hungCard({ kind: TAB_KIND.FILE, path, note }),
-        },
-      ),
-      close: () => panel.onClose({ file: path }),
-    };
-  });
+  const fileTabs = files.map(({ path }) => ({
+    tab: { file: path },
+    look: look(
+      { file: path },
+      { ...tabLook({ kind: TAB_KIND.FILE, path }), card: hungCard({ kind: TAB_KIND.FILE, path }) },
+    ),
+    close: () => panel.onClose({ file: path }),
+  }));
   // A Changes tab hangs its pull request's card, naming the agent whose it is.
   const changesTabs = changes.map((tab) => {
     const subject = agentSubject(agents, tab.changes, held, shownAgent === tab.changes);
@@ -1144,9 +1067,7 @@ function stripTabs(input: {
           }),
         }),
         close: () => {
-          if ("draft" in drawn && input.planId !== undefined) {
-            discardCloudDraft(input.planId, drawn.id);
-          }
+          if ("draft" in drawn) discardCloudDraft(input.pagePlace, drawn.id);
           panel.onClose(tab);
         },
       },
@@ -1165,6 +1086,7 @@ function stripTabs(input: {
           card: hungCard({ kind: TAB_KIND.AGENT, subject, models }),
         }),
         close: () => panel.onClose(tab),
+        agent,
       },
     ];
   });
@@ -1179,6 +1101,13 @@ function stripTabs(input: {
     ...macTerminalTabs,
     ...cloudBrowserTabs,
   ];
+}
+
+/** What an agent's transcript's tab beside the Inbox opens on the agent's task, by the agent: its tab there, and its Terminal tab. */
+export interface TranscriptDoors {
+  readonly onOpenInTask: (agentId: string) => void;
+  /** None where the platform runs no terminals. */
+  readonly onOpenTerminal: ((agentId: string) => void) | undefined;
 }
 
 /** The ids the chosen tab and the panel it shows stand under: the tab controls the panel, and the panel is labelled by the tab. */
@@ -1208,7 +1137,9 @@ interface PanelWiring {
  * a Changes tab's Pin or Unpin, which puts it in the sidebar or takes it out; a
  * subagent's adds the two copies of its transcript, built from the rows the
  * tab draws (`transcript-copy.ts`) and answered with the window's toast,
- * which the bar's ⋯ also offers while the subagent's tab is the chosen one.
+ * which the bar's ⋯ also offers while the subagent's tab is the chosen one;
+ * an agent's beside the Inbox offers the agent's one menu, as its tab in
+ * the task's column does, with Open in task (`agent-actions.tsx`).
  * The "+" stands after all of them, apart from the strip, so it is never
  * dragged nor dropped before. ⌘W closes the chosen tab while the panel
  * holds the window's focus (`keys`).
@@ -1217,6 +1148,7 @@ function PanelTabs({
   panel,
   holder,
   taskId,
+  pinOn,
   task,
   keys,
   unread,
@@ -1227,12 +1159,11 @@ function PanelTabs({
   pages,
   terminals,
   cloudBrowsers,
-  shown,
-  repository,
   offers,
   held,
   actionsSlot,
   handed,
+  planMenu,
   onOpenAgent,
   onCloseMacTerminal,
   shownAgent,
@@ -1240,20 +1171,24 @@ function PanelTabs({
   inboxDrafted,
   activity,
   wiring,
+  shown,
+  transcriptDoors,
 }: {
   panel: SidePanelControl;
   holder: SidePanelHolder;
   /** The open task, which a tab's pin is of. */
   taskId: string;
+  /** What an agent's page's tab is pinned on; none where it offers no pin. */
+  pinOn: PinHolder | undefined;
   /** The task's name and status, which its Plan tab wears; none where they are not known. */
   task: PlanStanding | undefined;
   /** Whether the panel offers its keys: on screen, not on its way out, and holding the window's focus. */
   keys: boolean;
   unread: readonly StripTab[];
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** The open subagent tabs the task draws, in the strip's order. */
   subagents: readonly DrawnSubagent[];
-  /** The open file tabs of files shown on the task, in the strip's order. */
+  /** The open file tabs, in the strip's order. */
   files: readonly OpenFile[];
   /** The open Changes tabs of the task's agents, in the order opened. */
   changes: readonly ChangesStripTab[];
@@ -1263,10 +1198,6 @@ function PanelTabs({
   terminals: readonly TerminalStripTab[];
   /** The task's agents' cloud Browser tabs, as the service lists them. */
   cloudBrowsers: readonly DrawnCloudBrowser[];
-  /** Every code Luke showed on the task, whose notes the file tabs' cards say. */
-  shown: readonly TaskCodeShowing[];
-  /** The task's repository, whose showings alone the file tabs' cards read. */
-  repository: string | null;
   /** What the "+" offers (`panelEntries`), which the empty panel offers too. */
   offers: readonly AddEntry[];
   /** What the agents' and the delegated workers' tabs last drew, which the workers' hover cards preview. */
@@ -1275,6 +1206,8 @@ function PanelTabs({
   actionsSlot: HTMLElement | null;
   /** What the chosen tab's body hands its ⋯, under the tab it was drawn for (`useHandedTabActions`). */
   handed: HandedTabActions | undefined;
+  /** The task's document menu, which its Plan tab's ⋯ and right-click draw; none beside anything but a task's page. */
+  planMenu: DocumentMenu | undefined;
   /** Opens an agent's tab in the plan's column, as a Changes tab's card offers. */
   onOpenAgent: (agentId: string) => void;
   /** Closes a Mac terminal's tab, asking first while its run is going. */
@@ -1289,6 +1222,10 @@ function PanelTabs({
   activity?: StripActivity | undefined;
   /** The ids the chosen tab and the panel it shows stand under, so each names the other; none while no panel stands for the tab. */
   wiring: PanelWiring | undefined;
+  /** Whether the panel is on screen, which an agent's Archive and delete ask on. */
+  shown: boolean;
+  /** What a transcript's tab beside the Inbox opens on its task; none elsewhere. */
+  transcriptDoors: TranscriptDoors | undefined;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const kinds = stripTabs({
@@ -1301,14 +1238,12 @@ function PanelTabs({
     pages,
     terminals,
     cloudBrowsers,
-    shown,
-    repository,
     held,
     copied,
     onOpenAgent,
     onCloseMacTerminal,
     shownAgent,
-    pagePlace: pagePlaceOf(holder, taskId),
+    pagePlace: holderPlaceOf(holder, taskId),
     plan: task,
     planId: holder === SIDE_PANEL_HOLDER.TASK ? taskId : undefined,
     inboxWaiting: inbox?.waiting.length ?? 0,
@@ -1323,45 +1258,80 @@ function PanelTabs({
   const copyLink = useCopyLinkItem();
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
   // falls through to the menu bar, which closes the window (`app-menu.ts`).
+  // Close others closes every tab but the one at `at`, then shows it; none where there is no other.
+  const closeOthersOf = (entry: DrawnTab, at: number): (() => void) | undefined => {
+    const others = strip.filter((_, place) => place !== at);
+    if (others.length === 0) return undefined;
+    return () => {
+      for (const other of others) other.close();
+      panel.onChoose(entry.tab);
+    };
+  };
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
+  // ⌥⌘W, ⌥⌘C, ⇧⌥⌘C, and ⇧⌘O act on the chosen tab while the panel holds the keys, the copies and Open on GitHub over the open task's own.
+  const closeOthers =
+    chosen === undefined ? undefined : closeOthersOf(chosen, strip.indexOf(chosen));
+  useAppCommand(APP_COMMAND.CLOSE_OTHER_TABS, keys ? closeOthers : undefined);
+  const copyChosen = keys ? chosen?.copy : undefined;
+  useAppCommand(
+    APP_COMMAND.COPY_CONTENT,
+    copyChosen === undefined ? undefined : () => copyChosen(TRANSCRIPT_COPY.CONCISE),
+    FOCUSED_OFFER,
+  );
+  useAppCommand(
+    APP_COMMAND.COPY_FULL_TRANSCRIPT,
+    copyChosen === undefined ? undefined : () => copyChosen(TRANSCRIPT_COPY.FULL),
+    FOCUSED_OFFER,
+  );
+  const openOnGitHub =
+    keys && chosen !== undefined && handed !== undefined && sameTab(handed.tab, chosen.tab)
+      ? handedCommand(handed.actions, APP_COMMAND.OPEN_ON_GITHUB)
+      : undefined;
+  useAppCommand(APP_COMMAND.OPEN_ON_GITHUB, openOnGitHub, FOCUSED_OFFER);
+  // Note that the Plan tab offers no pin of its own: the task's Pin, in its document menu, is what pins the task to the sidebar.
   const pinOf = ({ tab, look }: DrawnTab): TabPin | undefined => {
-    if (holder !== SIDE_PANEL_HOLDER.TASK || !isPinnable(tab)) return undefined;
-    const pinned = panel.pins.some((pin) => pin.task === taskId && sameTab(pin.tab, tab));
+    // A task's page pins on the task; an agent's page pins where the sidebar draws the pin, as its page says; the Inbox's, nowhere.
+    const on: PinHolder | undefined =
+      holder === SIDE_PANEL_HOLDER.TASK
+        ? { task: taskId }
+        : holder === SIDE_PANEL_HOLDER.AGENT
+          ? pinOn
+          : undefined;
+    if (on === undefined || tab === SIDE_PANEL_TAB.PLAN || !isPinnable(tab)) return undefined;
+    const pinned = panel.pins.some((pin) => sameHolder(pin, on) && sameTab(pin.tab, tab));
     return {
       pinned,
-      onToggle: () => (pinned ? panel.onUnpin(taskId, tab) : panel.onPin(tab, look.label)),
+      onToggle: () => (pinned ? panel.onUnpin(on, tab) : panel.onPin(on, tab, look.label)),
     };
   };
   const doorsOf = (entry: DrawnTab, at: number): TabDoors => {
-    const others = strip.filter((_, place) => place !== at);
-    // Note that only a task's panel names its tabs by the task: an agent's page holds its panel under the agent's id, and names only its pages by it.
+    const { agent } = entry;
+    // The Plan tab's menu is the task's own, Copy link among it, so the tab adds none of its own.
+    const document = entry.tab === SIDE_PANEL_TAB.PLAN ? planMenu : undefined;
+    // Note that the Inbox's panel names no tab of its own: an agent's page holds its panel under the agent's id, and names its tabs by it.
     const linked =
-      holder === SIDE_PANEL_HOLDER.TASK
-        ? panelTabPlace(taskId, entry.tab)
-        : holder === SIDE_PANEL_HOLDER.AGENT && isPageTab(entry.tab)
-          ? ({ kind: LINK_PLACE.PAGE, agentId: taskId, pageId: entry.tab.page } as const)
-          : undefined;
+      document !== undefined || holder === SIDE_PANEL_HOLDER.INBOX
+        ? undefined
+        : panelTabPlace(holderPlaceOf(holder, taskId), entry.tab);
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
-      onCloseOthers:
-        others.length === 0
-          ? undefined
-          : () => {
-              for (const other of others) other.close();
-              panel.onChoose(entry.tab);
-            },
+      onCloseOthers: closeOthersOf(entry, at),
       pin: pinOf(entry),
       onCopy: entry.copy,
       copyLink: linked === undefined ? undefined : copyLink(linked),
+      onOpenInTask:
+        agent === undefined || transcriptDoors === undefined
+          ? undefined
+          : () => transcriptDoors.onOpenInTask(agent.id),
       handed:
         entry.look.selected && handed !== undefined && sameTab(handed.tab, entry.tab)
           ? handed.actions
           : undefined,
+      document,
     };
   };
-  useShownTab(activity?.onShown, strip, doorsOf);
   return (
     <PanelTabsRow>
       {activity?.slot
@@ -1377,18 +1347,37 @@ function PanelTabs({
           if (entry !== undefined) panel.onMove(entry.tab, to);
         }}
       >
-        {strip.map((entry, at) => (
-          <DoorsTab
-            key={tabKey(entry.tab)}
-            look={
-              entry.look.selected && wiring !== undefined
-                ? { ...entry.look, id: wiring.tab, controls: wiring.panel }
-                : entry.look
-            }
-            doors={doorsOf(entry, at)}
-            slot={activity === undefined ? actionsSlot : null}
-          />
-        ))}
+        {strip.map((entry, at) => {
+          const look =
+            entry.look.selected && wiring !== undefined
+              ? { ...entry.look, id: wiring.tab, controls: wiring.panel }
+              : entry.look;
+          const slot = activity === undefined ? actionsSlot : null;
+          // A phone's header names itself by the plan, and offers the task's menu on its Plan view, so the strip hands it every tab past the plan.
+          const onShown = entry.tab === SIDE_PANEL_TAB.PLAN ? undefined : activity?.onShown;
+          return entry.agent === undefined || transcriptDoors === undefined ? (
+            <DoorsTab
+              key={tabKey(entry.tab)}
+              look={look}
+              doors={doorsOf(entry, at)}
+              slot={slot}
+              onShown={onShown}
+            />
+          ) : (
+            <AgentMenuTab
+              key={tabKey(entry.tab)}
+              agent={entry.agent}
+              agents={agents}
+              look={look}
+              doors={doorsOf(entry, at)}
+              shown={shown}
+              keys={keys}
+              terminals={{ onOpenTerminal: transcriptDoors.onOpenTerminal }}
+              slot={slot}
+              onShown={onShown}
+            />
+          );
+        })}
       </TabStrip>
       <AddTabButton
         label="Open a tab"
@@ -1429,36 +1418,6 @@ function useMacTerminalClose(panel: SidePanelControl) {
 }
 
 /**
- * Hands a phone's header the tab the strip shows, past the plan, which the
- * header names itself by: its name as it changes, and what it offers on what
- * it shows, read as the header's ⋯ opens, since those actions are made anew
- * on every draw; and none once no tab past the plan is shown, or the strip
- * is gone.
- */
-function useShownTab(
-  onShown: ((shown: ShownTab | undefined) => void) | undefined,
-  strip: readonly DrawnTab[],
-  doorsOf: (entry: DrawnTab, at: number) => TabDoors,
-): void {
-  const at = strip.findIndex((entry) => entry.look.selected);
-  const chosen = strip[at];
-  const groups = useRef<TabActionGroups>([]);
-  useLayoutEffect(() => {
-    groups.current = chosen === undefined ? [] : tabContentGroups(doorsOf(chosen, at));
-  });
-  const label =
-    chosen === undefined || chosen.tab === SIDE_PANEL_TAB.PLAN ? undefined : chosen.look.label;
-  useEffect(() => {
-    onShown?.(
-      label === undefined
-        ? undefined
-        : { label, groups: (opener) => tabActionItems(groups.current, opener) },
-    );
-  }, [onShown, label]);
-  useEffect(() => () => onShown?.(undefined), [onShown]);
-}
-
-/**
  * A phone's Activity: every tab the panel holds but the plan's, each a row of
  * its glyph, its name, and what its tab says after it, newest arrivals in
  * the strip's own order, a press showing it across the panel; under them,
@@ -1495,7 +1454,7 @@ export function ActivityList({
           <List label="Activity" density={LIST_DENSITY.DENSE}>
             {open.map((entry) => (
               // Note that a tab's card hangs on its row as it hangs on the tab in the strip, since a row drops nothing its tab carries.
-              <RowHintOptions key={tabKey(entry.tab)} card={entry.look.card} cardBeside>
+              <RowHintOptions key={tabKey(entry.tab)} card={entry.look.card}>
                 <ListRow
                   leading={entry.look.icon}
                   title={entry.look.label}
@@ -1597,7 +1556,7 @@ interface DrawnSubagent {
  */
 function drawnSubagent(
   tab: SubagentStripTab,
-  status: CodingAgentStatus,
+  status: AgentStatus,
   held: HeldTranscripts,
 ): DrawnSubagent | undefined {
   const { delegation, subagent } = tab;
@@ -1625,7 +1584,7 @@ function drawnSubagents(
 ): readonly DrawnSubagent[] {
   return tabs.flatMap((tab): DrawnSubagent[] => {
     if (!drawsSubagent(tab, drawn)) return [];
-    const status = standings.get(tab.subagent) ?? CODING_AGENT_STATUS.RUNNING;
+    const status = standings.get(tab.subagent) ?? AGENT_STATUS.RUNNING;
     const subagent = drawnSubagent(tab, status, held);
     return subagent === undefined ? [] : [subagent];
   });
@@ -1647,7 +1606,7 @@ interface DelegationChoices {
 function delegationChoices(
   delegation: NonNullable<SubagentStripTab["delegation"]>,
   subagent: string,
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   held: HeldTranscripts,
 ): DelegationChoices {
   const parent = agents.agents?.find((agent) => agent.id === delegation.agent);
@@ -1664,7 +1623,7 @@ function delegationChoices(
  */
 function subagentCardReading(
   drawn: DrawnSubagent,
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   held: HeldTranscripts,
   chosen: boolean,
 ): () => CardReading {
@@ -1735,25 +1694,19 @@ export interface TaskCards {
  * it opens, so a kind added to `TOOL_TARGET` is a choice made here.
  */
 export function taskCards(input: {
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   held: HeldTranscripts;
   chosen: (tab: StripTab) => boolean;
-  /** Every code Luke showed on the task, whose note on a `show_code` call's lines its row's card says. */
-  shownCode: readonly TaskCodeShowing[];
   /** What the transcript stands on, its task or its agent on no task, which a page's row reads its card from and a plan's row names; none where its rows open neither. */
   pages: PagePlace | undefined;
   /** The plan's task, which an agent's plan card names as its sender. */
   task?: BriefTask | undefined;
 }): TaskCards {
-  const { agents, held, chosen, shownCode, pages, task } = input;
+  const { agents, held, chosen, pages, task } = input;
   // The task the transcript stands on, whose Plan tab a row opens; none for an agent on no task.
   const taskId = pages !== undefined && "taskId" in pages ? pages.taskId : undefined;
   const subjectOf = (opened: ToolTarget, name: string | undefined): CardSubject | undefined => {
     switch (opened.kind) {
-      case TOOL_TARGET.SHOWN_CODE: {
-        const note = shownCode.find((each) => each.callId === opened.call)?.code.note;
-        return { kind: TAB_KIND.FILE, path: opened.ref.path, note };
-      }
       case TOOL_TARGET.AGENT: {
         const subject = agentSubject(agents, opened.agent, held, chosen({ agent: opened.agent }));
         return { kind: TAB_KIND.AGENT, subject, models: agents.models };
@@ -1768,8 +1721,6 @@ export function taskCards(input: {
           : { kind: TAB_KIND.PLAN, taskId, name: task?.name, status: task?.status };
       case TOOL_TARGET.TASK:
         return { kind: TAB_KIND.PLAN, taskId: opened.task, name };
-      case TOOL_TARGET.BOARD:
-        return { kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.BOARD };
       case TOOL_TARGET.INBOX:
         return { kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.INBOX };
     }
@@ -1818,8 +1769,8 @@ export function taskCards(input: {
   };
 }
 
-/** An agent on the task as its tab names it, which heads the code it showed and its notes on it; none for an agent the task does not list. */
-function taskAgentLabel(agents: CodingAgentsControl, agentId: string): string | undefined {
+/** An agent on the task as its tab names it; none for an agent the task does not list. */
+function taskAgentLabel(agents: AgentsControl, agentId: string): string | undefined {
   const agent = agents.agents?.find((each) => each.id === agentId);
   return agent === undefined ? undefined : agentName(agent, agents.models);
 }
@@ -1829,11 +1780,9 @@ function TabContent({
   tab,
   taskId,
   codeFilesRead,
+  repositoryPlace,
   pagePlace,
   repository,
-  board,
-  shownCode,
-  codeFailed,
   files,
   pages,
   agents,
@@ -1844,11 +1793,9 @@ function TabContent({
   cards,
   onWorkerStatus,
   onWorkerHeld,
-  onOpenFile,
   fileTree,
   onBrowseFile,
   onFileHistory,
-  onFoldNote,
   onCloseTab,
   pullRequestViews,
   onPullRequestView,
@@ -1863,21 +1810,19 @@ function TabContent({
 }: {
   tab: SidePanelTab;
   taskId: string;
-  /** What the panel's pages stand on: the task, or the agent on no task whose page holds the panel. */
+  /** What the panel's pages and cloud Browser drafts stand on: the task, or the agent whose page holds the panel. */
   pagePlace: PagePlace;
   /** The task's repository, which a file's tab is read from as it stands now. */
   repository: string | null;
-  board: Board | undefined;
-  shownCode: readonly TaskCodeShowing[] | undefined;
-  /** Whether a File tab reads the files code was shown in: a task's panel's does, and an agent's page's, with no task to read them by, does not. */
+  /** Whether a File tab reads the task's files: a task's panel's does, and a panel standing for no task does where it reads its repository by `repositoryPlace`. */
   codeFilesRead: boolean;
-  /** The task's code read that did not land, where the last did not. */
-  codeFailed: CodeFailed | undefined;
+  /** The workspace and repository a File tab reads through where the panel stands for no task; none where it stands for one. */
+  repositoryPlace: PanelRepositoryPlace | undefined;
   /** The open file tabs, which a file's tab reads its lit lines from. */
   files: readonly OpenFile[];
   /** The plan's pages, which a page's tab draws its newest version of. */
   pages: readonly PageLine[];
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   standings: WorkerStandings;
   /** Whether the panel is on screen, so a subagent's tab knows to follow its transcript. */
   shown: boolean;
@@ -1888,19 +1833,15 @@ function TabContent({
   /** What a worker's rows hang, its agent's cards (`taskCards`). */
   cards: TaskCards;
   /** A delegated worker's page said where it stands now. */
-  onWorkerStatus: (callId: string, status: CodingAgentStatus) => void;
+  onWorkerStatus: (callId: string, status: AgentStatus) => void;
   /** A delegated worker's tab drew its transcript anew, by the call that started it. */
   onWorkerHeld: TabViews["onWorkerHeld"];
-  /** Opens a file of the task's repository in a tab of its own, the reference's lines lit. */
-  onOpenFile: (ref: CodeRef, commit?: string) => void;
   /** Whether a File or Changes tab's tree is open, which holds for every one of them alike, and its toggle. */
   fileTree: TreeShown;
   /** Shows a file browsed to from a File tab's tree or breadcrumbs, or chosen with ⌘ in the Changes tree (`SidePanelControl.onBrowseFile`). */
   onBrowseFile: (from: string | undefined, path: string, newTab: boolean) => void;
   /** Walks a File tab's history a step (`SidePanelControl.onFileHistory`). */
   onFileHistory: (from: string, step: FileHistoryStep) => void;
-  /** Folds or opens a note on a File tab (`SidePanelControl.onFoldNote`). */
-  onFoldNote: (path: string, callId: string, folded: boolean) => void;
   /** Closes a tab whose subject is gone, as an archived agent's Terminal tab closes. */
   onCloseTab: (tab: SidePanelTab) => void;
   /** What each Pull request tab shows, by agent and number (`SidePanelControl.pullRequestViews`). */
@@ -1909,7 +1850,7 @@ function TabContent({
   onPullRequestView: SidePanelControl["onPullRequestView"];
   /** Whether a Terminal tab's shells list is open, which holds for every one of them alike, and its toggle. */
   shellsList: { readonly open: boolean; readonly onToggle: () => void };
-  /** The task's agents' cloud Browser tabs, which a cloud Browser tab reads its tab from. */
+  /** The holder's cloud Browser tabs, which a cloud Browser tab reads its tab from. */
   cloudBrowsers: readonly DrawnCloudBrowser[];
   /** Lands on the tab a draft opened, the draft let go of; or discards a draft. */
   cloudDrafts: {
@@ -1941,7 +1882,7 @@ function TabContent({
       return (
         <CloudBrowserDraftPane
           key={drawn.id}
-          taskId={taskId}
+          place={pagePlace}
           draft={drawn.draft}
           owner={drawn.owner}
           onOpened={(opened) => cloudDrafts.onOpened(drawn.id, opened)}
@@ -1952,7 +1893,6 @@ function TabContent({
     return (
       <CloudBrowserPane
         key={tab.cloudBrowser}
-        taskId={taskId}
         tab={drawn.tab}
         owner={drawn.owner}
         shown={shown}
@@ -2034,11 +1974,19 @@ function TabContent({
           taskId={taskId}
           repository={repository}
           file={file}
-          snippet={snippetOf(shownCode, file)}
-          shownCode={shownCode}
-          readFile={(window) => act(ACT_KIND.TASKS_FILE, { taskId, ...window })}
-          readFolder={(path) => act(ACT_KIND.TASKS_TREE, { planId: taskId, path })}
-          readWhole={() => act(ACT_KIND.TASKS_TREE, { planId: taskId, path: "", recursive: true })}
+          readFile={(window) =>
+            act(ACT_KIND.TASKS_FILE, { ...(repositoryPlace ?? { taskId }), ...window })
+          }
+          readFolder={(path) =>
+            act(ACT_KIND.TASKS_TREE, { ...(repositoryPlace ?? { planId: taskId }), path })
+          }
+          readWhole={() =>
+            act(ACT_KIND.TASKS_TREE, {
+              ...(repositoryPlace ?? { planId: taskId }),
+              path: "",
+              recursive: true,
+            })
+          }
           openGitHub={(url) => appPlatform().openGitHub(url)}
           treeOpen={fileTree.open}
           onToggleTree={fileTree.onToggle}
@@ -2049,8 +1997,6 @@ function TabContent({
             canGoForward: (file.forward?.length ?? 0) > 0,
             onStep: (step) => onFileHistory(file.path, step),
           }}
-          onFoldNote={(callId, folded) => onFoldNote(file.path, callId, folded)}
-          agentLabel={(agentId) => taskAgentLabel(agents, agentId)}
         />
       </Fragment>
     );
@@ -2075,7 +2021,7 @@ function TabContent({
           agentId={tab.delegation.agent}
           callId={tab.subagent}
           task={tab.delegation.task}
-          status={standings.get(tab.subagent) ?? CODING_AGENT_STATUS.RUNNING}
+          status={standings.get(tab.subagent) ?? AGENT_STATUS.RUNNING}
           control={agents}
           shown={shown}
           onStatus={(status) => onWorkerStatus(tab.subagent, status)}
@@ -2094,34 +2040,6 @@ function TabContent({
       return <>{plan}</>;
     case SIDE_PANEL_TAB.INBOX:
       return <>{inbox}</>;
-    case SIDE_PANEL_TAB.BOARD:
-      // An archived task's board only shows, as its agents only read.
-      return (
-        <TaskBoard taskId={taskId} board={board} viewOnly={agents.onUnarchive !== undefined} />
-      );
-    case SIDE_PANEL_TAB.CODE:
-      // Note that no code read yet is a wait, and only code read as none says so.
-      if (shownCode === undefined && codeFailed !== undefined) {
-        return (
-          <ErrorState onRetry={codeFailed.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-            {UNREAD_CODE_LINE}
-          </ErrorState>
-        );
-      }
-      if (shownCode === undefined) return <SpinnerRegion delay label={readingWords("the code")} />;
-      return shownCode.length === 0 ? (
-        <EmptyState icon={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.CODE }).icon}>
-          {NO_CODE_LINE}
-        </EmptyState>
-      ) : (
-        <CodePane
-          shown={shownCode}
-          calls={NO_CODE_CALLS}
-          taskId={codeFilesRead ? taskId : undefined}
-          agentLabel={(agentId) => taskAgentLabel(agents, agentId)}
-          onOpenFile={codeFilesRead ? onOpenFile : undefined}
-        />
-      );
     case SIDE_PANEL_TAB.COMMENTS:
       return (
         <PlanCommentsTab
@@ -2356,10 +2274,9 @@ export function SidePanel({
   unread,
   holder,
   taskId,
+  pinOn,
   repository,
-  board,
-  shownCode,
-  codeFailed,
+  repositoryPlace,
   pages,
   agents,
   openAgents,
@@ -2370,9 +2287,11 @@ export function SidePanel({
   onOpenTarget,
   banner,
   plan,
+  planMenu,
   task,
   inbox,
   transcript,
+  transcriptDoors,
   activity: taskActivity,
   phone,
 }: SidePanelDrawing & {
@@ -2382,16 +2301,20 @@ export function SidePanel({
   holder: SidePanelHolder;
   /** The plan the panel stands beside, or the agent where it stands beside the agent's own page. */
   taskId: string;
+  /**
+   * What a tab of an agent's own page is pinned on: the agent while the
+   * sidebar lists it standing, where the pin is drawn, or the task of an
+   * agent on one; none for an archived agent, whose page offers no pin, and
+   * beside a task's page or the Inbox, whose holder decides it.
+   */
+  pinOn?: PinHolder | undefined;
   /** The task's repository, `owner/name`, or none before one is chosen. */
   repository: string | null;
-  board: Board | undefined;
-  /** Every code Luke showed on the task, oldest first. */
-  shownCode: readonly TaskCodeShowing[] | undefined;
-  /** The task's code read that did not land, where the last did not; none where the panel reads no task's code. */
-  codeFailed: CodeFailed | undefined;
+  /** Where the panel stands for no task, an agent's page or an Inbox item of an agent on none: the workspace and repository its File tabs read through; none beside a task, or where no repository is known. */
+  repositoryPlace?: PanelRepositoryPlace | undefined;
   /** The pages agents wrote for the plan, each by its newest version; none where it has none. */
   pages: readonly PageLine[] | undefined;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   /** The task's agents whose tabs stand open in the task's column, whose workers' tabs stand here; nothing while unread. */
   openAgents: readonly string[] | undefined;
   /** The agent whose tab follows its run in the plan's column, whose card previews its latest step (`followedAgent`); none while another tab is shown or the column is out of sight. */
@@ -2408,6 +2331,8 @@ export function SidePanel({
   banner?: React.ReactNode;
   /** The plan's document, which its Plan tab shows; none beside anything but a task's page. */
   plan?: React.ReactNode;
+  /** The task's document menu (`task-actions.tsx`), which its Plan tab's ⋯ and right-click draw; none beside anything but a task's page. */
+  planMenu?: DocumentMenu | undefined;
   /** The task whose plan that is, whose name and status its Plan tab wears; none beside anything but a task's page. */
   task?: PlanStanding | undefined;
   /** The task's Inbox, which its Inbox tab shows, its board, whose items waiting on the developer the tab counts and its card says, and whether a card holds a draft, which the tab marks; none elsewhere. */
@@ -2420,6 +2345,8 @@ export function SidePanel({
     | undefined;
   /** An agent's transcript and composer, which its transcript tab shows beside the Inbox; none elsewhere, where the agent's column shows them. */
   transcript?: ((agentId: string) => React.ReactNode) | undefined;
+  /** What the agent of a transcript's tab opens on its task, which its menu offers; none where no transcript's tab stands. */
+  transcriptDoors?: TranscriptDoors | undefined;
   /**
    * A phone's Activity (`task-pane-switcher.tsx`): whether the panel lists
    * its tabs rather than showing one, and the way to ask for the list or
@@ -2534,16 +2461,12 @@ export function SidePanel({
         chosen: (chosen) =>
           (chosenTab !== undefined && sameTab(chosen, chosenTab)) ||
           (shownAgent !== undefined && sameTab(chosen, { agent: shownAgent })),
-        shownCode: shownCode ?? [],
-        pages: pagePlaceOf(holder, taskId),
+        pages: holderPlaceOf(holder, taskId),
       }),
-    [agents, drawnTranscripts, chosenTab, shownAgent, shownCode, holder, taskId],
+    [agents, drawnTranscripts, chosenTab, shownAgent, holder, taskId],
   );
-  // The file tabs of files shown on the task or browsed to on it, in the strip's order.
-  const offered = shownFiles(shownCode ?? []);
-  const files = panel.files.filter(
-    (file) => file.browsedOn === taskId || offered.some((ref) => ref.path === file.path),
-  );
+  // The file tabs of files opened on the task, in the strip's order.
+  const files = panel.files.filter((file) => file.browsedOn === taskId);
   // An agent's Changes tab stands while the agent is the task's, archived or not, as its pull request does.
   const changes = panel.changes.filter((each) =>
     drawsChanges(each, { taskAgents: agents.heldIds }),
@@ -2554,20 +2477,17 @@ export function SidePanel({
   const terminals = !terminalsHere
     ? NO_TERMINALS
     : panel.terminals.filter((each) => drawsTerminal(each, { taskAgents: agents.agentIds }));
-  const browserOn = useExperiment(EXPERIMENT.BROWSER);
-  // The task's agents' cloud Browser tabs stand while the experiment is on,
-  // on every platform, since the page draws them from the service and needs
-  // nothing of main's; on a task's own panel alone, never an agent's page's or
-  // the Inbox's, which borrows its task's panel.
-  const cloudListing = browserOn && holder === SIDE_PANEL_HOLDER.TASK;
-  const cloudListed = useCloudBrowserTabs(taskId, cloudListing);
+  // The cloud Browser tabs stand on every platform, since the page draws them
+  // from the service and needs nothing of main's: an agent's page lists its
+  // agent's, on a task or on none, and a task's panel every one of its
+  // agents', never the Inbox's, which borrows its task's panel.
+  const cloudListing = holder !== SIDE_PANEL_HOLDER.INBOX;
+  const cloudPlace = useMemo(() => holderPlaceOf(holder, taskId), [holder, taskId]);
+  const cloudListed = useCloudBrowserTabs(cloudPlace, cloudListing);
   // A draft of a tab in an agent's browser stands after the tabs the service lists, until it opens one.
-  const cloudDraftsHeld = useCloudBrowserDrafts(taskId, cloudListing);
+  const cloudDraftsHeld = useCloudBrowserDrafts(cloudPlace, cloudListing);
   const cloudBrowsers = useMemo(() => {
-    const ownerOf = (agentId: string | null): CloudBrowserOwner => {
-      if (agentId === null) {
-        return { name: LUKE_NAME, icon: <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} /> };
-      }
+    const ownerOf = (agentId: string): CloudBrowserOwner => {
       const subject = agentSubject(agents, agentId, drawnTranscripts, false);
       return { name: subject.name, icon: <AgentGlyph agent={subject.agent} /> };
     };
@@ -2581,14 +2501,14 @@ export function SidePanel({
     const drawn = cloudBrowsers.find((each) => each.id === id);
     return drawn === undefined ? TAB_WORDS.BROWSER : cloudBrowserTitleOf(drawn);
   };
-  // The "+" offers a new tab in each of the task's coding agents' cloud browsers, the one viewed first.
+  // The "+" offers a new tab in each of the holder's coding agents' cloud browsers, the one viewed first.
   const viewedAgent = shownAgent ?? (panel.tab === undefined ? undefined : agentOfTab(panel.tab));
   const cloudDrafts = {
     onOpened: (draftId: string, opened: AgentBrowserTab) => {
-      discardCloudDraft(taskId, draftId);
+      discardCloudDraft(cloudPlace, draftId);
       panel.onChoose({ cloudBrowser: opened.id });
     },
-    onDiscard: (draftId: string) => discardCloudDraft(taskId, draftId),
+    onDiscard: (draftId: string) => discardCloudDraft(cloudPlace, draftId),
   };
   // A page's tab stands while the plan lists the page.
   const taskPages = pages ?? NO_PAGES;
@@ -2600,7 +2520,7 @@ export function SidePanel({
     tab === undefined
       ? undefined
       : isTranscriptTab(tab)
-        ? (taskAgentLabel(agents, tab.transcript) ?? TAB_WORDS.CODING_AGENT)
+        ? (taskAgentLabel(agents, tab.transcript) ?? TAB_WORDS.AGENT)
         : isSubagentTab(tab)
           ? subagents.find((each) => sameTab(each.tab, tab))?.label
           : isFileTab(tab)
@@ -2631,20 +2551,16 @@ export function SidePanel({
     taskId,
     panel,
     agents,
-    shownCode: shownCode ?? [],
     pages: taskPages,
     onNewTerminal: terminalsHere
       ? (agentId: string) => openTerminal(agentId, TERMINAL_ASK.NEW)
       : undefined,
-    browsers: browserOn,
     viewedAgent,
     plan: task,
     cards: {
       agents,
       held: drawnTranscripts,
-      shown: shownCode ?? [],
-      repository,
-      pagePlace: pagePlaceOf(holder, taskId),
+      pagePlace: holderPlaceOf(holder, taskId),
       shownAgent,
       onOpenAgent: (agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent }),
     },
@@ -2682,6 +2598,7 @@ export function SidePanel({
         <PanelTabs
           panel={panel}
           holder={holder}
+          pinOn={pinOn}
           taskId={taskId}
           keys={keys && focused}
           unread={unread}
@@ -2692,19 +2609,20 @@ export function SidePanel({
           pages={pageTabs}
           terminals={terminals}
           cloudBrowsers={cloudBrowsers}
-          shown={shownCode ?? []}
-          repository={repository}
           offers={offers}
           held={drawnTranscripts}
           wiring={wiring}
           actionsSlot={actionsSlot}
           handed={handed}
+          planMenu={planMenu}
           onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
           onCloseMacTerminal={macTerminalClose.close}
           shownAgent={shownAgent}
           inbox={inbox?.board}
           inboxDrafted={inbox?.drafted ?? false}
           task={task}
+          shown={shown}
+          transcriptDoors={transcriptDoors}
           activity={
             switched
               ? {
@@ -2749,8 +2667,7 @@ export function SidePanel({
           {panel.closedTabs.length === 0 && !offersMore ? null : <NoTabs entries={offers} />}
         </Fill>
       ) : (
-        // The Board is drawn on a canvas, which keeps a find of its own, and
-        // a page's words stand in a sandboxed frame no find of the window
+        // A page's words stand in a sandboxed frame no find of the window
         // reaches, so a page's tab finds itself, through its frame or in its
         // source; a cloud Browser tab's page is drawn on a canvas, which no
         // find of the window reaches either.
@@ -2761,13 +2678,7 @@ export function SidePanel({
           // Note that the words stay as the fallback, because a tab not yet listed (a cloud Browser's, while its listing is read) is no element to name the panel by.
           aria-label={label}
           aria-labelledby={tabId}
-          active={
-            keys &&
-            focused &&
-            tab !== SIDE_PANEL_TAB.BOARD &&
-            !isPageTab(tab) &&
-            !isCloudBrowserTab(tab)
-          }
+          active={keys && focused && !isPageTab(tab) && !isCloudBrowserTab(tab)}
           subject={{ task: taskId, tab }}
         >
           {/* Typing into a preview, as a review's comment or a terminal's line, keeps it as a tab of its own. */}
@@ -2782,12 +2693,10 @@ export function SidePanel({
               <TabContent
                 tab={tab}
                 taskId={taskId}
-                codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK}
-                pagePlace={pagePlaceOf(holder, taskId)}
+                codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK || repositoryPlace !== undefined}
+                repositoryPlace={repositoryPlace}
+                pagePlace={holderPlaceOf(holder, taskId)}
                 repository={repository}
-                board={board}
-                shownCode={shownCode}
-                codeFailed={codeFailed}
                 files={files}
                 pages={taskPages}
                 agents={agents}
@@ -2798,11 +2707,9 @@ export function SidePanel({
                 cards={cards}
                 onWorkerStatus={views.onWorkerStatus}
                 onWorkerHeld={views.onWorkerHeld}
-                onOpenFile={panel.onPreviewFile}
                 fileTree={fileTree}
                 onBrowseFile={panel.onBrowseFile}
                 onFileHistory={panel.onFileHistory}
-                onFoldNote={panel.onFoldNote}
                 onCloseTab={panel.onClose}
                 pullRequestViews={panel.pullRequestViews}
                 onPullRequestView={panel.onPullRequestView}
@@ -2875,8 +2782,10 @@ const PANEL_LABEL = "Panel";
 /**
  * A phone's panel's header over a page other than a task's (`SidePanel`'s
  * `phone`): the way back's glyph, shutting the panel to the page it names,
- * the tab shown, or the list of tabs, centred, and a ⋯ holding the list,
- * the tab's own actions, each naming the tab under it, and Close.
+ * the tab shown, or the list of tabs, centred, and a ⋯ holding the list and
+ * Close, the tab's keeping, which prints ⌘W as the tab's own Close does,
+ * then the tab's own actions, each naming the tab under it, its Permanently
+ * delete last.
  */
 function PanelPhoneHead({
   back,
@@ -2910,20 +2819,23 @@ function PanelPhoneHead({
                 : shown
                     .groups(opener)
                     .map((group) =>
-                      group.map((item) => ({ ...item, detail: item.detail ?? shown.label })),
+                      group.map((item) =>
+                        "items" in item ? item : { ...item, detail: item.detail ?? shown.label },
+                      ),
                     );
             return [
-              [{ label: TABS, icon: <ListIcon />, checked: listing, onSelect: onList }],
+              [
+                { label: TABS, icon: <ListIcon />, checked: listing, onSelect: onList },
+                ...(listing || onCloseShown === undefined
+                  ? []
+                  : [
+                      {
+                        ...commandAction(PANEL_COMMAND.CLOSE_TAB, onCloseShown, true),
+                        detail: shown?.label ?? title,
+                      },
+                    ]),
+              ],
               ...tabActions,
-              listing || onCloseShown === undefined
-                ? []
-                : [
-                    {
-                      label: `Close ${shown?.label ?? title}`,
-                      icon: <CloseIcon />,
-                      onSelect: onCloseShown,
-                    },
-                  ],
             ].filter((group) => group.length > 0);
           }}
         />

@@ -42,13 +42,7 @@ import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
 import { startedAndStopped } from "./effect/composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
-import {
-  AccountSource,
-  AppIdentity,
-  type Environment,
-  SettingsChangedElsewhere,
-} from "./effect/seams.js";
-import { settingsOverrides } from "./effect/settings-overrides.js";
+import { AccountSource, AppIdentity, SettingsChangedElsewhere } from "./effect/seams.js";
 import { EXPERIMENT_UNANSWERED, experimentWriter } from "./experiment-write.js";
 import { removeRetiredStore } from "./retired-store.js";
 import { hostSettingSideEffects } from "./settings-side-effects.js";
@@ -63,8 +57,8 @@ const EXPERIMENT_SIGNED_OUT = "Sign in to turn on an experiment.";
 /**
  * What the settings write path reaches in the other concerns. Every one of
  * them is a genuine back-edge: a setting is where the developer changes what
- * an account or a voice does, so the write cannot be the leaf of the graph
- * however much simpler that would be.
+ * an account does, so the write cannot be the leaf of the graph however much
+ * simpler that would be.
  */
 interface SettingsLinks {
   /** What authorizes the counted events and the account preferences on the signed-in account. */
@@ -77,9 +71,6 @@ interface SettingsLinks {
   readonly readAccountKey: () => Effect.Effect<string | undefined>;
   /** Settles on the account the service names now, before a write keyed on the account. */
   readonly confirmAccount: () => Effect.Effect<void>;
-  setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;
-  /** The standing live session ended once the voice moved, since a session keeps the voice it was created with. */
-  readonly endLiveSession: Effect.Effect<void>;
 }
 
 /** The fields a reset keeps, as a call names them: none where absent, and nothing usable where any is not a setting. */
@@ -129,18 +120,11 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
   function* (): Effect.fn.Return<
     SettingsComposer,
     never,
-    | HostKernelTag
-    | Environment
-    | AccountSource
-    | AppIdentity
-    | FileSystem.FileSystem
-    | Path.Path
-    | Scope.Scope
+    HostKernelTag | AccountSource | AppIdentity | FileSystem.FileSystem | Path.Path | Scope.Scope
   > {
     const kernel = yield* HostKernelTag;
     const { tokenCipher } = yield* AccountSource;
     const identity = yield* AppIdentity;
-    const overrides = yield* settingsOverrides;
     const changedElsewhere = yield* Effect.serviceOption(SettingsChangedElsewhere);
     const fileSystemContext = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
     const fileSystem = yield* FileSystem.FileSystem;
@@ -158,9 +142,6 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
 
     const store = new SettingsStore({
       directory: () => kernel.stateRoot,
-      // A fixture or evidence run refuses the account it holds, so nothing is
-      // reported as available that would not actually happen.
-      credentialsUsable: runMode.observesProviders,
       // A run from source shares no usage data until its developer turns it on.
       packaged: identity.packaged,
       // The account source's own: a source that keeps no tokens here hands none.
@@ -170,7 +151,6 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         Effect.flatMap(late.peek, (links) =>
           Option.isSome(links) ? links.value.readAccountKey() : Effect.succeed(undefined),
         ),
-      overrides,
       fileSystem,
       path,
       // A file another writer shares, as the shell's change signal says, is written through a temporary file of this host's own.
@@ -420,8 +400,6 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     }
 
     const sideEffects = hostSettingSideEffects({
-      setVoice: (voice) => linked((links) => links.setVoice(voice)),
-      endLiveSession: linked((links) => links.endLiveSession),
       shareUsageData: (on) =>
         Effect.sync(() => {
           if (on) productEvents.arm();
@@ -464,9 +442,9 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     /**
      * The file as another writer left it, read again: each setting standing
      * other than its side effect last carried it has that side effect here,
-     * as a write of this host's own has (a voice another tab chose reaches
-     * this tab's live source), and the panel is sent the settings as they
-     * now stand.
+     * as a write of this host's own has (usage data another tab switched off
+     * disarms this tab's counted events), and the panel is sent the settings
+     * as they now stand.
      */
     const applyChangedElsewhere = Effect.gen(function* () {
       yield* store.reload();

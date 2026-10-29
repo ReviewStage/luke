@@ -2,20 +2,16 @@
 
 import assert from "node:assert/strict";
 import { MOTION_DELAY_MS } from "@luke/brand";
-import {
-  CODING_AGENT_ARCHIVER,
-  CODING_AGENT_STATUS,
-  type CodingAgentArchivedBy,
-} from "@luke/features/coding-agent-wire";
+import { ARCHIVE_DRAWN } from "@luke/features/agent-view";
+import { AGENT_ARCHIVER, AGENT_STATUS, type AgentArchivedBy } from "@luke/features/agent-wire";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { ARCHIVE_DRAWN } from "../tasks/use-coding-agents.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { ArchivedAgents } from "./agent-archive.js";
 
 /**
@@ -46,7 +42,7 @@ afterEach(() => {
 
 /** A summary's Archived fold, its one archived agent drawn over a registry of its own. */
 function drawArchived(): HTMLElement {
-  const agents = codingAgentsControl({
+  const agents = agentsControl({
     archived: [
       {
         id: "agent-8",
@@ -55,7 +51,7 @@ function drawArchived(): HTMLElement {
         effort: "high",
         title: "Retry audit",
         createdAt: 1,
-        status: CODING_AGENT_STATUS.CANCELLED,
+        status: AGENT_STATUS.CANCELLED,
         turnId: null,
         archivedAt: 2,
       },
@@ -107,11 +103,11 @@ test("an archived agent's row hangs its tab's card beside it, its name and when 
 });
 
 /** The notes the card hung over the archived agent's row says, with the reader and who archived it given. */
-function archivedCardNotes(me: string | undefined, archivedBy: CodingAgentArchivedBy): string[] {
+function archivedCardNotes(me: string | undefined, archivedBy: AgentArchivedBy): string[] {
   // Note that each draw unfolds Archived afresh, so the fold the last one kept is let go.
   window.localStorage.clear();
   const agents = {
-    ...codingAgentsControl({
+    ...agentsControl({
       archived: [
         {
           id: "agent-8",
@@ -120,7 +116,7 @@ function archivedCardNotes(me: string | undefined, archivedBy: CodingAgentArchiv
           effort: "high",
           title: "Retry audit",
           createdAt: 1,
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           turnId: null,
           archivedAt: 2,
           archivedBy,
@@ -151,7 +147,7 @@ function archivedCardNotes(me: string | undefined, archivedBy: CodingAgentArchiv
 test("an archived agent's card says who archived it, an agent or Luke for a member, the reader as you, the reason given, and an archive made with its task", () => {
   const dean = { userId: "user-dean", name: "Dean Stratakos" };
   const byAgent = archivedCardNotes("user-sam", {
-    by: CODING_AGENT_ARCHIVER.AGENT,
+    by: AGENT_ARCHIVER.AGENT,
     member: dean,
     agent: { id: "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b", name: "Bill by seat" },
     reason: "Its pull request merged.",
@@ -160,13 +156,13 @@ test("an archived agent's card says who archived it, an agent or Luke for a memb
     for (const root of roots.splice(0)) root.unmount();
   });
   document.body.innerHTML = "";
-  const byLuke = archivedCardNotes("user-dean", { by: CODING_AGENT_ARCHIVER.LUKE, member: dean });
+  const byLuke = archivedCardNotes("user-dean", { by: AGENT_ARCHIVER.LUKE, member: dean });
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
   document.body.innerHTML = "";
   const withTask = archivedCardNotes("user-sam", {
-    by: CODING_AGENT_ARCHIVER.MEMBER,
+    by: AGENT_ARCHIVER.MEMBER,
     member: dean,
     withTask: true,
   });
@@ -185,7 +181,7 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
     let answer: () => void = () => undefined;
     let unarchives = 0;
     let drawn: string | undefined;
-    const agents = codingAgentsControl({
+    const agents = agentsControl({
       archived: [
         {
           id: "agent-8",
@@ -194,7 +190,7 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
           effort: "high",
           title: "Retry audit",
           createdAt: 1,
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           turnId: null,
           archivedAt: 2,
         },

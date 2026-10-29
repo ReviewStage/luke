@@ -15,10 +15,10 @@
  * and listed in `PRIVACY.md`: the feedback dialog, whose screenshots are
  * pictures of the person's screen, a task's title and the editor its document
  * is edited in, whose masked value would still record the rhythm of the
- * typing, and its whiteboard, transcript, Work, Code, File, and page tabs,
+ * typing, and its transcript, Work, Code, File, and page tabs,
  * version history, Inbox, and coding agents' tabs and their Terminal tabs,
  * Browser tabs with the still of a page they draw and a cloud Browser
- * tab's live view, and ⌃Tab's previews, each a still of a tab, among others. The whiteboard, a Terminal tab, and a cloud
+ * tab's live view, and ⌃Tab's previews, each a still of a tab, among others. A Terminal tab and a cloud
  * Browser tab's live view are the surfaces that draw
  * their words on a canvas, which the text masking cannot reach, so their
  * block is their only line, and canvas recording is held off by name rather
@@ -73,9 +73,8 @@ const POSTHOG_HOST = "https://us.i.posthog.com";
  * that the canvas option is set here rather than left to the library's
  * default, because the library reads it before the remote configuration and a
  * project that switched canvas recording on would otherwise turn it on here.
- * The console and the network are kept out on the same terms, because the
- * desktop's panel runs Luke's avatar, whose LiveKit room names its session
- * token in a refused join's address and in the console line that reports it.
+ * The console and the network are kept out on the same terms, because a
+ * request's address or a console line can carry a token as freely as a link.
  */
 const WORDS = new Set([
   "title",

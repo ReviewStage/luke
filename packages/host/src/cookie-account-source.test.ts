@@ -7,11 +7,10 @@ import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/cr
 import { accountCall, CALL_FAULT, HOSTED_SERVICE_PATH, NO_CREDENTIAL } from "@luke/features";
 import { PRODUCT_EVENT } from "@luke/features/analytics";
 import { ProductEventSender } from "@luke/features/analytics/sender";
+import { LINK_OPEN } from "@luke/features/link-open";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD } from "@luke/gateway";
-import { LIVE_VOICE } from "@luke/live";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { EXPERIMENT } from "@luke/settings";
-import { scriptedOpenSocket } from "@luke/voice/testing";
 import { ACTION_RESULT_STATUS, HTTP_METHOD, isRecord } from "@luke/wire";
 import {
   HTTP_STATUS,
@@ -50,7 +49,7 @@ const ORIGIN = "https://luke.example.test";
 const ACCOUNT_BASE_URL = `${ORIGIN}/api/auth`;
 const PROVIDER_CONSENT = "https://github.com/login/oauth/authorize?state=state-1";
 /** A hosted route the account reaches, which refuses a request with no session behind it. */
-const HOSTED_ROUTE = HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE;
+const HOSTED_ROUTE = HOSTED_SERVICE_PATH.ACCOUNT_ACCESS;
 const CONTEXT = { client: { clientId: "browser", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
 const USER = {
@@ -69,6 +68,8 @@ interface ServiceState {
   /** The preferences the account saved, and when; none for an account that saved none. */
   preferences: Record<string, string>;
   updatedAt?: number;
+  /** Where the account's Luke links open, a part of its own; none where it never chose. */
+  linkOpen?: string;
   /** Whether the service's sign-out is unreachable. */
   signOutDown?: boolean;
   /** Holds the next session read's answer, as it stood when asked, until this settles. */
@@ -118,17 +119,19 @@ function respond(
           state.preferences = body.preferences;
           state.updatedAt = 2;
         }
+        if (body.linkOpen) state.linkOpen = body.linkOpen;
       }
       return jsonResponse({
         preferences: state.preferences,
         experiments: state.experiments,
         ...(state.updatedAt === undefined ? undefined : { updatedAt: state.updatedAt }),
+        ...(state.linkOpen === undefined ? undefined : { linkOpen: state.linkOpen }),
       });
     case HOSTED_SERVICE_PATH.EVENTS:
       return jsonResponse({}, state.user ? HTTP_STATUS.OK : HTTP_STATUS.UNAUTHORIZED);
     case HOSTED_ROUTE:
       return state.user
-        ? jsonResponse({ template: null })
+        ? jsonResponse({ admin: false })
         : jsonResponse({}, HTTP_STATUS.UNAUTHORIZED);
     default:
       return new Response(null, { status: 204 });
@@ -1064,16 +1067,11 @@ const composedTab = (
     );
     const settings = yield* Effect.provide(composeSettings(), machine);
     yield* prepare(settings);
-    const account = yield* Effect.provide(
-      composeAccount({ settings, openSocket: scriptedOpenSocket([]).openSocket }),
-      machine,
-    );
+    const account = yield* Effect.provide(composeAccount({ settings }), machine);
     yield* settings.link({
       credential: account.credential,
       readAccountKey: () => account.token.readAccountKey?.() ?? Effect.succeed(undefined),
       confirmAccount: () => account.session.confirmAccount?.() ?? Effect.void,
-      setVoice: () => Effect.void,
-      endLiveSession: Effect.void,
     });
     yield* account.link({ startCapabilities: Effect.void, stopCapabilities: Effect.void });
     yield* account.lifetime;
@@ -1086,9 +1084,10 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
     user: { ...USER },
     outages: 0,
     experiments: { [EXPERIMENT.MEMORY]: true },
-    // The account saved its voice before; this browser's own is another.
-    preferences: { voice: LIVE_VOICE.CEDAR },
+    // The account chose where its links open before; this browser's own choice is another.
+    preferences: {},
     updatedAt: 1,
+    linkOpen: LINK_OPEN.MAC_APP,
   };
   /** The same scripted service behind the platform fetch, which the settings' own clients ride. */
   const service: typeof globalThis.fetch = async (input, init) => {
@@ -1102,7 +1101,7 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
   return Effect.gen(function* () {
     const stateRoot = yield* temporaryDirectoryScoped("luke-cookie-settings-");
     const { settings, account } = yield* composedTab(stateRoot, (settings) =>
-      Effect.orDie(settings.store.set("voice", LIVE_VOICE.ALLOY)),
+      Effect.orDie(settings.store.set("linkOpen", LINK_OPEN.BROWSER)),
     );
     assert.equal(account.signedIn(), true);
 
@@ -1112,35 +1111,33 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
       Effect.orDie(settings.store.snapshot()),
       (snapshot) => snapshot.experiments,
     );
-    const voice = Effect.orDie(settings.store.get("voice"));
-    yield* until(() => Effect.map(voice, (chosen) => chosen === LIVE_VOICE.CEDAR));
+    const linkOpen = Effect.orDie(settings.store.get("linkOpen"));
+    yield* until(() => Effect.map(linkOpen, (chosen) => chosen === LINK_OPEN.MAC_APP));
     assert.equal((yield* experiments)[EXPERIMENT.MEMORY], true);
-    // The voice the account saved is applied here, and the service keeps it.
-    assert.equal(yield* voice, LIVE_VOICE.CEDAR);
-    assert.deepEqual(state.preferences, { voice: LIVE_VOICE.CEDAR });
+    // The choice the account made is applied here, and the service keeps it.
+    assert.equal(yield* linkOpen, LINK_OPEN.MAC_APP);
+    assert.equal(state.linkOpen, LINK_OPEN.MAC_APP);
 
     // An experiment's switch is written for the same account and lands.
     const set = settings.methods[GATEWAY_METHOD.EXPERIMENTS_SET];
     assert.ok(set);
-    const result = yield* Effect.orDie(
-      set({ experiment: EXPERIMENT.CODE_REVIEW, on: true }, CONTEXT),
-    );
+    const result = yield* Effect.orDie(set({ experiment: EXPERIMENT.MEMORY, on: true }, CONTEXT));
     assert.ok(isRecord(result));
     assert.equal(result.status, ACTION_RESULT_STATUS.ACCEPTED);
-    assert.equal((yield* experiments)[EXPERIMENT.CODE_REVIEW], true);
-    assert.equal(state.experiments[EXPERIMENT.CODE_REVIEW], true);
+    assert.equal((yield* experiments)[EXPERIMENT.MEMORY], true);
+    assert.equal(state.experiments[EXPERIMENT.MEMORY], true);
 
     // Another tab signs in as someone else; a switch pressed here for the first account is sent for no one.
     state.user = { ...USER, id: "user-2", email: "other@example.com" };
-    const stale = yield* Effect.orDie(set({ experiment: EXPERIMENT.BROWSER, on: true }, CONTEXT));
+    const stale = yield* Effect.orDie(set({ experiment: EXPERIMENT.OPERATOR, on: true }, CONTEXT));
     assert.ok(isRecord(stale));
     assert.equal(stale.status, ACTION_RESULT_STATUS.REJECTED);
     assert.equal(stale.reason, EXPERIMENT_ACCOUNT_CHANGED);
-    assert.equal(state.experiments[EXPERIMENT.BROWSER], undefined);
+    assert.equal(state.experiments[EXPERIMENT.OPERATOR], undefined);
     assert.equal(yield* account.token.readAccountKey?.() ?? Effect.void, "other@example.com");
     // The first account's choices are no longer drawn for the one now signed in.
-    assert.equal((yield* experiments)[EXPERIMENT.CODE_REVIEW], undefined);
-    assert.equal(yield* voice, undefined);
+    assert.equal((yield* experiments)[EXPERIMENT.MEMORY], undefined);
+    assert.equal(yield* linkOpen, undefined);
   }).pipe(
     Effect.provideService(FetchHttpClient.Fetch, service),
     Effect.provide([NodeFileSystem.layer, NodePath.layer]),
@@ -1207,7 +1204,6 @@ describe("a settings store that keeps no account of its own", () => {
         directory: () => directory,
         cipher: undefined,
         sessionAccountEmail: () => Effect.sync(() => signedIn.email),
-        overrides: { voice: undefined },
         fileSystem: yield* FileSystem.FileSystem,
         path: yield* Path.Path,
       });
@@ -1218,12 +1214,12 @@ describe("a settings store that keeps no account of its own", () => {
       const directory = yield* temporaryDirectoryScoped("luke-cookie-store-");
       const signedIn: SignedIn = { email: ADA };
       const store = yield* storeOver(directory, signedIn);
-      assert.equal(yield* store.cacheExperiments(ADA, { [EXPERIMENT.CODE_REVIEW]: true }), true);
+      assert.equal(yield* store.cacheExperiments(ADA, { [EXPERIMENT.MEMORY]: true }), true);
 
       const reopened = yield* storeOver(directory, signedIn);
-      assert.equal((yield* reopened.snapshot()).experiments[EXPERIMENT.CODE_REVIEW], true);
+      assert.equal((yield* reopened.snapshot()).experiments[EXPERIMENT.MEMORY], true);
       signedIn.email = BOB;
-      assert.equal((yield* reopened.snapshot()).experiments[EXPERIMENT.CODE_REVIEW], undefined);
+      assert.equal((yield* reopened.snapshot()).experiments[EXPERIMENT.MEMORY], undefined);
     }).pipe(Effect.orDie, Effect.provide([NodeFileSystem.layer, NodePath.layer])),
   );
 
@@ -1234,12 +1230,12 @@ describe("a settings store that keeps no account of its own", () => {
         const directory = yield* temporaryDirectoryScoped("luke-cookie-store-");
         const signedIn: SignedIn = { email: ADA };
         const store = yield* storeOver(directory, signedIn);
-        yield* store.set("voice", LIVE_VOICE.CEDAR);
-        yield* store.setAccountPreferencesSyncBaseline(ADA, { voice: LIVE_VOICE.CEDAR });
+        yield* store.set("linkOpen", LINK_OPEN.MAC_APP);
+        yield* store.setAccountPreferencesSyncBaseline(ADA, { linkOpen: LINK_OPEN.MAC_APP });
 
         // The same person keeps their choices.
         yield* store.settleSessionAccount(ADA);
-        assert.deepEqual(yield* store.accountPreferences(), { voice: LIVE_VOICE.CEDAR });
+        assert.deepEqual(yield* store.accountPreferences(), { linkOpen: LINK_OPEN.MAC_APP });
 
         // Another person on this browser starts from none of them.
         signedIn.email = BOB;
@@ -1247,7 +1243,7 @@ describe("a settings store that keeps no account of its own", () => {
         assert.deepEqual(yield* store.accountPreferences(), {});
 
         // A departure drops what was kept for the one leaving.
-        yield* store.set("voice", LIVE_VOICE.ALLOY);
+        yield* store.set("linkOpen", LINK_OPEN.BROWSER);
         yield* store.clearAccount();
         assert.deepEqual(yield* store.accountPreferences(), {});
       }).pipe(Effect.orDie, Effect.provide([NodeFileSystem.layer, NodePath.layer])),
@@ -1268,15 +1264,20 @@ it.effect(
     };
     return Effect.gen(function* () {
       const stateRoot = yield* temporaryDirectoryScoped("luke-cookie-unsettled-");
-      // The file as Ada left it: her voice, and the baseline that names her.
+      // The file as an earlier build left it for Ada: her link choice and her voice, which no
+      // build keeps any more, and the baseline that names her.
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       yield* fileSystem.writeFileString(
         path.join(stateRoot, "settings.json"),
         JSON.stringify({
           version: 2,
-          voice: LIVE_VOICE.CEDAR,
-          accountPreferencesSync: { accountEmail: ADA, preferences: { voice: LIVE_VOICE.CEDAR } },
+          voice: "cedar",
+          linkOpen: LINK_OPEN.MAC_APP,
+          accountPreferencesSync: {
+            accountEmail: ADA,
+            preferences: { voice: "cedar", linkOpen: LINK_OPEN.MAC_APP },
+          },
         }),
       );
       // A source keeping no account here, whose arrival settled nothing.
@@ -1286,8 +1287,6 @@ it.effect(
         credential: NO_CREDENTIAL,
         readAccountKey: () => Effect.succeed(BOB),
         confirmAccount: () => Effect.void,
-        setVoice: () => Effect.void,
-        endLiveSession: Effect.void,
       });
       yield* settings.lifetime;
 
@@ -1296,8 +1295,8 @@ it.effect(
       yield* until(() => Effect.map(baseline, (kept) => kept !== undefined));
 
       assert.deepEqual(yield* baseline, {});
-      assert.equal(yield* Effect.orDie(settings.store.get("voice")), undefined);
-      assert.ok(written.every((body) => !body.includes(LIVE_VOICE.CEDAR)));
+      assert.equal(yield* Effect.orDie(settings.store.get("linkOpen")), undefined);
+      assert.ok(written.every((body) => !body.includes(LINK_OPEN.MAC_APP)));
     }).pipe(
       Effect.provideService(FetchHttpClient.Fetch, service),
       Effect.provide([NodeFileSystem.layer, NodePath.layer]),

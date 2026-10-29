@@ -1,17 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-} from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_RUNTIME,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_BRIEF,
+  AGENT_RUNTIME,
+  AGENT_STATUS,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Effect } from "effect";
@@ -29,7 +26,7 @@ import {
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
 
 /**
@@ -46,19 +43,19 @@ const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const KEY = "d16fbf9e-8c7d-42d0-9abb-be91cf7d8076";
 
-const AGENT_SUMMARY: CodingAgentSummary = {
+const AGENT_SUMMARY: AgentSummary = {
   id: AGENT,
   planId: TASK,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Fix the tile",
   createdAt: 1_000,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
-  brief: CODING_AGENT_BRIEF.PLAN,
+  brief: AGENT_BRIEF.PLAN,
 };
 
-const MESSAGES: readonly CodingAgentMessage[] = [
+const MESSAGES: readonly AgentTranscriptMessage[] = [
   { id: "plan", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "# Fix the tile" }] },
   {
     id: "turn-1",
@@ -69,7 +66,7 @@ const MESSAGES: readonly CodingAgentMessage[] = [
   },
 ];
 
-const TAKEN: CodingAgentAgentAnswer = {
+const TAKEN: AgentAgentAnswer = {
   agent: {
     id: AGENT,
     planId: TASK,
@@ -77,7 +74,7 @@ const TAKEN: CodingAgentAgentAnswer = {
     effort: "high",
     title: null,
     createdAt: 1_000,
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
     turnId: null,
   },
 };
@@ -111,21 +108,21 @@ async function settle(): Promise<void> {
  * The agent's tab, its sends answered only as the test lets it and its
  * transcript pushed with `later` once the test releases it.
  */
-async function drawnTab(later: readonly CodingAgentMessage[], agent = AGENT_SUMMARY) {
+async function drawnTab(later: readonly AgentTranscriptMessage[], agent = AGENT_SUMMARY) {
   fakeAppBridge({});
-  const answers: ((answer: CodingAgentAgentAnswer) => void)[] = [];
+  const answers: ((answer: AgentAgentAnswer) => void)[] = [];
   const sent: { text: string; clientKey: string }[] = [];
   let release: () => void = () => undefined;
   const released = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const page = (messages: readonly CodingAgentMessage[]) => ({
+  const page = (messages: readonly AgentTranscriptMessage[]) => ({
     messages: [...messages],
     cursor: "2:0",
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     title: null,
   });
-  const control = codingAgentsControl({
+  const control = agentsControl({
     agents: [agent],
     onMessage: (_agentId, text, clientKey) => {
       sent.push({ text, clientKey });
@@ -163,7 +160,7 @@ async function drawnTab(later: readonly CodingAgentMessage[], agent = AGENT_SUMM
       pressInComposer(container, "Enter");
       await settle();
     },
-    answer: async (index: number, answer: CodingAgentAgentAnswer) => {
+    answer: async (index: number, answer: AgentAgentAnswer) => {
       act(() => answers[index]?.(answer));
       await settle();
     },
@@ -186,7 +183,7 @@ function rowOf(line: HTMLElement | undefined): Element {
 
 test("a message sent stands in the transcript at once, the box empty and taking words, and its row lands in its place, drawn once, before the send answers", async () => {
   vi.spyOn(crypto, "randomUUID").mockReturnValue(KEY);
-  const row: CodingAgentMessage = {
+  const row: AgentTranscriptMessage = {
     id: "row-1",
     role: MESSAGE_ROLE.USER,
     parts: [{ type: "text", text: "Now the dark variant." }],
@@ -212,6 +209,26 @@ test("a message sent stands in the transcript at once, the box empty and taking 
   assert.equal(tab.lines("Now the dark variant.").length, 1);
 });
 
+test("a line whose row landed before its send answered offers Edit only once the service took it, since it may yet withdraw the row", async () => {
+  vi.spyOn(crypto, "randomUUID").mockReturnValue(KEY);
+  const row: AgentTranscriptMessage = {
+    id: "row-1",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text: "Now the dark variant." }],
+    clientId: sentLineId(KEY),
+    sentAt: 90_000,
+  };
+  const tab = await drawnTab([row]);
+  const edit = () =>
+    tab.container.querySelector('[data-message-id="row-1"] button[aria-label="Edit"]');
+  await tab.send("Now the dark variant.");
+  await tab.landRow();
+
+  assert.ok(edit() === null, "no Edit while the send is out");
+  await tab.answer(0, TAKEN);
+  assert.ok(edit(), "Edit once the service took it");
+});
+
 test("a message sent to an agent at rest draws the working line at once, before the service takes it", async () => {
   const tab = await drawnTab([]);
   assert.equal(tab.container.querySelector("[data-working]"), null, "an agent at rest");
@@ -223,7 +240,7 @@ test("a message sent to an agent at rest draws the working line at once, before 
 });
 
 test("a Codex or Claude Code agent's box says nothing under it of the plan that pays", async () => {
-  for (const runtime of [CODING_AGENT_RUNTIME.CODEX, CODING_AGENT_RUNTIME.CLAUDE_CODE]) {
+  for (const runtime of [AGENT_RUNTIME.CODEX, AGENT_RUNTIME.CLAUDE_CODE]) {
     const tab = await drawnTab([], { ...AGENT_SUMMARY, runtime });
     const box = composerEditor(tab.container).closest(".agent-composer") ?? tab.container;
     for (const words of [
@@ -243,7 +260,7 @@ test("two messages of the same words are two lines, each let go by its own row a
   ] as const;
   const mint = vi.spyOn(crypto, "randomUUID");
   for (const key of keys) mint.mockReturnValueOnce(key);
-  const row: CodingAgentMessage = {
+  const row: AgentTranscriptMessage = {
     id: "row-1",
     role: MESSAGE_ROLE.USER,
     parts: [{ type: "text", text: "ok" }],
@@ -269,7 +286,7 @@ test("a message refused after the developer wrote on stays where it went, marked
   await tab.send("Rebase on main");
   typeInComposer(tab.container, "Then fix CI");
 
-  await tab.answer(0, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await tab.answer(0, { failure: AGENT_CALL_FAILURE.UNANSWERED });
   assert.equal(composerEditor(tab.container).textContent, "Then fix CI", "the newer words stay");
   const [line] = tab.lines("Rebase on main");
   assert.ok(line, "the refused words stay on their line");

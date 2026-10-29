@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Database } from "@luke/database/core/query";
-import { organization } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { noNetwork } from "@luke/wire/testing";
@@ -13,17 +10,12 @@ import { firstIntegrationAccount } from "../testing/integration-connect.js";
 import { beginIntegrationSignIn, completeIntegrationSignIn } from "./integration-store.js";
 import { INTEGRATION_GRANT_HOLDER, type IntegrationGrantRef } from "./integration-token.js";
 import { readStoredTools, storeTools } from "./integration-tool-store.js";
-import {
-  beginWorkspaceIntegrationSignIn,
-  completeWorkspaceIntegrationSignIn,
-} from "./workspace-integration-store.js";
 
 /**
  * The tools kept on a grant's row over the real migration on PGlite: a
  * list is read back for its own grant alone, a sign-in completed again
- * clears it on the account's row and the workspace's alike, a list read
- * before that sign-in completed is never kept over it, and neither is one
- * read before the list it would replace.
+ * clears it, a list read before that sign-in completed is never kept over
+ * it, and neither is one read before the list it would replace.
  */
 
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
@@ -46,27 +38,6 @@ const connectedMember = Effect.gen(function* () {
   return { userId, grant };
 });
 
-/** A workspace whose Linear stands connected, and the grant it stands for. */
-const connectedWorkspace = (userId: string) =>
-  Effect.gen(function* () {
-    const db = yield* Database;
-    const organizationId = randomUUID();
-    yield* db.insert(organization).values({
-      id: organizationId,
-      name: "Test Workspace",
-      slug: `workspace-${organizationId}`,
-      createdAt: yield* DateTime.nowAsDate,
-    });
-    yield* beginWorkspaceIntegrationSignIn(organizationId, LINEAR, userId, `w-${organizationId}`);
-    yield* completeWorkspaceIntegrationSignIn(organizationId, LINEAR, `w-${organizationId}`);
-    const grant: IntegrationGrantRef = {
-      holder: INTEGRATION_GRANT_HOLDER.WORKSPACE,
-      provider: LINEAR,
-      organizationId,
-    };
-    return grant;
-  });
-
 it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the tools kept on a grant", (it) => {
   it.effect("a grant's list is read back for that grant, and never for another account's", () =>
     Effect.gen(function* () {
@@ -86,10 +57,8 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the tools kept on a grant", (i
     () =>
       Effect.gen(function* () {
         const member = yield* connectedMember;
-        const workspace = yield* connectedWorkspace(member.userId);
         const before = yield* DateTime.nowAsDate;
         yield* storeTools(member.grant, TOOLS, before);
-        yield* storeTools(workspace, TOOLS, before);
         yield* TestClock.adjust(Duration.minutes(1));
 
         yield* beginIntegrationSignIn(
@@ -98,40 +67,27 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the tools kept on a grant", (i
           "again",
         );
         yield* completeIntegrationSignIn(member.userId, LINEAR, "again");
-        yield* beginWorkspaceIntegrationSignIn(
-          workspace.organizationId,
-          LINEAR,
-          member.userId,
-          "w-again",
-        );
-        yield* completeWorkspaceIntegrationSignIn(workspace.organizationId, LINEAR, "w-again");
-        const cleared = [yield* readStoredTools(member.grant), yield* readStoredTools(workspace)];
+        const cleared = yield* readStoredTools(member.grant);
         // A list whose read began before the sign-in completed was read on the grant it replaced.
         yield* storeTools(member.grant, TOOLS, before);
-        yield* storeTools(workspace, TOOLS, before);
 
-        assert.deepEqual(cleared, [undefined, undefined]);
+        assert.equal(cleared, undefined);
         assert.equal(yield* readStoredTools(member.grant), undefined);
-        assert.equal(yield* readStoredTools(workspace), undefined);
       }),
   );
 
   it.effect("a list whose read began before the kept one's is not kept over it", () =>
     Effect.gen(function* () {
       const member = yield* connectedMember;
-      const workspace = yield* connectedWorkspace(member.userId);
       const earlier = yield* DateTime.nowAsDate;
       yield* TestClock.adjust(Duration.seconds(1));
       const later = yield* DateTime.nowAsDate;
       const newer = [...TOOLS, { name: "archive_issue" }];
 
-      for (const grant of [member.grant, workspace]) {
-        yield* storeTools(grant, newer, later);
-        yield* storeTools(grant, TOOLS, earlier);
-      }
+      yield* storeTools(member.grant, newer, later);
+      yield* storeTools(member.grant, TOOLS, earlier);
 
       assert.deepEqual(yield* readStoredTools(member.grant), { tools: newer, listedAt: later });
-      assert.deepEqual(yield* readStoredTools(workspace), { tools: newer, listedAt: later });
     }),
   );
 });

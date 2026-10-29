@@ -80,12 +80,6 @@ const OVERVIEW_ACCOUNT_COLUMNS: readonly AccountsDetailColumn<AdminOverviewAccou
     sortValue: (row) => row.prsMerged,
   },
   {
-    key: ACCOUNTS_SORT_KEY.CALL_MINUTES,
-    label: "Call min",
-    cell: (row) => formatCount(row.callMinutes),
-    sortValue: (row) => row.callMinutes,
-  },
-  {
     key: ACCOUNTS_SORT_KEY.LAST_SEEN,
     label: "Last seen",
     cell: (row) => (row.lastSeenAt === null ? "—" : formatDate(row.lastSeenAt)),

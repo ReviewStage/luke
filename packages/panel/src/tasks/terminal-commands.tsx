@@ -16,7 +16,7 @@ import { useAppCommand } from "../app-commands.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
 import { useRepositoryRemedy } from "./repository-remedy.js";
 import { TerminalPicker } from "./terminal-picker.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import type { SidePanelControl } from "./use-side-panel.js";
 
 /**
@@ -66,7 +66,7 @@ export function TerminalCommands({
 }: {
   /** The agent whose own tab, Changes tab, or Terminal tab holds the developer, if any. */
   here: string | undefined;
-  agents: CodingAgentsControl;
+  agents: AgentsControl;
   sidePanel: Pick<SidePanelControl, "onChoose" | "lastTerminal">;
   /** Hands the keyboard to the side panel, where the terminal now stands. */
   onShown: () => void;

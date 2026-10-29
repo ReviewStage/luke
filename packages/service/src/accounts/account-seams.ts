@@ -2,18 +2,11 @@ import {
   deleteAccount,
   readAccountPreferences,
   readAccountRole,
-  readPlanTemplate,
-  restorePlanTemplate,
   writeAccountPreferences,
-  writePlanTemplate,
 } from "@luke/database/models/account-store";
-import {
-  listTemplateRevisions,
-  readTemplateRevision,
-} from "@luke/database/models/plan-template-revisions";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
-import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
 import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
+import { deploymentEveOrigin } from "../agents/eve-host/eve-origin.js";
 import { resolveHostedUserId } from "../auth/bearer.js";
 import type { AccountProcedureSeams } from "./account-procedures.js";
 
@@ -41,10 +34,5 @@ export function accountProcedureSeams(): AccountProcedureSeams {
     readRole: readAccountRole,
     accountFastOffer,
     writePreferences: writeAccountPreferences,
-    readPlanTemplate,
-    writePlanTemplate,
-    listPlanTemplateRevisions: listTemplateRevisions,
-    readPlanTemplateRevision: readTemplateRevision,
-    restorePlanTemplate,
   };
 }

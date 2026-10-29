@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import type { AgentAttachment, AgentTranscriptMessage } from "@luke/features/agent-wire";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -31,7 +31,7 @@ const PIXEL =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
 /** A line of the developer's that carried one picture inline. */
-const LINE: CodingAgentMessage = {
+const LINE: AgentTranscriptMessage = {
   id: "line-2",
   role: MESSAGE_ROLE.USER,
   parts: [
@@ -68,13 +68,13 @@ async function settle(): Promise<void> {
 
 /** The line's box mounted in the window `registry` stands for, every way it ended written down, its pictures read through `door` where one is handed. */
 async function opened(
-  line: CodingAgentMessage = LINE,
+  line: AgentTranscriptMessage = LINE,
   door?: AgentPictureDoor,
   words = "Also email the inviter.",
   registry = AtomRegistry.make(),
   cut: { cuts: boolean; takes?: string | undefined } = { cuts: false },
 ) {
-  const ended: { words: string; files: readonly CodingAgentAttachment[] }[] = [];
+  const ended: { words: string; files: readonly AgentAttachment[] }[] = [];
   let cancelled = 0;
   const container = document.createElement("div");
   document.body.append(container);
@@ -93,7 +93,6 @@ async function opened(
             edit: {
               agentId: "agent-1",
               doors: { openGitHub: () => undefined, copy: () => undefined },
-              dictates: true,
               ...cut,
               onCancel: () => {
                 cancelled += 1;
@@ -191,7 +190,7 @@ test("one of two like files taken off stays off after a relaunch, and the other 
     filename: "invite-expired.png",
     url: `data:image/png;base64,${PIXEL}`,
   };
-  const twice: CodingAgentMessage = {
+  const twice: AgentTranscriptMessage = {
     ...LINE,
     parts: [{ type: "text", text: "Also email the inviter." }, picture, picture],
   };
@@ -214,7 +213,7 @@ test("one of two like files taken off stays off after a relaunch, and the other 
 });
 
 /** A line whose picture was kept apart, which the window reads through the agent's door. */
-const KEPT: CodingAgentMessage = {
+const KEPT: AgentTranscriptMessage = {
   id: "line-3",
   role: MESSAGE_ROLE.USER,
   parts: [

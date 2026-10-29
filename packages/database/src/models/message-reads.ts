@@ -1,4 +1,4 @@
-import { toolPartType } from "@luke/features/brain";
+import { toolPartType } from "@luke/features/turn-run";
 import {
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -43,6 +43,7 @@ import {
   conversations,
   messages,
   type StoredTurnUsage,
+  standingLine,
   turnlessUserLine,
   turns,
 } from "../schemas/storage.js";
@@ -189,11 +190,14 @@ function pageLimit(cursor: { readonly limit?: number }): number {
  * reached: the conversation the row belongs to, stamped by no Clear, so a
  * cleared conversation is read by nothing. It is spelled once per table
  * rather than once over a column handed in, because the column the join
- * holds to is what makes each one the join it is.
+ * holds to is what makes each one the join it is. A message's join also
+ * leaves out a line its hand-over withdrew, which the agent never heard
+ * unless a turn takes it, and which no read shows until one does.
  */
 const MESSAGE_CONVERSATION_STANDS = and(
   eq(conversations.id, messages.conversationId),
   isNull(conversations.deletedAt),
+  standingLine(messages),
 );
 
 const TURN_CONVERSATION_STANDS = and(
@@ -588,6 +592,65 @@ export function messageCursorNow(
   });
 }
 
+/** Where a transcript stands as one reading: the cursor of a reader who has every message as it now stands, and the journal revision it was last rewound at, none for one never rewound. */
+export interface MessageStanding {
+  readonly cursor: MessageCursor;
+  readonly rewound: Option.Option<number>;
+}
+
+const findMessageStanding = SqlSchema.findOneOption({
+  Request: Schema.Struct({ conversationId: Schema.String, userId: Schema.String }),
+  Result: Schema.Struct({
+    seq: EpochMillisColumnSchema,
+    revision: EpochMillisColumnSchema,
+    rewound: Schema.NullOr(EpochMillisColumnSchema),
+  }),
+  execute: (options) =>
+    Database.use((db) =>
+      db
+        .select({
+          seq: sql<number>`(
+            select coalesce(max(${messages.seq}), 0) from ${messages}
+            where ${and(eq(messages.conversationId, conversations.id), eq(messages.userId, options.userId))}
+          )`,
+          revision: conversations.journalRevision,
+          rewound: conversations.rewoundRevision,
+        })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.id, options.conversationId),
+            eq(conversations.userId, options.userId),
+            isNull(conversations.deletedAt),
+          ),
+        ),
+    ),
+});
+
+/**
+ * Where a transcript stands now (`messageCursorNow`), and where it was last
+ * rewound, read in one statement, so a reader that reads its rows after
+ * this misses no message written or amended past the cursor, and a rewind
+ * that lands meanwhile moves the rewound revision past the cursor answered,
+ * which its next reading then finds behind. A conversation that no longer
+ * stands, or another account's, is the start, never rewound.
+ */
+export function messageStandingNow(
+  userId: string,
+  conversationId: string,
+): Effect.Effect<MessageStanding, StoreFailure, DatabaseServices> {
+  return Effect.map(
+    findMessageStanding({ conversationId, userId }),
+    Option.match({
+      onNone: () => ({ cursor: { seq: 0, revision: 0 }, rewound: Option.none() }),
+      onSome: (row) => ({
+        cursor: { seq: row.seq, revision: row.revision },
+        rewound: Option.fromNullishOr(row.rewound),
+      }),
+    }),
+  );
+}
+
 const findRunningChildTurns = SqlSchema.findAll({
   Request: Schema.Struct({ parentConversationId: Schema.String, userId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
@@ -927,6 +990,54 @@ export function turnStoppedUnderReached(
   return Effect.map(findTurnStoppedUnder({ conversationId, key }), (rows) => rows.length > 0);
 }
 
+/**
+ * When the newest turn to end in the conversation `conversationId` names
+ * ended, or null where none has: what a live statement selects beside the
+ * newest turn, whose own end is null while it runs, as
+ * `lastSettledTurnsOfReached` reads it.
+ */
+export function lastSettledTurnAt(conversationId: SQLWrapper): SQL<Date | null> {
+  // Note that the instant is selected bare, as `newestAwaitingLineAt`'s is, since a live statement takes no cast through text.
+  return sql<Date | null>`(${queryBuilder
+    .select({ settledAt: sql<Date | null>`max(${turns.settledAt})` })
+    .from(turns)
+    .where(eq(turns.conversationId, conversationId))})`;
+}
+
+const LastSettledTurnRowSchema = Schema.Struct({
+  conversationId: Schema.String,
+  settledAt: InstantColumnSchema,
+});
+
+/** When the newest turn to end in each conversation named ended; a conversation none of whose turns has ended answers no row. */
+const findLastSettledTurns = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationIds: Schema.Array(Schema.String) }),
+  Result: LastSettledTurnRowSchema,
+  execute: ({ conversationIds }) =>
+    Database.use((db) =>
+      db
+        .select({ conversationId: turns.conversationId, settledAt: max(turns.settledAt) })
+        .from(turns)
+        .where(and(inArray(turns.conversationId, [...conversationIds]), isNotNull(turns.settledAt)))
+        .groupBy(turns.conversationId),
+    ),
+});
+
+/**
+ * When the newest turn to end in each conversation named ended, whoever owns
+ * it, keyed by conversation; a conversation none of whose turns has ended is
+ * absent. Only for ids a gate already read, as `latestTurnsOfReached`.
+ */
+export function lastSettledTurnsOfReached(
+  conversationIds: readonly string[],
+): Effect.Effect<ReadonlyMap<string, Date>, StoreFailure, DatabaseServices> {
+  if (conversationIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findLastSettledTurns({ conversationIds }),
+    (rows) => new Map(rows.map((row) => [row.conversationId, row.settledAt])),
+  );
+}
+
 const AwaitingLinesRowSchema = Schema.Struct({
   conversationId: Schema.String,
   newestAt: InstantColumnSchema,
@@ -987,7 +1098,7 @@ function lineOfTheAgents(): SQL {
  * written in the coding-agent conversation `conversationId` names, by the
  * same rule `awaitingLinesOfReached` reads, or null where none stands: what
  * a live statement selects so its reader judges the line's grace
- * (`@luke/features/coding-agent-status`) without the statement reading the
+ * (`@luke/features/agent-status`) without the statement reading the
  * clock.
  */
 export function newestAwaitingLineAt(conversationId: SQLWrapper): SQL<Date | null> {
@@ -1002,6 +1113,7 @@ export function newestAwaitingLineAt(conversationId: SQLWrapper): SQL<Date | nul
         eq(messages.conversationId, conversationId),
         eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
         turnlessUserLine(messages),
+        isNull(messages.withdrawnAt),
         lineOfTheAgents(),
         noReceiptOfLine(),
       ),
@@ -1017,11 +1129,10 @@ export function newestAwaitingLineAt(conversationId: SQLWrapper): SQL<Date | nul
  * here as the writer holds it when it takes such a line, since a task
  * conversation's turnless user rows are its spoken asks and wait for no
  * turn of eve's. A line a turn already received under another row
- * (`noReceiptOfLine`) is not counted, and neither is a line said or typed
- * on a call into the agent: the voice answers many spoken ones itself, and
- * one it hands on, as every typed one is, opens its spoken turn through the
- * asks (`asks.ts`), whose turn row is what reads the agent as running, so no
- * line of a call waits on a turn here.
+ * (`noReceiptOfLine`) is not counted, and neither is a line a past call
+ * left (`lineOfTheAgents`), whose turn the call opened through an ask of its
+ * own rather than through the line. Nor is a line its hand-over withdrew,
+ * which the session did not take.
  */
 const newestAwaitingLines = SqlSchema.findAll({
   Request: ConversationsReadSchema,
@@ -1041,6 +1152,7 @@ const newestAwaitingLines = SqlSchema.findAll({
             inArray(messages.conversationId, [...conversationIds]),
             eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
             turnlessUserLine(messages),
+            isNull(messages.withdrawnAt),
             lineOfTheAgents(),
             noReceiptOfLine(),
           ),
@@ -1068,6 +1180,8 @@ const findSentLine = SqlSchema.findOneOption({
             eq(messages.conversationId, key.conversationId),
             eq(messages.userId, key.userId),
             eq(messages.clientId, key.clientId),
+            // A line its hand-over withdrew was not sent, and a send repeated under its key sends it afresh.
+            standingLine(messages),
             // A line its dispatch claim still hands over is not sent yet: the hand-over may withdraw it.
             sql`not (${conversations.dispatchLine} is not distinct from ${messages.id} and ${conversations.dispatchClaimedAt} > ${key.claimExpiredBefore})`,
           ),
@@ -1205,61 +1319,6 @@ export function turnsNamed(
     ),
     (rows) => Schema.decodeUnknownEffect(TurnRowsSchema)(rows),
   );
-}
-
-/** Where on its call a spoken row's words began, which orders a turn's lines as they were said; a row writes it on its first fragment. */
-const SPOKEN_FROM_MS = sql<number>`(${messages.metadata}->>'from_ms')::double precision`;
-
-/** One utterance the voice wrote as a row: its client id, its speaker, its call, and where on the call its words began. */
-const SpokenRowSchema = Schema.Struct({
-  clientId: Schema.String,
-  role: Schema.Literals([MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT]),
-  voiceSessionId: Schema.String,
-  fromMs: Schema.Number,
-});
-
-export type SpokenRow = typeof SpokenRowSchema.Type;
-
-const findSpokenRows = SqlSchema.findAll({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    conversationId: Schema.String,
-    voiceSessionIds: Schema.Array(Schema.String),
-  }),
-  Result: SpokenRowSchema,
-  execute: ({ userId, conversationId, voiceSessionIds }) =>
-    Database.use((db) =>
-      db
-        .select({
-          clientId: messages.clientId,
-          role: messages.role,
-          voiceSessionId: sql<string>`${messages.metadata}->>'voice_session_id'`,
-          fromMs: SPOKEN_FROM_MS,
-        })
-        .from(messages)
-        .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
-        .where(
-          and(
-            eq(messages.userId, userId),
-            eq(messages.conversationId, conversationId),
-            inArray(sql`${messages.metadata}->>'voice_session_id'`, [...voiceSessionIds]),
-            // A line typed into the call names it too, but nothing of it was said.
-            sql`${messages.metadata}->>'channel' = ${MESSAGE_CHANNEL.VOICE}`,
-            sql`${messages.metadata}->>'from_ms' is not null`,
-          ),
-        )
-        .orderBy(asc(SPOKEN_FROM_MS), asc(messages.seq)),
-    ),
-});
-
-/** The rows the voice wrote in a conversation for what was said on the calls named, each with its call and where on it its words began, in the order they were said. */
-export function spokenRowsOn(
-  userId: string,
-  conversationId: string,
-  voiceSessionIds: readonly string[],
-): Effect.Effect<readonly SpokenRow[], StoreFailure, DatabaseServices> {
-  if (voiceSessionIds.length === 0) return Effect.succeed([]);
-  return findSpokenRows({ userId, conversationId, voiceSessionIds });
 }
 
 const findTurnQueuedAt = SqlSchema.findOneOption({

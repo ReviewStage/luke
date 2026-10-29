@@ -1,19 +1,17 @@
 import { githubAvatarAt, githubAvatarUrl } from "@luke/features/account-picture";
+import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentCallFailure,
-} from "@luke/features/coding-agent-view";
-import {
+  AGENT_STATUS,
+  type AgentOverviewChecks,
+  type AgentOverviewConversation,
+  type AgentOverviewPullRequest,
+  type AgentPullRequest,
   CHANGES_BOUNDS,
   CHECK_STATE,
   CHECK_SUMMARY,
   type CheckState,
   type CheckSummary,
-  CODING_AGENT_STATUS,
-  type CodingAgentOverviewChecks,
-  type CodingAgentOverviewConversation,
-  type CodingAgentOverviewPullRequest,
-  type CodingAgentPullRequest,
+  CONVERSATION_ENTRY,
   type ConversationEntry,
   DEPLOYMENT_STATE,
   type DeploymentState,
@@ -25,8 +23,7 @@ import {
   REVIEW_STATE,
   type ReactionGroup,
   type ReviewThread,
-} from "@luke/features/coding-agent-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+} from "@luke/features/agent-wire";
 import {
   LINK_PLACE,
   type LinkPlace,
@@ -80,7 +77,6 @@ import {
   OneLine,
   PAGE_FRAME,
   PaneBar,
-  ProviderMark,
   SCROLL_FADE,
   SCROLL_FADE_INSET,
   SCROLL_GUTTER,
@@ -135,6 +131,8 @@ import {
 import { ACTOR_SIZE, ActorMark, ActorRef, BotBadge, commentAuthor } from "../actor-ref.js";
 import { Fold, FoldBody } from "../ai-elements/fold.js";
 import { appPlatform } from "../app-platform.js";
+import { commandAction, PANEL_COMMAND } from "../command-items.js";
+import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import {
@@ -144,6 +142,7 @@ import {
   useHandedTabActions,
 } from "../desktop/strip-tabs.js";
 import { lazyRoute } from "../lazy-route.js";
+import { scrollerOf } from "../scroll-within.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext, usePhoneRoom } from "../stage-room.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
@@ -157,6 +156,7 @@ import {
   useAgentRead,
   useChangesReads,
 } from "./agent-changes-tab.js";
+import { agentStillWriting, pullRequestNumberLabel } from "./agent-model.js";
 import {
   ANNOTATION_TONE,
   AnnotationCard,
@@ -167,8 +167,6 @@ import {
 } from "./annotation-card.js";
 import { threadPreview } from "./changes-model.js";
 import { type ChaptersRead, chaptersCount, useChaptersRead } from "./chapters-read.js";
-import { scrollerOf } from "./code-pane.js";
-import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model.js";
 import {
   type ConversationFilters,
   type ConversationFiltersControl,
@@ -234,7 +232,7 @@ import {
 } from "./thread-reveal.js";
 import { type GitHubPictureDrawer, GitHubWords, TranscriptWords } from "./transcript-blocks.js";
 import { usePushedLineMoved } from "./use-agent-pull-request.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import {
   linkPressOf,
   type OpenHere,
@@ -406,7 +404,7 @@ function threadLines(
 }
 
 /** A read that threw rather than answered, drawn as any other failed read. */
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** Where one of the overview's reads stands, as its section draws it: on its way, failed, answering that there is no pull request, or landed. */
 const PART = {
@@ -426,7 +424,7 @@ type Part<A> =
 interface PartRead<A> {
   readonly answer:
     | { readonly pullRequest: A | null }
-    | { readonly failure: CodingAgentCallFailure }
+    | { readonly failure: AgentCallFailure }
     | undefined;
   readonly out: boolean;
   readonly ask: () => void;
@@ -509,14 +507,15 @@ function durationOf(check: PullRequestCheck): string | undefined {
   return ran < RAN_AT_LEAST_MS ? undefined : workingTime(ran);
 }
 
-/** What the side panel's toolbar ⋯ offers on the pull request: it opened on GitHub, and the page read again, dimmed while a read is out, which a refresh would only repeat. */
+/**
+ * What the side panel's toolbar ⋯ offers on the pull request: it opened on
+ * GitHub, which ⇧⌘O runs while the tab is chosen and the panel holds the
+ * keys (`side-panel.tsx`), and the page read again, dimmed while a read is
+ * out, which a refresh would only repeat.
+ */
 function pullRequestActions(url: string, reading: boolean, onRefresh: () => void): MenuAction[] {
   return [
-    {
-      label: "Open on GitHub",
-      icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
-      onSelect: () => appPlatform().openGitHub(url),
-    },
+    commandAction(PANEL_COMMAND.OPEN_ON_GITHUB, () => appPlatform().openGitHub(url), true),
     {
       label: "Refresh",
       icon: <RotateCwIcon aria-hidden="true" />,
@@ -527,7 +526,7 @@ function pullRequestActions(url: string, reading: boolean, onRefresh: () => void
 }
 
 /** What the header draws of the pull request from the first frame: its mark's three, and its page. */
-type HeaderPullRequest = Pick<CodingAgentPullRequest, "number" | "state" | "checks" | "url">;
+type HeaderPullRequest = Pick<AgentPullRequest, "number" | "state" | "checks" | "url">;
 
 /** The checks as one word, as the pull request's mark wears it: a failure beats a wait beats a pass. */
 function checksSummaryOf(checks: readonly PullRequestCheck[]): CheckSummary {
@@ -546,9 +545,9 @@ function checksSummaryOf(checks: readonly PullRequestCheck[]): CheckSummary {
  * None while neither has been read.
  */
 function headerPullRequestOf(
-  pullRequest: CodingAgentOverviewPullRequest | undefined,
-  checks: CodingAgentOverviewChecks | undefined,
-  published: CodingAgentPullRequest | undefined,
+  pullRequest: AgentOverviewPullRequest | undefined,
+  checks: AgentOverviewChecks | undefined,
+  published: AgentPullRequest | undefined,
 ): HeaderPullRequest | undefined {
   const held = pullRequest ?? published;
   if (held === undefined) return undefined;
@@ -571,7 +570,7 @@ function headerPullRequestOf(
  * land, those it asks stand asked.
  */
 function reviewersOf(
-  requested: readonly CodingAgentOverviewPullRequest["requested"][number][],
+  requested: readonly AgentOverviewPullRequest["requested"][number][],
   standings: readonly PullRequestReviewer[],
   author: string | undefined,
 ): readonly PullRequestReviewer[] {
@@ -995,9 +994,9 @@ function useThreadJump(
 }
 
 /**
- * A thread's ⋯ at the end of its head: View in the tab's other view, where
- * the thread is found by its id, and Copy link, the thread's Luke link in
- * the view it is drawn in (`LINK_PLACE.PULL_REQUEST_THREAD`); nothing where
+ * A thread's ⋯ at the end of its head: Copy link, the thread's Luke link in
+ * the view it is drawn in (`LINK_PLACE.PULL_REQUEST_THREAD`), then View in
+ * the tab's other view, where the thread is found by its id; nothing where
  * the thread offers neither.
  */
 function ThreadMenu({
@@ -1017,8 +1016,8 @@ function ThreadMenu({
   const jump = useThreadJump(thread, there);
   const place = jumps?.place(thread, here);
   const copy = place === undefined ? undefined : copyLink(place);
-  const actions: MenuAction[] = [
-    ...(jump === undefined
+  const views: MenuAction[] =
+    jump === undefined
       ? []
       : [
           there === PULL_REQUEST_THREAD_VIEW.FILES
@@ -1032,16 +1031,49 @@ function ThreadMenu({
                 icon: <MessagesSquareIcon aria-hidden="true" />,
                 onSelect: jump,
               },
-        ]),
-    ...(copy === undefined ? [] : [copy]),
-  ];
-  if (actions.length === 0) return null;
+        ];
+  const groups = [copy === undefined ? [] : [copy], views].filter((group) => group.length > 0);
+  if (groups.length === 0) return null;
   const label = moreLabel(THREAD_REVEAL_WORDS.THING);
   return (
     <span className="pull-request-thread-menu ml-auto flex">
       <MoreButton thing={THREAD_REVEAL_WORDS.THING} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
-        <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
+        <ActionMenu label={label} menu={menu.drawn} groups={groups} onClose={menu.close} />
+      )}
+    </span>
+  );
+}
+
+/** What the ⋯ of a comment, a review, and the description are called. */
+const ENTRY_THING = { COMMENT: "Comment", REVIEW: "Review", DESCRIPTION: "Description" } as const;
+
+type EntryThing = (typeof ENTRY_THING)[keyof typeof ENTRY_THING];
+
+/**
+ * The ⋯ of a comment, a review, or the description: Copy GitHub link, its
+ * page's address on GitHub, then Open on GitHub. Note that it offers no
+ * Copy link, because no Luke link names one of them (`link-grammar.ts`'s
+ * `PULL_REQUEST_THREAD` names a review thread alone), and a GitHub address
+ * is never called a link of Luke's.
+ */
+function GitHubEntryMenu({ thing, url }: { thing: EntryThing; url: string }): React.JSX.Element {
+  const menu = useMenu(true);
+  const copy = useCopyToast();
+  const groups = [
+    [commandAction(PANEL_COMMAND.COPY_GITHUB_LINK, () => copy(url, LINK_COPY.COPIED), false)],
+    [commandAction(PANEL_COMMAND.OPEN_ON_GITHUB, () => appPlatform().openGitHub(url), false)],
+  ];
+  return (
+    <span className="pull-request-entry-menu flex">
+      <MoreButton thing={thing} {...menu.trigger()} />
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={moreLabel(thing)}
+          menu={menu.drawn}
+          groups={groups}
+          onClose={menu.close}
+        />
       )}
     </span>
   );
@@ -1434,7 +1466,7 @@ function EntryHead({ children }: { children: ReactNode }): React.JSX.Element {
   );
 }
 
-/** One comment or review: who, where a review left them, and when; then their words, and the review threads a review started. */
+/** One comment or review: who, where a review left them, when, and its ⋯; then their words, and the review threads a review started. */
 function EntryCard({
   entry,
   now,
@@ -1460,7 +1492,17 @@ function EntryCard({
         nameRef={<ActorRef actor={writer} nameOnly />}
         at={entry.at}
         now={now}
-        trailing={entry.state === undefined ? undefined : <ReviewStanding state={entry.state} />}
+        trailing={
+          <>
+            {entry.state === undefined ? null : <ReviewStanding state={entry.state} />}
+            <GitHubEntryMenu
+              thing={
+                entry.kind === CONVERSATION_ENTRY.REVIEW ? ENTRY_THING.REVIEW : ENTRY_THING.COMMENT
+              }
+              url={entry.url}
+            />
+          </>
+        }
       >
         <EntryWords entry={entry} picture={picture} />
         <Reactions reactions={entry.reactions} subject={entry.subject} />
@@ -1484,9 +1526,9 @@ function EntryCard({
 
 /** The overview's three reads, each as it stands, with the door that asks each again. */
 interface OverviewParts {
-  readonly pullRequest: Part<CodingAgentOverviewPullRequest>;
-  readonly checks: Part<CodingAgentOverviewChecks>;
-  readonly conversation: Part<CodingAgentOverviewConversation>;
+  readonly pullRequest: Part<AgentOverviewPullRequest>;
+  readonly checks: Part<AgentOverviewChecks>;
+  readonly conversation: Part<AgentOverviewConversation>;
   readonly ask: {
     readonly pullRequest: () => void;
     readonly checks: () => void;
@@ -1621,7 +1663,7 @@ function Deployments({
 
 /** The head's deployments that serve an address now, the newest of each environment, as the header's Preview opens them. */
 function servingOf(
-  checks: CodingAgentOverviewChecks | undefined,
+  checks: AgentOverviewChecks | undefined,
 ): readonly (PullRequestDeployment & { readonly url: string })[] {
   return (checks?.deployments ?? []).filter(
     (deployment): deployment is PullRequestDeployment & { readonly url: string } =>
@@ -1631,7 +1673,7 @@ function servingOf(
 
 /** The header's Preview as items of a phone's ⋯: each deployment serving an address, named for its environment as Preview's menu names it, Preview said under it. */
 function previewActions(
-  checks: CodingAgentOverviewChecks | undefined,
+  checks: AgentOverviewChecks | undefined,
   openLink: (url: string) => void,
 ): MenuAction[] {
   return servingOf(checks).map((deployment) => ({
@@ -1684,7 +1726,7 @@ function PreviewControl({
   checks,
   shown,
 }: {
-  checks: CodingAgentOverviewChecks | undefined;
+  checks: AgentOverviewChecks | undefined;
   shown: boolean;
 }): React.JSX.Element | null {
   const openLink = useOpenLink();
@@ -1776,7 +1818,7 @@ function DescriptionPart({
   fold,
 }: {
   agentId: string;
-  part: Part<CodingAgentOverviewPullRequest>;
+  part: Part<AgentOverviewPullRequest>;
   /** Asks the pull request's read again, as an edit of the description does once GitHub answered it. */
   onRead: () => void;
   reactions: readonly ReactionGroup[] | undefined;
@@ -1797,7 +1839,15 @@ function DescriptionPart({
       </div>
     );
   return (
-    <Section title="Description" fold={fold}>
+    <Section
+      title="Description"
+      fold={fold}
+      end={
+        part.kind === PART.LANDED ? (
+          <GitHubEntryMenu thing={ENTRY_THING.DESCRIPTION} url={part.value.url} />
+        ) : undefined
+      }
+    >
       {part.kind === PART.PENDING ? (
         <PartSkeleton
           label={PULL_REQUEST_WORDS.READING_DESCRIPTION}
@@ -1904,7 +1954,7 @@ function HeaderTitle({
   title,
   writes,
 }: {
-  title: Pick<CodingAgentPullRequest, "title" | "number" | "url"> | undefined;
+  title: Pick<AgentPullRequest, "title" | "number" | "url"> | undefined;
   writes: PullRequestWrites;
 }): React.JSX.Element {
   if (title === undefined) {
@@ -1992,7 +2042,7 @@ interface FilesCount {
  * counts at once, and one GitHub refuses counts again as it goes back.
  */
 function filesCountOf(
-  published: CodingAgentPullRequest | undefined,
+  published: AgentPullRequest | undefined,
   reads: ChangesReads,
 ): FilesCount | undefined {
   const changes = reads.pullRequest;
@@ -2023,7 +2073,7 @@ function filesCountOf(
 }
 
 /** How many entries the Conversation tab counts: its comments and reviews, the earlier ones left on GitHub, and every review thread. */
-function conversationCount(conversation: CodingAgentOverviewConversation): number {
+function conversationCount(conversation: AgentOverviewConversation): number {
   const threads = conversation.conversation.reduce(
     (sum, entry) => sum + (entry.threads?.length ?? 0),
     0,
@@ -2041,7 +2091,7 @@ function conversationCount(conversation: CodingAgentOverviewConversation): numbe
  */
 function tabsOf(
   parts: OverviewParts,
-  published: CodingAgentPullRequest | undefined,
+  published: AgentPullRequest | undefined,
   held: HeaderPullRequest | undefined,
   changes: ChangesReads,
   chapters: ChaptersRead,
@@ -2317,7 +2367,7 @@ function askedYet(read: { readonly answer: unknown; readonly out: boolean }): bo
 
 /** Every review thread a read's conversation holds, in its order; none before a read lands or where it failed. */
 function reviewThreadsOf(
-  conversation: CodingAgentOverviewConversation | undefined,
+  conversation: AgentOverviewConversation | undefined,
 ): readonly ReviewThread[] {
   return conversation?.conversation.flatMap((entry) => entry.threads ?? []) ?? [];
 }
@@ -2361,14 +2411,13 @@ function centreCard(card: HTMLElement): void {
  */
 function useThreadJumps(input: {
   agentId: string;
-  planId: string | null;
   number: number | undefined;
   shown: boolean;
   threads: readonly ReviewThread[];
-  conversation: Part<CodingAgentOverviewConversation>;
+  conversation: Part<AgentOverviewConversation>;
   onView: (view: PullRequestView) => void;
 }) {
-  const { agentId, planId, number, shown, threads, conversation } = input;
+  const { agentId, number, shown, threads, conversation } = input;
   const openPlace = useOpenPlace();
   const toast = useToast();
   const [jump, setJump] = useState<ThreadJump | undefined>(undefined);
@@ -2392,9 +2441,9 @@ function useThreadJumps(input: {
     standing.onRevealed(standing.reveal.ask);
   }, [taken?.reveal.ask, start]);
   const place = (thread: ReviewThread, view: PullRequestThreadView): LinkPlace | undefined =>
-    thread.id === undefined || planId === null || number !== undefined
+    thread.id === undefined || number !== undefined
       ? undefined
-      : { kind: LINK_PLACE.PULL_REQUEST_THREAD, planId, agentId, threadId: thread.id, view };
+      : { kind: LINK_PLACE.PULL_REQUEST_THREAD, agentId, threadId: thread.id, view };
   const latestView = useRef(input.onView);
   latestView.current = input.onView;
   const jumpTo = (thread: ReviewThread, view: PullRequestThreadView) => {
@@ -2555,7 +2604,7 @@ interface AgentPullRequestTabProps {
   agentId: string;
   /** The pull request of the agent's repository the tab shows by its number, where it is not the one from the agent's branch (`pull-request-number.ts`); none shows the agent's own. */
   number?: number | undefined;
-  control: CodingAgentsControl;
+  control: AgentsControl;
   /** Whether the panel is on screen, which is when the tab reads. */
   shown: boolean;
   /** The plan's repository, whose files a gap between a diff's hunks is read from; none opens no gap. */
@@ -2664,7 +2713,7 @@ function PullRequestTabBody({
     control.agents?.find((each) => each.id === agentId) ??
     control.archived?.find((each) => each.id === agentId);
   const status = agent?.status;
-  const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
+  const ended = !agentStillWriting(status ?? AGENT_STATUS.RUNNING);
   const id = useId();
   // A phone names each of the tabs in words, never their glyphs alone, which a finger cannot hover for a name.
   const tabsFold =
@@ -2731,12 +2780,15 @@ function PullRequestTabBody({
   // Refresh dimmed while a read is out; a read saying there is none takes them away with the header.
   const refreshNow = useRef(refresh);
   refreshNow.current = refresh;
+  // Note that the ⋯'s Refresh reads Files changed again too where its view was shown, because it is the one Refresh
+  // on the screen, Files changed's ⋯ offering none of its own; a write reads back without it.
+  const refreshAllNow = useRef(refresh);
   const url = none ? undefined : held?.url;
   const handed = useMemo(
     () =>
       url === undefined
         ? undefined
-        : [pullRequestActions(url, reading, () => refreshNow.current())],
+        : [pullRequestActions(url, reading, () => refreshAllNow.current())],
     [url, reading],
   );
   // A phone draws no actions beside the title: its header's ⋯ offers Preview and Run after the
@@ -2773,6 +2825,10 @@ function PullRequestTabBody({
     control,
     shown && !none && (view === PULL_REQUEST_VIEW.FILES || view === PULL_REQUEST_VIEW.CHAPTERS),
   );
+  refreshAllNow.current = () => {
+    refresh();
+    if (askedYet(changes)) changes.ask();
+  };
   // The Chapters view's chunk is asked for only once the view is first shown.
   const [chaptersSeen, setChaptersSeen] = useState(false);
   if (!chaptersSeen && view === PULL_REQUEST_VIEW.CHAPTERS) setChaptersSeen(true);
@@ -2822,7 +2878,6 @@ function PullRequestTabBody({
   );
   const threadJumps = useThreadJumps({
     agentId,
-    planId: agent?.planId ?? null,
     number,
     shown,
     threads: threadList,

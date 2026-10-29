@@ -28,22 +28,23 @@
  * notices were all read and whose work stands as it did hands nothing new
  * and the history stays cached.
  *
- * `list_open_asks` is the operator's read of every ask waiting on its member
- * across all their agents, where `read_inbox` reads only the caller's own
- * threads (`../inbox/inbox-store.ts`'s `memberOpenAsks`): only an operator is
- * offered it, and any other caller is refused. A member's own agents are the
- * ones whose row is theirs, started by them or by any of their agents, the
+ * `list_open_asks` is the operator's read of every ask waiting on its member,
+ * whichever agent asked it, a teammate's that addressed them included, where
+ * `read_inbox` reads only the caller's own threads
+ * (`../inbox/inbox-store.ts`'s `memberOpenAsks`): only an operator is offered
+ * it, and any other caller is refused. A member's own agents are the ones
+ * whose row is theirs, started by them or by any of their agents, the
  * operator among them; a teammate's never.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
+  type Agent,
   awaitingLinesOfReached,
-  type CodingAgent,
   latestTurnsOfReached,
-  listPublishedCodingAgentsById,
-  listWorkspaceCodingAgents,
-} from "@luke/database/models/coding-agent-store";
+  listPublishedAgentsById,
+  listWorkspaceAgents,
+} from "@luke/database/models/agent-store";
 import {
   markOperatorNoticesRead,
   type UnreadOperatorNotice,
@@ -51,7 +52,7 @@ import {
 } from "@luke/database/models/operator-notices";
 import { OPERATOR_NOTICE_KIND, type OperatorNoticeKind } from "@luke/database/storage-vocabulary";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
-import { CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { mentionMarkdownLink } from "@luke/features/link-grammar";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { agentName } from "@luke/features/model-label";
@@ -59,13 +60,8 @@ import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "@
 import { Clock, DateTime, Effect, Schema } from "effect";
 import type { StoreFailure } from "../http/store-failure.js";
 import { type MemberOpenAsk, memberOpenAsks } from "../inbox/inbox-store.js";
-import { codingAgentFailureOf, codingAgentStatusOf, startedBlank } from "./coder-host/status.js";
-import {
-  AGENT_CALLER,
-  agentToolRejected,
-  type CodingAgentCall,
-  orStoreRefusal,
-} from "./coding-agent-tools.js";
+import { type AgentCall, agentToolRejected, orStoreRefusal } from "./agent-tools.js";
+import { agentFailureOf, agentStatusOf, startedBlank } from "./coder-host/status.js";
 import { isOperator } from "./steward.js";
 import { workspaceStepOf, writtenMention } from "./written-mentions.js";
 
@@ -96,8 +92,8 @@ export const LIST_OPEN_ASKS_REFUSAL = {
 export const LIST_OPEN_ASKS_TOOL = {
   name: AGENT_TOOL.LIST_OPEN_ASKS,
   description:
-    "List every thread waiting on the developer, across all of their own agents in this workspace, " +
-    "yours among them, and none of a teammate's: each with its key, its title, the agent that posted it (its id, " +
+    "List every thread waiting on the developer in this workspace, whichever agent posted it, " +
+    "yours and a teammate's agent's alike: each with its key, its title, the agent that posted it (its id, " +
     "name, and mention) and its task (null for none), the kind of ask that waits (decide, do, or answer; null for a " +
     "post that only waits to be read) and its words, the latest changed first and at most " +
     `${OPERATOR_DESK.ASKS_LISTED}. It only reads: never answer an ask for the developer. ${AGENT_TOOL.READ_THREADS} ` +
@@ -131,14 +127,9 @@ const NOTICE_WORDS = {
   [OPERATOR_NOTICE_KIND.INBOX_ASK]: "it asked them in a thread",
 } as const satisfies Record<OperatorNoticeKind, string>;
 
-/** An agent's mention under the workspace's step, under its task where it has one. */
-function agentMention(
-  agent: { readonly id: string; readonly taskId: string | null },
-  name: string,
-  step: string,
-): string {
-  const task = agent.taskId === null ? undefined : { taskId: agent.taskId };
-  return writtenMention({ kind: MENTION_KIND.AGENT, ...task, agentId: agent.id }, name, step);
+/** An agent's mention under the workspace's step, by the agent whichever task it works on. */
+function agentMention(agentId: string, name: string, step: string): string {
+  return writtenMention({ kind: MENTION_KIND.AGENT, agentId }, name, step);
 }
 
 /** An ask's agent as its rows name it. */
@@ -152,7 +143,7 @@ function askAgent(ask: MemberOpenAsk, step: string) {
   return {
     id: ask.agentId,
     name,
-    mention: agentMention({ id: ask.agentId, taskId: ask.taskId }, name, step),
+    mention: agentMention(ask.agentId, name, step),
   };
 }
 
@@ -178,16 +169,16 @@ function deskText(sections: readonly DeskSection[]): string {
 }
 
 /** The member's own agents of the workspace standing, the operator left out, each with what it reads as now. */
-const memberAgentsOf = (operator: CodingAgent) =>
+const memberAgentsOf = (operator: Agent) =>
   Effect.gen(function* () {
     // The member's own are read before the bound, so a busy workspace's other agents crowd none out.
-    const listed = yield* listWorkspaceCodingAgents(operator.userId, operator.organizationId, {
+    const listed = yield* listWorkspaceAgents(operator.userId, operator.organizationId, {
       ownOnly: true,
       limit: OPERATOR_DESK.AGENTS_READ,
     });
     const own = listed.filter((agent) => agent.id !== operator.id);
     // What each published is read beside it, as its tab reads it: the pull request GitHub last answered.
-    const read = yield* listPublishedCodingAgentsById(
+    const read = yield* listPublishedAgentsById(
       operator.userId,
       own.map((agent) => agent.id),
     );
@@ -202,14 +193,13 @@ const memberAgentsOf = (operator: CodingAgent) =>
     const now = yield* Clock.currentTimeMillis;
     return agents.map(({ agent, published }) => {
       const turn = turns.get(agent.conversationId);
-      const status = codingAgentStatusOf(turn, {
+      const status = agentStatusOf(turn, {
         createdAt: agent.createdAt,
         now,
         awaitingLineAt: awaiting.get(agent.conversationId),
         blank: startedBlank(agent),
       });
-      const failure =
-        status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(turn) : undefined;
+      const failure = status === AGENT_STATUS.FAILED ? agentFailureOf(turn) : undefined;
       return { agent, published, status, failure };
     });
   });
@@ -221,7 +211,7 @@ const memberAgentsOf = (operator: CodingAgent) =>
  * member, so a workspace they have left reads as nothing standing.
  */
 const readDeskSections = (
-  operator: CodingAgent,
+  operator: Agent,
 ): Effect.Effect<readonly DeskSection[], StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
     const [agents, asks, step] = yield* Effect.all(
@@ -232,12 +222,11 @@ const readDeskSections = (
       ],
       { concurrency: "unbounded" },
     );
-    const named = (agent: CodingAgent) => agentMention(agent, agentName(agent), step);
+    const named = (agent: Agent) => agentMention(agent.id, agentName(agent), step);
     const running = agents.filter(
-      ({ status }) =>
-        status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING,
+      ({ status }) => status === AGENT_STATUS.STARTING || status === AGENT_STATUS.RUNNING,
     );
-    const failed = agents.filter(({ status }) => status === CODING_AGENT_STATUS.FAILED);
+    const failed = agents.filter(({ status }) => status === AGENT_STATUS.FAILED);
     const awaiting = agents.flatMap(({ agent, published }) =>
       published?.state === PULL_REQUEST_STATE.OPEN ? [{ agent, pull: published }] : [],
     );
@@ -294,7 +283,7 @@ function noticesSection(notices: readonly UnreadOperatorNotice[], step: string):
       model: newest.agentModel,
       automationName: newest.agentAutomationName,
     });
-    const mention = agentMention({ id: newest.agentId, taskId: newest.taskId }, name, step);
+    const mention = agentMention(newest.agentId, name, step);
     return `- ${mention}: ${kinds.map((kind) => NOTICE_WORDS[kind]).join(", ")}`;
   });
   return {
@@ -330,7 +319,7 @@ export interface OperatorDesk {
 
 /** The desk for the operator, as a turn's message carries it, with the notices it hands. */
 export const readOperatorDesk = (
-  operator: CodingAgent,
+  operator: Agent,
 ): Effect.Effect<OperatorDesk, StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
     const [sections, notices, step] = yield* Effect.all(
@@ -350,7 +339,7 @@ export const readOperatorDesk = (
 
 /** Marks read the notices the desk handed, once its turn's message carries it. */
 export const markDeskNoticesRead = (
-  operator: CodingAgent,
+  operator: Agent,
   desk: OperatorDesk,
 ): Effect.Effect<void, StoreFailure, DatabaseServices> =>
   Effect.flatMap(DateTime.nowAsDate, (now) =>
@@ -368,16 +357,16 @@ function askWords(text: string | null): string | null {
 
 /**
  * One call of `list_open_asks`: every thread waiting on the operator's
- * member across their own agents in its workspace, or the refusal for any
+ * member in its workspace, whichever agent posted it, or the refusal for any
  * caller that is no operator. Note that the caller's input is read for
  * nothing, since the tool takes none, so an extra field asks nothing.
  */
 export function runListOpenAsks(
-  call: CodingAgentCall,
+  call: AgentCall,
   _input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   const { caller } = call;
-  if (caller.kind !== AGENT_CALLER.AGENT || !isOperator(caller.agent)) {
+  if (!isOperator(caller.agent)) {
     return Effect.succeed(agentToolRejected(LIST_OPEN_ASKS_REFUSAL.NOT_OPERATOR));
   }
   const operator = caller.agent;

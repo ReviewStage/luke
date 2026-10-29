@@ -1,9 +1,5 @@
-import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type { RunMode } from "@luke/host";
 import type { EventPushName, PushPayload } from "@luke/host/contract";
-import { PanelAvatarRelay } from "@luke/host/panel-avatar";
-import type { AvatarFeed } from "@luke/voice/avatar";
-import type { AvatarViewSignal } from "@luke/voice/avatar-view";
 import {
   app,
   BrowserWindow,
@@ -28,17 +24,12 @@ import {
 import { windowPushes } from "./window-pushes";
 import { trafficLightsAt } from "./zoom";
 
-interface PanelDuck {
-  setExchangeActive(active: boolean): void;
-}
-
 interface PanelManagerOptions {
   runMode: RunMode;
   /** The native material its windows are drawn on (`window-material.ts`); the sidebar's where unset. */
   material?: WindowMaterial | undefined;
   /** The named development instance this run is, which every window's title then carries; none for the plain one. */
   instance?: string | undefined;
-  mediaDuck: PanelDuck;
   preloadPath: string;
   rendererHtmlPath: string;
   rendererUrl: string;
@@ -57,8 +48,7 @@ interface PanelManagerOptions {
   closing: () => boolean;
   /**
    * The last panel window went down on its own. All panels closed is how
-   * this process decides it is done, and `window-all-closed` can no longer
-   * say so once a hidden window of Luke's own stands beside them.
+   * this process decides it is done.
    */
   onAllClosed?: () => void;
   /**
@@ -153,7 +143,6 @@ function desktopBounds(display: Display): Rectangle {
 export class PanelManager {
   readonly #runMode: RunMode;
   readonly #instance: string | undefined;
-  readonly #mediaDuck: PanelDuck;
   readonly #preloadPath: string;
   readonly #rendererHtmlPath: string;
   readonly #rendererUrl: string;
@@ -166,18 +155,8 @@ export class PanelManager {
   readonly #closing: () => boolean;
   /** The window, keyed by the display it was opened against. */
   readonly #windows = new Map<number, BrowserWindow>();
-  /** The windows whose renderer has drawn its first frame, the ones the avatar's grant may reach. */
-  readonly #drawn = new WeakSet<BrowserWindow>();
   /** The windows hidden, minimized, or wholly covered since they last showed, the ones whose document is held. */
   readonly #hidden = new WeakSet<BrowserWindow>();
-  /** Whether the avatar's grant stands, so the panel running its session is left unthrottled and told every document. */
-  #avatarSession = false;
-  readonly #avatar = new PanelAvatarRelay(() => {
-    const window = this.primaryPanel();
-    if (!window || !this.#drawn.has(window)) return undefined;
-    const page = window.webContents;
-    return { push: (push, payload) => windowPushes.push(page, push, payload) };
-  });
 
   readonly #material: WindowMaterial;
 
@@ -185,7 +164,6 @@ export class PanelManager {
     this.#runMode = options.runMode;
     this.#material = options.material ?? WINDOW_MATERIAL.SIDEBAR;
     this.#instance = options.instance;
-    this.#mediaDuck = options.mediaDuck;
     this.#preloadPath = options.preloadPath;
     this.#rendererHtmlPath = options.rendererHtmlPath;
     this.#rendererUrl = options.rendererUrl;
@@ -228,40 +206,14 @@ export class PanelManager {
   }
 
   /**
-   * Keyframe's grant for the call's avatar, or nothing once its session is to
-   * close. The panel runs the session wherever it is and whichever tab it
-   * shows, since the avatar's voice is what the developer hears, and draws
-   * its video in the tab of the agent the call is into.
-   */
-  showAvatarSession(grant: AvatarGrant | undefined): void {
-    this.#avatarSession = grant !== undefined;
-    for (const window of this.windows()) {
-      this.#throttle(window);
-      this.#holdState(window);
-    }
-    this.#avatar.showAvatarSession(grant);
-  }
-
-  /**
-   * A window runs the avatar's session, whose video and lip-sync must go on
-   * while it is hidden or covered, only for as long as a grant stands; any
-   * other time it is throttled as Chromium does by default. Applied to a
-   * page that has just loaded as well, so a reload cannot drop it.
-   */
-  #throttle(window: BrowserWindow): void {
-    window.webContents.setBackgroundThrottling(!this.#avatarSession);
-  }
-
-  /**
    * A window no one can see is told no document until it shows again, when
    * it is handed the newest at once, because every document it is pushed is
    * rendered there whether or not the window is drawn, and while agents run
-   * that is a hidden panel's whole CPU. A window running the avatar's
-   * session is the exception, as it is for throttling. Only the document is
-   * held: its events and its own calls still go through.
+   * that is a hidden panel's whole CPU. Only the document is held: its
+   * events and its own calls still go through.
    */
   #holdState(window: BrowserWindow): void {
-    windowPushes.holdState(window.webContents, this.#hidden.has(window) && !this.#avatarSession);
+    windowPushes.holdState(window.webContents, this.#hidden.has(window));
   }
 
   /**
@@ -287,16 +239,6 @@ export class PanelManager {
     window.on("show", shown);
     window.on("restore", shown);
     window.on("focus", shown);
-  }
-
-  /** One message of Luke's voice feed, for the avatar to lip-sync. */
-  feedAvatar(feed: AvatarFeed): void {
-    this.#avatar.feedAvatar(feed);
-  }
-
-  /** The call window's offer or close for its view of the avatar's video, for the panel to answer. */
-  signalAvatarView(signal: AvatarViewSignal): void {
-    this.#avatar.signalView(signal);
   }
 
   /** Every living panel window, for what each one applies itself: the zoom. */
@@ -332,14 +274,6 @@ export class PanelManager {
 
   focusIfExpanded(displayId: number): void {
     this.#focusWindow(this.#windows.get(displayId));
-  }
-
-  /**
-   * Whether a spoken exchange is live, as the main process derives it from the
-   * voice window's report. The media duck follows it directly.
-   */
-  setVoiceExchange(active: boolean): void {
-    this.#mediaDuck.setExchangeActive(active);
   }
 
   /** How many panel windows stand — the count the process's lifetime is decided by. */
@@ -444,11 +378,7 @@ export class PanelManager {
       titleBarStyle: "hiddenInset",
       trafficLightPosition: trafficLightsAt(zoomFactor),
       webPreferences: {
-        ...hardenedWebPreferences({
-          preloadPath: this.#preloadPath,
-          runMode: this.#runMode,
-          backgroundThrottling: !this.#avatarSession,
-        }),
+        ...hardenedWebPreferences({ preloadPath: this.#preloadPath, runMode: this.#runMode }),
         zoomFactor,
       },
     };
@@ -460,21 +390,13 @@ export class PanelManager {
     refuseForeignNavigation(window, this.#rendererUrl);
     this.#followVisibility(window);
     // A page that stops answering is reported once per stretch, as it answers
-    // again or the window closes on it; unlike the voice window's, it is not
-    // reloaded, since it may answer again and the panel holds what the
-    // developer was doing. One whose renderer died has lost that already.
+    // again or the window closes on it; it is not reloaded, since it may
+    // answer again and the panel holds what the developer was doing. One whose renderer died has lost that already.
     this.#followResponsiveness?.(window);
     const revival = this.#followDeaths(window);
-    // Each page the window loads, a reload's included, is handed the avatar's
-    // grant standing, since the renderer it replaced ran the session and the
-    // voice window stays muted while the avatar reads as up. Note that the
-    // first page is handed it twice, which the renderer reads as one grant.
     const drew = () => {
       if (window.isDestroyed()) return;
       revival.loaded();
-      this.#drawn.add(window);
-      if (this.#avatarSession) this.#throttle(window);
-      this.#avatar.pageDrew();
     };
     window.webContents.on("did-finish-load", drew);
     window.once("ready-to-show", () => {
@@ -530,12 +452,11 @@ export class PanelManager {
 
   /**
    * Reloads the window's page each time its renderer dies or fails to load,
-   * after a pause and within the voice window's bound (`renderer-revival.ts`),
-   * so a blank window stands only for that pause. Until it draws again the
-   * avatar's grant reaches no page, and the reload's first frame is handed
-   * it (`drew`). Past the bound the window is shown with the question of
-   * reloading once more, since a window that crash-loops unasked would spin
-   * the process, or quitting. A quit's own teardown is no death.
+   * after a pause and within a bound (`renderer-revival.ts`),
+   * so a blank window stands only for that pause. Past the bound the window
+   * is shown with the question of reloading once more, since a window that
+   * crash-loops unasked would spin the process, or quitting. A quit's own
+   * teardown is no death.
    */
   #followDeaths(window: BrowserWindow): RendererRevival {
     const revival: RendererRevival = new RendererRevival({
@@ -546,8 +467,8 @@ export class PanelManager {
         void askReloadPanel(window).then((reload) => {
           if (window.isDestroyed() || this.#closing()) return;
           if (!reload) app.quit();
-          // Note that a quit a live call holds leaves the launch standing,
-          // and declining to end the call keeps it so, so the page is loaded
+          // Note that a quit held for its question leaves the launch
+          // standing, and declining it keeps it so, so the page is loaded
           // once more rather than left blank with no question on it.
           if (!this.#closing()) revival.restart();
         });
@@ -555,7 +476,6 @@ export class PanelManager {
     });
     onRendererDeath(window.webContents, "panel", (reason) => {
       if (window.isDestroyed() || this.#closing()) return;
-      this.#drawn.delete(window);
       revival.gone(reason);
     });
     return revival;

@@ -1,7 +1,10 @@
 import { Schema as EffectSchema } from "effect";
 import { sealedLiveQuerySchema } from "./live-wire.js";
 import {
+  type AgentSectionEntry,
   agentSectionEntrySchema,
+  type TaskSection,
+  type TaskSectionEntry,
   type TaskSections,
   taskSectionEntrySchema,
   taskSectionSchema,
@@ -9,17 +12,13 @@ import {
 import { type RepositoryPin, repositoryPinSchema } from "./task-wire.js";
 
 /**
- * sidebar-live.ts -- the account's sidebar sections and pinned repositories as the desktop follows them over Neon Realtime: the sealed statements the service answers, and the rows they deliver.
+ * sidebar-live.ts -- the account's sidebar sections and pinned repositories as the host follows them over the service's held poll: the statements the service answers, and the rows they deliver.
  *
  * The rows are the wire's own values, each instant as epoch milliseconds and
- * what the wire leaves out as null; Realtime keeps no order, so the reader
- * orders them as the held reads do.
+ * what the wire leaves out as null, in no order; the host keeps them in
+ * collections and draws them in the held reads' order
+ * (`@luke/host`'s `sidebar-collections.ts`).
  */
-
-/** By code unit, as a comparator answers. */
-function byText(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
 
 /**
  * The account's sidebar sealed for following: the address, and four
@@ -39,7 +38,7 @@ export const sidebarLiveAnswerSchema = EffectSchema.Struct({
 
 export type SidebarLiveAnswer = typeof sidebarLiveAnswerSchema.Type;
 
-/** The sidebar's rows as Realtime delivers them: what the wire leaves out where it holds nothing is null. */
+/** The sidebar's rows as the live statements deliver them: what the wire leaves out where it holds nothing is null. */
 export const sidebarLiveRowsSchema = EffectSchema.Struct({
   sections: EffectSchema.Array(
     EffectSchema.Struct({
@@ -69,37 +68,30 @@ export interface SidebarRead {
   readonly repositoryPins: readonly RepositoryPin[];
 }
 
-/**
- * The sidebar as the held reads answer it: the sections oldest made first,
- * the tasks and the agents in them oldest put there first, each by id among
- * one instant, an icon and a place only where they stand; and the pins
- * newest pinned first, then by name.
- */
-export function sidebarOfLiveRows(rows: typeof sidebarLiveRowsSchema.Type): SidebarRead {
+/** The sidebar's rows as the host keeps them: each part's rows in no order, what the wire leaves out where it holds nothing left out. */
+export interface SidebarRows {
+  readonly sections: readonly TaskSection[];
+  readonly entries: readonly TaskSectionEntry[];
+  readonly agentEntries: readonly AgentSectionEntry[];
+  readonly pins: readonly RepositoryPin[];
+}
+
+/** The sidebar's rows as the live statements deliver them, each null the wire answers where a row holds nothing left out. */
+export function sidebarRowsOfLive(rows: typeof sidebarLiveRowsSchema.Type): SidebarRows {
   return {
-    taskSections: {
-      sections: rows.sections
-        .toSorted((a, b) => a.createdAt - b.createdAt || byText(a.id, b.id))
-        .map(({ icon, position, ...section }) => ({
-          ...section,
-          ...(icon === null ? undefined : { icon }),
-          ...(position === null ? undefined : { position }),
-        })),
-      entries: rows.entries
-        .toSorted((a, b) => a.addedAt - b.addedAt || byText(a.taskId, b.taskId))
-        .map(({ position, ...entry }) => ({
-          ...entry,
-          ...(position === null ? undefined : { position }),
-        })),
-      agentEntries: rows.agentEntries
-        .toSorted((a, b) => a.addedAt - b.addedAt || byText(a.agentId, b.agentId))
-        .map(({ position, ...entry }) => ({
-          ...entry,
-          ...(position === null ? undefined : { position }),
-        })),
-    },
-    repositoryPins: rows.pins.toSorted(
-      (a, b) => b.pinnedAt - a.pinnedAt || byText(a.repository, b.repository),
-    ),
+    sections: rows.sections.map(({ icon, position, ...section }) => ({
+      ...section,
+      ...(icon === null ? undefined : { icon }),
+      ...(position === null ? undefined : { position }),
+    })),
+    entries: rows.entries.map(({ position, ...entry }) => ({
+      ...entry,
+      ...(position === null ? undefined : { position }),
+    })),
+    agentEntries: rows.agentEntries.map(({ position, ...entry }) => ({
+      ...entry,
+      ...(position === null ? undefined : { position }),
+    })),
+    pins: rows.pins,
   };
 }

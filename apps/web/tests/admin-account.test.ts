@@ -6,11 +6,7 @@ import {
   ADMIN_WORKSPACE_KIND,
 } from "@luke/features/admin-account-wire";
 import type { AdminUserDetail } from "@luke/features/admin-answer-wire";
-import {
-  CODING_AGENT_FAILURE,
-  CODING_AGENT_STATUS,
-  CONTEXT_WINDOW,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_FAILURE, AGENT_STATUS, CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-wire";
 import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
@@ -87,7 +83,6 @@ function support(overrides: Partial<AdminUserDetail["support"]> = {}): AdminUser
       agentsRead: 40,
       pullRequestsOpened: 17,
       pullRequestsMerged: 12,
-      callMinutes: 612,
     },
     recentAgents: [
       {
@@ -97,7 +92,7 @@ function support(overrides: Partial<AdminUserDetail["support"]> = {}): AdminUser
         model: "anthropic/claude-opus-5.5",
         effort: "high",
         contextWindow: CONTEXT_WINDOW.LONG,
-        status: CODING_AGENT_STATUS.COMPLETED,
+        status: AGENT_STATUS.COMPLETED,
         failure: null,
         pullRequest: ADMIN_PULL_REQUEST.MERGED,
       },
@@ -108,8 +103,8 @@ function support(overrides: Partial<AdminUserDetail["support"]> = {}): AdminUser
         model: "openai/gpt-5.5",
         effort: "medium",
         contextWindow: CONTEXT_WINDOW.STANDARD,
-        status: CODING_AGENT_STATUS.FAILED,
-        failure: CODING_AGENT_FAILURE.PROVIDER_KEY,
+        status: AGENT_STATUS.FAILED,
+        failure: AGENT_FAILURE.PROVIDER_KEY,
         pullRequest: ADMIN_PULL_REQUEST.NONE,
       },
     ],
@@ -150,13 +145,13 @@ function support(overrides: Partial<AdminUserDetail["support"]> = {}): AdminUser
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       contextWindow: null,
-      experiments: [{ key: EXPERIMENT.VIDEO_CALLS, name: "Video calls" }],
+      experiments: [{ key: EXPERIMENT.MEMORY, name: "Memory" }],
     },
     failures: [
       {
         kind: ADMIN_FAILURE_KIND.AGENT,
         at: Date.UTC(2026, 9, 13, 16, 42),
-        reason: CODING_AGENT_FAILURE.PROVIDER_KEY,
+        reason: AGENT_FAILURE.PROVIDER_KEY,
       },
       {
         kind: ADMIN_FAILURE_KIND.KEY,
@@ -302,11 +297,10 @@ test("the support sections say what the account did and what broke, by the servi
     ]),
   );
   expect(page.textContent).toContain("Tasks created · 30 days74");
-  expect(page.textContent).toContain("Coding agents · 30 days405% failed");
+  expect(page.textContent).toContain("Agents · 30 days405% failed");
   expect(page.textContent).toContain("Pull requests merged · 30 days12of 17 opened");
-  expect(page.textContent).toContain("Call minutes · 30 days612");
 
-  const agents = rows(page, "The account's newest coding agents");
+  const agents = rows(page, "The account's newest agents");
   expect(agents).toEqual([
     "Oct 14, 8:05 AM UTC|acme/relay|anthropic/claude-opus-5.5 · high|Finished|Merged",
     "Oct 13, 4:40 PM UTC|acme/web|openai/gpt-5.5 · medium · standard window|Failedprovider_key|—",
@@ -319,10 +313,10 @@ test("the support sections say what the account did and what broke, by the servi
     "Provider key|openai|quota_exceeded|Oct 13, 4:41 PM UTC",
     "Connection|linear|Connected|Sep 2, 12:00 AM UTC",
   ]);
-  expect(page.textContent).toContain("Coding agents start on anthropic/claude-opus-5.5 · high.");
-  expect(page.textContent).toContain("Experiments:Video calls");
+  expect(page.textContent).toContain("Agents start on anthropic/claude-opus-5.5 · high.");
+  expect(page.textContent).toContain("Experiments:Memory");
   expect(rows(page, "The account's recent failures")).toEqual([
-    "Oct 13, 4:42 PM UTC|Coding agent failed|provider_key",
+    "Oct 13, 4:42 PM UTC|Agent failed|provider_key",
     "Oct 13, 4:41 PM UTC|Provider key · openai|quota_exceeded",
   ]);
 });
@@ -340,7 +334,6 @@ test("an account with nothing to support from says so in each section", async ()
           agentsRead: 0,
           pullRequestsOpened: 0,
           pullRequestsMerged: 0,
-          callMinutes: 0,
         },
         recentAgents: [],
         workspaces: [],
@@ -353,11 +346,11 @@ test("an account with nothing to support from says so in each section", async ()
   );
 
   expect(page.textContent).toContain("last seen never");
-  expect(page.textContent).toContain("Coding agents · 30 days0none started");
-  expect(page.textContent).toContain("No coding agent started yet.");
+  expect(page.textContent).toContain("Agents · 30 days0none started");
+  expect(page.textContent).toContain("No agent started yet.");
   expect(page.textContent).toContain("In no workspace.");
   expect(page.textContent).toContain("No provider key or connection.");
-  expect(page.textContent).toContain("Coding agents start on the catalog's default.");
+  expect(page.textContent).toContain("Agents start on the catalog's default.");
   expect(page.textContent).toContain("No experiments turned on.");
   expect(page.textContent).toContain("Nothing failed in this window.");
 });

@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
+  type AgentSubagentStanding,
+  type AgentSummary,
+  type AgentTranscriptMessage,
   agentMessageReplyLine,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentSubagentStanding,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
@@ -27,10 +27,11 @@ import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { ChipCards } from "./chip-cards.js";
+import { TranscriptAgent } from "./line-cards.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 
@@ -64,15 +65,15 @@ function toolPart(tool: string, input: WireRecord, output?: WireRecord): WireRec
   };
 }
 
-function assistant(parts: readonly WireRecord[]): CodingAgentMessage {
+function assistant(parts: readonly WireRecord[]): AgentTranscriptMessage {
   return { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts };
 }
 
 /** The message drawn as an agent's turn is, every target its rows open recorded, its workers standing as their own sessions say. */
 function drawn(
-  message: CodingAgentMessage,
+  message: AgentTranscriptMessage,
   moving = false,
-  standings?: ReadonlyMap<string, CodingAgentSubagentStanding>,
+  standings?: ReadonlyMap<string, AgentSubagentStanding>,
 ) {
   const opened: ToolTarget[] = [];
   const container = document.createElement("div");
@@ -110,20 +111,6 @@ const OPENING_CALLS: readonly {
     target: { kind: TOOL_TARGET.PAGE, page: "page-1" },
   },
   {
-    name: "a drawing opens the Board",
-    tool: "draw_on_board",
-    input: { elements: [] },
-    output: ACCEPTED,
-    target: { kind: TOOL_TARGET.BOARD },
-  },
-  {
-    name: "a look at the board opens the Board",
-    tool: "look_at_board",
-    input: {},
-    output: { status: "looked", image: "data:image/png;base64,AA" },
-    target: { kind: TOOL_TARGET.BOARD },
-  },
-  {
     name: "a read of an agent opens its tab",
     tool: "read_coding_agent",
     input: { agentId: "agent-7" },
@@ -143,17 +130,6 @@ const OPENING_CALLS: readonly {
     input: { notes: [{ kind: "add", section: "Goal", text: "Export invoices" }] },
     output: ACCEPTED,
     target: { kind: TOOL_TARGET.PLAN },
-  },
-  {
-    name: "code shown opens its file at its lines",
-    tool: "show_code",
-    input: { path: "src/invoice.ts", startLine: 12, endLine: 40 },
-    output: ACCEPTED,
-    target: {
-      kind: TOOL_TARGET.SHOWN_CODE,
-      call: "call-show_code",
-      ref: { path: "src/invoice.ts", startLine: 12, endLine: 40 },
-    },
   },
   {
     name: "a post to the inbox opens the Inbox",
@@ -215,12 +191,12 @@ const SENT_CALLS: readonly {
 ];
 
 for (const call of SENT_CALLS) {
-  test(`${call.name}: its row folds what was sent open, and its chip, named as a coding agent where the place knows no name, opens the agent`, () => {
+  test(`${call.name}: its row folds what was sent open, and its chip, named as an agent where the place knows no name, opens the agent`, () => {
     const { container, opened } = drawn(assistant([toolPart(call.tool, call.input, call.output)]));
     const row = container.querySelector<HTMLElement>(`[data-call-id="call-${call.tool}"] summary`);
     assert.ok(row, "the row is a fold's line");
     const chip = row.querySelector<HTMLButtonElement>("button[data-tool-agent-ref]");
-    assert.equal(chip?.textContent, "Coding agent");
+    assert.equal(chip?.textContent, "Agent");
     assert.equal(container.querySelector("[data-opens]"), null, "no row is a button that opens");
     act(() => chip?.click());
     assert.deepEqual(opened, [call.target], "the chip opens the agent");
@@ -266,11 +242,11 @@ const FOLDING_CALLS: readonly {
     part: toolPart("show_page", { title: "Pricing explorer" }),
   },
   {
-    name: "a drawing the board refused",
+    name: "a page its tool refused",
     part: toolPart(
-      "draw_on_board",
-      { elements: [] },
-      { status: "not-drawn", reason: "Not drawn: an arrow names an id the diagram does not hold." },
+      "show_page",
+      { title: "Pricing explorer", path: "pricing.html" },
+      { status: "rejected", reason: "Not shown: no such file in your sandbox." },
     ),
   },
   {
@@ -359,7 +335,7 @@ function failureOn(line: Element | null | undefined) {
 const FAILURE_LINES: readonly {
   readonly name: string;
   readonly parts: readonly WireRecord[];
-  readonly standings?: ReadonlyMap<string, CodingAgentSubagentStanding>;
+  readonly standings?: ReadonlyMap<string, AgentSubagentStanding>;
   readonly label: string | undefined;
 }[] = [
   {
@@ -408,7 +384,7 @@ const FAILURE_LINES: readonly {
         "call-delegate",
         {
           callId: "call-delegate",
-          status: CODING_AGENT_STATUS.FAILED,
+          status: AGENT_STATUS.FAILED,
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           startedAt: 1,
@@ -428,7 +404,7 @@ for (const { name, parts, standings, label } of FAILURE_LINES) {
 }
 
 /** An agent of the task's, as its list holds it. */
-function listedAgent(id: string, title: string, overrides: Partial<CodingAgentSummary> = {}) {
+function listedAgent(id: string, title: string, overrides: Partial<AgentSummary> = {}) {
   return {
     id,
     planId: "plan-1",
@@ -436,10 +412,10 @@ function listedAgent(id: string, title: string, overrides: Partial<CodingAgentSu
     effort: "high",
     title,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
     turnId: null,
     ...overrides,
-  } satisfies CodingAgentSummary;
+  } satisfies AgentSummary;
 }
 
 /** The card standing in the window once `row` is reached from the keyboard: its name, then its corner. */
@@ -457,11 +433,11 @@ function cardOn(row: HTMLElement | null): readonly (string | boolean | null | un
 }
 
 test("in an agent's transcript, a call about an agent hangs that agent's tab's card, archived or not found as well, and a delegation's row its worker's", () => {
-  const agents = codingAgentsControl({
+  const agents = agentsControl({
     agents: [listedAgent("agent-7", "Invoice export")],
     archived: [
       listedAgent("agent-8", "Retry audit", {
-        status: CODING_AGENT_STATUS.CANCELLED,
+        status: AGENT_STATUS.CANCELLED,
         archivedAt: 2,
       }),
     ],
@@ -470,7 +446,6 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
     agents,
     held: NOTHING_HELD,
     chosen: () => false,
-    shownCode: [],
     pages: undefined,
   });
   const container = document.createElement("div");
@@ -516,16 +491,15 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
   const [archived, corner] = cardOn(row("read_coding_agent"));
   assert.equal(archived, "Retry audit");
   assert.match(String(corner), /^Archived · /u);
-  assert.deepEqual(cardOn(chip("start_coding_agent")), ["Coding agent", "Not found", false]);
+  assert.deepEqual(cardOn(chip("start_coding_agent")), ["Agent", "Not found", false]);
   assert.deepEqual(cardOn(row("delegate")), ["Audit the retry paths", undefined, true]);
 });
 
 test("in an agent's transcript, a call that folds open in place still hangs its agent's tab's card from the agent's chip", () => {
   const cards = taskCards({
-    agents: codingAgentsControl({ agents: [listedAgent("agent-7", "Invoice export")] }),
+    agents: agentsControl({ agents: [listedAgent("agent-7", "Invoice export")] }),
     held: NOTHING_HELD,
     chosen: () => false,
-    shownCode: [],
     pages: undefined,
   });
   const container = document.createElement("div");
@@ -569,12 +543,11 @@ test("in an agent's transcript, a call that folds open in place still hangs its 
 });
 
 test("a call about an agent names it by its chip in the place of the words, as its tab names it or its answer does, wearing the harness its answer's model runs in, a chip that opens the agent on a row that folds what was sent and is no target of its own on a row that opens it", () => {
-  const agents = codingAgentsControl({ agents: [listedAgent("agent-7", "Invoice export")] });
+  const agents = agentsControl({ agents: [listedAgent("agent-7", "Invoice export")] });
   const cards = taskCards({
     agents,
     held: NOTHING_HELD,
     chosen: () => false,
-    shownCode: [],
     pages: undefined,
   });
   const opened: ToolTarget[] = [];
@@ -632,7 +605,7 @@ test("a call about an agent names it by its chip in the place of the words, as i
     "an agent the plan lists not wears the harness its answer's model runs in, Codex's here",
   );
   assert.equal(chip("start_agent"), undefined, "a start that names no agent yet keeps its words");
-  assert.equal(said("start_agent"), "Started a coding agent Ship the invoice export");
+  assert.equal(said("start_agent"), "Started an agent Ship the invoice export");
   const row = line("message_agent");
   assert.ok(row, "the message's row is drawn");
   act(() => row.querySelector<HTMLElement>("button[data-tool-agent-ref]")?.click());
@@ -715,7 +688,7 @@ function stateHoldingCodexAgent(agentId: string): AppStateSnapshot {
           title: "Retry audit",
           model: "openai/gpt-6.1-sol",
           effort: "high",
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           createdAt: 1_000,
           automationId: null,
           workspaceId: "workspace-acme",
@@ -791,10 +764,9 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
   });
   fakeAppPlatform({ ...QUIET_PANEL, pageFrameUrl });
   const cards = taskCards({
-    agents: codingAgentsControl({}),
+    agents: agentsControl({}),
     held: NOTHING_HELD,
     chosen: () => false,
-    shownCode: [],
     pages: { taskId },
   });
   const container = document.createElement("div");
@@ -858,10 +830,9 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
 
 test("a call about the plan or another task hangs that task's card as its Plan tab and sidebar row do, and a task the window lists not its name as the row says it", () => {
   const cards = taskCards({
-    agents: codingAgentsControl({}),
+    agents: agentsControl({}),
     held: NOTHING_HELD,
     chosen: () => false,
-    shownCode: [],
     pages: { taskId: "task-invoices" },
     task: { name: "Invoice export", status: undefined, card: undefined },
   });
@@ -1002,7 +973,7 @@ test("a connection_execute that failed keeps its own row beside the call it ran,
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 /** A message another agent sent with `message_agent`, steered into the agent's turn as `agent-message.ts` writes it. */
-const AGENT_MESSAGE: CodingAgentMessage = {
+const AGENT_MESSAGE: AgentTranscriptMessage = {
   id: "message",
   role: MESSAGE_ROLE.USER,
   parts: [
@@ -1015,21 +986,29 @@ const AGENT_MESSAGE: CodingAgentMessage = {
       ].join("\n\n"),
     },
   ],
-  metadata: { author: "agent", channel: "agent_message", from: "Invite emails" },
+  metadata: { channel: "agent_message" },
+  sentBy: { name: "Invite emails", agent: true },
 };
 
 /** The message drawn in an agent's transcript, on the task's page where one is given. */
-function agentMessageDrawn(message: CodingAgentMessage, page?: TaskMentionsValue): HTMLElement {
+function agentMessageDrawn(
+  message: AgentTranscriptMessage,
+  page?: TaskMentionsValue,
+  agentId?: string,
+): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const drawn = createElement(AgentMessage, {
-    message,
-    plan: false,
-    lead: AGENT_LEAD,
-    moving: false,
-    delegation: { models: [] },
+  const drawn = createElement(TranscriptAgent, {
+    value: agentId,
+    children: createElement(AgentMessage, {
+      message,
+      plan: false,
+      lead: AGENT_LEAD,
+      moving: false,
+      delegation: { models: [] },
+    }),
   });
   act(() =>
     root.render(
@@ -1073,15 +1052,15 @@ test("a message from an agent the line keeps no chip of is named by the name its
   );
 });
 
-/** A task's page in the workspace `acme`, whose transcript draws a thread's chip. */
+/** A task's page in the workspace `acme`, whose agent's transcript draws a thread's chip. */
 const TASK_PAGE: TaskMentionsValue = {
-  taskId: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
+  holder: { taskId: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b" },
   taskName: "Invitations",
   workspace: "acme",
   repository: "acme/relay",
   text: () => "",
   doors: {
-    taskId: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b",
+    holder: { taskId: "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b" },
     place: { workspace: "acme", repository: "acme/relay" },
     anchors: new Set(),
     onOpenTask: () => undefined,
@@ -1102,13 +1081,13 @@ test("a member's message on a thread is headed by what they did and the thread's
         },
       ],
       metadata: {
-        author: "developer",
         channel: "thread",
         event: "message",
         item_id: "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
       },
     },
     TASK_PAGE,
+    "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   );
   const head = container.querySelector<HTMLElement>("[data-thread-line]");
   assert.match(head?.textContent ?? "", /^Thread message/u);
@@ -1130,7 +1109,6 @@ test("a review from GitHub draws as a card of who said what on the pull request,
       },
     ],
     metadata: {
-      author: "developer",
       channel: "github",
       event: "review",
       repository: "acme/relay",

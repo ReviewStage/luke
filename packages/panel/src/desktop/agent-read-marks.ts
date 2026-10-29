@@ -1,4 +1,4 @@
-import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import type { TasklessAgent } from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useAct } from "../act.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
@@ -27,7 +27,7 @@ export function useAgentReadMarks(): AgentReadMarks {
     markedUnread: reads.markedUnread,
     mark: (agent, unread) => {
       reads.mark({ id: agent.id, updatedAt: agent.activityAt }, unread);
-      if (!unread) tell(ACT_KIND.CODING_AGENTS_SEEN, { agentId: agent.id });
+      if (!unread) tell(ACT_KIND.AGENTS_SEEN, { agentId: agent.id });
     },
   };
 }

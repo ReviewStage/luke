@@ -1,6 +1,7 @@
 import { githubUserAvatarUrl } from "@luke/features/account-picture";
+import type { GitHubPerson } from "@luke/features/agent-wire";
 import type { AutomationFiring, AutomationTrigger } from "@luke/features/automation-wire";
-import type { GitHubPerson } from "@luke/features/coding-agent-wire";
+import { OPERATOR_NAME } from "@luke/features/model-label";
 import type { ModelProvider } from "@luke/features/models-wire";
 import {
   PLAN_ACTOR,
@@ -89,6 +90,8 @@ export type Actor =
       readonly taskId?: string | undefined;
       readonly name: string;
       readonly provider: ModelProvider | undefined;
+      /** Whether the agent is a member's operator, who wears Luke's face rather than his harness's mark; absent for any other agent. */
+      readonly operator?: true | undefined;
       readonly state: ActorState;
     }
   | {
@@ -217,7 +220,7 @@ export function actorName(
       case ACTOR_KIND.AUTOMATION:
         return actor.name;
       case ACTOR_KIND.LUKE:
-        return "Luke";
+        return OPERATOR_NAME;
       case ACTOR_KIND.SOMEONE:
         return actor.name ?? inSentence(SOMEONE_WORDS[actor.reason], sentence);
       case ACTOR_KIND.GITHUB:
@@ -404,7 +407,7 @@ export function originActor(
     kind: ACTOR_KIND.AGENT,
     ...(origin.agentId === undefined ? undefined : { agentId: origin.agentId }),
     ...(agent?.taskId === undefined ? undefined : { taskId: agent.taskId }),
-    name: agent?.name ?? TAB_WORDS.CODING_AGENT,
+    name: agent?.name ?? TAB_WORDS.AGENT,
     provider: agent?.provider,
     state: agent?.state ?? ACTOR_STATE.REST,
   };
@@ -412,16 +415,13 @@ export function originActor(
 
 /**
  * Who reads a plan's edits, as each is named for them: the workspace's
- * members as read, the reader's own account id, and, where every edit is
- * the reader's own, as the account's template's are, the reader as their
- * account names them.
+ * members as read, and the reader's own account id.
  */
 export interface EditReader {
   readonly members: readonly WorkspaceMember[] | undefined;
   readonly readerId: string | undefined;
   /** Who the workspace's work names but left, whose pictures they keep, grayed. */
   readonly former?: readonly FormerMember[] | undefined;
-  readonly owner?: PersonActor | undefined;
   /** How many members the workspace has, the reader among them, as its listing counts them; absent where the window has no count. */
   readonly memberCount?: number | undefined;
 }
@@ -432,9 +432,9 @@ export interface EditAgent {
   readonly state: ActorState;
 }
 
-/** The member an edit names, for the reader: the owner where every edit is theirs, a member as the directory reads them otherwise. */
+/** The member an edit names, for the reader, as the directory reads them. */
 function editPerson(edit: PlanLastEdit, reader: EditReader): Actor {
-  return reader.owner ?? personActor(edit.by, reader.members, reader.readerId, reader.former);
+  return personActor(edit.by, reader.members, reader.readerId, reader.former);
 }
 
 /**
@@ -456,20 +456,13 @@ export function editActor(
       return {
         kind: ACTOR_KIND.AGENT,
         ...(edit.agentId === undefined ? undefined : { agentId: edit.agentId }),
-        name: edit.label ?? TAB_WORDS.CODING_AGENT,
+        name: edit.label ?? TAB_WORDS.AGENT,
         provider: agent?.provider,
         state: agent?.state ?? ACTOR_STATE.REST,
       };
     case PLAN_ACTOR.EARLIER:
       return undefined;
   }
-}
-
-/** Whose call an edit was written on: the member it names, the reader among them; nobody for an edit off a call, or a call the service names nobody for. */
-export function editCallOwner(edit: PlanLastEdit, reader: EditReader): Actor | undefined {
-  if (!edit.duringCall) return undefined;
-  if (reader.owner === undefined && edit.by === undefined) return undefined;
-  return editPerson(edit, reader);
 }
 
 /** What an actor last did in a plan: the sections whose last change is theirs, in the plan's order, and the newest of those changes. */

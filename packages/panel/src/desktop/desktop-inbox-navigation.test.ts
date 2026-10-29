@@ -2,6 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_CALL_FAILURE,
+  type AgentInboxStartParams,
+  INBOX_SCOPE_KIND,
+} from "@luke/features/agent-view";
+import { AGENT_KIND } from "@luke/features/agent-wire";
+import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_SCOPE,
@@ -9,32 +15,20 @@ import {
   type AutomationSummary,
 } from "@luke/features/automation-wire";
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxStartParams,
-} from "@luke/features/coding-agent-view";
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import {
-  INBOX_BOUNDS,
-  INBOX_MESSAGE_AUTHOR,
-  INBOX_STATUS,
-  type InboxItem,
-} from "@luke/features/inbox-wire";
+import { INBOX_MESSAGE_AUTHOR, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import { pasteCutWords } from "@luke/features/words";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxTasklessItem } from "@luke/host/app-state";
+import type { AppInboxTask, AppInboxTasklessItem } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
-import { PROFILE } from "@luke/ui";
 import { Effect } from "effect";
 import { act } from "react";
-import { beforeAll, onTestFinished, test } from "vitest";
+import { beforeAll, test } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
@@ -48,18 +42,11 @@ import {
   fakeActsAnswer,
 } from "../testing/app-bridge.js";
 import { handState, stateWith } from "../testing/app-state.js";
-import {
-  composerEditor,
-  editorBundleLanded,
-  pasteInComposer,
-  typeInComposer,
-} from "../testing/composer.js";
-import { layContainersAt } from "../testing/container-width.js";
+import { composerEditor, editorBundleLanded, typeInComposer } from "../testing/composer.js";
 import {
   ACME,
   AGENT,
   arrowNamed,
-  attachedNames,
   BILLING,
   BUMP,
   backToList,
@@ -67,7 +54,6 @@ import {
   columnsShown,
   EXPIRY,
   GENERAL,
-  handFiles,
   headerNamed,
   headTitle,
   heardName,
@@ -80,6 +66,8 @@ import {
   listed,
   menuItem,
   mount,
+  noticeOf,
+  ON_THRESHOLD,
   openings,
   pagerOf,
   pressKey,
@@ -90,8 +78,6 @@ import {
   ROW_TITLE,
   readTitle,
   rowNamed,
-  SHARED_MEMBERS,
-  SHARED_WORKSPACE,
   STRAY_AGENT,
   SWEEP_AGENT,
   saying,
@@ -108,9 +94,8 @@ import {
   world,
 } from "../testing/desktop-inbox.js";
 import { restOn } from "../testing/hint-rest.js";
-import { pixelsOf } from "../testing/laid-length.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { tasksControl } from "../testing/tasks-control.js";
+import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 
 // Landed before any box renders, as the panel lands it after its first paint.
@@ -118,6 +103,96 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 // The parser an answer's note is drawn through, landed as the panel lands it.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
+
+test("the Inbox left and come back to under the window's root draws the rows it held at once, before any follow pushes again", async () => {
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  await settle();
+  const rows = listed(page);
+  assert.ok(
+    rows.some((row) => row.endsWith(THRESHOLD.title)),
+    "the rows are pushed and drawn",
+  );
+
+  act(() => world.setInboxOpen(false));
+  await settle();
+  act(() => world.setInboxOpen(true));
+  assert.deepEqual(listed(page), rows, "drawn from what the window held, nothing pushed anew");
+});
+
+test("the Inbox under the window's root draws each task held whole by the account's feed from it, following none on its own", async () => {
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  await settle();
+  const rows = listed(page);
+  assert.ok(
+    rows.some((row) => row.endsWith(THRESHOLD.title)),
+    "the billing task's items are drawn",
+  );
+  assert.ok(
+    rows.some((row) => row.endsWith(EXPIRY.title)),
+    "the invites task's items are drawn",
+  );
+  for (const task of [BILLING, INVITES]) {
+    assert.equal(
+      world.main.isFollowed({ kind: INBOX_SCOPE_KIND.PLAN, id: task.id }),
+      false,
+      `${task.name} is drawn from the feed alone`,
+    );
+  }
+});
+
+test("an Inbox under the window's root whose feed holds nothing of its tasks says so rather than reading for good", async () => {
+  // The feed answers with no task, as it leaves out one whose items all settled past its bound.
+  world.inboxes = new Map();
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  await settle();
+  const list = page.querySelector(".inbox-tasks");
+  assert.ok(list, "the list is drawn");
+  assert.equal(list.querySelector('[aria-busy="true"]'), null, "nothing is still being read");
+});
+
+test("a link to an item the account's feed leaves out waits for its task's own read, saying no Not found, and then shows it", async () => {
+  // The feed leaves the invites task out, as it does one whose items all settled past its bound.
+  world.inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
+  let land: () => void = () => undefined;
+  world.startRead = (taskId) =>
+    taskId === INVITES.id
+      ? new Promise((resolve) => {
+          land = () =>
+            resolve({ status: FAKE_ANSWER.DONE, value: { items: [EXPIRY], cursor: "1" } });
+        })
+      : undefined;
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  await settle();
+  act(() => world.chooseFromOutside({ taskId: INVITES.id, itemId: EXPIRY.id, opened: true }));
+  await settle();
+  const waiting = page.querySelector(".inbox-view-items")?.textContent ?? "";
+  land();
+  await settle();
+
+  assert.doesNotMatch(waiting, /Not found/u);
+  assert.match(
+    page.querySelector(".inbox-view-items")?.textContent ?? "",
+    /Expire after 7 days\?/u,
+  );
+});
+
+test("an Inbox whose account feed refused before it ever answered reads it again on Retry", async () => {
+  world.feedRefused = true;
+  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  await settle();
+  const retry = [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks button")].find(
+    (each) => each.textContent === "Retry",
+  );
+  assert.ok(retry, "the list offers to read again");
+
+  world.feedRefused = false;
+  act(() => retry.click());
+  await settle();
+  assert.ok(
+    listed(page).some((row) => row.endsWith(THRESHOLD.title)),
+    "the feed is read again and its items drawn",
+  );
+});
 
 test("an item a link names before the account's task list is read says no Not found, and shows once the list lands", async () => {
   const { page } = mount([], { listUnread: true });
@@ -138,7 +213,7 @@ test("an item a link names before the account's task list is read says no Not fo
 });
 
 test("an Inbox too narrow for the list and the item side by side shows the chosen item alone, the whole Inbox wide, under a way back that Back's chord and Escape take as well, the keyboard landing on the item's row; a row pressed opens its item again, and from the list Escape does not leave the Inbox", async () => {
-  const { page, asked } = mount();
+  const { page, asked } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   layOut(page, 800);
   assert.deepEqual(columnsShown(page), ["item"]);
@@ -173,8 +248,8 @@ test("an Inbox too narrow for the list and the item side by side shows the chose
   assert.deepEqual([columnsShown(page), asked.closed], [["list"], 0], "the Inbox stands");
 });
 
-test("the Inbox joins only once narrowed past the band, keeping the item it shows, and splits again only once widened past it; split again, it keeps the list asked for, so narrowed it lands on its list", async () => {
-  const { page } = mount();
+test("the Inbox joins only once narrowed past the band, keeping the item it shows, and splits again only once widened past it; split again with nothing chosen, narrowed it lands on its list", async () => {
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   layOut(page, 900);
   assert.deepEqual(columnsShown(page), ["list", "item"]);
@@ -200,7 +275,7 @@ test("the Inbox joins only once narrowed past the band, keeping the item it show
 });
 
 test("one column wide, the item's bar says where it stands in the list, and its arrows, K, and J step up and down the list in its order, a settled item among them, stopping at its ends", async () => {
-  const { page } = mount();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const keys = standKeymap();
   layOut(page, 800);
@@ -222,8 +297,8 @@ test("one column wide, the item's bar says where it stands in the list, and its 
   act(() => keys.unmount());
 });
 
-test("a chosen item whose plan leaves the account's list, deleted on another Mac, gives way to the first item still waiting", async () => {
-  const { page } = mount();
+test("a chosen item whose plan leaves the account's list, deleted on another Mac, leaves the pane beside the list empty rather than choosing another", async () => {
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   assert.deepEqual(
     listed(page).filter((row) => row.startsWith("▸")),
@@ -234,11 +309,9 @@ test("a chosen item whose plan leaves the account's list, deleted on another Mac
     world.setHolding([{ taskId: INVITES.id, items: 1, updatedAt: 4_000 }]);
   });
   await settle();
-  assert.deepEqual(listed(page), ["# Invites", "▸ *Expire after 7 days?"]);
-  assert.equal(
-    page.querySelector(".inbox-view-items [data-inbox-title]")?.textContent,
-    "Expire after 7 days?",
-  );
+  assert.deepEqual(listed(page), ["# Invites", "*Expire after 7 days?"]);
+  assert.equal(page.querySelector(".inbox-view-items [data-inbox-title]"), null);
+  assert.equal(page.querySelector(".inbox-view-items")?.textContent, "1 thread");
 });
 
 test("an item of an agent with no plan stands under the automation that started it, and opens on its agent's own read under the automation's crumb", async () => {
@@ -249,6 +322,7 @@ test("an item of an agent with no plan stands under the automation that started 
       agentId: SWEEP_AGENT,
       title: QUARANTINE.title,
       postedAt: QUARANTINE.postedAt,
+      updatedAt: QUARANTINE.updatedAt,
       agentTitle: "Sweep the flaky tests",
       agentModel: "anthropic/claude-opus-5.5",
       automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
@@ -263,7 +337,7 @@ test("an item of an agent with no plan stands under the automation that started 
   );
   const rows = listed(page);
   assert.ok(rows.includes("# Nightly flake sweep"), rows.join(" | "));
-  assert.equal(rows[rows.indexOf("# Nightly flake sweep") + 1], "▸ *Quarantine the flaky test?");
+  assert.equal(rows[rows.indexOf("# Nightly flake sweep") + 1], "*Quarantine the flaky test?");
 
   act(() => rowNamed(page, "Quarantine the flaky test?").click());
   await settle();
@@ -292,6 +366,7 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
     agentId: SWEEP_AGENT,
     title: QUARANTINE.title,
     postedAt: QUARANTINE.postedAt,
+    updatedAt: QUARANTINE.updatedAt,
     agentTitle: "Sweep the flaky tests",
     agentModel: "anthropic/claude-opus-5.5",
     automationId: null,
@@ -315,9 +390,12 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
   const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the agent's page hangs the page's own card");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Flake ledger");
-  assert.equal(
-    card.querySelector(".luke-hover-card-sub")?.textContent,
-    "Version 3 · Shown by Sweep the flaky tests",
+  assert.deepEqual(
+    [
+      card.querySelector(".luke-hover-card-sub")?.textContent,
+      card.querySelector(".luke-hover-card-row")?.textContent,
+    ],
+    ["Version 3", "Shown by Sweep the flaky tests"],
   );
   assert.equal(
     card.querySelector(".luke-page-thumb-frame")?.getAttribute("src"),
@@ -335,7 +413,7 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
       refused?.querySelector(".luke-hover-card-name")?.textContent,
       refused?.querySelector(".luke-hover-card-note")?.textContent,
     ],
-    ["Their ledger", "Luke cannot read this page."],
+    ["Their ledger", "Luke can't read this page."],
   );
 });
 
@@ -367,7 +445,31 @@ test("a task's group header hangs the task's card, as the automation's does its 
   assert.equal(name?.textContent, "Invites", "the header hangs a card named for its task");
 });
 
-test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
+const LUKE_AGENT = "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e";
+const DOMAIN: InboxItem = {
+  ...item("a1b2c3d4-0000-4000-8000-00000000000d", "Name a domain?", 1_200),
+  agentId: LUKE_AGENT,
+};
+
+/** An item of the reader's operator, Luke, as main lists it: no task, no automation, and no repository. */
+function lukeTaskless(asked: InboxItem): AppInboxTasklessItem {
+  return {
+    id: asked.id,
+    agentId: asked.agentId,
+    agentKind: AGENT_KIND.OPERATOR,
+    title: asked.title,
+    postedAt: asked.postedAt,
+    updatedAt: asked.updatedAt,
+    agentTitle: "Luke",
+    agentModel: "anthropic/claude-opus-5.5",
+    automationId: null,
+    automationName: null,
+    repository: null,
+    ...(asked.channelId === undefined ? undefined : { channelId: asked.channelId }),
+  };
+}
+
+test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor; the member's operator stands under Luke, by his face", async () => {
   handState({});
   world.listedWorkspace = {
     id: "workspace-acme",
@@ -379,10 +481,12 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   world.agentInboxes = new Map([
     [SWEEP_AGENT, [QUARANTINE]],
     [STRAY_AGENT, [BUMP]],
+    [LUKE_AGENT, [DOMAIN]],
   ]);
   const { page, asked } = mount([
     { ...waitingTaskless(QUARANTINE), agentTitle: "Sweep the flaky tests" },
     { ...waitingTaskless(BUMP), automationId: null, automationName: null },
+    lukeTaskless(DOMAIN),
   ]);
   await settle();
 
@@ -416,7 +520,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   );
   assert.match(
     hoveredCard(mark, "[data-inbox-row-card]") ?? "",
-    /^Nightly flake sweep.*Sweep the flaky tests$/su,
+    /^Quarantine the flaky test\?.*Nightly flake sweep.*Sweep the flaky tests$/su,
   );
 
   act(() => rowNamed(page, "Quarantine the flaky test?").click());
@@ -450,6 +554,16 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     stray?.querySelector(".lucide-zap"),
     "it wears the automation glyph, as its group does",
   );
+
+  const luke = headerNamed(page, "Luke");
+  assert.ok(luke.querySelector(".luke-face"), "Luke's group wears his face");
+  assert.ok(luke.querySelector(".lucide-zap") === null, "and no automation glyph");
+  act(() => rowNamed(page, "Name a domain?").click());
+  await settle();
+  // Note that the title joins the path only once the heading scrolls away, so his own crumb stands alone.
+  const path = [...page.querySelectorAll<HTMLElement>('nav[aria-label="Path"] li')];
+  assert.equal(path.length, 1, "his path names him once, under no group");
+  assert.ok(path[0]?.querySelector(".luke-face"), "his crumb wears his face");
 });
 
 test("an item's card names the automation that holds it by a chip that hangs the automation's card, read as it is hung where the Inbox has read no automations", async () => {
@@ -472,7 +586,7 @@ test("an item's card names the automation that holds it by a chip that hangs the
   restOn(rowNamed(page, "Quarantine the flaky test?"));
   const chip =
     document.querySelector<HTMLElement>(
-      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="automation"]',
+      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="agent"]',
     ) ?? assert.fail("the card names the automation by its chip");
   restOn(chip);
   await settle();
@@ -499,7 +613,7 @@ test("an item from a service that names no workspace for it still names its auto
   restOn(rowNamed(page, "Quarantine the flaky test?"));
   restOn(
     document.querySelector<HTMLElement>(
-      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="automation"]',
+      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="agent"]',
     ) ?? assert.fail("the card names the automation by its chip"),
   );
 
@@ -539,6 +653,25 @@ test("an agent with no plan whose waiting items move, one answered on another Ma
   assert.ok(listed(page).includes("Skip the slow suite?"), listed(page).join(" | "));
 });
 
+test("an agent with no plan whose items are all settled stays listed under the automation that started it, as main lists it holding them", async () => {
+  const settled = { ...SECOND_ASK, status: INBOX_STATUS.ANSWERED };
+  world.agentInboxes = new Map([[SECOND_AGENT, [settled]]]);
+  const { id: _id, title: _title, postedAt: _postedAt, ...agent } = waitingTaskless(settled);
+  const { page } = mount([], {
+    windowRoot: true,
+    accountFeed: true,
+    agents: [{ ...agent, items: 1, toDo: 0 }],
+  });
+  await settle();
+
+  const rows = listed(page);
+  assert.equal(
+    rows[rows.indexOf("# Nightly flake sweep") + 1],
+    "Skip the slow suite?",
+    rows.join(" | "),
+  );
+});
+
 test("a read of an agent with no plan that fails is said with Retry, which reads it again though it was read before", async () => {
   world.agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
   const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless));
@@ -567,7 +700,9 @@ test("a read of an agent with no plan that fails is said with Retry, which reads
 
 test("an item chosen by a notification's click, in an Inbox showing its list alone, is shown itself, and Back stands on the list again, the notification's ask taken once", async () => {
   world.agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
-  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless));
+  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless), {
+    chosen: ON_THRESHOLD,
+  });
   await settle();
   layOut(page, 700);
   await settle();
@@ -600,7 +735,7 @@ test("an untitled agent an automation started goes by its automation's name in t
   assert.match(hoveredCard(row, "[data-inbox-row-card]") ?? "", /Nightly flake sweep$/u);
 });
 
-test("an item's row offers Copy link on a right-click, copying the item's link under the task that holds it", async () => {
+test("an item's row offers Copy link on a right-click, copying the item's link under the agent that posted it, whichever task holds it", async () => {
   world.listedWorkspace = {
     id: "workspace-acme",
     name: "Acme",
@@ -622,7 +757,7 @@ test("an item's row offers Copy link on a right-click, copying the item's link u
   await act(async () => item.click());
 
   assert.deepEqual(world.copied, [
-    `https://tryluke.dev/acme/plan/${BILLING.id}/inbox/${THRESHOLD.id}`,
+    `https://tryluke.dev/acme/agent/${THRESHOLD.agentId}/inbox/${THRESHOLD.id}`,
   ]);
 });
 
@@ -668,7 +803,7 @@ test("an item a link names is not found though another task's read failed, and i
     taskId === BILLING.id
       ? Promise.resolve({
           status: FAKE_ANSWER.DONE,
-          value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+          value: { failure: AGENT_CALL_FAILURE.UNANSWERED },
         })
       : undefined;
   const { page } = mount();
@@ -810,7 +945,7 @@ test("an item a link names under a task whose own read fails is kept asked for, 
     taskId === quiet.id
       ? Promise.resolve({
           status: FAKE_ANSWER.DONE,
-          value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+          value: { failure: AGENT_CALL_FAILURE.UNANSWERED },
         })
       : undefined;
   const { page } = mount();
@@ -917,7 +1052,7 @@ test("a teammate's open item of an agent with no plan is listed under the automa
   );
 });
 
-test("on a phone the Inbox's list is headed by New task and one ⋯, its title centred between them, the ⋯ opening New thread and View options' own menu, and the search standing under the head", async () => {
+test("on a phone the Inbox's list is headed by New task and one ⋯, its title centred between them, the ⋯ opening View options' own menu, and the search standing under the head", async () => {
   const { page, asked } = mount([], { room: SHELL_ROOM.NARROW });
   await settle();
   const head = page.querySelector<HTMLElement>(".inbox-head");
@@ -949,7 +1084,7 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
     [...document.querySelectorAll('[role="menu"] .luke-menu-item-label')].map(
       (each) => each.textContent,
     ),
-    ["New thread", "View options"],
+    ["View options"],
     "the ⋯ holds what the wide head draws as buttons",
   );
   act(() => more().click());
@@ -967,7 +1102,7 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
   assert.equal(asked.newTasks, 1);
 });
 
-/** The thread a New thread starts, as the service hands it back: the reader's words its first message, settled on their own nod. */
+/** The thread a box's checkbox starts, as the service hands it back: the reader's words its first message, settled on their own nod. */
 const STARTED: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-0000000000f1", "Annual plan copy", 9_000),
   key: "annual-plan-copy",
@@ -985,35 +1120,15 @@ const STARTED: InboxItem = {
   ],
 };
 
-/**
- * Every thread the pane starts, written down and answered as the service
- * starts it, the task's inbox then holding it; the workspace's newest agents
- * read as `agents`, and those a search names as `found` answers its words.
- */
-function heldStarts(
-  agents: readonly CodingAgentSummary[],
-  found: (words: string) => readonly CodingAgentSummary[] = () => [],
-  /** The reads that do not answer while a test holds them so: the newest agents, and a search. */
-  unread: { list: boolean; search: boolean } = { list: false, search: false },
-): CodingAgentInboxStartParams[] {
-  const sent: CodingAgentInboxStartParams[] = [];
+/** Every thread the box starts, written down and answered as the service starts it, the task's inbox then holding it. */
+function heldStarts(): AgentInboxStartParams[] {
+  const sent: AgentInboxStartParams[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
-        const { words } = request.payload;
-        if (words === undefined ? unread.list : unread.search) {
-          return Promise.resolve({
-            status: FAKE_ANSWER.DONE,
-            value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
-          });
-        }
-        const value = { agents: words === undefined ? agents : found(words) };
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
-      }
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_START) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_START) return previous(request);
       sent.push(request.payload);
       world.inboxes.set(BILLING.id, [STARTED, ...(world.inboxes.get(BILLING.id) ?? [])]);
       pushAgain();
@@ -1023,687 +1138,7 @@ function heldStarts(
   return sent;
 }
 
-/** The To menu `openTo` opened. */
-function toMenu(): HTMLElement {
-  return document.querySelector<HTMLElement>('[role="dialog"][aria-label="To"]') ?? assert.fail();
-}
-
-/** What To's menu says of a read that did not answer: the alert's words, and Retry's press. */
-function toAlert(menu: HTMLElement): { words: string | undefined; retry: HTMLButtonElement } {
-  const alert = menu.querySelector("[role=alert]");
-  return {
-    words: alert?.textContent ?? undefined,
-    retry: alert?.querySelector("button") ?? assert.fail("the alert offers Retry"),
-  };
-}
-
-test("a New thread whose agents could not be read says so in To with Retry, which reads them again", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const unread = { list: true, search: false };
-  heldStarts([AGENT], () => [], unread);
-  const { page } = mount();
-  await settle();
-  await openTo(page);
-  const menu = toMenu();
-
-  const { words, retry } = toAlert(menu);
-  assert.equal(words, "The workspace's agents could not be read.Retry");
-
-  unread.list = false;
-  act(() => retry.click());
-  await settle();
-
-  assert.equal(menu.querySelector("[role=alert]"), null);
-  assert.equal(menu.querySelectorAll("[role=option]").length, 1, "the agent is listed");
-});
-
-test("a New thread's search that failed says so in To with Retry, never that no agent matches, and Retry searches again", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const unread = { list: false, search: true };
-  heldStarts([AGENT], () => [], unread);
-  const { page } = mount();
-  await settle();
-  await openTo(page);
-  const menu = toMenu();
-
-  const field = menu.querySelector<HTMLInputElement>("input") ?? assert.fail("To searches");
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(field, "zzz");
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await settle();
-
-  const { words, retry } = toAlert(menu);
-  assert.equal(words, "The search for agents could not be read.Retry");
-  assert.doesNotMatch(menu.textContent ?? "", /No agent matches/u);
-
-  unread.search = false;
-  act(() => retry.click());
-  await settle();
-
-  assert.equal(menu.querySelector("[role=alert]"), null);
-  assert.match(menu.textContent ?? "", /No agent matches/u);
-});
-
-test("New thread in the Inbox's head opens a draft in the pane, To naming the agent of the item read; Send starts the thread with that agent, once however often it is pressed, and the Inbox then opens the thread it started, the reader's words its first message", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const starts = heldStarts([AGENT]);
-  const { page } = mount();
-  await settle();
-
-  const compose = page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]');
-  assert.ok(compose, "the head offers New thread");
-  act(() => compose.click());
-  await settle();
-  const pane = itemPane(page);
-  assert.equal(pane.getAttribute("aria-label"), "New thread");
-  assert.equal(
-    pane.querySelector('[aria-label^="To: "]')?.getAttribute("aria-label"),
-    "To: Alerts",
-    "To names the agent of the item that was read",
-  );
-  const send = () =>
-    pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
-    assert.fail("the box has a Send");
-  assert.equal(send().disabled, true, "a draft with no words sends nothing");
-  typeInComposer(pane, "Draft the annual plan's line too.");
-  assert.equal(send().disabled, false, "To and words light Send, the subject being optional");
-
-  const subject = subjectField(pane);
-  assert.equal(
-    subjectLabel(pane).textContent,
-    "SubjectOptional",
-    "the Subject says it may be left empty, in its label",
-  );
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(subject, "Annual plan copy");
-    subject.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  act(() => send().click());
-  await settle();
-
-  assert.deepEqual(
-    starts.map(({ agentId, title, text, attachments }) => ({ agentId, title, text, attachments })),
-    [
-      {
-        agentId: AGENT.id,
-        title: "Annual plan copy",
-        text: "Draft the annual plan's line too.",
-        attachments: undefined,
-      },
-    ],
-  );
-  const opened = itemPane(page);
-  assert.equal(
-    opened.getAttribute("aria-label"),
-    "Annual plan copy",
-    "the thread it started opens",
-  );
-  assert.match(opened.textContent ?? "", /Draft the annual plan's line too\./u);
-});
-
-test("Discard takes a New thread away and shows the item it stood over again, as pressing a row does", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
-  heldStarts([AGENT]);
-  const { page } = mount();
-  await settle();
-  const compose = () =>
-    page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
-    assert.fail("the head offers New thread");
-
-  act(() => compose().click());
-  await settle();
-  const discard = [...itemPane(page).querySelectorAll("button")].find(
-    (button) => button.textContent === "Discard",
-  );
-  assert.ok(discard);
-  act(() => discard.click());
-  await settle();
-  assert.equal(itemPane(page).getAttribute("aria-label"), THRESHOLD.title);
-
-  act(() => compose().click());
-  await settle();
-  act(() => rowNamed(page, RETRY.title).click());
-  await settle();
-  assert.equal(itemPane(page).getAttribute("aria-label"), RETRY.title);
-});
-
-test("New thread's bar leads with the way back to the Inbox, titles itself New thread, and ends in Discard", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
-  heldStarts([AGENT]);
-  const { page } = mount();
-  await settle();
-  layOut(page, 700);
-  await settle();
-  act(() =>
-    (
-      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
-      assert.fail("the head offers New thread")
-    ).click(),
-  );
-  await settle();
-
-  const bar = itemPane(page).querySelector("header") ?? assert.fail("New thread draws a bar");
-  const words = (selector: string) =>
-    [...bar.querySelectorAll(selector)].map(
-      (each) => each.getAttribute("aria-label") ?? each.textContent,
-    );
-  assert.deepEqual(words(".luke-toolbar-lead button"), ["Inbox"], "the way back leads");
-  assert.deepEqual(words("h1.luke-toolbar-title"), ["New thread"], "the title names it");
-  assert.deepEqual(words(".luke-toolbar-actions button"), ["Discard"], "Discard ends the bar");
-});
-
-/** Opens a New thread from the Inbox's head and hands back its pane. */
-async function openNewThread(page: HTMLElement): Promise<HTMLElement> {
-  act(() =>
-    (
-      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
-      assert.fail("the head offers New thread")
-    ).click(),
-  );
-  await settle();
-  const pane = itemPane(page);
-  assert.equal(pane.getAttribute("aria-label"), "New thread");
-  return pane;
-}
-
-/** The label of a New thread's Subject. */
-function subjectLabel(pane: HTMLElement): HTMLLabelElement {
-  return (
-    [...pane.querySelectorAll("label")].find((label) => label.textContent?.startsWith("Subject")) ??
-    assert.fail("the draft has a Subject")
-  );
-}
-
-/** The field a New thread's Subject label names. */
-function subjectField(pane: HTMLElement): HTMLInputElement {
-  const field = pane.querySelector<HTMLInputElement>(`input[id="${subjectLabel(pane).htmlFor}"]`);
-  return field ?? assert.fail("the Subject label names a field");
-}
-
-/** Types `words` into a New thread's Subject. */
-function typeSubject(pane: HTMLElement, words: string): void {
-  const subject = subjectField(pane);
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(subject, words);
-    subject.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
-/** What a New thread's pane holds, as a reader sees it: To, Subject, the words in its box, and its files. */
-function threadDraft(pane: HTMLElement) {
-  return {
-    to: pane.querySelector('[aria-label^="To: "]')?.getAttribute("aria-label"),
-    subject: subjectField(pane).value,
-    words: composerEditor(pane).textContent,
-    files: attachedNames(pane),
-  };
-}
-
-/** The ground an element is filled with, as the tokens it names spell it where it stands. */
-function groundOf(element: Element): string {
-  const style = getComputedStyle(element);
-  let spelled = style.backgroundColor;
-  for (let named = /var\((--[\w-]+)\)/u.exec(spelled); named !== null; ) {
-    const [whole, property = ""] = named;
-    spelled = spelled.replace(whole, style.getPropertyValue(property).trim());
-    named = /var\((--[\w-]+)\)/u.exec(spelled);
-  }
-  return spelled;
-}
-
-test("a New thread's head reads as one on the desktop: Subject is filled with the message box's ground, and the box stands as far under Subject as Subject stands under To", async () => {
-  // Note that the desktop's palette is the one whose input well is darker than a card in the dark.
-  document.documentElement.dataset.lukeProfile = PROFILE.DESKTOP;
-  const sheets = layContainersAt({});
-  onTestFinished(() => {
-    sheets.remove();
-    delete document.documentElement.dataset.lukeProfile;
-  });
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
-  heldStarts([AGENT]);
-  const { page } = mount();
-  await settle();
-  layOut(page, 700);
-  await settle();
-  const pane = await openNewThread(page);
-
-  const subject = subjectField(pane);
-  const frame = composerEditor(pane).closest("form") ?? assert.fail("the box is a form");
-  assert.equal(groundOf(subject), groundOf(frame), "Subject is filled with the box's ground");
-
-  // The room a row leaves around its control, half over it and half under it.
-  const room = (row: Element) =>
-    pixelsOf(row, getComputedStyle(row).minHeight) - pixelsOf(row, "var(--luke-control-height)");
-  const toRow =
-    pane.querySelector('[aria-label^="To: "]')?.closest(".inbox-compose-row") ??
-    assert.fail("To stands in a row");
-  const subjectRow =
-    subject.closest(".inbox-compose-row") ?? assert.fail("Subject stands in a row");
-  const box = frame.parentElement ?? assert.fail("the box stands in the form");
-  const boxStyle = getComputedStyle(box);
-  assert.equal(
-    room(subjectRow) / 2 +
-      pixelsOf(box, boxStyle.marginTop) +
-      pixelsOf(box, boxStyle.paddingTop || "0px"),
-    room(toRow) / 2 + room(subjectRow) / 2,
-    "the gap under Subject is the gap over it",
-  );
-});
-
-test("a New thread's To, Subject, words, and files outlast a row pressed meanwhile, and stand again as New thread opens once more", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
-  heldStarts([AGENT]);
-  const { page } = mount();
-  await settle();
-  const pane = await openNewThread(page);
-  typeSubject(pane, "Annual plan copy");
-  typeInComposer(pane, "Draft the annual plan's line too.");
-  await handFiles(page, [new File(["%PDF-1.7"], "spec.pdf", { type: "application/pdf" })], "pick");
-  const written = threadDraft(pane);
-
-  act(() => rowNamed(page, RETRY.title).click());
-  await settle();
-  assert.equal(itemPane(page).getAttribute("aria-label"), RETRY.title);
-
-  assert.deepEqual(threadDraft(await openNewThread(page)), written);
-  assert.deepEqual(written, {
-    to: "To: Alerts",
-    subject: "Annual plan copy",
-    words: "Draft the annual plan's line too.",
-    files: ["spec.pdf"],
-  });
-});
-
-test("words written in a New thread before the workspaces are read stay in it once they are, as the workspace's draft", async () => {
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  heldStarts([AGENT]);
-  const { page } = mount();
-  await settle();
-  const pane = await openNewThread(page);
-  typeSubject(pane, "Annual plan copy");
-  typeInComposer(pane, "Draft the annual plan's line too.");
-
-  world.listedWorkspace = ACME;
-  act(() => world.setTasks([BILLING, INVITES]));
-  await settle();
-
-  const now = threadDraft(itemPane(page));
-  assert.deepEqual(
-    { subject: now.subject, words: now.words },
-    { subject: "Annual plan copy", words: "Draft the annual plan's line too." },
-  );
-});
-
-test("a New thread open as another workspace is listed starts on that workspace's draft, leaving the agent picked in the last one behind", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const OLDER: CodingAgentSummary = {
-    ...AGENT,
-    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b28",
-    planId: INVITES.id,
-    title: "Seat limits",
-  };
-  heldStarts([AGENT], (words) => (words === "seat" ? [OLDER] : []));
-  const { page } = mount();
-  await settle();
-  const pane = await openTo(page);
-  const search =
-    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="To"] input') ??
-    assert.fail("To's menu has a search field");
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(search, "seat");
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await settle();
-  act(() =>
-    (
-      document.querySelector<HTMLElement>('[role="dialog"][aria-label="To"] [role="option"]') ??
-      assert.fail("To lists the agent found")
-    ).click(),
-  );
-  await settle();
-  typeInComposer(pane, "Raise the seat limit.");
-  assert.equal(threadDraft(pane).to, "To: Seat limits");
-
-  world.listedWorkspace = { ...ACME, id: "workspace-globex", slug: "globex" };
-  act(() => world.setTasks([BILLING, INVITES]));
-  await settle();
-
-  const now = threadDraft(itemPane(page));
-  assert.deepEqual({ to: now.to, words: now.words }, { to: "To: Alerts", words: "" });
-});
-
-test("Discard takes a written New thread away at once and offers Undo, which opens it again holding everything written", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  heldStarts([AGENT]);
-  const { page } = mount([], { toasts: true });
-  await settle();
-  const pane = await openNewThread(page);
-  typeSubject(pane, "Annual plan copy");
-  typeInComposer(pane, "Draft the annual plan's line too.");
-  const written = threadDraft(pane);
-
-  act(() =>
-    (
-      [...pane.querySelectorAll("button")].find((button) => button.textContent === "Discard") ??
-      assert.fail("the draft offers Discard")
-    ).click(),
-  );
-  await settle();
-  assert.equal(itemPane(page).getAttribute("aria-label"), THRESHOLD.title, "it goes at once");
-  const undo =
-    [...document.querySelectorAll<HTMLButtonElement>("button")].find(
-      (button) => button.textContent === "Undo",
-    ) ?? assert.fail("a toast offers Undo");
-  act(() => undo.click());
-  await settle();
-
-  assert.deepEqual(threadDraft(itemPane(page)), written);
-  assert.equal(itemPane(page).getAttribute("aria-label"), "New thread");
-});
-
-test("a file dropped on a New thread's box is attached, and goes with the thread it starts", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const starts = heldStarts([AGENT]);
-  const { page } = mount();
-  await settle();
-  const pane = await openNewThread(page);
-
-  await handFiles(page, [new File(["%PDF-1.7"], "spec.pdf", { type: "application/pdf" })], "drop");
-  assert.deepEqual(attachedNames(pane), ["spec.pdf"]);
-  act(() =>
-    (
-      pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
-      assert.fail("the box has a Send")
-    ).click(),
-  );
-  await settle();
-  assert.deepEqual(
-    starts.map(({ attachments }) => attachments),
-    [[{ name: "spec.pdf", mediaType: "application/pdf", data: btoa("%PDF-1.7") }]],
-  );
-});
-
-test("a paste past a New thread's cap is cut to the room left and its note line says so, until the words change", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  heldStarts([AGENT]);
-  const { page } = mount();
-  await settle();
-  const pane = await openNewThread(page);
-  const cap = INBOX_BOUNDS.MAX_MESSAGE_CHARS;
-  const note = () => pane.querySelector(".luke-composer-foot-note")?.textContent;
-
-  pasteInComposer(pane, "x".repeat(cap + 100));
-  await settle();
-  assert.equal(composerEditor(pane).textContent?.length, cap);
-  assert.equal(note(), pasteCutWords(cap));
-
-  const editor = composerEditor(pane).editor ?? assert.fail("the editor is running");
-  act(() => {
-    editor.view.dispatch(editor.state.tr.delete(1, 2));
-  });
-  await settle();
-  assert.equal(note(), undefined, "the note goes once the words change again");
-});
-
-test("an @ in a New thread's box offers the workspace's agents and people, but for the agent To names", async () => {
-  world.listedWorkspace = SHARED_WORKSPACE;
-  world.members = SHARED_MEMBERS;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const SEATS: CodingAgentSummary = {
-    ...AGENT,
-    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b27",
-    planId: INVITES.id,
-    title: "Seat limits",
-  };
-  heldStarts([AGENT, SEATS]);
-  const { page } = mount();
-  await settle();
-  const pane = await openNewThread(page);
-
-  typeInComposer(pane, "@");
-  await settle();
-  const offered = [...pane.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
-    (name) => name.textContent,
-  );
-  assert.ok(offered.includes("Seat limits"), `the agent is offered among ${offered.join(", ")}`);
-  assert.ok(offered.includes(TEAMMATE.name), `the teammate is offered among ${offered.join(", ")}`);
-  assert.equal(offered.includes("Alerts"), false, "To's agent is not offered");
-});
-
-test("a / in a New thread's box offers the skills of the task of the agent To names", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  heldStarts([AGENT]);
-  skillReads();
-  const { page } = mount();
-  await settle();
-  const pane = await openNewThread(page);
-
-  typeInComposer(pane, "/");
-  await settle();
-  assert.deepEqual(
-    [...pane.querySelectorAll(".skill-menu .luke-combobox-option-label")].map(
-      (name) => name.textContent,
-    ),
-    ["/release"],
-  );
-});
-
-/** The menu To opens, as a reader sees it: each task's heading, then each agent's name and what it says beside it. */
-function toMenuRows(): string[] {
-  const menu = document.querySelector('[role="dialog"][aria-label="To"]');
-  assert.ok(menu, "To's menu is open");
-  return [
-    ...menu.querySelectorAll(
-      '.luke-combobox-heading, .luke-searchable-menu-heading, [role="option"]',
-    ),
-  ].map((node) => {
-    if (!node.matches('[role="option"]')) return `# ${node.textContent}`;
-    const name = node.querySelector(".luke-combobox-option-label")?.textContent ?? "";
-    const detail = node.querySelector(".luke-combobox-option-detail")?.textContent;
-    return detail === undefined ? name : `${name} · ${detail}`;
-  });
-}
-
-test("To lists the workspace's agents as one list, newest first, each in its tab's look and named as its tab is, its task beside it as the @ menu says it, No task for one on none, and nothing where the task only says the agent's name again", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const MAYA: CodingAgentSummary = {
-    ...AGENT,
-    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b22",
-    planId: INVITES.id,
-    title: "Move the frontend into shared components",
-  };
-  const LONE: CodingAgentSummary = {
-    ...AGENT,
-    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b23",
-    planId: null,
-    title: "Nightly dependency sweep",
-  };
-  const NAMESAKE: CodingAgentSummary = {
-    ...AGENT,
-    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b24",
-    title: BILLING.name,
-  };
-  heldStarts([NAMESAKE, LONE, MAYA, AGENT]);
-  const { page } = mount();
-  await settle();
-  act(() =>
-    (
-      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
-      assert.fail("the head offers New thread")
-    ).click(),
-  );
-  await settle();
-  const to =
-    itemPane(page).querySelector<HTMLButtonElement>('[aria-label^="To: "]') ??
-    assert.fail("the draft has To");
-  act(() => to.click());
-  await settle();
-
-  assert.deepEqual(toMenuRows(), [
-    BILLING.name,
-    "Nightly dependency sweep · No task",
-    `Move the frontend into shared components · ${INVITES.name}`,
-    `Alerts · ${BILLING.name}`,
-  ]);
-});
-
-test("To's rows keep no check's room while no agent is chosen, and each hangs its agent's card while the pointer rests on it, as ⌘K's rows do", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map();
-  heldStarts([AGENT]);
-  const { page } = mount([], { standing: [BILLING], holding: [] });
-  await settle();
-  act(() =>
-    (
-      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
-      assert.fail("the head offers New thread")
-    ).click(),
-  );
-  await settle();
-  const to =
-    itemPane(page).querySelector<HTMLButtonElement>('[aria-label^="To: "]') ??
-    assert.fail("the draft has To");
-  assert.equal(to.getAttribute("aria-label"), "To: Choose an agent");
-  act(() => to.click());
-  await settle();
-
-  const option =
-    document.querySelector<HTMLElement>('[role="dialog"][aria-label="To"] [role="option"]') ??
-    assert.fail("To lists the agent");
-  assert.equal(
-    option.querySelector(".luke-combobox-option-end"),
-    null,
-    "no row keeps a check's room",
-  );
-  restOn(option);
-  const card = document.querySelector(".luke-tooltip-card") ?? assert.fail("the row hangs a card");
-  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Alerts");
-  assert.match(
-    card.textContent ?? "",
-    new RegExp(`On ${BILLING.name}`, "u"),
-    "the card stands whole as it is hung, its task named, as ⌘K's does, with nothing read",
-  );
-});
-
-/** Opens a New thread from the Inbox's head, then its To menu, and hands back the draft's pane. */
-async function openTo(page: HTMLElement): Promise<HTMLElement> {
-  act(() =>
-    (
-      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
-      assert.fail("the head offers New thread")
-    ).click(),
-  );
-  await settle();
-  const pane = itemPane(page);
-  act(() =>
-    (
-      pane.querySelector<HTMLButtonElement>('[aria-label^="To: "]') ??
-      assert.fail("the draft has To")
-    ).click(),
-  );
-  await settle();
-  return pane;
-}
-
-test("a word typed in To asks the service for the agents it names, so one past the workspace's newest is found, picked, and sent to", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const OLDER: CodingAgentSummary = {
-    ...AGENT,
-    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b26",
-    planId: INVITES.id,
-    title: "Seat limits",
-  };
-  const searched: string[] = [];
-  const starts = heldStarts([AGENT], (words) => {
-    searched.push(words);
-    return words === "seat" ? [OLDER] : [];
-  });
-  const { page } = mount();
-  await settle();
-  const pane = await openTo(page);
-
-  const search =
-    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="To"] input') ??
-    assert.fail("To's menu has a search field");
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(search, "seat");
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await settle();
-  assert.deepEqual(searched, ["seat"], "the words reach the service");
-  assert.deepEqual(toMenuRows(), [`Seat limits · ${INVITES.name}`]);
-
-  act(() =>
-    (
-      document.querySelector<HTMLElement>('[role="dialog"][aria-label="To"] [role="option"]') ??
-      assert.fail("To lists the agent found")
-    ).click(),
-  );
-  await settle();
-  assert.equal(
-    pane.querySelector('[aria-label^="To: "]')?.getAttribute("aria-label"),
-    "To: Seat limits",
-  );
-  typeInComposer(pane, "Raise the seat limit.");
-  act(() =>
-    (
-      pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
-      assert.fail("the box has a Send")
-    ).click(),
-  );
-  await settle();
-  assert.deepEqual(
-    starts.map(({ agentId }) => agentId),
-    [OLDER.id],
-  );
-});
-
-test("an agent of the workspace's newest stays found by every word its row shows, its name and its task, though the service finds nothing for the words", async () => {
-  world.listedWorkspace = ACME;
-  world.inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
-  const searched: string[] = [];
-  heldStarts([AGENT], (words) => {
-    searched.push(words);
-    return [];
-  });
-  const { page } = mount();
-  await settle();
-  await openTo(page);
-
-  const search =
-    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="To"] input') ??
-    assert.fail("To's menu has a search field");
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setValue?.call(search, "billing alerts");
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await settle();
-  assert.deepEqual(searched, ["billing alerts"]);
-  assert.deepEqual(toMenuRows(), [`Alerts · ${BILLING.name}`]);
-});
-
-test("on a phone an item is headed by its way back's glyph, its title centred, and one ⋯ that says where it stands and holds the pager, what the crumbs opened, the panel, and the item's own actions", async () => {
+test("on a phone an item is headed by its way back's glyph, its task centred, which opens it as its crumb does, and one ⋯ that says where it stands and holds the pager, what the crumbs opened, the panel, and the item's own actions", async () => {
   const { page, asked } = mount([], { room: SHELL_ROOM.NARROW });
   await settle();
   layOut(page, 390);
@@ -1715,13 +1150,23 @@ test("on a phone an item is headed by its way back's glyph, its title centred, a
     [...head.querySelectorAll("button")].map(
       (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
     ),
-    ["Inbox", "Item actions"],
-    "one control a corner",
+    ["Inbox", INVITES.name, "Inbox item actions"],
+    "one control a corner, the item's task between them",
   );
-  assert.equal(head.querySelector("h1")?.textContent, "Expire after 7 days?");
-  assert.equal(page.querySelector('nav[aria-label="Path"]'), null, "no crumbs under it");
+  assert.equal(
+    head.querySelector(".luke-toolbar-heading")?.textContent,
+    INVITES.name,
+    "the bar names the item's task, not the title its thread is headed by under it",
+  );
+  assert.deepEqual(
+    [...page.querySelectorAll("h1")]
+      .filter((each) => each.closest("[hidden]") === null)
+      .map((each) => each.textContent),
+    ["Expire after 7 days?"],
+    "the thread's title is the page's one top heading",
+  );
 
-  act(() => head.querySelector<HTMLButtonElement>('[aria-label="Item actions"]')?.click());
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="Inbox item actions"]')?.click());
   const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
   assert.ok(menu, "the ⋯ opens");
   assert.match(menu.textContent ?? "", /\d of \d/, "it says where the item stands");
@@ -1729,8 +1174,8 @@ test("on a phone an item is headed by its way back's glyph, its title centred, a
     (each) => each.textContent,
   );
   for (const offered of [
-    "Previous item",
-    "Next item",
+    "Previous inbox item",
+    "Next inbox item",
     "Open task",
     "Open agent",
     "Show panel",
@@ -1747,6 +1192,11 @@ test("on a phone an item is headed by its way back's glyph, its title centred, a
     [INVITES.id],
     "Open task opens the item's task, as its crumb did",
   );
+  const task = [...head.querySelectorAll("button")].find(
+    (each) => each.textContent?.trim() === INVITES.name,
+  );
+  act(() => task?.click());
+  assert.deepEqual(asked.shownTasks, [INVITES.id, INVITES.id], "the task's name opens it too");
 
   act(() => head.querySelector<HTMLButtonElement>("button")?.click());
   assert.deepEqual(columnsShown(page), ["list"], "the way back stands the list");
@@ -1786,28 +1236,6 @@ test("on a phone the panel open over an item heads itself: the way back to the i
   act(() => head.querySelector<HTMLButtonElement>('[aria-label="Panel actions"]')?.click());
   act(() => head.querySelector<HTMLButtonElement>("button")?.click());
   assert.equal(shut, 1, "the way back shuts the panel");
-});
-
-test("on a phone New thread is headed by its way back's glyph, its title centred, and Discard's glyph", async () => {
-  const { page } = mount([], { room: SHELL_ROOM.NARROW });
-  await settle();
-  layOut(page, 390);
-  const listHead = page.querySelector<HTMLElement>(".inbox-head") ?? assert.fail("the list's head");
-  act(() => listHead.querySelector<HTMLButtonElement>('[aria-label="Inbox actions"]')?.click());
-  const compose = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-    (each) => each.querySelector(".luke-menu-item-label")?.textContent === "New thread",
-  );
-  act(() => compose?.click());
-  await settle();
-  const head = page.querySelector<HTMLElement>(".new-thread-head");
-  assert.ok(head, "the phone's head stands");
-  assert.deepEqual(
-    [...head.querySelectorAll("button")].map(
-      (each) => each.textContent?.trim() || each.getAttribute("aria-label"),
-    ),
-    ["Inbox", "Discard"],
-  );
-  assert.equal(head.querySelector("h1")?.textContent, "New thread");
 });
 
 /** #app, a second standing channel of the workspace. */
@@ -2015,7 +1443,7 @@ test("a channel chosen while the workspace's channels could not be read says so 
   assert.match(notRead.textContent ?? "", /Could not read this workspace's channels\./u);
 });
 
-test("a New thread started while a channel is shown is moved into it", async () => {
+test("ticking the box's checkbox under an open question sets its options aside and sends its words as a new thread to the item's agent in the item's channel, which the Inbox then opens, the box a reply again", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = ACME;
   const moves: unknown[] = [];
@@ -2026,12 +1454,107 @@ test("a New thread started while a channel is shown is moved into it", async () 
     },
   });
   world.inboxes = new Map([[BILLING.id, [{ ...THRESHOLD, channelId: APP_CHANNEL.id }]]]);
-  heldStarts([AGENT]);
-  const { page } = mount();
-  chooseChannel(APP_CHANNEL.id);
+  const starts = heldStarts();
+  const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
 
-  const pane = await openNewThread(page);
+  const box = () =>
+    itemPane(page).querySelector<HTMLElement>('[role="checkbox"]') ??
+    assert.fail("the box offers a new thread");
+  assert.equal(
+    box().closest("label")?.textContent,
+    "Send as a new thread to Alerts in app",
+    "it names the item's agent and channel",
+  );
+  const options = () => itemPane(page).querySelectorAll('[role="radio"]').length;
+  assert.equal(options(), 2, "the question's options stand over the box");
+  act(() => box().click());
+  assert.equal(options(), 0, "ticked, the box sets the question's options aside");
+  const pane = itemPane(page);
+  typeInComposer(pane, "Draft the annual plan's line too.");
+  const send =
+    pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
+    assert.fail("the box has a Send");
+  assert.equal(send.textContent, "Start thread");
+  act(() => send.click());
+  await settle();
+
+  assert.deepEqual(
+    starts.map(({ agentId, title, text }) => ({ agentId, title, text })),
+    [{ agentId: AGENT.id, title: undefined, text: "Draft the annual plan's line too." }],
+  );
+  assert.deepEqual(moves, [{ threadId: STARTED.id, channelId: APP_CHANNEL.id }]);
+  assert.equal(
+    itemPane(page).getAttribute("aria-label"),
+    STARTED.title,
+    "the thread it started opens",
+  );
+  assert.equal(box().getAttribute("aria-checked"), "false", "its box is a reply again");
+});
+
+test("words written in the box while its new thread starts stay in it once the thread has started", async () => {
+  world.listedWorkspace = ACME;
+  world.inboxes = new Map([[BILLING.id, [noticeOf(THRESHOLD)]]]);
+  const answer = Promise.withResolvers<FakeActAnswer>();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> =>
+      request.kind === ACT_KIND.AGENTS_INBOX_START ? answer.promise : previous(request),
+  });
+  const { page } = mount([], { chosen: ON_THRESHOLD });
+  await settle();
+
+  const pane = itemPane(page);
+  act(() =>
+    (
+      pane.querySelector<HTMLElement>('[role="checkbox"]') ??
+      assert.fail("the box offers a new thread")
+    ).click(),
+  );
+  typeInComposer(pane, "Draft the annual plan's line too.");
+  act(() =>
+    (
+      pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
+      assert.fail("the box has a Send")
+    ).click(),
+  );
+  typeInComposer(pane, "And the footer.");
+  world.inboxes.set(BILLING.id, [STARTED, noticeOf(THRESHOLD)]);
+  pushAgain();
+  await act(async () => answer.resolve({ status: FAKE_ANSWER.DONE, value: { item: STARTED } }));
+  await settle();
+  act(() => rowNamed(page, THRESHOLD.title).click());
+  await settle();
+
+  assert.equal(composerEditor(itemPane(page)).textContent, "And the footer.");
+});
+
+test("a thread started from an item of an archived channel lands in #general, and the Inbox turns to #general to open it", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  world.listedWorkspace = ACME;
+  const old: ArchivedChannel = {
+    id: "c0ffee00-0000-4000-8000-0000000000aa",
+    name: "old-app",
+    purpose: "The apps, before the split",
+    project: false,
+    createdAt: 1,
+    archivedAt: 2,
+  };
+  answerChannels({ archived: () => [old] });
+  world.inboxes = new Map([[BILLING.id, [{ ...noticeOf(THRESHOLD), channelId: old.id }]]]);
+  heldStarts();
+  const { page } = mount([], { channels: true, chosen: ON_THRESHOLD });
+  await settle();
+  act(() => chooseChannel(old.id));
+  await settle();
+
+  const box =
+    itemPane(page).querySelector<HTMLElement>('[role="checkbox"]') ??
+    assert.fail("the box offers a new thread");
+  assert.equal(box.closest("label")?.textContent, "Send as a new thread to Alerts in general");
+  act(() => box.click());
+  const pane = itemPane(page);
   typeInComposer(pane, "Draft the annual plan's line too.");
   act(() =>
     (
@@ -2041,7 +1564,8 @@ test("a New thread started while a channel is shown is moved into it", async () 
   );
   await settle();
 
-  assert.deepEqual(moves, [{ threadId: STARTED.id, channelId: APP_CHANNEL.id }]);
+  assert.equal(headTitle(page), "#general");
+  assert.equal(itemPane(page).getAttribute("aria-label"), STARTED.title);
 });
 
 test("with Channels on, a row's ⋯ moves its thread to the channel picked", async () => {
@@ -2080,11 +1604,16 @@ test("the sidebar lists the channels under the Inbox's row, each with what waits
     name: "launch",
     project: true,
   };
-  answerChannels({ channels: () => [project, { ...GENERAL, waiting: 2 }, APP_CHANNEL] });
-  const { page } = mount([], { withSidebar: true });
+  answerChannels({ channels: () => [project, GENERAL, APP_CHANNEL] });
+  // Note that a row counts the questions main lists in its channel, as the Inbox's row counts them.
+  const waiting: readonly AppInboxTask[] = [
+    { taskId: BILLING.id, items: [waitingOf({ ...THRESHOLD, channelId: GENERAL.id })] },
+    { taskId: INVITES.id, items: [waitingOf({ ...EXPIRY, channelId: GENERAL.id })] },
+  ];
+  const { page } = mount([], { withSidebar: true, waiting });
   await settle();
 
-  assert.deepEqual(sidebarChannels(page), ["general2 need you", "app", "launch", "Add channel"]);
+  assert.deepEqual(sidebarChannels(page), ["general2 for you", "app", "launch", "Add channel"]);
   act(() =>
     (
       [...page.querySelectorAll<HTMLButtonElement>('[aria-label="Channels"] .luke-nav-item')].find(
@@ -2167,11 +1696,6 @@ test("an archived channel narrows the Inbox under its name and when it was archi
   assert.equal(headTitle(page), "#old-app");
   assert.match(headDetail(page) ?? "", /^Archived /u);
   assert.deepEqual(rowTitles(page), [THRESHOLD.title]);
-  assert.equal(
-    page.querySelector('button[aria-label="New thread"]'),
-    null,
-    "no thread is started where it would land in #general",
-  );
   act(() => buttonSaying("Unarchive").click());
   await settle();
   assert.deepEqual(unarchived, [old.id]);
@@ -2257,4 +1781,105 @@ test("an item opened whose agent's inbox could not be read says so in the pane, 
     THRESHOLD.title,
     "the item is read again",
   );
+});
+
+/** The count a sidebar row wears, by the row's name; none where it wears none. */
+function sidebarRowCount(page: HTMLElement, name: string): number | undefined {
+  const row =
+    [...page.querySelectorAll<HTMLElement>(".luke-nav-item")].find(
+      (each) => each.querySelector(".luke-nav-item-name")?.textContent === name,
+    ) ?? assert.fail(`the sidebar draws the row ${name}`);
+  const count = row.textContent?.match(/\d+/u)?.[0];
+  return count === undefined ? undefined : Number(count);
+}
+
+test("the channels' counts add up to the Inbox's, Luke's question among them, but for one in an archived channel, which has no row, and neither counts another workspace's", async () => {
+  handState(experimentsOn(EXPERIMENT.CHANNELS));
+  world.listedWorkspace = ACME;
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...appBridge(),
+    act: (request: AnyAct): Promise<FakeActAnswer> =>
+      request.kind === ACT_KIND.CHANNELS_LIST
+        ? // Note that the service's own tally of each channel is not what a row counts, so it is set wrong here.
+          Promise.resolve({
+            status: FAKE_ANSWER.DONE,
+            value: { channels: [GENERAL, APP_CHANNEL].map((each) => ({ ...each, waiting: 5 })) },
+          } as FakeActAnswer)
+        : previous(request),
+  });
+  world.agentInboxes = new Map([[LUKE_AGENT, [DOMAIN]]]);
+  const waiting: readonly AppInboxTask[] = [
+    { taskId: BILLING.id, items: [waitingOf({ ...THRESHOLD, channelId: GENERAL.id })] },
+    { taskId: INVITES.id, items: [waitingOf({ ...EXPIRY, channelId: APP_CHANNEL.id })] },
+  ];
+  const archived = "c0ffee00-0000-4000-8000-000000000009";
+  const { page } = mount(
+    [
+      { ...lukeTaskless({ ...DOMAIN, channelId: APP_CHANNEL.id }), workspaceId: ACME.id },
+      {
+        ...lukeTaskless({ ...BUMP, agentId: LUKE_AGENT, channelId: archived }),
+        workspaceId: ACME.id,
+      },
+      // Note that another workspace's question is set in #general's place, so it would show on that row were it counted.
+      {
+        ...lukeTaskless({
+          ...item("a1b2c3d4-0000-4000-8000-00000000000e", "Rotate the beta key?", 1_100),
+          agentId: LUKE_AGENT,
+          channelId: GENERAL.id,
+        }),
+        workspaceId: "workspace-beta",
+      },
+    ],
+    { withSidebar: true, waiting },
+  );
+  await settle();
+  assert.equal(sidebarRowCount(page, "Inbox"), 4, "both tasks' questions and Luke's two");
+  assert.deepEqual(
+    [sidebarRowCount(page, "general"), sidebarRowCount(page, "app")],
+    [1, 2],
+    "the channels count three of them, Luke's in #app among them, the archived channel's on no row",
+  );
+});
+
+test("an item of an agent with no task reads the lines its code names through the agent's workspace and repository, and a file its words name opens beside the Inbox rather than on GitHub", async () => {
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+  const words = [
+    `https://github.com/acme/relay/blob/${commit}/src/flaky.test.ts#L3-L5`,
+    "The retry is in [@flaky.test.ts](https://github.com/acme/relay/blob/HEAD/src/flaky.test.ts).",
+  ].join("\n\n");
+  world.agentInboxes = new Map([[SWEEP_AGENT, [saying(QUARANTINE, words)]]]);
+  const openedOnGitHub = skillReads();
+  const previewed: string[] = [];
+  const panel: SidePanelControl = {
+    ...tasksControl().sidePanel,
+    onPreviewFile: (ref, at) => previewed.push(`${JSON.stringify(ref)} ${at}`),
+  };
+  const { page } = mount([{ ...waitingTaskless(QUARANTINE), workspaceId: "workspace-acme" }], {
+    panel,
+  });
+  await settle();
+  act(() => rowNamed(page, "Quarantine the flaky test?").click());
+  await settle();
+
+  assert.deepEqual(
+    world.fileReads.map(({ firstLine: _first, lastLine: _last, ...place }) => place),
+    [
+      {
+        path: "src/flaky.test.ts",
+        workspaceId: "workspace-acme",
+        repository: "acme/relay",
+        ref: commit,
+      },
+    ],
+    "the code reads its lines by the agent's workspace and repository, naming no task",
+  );
+
+  const chip = [
+    ...page.querySelectorAll<HTMLElement>("[data-inbox-message-text] [data-mention-ref]"),
+  ].find((each) => each.querySelector(".luke-inline-ref-label")?.textContent === "flaky.test.ts");
+  assert.ok(chip, "the file is its chip");
+  act(() => chip.click());
+  assert.deepEqual(previewed, [`${JSON.stringify({ path: "src/flaky.test.ts" })} undefined`]);
+  assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
 });

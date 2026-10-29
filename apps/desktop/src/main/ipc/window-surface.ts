@@ -10,7 +10,11 @@ import {
 import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback";
 import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
 import { CONTACT_MAILTO, WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
-import { MICROPHONE_STATUS, type MicrophoneRoute, type MicrophoneStatus } from "@luke/voice/audio";
+import {
+  MICROPHONE_STATUS,
+  type MicrophoneRoute,
+  type MicrophoneStatus,
+} from "@luke/settings/microphone";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import type { ReportHandlers } from "../bridge-host";
@@ -109,6 +113,14 @@ export function windowSurfaceProcedures(
       dependencies.microphoneRouteWatcher()?.probe();
       return dependencies.microphoneRoute();
     }),
+    // Privacy & Security's Microphone pane, where a refused microphone is let back in.
+    [WINDOW_SURFACE_ACT_KIND.MICROPHONE_OPEN_SETTINGS]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.MICROPHONE_OPEN_SETTINGS
+    ].handler(() =>
+      dependencies.openExternal(
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+      ),
+    ),
     // The pane that lists every app's notifications, Luke's among them.
     [WINDOW_SURFACE_ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: surfacePort[
       WINDOW_SURFACE_ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS

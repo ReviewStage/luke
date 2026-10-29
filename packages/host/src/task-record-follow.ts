@@ -7,23 +7,22 @@ import { type Effect, Stream } from "effect";
 import { decodedLiveRows, type LiveBroken } from "./live-follow.js";
 
 /**
- * task-record-follow.ts -- where an open task's plan, pages, and agents' code stand, followed by the host over the service's held poll, so a part is read again only once its mark moved.
+ * task-record-follow.ts -- where an open task's plan and pages stand, followed by the host over the service's held poll, so a part is read again only once its mark moved.
  *
  * The service answers one statement a part (`task-record-live.ts`), each a
  * mark that moves as its rows do and carries none of their words. The host
- * follows them (`live-follow.ts`) for as long as the task stands open, as it
- * does the board (`board-follow.ts`), and answers each delivery with the
- * parts it moved, which the caller reads again from the service. The calls
- * part the service still answers is read by no one: every call speaks into
- * an agent, whose own transcript says what was said. Only which parts moved
- * leaves.
+ * follows them (`live-follow.ts`) for as long as the task stands open, and
+ * answers each delivery with the parts it moved, which the caller reads
+ * again from the service. The calls and code parts the service still
+ * answers for a released desktop are read by no one: Luke takes no calls,
+ * and no window draws the code agents
+ * showed. Only which parts moved leaves.
  */
 
 /** A part of the record the panel reads again once its mark moves. */
 export const TASK_RECORD_PART = {
   PLAN: "plan",
   PAGES: "pages",
-  CODE: "code",
 } as const;
 
 export type TaskRecordPart = (typeof TASK_RECORD_PART)[keyof typeof TASK_RECORD_PART];
@@ -52,8 +51,8 @@ function markOf<Row>(rows: readonly Row[], key: (row: Row) => string): string {
 
 /**
  * The parts a delivery moved from the one before: the plan where its last
- * save moved, the pages where their rows differ, and the code where the `show_code` calls the agents'
- * journals answered do. The first delivery moves every part.
+ * save moved, and the pages where their rows differ. The first delivery
+ * moves every part.
  */
 function movedParts(
   before: TaskRecordLiveRows | undefined,
@@ -62,11 +61,9 @@ function movedParts(
   if (before === undefined) return EVERY_TASK_RECORD_PART;
   const planOf = (read: TaskRecordLiveRows) => markOf(read.plan, (plan) => plan.taskId);
   const pagesOf = (read: TaskRecordLiveRows) => markOf(read.pages, (page) => page.pageId);
-  const codeOf = (read: TaskRecordLiveRows) => markOf(read.code, (journal) => journal.id);
   return [
     ...(planOf(before) === planOf(rows) ? [] : [TASK_RECORD_PART.PLAN]),
     ...(pagesOf(before) === pagesOf(rows) ? [] : [TASK_RECORD_PART.PAGES]),
-    ...(codeOf(before) === codeOf(rows) ? [] : [TASK_RECORD_PART.CODE]),
   ];
 }
 

@@ -2,7 +2,7 @@
  * claude-code-sessions.ts -- a coding agent's sessions on Claude Code: the runner in its Claude Code mode, launched on the account's setup-token.
  *
  * The `claude_code` implementation of `AgentSessions`
- * (`brain-host/eve-sessions.ts`), on the launch machinery every native
+ * (`eve-host/eve-sessions.ts`), on the launch machinery every native
  * harness shares (`runner-sessions.ts`). What is Claude Code's own: the
  * runner's config names the image's `claude` and appends Luke's coder
  * instructions to Claude Code's prompt; the plan's token, opened from the
@@ -28,12 +28,12 @@ import {
   RUNNER_ENV,
   RUNNER_HARNESS,
 } from "@luke/agent-runner/protocol";
-import { type CodingAgent, readCodingAgentRouting } from "@luke/database/models/coding-agent-store";
+import { type Agent, readAgentRouting } from "@luke/database/models/agent-store";
 import { deviceLayout } from "@luke/database/models/device-store";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { CODING_AGENT_MACHINE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE, AGENT_PAYER } from "@luke/features/agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -44,8 +44,8 @@ import { Clock, Effect, Option, Redacted, Result } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import { SERVER_AGENT_HARNESS } from "../../events/server-events.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
-import type { BrainHostTurn } from "../brain-host/bounds.js";
-import { KEY_REFUSAL, PLAN_REFUSAL } from "../brain-host/eve-sessions.js";
+import type { EveHostTurn } from "../eve-host/bounds.js";
+import { KEY_REFUSAL, PLAN_REFUSAL } from "../eve-host/eve-sessions.js";
 import { LaunchRefused, type MachineLayout } from "../machine/agent-machine.js";
 import { SKILL_ROOT } from "../repository-skills.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
@@ -113,8 +113,8 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
   });
 
   /** Who pays for the agent, as recorded as it started; none for an agent from before payers were. */
-  const payerOf = (agent: CodingAgent) =>
-    Effect.map(readCodingAgentRouting(userId, agent.id), (routing) =>
+  const payerOf = (agent: Agent) =>
+    Effect.map(readAgentRouting(userId, agent.id), (routing) =>
       Option.getOrUndefined(Option.flatMapNullishOr(routing, (row) => row.payer)),
     );
 
@@ -126,8 +126,8 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
    * "Authentication precedence", 7), its config folder left as the
    * developer's, which that login is kept under.
    */
-  const onMacLogin = (agent: CodingAgent) =>
-    agent.machine !== CODING_AGENT_MACHINE.DEVICE || agent.deviceId == null
+  const onMacLogin = (agent: Agent) =>
+    agent.machine !== AGENT_MACHINE.DEVICE || agent.deviceId == null
       ? Effect.succeed(false)
       : Effect.map(deviceLayout(userId, agent.deviceId), (device) =>
           Option.exists(device, (standing) => standing.signedIn.claudeCode === true),
@@ -140,22 +140,22 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
    * key otherwise, and the plan's refusal where it keeps neither; the plan
    * for every other.
    */
-  const savedPayer = (agent: CodingAgent) =>
+  const savedPayer = (agent: Agent) =>
     Effect.gen(function* () {
       const payer = yield* payerOf(agent);
-      if (payer === CODING_AGENT_PAYER.API_KEY) return CODING_AGENT_PAYER.API_KEY;
-      if (payer !== CODING_AGENT_PAYER.MAC_SIGN_IN) return CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION;
+      if (payer === AGENT_PAYER.API_KEY) return AGENT_PAYER.API_KEY;
+      if (payer !== AGENT_PAYER.MAC_SIGN_IN) return AGENT_PAYER.CLAUDE_SUBSCRIPTION;
       const anthropic = (rows: readonly { readonly provider: string }[]) =>
         rows.some((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
       // Note that the plan pays only where Settings lets it pay for agents, as Start decides (`providerRuntimeChoice`).
       const plans = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN);
       if (anthropic(plans.filter((row) => row.forAgents))) {
-        return CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION;
+        return AGENT_PAYER.CLAUDE_SUBSCRIPTION;
       }
       // Note that an account that saved neither is refused in the plan's words, as signed out, which its Mac now is.
       return anthropic(yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY))
-        ? CODING_AGENT_PAYER.API_KEY
-        : CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION;
+        ? AGENT_PAYER.API_KEY
+        : AGENT_PAYER.CLAUDE_SUBSCRIPTION;
     });
 
   /** The deployment's ring, which every sealed credential opens under. */
@@ -225,7 +225,7 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
   });
 
   const config = (
-    agent: CodingAgent,
+    agent: Agent,
     layout: MachineLayout,
     resume: string | undefined,
     firstSequence: number,
@@ -260,12 +260,12 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
   // The agent's model, effort, and fast mode as they stand go ahead of every message, which a change since the launch takes effect from.
   // Note that the plan is asked first, so a message to a live runner on a refused or limited plan is refused as a launch would be;
   // an agent on its API key has no plan to ask, and its runner holds the key it launched with.
-  const ahead = (agent: CodingAgent) => {
+  const ahead = (agent: Agent) => {
     const effort = effortOf(agent.effort);
     const model = providerModelOf(agent.model);
     const asked = Effect.gen(function* () {
       if (yield* onMacLogin(agent)) return;
-      if ((yield* savedPayer(agent)) === CODING_AGENT_PAYER.API_KEY) return;
+      if ((yield* savedPayer(agent)) === AGENT_PAYER.API_KEY) return;
       yield* standingPlan;
     });
     return Effect.as(asked, {
@@ -286,7 +286,7 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
     launch: (agent) =>
       Effect.gen(function* () {
         if (yield* onMacLogin(agent)) return MAC_LOGIN;
-        return yield* (yield* savedPayer(agent)) === CODING_AGENT_PAYER.API_KEY
+        return yield* (yield* savedPayer(agent)) === AGENT_PAYER.API_KEY
           ? apiKeyCredential
           : planCredential;
       }),
@@ -298,7 +298,7 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
 }
 
 /** The sessions for one account, over the calling fiber's services. */
-export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
+export const claudeCodeSessions = <Turn extends EveHostTurn = EveHostTurn>(
   options: RunnerSessionsOptions,
 ): Effect.Effect<NativeSessions<Turn>, never, RunnerServices> =>
   runnerSessions<{ readonly _tag: string }, Turn>(claudeCode(options), options);

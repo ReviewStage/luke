@@ -14,7 +14,6 @@ import { BLOCK_MENU_EXAMPLE } from "./examples/block-menu";
 import { BREADCRUMBS_EXAMPLE } from "./examples/breadcrumbs";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CALENDAR_EXAMPLE } from "./examples/calendar";
-import { CALL_CONTROLS_EXAMPLE } from "./examples/call-controls";
 import { CARD_PRESSES_EXAMPLE } from "./examples/card-presses";
 import { CARDS_EXAMPLE } from "./examples/cards";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
@@ -70,6 +69,7 @@ import { LOADING_INDICATORS_EXAMPLE } from "./examples/loading-indicators";
 import { MARKDOWN_EXAMPLE } from "./examples/markdown";
 import { MENU_EXAMPLE } from "./examples/menu";
 import { MENU_KEYS_EXAMPLE } from "./examples/menu-keys";
+import { MENU_SECTIONS_EXAMPLE } from "./examples/menu-sections";
 import { MESSAGES_EXAMPLE } from "./examples/messages";
 import { MORE_BUTTONS_EXAMPLE } from "./examples/more-buttons";
 import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
@@ -94,7 +94,6 @@ import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { READABLE_CONTROLS_EXAMPLE } from "./examples/readable-controls";
 import { RECT_FLOAT_EXAMPLE } from "./examples/rect-float";
 import { REMOTE_SURFACE_EXAMPLE } from "./examples/remote-surface";
-import { RESIZE_CORNERS_EXAMPLE } from "./examples/resize-corners";
 import { RESIZE_EDGES_EXAMPLE } from "./examples/resize-edges";
 import { REVEALS_EXAMPLE } from "./examples/reveals";
 import { ROLLING_NUMBER_EXAMPLE } from "./examples/rolling-number";
@@ -171,7 +170,6 @@ export const EXAMPLES: readonly Example[] = [
   READABLE_CONTROLS_EXAMPLE,
   CALENDAR_EXAMPLE,
   LENGTH_COUNTERS_EXAMPLE,
-  CALL_CONTROLS_EXAMPLE,
   CARDS_EXAMPLE,
   SOCIAL_SIGN_IN_EXAMPLE,
   CARD_PRESSES_EXAMPLE,
@@ -235,6 +233,7 @@ export const EXAMPLES: readonly Example[] = [
   LIST_MOTION_EXAMPLE,
   ROVING_KEYS_EXAMPLE,
   MENU_EXAMPLE,
+  MENU_SECTIONS_EXAMPLE,
   MORE_BUTTONS_EXAMPLE,
   FORMAT_TOOLBAR_EXAMPLE,
   BLOCK_MENU_EXAMPLE,
@@ -271,7 +270,6 @@ export const EXAMPLES: readonly Example[] = [
   LOADING_INDICATORS_EXAMPLE,
   SPLIT_BUTTONS_EXAMPLE,
   SKELETONS_EXAMPLE,
-  RESIZE_CORNERS_EXAMPLE,
   SLIDER_EXAMPLE,
   VIDEO_PLAYER_EXAMPLE,
   SETTINGS_ROW_EXAMPLE,

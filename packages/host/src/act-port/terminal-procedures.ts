@@ -12,7 +12,7 @@
  * attaches a shell it already holds has the older port closed first, and a
  * panel whose page is gone has every port it held closed and every
  * connection let go. Only a panel draws a Terminal tab, so every procedure
- * refuses the voice and call windows. How a channel reaches a page is the
+ * refuses any other window. How a channel reaches a page is the
  * platform's (`TerminalPortSeam`): the desktop posts it from main through the
  * preload, and a browser tab, whose host runs in the page, posts it to itself.
  */

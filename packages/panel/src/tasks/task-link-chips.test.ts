@@ -10,18 +10,16 @@ import { MARKDOWN_MARK, type MarkdownMark, MarkdownMessage } from "../markdown-m
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
-import { FileNoteAnnotation } from "./file-note.js";
 import { PlanBody } from "./plan-body.js";
 import { TaskMentions, type TaskMentionsValue, useMentionLink } from "./task-mentions.js";
 import { HISTORY_READ } from "./use-plan-history.js";
 import { VersionView } from "./version-view.js";
 
 /**
- * task-link-chips.test.ts -- a link in the plan's words, or in Luke's
- * notes, is drawn as the chip of what it names whoever wrote it, as a
- * transcript draws one: the task read on its page, a version's diff, and a
- * File tab's note. A link that names nothing stays a link, and code stays
- * code.
+ * task-link-chips.test.ts -- a link in the plan's words is drawn as the
+ * chip of what it names whoever wrote it, as a transcript draws one: the
+ * task read on its page and a version's diff. A link that names nothing
+ * stays a link, and code stays code.
  * Synthetic task and repository.
  */
 
@@ -59,13 +57,13 @@ afterEach(() => {
 
 /** What a task's page hands its places. */
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: "Invitations",
   workspace: "acme",
   repository: REPOSITORY,
   text: () => TASK.document.body,
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: { workspace: "acme", repository: REPOSITORY },
     anchors: new Set(["rollout"]),
     onOpenTask: () => undefined,
@@ -109,7 +107,6 @@ test("the plan read on its page draws a plan's link, a file's lines, and a Linea
   const container = drawn(
     createElement(PlanBody, {
       task: TASK,
-      live: false,
       sectionLinks: {
         workspace: "acme",
         onOpen: () => undefined,
@@ -150,22 +147,6 @@ test("a version's diff draws a mention written in as its chip, still marked as w
   );
 });
 
-test("Luke's note on a File tab's lines draws its links as a transcript does", () => {
-  const note = { callId: "call-1", shownAt: 0, startLine: 3, endLine: 5, note: LINKS };
-  const annotation = createElement(FileNoteAnnotation, {
-    note,
-    notes: { notes: [note], folded: [], onFold: () => undefined, taskId: undefined },
-    minimized: undefined,
-  });
-  const container = drawn(createElement(TaskMentions, { value: PAGE, children: annotation }));
-
-  assert.deepEqual(chips(container), THREE_CHIPS_ON_PAGE);
-  assert.deepEqual(
-    [...container.querySelectorAll(".luke-text-link")].map((link) => link.textContent),
-    ["the docs"],
-  );
-});
-
 test("a link whose label a version changed in part is drawn as words with the change marked, not as one chip", () => {
   const words = `Read [the new store](https://github.com/${REPOSITORY}/blob/HEAD/store.ts).`;
   const from = words.indexOf("new");
@@ -194,7 +175,7 @@ test("the plan's version history, off the plan's page, reads a version's mention
       viewing: {
         line: {
           seq: 2,
-          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: true },
+          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: false },
           startedAt: 0,
           changes: 1,
         },

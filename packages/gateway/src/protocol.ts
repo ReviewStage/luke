@@ -19,11 +19,11 @@ export const GATEWAY_METHOD = {
   TASKS_RESYNC: "tasks.resync",
   /** One task made the active one and its saved document read, replacing whichever was active. */
   TASKS_OPEN: "tasks.open",
-  /** The developer left the open task: its call ends and no task is active. */
+  /** The developer left the open task, and no task is active. */
   TASKS_CLOSE: "tasks.close",
   /** A named task started on the service, on the repository it names where it names one, and made the active one. */
   TASKS_START: "tasks.start",
-  /** One task deleted on the service; deleting the open task ends its call and leaves no task active. */
+  /** One task deleted on the service; deleting the open task leaves no task active. */
   TASKS_DELETE: "tasks.delete",
   /** One task renamed on the service; the list and the open document take the name it answered without reading either again. */
   TASKS_RENAME: "tasks.rename",
@@ -52,20 +52,10 @@ export const GATEWAY_METHOD = {
   TASKS_PULL_REQUEST: "tasks.pullRequest",
   /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   TASKS_ISSUE: "tasks.issue",
-  /** A repository's issues as New task's picker asks for them, read from GitHub through the service as they stand now, or that its installation grants none; answered to the caller, never held in the view. */
-  TASKS_GITHUB_ISSUES: "tasks.githubIssues",
-  /** The issues one task links, each with where it stands now, read live through the service; answered to the caller, never held in the view. */
-  TASKS_ISSUE_LINKS: "tasks.issueLinks",
   /** The Browser tabs open in a task's agents' browsers, read from the service and answered to the panel that asked, held nowhere. */
   TASKS_BROWSER_TABS: "tasks.browserTabs",
   /** A Browser tab opened at an address in a task's coding agent's browser on the service, taken over by the account at once; answered to the panel that asked, held nowhere. */
   TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
-  /** One more issue linked to a task on the service, which reads it from its provider first; answered to the caller. */
-  TASKS_ISSUE_LINK: "tasks.issueLink",
-  /** Which keyword a task's pull requests write of one of its links, changed on the service; answered to the caller. */
-  TASKS_ISSUE_RELATE: "tasks.issueRelate",
-  /** One of a task's links let go on the service; answered to the caller. */
-  TASKS_ISSUE_UNLINK: "tasks.issueUnlink",
   /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
   TASKS_REVISIONS: "tasks.revisions",
   /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */
@@ -111,8 +101,6 @@ export const GATEWAY_METHOD = {
   TASKS_COMMENT_ACT: "tasks.commentAct",
   /** One revision of one plan put back as its content on the service; the view takes the task as the service answered it. */
   TASKS_RESTORE: "tasks.restore",
-  /** The developer's scene of the open task's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
-  TASKS_BOARD_SAVE: "tasks.boardSave",
   /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */
   WORKSPACES_REFRESH: "workspaces.refresh",
   /** A workspace made on the service under a name, owned by the account; the view's workspaces are read again. */
@@ -125,12 +113,6 @@ export const GATEWAY_METHOD = {
   WORKSPACES_GITHUB_CONNECT: "workspaces.githubConnect",
   /** A workspace's GitHub organization disconnected on the service; the view's workspaces are read again. */
   WORKSPACES_GITHUB_DISCONNECT: "workspaces.githubDisconnect",
-  /** A workspace's Linear connection begun on the service by an owner or admin: Vercel Connect's sign-in address, for the caller to open. */
-  WORKSPACES_LINEAR_CONNECT: "workspaces.linearConnect",
-  /** A workspace's Linear disconnected on the service; the view's workspaces are read again. */
-  WORKSPACES_LINEAR_DISCONNECT: "workspaces.linearDisconnect",
-  /** The Linear issues a workspace's connection reaches, read from the service now; answered to the caller, never held in the view. */
-  WORKSPACES_LINEAR_ISSUES: "workspaces.linearIssues",
   /** Whether the deployment holds Luke's Sentry integration, and a workspace's installations of it, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_SENTRY: "workspaces.sentry",
   /** A workspace's Sentry install begun on the service by an owner or admin: Sentry's install address, for the caller to open. */
@@ -186,11 +168,11 @@ export const GATEWAY_METHOD = {
   /** The admin dashboard's star set or taken back on one account under the account's session; whether it landed. */
   ADMIN_FAVORITE: "admin.favorite",
   /** The models a coding agent may run on, read from the service's catalog now. */
-  CODING_AGENTS_MODELS: "codingAgents.models",
+  AGENTS_MODELS: "agents.models",
   /** The account's default model and effort for a coding agent, read from the service now. */
-  CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
+  AGENTS_DEFAULT_READ: "agents.defaultRead",
   /** The account's default model and effort for a coding agent, written to the service; the default as kept, or why it is unchanged. */
-  CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
+  AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
   /** The account's hosts, as Settings lists them, read from the service now. */
   HOSTS_LIST: "hosts.list",
   /** How long ago the account's own devices last beat, read from the service now; the ages, or why not. */
@@ -202,48 +184,46 @@ export const GATEWAY_METHOD = {
   /** One of the account's install tokens revoked; done, or why not. */
   HOSTS_REVOKE_INSTALL_TOKEN: "hosts.revokeInstallToken",
   /** One task's coding agents with their status, read from the service now. */
-  CODING_AGENTS_LIST: "codingAgents.list",
+  AGENTS_LIST: "agents.list",
   /** A workspace's coding agents, newest started first, narrowed to one repository where one is named. */
-  CODING_AGENTS_WORKSPACE_LIST: "codingAgents.workspaceList",
+  AGENTS_WORKSPACE_LIST: "agents.workspaceList",
   /** A coding agent started on one task under the panel's own key; the agent, or why none started. */
-  CODING_AGENTS_START: "codingAgents.start",
+  AGENTS_START: "agents.start",
   /** One agent's transcript past a cursor, held open by the service while the agent runs. */
-  CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  AGENTS_MESSAGES: "agents.messages",
   /**
    * One agent's transcript, or one of its workers', followed from now until
    * it is let go or the account signs out. Its pages are heard as
    * `TRANSCRIPT_CHANGED` events, never answered: the first from the start,
    * then each one past the last; following again starts over.
    */
-  CODING_AGENTS_TRANSCRIPT_FOLLOW: "codingAgents.transcriptFollow",
+  AGENTS_TRANSCRIPT_FOLLOW: "agents.transcriptFollow",
   /** One agent's or worker's transcript let go: no more `TRANSCRIPT_CHANGED` events of it until it is followed again. */
-  CODING_AGENTS_TRANSCRIPT_UNFOLLOW: "codingAgents.transcriptUnfollow",
+  AGENTS_TRANSCRIPT_UNFOLLOW: "agents.transcriptUnfollow",
   /** The page of an agent's or worker's transcript below the oldest message a window holds, read at once: its messages, and where the page older still is read below. */
-  CODING_AGENTS_TRANSCRIPT_OLDER: "codingAgents.transcriptOlder",
+  AGENTS_TRANSCRIPT_OLDER: "agents.transcriptOlder",
   /** One agent sent a message, naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
-  CODING_AGENTS_MESSAGE: "codingAgents.message",
+  AGENTS_MESSAGE: "agents.message",
   /** One agent's model and effort changed for its next step; the agent as it then stands, or why it is unchanged. */
-  CODING_AGENTS_CHOOSE: "codingAgents.choose",
+  AGENTS_CHOOSE: "agents.choose",
   /** One agent renamed, or its title cleared; the agent as it then stands, or why it is unchanged. */
-  CODING_AGENTS_RENAME: "codingAgents.rename",
+  AGENTS_RENAME: "agents.rename",
   /** One agent's MCP servers switched, the whole list of those off, for its next turn on; the agent as it then stands, or why it is unchanged. */
-  CODING_AGENTS_SERVERS: "codingAgents.servers",
+  AGENTS_SERVERS: "agents.servers",
   /** One agent stopped; the agent as it then stands, or why it was not. */
-  CODING_AGENTS_STOP: "codingAgents.stop",
+  AGENTS_STOP: "agents.stop",
   /** One agent taken back to just before one of the developer's lines, stopped first where it still works; the agent as it then stands, or why it was not. */
-  CODING_AGENTS_REWIND: "codingAgents.rewind",
+  AGENTS_REWIND: "agents.rewind",
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
-  CODING_AGENTS_ARCHIVE: "codingAgents.archive",
+  AGENTS_ARCHIVE: "agents.archive",
   /** One agent pinned for the account alone, or unpinned; the agent as it then stands, or why it is unchanged. */
-  CODING_AGENTS_PIN: "codingAgents.pin",
+  AGENTS_PIN: "agents.pin",
   /** The account's operator in a workspace ensured, or reset and ensured afresh; its id, or why there is none. */
-  CODING_AGENTS_ENSURE_OPERATOR: "codingAgents.ensureOperator",
+  AGENTS_ENSURE_OPERATOR: "agents.ensureOperator",
   /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
-  CODING_AGENTS_DELETE: "codingAgents.delete",
+  AGENTS_DELETE: "agents.delete",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
-  CODING_AGENTS_PAGE: "codingAgents.page",
-  /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's span from. */
-  CODING_AGENTS_CALLS: "codingAgents.calls",
+  AGENTS_PAGE: "agents.page",
   /** A workspace's open channels, each with what waits on the reader there and when they last looked; or why there are none. */
   CHANNELS_LIST: "channels.list",
   /** A channel made; the workspace's channels as they then stand. */
@@ -307,30 +287,31 @@ export const GATEWAY_METHOD = {
   INSTALLED_SKILLS_SHARE: "installedSkills.share",
   /** One installed skill removed with its files; or why it stands. */
   INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
-  CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
+  AGENTS_PULL_REQUEST: "agents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
-  CODING_AGENTS_CHANGES: "codingAgents.changes",
+  AGENTS_CHANGES: "agents.changes",
   /** The workspace's newest chapters of one agent's pull request, with its head as GitHub holds it now; or why there are none. */
-  CODING_AGENTS_CHAPTERS: "codingAgents.chapters",
+  AGENTS_CHAPTERS: "agents.chapters",
   /** One agent's pull request's chapters generated for its head on Luke's own model key, or the generation already under way, answered as a read of them is. */
-  CODING_AGENTS_CHAPTERS_GENERATE: "codingAgents.chaptersGenerate",
+  AGENTS_CHAPTERS_GENERATE: "agents.chaptersGenerate",
   /** The Claude model the account's Generate chapters runs on, read from the service now. */
   CHAPTERS_MODEL_READ: "chapters.modelRead",
   /** The Claude model the account's Generate chapters runs on, written to the service; the model as kept, or why it is unchanged. */
   CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
-  CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
-  CODING_AGENTS_REVIEW_OPTIONS: "codingAgents.reviewOptions",
+  AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
+  AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
+  AGENTS_LUKE_TOOLS: "agents.lukeTools",
   /** The checks on one agent's pull request's head, as its overview draws them. */
-  CODING_AGENTS_OVERVIEW_CHECKS: "codingAgents.overviewChecks",
+  AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
   /** One agent's pull request's conversation and where its reviewers stand, as its overview draws them. */
-  CODING_AGENTS_OVERVIEW_CONVERSATION: "codingAgents.overviewConversation",
+  AGENTS_OVERVIEW_CONVERSATION: "agents.overviewConversation",
   /** One image an agent's pull request's overview names, read by the service on the App's token: its bytes in base64 and their type. */
-  CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
+  AGENTS_GITHUB_IMAGE: "agents.githubImage",
   /** One change to an agent's pull request, made on GitHub by the service as the account on its own GitHub sign-in: how GitHub took it. */
-  CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
+  AGENTS_PULL_REQUEST_ACTION: "agents.pullRequestAction",
   /** Which of an agent's pull request's files the account marked viewed on GitHub, read by the service on its own GitHub sign-in. */
-  CODING_AGENTS_PULL_REQUEST_VIEWED: "codingAgents.pullRequestViewed",
+  AGENTS_PULL_REQUEST_VIEWED: "agents.pullRequestViewed",
   /** The account's own provider keys an agent runs on, read from the service now as hints and statuses; never a key. */
   PROVIDER_KEYS_READ: "providerKeys.read",
   /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */
@@ -353,16 +334,6 @@ export const GATEWAY_METHOD = {
   MEMORIES_READ: "memories.read",
   /** One memory forgotten on the service for good; the workspace's memories as they then stand. */
   MEMORIES_FORGET: "memories.forget",
-  /** The Markdown the account's new tasks start from, read from the service now: its own, or the default while it keeps none. */
-  PLAN_TEMPLATE_READ: "planTemplate.read",
-  /** The account's plan template kept verbatim on the service, or the default again for null; the template as kept, or why it is unchanged. */
-  PLAN_TEMPLATE_WRITE: "planTemplate.write",
-  /** A page of the account's plan template history, read from the service now, newest first; or why there is none. */
-  PLAN_TEMPLATE_REVISIONS: "planTemplate.revisions",
-  /** One revision of the account's plan template beside the one before it; or why there is none. */
-  PLAN_TEMPLATE_REVISION: "planTemplate.revision",
-  /** One revision of the account's plan template put back as the template; the template as kept, or why it is unchanged. */
-  PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
   /**
@@ -370,21 +341,21 @@ export const GATEWAY_METHOD = {
    * or the account signs out, over Neon Realtime. What it holds is heard as
    * `INBOX_CHANGED` events, never answered; following again starts over.
    */
-  CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
+  AGENTS_INBOX_FOLLOW: "agents.inboxFollow",
   /** One plan's or agent's inbox let go: no more `INBOX_CHANGED` events of it until it is followed again. */
-  CODING_AGENTS_INBOX_UNFOLLOW: "codingAgents.inboxUnfollow",
+  AGENTS_INBOX_UNFOLLOW: "agents.inboxUnfollow",
   /** One item of a task's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
-  CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  AGENTS_INBOX_ANSWER: "agents.inboxAnswer",
   /** One open item of a task's inbox closed without an answer against the revision the panel drew, under the panel's own key; answered as an answer is. */
-  CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
+  AGENTS_INBOX_CLOSE: "agents.inboxClose",
   /** One message of the account's on an item's thread, open or settled, under the panel's own key, carrying the answer to the thread's open ask where the reader attached one; the item as it then stands, its thread with the message on it, or why there is no answer. */
-  CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
+  AGENTS_INBOX_MESSAGE: "agents.inboxMessage",
   /** A thread the account starts with one agent, its subject and first message under the panel's own key; the thread as it then stands, its message on it, or why there is no answer. */
-  CODING_AGENTS_INBOX_START: "codingAgents.inboxStart",
+  AGENTS_INBOX_START: "agents.inboxStart",
   /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
-  CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",
+  AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
   /** Every item of the account's Inbox marked read, in one workspace or in all; how many were unread, or why there is no answer. */
-  CODING_AGENTS_INBOX_READ_ALL: "codingAgents.inboxReadAll",
+  AGENTS_INBOX_READ_ALL: "agents.inboxReadAll",
   /** Where every one of the account's integrations stands, read from the service now. */
   INTEGRATIONS_STATUS: "integrations.status",
   /** A browser sign-in to one account at a provider, or to a new one, begun on the service and opened on this Mac; whether it was opened and the account it signs in, never the address. */
@@ -403,15 +374,24 @@ export const GATEWAY_METHOD = {
    * `ACCOUNT_INBOX_CHANGED` events, never answered; following again starts
    * over. Main's own follow, which no window asks.
    */
-  CODING_AGENTS_ACCOUNT_INBOX_FOLLOW: "codingAgents.accountInboxFollow",
+  AGENTS_ACCOUNT_INBOX_FOLLOW: "agents.accountInboxFollow",
   /** The account inbox let go: no more `ACCOUNT_INBOX_CHANGED` events until it is followed again. */
-  CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW: "codingAgents.accountInboxUnfollow",
+  AGENTS_ACCOUNT_INBOX_UNFOLLOW: "agents.accountInboxUnfollow",
+  /**
+   * Every inbox item the account reaches, whole, followed from now until it
+   * is let go or the account signs out, on one held poll: heard as
+   * `ACCOUNT_ITEMS_CHANGED` events by the plans and agents that moved,
+   * never answered; following again starts over, told whole.
+   */
+  AGENTS_ACCOUNT_ITEMS_FOLLOW: "agents.accountItemsFollow",
+  /** The account's items let go: no more `ACCOUNT_ITEMS_CHANGED` events until they are followed again. */
+  AGENTS_ACCOUNT_ITEMS_UNFOLLOW: "agents.accountItemsUnfollow",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
-  CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
+  AGENTS_INBOX_ATTACHMENT: "agents.inboxAttachment",
   /** One picture a tool answered an agent or one of its workers, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
-  CODING_AGENTS_PICTURE: "codingAgents.picture",
+  AGENTS_PICTURE: "agents.picture",
   /** One part of a message of an agent's transcript or one of its workers', whole, fetched under the account: what the page carried cut, or why there is none. */
-  CODING_AGENTS_PART: "codingAgents.part",
+  AGENTS_PART: "agents.part",
   /**
    * A coding agent's terminals (`@luke/features/terminal-view`): its shells
    * listed, started, named, and ended, and its sandbox resumed on the
@@ -464,210 +444,10 @@ export const GATEWAY_METHOD = {
   ACCOUNT_SIGN_IN_AGAIN: "account.signInAgain",
   ACCOUNT_SIGN_OUT: "account.signOut",
   ACCOUNT_DELETE: "account.delete",
-  VOICE_DIAGNOSTICS: "voice.diagnostics",
-  VOICE_CREATE_LIVE_SESSION: "voice.createLiveSession",
-  VOICE_END_LIVE_SESSION: "voice.endLiveSession",
-  VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
-  VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
-  VOICE_STOP_SPEAKING: "voice.stopSpeaking",
-  /** Luke's avatar on the standing call asked for or taken down; whether the service was asked. The grant it draws never crosses here. */
-  VOICE_SET_VIDEO: "voice.setVideo",
-  /** One live event the renderer's tap saw cross the data channel, for the host's development trace; a no-op where no writer stands. */
-  VOICE_RECORD_TRACE: "voice.recordTrace",
   ANALYTICS_RECORD: "analytics.record",
 } as const;
 
 export type GatewayMethod = (typeof GATEWAY_METHOD)[keyof typeof GATEWAY_METHOD];
-
-/**
- * The live voice session's vocabulary, declared beside the four methods and
- * the one event that speak it, so the host that answers them and the client
- * that sends them read one shape. The session itself belongs to the host; the
- * renderer is a WebRTC peer that hands over an SDP offer, reports what its
- * transport and microphone are doing, and asks for the end, and no credential
- * of any kind travels in these shapes.
- */
-
-/** Where the one live session stands, as `voiceLiveSession.changed` reports it. */
-export const LIVE_SESSION_PHASE = {
-  /** The provider created the session; its answer is on its way to the peer. */
-  CREATED: "created",
-  /** The provider announced the session live. */
-  STARTED: "started",
-  /**
-   * Luke said goodbye and is ending the call: the peer hangs up through its
-   * own hang-up once the goodbye has played, or keeps the call up if the
-   * developer speaks first. The host ends nothing on it.
-   */
-  ENDING: "ending",
-  /** The host asked for a graceful close and is waiting for it to be confirmed. */
-  CLOSING: "closing",
-  CLOSED: "closed",
-} as const;
-
-export type LiveSessionPhase = (typeof LIVE_SESSION_PHASE)[keyof typeof LIVE_SESSION_PHASE];
-
-const LIVE_SESSION_PHASES: readonly LiveSessionPhase[] = Object.values(LIVE_SESSION_PHASE);
-
-/** What a peer's transport reports of itself, after the peer connection's own states. */
-export const LIVE_TRANSPORT_STATE = {
-  CONNECTING: "connecting",
-  CONNECTED: "connected",
-  DISCONNECTED: "disconnected",
-  FAILED: "failed",
-  CLOSED: "closed",
-} as const;
-
-export type LiveTransportState = (typeof LIVE_TRANSPORT_STATE)[keyof typeof LIVE_TRANSPORT_STATE];
-
-const LIVE_TRANSPORT_STATES: readonly LiveTransportState[] = Object.values(LIVE_TRANSPORT_STATE);
-
-/**
- * Why the peer ended its side of a call, told with the closed transport it
- * reports, so the host's line about the end names the peer's own reason.
- */
-export const LIVE_PEER_END_REASON = {
-  /** The developer or the policy above the peer hung up. */
-  HUNG_UP: "hung_up",
-  /** The hang-up's `session.closed` did not arrive within its bound. */
-  CLOSE_TIMED_OUT: "close_timed_out",
-  /** `session.closed` reached the peer unasked. */
-  SERVICE_CLOSED: "service_closed",
-  /** The data channel closed under the peer. */
-  CHANNEL_CLOSED: "channel_closed",
-  /** The peer connection reported itself failed. */
-  TRANSPORT_FAILED: "transport_failed",
-  /** The created session never announced itself started. */
-  START_TIMED_OUT: "start_timed_out",
-} as const;
-
-export type LivePeerEndReason = (typeof LIVE_PEER_END_REASON)[keyof typeof LIVE_PEER_END_REASON];
-
-const LIVE_PEER_END_REASONS: readonly LivePeerEndReason[] = Object.values(LIVE_PEER_END_REASON);
-
-/**
- * The most characters an SDP document may carry. A WebRTC offer for one audio
- * track and one data channel is a few kilobytes; the bound refuses an offer
- * no peer of this build composes rather than carrying it to a provider.
- */
-export const LIVE_SDP_MAX_CHARACTERS = 65_536;
-
-/**
- * The representation a check carries so the node a model is shown says the
- * bound the check stands for. Effect's own length filters annotate themselves
- * with it, and a filter of this module's own that means the same bound says so
- * under the same id rather than emitting nothing.
- */
-const SCHEMA_CHECK_REPRESENTATION = {
-  MIN_LENGTH: "effect/schema/isMinLength",
-} as const;
-
-/** A trimmed text, refused when only whitespace remains. */
-const text: Schema.Codec<string, string> = Schema.Trim.check(Schema.isNonEmpty());
-
-/** A text admitted as written, refused when only whitespace remains, and bounded by `max`. */
-function keptText(max: number): Schema.Codec<string, string> {
-  return Schema.String.check(
-    Schema.makeFilter<string>((value) => value.trim().length > 0, {
-      representation: {
-        id: SCHEMA_CHECK_REPRESENTATION.MIN_LENGTH,
-        payload: { minLength: 1 },
-      },
-    }),
-    Schema.isMaxLength(max),
-  );
-}
-
-/**
- * Every answer below is a plain struct that names exactly its own keys. A key
- * a newer service added is ignored at the read rather than in the declaration,
- * because whether an unnamed key refuses a value is a parse option a caller
- * passes and no longer something a schema can say for itself: the readers of
- * these answers hand `readEither` `{ excess: EXCESS_KEYS.DROP }`, and what a
- * model is shown still says `additionalProperties: false`.
- */
-
-/** SDP is line-oriented and ends its lines with CRLF, so it travels verbatim: nothing is trimmed, collapsed, or cut. */
-const sdpSchema = keptText(LIVE_SDP_MAX_CHARACTERS);
-
-/**
- * `voice.createLiveSession`: the peer's SDP offer, and the agent the call
- * speaks into with the task it is on, none for an agent with no task. The
- * host creates a call only into an agent the account reaches on eve, whose
- * own task is the one named.
- */
-export const voiceCreateLiveSessionParamsSchema = Schema.Struct({
-  sdp: sdpSchema,
-  taskId: Schema.optionalKey(text),
-  agentId: text,
-});
-
-/**
- * What `voice.createLiveSession` answers: the session the provider named, the
- * SDP answer the peer sets, and, where the account holds a row for the
- * session, the store's own id for it, which is what a stored spoken row names
- * as its `voice_session_id`.
- */
-export const voiceCreateLiveSessionResultSchema = Schema.Struct({
-  sessionId: text,
-  sdpAnswer: sdpSchema,
-  voiceSessionId: Schema.optionalKey(text),
-});
-
-export type VoiceCreateLiveSessionResult = typeof voiceCreateLiveSessionResultSchema.Type;
-
-/**
- * `voice.endLiveSession`: the peer's hang-up, naming the session it hangs up,
- * so an old call still closing behind a newer one ends nothing but its own.
- */
-export const voiceEndLiveSessionParamsSchema = Schema.Struct({ sessionId: text });
-
-export type VoiceEndLiveSessionParams = typeof voiceEndLiveSessionParamsSchema.Type;
-
-/**
- * `voice.reportLiveTransport`: the peer connection's state as the peer saw it
- * change, the session that peer was created for, and why the peer ended where
- * it did. The session is named for the same reason the hang-up names it: an
- * old peer's late close is about its own session and never the next one.
- */
-export const voiceReportLiveTransportParamsSchema = Schema.Struct({
-  sessionId: text,
-  state: Schema.Literals(LIVE_TRANSPORT_STATES),
-  reason: Schema.optionalKey(Schema.Literals(LIVE_PEER_END_REASONS)),
-});
-
-export type VoiceReportLiveTransportParams = typeof voiceReportLiveTransportParamsSchema.Type;
-
-/** `voice.reportLiveActivity`: whether the peer has decided, from its own local signals, that the exchange is idle. */
-export const voiceReportLiveActivityParamsSchema = Schema.Struct({ idle: Schema.Boolean });
-
-/**
- * What `voice.stopSpeaking` answers: whether a standing session was told to
- * stop. The stop key is the one ask that carries this; a muted microphone
- * says nothing about Luke's own output, so the method takes no parameters
- * and the mute carries none of its meaning.
- */
-export const voiceStopSpeakingResultSchema = Schema.Struct({ stopped: Schema.Boolean });
-
-/** `voice.setVideo`: the developer turning Luke's avatar on or off on the standing call. */
-export const voiceSetVideoParamsSchema = Schema.Struct({ on: Schema.Boolean });
-
-/**
- * What `voice.setVideo` answers: whether the service was asked. The avatar's
- * grant answers the ask on the voice socket and goes from the host to the
- * call window in process alone, so this answer never carries it, and nor
- * does any Gateway event.
- */
-export const voiceSetVideoResultSchema = Schema.Struct({ requested: Schema.Boolean });
-
-/** `voiceLiveSession.changed`: the phase the host's one session moved to, the id once the provider named one, and the reason of a close. */
-export const voiceLiveSessionChangedSchema = Schema.Struct({
-  sessionId: Schema.optionalKey(text),
-  phase: Schema.Literals(LIVE_SESSION_PHASES),
-  reason: Schema.optionalKey(text),
-});
-
-export type VoiceLiveSessionChanged = typeof voiceLiveSessionChangedSchema.Type;
 
 /** Every way a call can be refused: the dispatcher's own two, and the codes a handler fails with. */
 export const GATEWAY_ERROR = {
@@ -750,7 +530,6 @@ export const GATEWAY_EVENT = {
   ACCOUNT_CHANGED: "account.changed",
   /** What the signed-in account may open in the app (whether it is an admin), whenever a read or the account moved it. */
   ACCOUNT_ACCESS_CHANGED: "accountAccess.changed",
-  VOICE_LIVE_SESSION_CHANGED: "voiceLiveSession.changed",
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
   /** The panel's tasks, active task, and document, whole, whenever a read moved them. */
   TASKS_CHANGED: "tasks.changed",
@@ -782,6 +561,8 @@ export const GATEWAY_EVENT = {
   INBOX_CHANGED: "inbox.changed",
   /** What waits across the followed account, whole or why there is none, each time it moves while it is followed. */
   ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
+  /** The followed account's items, whole as the follow starts and then by the plans and agents that moved, or why there are none, each time they move while followed. */
+  ACCOUNT_ITEMS_CHANGED: "accountItems.changed",
   /** The commands agents asked to run on this Mac that wait on the developer's answer, whole, each time one is asked or answered. */
   MAC_COMMAND_ASKS_CHANGED: "macCommandAsks.changed",
 } as const;

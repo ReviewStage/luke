@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -18,9 +19,8 @@ import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { automation, automationRun } from "../../schemas/automation.js";
-import { personalWorkspace } from "../../schemas/personal-workspace.js";
-import { task } from "../../schemas/task.js";
 import { getTestDB, plansOf } from "../../testing/index.js";
+import { archiveAgent, createAgent } from "../agent-store.js";
 import {
   aimOperatorHeartbeat,
   automationRunsSince,
@@ -37,6 +37,7 @@ import {
   ownFailedAutomationRuns,
   queuedAutomationRuns,
   readAutomation,
+  readAutomationToRun,
   readWebhookAutomation,
   recordAutomationRun,
   settleAutomationRun,
@@ -44,8 +45,6 @@ import {
   subjectRunStartedSince,
   updateAutomation,
 } from "../automation-store.js";
-import { createCodingAgent } from "../coding-agent-store.js";
-import { createTask, updateTask } from "../task-store.js";
 
 /**
  * An account's automations and their runs, over a real dialect: made only
@@ -64,8 +63,8 @@ const openAccount = Effect.gen(function* () {
   return id;
 });
 
-/** A task in a workspace the account owns, as the organization plugin would leave the rows. */
-const openTask = (userId: string) =>
+/** A workspace the account owns, as the organization plugin would leave the rows. */
+const openWorkspace = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const organizationId = randomUUID();
@@ -79,27 +78,12 @@ const openTask = (userId: string) =>
     yield* db
       .insert(member)
       .values({ id: randomUUID(), organizationId, userId, role: "owner", createdAt: now });
-    const made = yield* createTask(userId, {
-      organizationId,
-      name: "Nightly triage",
-      repository: "acme/api",
-    });
-    return made.id;
+    return organizationId;
   });
 
-/** The workspace a task stands in. */
-const workspaceOf = (taskId: string) =>
-  Effect.gen(function* () {
-    const db = yield* Database;
-    const [row] = yield* db
-      .select({ organizationId: task.organizationId })
-      .from(task)
-      .where(eq(task.id, taskId));
-    return row?.organizationId ?? "";
-  });
-
-const nightly = (taskId: string): NewAutomation => ({
-  taskId,
+const nightly = (organizationId: string): NewAutomation => ({
+  organizationId,
+  repositories: ["acme/api"],
   name: "Nightly flaky-test sweep",
   trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 2 * * *", timezone: "Europe/London" },
   action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Find and fix one flaky test." },
@@ -110,16 +94,16 @@ const nightly = (taskId: string): NewAutomation => ({
 
 it.layer(getTestDB())("the automation store", (it) => {
   it.effect(
-    "an operator's heartbeat re-aims the member's own automations aimed at the operator it replaced, a teammate's left as they stood, and is made only where none is then aimed at it",
+    "an operator's heartbeat re-aims the member's own automations aimed at their archived operator in the workspace, a teammate's left as they stood, and is made only where none is then aimed at it",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const teammate = yield* openAccount;
-        const taskId = yield* openTask(owner);
-        const onTask = Option.getOrThrow(
-          yield* createAutomation(owner, { ...nightly(taskId), nextRunAt: null }),
+        const workspaceId = yield* openWorkspace(owner);
+        const existing = Option.getOrThrow(
+          yield* createAutomation(owner, { ...nightly(workspaceId), nextRunAt: null }),
         );
-        const workspace = onTask.organizationId ?? "";
+        const workspace = existing.organizationId;
         const db = yield* Database;
         const now = yield* DateTime.nowAsDate;
         yield* db.insert(member).values({
@@ -129,27 +113,31 @@ it.layer(getTestDB())("the automation store", (it) => {
           role: "member",
           createdAt: now,
         });
-        const agentOf = (userId: string) =>
+        const operatorOf = (userId: string) =>
           Effect.map(
-            createCodingAgent(userId, {
+            createAgent(userId, {
               taskId: null,
               organizationId: workspace,
               planSnapshot: null,
-              prompt: "Watch the agents.",
+              prompt: null,
+              kind: AGENT_KIND.OPERATOR,
               idempotencyKey: randomUUID(),
               model: "anthropic/claude-opus-5.5",
               effort: "high",
-              repository: "acme/api",
+              repository: null,
             }),
             (made) => Option.getOrThrow(made).agent.id,
           );
-        const retired = yield* agentOf(owner);
-        const fresh = yield* agentOf(owner);
+        // Archived by hand, as the archive or update_agent does it, with no Reset to name it.
+        const archived = (userId: string, agentId: string) =>
+          Effect.asVoid(archiveAgent(userId, agentId, true));
+        const retired = yield* operatorOf(owner);
+        yield* archived(owner, retired);
+        const fresh = yield* operatorOf(owner);
         const aimedAt = (userId: string, agentId: string) =>
           Effect.map(
             createAutomation(userId, {
-              ...nightly(taskId),
-              taskId: null,
+              ...nightly(workspaceId),
               organizationId: workspace,
               repositories: [],
               nextRunAt: null,
@@ -161,8 +149,7 @@ it.layer(getTestDB())("the automation store", (it) => {
         const owners = yield* aimedAt(owner, retired);
         const teammates = yield* aimedAt(teammate, retired);
         const heartbeat: NewAutomation = {
-          ...nightly(taskId),
-          taskId: null,
+          ...nightly(workspaceId),
           organizationId: workspace,
           repositories: [],
           nextRunAt: null,
@@ -170,17 +157,9 @@ it.layer(getTestDB())("the automation store", (it) => {
 
         const reaimed = yield* aimOperatorHeartbeat(owner, {
           operatorId: fresh,
-          retiredId: retired,
+          workspaceId: workspace,
           heartbeat,
         });
-        const another = yield* agentOf(owner);
-        const made = Option.getOrThrow(
-          yield* aimOperatorHeartbeat(owner, {
-            operatorId: another,
-            retiredId: undefined,
-            heartbeat,
-          }),
-        );
 
         assert.deepEqual(reaimed, Option.some([owners]), "re-aimed, and none made beside it");
         const targetOf = (userId: string, id: string) =>
@@ -190,6 +169,17 @@ it.layer(getTestDB())("the automation store", (it) => {
           );
         assert.deepEqual(yield* targetOf(owner, owners), Option.some(fresh));
         assert.deepEqual(yield* targetOf(teammate, teammates), Option.some(retired));
+
+        assert.ok(yield* deleteAutomation(owner, owners));
+        yield* archived(owner, fresh);
+        const another = yield* operatorOf(owner);
+        const made = Option.getOrThrow(
+          yield* aimOperatorHeartbeat(owner, {
+            operatorId: another,
+            workspaceId: workspace,
+            heartbeat,
+          }),
+        );
         assert.equal(made.length, 1);
         const [madeId = ""] = made;
         assert.deepEqual(
@@ -208,16 +198,15 @@ it.layer(getTestDB())("the automation store", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
-        const taskId = yield* openTask(owner);
+        const workspaceId = yield* openWorkspace(owner);
         // Never due, so no other test's claim finds it.
-        const onTask = Option.getOrThrow(
-          yield* createAutomation(owner, { ...nightly(taskId), nextRunAt: null }),
+        const existing = Option.getOrThrow(
+          yield* createAutomation(owner, { ...nightly(workspaceId), nextRunAt: null }),
         );
-        const workspace = onTask.organizationId ?? "";
+        const workspace = existing.organizationId;
         const hooked = Option.getOrThrow(
           yield* createAutomation(owner, {
-            ...nightly(taskId),
-            taskId: null,
+            ...nightly(workspaceId),
             organizationId: workspace,
             repositories: ["acme/api"],
             trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
@@ -227,7 +216,7 @@ it.layer(getTestDB())("the automation store", (it) => {
         );
 
         const read = yield* readWebhookAutomation(hooked.id);
-        const scheduled = yield* readWebhookAutomation(onTask.id);
+        const scheduled = yield* readWebhookAutomation(existing.id);
         yield* recordAutomationRun(hooked, {
           dedupeKey: randomUUID(),
           firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: 5 },
@@ -255,18 +244,43 @@ it.layer(getTestDB())("the automation store", (it) => {
   );
 
   it.effect(
-    "an automation made on a workspace with no plan takes the workspace and repositories named, lists under that workspace, and is made by no account outside it",
+    "an automation whose stored action says `agent`, as the rename's migration leaves it, still reads to run",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const workspaceId = yield* openWorkspace(owner);
+        const made = Option.getOrThrow(
+          yield* createAutomation(owner, { ...nightly(workspaceId), nextRunAt: null }),
+        );
+        const db = yield* Database;
+        yield* db
+          .update(automation)
+          .set({
+            action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Find and fix one flaky test." },
+          })
+          .where(eq(automation.id, made.id));
+
+        const read = yield* readAutomationToRun(made.id);
+
+        assert.deepEqual(
+          Option.map(read, (row) => row.action.kind),
+          Option.some(AUTOMATION_ACTION.AGENT),
+        );
+      }),
+  );
+
+  it.effect(
+    "an automation made on a workspace lists under that workspace, and is made by no account outside it",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const outsider = yield* openAccount;
-        const taskId = yield* openTask(owner);
-        const onTask = Option.getOrThrow(yield* createAutomation(owner, nightly(taskId)));
-        const workspace = onTask.organizationId ?? "";
+        const workspaceId = yield* openWorkspace(owner);
+        const existing = Option.getOrThrow(yield* createAutomation(owner, nightly(workspaceId)));
+        const workspace = existing.organizationId;
         const made = (by: string) =>
           createAutomation(by, {
-            ...nightly(taskId),
-            taskId: null,
+            ...nightly(workspaceId),
             organizationId: workspace,
             repositories: ["acme/api", "acme/web"],
           });
@@ -275,8 +289,8 @@ it.layer(getTestDB())("the automation store", (it) => {
         const refused = yield* made(outsider);
 
         assert.deepEqual(
-          [taskless.taskId, taskless.taskName, taskless.organizationId, taskless.repositories],
-          [null, null, workspace, ["acme/api", "acme/web"]],
+          [taskless.organizationId, taskless.repositories],
+          [workspace, ["acme/api", "acme/web"]],
         );
         assert.ok(Option.isNone(refused), "an account outside the workspace makes nothing there");
         // Note that the two were made in one instant, so their order is their ids', and read as a set.
@@ -284,22 +298,19 @@ it.layer(getTestDB())("the automation store", (it) => {
           (yield* listAutomations(owner, { organizationId: workspace }))
             .map((each) => each.id)
             .toSorted(),
-          [taskless.id, onTask.id].toSorted(),
+          [taskless.id, existing.id].toSorted(),
         );
         assert.deepEqual(yield* listAutomations(outsider, { organizationId: workspace }), []);
       }),
   );
 
   it.effect(
-    "a new automation takes its plan's workspace and repository, its owner's alone and a new agent each run where the maker names neither",
+    "a new automation takes the workspace and repositories named, its owner's alone and a new agent each run where the maker names neither",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
-        const taskId = yield* openTask(owner);
-        const made = Option.getOrThrow(yield* createAutomation(owner, nightly(taskId)));
-        const [taskRow] = yield* Database.use((db) =>
-          db.select({ organizationId: task.organizationId }).from(task).where(eq(task.id, taskId)),
-        );
+        const workspaceId = yield* openWorkspace(owner);
+        const made = Option.getOrThrow(yield* createAutomation(owner, nightly(workspaceId)));
 
         assert.deepEqual(
           [
@@ -310,7 +321,7 @@ it.layer(getTestDB())("the automation store", (it) => {
             made.archiveSuccessful,
           ],
           [
-            taskRow?.organizationId,
+            workspaceId,
             ["acme/api"],
             AUTOMATION_SCOPE.PERSONAL,
             AUTOMATION_TARGET.NEW_AGENT,
@@ -321,104 +332,21 @@ it.layer(getTestDB())("the automation store", (it) => {
   );
 
   it.effect(
-    "a plan given another repository or moved to another workspace takes its automations along",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* openAccount;
-        const taskId = yield* openTask(owner);
-        const made = Option.getOrThrow(yield* createAutomation(owner, nightly(taskId)));
-        const elsewhere = randomUUID();
-        const now = yield* DateTime.nowAsDate;
-        yield* Database.use((db) =>
-          db.insert(organization).values({
-            id: elsewhere,
-            name: "Elsewhere",
-            slug: `elsewhere-${elsewhere}`,
-            createdAt: now,
-          }),
-        );
-        yield* Database.use((db) =>
-          db.insert(member).values({
-            id: randomUUID(),
-            organizationId: elsewhere,
-            userId: owner,
-            role: "owner",
-            createdAt: now,
-          }),
-        );
-
-        yield* updateTask(owner, taskId, { repository: "acme/moved", organizationId: elsewhere });
-        const followed = Option.getOrThrow(yield* readAutomation(owner, made.id));
-
-        assert.deepEqual(
-          [followed.organizationId, followed.repositories],
-          [elsewhere, ["acme/moved"]],
-          "the automation follows its plan",
-        );
-      }),
-  );
-
-  it.effect(
-    "a workspace automation whose plan moves into a personal workspace becomes personal, as everything there is",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* openAccount;
-        const taskId = yield* openTask(owner);
-        const shared = Option.getOrThrow(
-          yield* createAutomation(owner, { ...nightly(taskId), scope: AUTOMATION_SCOPE.WORKSPACE }),
-        );
-        const personal = randomUUID();
-        const now = yield* DateTime.nowAsDate;
-        yield* Database.use((db) =>
-          db.insert(organization).values({
-            id: personal,
-            name: "Personal",
-            slug: `personal-${personal}`,
-            createdAt: now,
-          }),
-        );
-        yield* Database.use((db) =>
-          db.insert(member).values({
-            id: randomUUID(),
-            organizationId: personal,
-            userId: owner,
-            role: "owner",
-            createdAt: now,
-          }),
-        );
-        yield* Database.use((db) =>
-          db
-            .insert(personalWorkspace)
-            .values({ userId: owner, organizationId: personal, createdAt: now }),
-        );
-
-        yield* updateTask(owner, taskId, { organizationId: personal });
-
-        const moved = Option.getOrThrow(yield* readAutomation(owner, shared.id));
-        assert.deepEqual(
-          [moved.organizationId, moved.scope],
-          [personal, AUTOMATION_SCOPE.PERSONAL],
-        );
-      }),
-  );
-
-  it.effect(
-    "an automation is made only on a plan the account reaches, and read, changed, and deleted by its own account alone",
+    "an automation is made only on a workspace the account is a member of, and read, changed, and deleted by its own account alone",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const other = yield* openAccount;
-        const taskId = yield* openTask(owner);
+        const workspaceId = yield* openWorkspace(owner);
 
         assert.deepEqual(
-          yield* createAutomation(other, nightly(taskId)),
+          yield* createAutomation(other, nightly(workspaceId)),
           Option.none(),
-          "an account outside the plan's workspace makes nothing on it",
+          "an account outside the workspace makes nothing on it",
         );
-        const made = Option.getOrThrow(yield* createAutomation(owner, nightly(taskId)));
+        const made = Option.getOrThrow(yield* createAutomation(owner, nightly(workspaceId)));
         assert.equal(made.enabled, true);
-        assert.equal(made.taskName, "Nightly triage");
-        assert.deepEqual(made.trigger, nightly(taskId).trigger);
+        assert.deepEqual(made.trigger, nightly(workspaceId).trigger);
 
         assert.deepEqual(
           (yield* listAutomations(owner)).map((each) => each.id),
@@ -455,7 +383,7 @@ it.layer(getTestDB())("the automation store", (it) => {
         const owner = yield* openAccount;
         const other = yield* openAccount;
         const made = Option.getOrThrow(
-          yield* createAutomation(owner, nightly(yield* openTask(owner))),
+          yield* createAutomation(owner, nightly(yield* openWorkspace(owner))),
         );
         const firing = {
           dedupeKey: "2026-10-15T01:00:00.000Z",
@@ -498,12 +426,12 @@ it.layer(getTestDB())("the automation store", (it) => {
   );
 
   it.effect(
-    "an account that leaves the plan's workspace no longer reads, changes, or deletes its automations there, nor their runs",
+    "an account that leaves the workspace no longer reads, changes, or deletes its automations there, nor their runs",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const made = Option.getOrThrow(
-          yield* createAutomation(owner, nightly(yield* openTask(owner))),
+          yield* createAutomation(owner, nightly(yield* openWorkspace(owner))),
         );
         yield* recordAutomationRun(made, {
           dedupeKey: "manual-1",
@@ -528,11 +456,14 @@ it.layer(getTestDB())("the automation store", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
-        const taskId = yield* openTask(owner);
+        const workspaceId = yield* openWorkspace(owner);
         const now = new Date("2026-10-15T09:05:00Z");
         const next = new Date("2026-10-16T09:00:00Z");
         const make = (nextRunAt: Date) =>
-          Effect.map(createAutomation(owner, { ...nightly(taskId), nextRunAt }), Option.getOrThrow);
+          Effect.map(
+            createAutomation(owner, { ...nightly(workspaceId), nextRunAt }),
+            Option.getOrThrow,
+          );
         const due = yield* make(new Date("2026-10-15T09:00:00Z"));
         const stale = yield* make(new Date("2026-10-15T06:00:00Z"));
         const later = yield* make(new Date("2026-10-15T10:00:00Z"));
@@ -551,7 +482,7 @@ it.layer(getTestDB())("the automation store", (it) => {
         const leaver = yield* openAccount;
         const left = Option.getOrThrow(
           yield* createAutomation(leaver, {
-            ...nightly(yield* openTask(leaver)),
+            ...nightly(yield* openWorkspace(leaver)),
             nextRunAt: new Date("2026-10-15T09:00:00Z"),
           }),
         );
@@ -604,24 +535,32 @@ it.layer(getTestDB())("the automation store", (it) => {
   );
 
   it.effect(
-    "a repository's event finds the enabled GitHub automations listening for it on its plans, however its name is cased, and no other",
+    "a repository's event finds the enabled GitHub automations listening for it, however its name is cased, and no other",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
-        const taskId = yield* openTask(owner);
+        const workspaceId = yield* openWorkspace(owner);
         const github = {
           kind: AUTOMATION_TRIGGER.GITHUB,
           event: "issue-opened",
           labels: ["bug"],
         } as const;
         const listening = Option.getOrThrow(
-          yield* createAutomation(owner, { ...nightly(taskId), trigger: github, nextRunAt: null }),
+          yield* createAutomation(owner, {
+            ...nightly(workspaceId),
+            trigger: github,
+            nextRunAt: null,
+          }),
         );
         const paused = Option.getOrThrow(
-          yield* createAutomation(owner, { ...nightly(taskId), trigger: github, nextRunAt: null }),
+          yield* createAutomation(owner, {
+            ...nightly(workspaceId),
+            trigger: github,
+            nextRunAt: null,
+          }),
         );
         yield* updateAutomation(owner, paused.id, { enabled: false });
-        yield* createAutomation(owner, nightly(taskId));
+        yield* createAutomation(owner, nightly(workspaceId));
 
         const found = yield* githubAutomationsOn("ACME/api", "issue-opened", 10);
         assert.deepEqual(
@@ -650,8 +589,8 @@ it.layer(getTestDB())("the automation store", (it) => {
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const other = yield* openAccount;
-        const ours = yield* workspaceOf(yield* openTask(owner));
-        const theirs = yield* workspaceOf(yield* openTask(other));
+        const ours = yield* openWorkspace(owner);
+        const theirs = yield* openWorkspace(other);
         const alert = {
           kind: AUTOMATION_TRIGGER.INTEGRATION,
           provider: TRIGGER_PROVIDER.SENTRY,
@@ -660,7 +599,6 @@ it.layer(getTestDB())("the automation store", (it) => {
         } as const;
         const onWorkspace = (organizationId: string): NewAutomation => ({
           ...nightly(""),
-          taskId: null,
           organizationId,
           repositories: ["acme/api"],
           trigger: alert,
@@ -713,10 +651,10 @@ it.layer(getTestDB())("the automation store", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
-        const taskId = yield* openTask(owner);
+        const workspaceId = yield* openWorkspace(owner);
         const made = Option.getOrThrow(
           yield* createAutomation(owner, {
-            ...nightly(taskId),
+            ...nightly(workspaceId),
             trigger: {
               kind: AUTOMATION_TRIGGER.INTEGRATION,
               provider: TRIGGER_PROVIDER.SENTRY,
@@ -796,15 +734,15 @@ it.layer(getTestDB())("the automation store's failed runs", (it) => {
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const other = yield* openAccount;
-        const taskId = yield* openTask(owner);
-        const theirTask = yield* openTask(other);
-        const made = (userId: string, onTask: string, name: string) =>
+        const workspaceId = yield* openWorkspace(owner);
+        const theirTask = yield* openWorkspace(other);
+        const made = (userId: string, existing: string, name: string) =>
           Effect.map(
-            createAutomation(userId, { ...nightly(onTask), name, nextRunAt: null }),
+            createAutomation(userId, { ...nightly(existing), name, nextRunAt: null }),
             Option.getOrThrow,
           );
-        const sweep = yield* made(owner, taskId, "Nightly flaky-test sweep");
-        const digest = yield* made(owner, taskId, "Morning digest");
+        const sweep = yield* made(owner, workspaceId, "Nightly flaky-test sweep");
+        const digest = yield* made(owner, workspaceId, "Morning digest");
         const theirs = yield* made(other, theirTask, "Their sweep");
         /** A run of the automation, settled as it came out, a second after the one before. */
         const ran = (
@@ -866,13 +804,19 @@ it.layer(getTestDB())("the automation store's failed runs", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
-        const taskId = yield* openTask(owner);
+        const workspaceId = yield* openWorkspace(owner);
         const id = randomUUID();
 
-        const made = Option.getOrThrow(yield* createAutomation(owner, { ...nightly(taskId), id }));
+        const made = Option.getOrThrow(
+          yield* createAutomation(owner, { ...nightly(workspaceId), id }),
+        );
 
         // A make run again under the same id writes nothing, and the first stands.
-        const again = yield* createAutomation(owner, { ...nightly(taskId), id, name: "Again" });
+        const again = yield* createAutomation(owner, {
+          ...nightly(workspaceId),
+          id,
+          name: "Again",
+        });
 
         assert.equal(made.id, id);
         assert.ok(Option.isNone(again));

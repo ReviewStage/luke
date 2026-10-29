@@ -8,10 +8,10 @@ import {
   RETIRED_TOOL,
 } from "@luke/features/agent-tools";
 import {
-  CODING_AGENT_TODO_STATUS,
-  type CodingAgentTodos,
-  codingAgentTodosInputSchema,
-} from "@luke/features/coding-agent-wire";
+  AGENT_TODO_STATUS,
+  type AgentTodos,
+  agentTodosInputSchema,
+} from "@luke/features/agent-wire";
 import {
   INBOX_ASK,
   INBOX_BLOCK,
@@ -35,7 +35,6 @@ import {
 import { linkLabels } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
-import type { CodeRef } from "@luke/features/task-wire";
 import {
   browserCallWords,
   CALL_KIND,
@@ -44,7 +43,6 @@ import {
   pageName,
 } from "@luke/features/turn-rows";
 import { skillWord } from "@luke/ui/skill-mention";
-import { fileRefText } from "@luke/voice/code-pane-model";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
@@ -55,6 +53,7 @@ import {
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import { INLINE_SPAN, readInline } from "../plan-editor/composer-markdown.js";
+import { fileRefText } from "./file-ref-model.js";
 import { shortCommit } from "./file-tab-model.js";
 import { askHeadWords } from "./inbox-ask-words.js";
 
@@ -74,7 +73,7 @@ import { askHeadWords } from "./inbox-ask-words.js";
  * is read through the wire's own schema, since its input is the list the
  * row draws item by item, and an item posted to the developer's inbox
  * through it too, its row naming the item the Inbox tab draws. A call
- * about something the window opens elsewhere, a page, the board, an agent,
+ * about something the window opens elsewhere, a page, an agent,
  * code shown, names it as its target (`toolTarget`), which its row opens.
  * A call of an integration's own MCP tool, stored under its provider's
  * remote name, is drawn as the tool it ran: the provider's mark, the
@@ -306,47 +305,47 @@ function planEditSummary(input: WireValue | undefined): string {
     .join(", ");
 }
 
-const readTodos = Schema.decodeUnknownOption(codingAgentTodosInputSchema);
+const readTodos = Schema.decodeUnknownOption(agentTodosInputSchema);
 
 /** The list a to-do write carries, or nothing where its input does not read as one, as while it streams. */
-export function todosView(input: WireValue | undefined): CodingAgentTodos["todos"] | undefined {
+export function todosView(input: WireValue | undefined): AgentTodos["todos"] | undefined {
   return Option.getOrUndefined(readTodos(input))?.todos;
 }
 
 /** How many of a list's items are done, and how many it holds. */
-export function todosCount(todos: CodingAgentTodos["todos"]): { done: number; total: number } {
-  const done = todos.filter((todo) => todo.status === CODING_AGENT_TODO_STATUS.DONE).length;
+export function todosCount(todos: AgentTodos["todos"]): { done: number; total: number } {
+  const done = todos.filter((todo) => todo.status === AGENT_TODO_STATUS.DONE).length;
   return { done, total: todos.length };
 }
 
 /** How far a list has got: "2 of 5 done". */
-export function todosSummary(todos: CodingAgentTodos["todos"]): string {
+export function todosSummary(todos: AgentTodos["todos"]): string {
   const { done, total } = todosCount(todos);
   return `${done} of ${total} done`;
 }
 
 /** The item a list is at: the one in progress, else the first still pending; nothing once every item is done. */
-export function todoFocus(todos: CodingAgentTodos["todos"]): string | undefined {
+export function todoFocus(todos: AgentTodos["todos"]): string | undefined {
   const current =
-    todos.find((todo) => todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS) ??
-    todos.find((todo) => todo.status === CODING_AGENT_TODO_STATUS.PENDING);
+    todos.find((todo) => todo.status === AGENT_TODO_STATUS.IN_PROGRESS) ??
+    todos.find((todo) => todo.status === AGENT_TODO_STATUS.PENDING);
   return current?.content;
 }
 
 /** One item of a list as words, where the list is copied or drawn as a call's input: a markdown checkbox, the item in progress saying so. */
-function todoLine(todo: CodingAgentTodos["todos"][number]): string {
+function todoLine(todo: AgentTodos["todos"][number]): string {
   switch (todo.status) {
-    case CODING_AGENT_TODO_STATUS.PENDING:
+    case AGENT_TODO_STATUS.PENDING:
       return `- [ ] ${todo.content}`;
-    case CODING_AGENT_TODO_STATUS.IN_PROGRESS:
+    case AGENT_TODO_STATUS.IN_PROGRESS:
       return `- [ ] ${todo.content} (in progress)`;
-    case CODING_AGENT_TODO_STATUS.DONE:
+    case AGENT_TODO_STATUS.DONE:
       return `- [x] ${todo.content}`;
   }
 }
 
 /** A to-do list's row, a whole list's write or the list as it stood after one of Claude Code's task calls (`agent-todos.ts`): how far the list has got, and the list as checkboxes. The call's answer only says the list was taken, so none is shown. */
-export function todosListView(todos: CodingAgentTodos["todos"]): ToolCallView {
+export function todosListView(todos: AgentTodos["todos"]): ToolCallView {
   return {
     kind: CALL_KIND.TODOS,
     subject: todosSummary(todos),
@@ -641,14 +640,6 @@ function openedPullRequestView(
   };
 }
 
-/** The lines `show_code` put on screen, as its row names them: the file, and the lines where it named any, said as a code card says them. */
-function shownLines(input: WireValue | undefined): string {
-  const path = stringAt(input, "path") ?? "";
-  const startLine = isRecord(input) && isWireNumber(input.startLine) ? input.startLine : undefined;
-  const endLine = isRecord(input) && isWireNumber(input.endLine) ? input.endLine : startLine;
-  return fileRefText({ path, startLine, endLine });
-}
-
 /** A brain call whose input is one field the row names it by, its answer as its JSON. */
 function namedCall(
   kind: CallKind,
@@ -909,23 +900,8 @@ const READ_INBOX_CALL: ToolReader = ({ tool, input, output }) => inboxToolView(t
  * reaches here (`native-tool-calls.ts`).
  */
 const AGENT_TOOL_VIEWS = {
-  [AGENT_TOOL.QUEUE_QUESTION]: ({ input, output }) =>
-    namedCall(CALL_KIND.QUEUE_QUESTION, input, output, "question"),
-  [AGENT_TOOL.WITHDRAW_QUESTION]: ({ input, output }) =>
-    namedCall(CALL_KIND.WITHDRAW_QUESTION, input, output, "question"),
-  [AGENT_TOOL.SHOW_CODE]: ({ input, output }) => ({
-    ...namedCall(CALL_KIND.SHOW_CODE, input, output, undefined),
-    subject: shownLines(input),
-  }),
-  [AGENT_TOOL.DRAW_ON_BOARD]: ({ input, output }) =>
-    namedCall(CALL_KIND.DRAW_ON_BOARD, input, output, undefined),
-  // A look at the board answers with an image of it, which is nothing to read.
-  [AGENT_TOOL.LOOK_AT_BOARD]: ({ input }) =>
-    namedCall(CALL_KIND.LOOK_AT_BOARD, input, undefined, undefined),
   [AGENT_TOOL.LOOK_AT_PICTURE]: ({ input, output }) =>
     namedCall(CALL_KIND.LOOK_AT_PICTURE, input, output, undefined),
-  [AGENT_TOOL.END_CALL]: ({ input, output }) =>
-    namedCall(CALL_KIND.END_CALL, input, output, undefined),
   [AGENT_TOOL.LIST_AGENTS]: ({ input, output }) =>
     namedCall(CALL_KIND.LIST_AGENTS, input, output, undefined),
   [AGENT_TOOL.READ_AGENT]: ({ input, output }) =>
@@ -1107,9 +1083,10 @@ const AGENT_TOOL_VIEWS = {
 } as const satisfies Record<AgentTool, ToolReader>;
 
 /**
- * The retired tools a row reads by name: every one but Chat's four, whose
- * calls, with no Chat left to open, draw as any other call does, by the
- * tool's name and what it was handed and answered.
+ * The retired tools a row reads by name: every one but Chat's four, the
+ * code and whiteboard tools, and a voice call's own three, whose calls, with
+ * no Chat, Code tab, Board, or call left to open, draw as any other call
+ * does, by the tool's name and what it was handed and answered.
  */
 type RetiredTool = Exclude<
   (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL],
@@ -1117,6 +1094,12 @@ type RetiredTool = Exclude<
   | typeof RETIRED_TOOL.READ_CHAT
   | typeof RETIRED_TOOL.RESOLVE_ASK
   | typeof RETIRED_TOOL.EDIT_CHANNEL
+  | typeof RETIRED_TOOL.SHOW_CODE
+  | typeof RETIRED_TOOL.DRAW_ON_BOARD
+  | typeof RETIRED_TOOL.LOOK_AT_BOARD
+  | typeof RETIRED_TOOL.QUEUE_QUESTION
+  | typeof RETIRED_TOOL.WITHDRAW_QUESTION
+  | typeof RETIRED_TOOL.END_CALL
 >;
 
 /** How each tool no agent is offered now reads, as a transcript written while it was offered still names it, under the name it had then. */
@@ -1207,12 +1190,8 @@ export const TOOL_TARGET = {
   AGENT: "agent",
   /** A page's tab in the side panel. */
   PAGE: "page",
-  /** The side panel's Board tab. */
-  BOARD: "board",
   /** The task's own tab, its document. */
   PLAN: "plan",
-  /** The File tab of a file Luke showed, its lines lit as the call showed them. */
-  SHOWN_CODE: "shown-code",
   /** The task's Inbox tab, on the item a call names by its key where it names one. */
   INBOX: "inbox",
   /** Another task of the workspace, opened on its plan as the sidebar opens it. */
@@ -1224,9 +1203,7 @@ export const TOOL_TARGET = {
 export type ToolTarget =
   | { readonly kind: typeof TOOL_TARGET.AGENT; readonly agent: string }
   | { readonly kind: typeof TOOL_TARGET.PAGE; readonly page: string }
-  | { readonly kind: typeof TOOL_TARGET.BOARD }
   | { readonly kind: typeof TOOL_TARGET.PLAN }
-  | { readonly kind: typeof TOOL_TARGET.SHOWN_CODE; readonly call: string; readonly ref: CodeRef }
   | {
       readonly kind: typeof TOOL_TARGET.INBOX;
       /** The key of the calling agent's thread the call posted on or withdrew, whose item the Inbox opens on; none for a read of the whole Inbox. */
@@ -1239,9 +1216,7 @@ export type ToolTarget =
 export const TARGET_HINT = {
   [TOOL_TARGET.AGENT]: "Open the agent",
   [TOOL_TARGET.PAGE]: "Open the page",
-  [TOOL_TARGET.BOARD]: "Open the Board",
   [TOOL_TARGET.PLAN]: "Open the plan",
-  [TOOL_TARGET.SHOWN_CODE]: "Open the file",
   [TOOL_TARGET.INBOX]: "Open the Inbox",
   [TOOL_TARGET.TASK]: "Open the task",
   [TOOL_TARGET.PULL_REQUEST]: "Open the pull request",
@@ -1255,7 +1230,6 @@ interface TargetedCall {
   readonly output: WireValue | undefined;
 }
 
-const BOARD_TARGET: ToolTarget = { kind: TOOL_TARGET.BOARD };
 const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
 const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
 
@@ -1323,19 +1297,6 @@ function openedPullRequest(call: TargetedCall): ToolTarget | undefined {
   return url === undefined ? undefined : { kind: TOOL_TARGET.PULL_REQUEST, url };
 }
 
-/** The lines `show_code` put on screen, as a reference a File tab lights. */
-function shownCode(call: TargetedCall): ToolTarget | undefined {
-  const path = stringAt(call.input, "path");
-  if (path === undefined || path === "" || !isRecord(call.input)) return undefined;
-  const { startLine, endLine } = call.input;
-  const ref: CodeRef = {
-    path,
-    ...(isWireNumber(startLine) ? { startLine } : undefined),
-    ...(isWireNumber(endLine) ? { endLine } : undefined),
-  };
-  return { kind: TOOL_TARGET.SHOWN_CODE, call: call.callId, ref };
-}
-
 /**
  * What each tool's call opens, read from the call alone; a tool not listed
  * opens nothing, and its row folds its input and answer open in place. A
@@ -1353,8 +1314,6 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
 >([
   [AGENT_TOOL.SHOW_PAGE, shownPage],
   [AGENT_TOOL.READ_PAGE, readPage],
-  [AGENT_TOOL.DRAW_ON_BOARD, () => BOARD_TARGET],
-  [AGENT_TOOL.LOOK_AT_BOARD, () => BOARD_TARGET],
   [AGENT_TOOL.READ_AGENT, namedAgent],
   [AGENT_TOOL.MESSAGE_AGENT, namedAgent],
   [AGENT_TOOL.START_AGENT, startedAgent],
@@ -1369,7 +1328,6 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [RETIRED_TOOL.START_CODING_AGENT, startedAgent],
   [AGENT_TOOL.EDIT_PLAN, () => TASK_TARGET],
   [AGENT_TOOL.LOOK_AT_PICTURE, () => TASK_TARGET],
-  [AGENT_TOOL.SHOW_CODE, shownCode],
   [AGENT_TOOL.OPEN_PULL_REQUEST, openedPullRequest],
   [AGENT_TOOL.POST_THREAD, namedThread],
   [RETIRED_TOOL.POST_TO_INBOX, namedThread],
@@ -1383,9 +1341,9 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
 /**
  * Whether a call's answer says it did nothing. Note that it is told by the
  * reason it answers beside its status rather than by the status's word,
- * because every refusal among these tools answers why (`rejected`, the
- * board's `not-drawn` and `not-looked`), each tool in words of its own the
- * renderer cannot reach, and no answer that did what was asked carries one.
+ * because every refusal among these tools answers why, each tool in words
+ * of its own the renderer cannot reach, and no answer that did what was
+ * asked carries one.
  */
 function refused(output: WireValue | undefined): boolean {
   return stringAt(output, "reason") !== undefined;
@@ -1441,7 +1399,7 @@ export function calledAgent(call: Omit<TargetedCall, "callId">): CalledAgent | u
   return model === undefined ? { id, title } : { id, title, model };
 }
 
-/** The fields a delegation's part carries, in the wire's words (`codingAgentDelegationInputSchema`, `codingAgentDelegationOutputSchema`), and the message the brain's worker is handed in the task's place. */
+/** The fields a delegation's part carries, in the wire's words (`agentDelegationInputSchema`, `agentDelegationOutputSchema`), and the message the brain's worker is handed in the task's place. */
 const DELEGATION_FIELD = {
   TASK: "task",
   MESSAGE: "message",

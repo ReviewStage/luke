@@ -10,15 +10,14 @@ import no React and no DOM, so another app could draw the same surface.
 
 ## The dependency direction is the point
 
-It depends only on lower wire vocabulary, on `@luke/live`, and on
-`@luke/runtime` (the `effect` door the analytics sender schedules through),
-none of which imports this one, so the edge points down.
+It depends only on lower wire vocabulary and on `@luke/runtime` (the
+`effect` door the analytics sender schedules through), neither of which
+imports this one, so the edge points down.
 
 A client sits here because it speaks nothing but hosted vocabulary and holds no
 credential of its own. **Behavior that needs anything above this boundary belongs
-above it**: the hosted live session source in `@luke/voice`, the account
-preference client in `@luke/host` because the snapshot it carries is settings
-vocabulary.
+above it**: the account preference client in `@luke/host` because the
+snapshot it carries is settings vocabulary.
 
 **A request frame refuses a key it did not name; an answer ignores one a newer
 service added.** Every wire module here keeps that rule.
@@ -43,29 +42,7 @@ caller's to read, and no backoff stands behind any of them.
 
 The service's socket origin is the service origin with its scheme swapped,
 **compared as `URL.origin` — scheme, host, and port, never a path or query — so
-nothing a service answers can send a desktop's socket elsewhere.** A development
-override enters at one place and is refused past the packaging boundary; the
-package reads no environment itself.
-
-The service authorizes and meters a session by direct calls into its own account
-code, so **no internal route and no shared secret exist between two deployments.**
-
-## A turn's events are a projection
-
-**The five run seams and nothing wider — a slow step began, a brain turn
-queued a question, every action settled, one sentence of the reply, the turn
-ended. No tool part, no reasoning, no message.** A queued question is read off
-its `queue_question` call's input, because that call exists only to hand the
-voice its words; the one other call whose words are told is `show_code`, whose
-lines travel on the `plan.code` frame rather than as an event. The kinds are the brain's own run-stream words (`brain/run-events.ts`),
-spelled apart from them because the two were separate packages until the brain
-joined this one; a test in the service holds every event kind a member of the
-run stream's set. The slow step's set is one value, `TURN_SLOW_STEP`, which the
-brain names `SLOW_STEP_KIND`.
-
-Each event is numbered from one inside its turn, so a reader that took some hears
-the rest exactly once. The service stores no event of this kind; the voice's live
-brain projects them in process from the turn row and its journal.
+nothing a service answers can send a desktop's socket elsewhere.**
 
 ## The allowlist is the privacy boundary for `/api/events`
 

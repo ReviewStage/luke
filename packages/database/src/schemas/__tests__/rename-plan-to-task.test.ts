@@ -4,13 +4,14 @@ import { it } from "@effect/vitest";
 import { DateTime, Effect, Option } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
-import { createCodingAgent, readCodingAgent } from "../../models/coding-agent-store.js";
+import { createAgent, readAgent } from "../../models/agent-store.js";
 import { createTask, readTask } from "../../models/task-store.js";
 import {
   getTestDB,
   migrationStatements,
   RENAME_PLAN_TO_TASK,
   replayable,
+  syncCaptureTakenOff,
   undoneRename,
 } from "../../testing/index.js";
 import { member, organization, user } from "../auth.js";
@@ -43,7 +44,7 @@ const openTask = Effect.gen(function* () {
     repository: "acme/api",
   });
   const started = Option.getOrThrow(
-    yield* createCodingAgent(userId, {
+    yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -65,7 +66,8 @@ it.layer(getTestDB())("the migration that names a plan's row a task", (it) => {
         const { userId, taskId, agentId } = yield* openTask;
         const renames = replayable(yield* migrationStatements(RENAME_PLAN_TO_TASK));
 
-        // The database as it stood before the migration, written to as an earlier build wrote it.
+        // The database as it stood before the migration, with no sync capture yet, written to as an earlier build wrote it.
+        for (const statement of syncCaptureTakenOff()) yield* sql.unsafe(statement);
         for (const statement of [...renames].reverse()) yield* sql.unsafe(undoneRename(statement));
         yield* sql.unsafe(`UPDATE "plan" SET name = 'Written before' WHERE id = '${taskId}'`);
         yield* sql.unsafe(
@@ -75,7 +77,7 @@ it.layer(getTestDB())("the migration that names a plan's row a task", (it) => {
         for (const statement of renames) yield* sql.unsafe(statement);
 
         const task = Option.getOrThrow(yield* readTask(userId, taskId));
-        const agent = Option.getOrThrow(yield* readCodingAgent(userId, agentId));
+        const agent = Option.getOrThrow(yield* readAgent(userId, agentId));
         assert.equal(task.task.name, "Written before");
         assert.deepEqual([agent.taskId, agent.prompt], [taskId, "Words written before"]);
       }),

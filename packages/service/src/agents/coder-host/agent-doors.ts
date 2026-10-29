@@ -14,21 +14,17 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   hasRepository,
-  readCodingAgentHeaderOfConversation,
-  readCodingAgentOfConversation,
-} from "@luke/database/models/coding-agent-store";
+  readAgentHeaderOfConversation,
+  readAgentOfConversation,
+} from "@luke/database/models/agent-store";
 import { PAGE_OWNER, PAGE_SHOWER } from "@luke/features/page-wire";
 import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
 import { Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { UnparsedWireValue, WireRecord } from "../../core.js";
-import { ACTION_RESULT_STATUS } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
-import { runLookAtBoard } from "../../tasks/board-look.js";
-import { runDrawOnBoard } from "../../tasks/board-tool.js";
 import {
   COMMENT_TOOL_REFUSAL,
   type CommentToolName,
@@ -42,21 +38,11 @@ import {
   pictureNotLooked,
   runLookAtPicture,
 } from "../../tasks/picture-look.js";
-import { SHOW_CODE_REFUSAL, showCodeIn, showCodeRejected } from "../../tasks/show-code.js";
 import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import {
-  runCreateAutomation,
-  runDeleteAutomation,
-  runListAutomations,
-  runRunAutomation,
-  runUpdateAutomation,
-} from "../automation-tools.js";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
-import { EVE_MOUNT, eveSessionsComposer } from "../brain-host/eve-sessions.js";
-import {
   AGENT_CALLER,
+  AGENT_TOOL_REFUSAL,
   agentToolRejected,
-  CODING_AGENT_TOOL_REFUSAL,
   runListAgents,
   runListModels,
   runListTasks,
@@ -66,14 +52,18 @@ import {
   runStopAgent,
   runUpdateAgent,
   runUpdateTask,
-} from "../coding-agent-tools.js";
+} from "../agent-tools.js";
+import {
+  runCreateAutomation,
+  runDeleteAutomation,
+  runListAutomations,
+  runRunAutomation,
+  runUpdateAutomation,
+} from "../automation-tools.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
+import { EVE_MOUNT, eveSessionsComposer } from "../eve-host/eve-sessions.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
 import { runListOpenAsks } from "../operator-desk.js";
-import {
-  REPOSITORY_REFUSAL,
-  RepositoryRefusal,
-  type RepositorySandbox,
-} from "../repository-shell.js";
 import { isOperator, STEWARD_DELETE_REFUSAL } from "../steward.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
@@ -158,20 +148,6 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.RECALL]: runAgentRecall,
 } as const;
 
-/** The whiteboard's tools, by the name a call of one is made under. */
-export type BoardTool = typeof CODER_TOOL.DRAW_ON_BOARD | typeof CODER_TOOL.LOOK_AT_BOARD;
-
-/** Why a call of the whiteboard's tools drew or looked at nothing, in words the model can act on. */
-const BOARD_REFUSAL = {
-  TASKLESS: "Not run: you work on no task, so there is no whiteboard to draw on or look at.",
-  UNAVAILABLE: "Not run: the whiteboard could not be reached just now. The call may be made again.",
-} as const;
-
-/** A call of the whiteboard's tools that ran nothing, and why. */
-function boardRejected(reason: string): WireRecord {
-  return { status: ACTION_RESULT_STATUS.REJECTED, reason };
-}
-
 /** The agent a read found, or the refusal that the conversation is none. */
 function foundOrRefused<A>(found: Option.Option<A>) {
   return Option.match(found, {
@@ -183,7 +159,7 @@ function foundOrRefused<A>(found: Option.Option<A>) {
 /** The coding agent the admitted conversation is, whole, or the refusal that it is none. */
 function agentOfConversation(admitted: AdmittedConversation) {
   return Effect.map(
-    readCodingAgentOfConversation(admitted.target.userId, admitted.target.conversationId),
+    readAgentOfConversation(admitted.target.userId, admitted.target.conversationId),
     foundOrRefused,
   );
 }
@@ -191,7 +167,7 @@ function agentOfConversation(admitted: AdmittedConversation) {
 /** The header of the coding agent the admitted conversation is, for a tool that needs no more of it, or the refusal that it is none. */
 function agentHeaderOfConversation(admitted: AdmittedConversation) {
   return Effect.map(
-    readCodingAgentHeaderOfConversation(admitted.target.userId, admitted.target.conversationId),
+    readAgentHeaderOfConversation(admitted.target.userId, admitted.target.conversationId),
     foundOrRefused,
   );
 }
@@ -319,7 +295,7 @@ export function runAgentShowImage(
 
 /**
  * Runs one of the agent's tools about the workspace's coding agents
- * (`../coding-agent-tools.ts`), the agent the conversation is as the
+ * (`../agent-tools.ts`), the agent the conversation is as the
  * caller: a list of agents or of tasks, a message sent under the call's own
  * key, or a start on a task of its workspace under the same key, which reach
  * eve as the deployment acting for this agent's starter, and reach nothing
@@ -332,12 +308,7 @@ export function runAgentTools(
 ): Effect.Effect<
   WireRecord,
   never,
-  | DatabaseServices
-  | HttpClient.HttpClient
-  | GitHubApp
-  | ModelCatalog
-  | WorkspaceLinearConnect
-  | SentryApp
+  DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog | SentryApp
 > {
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);
@@ -377,60 +348,6 @@ export function runAgentTools(
     return yield* AGENT_TOOL_RUN[call.tool](toolCall, call.input);
   }).pipe(
     Effect.tapError(logStoreFailure),
-    Effect.catch(() => Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.STORE))),
-  );
-}
-
-/**
- * Runs one `show_code` call (`../../tasks/show-code.ts`): lines of the
- * checkout the agent's sandbox holds, read through the door given, and
- * journaled with the call on the agent's own conversation.
- */
-export function runAgentShowCode(
-  admitted: AdmittedConversation,
-  input: UnparsedWireValue,
-  sandbox: () => Promise<RepositorySandbox>,
-): Effect.Effect<WireRecord, never, DatabaseServices> {
-  return Effect.gen(function* () {
-    const found = yield* agentHeaderOfConversation(admitted);
-    if (Result.isFailure(found)) return showCodeRejected(found.failure);
-    const { repository } = found.success;
-    // Note that eve offers the tool to no agent with no repository (`repositoryToolsOf`); a harness is offered it always, and this refuses it.
-    // The sandbox opened with the checkout standing (`checkOut`), so the lines are read where it stands.
-    const checkout =
-      repository === null
-        ? Effect.fail(new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.NO_REPOSITORY }))
-        : Effect.tryPromise({
-            try: sandbox,
-            catch: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE }),
-          }).pipe(Effect.map((opened) => ({ sandbox: opened, repository })));
-    return yield* showCodeIn(checkout, input);
-  }).pipe(
-    Effect.tapError(logStoreFailure),
-    Effect.catch(() => Effect.succeed(showCodeRejected(SHOW_CODE_REFUSAL.READ_FAILED))),
-  );
-}
-
-/** Runs one call of the whiteboard's tools (`../../tasks/board-tool.ts`, `../../tasks/board-look.ts`) on the agent's task, as the member whose turn it is. */
-export function runAgentBoard(
-  admitted: AdmittedConversation,
-  tool: BoardTool,
-  input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, DatabaseServices> {
-  return Effect.gen(function* () {
-    const found = yield* agentHeaderOfConversation(admitted);
-    if (Result.isFailure(found)) return boardRejected(found.failure);
-    const { taskId } = found.success;
-    if (taskId === null) return boardRejected(BOARD_REFUSAL.TASKLESS);
-    // The board is drawn and read as the member whose turn this is, as `editPlan` writes the plan.
-    const binding = { userId: admitted.caller, taskId };
-    const ran =
-      tool === CODER_TOOL.DRAW_ON_BOARD
-        ? runDrawOnBoard(binding, input)
-        : runLookAtBoard(binding, input);
-    return { ...(yield* ran) };
-  }).pipe(
-    Effect.tapError(logStoreFailure),
-    Effect.catch(() => Effect.succeed(boardRejected(BOARD_REFUSAL.UNAVAILABLE))),
+    Effect.catch(() => Effect.succeed(agentToolRejected(AGENT_TOOL_REFUSAL.STORE))),
   );
 }

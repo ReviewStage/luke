@@ -91,7 +91,7 @@ const findHeld = SqlSchema.findAll({
  * abandoned-turn sweep settles it by has no end coming, so it holds nothing.
  */
 const noTurnRuns = (now: Date) => {
-  const startedSince = new Date(now.getTime() - TURN_ABANDON.CODING_AGENT_AFTER_MS);
+  const startedSince = new Date(now.getTime() - TURN_ABANDON.AGENT_AFTER_MS);
   const cancelledSince = new Date(now.getTime() - TURN_ABANDON.CANCEL_AFTER_MS);
   return sql`not exists (
   select 1 from ${turns}

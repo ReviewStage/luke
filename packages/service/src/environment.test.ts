@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { ConfigProvider, Effect, Layer, Logger, Redacted } from "effect";
 import { test } from "vitest";
-import { BRAIN_HOST_ENVIRONMENT } from "./agents/brain-host/bounds.js";
+import { EVE_HOST_ENVIRONMENT } from "./agents/eve-host/bounds.js";
 import {
   HostedEnvironment,
   type HostedEnvironmentValues,
@@ -59,14 +59,14 @@ test("a secret that is set travels sealed and trimmed, and its value is the one 
 test("the deployment's secret at eve's door is read from its own variable and never from the cron's", async () => {
   const cronAlone = await environmentOver({
     [CRON_ENVIRONMENT.CRON_SECRET]: "cron-secret-1",
-    [BRAIN_HOST_ENVIRONMENT.DEPLOYMENT_SECRET]: undefined,
+    [EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET]: undefined,
   });
   assert.equal(cronAlone.eveDeploymentSecret, undefined);
   const logged: string[] = [];
   const both = await environmentOver(
     {
       [CRON_ENVIRONMENT.CRON_SECRET]: "cron-secret-1",
-      [BRAIN_HOST_ENVIRONMENT.DEPLOYMENT_SECRET]: " eve-deployment-secret-1 ",
+      [EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET]: " eve-deployment-secret-1 ",
     },
     logged,
   );
@@ -80,7 +80,7 @@ test("a blank eve secret, empty or spaces alone, reads as unset", async () => {
   for (const blank of ["", "   ", "\n\t "]) {
     const environment = await environmentOver({
       [CRON_ENVIRONMENT.CRON_SECRET]: "cron-secret-1",
-      [BRAIN_HOST_ENVIRONMENT.DEPLOYMENT_SECRET]: blank,
+      [EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET]: blank,
     });
     assert.equal(environment.eveDeploymentSecret, undefined, JSON.stringify(blank));
   }
@@ -91,7 +91,7 @@ test("an eve secret that is the cron's own value reads as unset, the cron's stay
   const environment = await environmentOver(
     {
       [CRON_ENVIRONMENT.CRON_SECRET]: "cron-secret-1",
-      [BRAIN_HOST_ENVIRONMENT.DEPLOYMENT_SECRET]: "  cron-secret-1\n",
+      [EVE_HOST_ENVIRONMENT.DEPLOYMENT_SECRET]: "  cron-secret-1\n",
     },
     logged,
   );

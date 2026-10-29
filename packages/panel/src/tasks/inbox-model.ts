@@ -1,9 +1,11 @@
-import { ATTACHMENT_VIEW, attachmentView, type FileChip } from "@luke/features/attachment-model";
+import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentCallFailure,
-} from "@luke/features/coding-agent-view";
-import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+  AGENT_KIND,
+  type AgentAttachment,
+  type AgentKind,
+  type AgentSummary,
+} from "@luke/features/agent-wire";
+import { ATTACHMENT_VIEW, attachmentView, type FileChip } from "@luke/features/attachment-model";
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
@@ -44,6 +46,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/link-grammar";
 import { insideCode, linksIn } from "@luke/features/mention-link";
+import { agentGivenName, OPERATOR_NAME } from "@luke/features/model-label";
 import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
@@ -53,6 +56,12 @@ import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-fold.js";
 import type { SnippetLines } from "./code-snippet-model.js";
 import { refusalLine, refusalPasses } from "./file-tab-model.js";
+import {
+  fillInWords,
+  INBOX_MISSING,
+  type InboxMissing,
+  WRITE_AN_ANSWER,
+} from "./inbox-ask-words.js";
 import { plainWords } from "./tool-call-model.js";
 
 /**
@@ -96,7 +105,7 @@ export interface InboxDraft {
   readonly choices: readonly string[];
   readonly values: readonly InboxFormValue[];
   readonly note: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly steps?: readonly number[] | undefined;
   readonly press?: InboxReplyKind | undefined;
 }
@@ -106,7 +115,7 @@ export const EMPTY_INBOX_DRAFT: InboxDraft = { choices: [], values: [], note: ""
 /** Why a card's last send did not go, or was not taken: its words, and the refusal they say where the service refused it. */
 export interface InboxNote {
   readonly words: string;
-  readonly failure?: CodingAgentCallFailure | undefined;
+  readonly failure?: AgentCallFailure | undefined;
 }
 
 /** What a card says under its box: the note's words, and whether Unarchive follows them. */
@@ -127,10 +136,9 @@ const AGENT_ARCHIVED_NOTE = "This agent is archived.";
  */
 export function inboxNoteReading(
   note: InboxNote,
-  agent: CodingAgentSummary | undefined,
+  agent: AgentSummary | undefined,
 ): InboxNoteReading {
-  const archived =
-    note.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND && agent?.archivedAt !== undefined;
+  const archived = note.failure === AGENT_CALL_FAILURE.NOT_FOUND && agent?.archivedAt !== undefined;
   return archived
     ? { words: AGENT_ARCHIVED_NOTE, unarchive: true }
     : { words: note.words, unarchive: false };
@@ -324,47 +332,37 @@ export function inboxReply(
   return inboxReplyRefusal(response, answer, draft.attachments) === undefined ? answer : undefined;
 }
 
-/** What an open ask's answer still lacks: an option picked, a required field filled, or the developer's own words. */
-export const INBOX_MISSING = {
-  OPTION: "option",
-  FIELD: "field",
-  WORDS: "words",
-} as const;
-
-/** What the answer lacks; a field's by its label. */
-export type InboxMissing =
-  | { readonly kind: typeof INBOX_MISSING.OPTION }
-  | { readonly kind: typeof INBOX_MISSING.FIELD; readonly label: string }
-  | { readonly kind: typeof INBOX_MISSING.WORDS };
-
 /**
- * What the card's answer still lacks, the first thing in the response's order,
- * or nothing where it lacks nothing it can be told to fill: a choice with
- * no pick and no words of the developer's own lacks an option, a form with
- * nothing to send its first required field left empty, an approval or a
- * to-do its decision, and words their words. A note lacks nothing, its nod
- * being its answer.
+ * What the open ask's answer still lacks where the box holds nothing it can
+ * send (`inboxThreadSend`), or nothing where it sends, no ask it knows
+ * waits, or the developer wrote or attached something of their own, which
+ * a box refuses only past its bound, as its counter says: a `decide` with
+ * no pick lacks an option, and a `do` with nothing ticked or pressed its
+ * decision, an option of its two; an `answer`'s fields their first required
+ * field left empty, or their first empty where none is, since a form filled
+ * in part sends what was filled; and an `answer` of words alone its words.
  */
-export function inboxMissing(response: InboxResponse, draft: InboxDraft): InboxMissing | undefined {
-  const ownWords = draft.note.trim() !== "" || draft.attachments.length > 0;
-  switch (response.type) {
-    case INBOX_RESPONSE.CHOICE:
-      return draft.choices.length > 0 || ownWords ? undefined : { kind: INBOX_MISSING.OPTION };
-    case INBOX_RESPONSE.FORM: {
-      if (formSendable(response, draft)) return undefined;
-      const sent = new Set(sentValues(response, draft).map((value) => value.label));
-      const empty = response.fields.find(
-        (field) => field.required === true && !sent.has(field.label),
-      );
-      return empty === undefined ? undefined : { kind: INBOX_MISSING.FIELD, label: empty.label };
+export function inboxMissing(
+  thread: readonly InboxMessage[],
+  draft: InboxDraft,
+): InboxMissing | undefined {
+  if (inboxThreadSend(thread, draft) !== undefined) return undefined;
+  if (draft.note.trim() !== "" || draft.attachments.length > 0) return undefined;
+  const asking = openAskOf(thread);
+  if (asking === undefined || !knownAsk(asking.ask)) return undefined;
+  const { ask } = asking;
+  switch (ask.type) {
+    case INBOX_ASK.DECIDE:
+    case INBOX_ASK.DO:
+      return { kind: INBOX_MISSING.OPTION };
+    case INBOX_ASK.ANSWER: {
+      if (ask.fields === undefined) return { kind: INBOX_MISSING.WORDS };
+      // Note that a yes-or-no left alone sends no, so it is never what a form lacks.
+      const sent = new Set(sentValues({ fields: ask.fields }, draft).map((value) => value.label));
+      const empty = ask.fields.filter((field) => !sent.has(field.label));
+      const first = empty.find((field) => field.required === true) ?? empty[0];
+      return first === undefined ? undefined : { kind: INBOX_MISSING.FIELD, label: first.label };
     }
-    case INBOX_RESPONSE.TEXT:
-      return ownWords ? undefined : { kind: INBOX_MISSING.WORDS };
-    case INBOX_RESPONSE.APPROVAL:
-    case INBOX_RESPONSE.TODO:
-      return decidedOf(response, draft) === undefined ? { kind: INBOX_MISSING.OPTION } : undefined;
-    default:
-      return undefined;
   }
 }
 
@@ -445,6 +443,9 @@ export function asksNod(item: InboxItem, readerId: string | undefined, channels:
   if (!channels) return true;
   return readerId !== undefined && inboxWaitsOn(item)?.userId === readerId;
 }
+
+/** What an option the agent recommends is called: the badge it wears, as a choice's or a form's option or as one of two small buttons, and the word after it on its row. */
+export const RECOMMENDED = "Recommended";
 
 /** The most characters an option may spell and still stand as one of two small buttons. */
 const BUTTON_OPTION_CHARS = 24;
@@ -638,7 +639,7 @@ export function askNumberedPick(
 /** What a reply sends on a thread: its words, its files, and the answer to the open ask it carries, if any. */
 export interface InboxThreadSend {
   readonly text: string;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly answers?: InboxAnswers;
 }
 
@@ -914,7 +915,7 @@ function picturesDrawn(
  * An item's row's second line, what it asks or how it ended rather than who
  * said it last, since the row's tile names the agent and its title asks the
  * question. While an ask waits, the ask itself (`askLine`): a choice's
- * options, the recommended one starred, "7 days ★ / 14 days"; a to-do's
+ * options, the recommended one said so, "7 days (recommended) / 14 days"; a to-do's
  * steps left and the next, as the reader's draft ticks them (`ticked`), "2
  * steps left · Open Vercel"; a form's fields, "Fill in Name, Domain"; or
  * "Write an answer". Else the thread's latest message: an answer by its
@@ -1065,7 +1066,9 @@ function askLine(ask: InboxKnownAsk, ticked: readonly number[]): string {
     case INBOX_ASK.DECIDE:
       return ask.options
         .map((option) =>
-          recommendedLabels(ask).includes(option.label) ? `${option.label} ★` : option.label,
+          recommendedLabels(ask).includes(option.label)
+            ? `${option.label} (${RECOMMENDED.toLowerCase()})`
+            : option.label,
         )
         .join(" / ");
     case INBOX_ASK.DO: {
@@ -1079,8 +1082,8 @@ function askLine(ask: InboxKnownAsk, ticked: readonly number[]): string {
     }
     case INBOX_ASK.ANSWER:
       return ask.fields === undefined
-        ? "Write an answer"
-        : `Fill in ${ask.fields.map((field) => field.label).join(", ")}`;
+        ? WRITE_AN_ANSWER
+        : fillInWords(ask.fields.map((field) => field.label));
   }
 }
 
@@ -1132,38 +1135,28 @@ export function needsYouWords(count: number): string {
   return `${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`;
 }
 
-/** What an item is listed under: the task its agent works on, or, for an agent with no task, the automation that started it. */
+/** A count of threads with its words, as a channel's card or the Inbox's empty pane says it: "1 thread", "3 threads". */
+export function threadsWords(count: number): string {
+  return `${count} ${count === 1 ? "thread" : "threads"}`;
+}
+
+/** What holds an item: the task its agent works on, or, for an agent with no task, the agent itself. */
 export const INBOX_HOLDER = {
   TASK: "plan",
-  AUTOMATION: "automation",
+  AGENT: "agent",
 } as const;
 
-/** An agent with no plan as main's read of what waits on the developer names it: its title, its model, the automation that started it, and the workspace it belongs to, where the service names it. */
-type InboxAgentLine = Pick<
-  AppInboxTasklessItem,
-  "agentTitle" | "agentModel" | "automationId" | "workspaceId"
->;
-
 /**
- * The task holding an item, or the automation holding an item of an agent
- * with no task, named as its group's header names it, and its agents as
- * main's read names them, by id; none for the agents no automation the
- * reader may read started.
+ * An agent with no task as the Inbox names it: what its row names it by,
+ * the automation whose run started it, which its group stands under, the
+ * repository it works in, and the workspace whose list holds it, where the
+ * service names it; one with an item waiting, or one a link names whose
+ * items are all settled.
  */
-export type InboxHolder =
-  | { readonly kind: typeof INBOX_HOLDER.TASK; readonly task: TaskSummary }
-  | {
-      readonly kind: typeof INBOX_HOLDER.AUTOMATION;
-      readonly automationId: string | null;
-      readonly name: string;
-      readonly repository: string;
-      readonly agents: ReadonlyMap<string, InboxAgentLine>;
-    };
-
-/** An agent with no plan as the Inbox groups it: what its group and row name it by, and the workspace whose list holds it; one with an item waiting, or one a link names whose items are all settled. */
 export type TasklessInboxAgent = Pick<
   AppInboxTasklessItem,
   | "agentId"
+  | "agentKind"
   | "agentTitle"
   | "agentModel"
   | "automationId"
@@ -1172,10 +1165,68 @@ export type TasklessInboxAgent = Pick<
   | "workspaceId"
 >;
 
-/** The key a holder's group is folded and drawn by: the task's id, the automation's, or one key for the agents no automation names. */
-export function holderKey(holder: InboxHolder): string {
+/**
+ * An agent with no task as the Inbox names it, from its own row where main
+ * lists none of its items, a link naming one whose items are all settled:
+ * the name it goes by (`agentGivenName`, Luke for the member's operator), else
+ * its title, as main's read names it (`agentGivenNameSql`), and its kind, so
+ * Luke's stands under Luke; the automation that started it, by the name its
+ * run kept; and its repository and workspace where they are known.
+ */
+export function inboxAgentOf(agent: {
+  readonly id: string;
+  readonly kind?: AgentKind | undefined;
+  readonly title: string | null;
+  readonly model: string;
+  readonly automationId?: string | null | undefined;
+  readonly automationName?: string | undefined;
+  readonly repository?: string | null | undefined;
+  readonly workspaceId?: string | undefined;
+}): TasklessInboxAgent {
+  return {
+    agentId: agent.id,
+    ...(agent.kind === undefined ? undefined : { agentKind: agent.kind }),
+    agentTitle: agentGivenName(agent) ?? agent.title,
+    agentModel: agent.model,
+    automationId: agent.automationId ?? null,
+    automationName: agent.automationName ?? null,
+    repository: agent.repository ?? null,
+    ...(agent.workspaceId === undefined ? undefined : { workspaceId: agent.workspaceId }),
+  };
+}
+
+/**
+ * What holds an item: the task its agent works on, or the agent itself
+ * where it works on none. Note that an agent is never grouped as a holder
+ * of its own: the list stands every agent under the group `holderKey`
+ * names, the automation that started it, Luke's for the member's operator,
+ * or one for the agents no automation the reader may read names.
+ */
+export type InboxHolder =
+  | { readonly kind: typeof INBOX_HOLDER.TASK; readonly task: TaskSummary }
+  | { readonly kind: typeof INBOX_HOLDER.AGENT; readonly agent: TasklessInboxAgent };
+
+/** The agent with no task as the holder of its items. */
+export function agentHolder(agent: TasklessInboxAgent): InboxHolder {
+  return { kind: INBOX_HOLDER.AGENT, agent };
+}
+
+/** Whether a holder is the member's operator, Luke, whose items stand in a group of his own. */
+export function operatorHolder(holder: InboxHolder): boolean {
+  return holder.kind === INBOX_HOLDER.AGENT && holder.agent.agentKind === AGENT_KIND.OPERATOR;
+}
+
+/** The automation whose group an agent's items stand in; none for a task, the member's operator, and the agents no automation the reader may read names. */
+export function holderAutomationId(holder: InboxHolder): string | null {
+  if (holder.kind === INBOX_HOLDER.TASK || operatorHolder(holder)) return null;
+  return holder.agent.automationId;
+}
+
+/** The key a holder's group is folded and drawn by: the task's id, the automation's, Luke's, or one key for the agents no automation names. */
+function holderKey(holder: InboxHolder): string {
   if (holder.kind === INBOX_HOLDER.TASK) return holder.task.id;
-  return holder.automationId ?? NO_AUTOMATION_KEY;
+  if (operatorHolder(holder)) return OPERATOR_KEY;
+  return holder.agent.automationId ?? NO_AUTOMATION_KEY;
 }
 
 /** A task as the holder of its items. */
@@ -1188,15 +1239,16 @@ export function taskHolder(task: TaskSummary): InboxHolder {
  * plan, the agent's own, where the service named it; none where it did not,
  * since the Inbox may list an item whose workspace it does not know.
  */
-export function itemWorkspaceId(holder: InboxHolder, agentId: string): string | undefined {
-  return holder.kind === INBOX_HOLDER.TASK
-    ? holder.task.workspaceId
-    : holder.agents.get(agentId)?.workspaceId;
+export function itemWorkspaceId(holder: InboxHolder): string | undefined {
+  return holder.kind === INBOX_HOLDER.TASK ? holder.task.workspaceId : holder.agent.workspaceId;
 }
 
-/** A holder's name as its header and a row's context say it: the task's, or the automation's. */
+/** A holder's name as its group's header and a row's context say it: the task's, Luke's, the automation's, or the name of the agents no automation names. */
 export function holderName(holder: InboxHolder): string {
-  return holder.kind === INBOX_HOLDER.TASK ? holder.task.name : holder.name;
+  if (holder.kind === INBOX_HOLDER.TASK) return holder.task.name;
+  if (operatorHolder(holder)) return OPERATOR_NAME;
+  const { automationId, automationName } = holder.agent;
+  return automationId === null ? NO_AUTOMATION_NAME : (automationName ?? NO_AUTOMATION_NAME);
 }
 
 /** The words options say: each one's label and the trade-off written under it. */
@@ -1261,6 +1313,9 @@ const NO_AUTOMATION_KEY = "no-automation";
 /** What the group of agents no automation the reader may read started is called. */
 const NO_AUTOMATION_NAME = "Other agents";
 
+/** What the member's operator's group, Luke's, is keyed by. */
+const OPERATOR_KEY = "operator";
+
 /**
  * Whether a waiting item of an agent with no task is listed in the workspace
  * given: one of that workspace's agents', or one whose workspace the service
@@ -1279,42 +1334,23 @@ export function listedIn(
 }
 
 /**
- * The groups the items of agents with no task stand in: one per automation
- * that started them, by its name, and one for the agents no automation the
- * reader may read names, each holding every item its agents' reads hold,
- * settled ones too; only the listed workspace's agents, where the service
- * names an agent's workspace, so another workspace's list holds none of
- * them.
+ * Each agent with no task as the holder of its items, once whatever many
+ * of its items main lists, holding every item its read holds, settled ones
+ * too; only the listed workspace's agents, where the service names an
+ * agent's workspace, so another workspace's list holds none of them.
  */
-export function tasklessGroups(
-  waiting: readonly TasklessInboxAgent[],
+export function agentGroups(
+  agents: readonly TasklessInboxAgent[],
   read: ReadonlyMap<string, readonly InboxItem[]>,
   workspaceId: string | undefined,
 ): readonly InboxGroup[] {
-  const groups = new Map<string, { holder: InboxHolder; agents: Map<string, InboxAgentLine> }>();
-  for (const entry of waiting) {
-    if (!listedIn(entry, workspaceId)) continue;
-    const key = entry.automationId ?? NO_AUTOMATION_KEY;
-    const agents = groups.get(key)?.agents ?? new Map<string, InboxAgentLine>();
-    agents.set(entry.agentId, {
-      agentTitle: entry.agentTitle,
-      agentModel: entry.agentModel,
-      automationId: entry.automationId,
-      ...(entry.workspaceId === undefined ? undefined : { workspaceId: entry.workspaceId }),
-    });
-    const holder: InboxHolder = groups.get(key)?.holder ?? {
-      kind: INBOX_HOLDER.AUTOMATION,
-      automationId: entry.automationId,
-      name: entry.automationName ?? NO_AUTOMATION_NAME,
-      repository: entry.repository,
-      agents,
-    };
-    groups.set(key, { holder, agents });
+  const holders = new Map<string, InboxHolder>();
+  for (const agent of agents) {
+    if (listedIn(agent, workspaceId) && !holders.has(agent.agentId)) {
+      holders.set(agent.agentId, agentHolder(agent));
+    }
   }
-  return [...groups.values()].map(({ holder, agents }) => ({
-    holder,
-    items: [...agents.keys()].flatMap((agentId) => read.get(agentId) ?? []),
-  }));
+  return [...holders].map(([agentId, holder]) => ({ holder, items: read.get(agentId) ?? [] }));
 }
 
 /**
@@ -1397,7 +1433,7 @@ export interface InboxCounts {
   readonly [INBOX_SHOW.ALL]: number;
 }
 
-/** One holder, a task or an automation, and every item it holds, as the list is handed them. */
+/** One holder, a task or an agent, and every item it holds, as the list is handed them. */
 export interface InboxGroup {
   readonly holder: InboxHolder;
   readonly items: readonly InboxItem[];
@@ -1407,6 +1443,20 @@ export interface InboxGroup {
 export interface InboxListed {
   readonly holder: InboxHolder;
   readonly item: InboxItem;
+}
+
+/**
+ * One group of items as a list grouped by task draws it: a task's, or the
+ * agents' with no task that stand under one automation, or under Luke, or
+ * with no automation the reader may read (`holderKey`), headed as its first
+ * holder names it, each item with its own holder.
+ */
+interface InboxHolderGroup {
+  /** What the group is folded by (`holderKey`). */
+  readonly key: string;
+  /** The holder its header names, the first of its holders. */
+  readonly holder: InboxHolder;
+  readonly items: readonly InboxListed[];
 }
 
 /** One person's items, by whoever they wait on (`inboxWaitsOn`); the reader's own where `person` is none. */
@@ -1432,7 +1482,10 @@ export interface InboxStatusGroup {
  * them.
  */
 export type InboxListView = { readonly readerId: string | undefined } & (
-  | { readonly grouping: typeof INBOX_GROUPING.TASK; readonly groups: readonly InboxGroup[] }
+  | {
+      readonly grouping: typeof INBOX_GROUPING.TASK;
+      readonly groups: readonly InboxHolderGroup[];
+    }
   | { readonly grouping: typeof INBOX_GROUPING.NONE; readonly items: readonly InboxListed[] }
   | {
       readonly grouping: typeof INBOX_GROUPING.PERSON;
@@ -1511,9 +1564,10 @@ export function needsYou(listed: InboxListed, readerId: string | undefined): boo
 }
 
 /**
- * Whether a listed item is one the reader is not done with, as To do lists
- * it: one that needs them (`needsYou`), or one of theirs (`readersItem`)
- * still unread, such as a settled thread its agent wrote on again.
+ * Whether a listed item is one the reader is not done with, as the next
+ * item that needs you steps to it: one that needs them (`needsYou`), or one
+ * of theirs (`readersItem`) still unread, such as a settled thread a
+ * teammate wrote on.
  */
 function toDo(listed: InboxListed, readerId: string | undefined): boolean {
   return (
@@ -1688,12 +1742,12 @@ export function inboxList(
     .map(({ holder, items }) => ({ holder, items: items.filter(shows(holder)).toSorted(order) }))
     .filter((group) => group.items.length > 0)
     .toSorted((a, b) => firstOrder(a.items[0], b.items[0], order));
-  if (view.grouping === INBOX_GROUPING.TASK) {
-    return { grouping: INBOX_GROUPING.TASK, groups, readerId };
-  }
   const items = groups
     .flatMap(({ holder, items }) => items.map((item) => ({ holder, item })))
     .toSorted((a, b) => order(a.item, b.item));
+  if (view.grouping === INBOX_GROUPING.TASK) {
+    return { grouping: INBOX_GROUPING.TASK, groups: holderGroups(items), readerId };
+  }
   if (view.grouping === INBOX_GROUPING.NONE) {
     return { grouping: INBOX_GROUPING.NONE, items, readerId };
   }
@@ -1702,6 +1756,23 @@ export function inboxList(
     return { grouping: INBOX_GROUPING.STATUS, groups, readerId };
   }
   return { grouping: INBOX_GROUPING.PERSON, groups: personGroups(items, readerId), readerId };
+}
+
+/**
+ * The items, in the order given, grouped by what holds them (`holderKey`):
+ * each task's alone, and the agents' with no task under their automation,
+ * Luke, or none, the group whose first item stands first, each group's
+ * items in the order given.
+ */
+function holderGroups(items: readonly InboxListed[]): readonly InboxHolderGroup[] {
+  const groups = new Map<string, { key: string; holder: InboxHolder; items: InboxListed[] }>();
+  for (const listed of items) {
+    const key = holderKey(listed.holder);
+    const group = groups.get(key) ?? { key, holder: listed.holder, items: [] };
+    group.items.push(listed);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
 }
 
 /**
@@ -1742,11 +1813,17 @@ export function isDone(item: InboxItem): boolean {
   return item.status !== INBOX_STATUS.OPEN && !isUnread(item);
 }
 
-/** Whether a scope lists the item: To do the reader's own not done with (`toDo`), and All all of them. */
+/**
+ * Whether a scope lists the item: To do what needs the reader (`needsYou`),
+ * the open threads that wait on them, a question or an update not yet
+ * opened, which are what the sidebar's Inbox row counts
+ * (`places-waiting.ts`), and All all of them. Note that a thread of theirs
+ * settled and unread is left to All, because main counts no settled item.
+ */
 function showsItem(show: InboxShow, listed: InboxListed, readerId: string | undefined): boolean {
   switch (show) {
     case INBOX_SHOW.TO_DO:
-      return toDo(listed, readerId);
+      return needsYou(listed, readerId);
     case INBOX_SHOW.ALL:
       return true;
   }
@@ -1777,9 +1854,7 @@ export function anyUnread(tasks: readonly InboxGroup[]): boolean {
 /** Every item the list draws, in the order it draws them. */
 export function listedItems(view: InboxListView): readonly InboxListed[] {
   if (view.grouping === INBOX_GROUPING.NONE) return view.items;
-  if (view.grouping === INBOX_GROUPING.PERSON) return view.groups.flatMap(({ items }) => items);
-  if (view.grouping === INBOX_GROUPING.STATUS) return view.groups.flatMap(({ items }) => items);
-  return view.groups.flatMap(({ holder, items }) => items.map((item) => ({ holder, item })));
+  return view.groups.flatMap(({ items }) => items);
 }
 
 /** Where the chosen item stands among those listed, counted from one, and the items either side of it in the list's order. */
@@ -1802,17 +1877,11 @@ function rowedItems(
   chosen: string | undefined,
 ): readonly InboxListed[] {
   if (view.grouping === INBOX_GROUPING.NONE) return view.items;
-  if (view.grouping === INBOX_GROUPING.PERSON || view.grouping === INBOX_GROUPING.STATUS) {
-    const keyed: readonly { readonly key: string; readonly items: readonly InboxListed[] }[] =
-      view.groups;
-    return keyed.flatMap(({ key, items }) =>
-      folded(key) ? items.filter(({ item }) => item.id === chosen) : items,
-    );
-  }
-  return view.groups.flatMap(({ holder, items }) => {
-    const shut = folded(holderKey(holder));
-    return items.filter((item) => !shut || item.id === chosen).map((item) => ({ holder, item }));
-  });
+  const keyed: readonly { readonly key: string; readonly items: readonly InboxListed[] }[] =
+    view.groups;
+  return keyed.flatMap(({ key, items }) =>
+    folded(key) ? items.filter(({ item }) => item.id === chosen) : items,
+  );
 }
 
 /** The chosen item's place among the rows, in the list's own order, its grouping and filter as drawn and a folded group's other items left out; none where the list does not hold it. */
@@ -1857,12 +1926,6 @@ export function nextNeedingYou(
       ? [...above.reverse(), ...below.reverse()]
       : [...below, ...above];
   return ahead.find((listed) => toDo(listed, view.readerId) && listed.item.id !== chosen);
-}
-
-/** The item that stands chosen where none is: the first listed the reader is not done with (`toDo`), else the first listed. */
-export function firstChoice(view: InboxListView): InboxListed | undefined {
-  const listed = listedItems(view);
-  return listed.find((each) => toDo(each, view.readerId)) ?? listed[0];
 }
 
 /** How many lines of the file a code block's card draws above and below the lines it points at. */

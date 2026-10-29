@@ -4,7 +4,7 @@
  * environment configures.
  *
  * Each provider is reported by the presence of the variables it is read
- * from, never their values, so a maintainer reads that the call avatar is
+ * from, never their values, so a maintainer reads that error reporting is
  * off or the GitHub App unset without any secret crossing into the answer.
  * A provider the environment cannot show without a value, AI Gateway's
  * public catalog or the OIDC token Vercel Sandbox and Vercel Connect run on,
@@ -23,17 +23,15 @@ const ADMIN_INTEGRATION = {
   GITHUB_APP: { key: "github-app", label: "GitHub App (installations and webhooks)" },
   GITHUB_SIGN_IN: { key: "github-sign-in", label: "GitHub sign-in" },
   GOOGLE_SIGN_IN: { key: "google-sign-in", label: "Google sign-in" },
-  CALL_AVATAR: { key: "call-avatar", label: "Call avatar (Keyframe)" },
   ERROR_REPORTING: { key: "error-reporting", label: "Error reporting (Sentry)" },
   ANALYTICS_RECORDING: { key: "analytics-recording", label: "Product analytics recording" },
   ANALYTICS_ERASURE: { key: "analytics-erasure", label: "Analytics erasure on account delete" },
   SWEEP: { key: "maintenance-sweep", label: "Scheduled maintenance sweep" },
   EVE_DEPLOYMENT: {
     key: "eve-deployment-secret",
-    label: "Deployment acting for accounts at eve (voice, browser, automations)",
+    label: "Deployment acting for accounts at eve (browser, automations)",
   },
   OWN_KEYS: { key: "own-key-encryption", label: "Encryption of accounts' own API keys" },
-  WORKSPACE_LINEAR: { key: "workspace-linear", label: "Linear for workspaces (Vercel Connect)" },
 } as const;
 
 /** Whether each provider's configuration is present — never its value. */
@@ -41,7 +39,6 @@ export interface AdminIntegrationPresence {
   githubApp: boolean;
   githubSignIn: boolean;
   googleSignIn: boolean;
-  callAvatar: boolean;
   errorReporting: boolean;
   analyticsRecording: boolean;
   analyticsErasure: boolean;
@@ -49,7 +46,6 @@ export interface AdminIntegrationPresence {
   /** The deployment's own secret at eve's door, read as unset where it is blank or the cron's own value. */
   eveDeployment: boolean;
   ownKeys: boolean;
-  workspaceLinear: boolean;
   /** Each account integration Vercel Connect grants, by whether its connector is named; a provider with no connector is absent. */
   connectors: ReadonlyMap<IntegrationProvider, boolean>;
 }
@@ -65,14 +61,12 @@ export function adminIntegrations(present: AdminIntegrationPresence): AdminInteg
     { ...ADMIN_INTEGRATION.GITHUB_APP, configured: present.githubApp },
     { ...ADMIN_INTEGRATION.GITHUB_SIGN_IN, configured: present.githubSignIn },
     { ...ADMIN_INTEGRATION.GOOGLE_SIGN_IN, configured: present.googleSignIn },
-    { ...ADMIN_INTEGRATION.CALL_AVATAR, configured: present.callAvatar },
     { ...ADMIN_INTEGRATION.ERROR_REPORTING, configured: present.errorReporting },
     { ...ADMIN_INTEGRATION.ANALYTICS_RECORDING, configured: present.analyticsRecording },
     { ...ADMIN_INTEGRATION.ANALYTICS_ERASURE, configured: present.analyticsErasure },
     { ...ADMIN_INTEGRATION.SWEEP, configured: present.sweep },
     { ...ADMIN_INTEGRATION.EVE_DEPLOYMENT, configured: present.eveDeployment },
     { ...ADMIN_INTEGRATION.OWN_KEYS, configured: present.ownKeys },
-    { ...ADMIN_INTEGRATION.WORKSPACE_LINEAR, configured: present.workspaceLinear },
     ...connectors,
   ];
 }

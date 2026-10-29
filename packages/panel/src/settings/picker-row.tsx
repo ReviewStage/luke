@@ -9,13 +9,14 @@ import {
   POPOVER_ALIGN,
   POPOVER_WIDTH,
   type PopoverAlign,
+  type PopoverWidth,
   SearchableMenu,
   SettingsRow,
   type SettingsRowDensity,
   Tooltip,
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { SettingMarks } from "./marks.js";
 
 /**
@@ -66,10 +67,14 @@ interface PickerProps {
   align?: PopoverAlign | undefined;
   /** How wide the chip stands; the settings column where none is named. */
   width?: ChipWidth | undefined;
+  /** How wide the menu stands, the room allowing; narrow where none is named. */
+  menuWidth?: PopoverWidth | undefined;
   /** Reads what the menu lists now, as it opens, so a list that failed to read is asked for again. */
   onOpen?: (() => void) | undefined;
   /** Present, the owner answers the search: it hears each query as typed, and the rows it hands are listed unfiltered. */
   onSearch?: ((query: string) => void) | undefined;
+  /** Counts the asks from elsewhere to open the menu, as the S key's for a task's status, each opening it. */
+  openRequest?: number | undefined;
   onPick: (id: string) => void;
 }
 
@@ -94,8 +99,10 @@ export function Picker({
   hint,
   align = POPOVER_ALIGN.END,
   width = CHIP_WIDTH.FIELD,
+  menuWidth = POPOVER_WIDTH.NARROW,
   onOpen,
   onSearch,
+  openRequest,
   onPick,
 }: PickerProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
@@ -110,6 +117,13 @@ export function Picker({
     setOpen(false);
     chip.current?.focus();
   };
+
+  // Each ask from elsewhere opens the menu, as a press on the chip would.
+  useEffect(() => {
+    if (openRequest === undefined || openRequest === 0 || disabled) return;
+    onOpen?.();
+    setOpen(true);
+  }, [openRequest]);
 
   return (
     <span
@@ -151,7 +165,7 @@ export function Picker({
           note={note}
           noMatch={noMatch}
           align={align}
-          width={POPOVER_WIDTH.NARROW}
+          width={menuWidth}
           onSearch={onSearch}
           onPick={(id) => {
             close();

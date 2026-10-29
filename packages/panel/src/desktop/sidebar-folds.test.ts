@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -11,7 +11,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
-import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { ArchivedAgents } from "./agent-archive.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
@@ -78,13 +78,13 @@ test("the summary's archived agents fold under a group header that counts them f
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.CANCELLED,
+    status: AGENT_STATUS.CANCELLED,
     turnId: null,
     archivedAt: 2,
   } as const;
   const summary = mount(
     createElement(ArchivedAgents, {
-      agents: codingAgentsControl({
+      agents: agentsControl({
         archived: [
           { ...agent, id: "agent-1", title: "Retry audit" },
           { ...agent, id: "agent-2", title: "Spike" },
@@ -181,7 +181,7 @@ test("a repository's header folds on its name, says its pin, counts its plans fo
   assert.ok(menu, "the right-click opens the repository's menu");
   assert.deepEqual(
     [...menu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
-    ["Unpin", "Mark all done", "Open on GitHub"],
+    ["Status", "Unpin", "Open on GitHub"],
   );
   const ellipsis = sidebar.querySelector('button[aria-label="relay actions"]');
   assert.equal(ellipsis?.getAttribute("aria-expanded"), "true");
@@ -204,6 +204,7 @@ test("the Inbox row counts what waits on a plan and what waits from an agent wit
           agentId: "agent-2",
           title: "Quarantine the flaky test?",
           postedAt: 2,
+          updatedAt: 2,
           agentTitle: null,
           agentModel: "anthropic/claude-opus-5.5",
           automationId: null,
@@ -216,6 +217,7 @@ test("the Inbox row counts what waits on a plan and what waits from an agent wit
           agentId: "agent-3",
           title: "Bump the Node image?",
           postedAt: 3,
+          updatedAt: 3,
           agentTitle: null,
           agentModel: "anthropic/claude-opus-5.5",
           automationId: null,

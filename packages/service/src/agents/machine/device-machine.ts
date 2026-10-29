@@ -39,16 +39,21 @@
  * stop line after it for the same reason, so a message sent next relaunches
  * rather than landing behind a line the runner ends on.
  *
- * `readFile` and `runRepositoryCommand` queue a request under an id they
- * mint, wait for its answer at most `MAC_MACHINE.ANSWER_WAIT`, and withdraw
- * it however the wait ends; a Mac that has not beaten within
- * `MAC_MACHINE.PRESENCE` is away, and the call is unavailable at once, as a
- * stopped sandbox's is.
+ * `readFile` queues a request under an id it mints, waits for its answer
+ * at most `MAC_MACHINE.ANSWER_WAIT`, and withdraws it however the wait ends; a Mac that has not beaten within
+ * `MAC_PRESENCE.FRESH_MS` is away, and the call is unavailable at once, as a
+ * stopped sandbox's is. `launchRunner`, `writeFiles`, and `writeLine` refuse
+ * an away Mac at once too, as a Start on it is refused
+ * (`LOCAL_AGENT_REFUSAL.MAC_AWAY`), and a host its account removed by name,
+ * rather than queue a line no one may take for hours: a message to it fails
+ * in words, and its open run is taken from it once its lease lapses
+ * (`../../maintenance/device-lease-sweep.ts`).
  */
 
 import { randomUUID } from "node:crypto";
+import { INPUT_LINE, InputLineSchema } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
-import { hasRepository, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { hasRepository, readAgent } from "@luke/database/models/agent-store";
 import {
   type DeviceAgentPin,
   deviceAgentLineStanding,
@@ -63,7 +68,8 @@ import {
 import { deviceLayout, devicesSeenSince } from "@luke/database/models/device-store";
 import { hostRemoved } from "@luke/database/models/host-store";
 import { parseKeyRing, sealMacLaunchSecrets } from "@luke/database/models/provider-key-seal";
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
+import { AGENT_MACHINE, MAC_PRESENCE } from "@luke/features/agent-wire";
 import {
   DEVICE_AGENT_BOUNDS,
   DEVICE_AGENT_LINE_KIND,
@@ -86,15 +92,14 @@ import {
   Option,
   Redacted,
   Result,
-  Schedule,
   Schema,
 } from "effect";
 import { HostedEnvironment } from "../../environment.js";
+import { heldUntil } from "../../http/held-read.js";
 import { agentCommitIdentity, type CheckoutServices } from "../coder-host/checkout.js";
 import {
   COMMAND_GONE,
   type CommandExit,
-  type CommandRun,
   NOT_FOUND_STATUS,
   type SandboxFile,
   SandboxUnavailable,
@@ -118,12 +123,10 @@ import {
 export const MAC_MACHINE = {
   /** How long a tool's request waits for its Mac's answer before the call is unavailable. */
   ANSWER_WAIT: Duration.seconds(30),
-  /** How often a waiting request, or a runner's exit, is read again. */
+  /** How often a waiting request, or a runner's exit, is read again where Luke Sync cannot wake it. */
   POLL: Duration.millis(250),
   /** How long a read of a runner's exit waits where its caller names no wait, as a sandbox's does. */
   EXIT_WAIT: Duration.seconds(2),
-  /** How lately a Mac must have beaten to be there: one beat, and room for the next to arrive. */
-  PRESENCE: Duration.seconds(45),
 } as const;
 
 /**
@@ -154,15 +157,32 @@ const nameOfAgent = Brand.nominal<MachineName>();
 const encodeFilesPayload = Schema.encodeSync(deviceAgentFilesPayloadSchema);
 const encodeLaunchPayload = Schema.encodeSync(deviceAgentLaunchPayloadSchema);
 const encodeSecrets = Schema.encodeSync(Schema.fromJsonString(deviceAgentLaunchSecretsSchema));
+const decodeInputLine = Schema.decodeUnknownOption(Schema.fromJsonString(InputLineSchema));
+
+/** The runner's lines that only end what it does, which an away Mac is still sent. */
+const ENDING_LINES: ReadonlySet<string> = new Set([INPUT_LINE.STOP, INPUT_LINE.RETIRE]);
+
+/** Whether every line of a write only stops or retires the runner, carrying no message and no model. */
+function onlyEnds(text: string): boolean {
+  return text
+    .split("\n")
+    .filter((each) => each.length > 0)
+    .every((each) => Option.exists(decodeInputLine(each), (input) => ENDING_LINES.has(input.type)));
+}
 
 /** A local agent's place on its Mac, under Luke's session given: the agent itself, since it has one place. */
 function macPlace(session: string, agentId: string): MachinePlace {
-  return { machine: CODING_AGENT_MACHINE.DEVICE, session, running: runningOfAgent(agentId) };
+  return { machine: AGENT_MACHINE.DEVICE, session, running: runningOfAgent(agentId) };
 }
 
 /** A failure the store or the seal answered, as a machine's own: unavailable, with no words of the cause. */
 function unavailable(): SandboxUnavailable {
   return new SandboxUnavailable({});
+}
+
+/** The account's topic, which every write to its agents' lines and requests notifies (`deviceAgentLineSync`, `deviceAgentRequestSync`): a Mac's claim, answer, or settle among them. */
+function deviceTopics(userId: string): readonly SyncTopic[] {
+  return [[TOPIC.ACCOUNT, userId]];
 }
 
 /** A line's payload as the row holds it: a JSON object. */
@@ -223,6 +243,8 @@ function deviceMachineOver(
         writableRoots: [folders.folder],
         signedIn: device.value.signedIn,
         isolation: device.value.isolation,
+        // Note that the Mac's follower writes its lines to the stdin of the runner its release bundled.
+        linesRead: false,
       };
       return layout;
     });
@@ -254,9 +276,23 @@ function deviceMachineOver(
     Effect.gen(function* () {
       if (pin.deviceId === null) return false;
       const now = yield* Clock.currentTimeMillis;
-      const since = new Date(now - Duration.toMillis(MAC_MACHINE.PRESENCE));
+      const since = new Date(now - MAC_PRESENCE.FRESH_MS);
       const seen = yield* stored(devicesSeenSince(pin.userId, since));
       return seen.some((device) => device.id === pin.deviceId);
+    });
+
+  /**
+   * Refused as a Start on an away Mac is, where the agent's Mac has not
+   * beaten lately; refused by name where it is a host its account removed,
+   * which no presence read lists and no message brings back.
+   */
+  const refuseAway = (pin: DeviceAgentPin) =>
+    Effect.gen(function* () {
+      if (yield* present(pin)) return;
+      if (pin.deviceId !== null && (yield* stored(hostRemoved(pin.userId, pin.deviceId)))) {
+        return yield* new LaunchRefused({ reason: "host removed", deviceRemoved: true });
+      }
+      return yield* new LaunchRefused({ reason: "mac away", deviceAway: true });
     });
 
   /**
@@ -278,11 +314,14 @@ function deviceMachineOver(
         if (!(yield* stored(queueDeviceAgentRequest(userId, { id, agentId, kind, args })))) {
           return Option.none<DeviceAgentAnswer>();
         }
-        return yield* stored(deviceAgentRequestAnswer(userId, id)).pipe(
-          Effect.repeat({ schedule: Schedule.spaced(MAC_MACHINE.POLL), until: Option.isSome }),
-          Effect.timeoutOption(MAC_MACHINE.ANSWER_WAIT),
-          Effect.map(Option.flatten),
+        const held = yield* heldUntil(
+          stored(deviceAgentRequestAnswer(userId, id)),
+          Option.isSome,
+          deviceTopics(userId),
+          MAC_MACHINE.POLL,
+          MAC_MACHINE.ANSWER_WAIT,
         );
+        return Option.flatMap(held, ({ read }) => read);
       }).pipe(Effect.ensuring(Effect.ignore(stored(withdrawDeviceAgentRequest(userId, id)))));
       if (Option.isNone(answer) || answer.value.kind !== kind) return yield* unavailable();
       return answer.value;
@@ -357,7 +396,7 @@ function deviceMachineOver(
             ? { handle: { ...place, command: launch.value.id }, mark: mark.value }
             : undefined;
         const found: FoundPlace = {
-          machine: CODING_AGENT_MACHINE.DEVICE,
+          machine: AGENT_MACHINE.DEVICE,
           session,
           agentId,
           name: nameOfAgent(agentId),
@@ -392,20 +431,25 @@ function deviceMachineOver(
     // The worktree is the developer's own, so nothing is thrown away; a retired bearer shuts its runner out.
     discard: () => Effect.void,
 
+    // Note that files go to an away Mac no more than the message naming them does, so a message
+    // refused while it is away leaves nothing behind for it to write when it is back.
     writeFiles: (place, files: readonly SandboxFile[]) =>
       Effect.flatMap(pinOfPlace(place), (pin) =>
-        queued(pin, {
-          kind: DEVICE_AGENT_LINE_KIND.FILES,
-          payload: objectOf(
-            encodeFilesPayload({
-              files: files.map((file) => ({
-                path: file.path,
-                mode: file.mode,
-                contents: file.contents,
-              })),
-            }),
-          ),
-        }),
+        Effect.andThen(
+          refuseAway(pin),
+          queued(pin, {
+            kind: DEVICE_AGENT_LINE_KIND.FILES,
+            payload: objectOf(
+              encodeFilesPayload({
+                files: files.map((file) => ({
+                  path: file.path,
+                  mode: file.mode,
+                  contents: file.contents,
+                })),
+              }),
+            ),
+          }),
+        ),
       ),
 
     // The secrets and the first lines are sealed together, bound to the agent, before the line is
@@ -417,8 +461,10 @@ function deviceMachineOver(
     launchRunner: (place, launch) =>
       Effect.gen(function* () {
         const pin = yield* pinOfPlace(place);
+        // Note that the refusal comes before the caller's steps run, so it has nothing to undo.
+        yield* refuseAway(pin);
         const read = Effect.gen(function* () {
-          const agent = yield* stored(readCodingAgent(pin.userId, pin.agentId));
+          const agent = yield* stored(readAgent(pin.userId, pin.agentId));
           if (Option.isNone(agent) || !hasRepository(agent.value))
             return { agent, identity: Exit.succeed(undefined) };
           const target = { userId: pin.userId, conversationId: agent.value.conversationId };
@@ -465,20 +511,23 @@ function deviceMachineOver(
         if (yield* runnerEnded(pin, handle)) {
           return yield* new SandboxUnavailable({ status: NOT_FOUND_STATUS });
         }
+        // Note that a line that only stops or retires the runner still goes, because a Stop on an
+        // away Mac is honoured when it is back, and its lease's own stop stands for it if it never is.
+        if (!onlyEnds(text)) yield* refuseAway(pin);
         yield* queued(pin, { kind: DEVICE_AGENT_LINE_KIND.MESSAGE, payload: { text } });
       }),
 
     runnerExit: (handle, within = MAC_MACHINE.EXIT_WAIT) =>
       Effect.gen(function* () {
         const pin = yield* pinOfPlace(handle);
-        const settled = yield* exitOf(pin, handle).pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced(MAC_MACHINE.POLL),
-            until: (exit) => exit !== null,
-          }),
-          Effect.timeoutOption(within),
+        const settled = yield* heldUntil(
+          exitOf(pin, handle),
+          (exit) => exit !== null,
+          deviceTopics(pin.userId),
+          MAC_MACHINE.POLL,
+          within,
         );
-        return Option.getOrNull(settled);
+        return Option.match(settled, { onNone: () => null, onSome: ({ read }) => read });
       }),
 
     kill: (handle) =>
@@ -498,24 +547,6 @@ function deviceMachineOver(
           answer.kind === DEVICE_AGENT_REQUEST_KIND.READ_FILE && answer.bytes !== null
             ? answer.bytes
             : undefined,
-      ),
-
-    // Note that the command runs in the agent's worktree whatever folder it names, because a
-    // repository's command names the folder its sandbox keeps the checkout in.
-    runRepositoryCommand: (session, command) =>
-      Effect.flatMap(
-        asked(session, DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND, {
-          command: command.command,
-          ...(command.env === undefined ? {} : { env: command.env }),
-        }),
-        (answer): Effect.Effect<CommandRun, SandboxUnavailable> =>
-          answer.kind === DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND
-            ? Effect.succeed({
-                exitCode: answer.exitCode,
-                stdout: answer.stdout,
-                stderr: answer.stderr,
-              })
-            : Effect.fail(unavailable()),
       ),
   };
 }

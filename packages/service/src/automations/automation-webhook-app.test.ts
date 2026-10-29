@@ -104,7 +104,6 @@ const openWebhook = Effect.gen(function* () {
   const task = yield* startTask(owner, { name: "Alerts", repository: null });
   const secret = randomBytes(32).toString("base64url");
   const made = yield* createAutomation(owner, {
-    taskId: null,
     organizationId: task.workspaceId,
     repositories: ["Acme/Relay"],
     name: "Fix Sentry alerts",

@@ -1,4 +1,4 @@
-import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
+import type { AgentChangedFile } from "@luke/features/agent-wire";
 import {
   FILES_CHANGED_KEY,
   FILES_CHANGED_SHORTCUTS,
@@ -22,7 +22,6 @@ import {
   TextButton,
   Tooltip,
 } from "@luke/ui";
-import { fileName } from "@luke/voice/code-pane-model";
 import { ChevronRightIcon } from "lucide-react";
 import {
   type ComponentProps,
@@ -47,6 +46,7 @@ import {
 } from "./changes-model.js";
 import type { DiffListDoor } from "./diff-list.js";
 import { PATH_COPY_WORDS } from "./file-menu.js";
+import { fileName } from "./file-ref-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 
 /**
@@ -151,7 +151,7 @@ function turned(paths: ReadonlySet<string>, path: string): ReadonlySet<string> {
 /** The folds the developer chose, with `files` folded as `collapsed` says. */
 function foldedAs(
   chosen: ReadonlyMap<string, boolean>,
-  files: readonly CodingAgentChangedFile[],
+  files: readonly AgentChangedFile[],
   collapsed: boolean,
 ): ReadonlyMap<string, boolean> {
   const next = new Map(chosen);
@@ -175,7 +175,7 @@ export interface ViewedMarks {
 export interface ChangesList {
   readonly query: string;
   readonly onQuery: (query: string) => void;
-  readonly kept: readonly CodingAgentChangedFile[];
+  readonly kept: readonly AgentChangedFile[];
   readonly collapsed: (path: string) => boolean;
   readonly allCollapsed: boolean;
   readonly toggle: (path: string) => void;
@@ -206,7 +206,7 @@ export interface ChangesList {
 
 /** Files changed's list over `files`, every fold at its default and no file stood on until the developer acts. */
 export function useChangesList(
-  files: readonly CodingAgentChangedFile[],
+  files: readonly AgentChangedFile[],
   marks?: ViewedMarks | undefined,
   /** Turns Minimize inline comments on or off, as I does; none leaves I to the window. */
   onMinimize?: (() => void) | undefined,
@@ -462,7 +462,7 @@ export function FileHead({
   onToggleAll,
   onStand,
 }: {
-  file: CodingAgentChangedFile;
+  file: AgentChangedFile;
   /** The file's own controls, at the end of its row; none for none. */
   controls?: ReactNode;
   collapsed: boolean;

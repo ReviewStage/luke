@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { LINK_PLACE } from "@luke/features/link-grammar";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
 import { Context, Effect } from "effect";
 import type { AppStateDelivery } from "../app-state.js";
 import { runModeFor } from "../run-mode.js";
@@ -20,7 +21,10 @@ const RUN = {
   platform: "web",
 } as const;
 
-const AGENT_PLACE = { taskId: "task-1", agentId: "agent-1" };
+const LINK = {
+  workspace: "workspace-1",
+  place: { kind: LINK_PLACE.TASK, planId: "plan-1" },
+} as const;
 
 /** A bridge over a fresh store. */
 const bridgeFixture = Effect.gen(function* () {
@@ -64,19 +68,19 @@ it.effect("an ended subscription hears neither the document nor an event again",
     const versions: number[] = [];
     const shown: unknown[] = [];
     const endState = bridge.onAppState((delivery) => versions.push(delivery.version));
-    const endShow = bridge.onShowAgent((place) => shown.push(place));
+    const endShow = bridge.onShowLink((place) => shown.push(place));
 
     state.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
-    events.onShowAgent(AGENT_PLACE);
+    events.onShowLink(LINK);
     yield* Effect.yieldNow;
     endState();
     endShow();
     state.update({ audio: { microphoneStatus: MICROPHONE_STATUS.DENIED } });
-    events.onShowAgent(AGENT_PLACE);
+    events.onShowLink(LINK);
     yield* Effect.yieldNow;
 
     assert.deepEqual(versions, [1]);
-    assert.deepEqual(shown, [AGENT_PLACE]);
+    assert.deepEqual(shown, [LINK]);
   }).pipe(Effect.scoped),
 );
 
@@ -84,12 +88,12 @@ it.effect("a listener that throws is reported, and the others still hear the eve
   Effect.gen(function* () {
     const { bridge, events, reported } = yield* bridgeFixture;
     const shown: unknown[] = [];
-    bridge.onShowAgent(() => {
+    bridge.onShowLink(() => {
       throw new Error("the view went away");
     });
-    bridge.onShowAgent((place) => shown.push(place));
-    events.onShowAgent(AGENT_PLACE);
-    assert.deepEqual(shown, [AGENT_PLACE]);
+    bridge.onShowLink((place) => shown.push(place));
+    events.onShowLink(LINK);
+    assert.deepEqual(shown, [LINK]);
     assert.deepEqual(reported, ["a page's bridge listener failed: the view went away"]);
   }).pipe(Effect.scoped),
 );
@@ -99,11 +103,11 @@ it.effect("a closed bridge tells its page nothing more, nor takes a new subscrip
     const shown: unknown[] = [];
     const { bridge, events } = yield* Effect.scoped(
       Effect.tap(bridgeFixture, ({ bridge }) =>
-        Effect.sync(() => bridge.onShowAgent((place) => shown.push(place))),
+        Effect.sync(() => bridge.onShowLink((place) => shown.push(place))),
       ),
     );
-    bridge.onShowAgent((place) => shown.push(place));
-    events.onShowAgent(AGENT_PLACE);
+    bridge.onShowLink((place) => shown.push(place));
+    events.onShowLink(LINK);
     assert.deepEqual(shown, []);
   }),
 );

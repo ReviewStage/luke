@@ -7,12 +7,11 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import { SETTINGS_ACT_KIND } from "@luke/host/contract";
 import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
+import { MICROPHONE_STATUS } from "@luke/settings/microphone";
+import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import type { AppSettingsView } from "@luke/settings/wire";
-import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { AVATAR_OFF } from "@luke/voice/avatar";
-import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { fakeActPort, fakeActPortCalls, fakeAppBridge, fakeAppBridgeCalls } from "./app-bridge.js";
 
@@ -32,7 +31,6 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
       captureMode: false,
       fixtureMode: false,
       accountRequired: false,
-      agentTraceEnabled: false,
     },
     settings: appSettingsWire(settingsView({ experiments })),
     account: {
@@ -49,10 +47,9 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
       upToDate: false,
     },
     audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
-    voice: { avatar: AVATAR_OFF },
     tasks: IDLE_TASKS_VIEW,
-    codingAgents: { unseen: [] },
-    inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [] },
+    agents: { unseen: [] },
+    inbox: { waiting: [], tasks: [], taskless: [], automations: [], agents: [], failedRuns: [] },
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
@@ -61,28 +58,13 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
   };
 }
 
-/**
- * A document as main's push delivers it to a window that holds none of it
- * yet: every entry, and the call transcript as the change from no lines.
- */
+/** A document as main's push delivers it to a window that holds none of it yet: every entry. */
 export function deliveryOf(snapshot: AppStateSnapshot): AppStateDelivery {
-  const { version, callTranscript, ...entries } = snapshot;
-  return {
-    version,
-    entries,
-    ...(callTranscript === undefined
-      ? undefined
-      : {
-          callTranscript: {
-            voiceSessionId: callTranscript.voiceSessionId,
-            from: 0,
-            lines: callTranscript.lines,
-          },
-        }),
-  };
+  const { version, ...entries } = snapshot;
+  return { version, entries };
 }
 
-/** Main's document with the account's experiments as given and the slices patched: a call standing, its avatar, the window's facts. */
+/** Main's document with the account's experiments as given and the slices patched, the window's facts among them. */
 export function stateWith(
   experiments: ExperimentChoices,
   patch: Partial<AppStateSnapshot>,

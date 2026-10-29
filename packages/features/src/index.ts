@@ -17,18 +17,18 @@ export {
   type AccountToken,
 } from "./account-token.js";
 export { HostedAdminClient } from "./admin-client.js";
-export { ASK_ORIGIN, type AskOrigin } from "./ask-wire.js";
+export {
+  HostedAgentClient,
+  type HostedAgentClientOptions,
+} from "./agent-client.js";
 export {
   HostedAutomationClient,
   type HostedAutomationClientOptions,
 } from "./automation-client.js";
 export { HostedChannelClient, type HostedChannelClientOptions } from "./channel-client.js";
 export {
-  HostedCodingAgentClient,
-  type HostedCodingAgentClientOptions,
-} from "./coding-agent-client.js";
-export {
   DEVICE_AGENT_NOT_CLAIMED,
+  type DeviceAgentBeat,
   type DeviceAgentClaimedLine,
   type DeviceAgentDevice,
   enrollHost,
@@ -75,62 +75,6 @@ export {
   type HostedIntegrationsClientOptions,
 } from "./integration-client.js";
 export {
-  AVATAR_FRAME_BOUNDS,
-  AVATAR_STOP_REASON,
-  AVATAR_UNAVAILABLE_REASON,
-  type AvatarRequestFrame,
-  type AvatarStartedFrame,
-  type AvatarStartFrame,
-  type AvatarStopFrame,
-  type AvatarStopReason,
-  type AvatarUnavailableFrame,
-  type AvatarUnavailableReason,
-  avatarRequestFrameFromWire,
-  avatarStartedFrameFromWire,
-  avatarStartFrameSchema,
-  avatarStopFrameSchema,
-  avatarUnavailableFrameFromWire,
-  HOSTED_SERVICE_ORIGIN,
-  HOSTED_VOICE_SERVICE_ORIGIN,
-  hostedVoiceServiceOrigin,
-  isHostedVoiceServiceAddress,
-  type LiveSessionCreated,
-  SESSION_CREATE_BOUNDS,
-  type SessionActivityFrame,
-  type SessionAttachedFrame,
-  type SessionAttachFrame,
-  type SessionCreatedFrame,
-  type SessionCreateFrame,
-  type SessionHangUpFrame,
-  type SessionReportFrame,
-  type SessionStopFrame,
-  type SessionTypedFrame,
-  sessionActivityFrameFromWire,
-  sessionActivityFrameSchema,
-  sessionAttachedFrameFromWire,
-  sessionAttachedFrameSchema,
-  sessionAttachFrameSchema,
-  sessionCreatedFrameFromWire,
-  sessionCreatedFrameSchema,
-  sessionCreateFrameSchema,
-  sessionHangUpFrameSchema,
-  sessionOpeningFrameFromWire,
-  sessionOpeningFrameSchema,
-  sessionReportFrameFromWire,
-  sessionReportFrameSchema,
-  sessionStopFrameSchema,
-  sessionTypedFrameSchema,
-  type TaskActivityFrame,
-  type TaskCallEndingFrame,
-  type TaskCodeFrame,
-  taskActivityFrameFromWire,
-  taskCallEndingFrameFromWire,
-  taskCodeFrameFromWire,
-  VOICE_SERVICE_FRAME,
-  VOICE_SERVICE_ORIGIN_VARIABLE,
-  webSocketOrigin,
-} from "./live-contract.js";
-export {
   HostedMacCommandClient,
   type HostedMacCommandClientOptions,
   MAC_COMMAND_NOT_CLAIMED,
@@ -140,7 +84,6 @@ export {
   automationWebhookPath,
   HOSTED_SERVICE_PATH,
   installedSkillPath,
-  VOICE_SERVICE_PATH,
 } from "./service-paths.js";
 export {
   HOSTED_API_ERROR,
@@ -153,6 +96,7 @@ export {
   WIRE_UUID_LENGTH,
   wireUuidSchema,
 } from "./service-wire.js";
+export { webSocketOrigin } from "./socket-origin.js";
 export {
   HostedTaskClient,
   type HostedTaskClientOptions,
@@ -169,16 +113,6 @@ export {
   type TerminalUnanswered,
   terminalRelayAddress,
 } from "./terminal-client.js";
-export {
-  TURN_END,
-  TURN_EVENT_KIND,
-  TURN_SLOW_STEP,
-  type TurnEnd,
-  type TurnEvent,
-  type TurnEventBody,
-  type TurnEventKind,
-  type TurnSlowStep,
-} from "./turn-events-wire.js";
 export {
   WORKSPACE_CALL_FAILURE,
   type WorkspaceCallFailure,

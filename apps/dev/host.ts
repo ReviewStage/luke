@@ -5,6 +5,7 @@ import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import { environment, type SandboxRecord } from "@luke/service/agents/agent-runtime/sandbox";
 import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
+import { agentToolRejected } from "@luke/service/agents/agent-tools";
 import { type AgentBrowser, browserSessionOf } from "@luke/service/agents/browser/agent-browser";
 import {
   BROWSER_TOOL,
@@ -18,7 +19,6 @@ import type { DeepenDoor } from "@luke/service/agents/coder-host/deepen";
 import type { DelegationAsk } from "@luke/service/agents/coder-host/delegation";
 import {
   type AgentToolCall,
-  type BoardTool,
   type CoderHost,
   type CoderTurnMessage,
   coderHost,
@@ -42,17 +42,14 @@ import {
 } from "@luke/service/agents/coder-host/pull-request";
 import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
-  type CallTool,
   type KindTool,
   kindToolsOf,
   type RepositoryTool,
   repositoryToolsOf,
-  runCallTool,
   type TaskTool,
   taskToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
 import type { TurnHanded } from "@luke/service/agents/coder-host/turn-context";
-import { agentToolRejected } from "@luke/service/agents/coding-agent-tools";
 import {
   MAC_COMMAND_STATUS,
   type MacCommandAnswer,
@@ -60,14 +57,12 @@ import {
   runOnMacTool,
 } from "@luke/service/agents/mac-command";
 import { memoryOnFor } from "@luke/service/agents/memory-tools";
-import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
 import { keepSessionSandboxAlive } from "@luke/service/agents/session-sandboxes";
 import { hostedEnvironment } from "@luke/service/environment";
 import type { WebServices } from "@luke/service/runtime";
 import { type CommentToolName, commentToolRejected } from "@luke/service/tasks/comment-tools";
 import { showPageRejected } from "@luke/service/tasks/page-tool";
 import { type PictureLookResult, pictureNotLooked } from "@luke/service/tasks/picture-look";
-import { showCodeRejected } from "@luke/service/tasks/show-code";
 import { scriptedModel } from "@luke/service/testing/coder-scripted-model";
 import {
   ACTION_RESULT_STATUS,
@@ -215,17 +210,6 @@ export function offeredTaskTools(
       return taskToolsOf(agent.success);
     }),
   );
-}
-
-/**
- * One call of the call's own tools (`runCallTool`), for those tools' own
- * files: run on a spoken turn and refused on any other, the turn's kind
- * read off the request alone, with no admission, because the tools reach
- * nothing when they run: the journal carries their calls to the voice, and
- * a session the host does not admit runs no model step to call them from.
- */
-export function callTool(auth: SessionAuth, tool: CallTool, run: () => WireRecord): WireRecord {
-  return runCallTool(host.turnKind(auth), tool, run);
 }
 
 /**
@@ -435,7 +419,7 @@ function runAgentTool(
 
 /**
  * One of the agent's tools about the workspace's coding agents, the planning
- * model's own too (`packages/service/src/agents/coding-agent-tools.ts`), run
+ * model's own too (`packages/service/src/agents/agent-tools.ts`), run
  * through `runAgentTool` under eve's id for the call, so a call run again
  * does its work once.
  */
@@ -465,33 +449,6 @@ export function runShowPageTool(
 ): Promise<WireRecord> {
   return admitted(auth, sessionId, showPageRejected, (session) =>
     host.showPage(session, input, sandbox),
-  );
-}
-
-/** One `show_code` call run under the agent's session, its lines read from the checkout through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
-export function runShowCodeTool(
-  auth: SessionAuth,
-  sessionId: string,
-  input: UnparsedWireValue,
-  sandbox: () => Promise<RepositorySandbox>,
-): Promise<WireRecord> {
-  return admitted(auth, sessionId, showCodeRejected, (session) =>
-    host.showCode(session, input, sandbox),
-  );
-}
-
-/** One call of the whiteboard's tools run under the agent's session, for the tool, which runs here rather than at an edge of its own. */
-export function runBoardTool(
-  auth: SessionAuth,
-  sessionId: string,
-  tool: BoardTool,
-  input: UnparsedWireValue,
-): Promise<WireRecord> {
-  return admitted(
-    auth,
-    sessionId,
-    (reason): WireRecord => ({ status: ACTION_RESULT_STATUS.REJECTED, reason }),
-    (session) => host.board(session, tool, input),
   );
 }
 

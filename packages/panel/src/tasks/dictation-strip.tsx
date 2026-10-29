@@ -12,11 +12,11 @@ import {
   Text,
   Tooltip,
 } from "@luke/ui";
-import { OPENAI_KEY_MISSING_NOTE } from "@luke/voice/microphone-access";
+import { OPENAI_KEY_MISSING_NOTE } from "@luke/ui/microphone-access";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useMotionHeld } from "../use-motion-held.js";
-import { frameLevel } from "../voice/voice-level-meter.js";
+import { frameLevel } from "./frame-level.js";
 import { DICTATION_PHASE, type DictationControl } from "./use-dictation.js";
 
 /**

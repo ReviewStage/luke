@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { TOPIC } from "@luke/database/sync/notification";
-import { defineSyncTable } from "@luke/database/sync/sync-table";
+import { defineSyncTable, type SyncTable } from "@luke/database/sync/sync-table";
 import { SYNC_TABLES } from "@luke/database/sync/tables";
 import { getTestDB, installSyncTables } from "@luke/database/testing";
 import { liveDigestOf } from "@luke/features/live-wire";
@@ -13,6 +13,7 @@ import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { liveQueryParts } from "../live/live-procedures.js";
 import { announcingClock, driven } from "../testing/clock-driven.js";
+import { recordingSentry, sentOfType } from "../testing/sentry-transport.js";
 import { syncHub } from "./hub.js";
 import { LIVE_QUERIES } from "./live-queries.js";
 import { defineLiveQuery, LIVE_MODE, type LiveQuery } from "./live-query.js";
@@ -64,7 +65,7 @@ const probeDB = Layer.provideMerge(
 /** A toy read of one task's probe rows, standing in for a view's own; `sql` reads them, its one placeholder the task. */
 const probeQuery = (sql: string) =>
   defineLiveQuery({
-    name: "taskBoard",
+    name: "taskHistory",
     params: ["taskId"],
     reads: [probeSync],
     topics: ({ taskId }) => [[TOPIC.TASK, taskId]],
@@ -76,41 +77,57 @@ const PROBE_READ = probeQuery(
   "select p.id, p.note from live_query_probe p where p.task_id = $1 order by p.id",
 );
 
-/** A relation a plan scans, by its alias, and the expressions its own scan writes. */
-interface ScanReads {
-  readonly table: string;
-  readonly alias: string;
-  readonly expressions: readonly string[];
+/** One node of an explained plan, as its JSON writes it, the nodes under it among its `Plans`. */
+type PlanNode = Readonly<Record<string, unknown>>;
+
+/** A node of the plan, and whether it is a root: the statement's top node, or a subquery's. */
+interface PlannedNode {
+  readonly node: PlanNode;
+  readonly root: boolean;
 }
 
-/** The text the node writes itself, every node under it left out. */
-function ownExpressions(fields: Readonly<Record<string, unknown>>): readonly string[] {
-  return Object.entries(fields).flatMap(([key, value]) => {
-    if (key === "Plans") return [];
+/** A relation a plan scans, by its alias, with the node that scans it. */
+interface Scan extends PlannedNode {
+  readonly table: string;
+  readonly alias: string;
+}
+
+/** How a plan names the place of a subquery's top node, whose output is the subquery's own. */
+const SUBQUERY_ROOT: ReadonlySet<unknown> = new Set(["SubPlan", "InitPlan"]);
+
+/** Every node under the explained plan, each once, the roots marked. */
+function nodesOf(explained: unknown, root = false): readonly PlannedNode[] {
+  if (Array.isArray(explained)) return explained.flatMap((each) => nodesOf(each, root));
+  if (typeof explained !== "object" || explained === null) return [];
+  const fields = explained as PlanNode;
+  if ("Plan" in fields) return nodesOf(fields.Plan, true);
+  const own = { node: fields, root: root || SUBQUERY_ROOT.has(fields["Parent Relationship"]) };
+  return [own, ...nodesOf(fields.Plans)];
+}
+
+/** The node's scan of a relation, where it is one. */
+function scanOf(planned: PlannedNode): readonly Scan[] {
+  const table = planned.node["Relation Name"];
+  const alias = planned.node.Alias;
+  return typeof table === "string" && typeof alias === "string"
+    ? [{ ...planned, table, alias }]
+    : [];
+}
+
+/** The text the node writes itself, every node under it left out, and its output too where it is `withoutOutput`. */
+function ownExpressions(node: PlanNode, withoutOutput: boolean): readonly string[] {
+  return Object.entries(node).flatMap(([key, value]) => {
+    if (key === "Plans" || (withoutOutput && key === "Output")) return [];
     if (typeof value === "string") return [value];
     return Array.isArray(value) ? value.filter((each) => typeof each === "string") : [];
   });
 }
 
-/** Every scan of a relation under the plan node, the node's own included. */
-function scansOf(node: unknown): readonly ScanReads[] {
-  if (Array.isArray(node)) return node.flatMap(scansOf);
-  if (typeof node !== "object" || node === null) return [];
-  const fields = node as Readonly<Record<string, unknown>>;
-  const table = fields["Relation Name"];
-  const alias = fields.Alias;
-  const own =
-    typeof table === "string" && typeof alias === "string"
-      ? [{ table, alias, expressions: ownExpressions(fields) }]
-      : [];
-  return [...own, ...Object.values(fields).flatMap(scansOf)];
-}
-
 /**
- * Whether a scan's own expression names its column, or its whole row. Note
- * that a verbose plan qualifies a column by its alias wherever the
+ * Whether an expression names the relation's column, or its whole row.
+ * Note that a verbose plan qualifies a column by its alias wherever the
  * statement reads more than one relation, and writes it bare where it reads
- * one, so a bare name in a scan's own text is that relation's.
+ * one, so a bare name in its text is that relation's.
  */
 function namesColumn(alias: string, column: string): (expression: string) => boolean {
   const escaped = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -119,6 +136,21 @@ function namesColumn(alias: string, column: string): (expression: string) => boo
     `(?<![\\w$."':])(?:${qualifier}\\*|(?:${qualifier})?"?${escaped(column)}"?(?![\\w$"'(]))`,
   );
   return (expression) => reference.test(expression);
+}
+
+/**
+ * Whether a scan below its root emits every column of its table. Note that
+ * Postgres has a scan feeding a join emit its table's whole row, its
+ * physical tlist, to save a projection, so that output says nothing of what
+ * the statement reads: the node above names what it takes of it.
+ */
+function emitsWholeRow(scan: Scan, table: SyncTable): boolean {
+  const output = scan.node.Output;
+  if (scan.root || !Array.isArray(output)) return false;
+  const named = output.filter((each) => typeof each === "string");
+  return [...table.watched, ...table.ignored].every((column) =>
+    named.some(namesColumn(scan.alias, column)),
+  );
 }
 
 /** The name a statement is prepared under while it is explained. */
@@ -158,18 +190,37 @@ const genericPlanOf = (statement: string) =>
  * them generically, read past what it declares, a table its `reads` leaves
  * out or a column one of them ignores, each once; none where it reads only
  * what it declares. Note that the plan is read rather than the SQL, so a
- * column two tables share is told apart by the relation it is read from.
+ * column two tables share is told apart by the relation it is read from,
+ * and that a column is read wherever any node of the plan names it, bar a
+ * scan's whole row emitted for the node above to pick from (`emitsWholeRow`).
+ * A read in cursor mode is planned past a cursor too, as a reader that names
+ * one is answered.
  */
 const faultsOf = (query: LiveQuery) =>
   Effect.gen(function* () {
     const params = Object.fromEntries(query.params.map((param) => [param, randomUUID()]));
-    const statements = query.statements(params);
-    assert.ok(Option.isSome(statements), `${query.name}'s statements could not be built`);
+    const past = query.cursor === undefined ? [] : [(yield* query.cursor.standing(params)).next];
+    const built = [
+      query.statements(params),
+      ...past.map((cursor) => query.statements(params, cursor)),
+    ];
     const declared = new Map(query.reads.map((table) => [table.name, table]));
     const faults = new Set<string>();
-    for (const statement of Object.values<LiveStatement>(statements.value)) {
-      const scans = scansOf(yield* genericPlanOf(statement.sql));
-      for (const { table, alias, expressions } of scans) {
+    const planned = built.flatMap((statements) => {
+      assert.ok(Option.isSome(statements), `${query.name}'s statements could not be built`);
+      return Object.values<LiveStatement>(statements.value);
+    });
+    for (const statement of planned) {
+      const nodes = nodesOf(yield* genericPlanOf(statement.sql));
+      const scans = nodes.flatMap(scanOf);
+      const wholeRows = new Set(
+        scans.flatMap((scan) => {
+          const synced = declared.get(scan.table);
+          return synced !== undefined && emitsWholeRow(scan, synced) ? [scan.node] : [];
+        }),
+      );
+      const expressions = nodes.flatMap(({ node }) => ownExpressions(node, wholeRows.has(node)));
+      for (const { table, alias } of scans) {
         const synced = declared.get(table);
         if (synced === undefined) faults.add(`reads ${table}, which it does not declare`);
         for (const column of synced?.ignored ?? []) {
@@ -210,6 +261,7 @@ const onHub = <A, E, R>(
       Effect.map(Sync, (hub) => ({
         watch: (topics, fallback) =>
           Effect.map(hub.watch(topics, fallback), (watch) => ({
+            ...watch,
             next: Effect.andThen(Queue.offer(looking, undefined), watch.next),
           })),
       })),
@@ -251,10 +303,36 @@ it.layer(probeDB)("live reads Luke Sync wakes", (it) => {
       query: probeQuery("select p.id, p.hot from live_query_probe p where p.task_id = $1"),
       faults: ["reads live_query_probe.hot, which live_query_probe ignores"],
     },
+    {
+      reading: "a table it joins, whose scan emits every column for the join to pick from",
+      query: probeQuery(
+        "select p.id, q.note from live_query_probe p join live_query_probe q on q.task_id = p.task_id where p.task_id = $1",
+      ),
+      faults: [],
+    },
   ])("the registry check of a query reading $reading finds $faults", ({ query, faults }) =>
     Effect.gen(function* () {
       assert.deepEqual(yield* faultsOf(query), faults);
     }),
+  );
+
+  it.effect(
+    "a live read's statements reach Sentry under the read's own span, not as traces of their own",
+    () =>
+      Effect.gen(function* () {
+        const sentry = recordingSentry();
+        yield* liveQueryParts(PROBE_READ, { taskId: randomUUID() }, {}).pipe(
+          Effect.provide(sentry.layer),
+        );
+        const spans = sentOfType(sentry.sent, "span").flatMap(
+          (item): readonly { name: string; span_id: string; parent_span_id?: string }[] =>
+            JSON.parse(item.text).items,
+        );
+        const read = spans.find((span) => span.name === "web/live/taskHistory");
+        const statement = spans.find((span) => span.name.includes("from live_query_probe p"));
+        assert.ok(read !== undefined && statement !== undefined);
+        assert.equal(statement.parent_span_id, read.span_id);
+      }),
   );
 
   it.effect(

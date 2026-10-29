@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import {
   listRevisions,
   PLAN_REVISION,
@@ -11,7 +11,7 @@ import {
 import { readTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
-import { PLAN_HEADING, type PlanNote } from "@luke/features/plan-template";
+import type { PlanNote } from "@luke/features/plan-template";
 import { PLAN_ACTOR, type PlanRevisionLine } from "@luke/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
@@ -27,15 +27,14 @@ import { PLAN_SAVE_REFUSAL, PLAN_SAVE_STATUS, restoreRevision, saveNotes } from 
  * revision's writer as its last edit. Synthetic accounts and tasks throughout.
  */
 
-const CALL = "rtc-session-history";
 const AGENT_MODEL = "anthropic/claude-opus-5.5";
-const ON_CALL: PlanWriter = { actor: PLAN_ACTOR.NOTETAKER, liveSessionId: CALL };
+const NOTETAKER: PlanWriter = { actor: PLAN_ACTOR.NOTETAKER };
 
 /** Notes that write a draft into a plan, each in a section of its own. */
 const DRAFT_NOTES: readonly PlanNote[] = [
-  added(PLAN_HEADING.CONTEXT, "A member cannot bring a teammate in without an admin."),
-  added(PLAN_HEADING.HARD_PARTS, "- A withdrawn invite's link never grants access."),
-  added(PLAN_HEADING.OPEN_QUESTIONS, "- Who can withdraw an invite?"),
+  added("Context", "A member cannot bring a teammate in without an admin."),
+  added("Hard parts", "- A withdrawn invite's link never grants access."),
+  added("Open questions", "- Who can withdraw an invite?"),
 ];
 
 const openNamedUser = (name: string) =>
@@ -62,7 +61,7 @@ const AGENT_TITLE = "Invite emails";
 
 const startAgent = (userId: string, taskId: string) =>
   Effect.map(
-    createCodingAgent(userId, {
+    createAgent(userId, {
       taskId,
       idempotencyKey: randomUUID(),
       model: AGENT_MODEL,
@@ -85,7 +84,6 @@ function shapeOf(revisions: readonly PlanRevisionLine[]) {
     seq,
     actor: lastEdit.actor,
     label: lastEdit.label,
-    duringCall: lastEdit.duringCall,
     changes,
   }));
 }
@@ -94,21 +92,20 @@ it.layer(getTestDB())("a plan's history", (it) => {
   it.effect("every save that changes the plan is a revision under the writer who made it", () =>
     Effect.gen(function* () {
       const { userId, taskId } = yield* openTask;
-      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, ON_CALL);
+      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, NOTETAKER);
       const agentId = yield* startAgent(userId, taskId);
       yield* saveNotes(
         { userId, taskId },
-        [added(PLAN_HEADING.OPEN_QUESTIONS, "- Who may withdraw an invite?")],
+        [added("Open questions", "- Who may withdraw an invite?")],
         { actor: PLAN_ACTOR.AGENT, agentId },
       );
 
       assert.deepEqual(shapeOf(yield* revisionsOf(userId, taskId)), [
-        { seq: 2, actor: PLAN_ACTOR.AGENT, label: AGENT_TITLE, duringCall: false, changes: 1 },
+        { seq: 2, actor: PLAN_ACTOR.AGENT, label: AGENT_TITLE, changes: 1 },
         {
           seq: 1,
           actor: PLAN_ACTOR.NOTETAKER,
           label: undefined,
-          duringCall: true,
           changes: DRAFT_NOTES.length,
         },
       ]);
@@ -120,7 +117,7 @@ it.layer(getTestDB())("a plan's history", (it) => {
       const { userId, taskId, workspaceId } = yield* openTask;
       const teammate = yield* openUser;
       yield* joinWorkspace(workspaceId, teammate);
-      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, ON_CALL);
+      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, NOTETAKER);
 
       assert.equal((yield* revisionsOf(userId, taskId)).length, 1);
       assert.deepEqual(yield* revisionsOf(teammate, taskId), yield* revisionsOf(userId, taskId));
@@ -131,19 +128,19 @@ it.layer(getTestDB())("a plan's history", (it) => {
     Effect.gen(function* () {
       const { userId, taskId } = yield* openTask;
       const intruder = yield* openTask;
-      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, ON_CALL);
+      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, NOTETAKER);
 
       assert.deepEqual(yield* revisionsOf(intruder.userId, taskId), []);
       assert.equal((yield* revisionsOf(userId, taskId)).length, 1);
     }),
   );
-  /** Notes on the call, each a revision of its own: the saves stand further apart than any join. */
+  /** Luke's notes, each a revision of its own: the saves stand further apart than any join. */
   const apart = (userId: string, taskId: string, notes: readonly (readonly [string, string])[]) =>
     Effect.forEach(
       notes,
       ([heading, text]) =>
         Effect.andThen(
-          saveNotes({ userId, taskId }, [added(heading, text)], ON_CALL),
+          saveNotes({ userId, taskId }, [added(heading, text)], NOTETAKER),
           TestClock.adjust(Duration.millis(PLAN_REVISION.JOIN_WITHIN_MS + 1)),
         ),
       { discard: true },
@@ -157,11 +154,11 @@ it.layer(getTestDB())("a plan's history", (it) => {
     () =>
       Effect.gen(function* () {
         const { userId, taskId } = yield* openTask;
-        yield* apart(userId, taskId, [[PLAN_HEADING.CONTEXT, "Only admins can invite."]]);
+        yield* apart(userId, taskId, [["Context", "Only admins can invite."]]);
         const first = yield* contentOf(userId, taskId);
         yield* apart(userId, taskId, [
-          [PLAN_HEADING.GOAL, "Members invite by email."],
-          [PLAN_HEADING.APPROACH, "Invites expire."],
+          ["Goal", "Members invite by email."],
+          ["Approach", "Invites expire."],
         ]);
 
         const restored = yield* restoreRevision({ userId, taskId }, 1);
@@ -183,8 +180,8 @@ it.layer(getTestDB())("a plan's history", (it) => {
       Effect.gen(function* () {
         const { userId, taskId } = yield* openTask;
         yield* apart(userId, taskId, [
-          [PLAN_HEADING.CONTEXT, "Only admins can invite."],
-          [PLAN_HEADING.GOAL, "Members invite by email."],
+          ["Context", "Only admins can invite."],
+          ["Goal", "Members invite by email."],
         ]);
 
         const restored = yield* restoreRevision({ userId, taskId }, 1);
@@ -203,8 +200,8 @@ it.layer(getTestDB())("a plan's history", (it) => {
       const { userId, taskId } = yield* openTask;
       const intruder = yield* openTask;
       yield* apart(userId, taskId, [
-        [PLAN_HEADING.CONTEXT, "Only admins can invite."],
-        [PLAN_HEADING.GOAL, "Members invite by email."],
+        ["Context", "Only admins can invite."],
+        ["Goal", "Members invite by email."],
       ]);
       const before = yield* contentOf(userId, taskId);
 
@@ -225,15 +222,11 @@ it.layer(getTestDB())("a plan's history", (it) => {
         const charles = yield* openNamedUser("Charles Pan");
         yield* joinWorkspace(task.workspaceId, charles);
         const taskId = task.id;
-        yield* saveNotes(
-          { userId: dean, taskId },
-          [added(PLAN_HEADING.GOAL, "Members invite.")],
-          DEVELOPER,
-        );
+        yield* saveNotes({ userId: dean, taskId }, [added("Goal", "Members invite.")], DEVELOPER);
         // Within the join's reach, which one member's saves in a row would share.
         yield* saveNotes(
           { userId: charles, taskId },
-          [added(PLAN_HEADING.APPROACH, "Invites expire.")],
+          [added("Approach", "Invites expire.")],
           DEVELOPER,
         );
 
@@ -250,16 +243,16 @@ it.layer(getTestDB())("a plan's history", (it) => {
           const bySection = new Map(
             stored.task.sectionEdits?.map((edit) => [edit.section, edit.by]),
           );
-          assert.deepEqual(bySection.get(PLAN_HEADING.GOAL), DEAN);
-          assert.deepEqual(bySection.get(PLAN_HEADING.APPROACH), CHARLES);
+          assert.deepEqual(bySection.get("Goal"), DEAN);
+          assert.deepEqual(bySection.get("Approach"), CHARLES);
         }
       }),
   );
 
-  it.effect("Luke's notes on a member's call are kept under that member", () =>
+  it.effect("Luke's notes on a member's turn are kept under that member", () =>
     Effect.gen(function* () {
       const { userId, taskId } = yield* openTask;
-      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, ON_CALL);
+      yield* saveNotes({ userId, taskId }, DRAFT_NOTES, NOTETAKER);
 
       const [line] = yield* revisionsOf(userId, taskId);
       assert.deepEqual(line?.lastEdit.by, { userId, name: "Test User" });
@@ -271,13 +264,9 @@ it.layer(getTestDB())("a plan's history", (it) => {
     () =>
       Effect.gen(function* () {
         const { userId, taskId } = yield* openTask;
-        yield* saveNotes(
-          { userId, taskId },
-          [added(PLAN_HEADING.GOAL, "Members invite.")],
-          DEVELOPER,
-        );
+        yield* saveNotes({ userId, taskId }, [added("Goal", "Members invite.")], DEVELOPER);
         const agentId = yield* startAgent(userId, taskId);
-        yield* saveNotes({ userId, taskId }, [added(PLAN_HEADING.APPROACH, "Invites expire.")], {
+        yield* saveNotes({ userId, taskId }, [added("Approach", "Invites expire.")], {
           actor: PLAN_ACTOR.AGENT,
           agentId,
         });
@@ -285,8 +274,8 @@ it.layer(getTestDB())("a plan's history", (it) => {
         const { task } = Option.getOrThrow(yield* readTask(userId, taskId));
         assert.equal(task.lastEdit?.agentId, agentId);
         const bySection = new Map(task.sectionEdits?.map((edit) => [edit.section, edit.agentId]));
-        assert.equal(bySection.get(PLAN_HEADING.APPROACH), agentId);
-        assert.equal(bySection.get(PLAN_HEADING.GOAL), undefined);
+        assert.equal(bySection.get("Approach"), agentId);
+        assert.equal(bySection.get("Goal"), undefined);
       }),
   );
 
@@ -299,11 +288,11 @@ it.layer(getTestDB())("a plan's history", (it) => {
         yield* joinWorkspace(workspaceId, teammate);
         yield* saveNotes(
           { userId: teammate, taskId },
-          [added(PLAN_HEADING.GOAL, "Members invite.")],
+          [added("Goal", "Members invite.")],
           DEVELOPER,
         );
         const agentId = yield* startAgent(userId, taskId);
-        yield* saveNotes({ userId, taskId }, [added(PLAN_HEADING.APPROACH, "Invites expire.")], {
+        yield* saveNotes({ userId, taskId }, [added("Approach", "Invites expire.")], {
           actor: PLAN_ACTOR.AGENT,
           agentId,
         });

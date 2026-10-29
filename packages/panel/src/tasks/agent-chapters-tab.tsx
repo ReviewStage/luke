@@ -1,4 +1,4 @@
-import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
+import type { AgentChangedFile } from "@luke/features/agent-wire";
 import {
   type Chapter,
   chapterHunks,
@@ -117,7 +117,7 @@ import type { ChaptersRead } from "./chapters-read.js";
 import { drawnIn, useFloatsOver } from "./drawn-in.js";
 import type { TreeShown } from "./file-view.js";
 import { TranscriptWords } from "./transcript-blocks.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 
 /**
  * agent-chapters-tab.tsx -- the Chapters view of an agent's Pull request tab (`agent-pull-request-tab.tsx`): its pull request's diff told as chapters to review in order, each read as its title, risk, and summary over its own hunks, drawn by Files changed's own list.
@@ -421,8 +421,16 @@ function RiskChip({
 }): React.JSX.Element {
   const card =
     reasons.length === 0 ? undefined : (
-      <HoverCard>
-        <HoverCardHead name={RISK_WORDS[risk]} />
+      <HoverCard data-risk-card="">
+        <HoverCardHead
+          glyph={
+            // Note that the dot stands in a box of its own, because the head's glyph box sizes its child to a glyph's, which would swell the dot.
+            <span className="flex items-center justify-center">
+              <RiskMark risk={risk} />
+            </span>
+          }
+          name={RISK_WORDS[risk]}
+        />
         {reasons.map((reason) => (
           <HoverCardNote key={reason}>{reason}</HoverCardNote>
         ))}
@@ -690,7 +698,7 @@ function ChaptersReading({
   lineComments,
 }: {
   agentId: string;
-  control: CodingAgentsControl;
+  control: AgentsControl;
   shown: boolean;
   repository: string | null;
   tree: TreeShown;
@@ -702,7 +710,7 @@ function ChaptersReading({
   read: ChaptersRead;
   changes: ChangesReads;
   /** Every file the pull request changes, as the read of its files answered. */
-  files: readonly CodingAgentChangedFile[];
+  files: readonly AgentChangedFile[];
   threads: ChangesThreads;
   lineComments: LineComments | undefined;
 }): React.JSX.Element {
@@ -1032,7 +1040,7 @@ function chaptersState(
         </EmptyState>
       ) : (
         <EmptyState icon={<GLYPH.PULL_REQUEST_CHAPTERS />}>
-          {CHAPTERS_WORDS.unavailable(<SettingsPageLink page={SETTINGS_VIEW.CODING_AGENTS} />)}
+          {CHAPTERS_WORDS.unavailable(<SettingsPageLink page={SETTINGS_VIEW.AGENTS} />)}
         </EmptyState>
       );
     case CHAPTERS_SHOWN.GENERATING:
@@ -1075,7 +1083,7 @@ export function AgentChaptersTab({
   lineComments,
 }: {
   agentId: string;
-  control: CodingAgentsControl;
+  control: AgentsControl;
   /** Whether the view is on screen, which is when its time counts and its keys' sheet stands. */
   shown: boolean;
   repository: string | null;

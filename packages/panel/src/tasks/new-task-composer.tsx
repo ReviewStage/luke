@@ -1,25 +1,21 @@
-import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_STATUS,
-  hasWordsOrFiles,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, AGENT_STATUS, hasWordsOrFiles } from "@luke/features/agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
-import type { GitHubIssuePick } from "@luke/features/github-repositories-wire";
-import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
-import {
-  TASK_ISSUE_PROVIDER,
-  TASK_ISSUE_RELATION,
-  type TaskIssueChoice,
-} from "@luke/features/task-issue-wire";
-import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
-import { CHIP_WIDTH, POPOVER_ALIGN, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
-import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
+import {
+  CHIP_WIDTH,
+  POPOVER_ALIGN,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  VisuallyHidden,
+} from "@luke/ui";
+import { workspaceReaches } from "@luke/ui/tasks-model";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
@@ -33,16 +29,7 @@ import {
 import { automationAgentBrief } from "../desktop/automation-agent-brief.js";
 import { useExperiment } from "../use-app-state.js";
 import { AgentComposer, type ComposerWords } from "./agent-composer.js";
-import { ISSUE_CHORD, IssuePickerChip } from "./issue-picker-chip.js";
 import type { MentionMenuSide } from "./mention-picker.js";
-import {
-  choiceOf,
-  linkedElsewhere,
-  linkIdOf,
-  linkIssueOf,
-  type NewTaskLink,
-  NewTaskLinks,
-} from "./new-task-links.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { keptSkills } from "./repository-skills.js";
@@ -51,7 +38,7 @@ import { SkillFiles } from "./skill-chip.js";
 import type { SkillWithFile } from "./skill-ref.js";
 import { TaskMentions, tasklessMentions, useMentionAgentsReader } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
-import { MODELS_READ } from "./use-coding-agents.js";
+import { MODELS_READ } from "./use-agents.js";
 import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.js";
 
 /**
@@ -63,13 +50,12 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * later before it, drawing the backlog's mark alone where the card is too
  * narrow for its words, as on a phone, where the model chip's words are cut
  * short too, so Start stays at the row's end in the card.
- * New task's own chips stand in a head row over the card, the same in the
- * dialog and on a new account's welcome: the title, "New task", then the repository the task
- * is about (`repository-chip.tsx`), and at the row's right end the Issue
- * chip, where the workspace has GitHub or Linear connected
- * (`issue-picker-chip.tsx`, ⌘L from the card). While local agents are on
- * and the member has a device, the Runs on chip follows the repository's,
- * Cloud or one of their devices, which the task's agents run on
+ * New task's repository chip stands in a head row over the card, the same in the
+ * dialog and on a new account's welcome: the repository the task is about
+ * (`repository-chip.tsx`), its title, "New task", named to a reader alone,
+ * since the card says what it is, and an automation's drawn before it. While local agents are on
+ * and the member has a device, the Runs on chip stands after the box's "+",
+ * as an agent's box draws where its agent runs: Cloud or one of their devices, which the task's agents run on
  * (`runs-on.tsx`); an automation's card draws none. Note that while local
  * agents are on the card reads the member's devices as it opens and holds
  * Start, saying so, until that read lands, a list read before it opened not
@@ -81,9 +67,9 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * was about, either only where the workspace's GitHub reaches it.
  *
  * The words are a coding agent's prompt. Start stands once there are
- * words, files, or an issue, and a repository, without which it is held and
+ * words or files, and a repository, without which it is held and
  * the card says so under it. It starts the task with an empty plan and no
- * call, named by the issue where one was picked and else Untitled until the
+ * call, Untitled until the
  * agent names it, and the agent on the words, the files, and the model on
  * the chip, in the one start (`use-tasks-tab.ts`), then opens the task on
  * the agent's tab; an agent refused opens it on a draft agent's tab holding
@@ -91,19 +77,6 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * model chip starts on the account's default, and a pick here runs this one
  * agent alone: only Settings changes the default. A call starts only from an
  * agent's own tab, so starting a task never opens one.
- *
- * Choosing a GitHub or a Linear issue links it, as a chip over the words
- * (`new-task-links.tsx`) with its key, its title, its Closes / Part of
- * switch, and the × that lets it go, rather than starting anything; the
- * card links up to as many as a task may, GitHub's and Linear's mixed, and
- * starting the task links each with its relation. A GitHub issue is the
- * chosen repository's: picking one of another repository, or with none
- * chosen, makes its repository the task's, and a change of repository lets
- * go the GitHub issues of the one before. The owner's workspace changing,
- * as the welcome's does, lets every one go. The task is named by the first issue
- * picked, and the agent is handed a mention of each, by its page, before the
- * words (`agentPromptOf`), so an issue picked and Return starts an agent on
- * it.
  *
  * An agent's start carries a key the card mints, and a press asking the
  * same again, as Retry after a start the service never answered does,
@@ -113,8 +86,8 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  *
  * Return starts, Shift+Return is a new line, and ⌘Return on a box with
  * neither words nor files starts a bare task: an empty plan, no call, and
- * no agent, which needs no repository. While the box holds nothing and no
- * issue is linked, the round button's hint says so, with its chord, since
+ * no agent, which needs no repository. While the box holds nothing,
+ * the round button's hint says so, with its chord, since
  * nothing else on screen would. Escape closes a menu or a
  * dictation standing first,
  * and then whatever the owner says (`onLeave`), the dialog's card. A start
@@ -134,7 +107,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * kept apart from the card (`../composer-drafts.ts`), so a card put away
  * and opened again, or the welcome's, finds them where they were left, the words
  * after a relaunch too; a task started lets them go, as emptying the box
- * does. The card holds its own issues, repository, and model, so the owner
+ * does. The card holds its own repository and model, so the owner
  * mounts it afresh to start those over; the workspace it starts in is the
  * owner's.
  *
@@ -144,7 +117,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * say so, its words are kept as a draft of their own, and the agent is handed
  * the fixed brief with the words fenced after it (`automation-agent-brief.ts`),
  * refused here where that would pass an agent's first message's bound. It
- * starts on words alone: it offers no Issue chip, and
+ * starts on words alone, and
  * ⌘Return on an empty box starts no bare task, so its hint never names one.
  * A start refused after the card closed opens it again for the same purpose.
  */
@@ -152,7 +125,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
 /** ⌘Return: a bare task from a box with nothing in it. */
 const BARE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
 
-/** Each purpose's head row title, before the repository's chip. */
+/** Each purpose's head row title, before the repository's chip: drawn for an automation's, and named to a reader alone for a task's. */
 const PURPOSE_HEADING = {
   [NEW_TASK_PURPOSE.TASK]: "New task",
   [NEW_TASK_PURPOSE.AUTOMATION]: "Create with an agent",
@@ -182,10 +155,9 @@ const BARE_WORDS: ComposerWords = {
 /** Why an automation's agent did not start where the brief and the words pass an agent's first message's bound. */
 const TOO_LONG = "That request is too long.";
 
-/** Why Start is held: without a repository, or before the member's devices are read. */
+/** Why Start is held without a repository. */
 const COMPOSER_WORDS = {
   NEEDS_REPOSITORY: "Choose a repository",
-  READING_DEVICES: "Checking your devices…",
 } as const;
 
 /** What the card says where the member's devices could not be read, with Retry, rather than starting the task in the cloud. */
@@ -194,12 +166,10 @@ const DEVICES_UNREAD: Failure = {
   text: "Couldn't read your devices, so Luke can't tell where this task should run.",
 };
 
-/** What one Agent-mode press asked beside its key: the task's name, repository, workspace, issues, and where its agents run, and the agent's words, files, and model. */
+/** What one Agent-mode press asked beside its key: the task's repository and workspace, and where its agents run, and the agent's words, files, and model. */
 interface AgentAsk {
-  readonly name: string;
   readonly repository: string | null;
   readonly workspaceId: string | undefined;
-  readonly issues: readonly TaskIssueChoice[];
   /** The device the task's agents run on, by its id; none for the cloud. */
   readonly deviceId?: string | undefined;
   readonly agent: Omit<NewTaskAgent, "idempotencyKey">;
@@ -211,26 +181,11 @@ export interface NewTaskPress {
   readonly key: string;
 }
 
-/** Whether two presses link the same issues, in the same order and with the same relations. */
-function sameIssues(a: readonly TaskIssueChoice[], b: readonly TaskIssueChoice[]): boolean {
-  return a.length === b.length && a.every((issue, index) => sameChoice(issue, b[index]));
-}
-
-function sameChoice(a: TaskIssueChoice, b: TaskIssueChoice | undefined): boolean {
-  if (b === undefined || a.relation !== b.relation) return false;
-  if (a.provider === TASK_ISSUE_PROVIDER.LINEAR || b.provider === TASK_ISSUE_PROVIDER.LINEAR) {
-    return a.provider === b.provider && "id" in a && "id" in b && a.id === b.id;
-  }
-  return a.repository === b.repository && a.number === b.number;
-}
-
 /** Whether two presses ask the same: the same task, device, words, files in the same order, and model. */
 function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
   return (
-    a.name === b.name &&
     a.repository === b.repository &&
     a.workspaceId === b.workspaceId &&
-    sameIssues(a.issues, b.issues) &&
     a.deviceId === b.deviceId &&
     a.agent.prompt === b.agent.prompt &&
     a.agent.attachments.length === b.agent.attachments.length &&
@@ -319,8 +274,6 @@ export function NewTaskComposer({
   }, [workspaceId, loose, writer, purpose]);
   // A card opened again on a start refused after it closed starts where it was left, saying why.
   const refused = newTask.preset?.refused;
-  // The GitHub and Linear issues picked from the Issue chip, in the order picked.
-  const [picks, setLinks] = useState<readonly NewTaskLink[]>(refused?.card.links ?? []);
   const [chosen, setChosen] = useState<string | null | undefined>(
     refused === undefined ? newTask.preset?.repository : refused.card.repository,
   );
@@ -329,12 +282,6 @@ export function NewTaskComposer({
   const [note, setNote] = useState<Failure | undefined>(refused?.note);
   // The last agent press's key and what it asked, until a start lands.
   const pressed = useRef<NewTaskPress | undefined>(refused?.card.press);
-  // How many times ⌘L asked the Issue chip to open its menu.
-  const [issueAsks, setIssueAsks] = useState(0);
-  const { linearIssuesIn, githubIssuesIn } = newTask;
-  const offersIssues =
-    !forAutomation &&
-    (linearIssuesIn(workspaceId) !== undefined || githubIssuesIn(workspaceId) !== undefined);
   const repositories = newTask.repositoriesIn(workspaceId);
   const workspace = newTask.workspaces.find((each) => each.id === workspaceId);
   // Runs on stands while local agents are on and the member has a device, never for an automation's agent.
@@ -368,16 +315,13 @@ export function NewTaskComposer({
   const runsOn = devices === undefined ? undefined : newTaskRunsOn(device);
   // The repositories the chip's last read listed, an App's and a member's token's alike.
   const [listed, setListed] = useState<readonly string[] | undefined>(undefined);
-  // A repository or an issue picked in one workspace is none of another's,
-  // so the owner's switch, as the welcome's, lets them go, in the render that brings it; the scope first
+  // A repository picked in one workspace is none of another's,
+  // so the owner's switch, as the welcome's, lets it go, in the render that brings it; the scope first
   // resolving keeps a pick made before the workspaces were read.
   const [scope, setScope] = useState(repositories.scope);
   if (repositories.scope !== scope) {
     setListed(undefined);
-    if (scope !== undefined) {
-      setChosen(undefined);
-      setLinks([]);
-    }
+    if (scope !== undefined) setChosen(undefined);
     setScope(repositories.scope);
   }
   const isListed = (name: string) =>
@@ -396,25 +340,12 @@ export function NewTaskComposer({
       (listed === undefined && workspace !== undefined && !workspaceReaches(workspace, candidate)))
       ? null
       : candidate;
-  // A change of repository lets go the GitHub issues of the one before, in the render that brings it.
-  const [linkedFor, setLinkedFor] = useState(repository);
-  if (linkedFor !== repository) {
-    setLinkedFor(repository);
-    setLinks((was) => was.filter((link) => !linkedElsewhere(link, repository)));
-  }
-  const links = picks.filter((link) => !linkedElsewhere(link, repository));
   const said = words.trim();
   // Note that an automation's agent starts on words alone, since the brief fences them as the request.
   const filled = forAutomation ? said !== "" : hasWordsOrFiles(said, attachments);
-  // An agent needs a repository to work in, and something to work on:
-  // words, files, or a GitHub or Linear issue.
-  const onIssue = links.length > 0;
+  // An agent needs a repository to work in, and something to work on: words or files.
   const blocked = repository === null;
-  const canStart = !blocked && !devicesUnread && (filled || onIssue);
-  const linkedIssues = links.map(linkIssueOf);
-  const named = linkedIssues[0];
-  const issueName = named === undefined ? undefined : taskNameOfIssue(named);
-  const issues = links.map(choiceOf);
+  const canStart = !blocked && !devicesUnread && filled;
   // What an `@` and a `/` offer: the chosen repository's, read through the workspace, as on an agent's page no task holds.
   const { act } = useAct();
   const readMentionAgents = useMentionAgentsReader(workspaceId, newTask.tasks, newTask.models);
@@ -451,14 +382,13 @@ export function NewTaskComposer({
     );
   };
 
-  const begin = (name: string, handing: Pick<NewTaskStart, "handed" | "card"> = {}) => {
+  const begin = (handing: Pick<NewTaskStart, "handed" | "card"> = {}) => {
     if (starting || devicesUnread) return;
     setStarting(true);
     onStarting?.(true);
     setNote(undefined);
     newTask
-      .start(name, repository, workspaceId, {
-        ...(issues.length === 0 ? undefined : { issues }),
+      .start("", repository, workspaceId, {
         ...(runsOn === undefined ? undefined : { runsOn }),
         ...(device === undefined ? undefined : { device }),
         ...handing,
@@ -478,17 +408,14 @@ export function NewTaskComposer({
   };
   const start = () => {
     if (!canStart) return;
-    const name = issueName ?? "";
-    const prompt = forAutomation ? automationAgentBrief(said) : agentPromptOf(linkedIssues, said);
-    if (forAutomation && prompt.length > CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS) {
+    const prompt = forAutomation ? automationAgentBrief(said) : said;
+    if (forAutomation && prompt.length > AGENT_BOUNDS.MAX_MESSAGE_CHARS) {
       setNote({ reason: FAILURE_REASON.OTHER, text: TOO_LONG });
       return;
     }
     const ask: AgentAsk = {
-      name,
       repository,
       workspaceId,
-      issues,
       deviceId: device?.deviceId,
       agent: { prompt, attachments, choice },
     };
@@ -496,30 +423,20 @@ export function NewTaskComposer({
     const key = held !== undefined && sameAsk(held.ask, ask) ? held.key : crypto.randomUUID();
     const press = { ask, key };
     pressed.current = press;
-    begin(name, {
+    begin({
       handed: { idempotencyKey: key, ...ask.agent },
-      card: { ...(forAutomation ? { purpose } : undefined), repository, links, choice, press },
+      card: { ...(forAutomation ? { purpose } : undefined), repository, choice, press },
     });
   };
   // ⌘Return on a box with nothing in it starts a bare task: no call and no agent.
-  const bare = () => begin(issueName ?? "");
-  // Note that a linked issue keeps the round button its own name, because its press then starts an agent on the issue.
-  const startsBare = !forAutomation && !filled && !onIssue;
+  const bare = () => begin();
+  const startsBare = !forAutomation && !filled;
 
   const onKey = (event: KeyboardEvent): boolean => {
     if (!shortcutMatches(BARE_CHORD, event)) return false;
     if (filled) start();
     else if (!forAutomation) bare();
     return true;
-  };
-  // ⌘L from the card opens the Issue chip's menu, where the chip stands.
-  const onCardKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    // Note that a key an input method is composing with is its own, Safari's last one (229) among them.
-    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
-    if (starting || !offersIssues) return;
-    if (!shortcutMatches(ISSUE_CHORD, event)) return;
-    event.preventDefault();
-    setIssueAsks((asks) => asks + 1);
   };
 
   const repositoryChip = (
@@ -535,46 +452,6 @@ export function NewTaskComposer({
       onListed={setListed}
     />
   );
-  const full = links.length >= TASK_BOUNDS.MAX_ISSUES;
-  const link = (linked: NewTaskLink) => {
-    if (full || links.some((each) => linkIdOf(each) === linkIdOf(linked))) return;
-    setLinks([...links, linked]);
-    setNote(undefined);
-  };
-  const chooseIssue = (chosenIssue: LinearIssueSummary) =>
-    link({
-      provider: TASK_ISSUE_PROVIDER.LINEAR,
-      issue: chosenIssue,
-      relation: TASK_ISSUE_RELATION.CLOSES,
-    });
-  // Note that a GitHub issue of another repository, or picked with none chosen, makes its repository the task's.
-  const chooseGitHub = (chosenIssue: GitHubIssuePick) => {
-    if (chosenIssue.repository.toLowerCase() !== repository?.toLowerCase()) {
-      setChosen(chosenIssue.repository);
-    }
-    link({
-      provider: TASK_ISSUE_PROVIDER.GITHUB,
-      issue: chosenIssue,
-      relation: TASK_ISSUE_RELATION.CLOSES,
-    });
-  };
-  // Note that the chip at the head row's right end hangs its menu from its trailing edge.
-  const issueChip = (
-    <IssuePickerChip
-      linearIn={linearIssuesIn}
-      githubIn={githubIssuesIn}
-      workspaceId={workspaceId}
-      repository={repository}
-      linked={new Set(links.map(linkIdOf))}
-      full={full}
-      disabled={starting}
-      openRequest={issueAsks}
-      align={POPOVER_ALIGN.END}
-      onChoose={chooseIssue}
-      onChooseGitHub={chooseGitHub}
-    />
-  );
-
   const composer: AgentComposerControl = {
     draft: words,
     setDraft: (text) => {
@@ -594,35 +471,28 @@ export function NewTaskComposer({
   };
 
   const card = (
-    // biome-ignore lint/a11y/noStaticElementInteractions: ⌘L is read as it bubbles from the card's own controls, the field first, which are what take the keys.
-    <div className="new-task-composer flex min-w-0 flex-col gap-control-gap" onKeyDown={onCardKey}>
-      <div className="new-task-head flex min-w-0 items-center justify-between gap-block-gap">
+    <div className="new-task-composer flex min-w-0 flex-col gap-control-gap">
+      <div className="new-task-head flex min-w-0 items-center gap-block-gap">
         <div className="new-task-title flex min-w-0 items-center gap-item-gap">
-          <Text
-            variant={TEXT_VARIANT.DIALOG}
-            as={TEXT_ELEMENT.H2}
-            id={titleId}
-            className="max-w-new-task-title shrink-0"
-          >
-            {PURPOSE_HEADING[purpose]}
-          </Text>
-          {repositoryChip}
-          {devices === undefined ? null : (
-            <NewTaskRunsOnChip
-              devices={devices}
-              device={device}
-              disabled={starting}
-              onChoose={chooseDevice}
-            />
+          {forAutomation ? (
+            <Text
+              variant={TEXT_VARIANT.DIALOG}
+              as={TEXT_ELEMENT.H2}
+              id={titleId}
+              className="max-w-new-task-title shrink-0"
+            >
+              {PURPOSE_HEADING[purpose]}
+            </Text>
+          ) : (
+            <VisuallyHidden id={titleId}>{PURPOSE_HEADING[purpose]}</VisuallyHidden>
           )}
+          {repositoryChip}
         </div>
-        {forAutomation ? null : issueChip}
       </div>
       <AgentComposer
-        status={CODING_AGENT_STATUS.STARTING}
+        status={AGENT_STATUS.STARTING}
         composer={composer}
         wording={startsBare ? BARE_WORDS : PURPOSE_WORDS[purpose]}
-        sendsEmpty={onIssue}
         // Note that an automation's agent is held without words, since its brief fences them as the request, files alone saying none.
         sendable={!blocked && !devicesUnread && (!forAutomation || said !== "")}
         model={choice === undefined ? undefined : { choice, note: undefined, choose }}
@@ -634,25 +504,25 @@ export function NewTaskComposer({
         skills={skills}
         published={undefined}
         doors={{ openGitHub: () => undefined, copy: () => undefined }}
-        onStop={() => Promise.resolve()}
+        onStop={() => Promise.resolve(false)}
         onKey={onKey}
         onLeave={onLeave}
         focusedByOwner={focusedByOwner}
         listSide={listSide}
-        above={
-          links.length === 0 ? undefined : (
-            <NewTaskLinks links={links} disabled={starting} onChange={setLinks} />
+        tools={
+          devices === undefined ? undefined : (
+            <NewTaskRunsOnChip
+              devices={devices}
+              device={device}
+              disabled={starting}
+              onChoose={chooseDevice}
+            />
           )
         }
       />
       {blocked ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           {COMPOSER_WORDS.NEEDS_REPOSITORY}
-        </Text>
-      ) : null}
-      {devicesUnread && !devicesFailed ? (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {COMPOSER_WORDS.READING_DEVICES}
         </Text>
       ) : null}
     </div>

@@ -1,13 +1,14 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  type CodingAgent,
-  settleCodingAgentAuthor,
+  type Agent,
+  settleAgentAuthor,
   type WithRepository,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { AGENT_AUTHOR, type AgentAuthor } from "@luke/features/agent-wire";
 import type { CheckoutIdentity } from "@luke/features/checkout-identity";
-import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { automationRun } from "@luke/features/model-label";
 import { Data, Effect, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
@@ -70,7 +71,7 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * turn ends, and set again as the next begins.
  *
  * Who the agent writes as is settled once, as its first session starts, and
- * kept on its row (`CODING_AGENT_AUTHOR`), so the instructions that session
+ * kept on its row (`AGENT_AUTHOR`), so the instructions that session
  * runs under and the checkout agree for the agent's life. An agent a
  * developer started, by hand or by voice, writes as that developer where
  * they signed in with GitHub and their own account may push to the
@@ -116,7 +117,7 @@ function refusedBy(): CheckoutRefused {
 }
 
 /** The agent's workspace, whose installation its repository is reached through; none where its starter no longer reaches it. */
-function agentWorkspace(target: ConversationTarget, agent: CodingAgent) {
+function agentWorkspace(target: ConversationTarget, agent: Agent) {
   return workspaceOfAgent(target.userId, agent);
 }
 
@@ -135,28 +136,25 @@ function identityOf(user: GitHubUser): CheckoutIdentity {
  */
 const readAuthor = /* @__PURE__ */ Effect.fn("web/agentReadAuthor")(function* (
   target: ConversationTarget,
-  agent: WithRepository<CodingAgent>,
-): Effect.fn.Return<CodingAgentAuthor, StoreFailure, CheckoutServices> {
-  // Note that the run's origin outlives its automation, whose id goes null once it is deleted.
-  if (agent.automationId !== null || agent.automationOrigin !== null) {
-    return CODING_AGENT_AUTHOR.APP_AUTOMATION;
-  }
-  if (agent.githubAccess === GITHUB_ACCESS.TOKEN) return CODING_AGENT_AUTHOR.TOKEN;
+  agent: WithRepository<Agent>,
+): Effect.fn.Return<AgentAuthor, StoreFailure, CheckoutServices> {
+  if (automationRun(agent) !== undefined) return AGENT_AUTHOR.APP_AUTOMATION;
+  if (agent.githubAccess === GITHUB_ACCESS.TOKEN) return AGENT_AUTHOR.TOKEN;
   const app = yield* GitHubApp;
   return yield* app.userPusher(target.userId, agent.repository).pipe(
     Effect.map((pusher) =>
-      Option.isSome(pusher) ? CODING_AGENT_AUTHOR.DEVELOPER : CODING_AGENT_AUTHOR.APP_NO_PUSH,
+      Option.isSome(pusher) ? AGENT_AUTHOR.DEVELOPER : AGENT_AUTHOR.APP_NO_PUSH,
     ),
-    Effect.catchTag("GitHubSignInRequired", () => Effect.succeed(CODING_AGENT_AUTHOR.APP_UNLINKED)),
+    Effect.catchTag("GitHubSignInRequired", () => Effect.succeed(AGENT_AUTHOR.APP_UNLINKED)),
     // Note that GitHub refusing the token outright is a sign-in it no longer honours, whatever the row says.
     Effect.catchTag("GitHubUnavailable", (failure) =>
       Effect.succeed(
         failure.status === GITHUB_HTTP_STATUS.UNAUTHORIZED
-          ? CODING_AGENT_AUTHOR.APP_UNLINKED
-          : CODING_AGENT_AUTHOR.APP_UNREAD,
+          ? AGENT_AUTHOR.APP_UNLINKED
+          : AGENT_AUTHOR.APP_UNREAD,
       ),
     ),
-    Effect.catchTag("GitHubAppNotConfigured", () => Effect.succeed(CODING_AGENT_AUTHOR.APP_UNREAD)),
+    Effect.catchTag("GitHubAppNotConfigured", () => Effect.succeed(AGENT_AUTHOR.APP_UNREAD)),
   );
 });
 
@@ -167,11 +165,11 @@ const readAuthor = /* @__PURE__ */ Effect.fn("web/agentReadAuthor")(function* (
  */
 const agentAuthor = /* @__PURE__ */ Effect.fn("web/agentAuthor")(function* (
   target: ConversationTarget,
-  agent: WithRepository<CodingAgent>,
-): Effect.fn.Return<CodingAgentAuthor, StoreFailure, CheckoutServices> {
+  agent: WithRepository<Agent>,
+): Effect.fn.Return<AgentAuthor, StoreFailure, CheckoutServices> {
   if (agent.author !== null) return agent.author;
   const read = yield* readAuthor(target, agent);
-  const settled = yield* settleCodingAgentAuthor(target.userId, agent.id, read);
+  const settled = yield* settleAgentAuthor(target.userId, agent.id, read);
   return Option.getOrElse(settled, () => read);
 });
 
@@ -185,17 +183,17 @@ const agentAuthor = /* @__PURE__ */ Effect.fn("web/agentAuthor")(function* (
  */
 export const agentCoAuthor = /* @__PURE__ */ Effect.fn("web/agentCoAuthor")(function* (
   target: ConversationTarget,
-  agent: WithRepository<CodingAgent>,
+  agent: WithRepository<Agent>,
 ): Effect.fn.Return<string | undefined, never, CheckoutServices> {
   const app = yield* GitHubApp;
   return yield* Effect.gen(function* () {
     const author = yield* agentAuthor(target, agent);
-    if (author !== CODING_AGENT_AUTHOR.DEVELOPER && author !== CODING_AGENT_AUTHOR.TOKEN) {
+    if (author !== AGENT_AUTHOR.DEVELOPER && author !== AGENT_AUTHOR.TOKEN) {
       return undefined;
     }
     // Note that an agent on its starter's own token reads the bot on that token, which stands where their sign-in may not.
     const token =
-      author === CODING_AGENT_AUTHOR.TOKEN
+      author === AGENT_AUTHOR.TOKEN
         ? (yield* agentRepositoryToken(target, agent)).token
         : yield* app.userToken(target.userId);
     const bot = yield* app.appBot(token);
@@ -221,7 +219,7 @@ export const agentCoAuthor = /* @__PURE__ */ Effect.fn("web/agentCoAuthor")(func
  */
 export const agentCiReadable = /* @__PURE__ */ Effect.fn("web/agentCiReadable")(function* (
   target: ConversationTarget,
-  agent: WithRepository<CodingAgent>,
+  agent: WithRepository<Agent>,
 ): Effect.fn.Return<boolean, never, CheckoutServices> {
   const app = yield* GitHubApp;
   return yield* Effect.gen(function* () {
@@ -248,7 +246,7 @@ export const agentCiReadable = /* @__PURE__ */ Effect.fn("web/agentCiReadable")(
 export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentRepositoryToken")(
   function* (
     target: ConversationTarget,
-    agent: WithRepository<CodingAgent>,
+    agent: WithRepository<Agent>,
   ): Effect.fn.Return<
     {
       readonly token: Redacted.Redacted;
@@ -289,15 +287,15 @@ export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentReposito
  */
 const commitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIdentity")(function* (
   target: ConversationTarget,
-  agent: WithRepository<CodingAgent>,
-  author: CodingAgentAuthor,
+  agent: WithRepository<Agent>,
+  author: AgentAuthor,
   credential: RepositoryCredential,
 ): Effect.fn.Return<CheckoutIdentity, CheckoutRefused, CheckoutServices> {
   const app = yield* GitHubApp;
-  if (author === CODING_AGENT_AUTHOR.TOKEN && credential.access.kind === GITHUB_ACCESS.TOKEN) {
+  if (author === AGENT_AUTHOR.TOKEN && credential.access.kind === GITHUB_ACCESS.TOKEN) {
     return identityOf(yield* app.tokenUser(credential.token).pipe(Effect.mapError(refusedBy)));
   }
-  if (author === CODING_AGENT_AUTHOR.DEVELOPER) {
+  if (author === AGENT_AUTHOR.DEVELOPER) {
     const pusher = yield* Effect.option(app.userPusher(target.userId, agent.repository));
     const developer = Option.flatten(pusher);
     if (Option.isSome(developer)) return identityOf(developer.value.user);
@@ -312,7 +310,7 @@ const commitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIdentity")(func
 /** Who the checkout's commits are by, on a token just minted for the repository: the agent's author settled, then the account it names (`commitIdentity`). */
 const identityOn = (
   target: ConversationTarget,
-  agent: WithRepository<CodingAgent>,
+  agent: WithRepository<Agent>,
   credential: RepositoryCredential,
 ) =>
   Effect.flatMap(agentAuthor(target, agent), (author) =>
@@ -342,7 +340,7 @@ export interface AgentRepositoryRead {
  */
 export const agentRepositoryRead = /* @__PURE__ */ Effect.fn("web/agentRepositoryRead")(function* (
   target: ConversationTarget,
-  agent: WithRepository<CodingAgent>,
+  agent: WithRepository<Agent>,
 ): Effect.fn.Return<AgentRepositoryRead, CheckoutRefused, CheckoutServices> {
   const app = yield* GitHubApp;
   // Note that a store that could not be read refuses as GitHub unavailable, as the checkout always has.
@@ -386,7 +384,7 @@ export type CheckoutDepthChoice = (typeof CHECKOUT_DEPTH)[keyof typeof CHECKOUT_
  */
 export const cloneAgentRepository = /* @__PURE__ */ Effect.fn("web/cloneAgentRepository")(
   function* (
-    agent: WithRepository<CodingAgent>,
+    agent: WithRepository<Agent>,
     sandbox: RepositorySandbox,
     read: AgentRepositoryRead,
     depth: CheckoutDepthChoice = CHECKOUT_DEPTH.SHALLOW,
@@ -411,7 +409,7 @@ export const cloneAgentRepository = /* @__PURE__ */ Effect.fn("web/cloneAgentRep
 export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAgentRepository")(
   function* (
     target: ConversationTarget,
-    agent: WithRepository<CodingAgent>,
+    agent: WithRepository<Agent>,
     sandbox: RepositorySandbox,
   ): Effect.fn.Return<void, CheckoutRefused | StoreFailure, CheckoutServices> {
     const read = yield* agentRepositoryRead(target, agent);
@@ -429,7 +427,7 @@ export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAg
  */
 export const refreshAgentCheckout = /* @__PURE__ */ Effect.fn("web/refreshAgentCheckout")(
   function* (
-    agent: WithRepository<CodingAgent>,
+    agent: WithRepository<Agent>,
     sandbox: RepositorySandbox,
     read: AgentRepositoryRead,
   ): Effect.fn.Return<void, CheckoutRefused> {
@@ -483,7 +481,7 @@ export const openWorkingFolder = /* @__PURE__ */ Effect.fn("web/openWorkingFolde
  */
 export const deepenAgentCheckout = /* @__PURE__ */ Effect.fn("web/deepenAgentCheckout")(function* (
   target: ConversationTarget,
-  agent: WithRepository<CodingAgent>,
+  agent: WithRepository<Agent>,
   sandbox: RepositorySandbox,
 ): Effect.fn.Return<void, CheckoutRefused | StoreFailure, CheckoutServices> {
   if (yield* checkoutDeepened(sandbox).pipe(Effect.mapError(refusedWith))) return;
@@ -506,7 +504,7 @@ export interface AgentDeepenPlan {
  */
 export const agentDeepenPlan = /* @__PURE__ */ Effect.fn("web/agentDeepenPlan")(function* (
   target: ConversationTarget,
-  agent: WithRepository<CodingAgent>,
+  agent: WithRepository<Agent>,
 ): Effect.fn.Return<AgentDeepenPlan, CheckoutRefused | StoreFailure, CheckoutServices> {
   const minted = yield* agentRepositoryToken(target, agent);
   const identity = yield* identityOn(target, agent, minted);
@@ -524,7 +522,7 @@ export const agentDeepenPlan = /* @__PURE__ */ Effect.fn("web/agentDeepenPlan")(
  */
 export const agentCommitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIdentity")(function* (
   target: ConversationTarget,
-  agent: WithRepository<CodingAgent>,
+  agent: WithRepository<Agent>,
 ): Effect.fn.Return<CheckoutIdentity, CheckoutRefused | StoreFailure, CheckoutServices> {
   return yield* identityOn(target, agent, yield* agentRepositoryToken(target, agent));
 });
@@ -572,7 +570,7 @@ export const deepenCheckoutWith = /* @__PURE__ */ Effect.fn("web/deepenCheckoutW
  */
 export const fetchAgentHistory = /* @__PURE__ */ Effect.fn("web/fetchAgentHistory")(function* (
   target: ConversationTarget,
-  agent: WithRepository<CodingAgent>,
+  agent: WithRepository<Agent>,
   sandbox: RepositorySandbox,
 ): Effect.fn.Return<void, CheckoutRefused | StoreFailure, CheckoutServices> {
   if (!(yield* checkoutShallow(sandbox).pipe(Effect.mapError(refusedWith)))) return;

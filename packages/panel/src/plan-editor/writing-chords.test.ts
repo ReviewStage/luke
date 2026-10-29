@@ -44,8 +44,7 @@ afterEach(() => {
 function KeyedWindow({ ran }: { ran: string[] }): ReactElement | null {
   useAppKeymap(true);
   useAppCommand(APP_COMMAND.TOGGLE_SIDEBAR, () => ran.push("toggle sidebar"));
-  useAppCommand(APP_COMMAND.TOGGLE_SPEAKER, () => ran.push("toggle speaker"));
-  useAppCommand(APP_COMMAND.COPY_LINK, () => ran.push("copy link"));
+  useAppCommand(APP_COMMAND.COPY_CONTENT, () => ran.push("copy plan"));
   useAppCommand(APP_COMMAND.TOGGLE_FULL_SCREEN, () => ran.push("toggle full screen"));
   return null;
 }
@@ -80,7 +79,6 @@ const KEYS = {
   b: { key: "b", shifted: "B", code: "KeyB", keyCode: 66 },
   c: { key: "c", shifted: "C", code: "KeyC", keyCode: 67 },
   e: { key: "e", shifted: "E", code: "KeyE", keyCode: 69 },
-  s: { key: "s", shifted: "S", code: "KeyS", keyCode: 83 },
   x: { key: "x", shifted: "X", code: "KeyX", keyCode: 88 },
   "2": { key: "2", shifted: "@", code: "Digit2", keyCode: 50 },
   "8": { key: "8", shifted: "*", code: "Digit8", keyCode: 56 },
@@ -120,22 +118,18 @@ test("⌘B in the plan bolds its words and leaves the sidebar alone, and toggles
   assert.deepEqual(ran, ["toggle sidebar"]);
 });
 
-test("⇧⌘X strikes the plan's words, and ⇧⌘S leaves them and toggles the speaker", () => {
+test("⇧⌘X strikes the plan's words", () => {
   const { ran, handle, element } = mount("Ship the invite flow.\n");
-  press(element, "s", { shift: true });
-  assert.equal(handle.markdown().trim(), "Ship the invite flow.");
-  assert.deepEqual(ran, ["toggle speaker"]);
-
   press(element, "x", { shift: true });
   assert.equal(handle.markdown().trim(), "~~Ship the invite flow.~~");
-  assert.deepEqual(ran, ["toggle speaker"], "the speaker is left as it was");
+  assert.deepEqual(ran, []);
 });
 
-test("⌥⌘C leaves the plan's line as words and copies the link", () => {
+test("⌥⌘C leaves the plan's line as words and copies the plan", () => {
   const { ran, handle, element } = mount("Ship the invite flow.\n");
   press(element, "c", { option: true });
   assert.equal(handle.markdown().trim(), "Ship the invite flow.");
-  assert.deepEqual(ran, ["copy link"]);
+  assert.deepEqual(ran, ["copy plan"]);
 });
 
 test("⌘E sets code, ⌥⌘2 a second heading, and ⇧⌘8 a bulleted list, none of them reaching the window", () => {

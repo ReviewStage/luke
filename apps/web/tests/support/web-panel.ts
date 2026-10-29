@@ -16,14 +16,13 @@ import { installAppBridge } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
 import { installWindowHistory } from "@luke/panel/navigation-history";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
-import { installShellBundles } from "@luke/panel/shell-bundles";
 import { loadTasksFixture } from "@luke/panel/tasks/tasks-fixture-loader";
 import { APP_SETTING_DEFAULTS, NO_EXPERIMENTS } from "@luke/settings";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { browserHistory } from "../../src/app/browser-history";
 import { withLoadLink } from "../../src/app/load-link";
-import { WEB_BUNDLES, webPlatform } from "../../src/app/web-platform";
+import { webPlatform } from "../../src/app/web-platform";
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -82,7 +81,6 @@ export function fixtureBridge(profile: RunProfile): AppBridge {
     ),
     settings: {
       stored: APP_SETTING_DEFAULTS,
-      status: { voiceAvailable: false },
       experiments: NO_EXPERIMENTS,
     },
     version: 1,
@@ -114,7 +112,6 @@ export function installPanelDoors(profile: RunProfile = RUN_PROFILE.IDLE): void 
   installAppBridge(withLoadLink(fixtureBridge(profile)));
   // Nothing counts a surface event here: no host stands behind the fixture.
   installAppPlatform(webPlatform({ recordSurfaceEvent: () => undefined }));
-  installShellBundles(WEB_BUNDLES);
   installWindowHistory(browserHistory());
 }
 

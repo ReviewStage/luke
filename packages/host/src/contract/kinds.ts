@@ -16,8 +16,8 @@ export const ACCOUNT_ACT_KIND = {
 } as const;
 
 /**
- * The account's own asks from Settings and a dictating box: its provider keys,
- * its plan template and that template's history, and a dictated clip's words.
+ * The account's own asks from Settings and a dictating box: its provider keys
+ * and a dictated clip's words.
  */
 export const ACCOUNT_ASK_ACT_KIND = {
   /**
@@ -50,18 +50,6 @@ export const ACCOUNT_ASK_ACT_KIND = {
   GITHUB_TOKEN_READ: "githubToken.read",
   GITHUB_TOKEN_SAVE: "githubToken.save",
   GITHUB_TOKEN_REMOVE: "githubToken.remove",
-  /**
-   * Settings › Plan template: the Markdown the account's new tasks start
-   * from, read as the page opens, and kept as the developer pauses or reset
-   * to the default with null. Each answers the template as the service then
-   * keeps it. Its version history reads a page of revisions and one
-   * revision at a time, and a restore answers the template as a write does.
-   */
-  PLAN_TEMPLATE_READ: "planTemplate.read",
-  PLAN_TEMPLATE_WRITE: "planTemplate.write",
-  PLAN_TEMPLATE_REVISIONS: "planTemplate.revisions",
-  PLAN_TEMPLATE_REVISION: "planTemplate.revision",
-  PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /**
    * Settings › Memory: the facts and conventions the coding agents kept in
    * the workspace Settings shows, shared by its members, read as the page
@@ -125,11 +113,11 @@ export const AGENT_ACT_KIND = {
    * for good (stopped first the same way). The
    * window holds what it draws; nothing here does.
    */
-  CODING_AGENTS_MODELS: "codingAgents.models",
-  CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
-  CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
+  AGENTS_MODELS: "agents.models",
+  AGENTS_DEFAULT_READ: "agents.defaultRead",
+  AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
   /**
-   * The account's hosts as Settings › Agents › Hosts reads and changes
+   * The account's hosts as Settings › Hosts reads and changes
    * them: listed, the beats of the account's devices read, one removed, an install token kept by its hash alone (the
    * window that minted the token keeps it and shows it once), and one revoked.
    */
@@ -138,60 +126,59 @@ export const AGENT_ACT_KIND = {
   HOSTS_REMOVE: "hosts.remove",
   HOSTS_KEEP_INSTALL_TOKEN: "hosts.keepInstallToken",
   HOSTS_REVOKE_INSTALL_TOKEN: "hosts.revokeInstallToken",
-  CODING_AGENTS_LIST: "codingAgents.list",
+  AGENTS_LIST: "agents.list",
   /** One workspace's agents, newest started first: what an automation's Same agent is chosen from. */
-  CODING_AGENTS_WORKSPACE_LIST: "codingAgents.workspaceList",
-  CODING_AGENTS_START: "codingAgents.start",
-  CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  AGENTS_WORKSPACE_LIST: "agents.workspaceList",
+  AGENTS_START: "agents.start",
+  AGENTS_MESSAGES: "agents.messages",
   /**
    * One agent's transcript, a worker's, or a task's planning worker's,
    * followed while the window holds the stream open: its pages, the first
    * from the start and each later one what moved past the last.
    */
-  CODING_AGENTS_TRANSCRIPT: "codingAgents.transcript",
+  AGENTS_TRANSCRIPT: "agents.transcript",
   /** One part of a message of a transcript, whole: what its followed page carried cut, fetched as the window opens it. */
-  CODING_AGENTS_PART: "codingAgents.part",
+  AGENTS_PART: "agents.part",
   /** The page of a followed transcript below the oldest message the window holds, as its newest or last older page named it; or why there is none. */
-  CODING_AGENTS_TRANSCRIPT_OLDER: "codingAgents.transcriptOlder",
-  CODING_AGENTS_MESSAGE: "codingAgents.message",
-  CODING_AGENTS_CHOOSE: "codingAgents.choose",
-  CODING_AGENTS_RENAME: "codingAgents.rename",
-  CODING_AGENTS_SERVERS: "codingAgents.servers",
-  CODING_AGENTS_STOP: "codingAgents.stop",
-  CODING_AGENTS_REWIND: "codingAgents.rewind",
-  CODING_AGENTS_ARCHIVE: "codingAgents.archive",
-  CODING_AGENTS_PIN: "codingAgents.pin",
+  AGENTS_TRANSCRIPT_OLDER: "agents.transcriptOlder",
+  AGENTS_MESSAGE: "agents.message",
+  AGENTS_CHOOSE: "agents.choose",
+  AGENTS_RENAME: "agents.rename",
+  AGENTS_SERVERS: "agents.servers",
+  AGENTS_STOP: "agents.stop",
+  AGENTS_REWIND: "agents.rewind",
+  AGENTS_ARCHIVE: "agents.archive",
+  AGENTS_PIN: "agents.pin",
   /** The account's operator in a workspace, Luke, ensured: the one standing, made where none stands, or, with a reset, a fresh one in place of it. */
-  CODING_AGENTS_ENSURE_OPERATOR: "codingAgents.ensureOperator",
-  CODING_AGENTS_DELETE: "codingAgents.delete",
+  AGENTS_ENSURE_OPERATOR: "agents.ensureOperator",
+  AGENTS_DELETE: "agents.delete",
   /**
    * Which agent's tab the panel shows, or none: what an agent's end leaves no
    * unseen dot for while the window is focused, and what clears that dot.
    */
-  CODING_AGENTS_SHOWN: "codingAgents.shown",
+  AGENTS_SHOWN: "agents.shown",
   /** An agent's unseen dot cleared by hand, without its page being shown: its row's Mark as read. */
-  CODING_AGENTS_SEEN: "codingAgents.seen",
-  CODING_AGENTS_PAGE: "codingAgents.page",
-  /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's span from. */
-  CODING_AGENTS_CALLS: "codingAgents.calls",
+  AGENTS_SEEN: "agents.seen",
+  AGENTS_PAGE: "agents.page",
   /** What one agent published: its branch and pull request as GitHub holds them. */
-  CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
+  AGENTS_PULL_REQUEST: "agents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
-  CODING_AGENTS_CHANGES: "codingAgents.changes",
+  AGENTS_CHANGES: "agents.changes",
   /** One agent's pull request itself, its description, branches, mergeability, and people, which its Pull request tab's overview draws. */
-  CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
+  AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
   /** What the reviewer and label pickers of an agent's Pull request tab offer. */
-  CODING_AGENTS_REVIEW_OPTIONS: "codingAgents.reviewOptions",
+  AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
+  AGENTS_LUKE_TOOLS: "agents.lukeTools",
   /** The checks on one agent's pull request's head, which its Pull request tab's overview draws. */
-  CODING_AGENTS_OVERVIEW_CHECKS: "codingAgents.overviewChecks",
+  AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
   /** One agent's pull request's conversation and where its reviewers stand, which its Pull request tab's overview draws. */
-  CODING_AGENTS_OVERVIEW_CONVERSATION: "codingAgents.overviewConversation",
+  AGENTS_OVERVIEW_CONVERSATION: "agents.overviewConversation",
   /** One image an agent's pull request's overview names, its bytes read by the service on the App's token. */
-  CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
+  AGENTS_GITHUB_IMAGE: "agents.githubImage",
   /** One change to an agent's pull request, such as marking it ready for review, made on GitHub as the account on its own GitHub sign-in. */
-  CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
+  AGENTS_PULL_REQUEST_ACTION: "agents.pullRequestAction",
   /** Which of an agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in. */
-  CODING_AGENTS_PULL_REQUEST_VIEWED: "codingAgents.pullRequestViewed",
+  AGENTS_PULL_REQUEST_VIEWED: "agents.pullRequestViewed",
 } as const;
 
 /**
@@ -209,33 +196,28 @@ export const AGENT_INBOX_ACT_KIND = {
    * stream open: what it holds, whole, each time it changes, or why there
    * is none.
    */
-  CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
-  CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  AGENTS_INBOX_FOLLOW: "agents.inboxFollow",
+  /**
+   * Every inbox item the account reaches, followed while the window holds
+   * the stream open: by the plans and agents with no task they are on,
+   * whole as the stream opens and then those that moved, or why there are
+   * none.
+   */
+  AGENTS_ACCOUNT_ITEMS_FOLLOW: "agents.accountItemsFollow",
+  AGENTS_INBOX_ANSWER: "agents.inboxAnswer",
   /** One open item closed without an answer against the revision the panel drew, under the panel's own key. */
-  CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
+  AGENTS_INBOX_CLOSE: "agents.inboxClose",
   /** A message on one item's thread, open or settled, under the panel's own key; it never answers the item. */
-  CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
+  AGENTS_INBOX_MESSAGE: "agents.inboxMessage",
   /** A new thread with one agent, its subject and first message, under the panel's own key. */
-  CODING_AGENTS_INBOX_START: "codingAgents.inboxStart",
+  AGENTS_INBOX_START: "agents.inboxStart",
   /** One item marked read or unread for the account; it changes neither what the item asks nor whether it waits. */
-  CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",
+  AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
   /** Every item of the account's Inbox marked read, in one workspace or in all; the dots alone. */
-  CODING_AGENTS_INBOX_READ_ALL: "codingAgents.inboxReadAll",
+  AGENTS_INBOX_READ_ALL: "agents.inboxReadAll",
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
-  CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
-  CODING_AGENTS_PICTURE: "codingAgents.picture",
-} as const;
-
-/**
- * Luke's avatar as the windows reach it: the panel's word on it, starting,
- * live on its first frame, or ended and why, taken from the panel alone; and
- * the video tile's Video off, Video on, and Restart video, Luke's avatar asked
- * for on the standing call or taken down, taken from the panel and the
- * floating call window, which draw the tile, alone.
- */
-export const AVATAR_ACT_KIND = {
-  AVATAR_REPORT: "avatar.report",
-  VOICE_SET_VIDEO: "voice.setVideo",
+  AGENTS_INBOX_ATTACHMENT: "agents.inboxAttachment",
+  AGENTS_PICTURE: "agents.picture",
 } as const;
 
 /**
@@ -304,9 +286,9 @@ export const SETTINGS_ACT_KIND = {
  * developer's edit of a field, `TASKS_EDIT`, which answers whether it
  * saved, conflicted with what Luke wrote meanwhile, or failed. Beside them,
  * a page of GitHub's or the web's opened in the browser, the account's own
- * GitHub connected or disconnected, a call about the open task, and its
- * whiteboard saved. And what one task holds, read as its tabs draw it: its
- * earlier work and conversation, a call's messages, its repository's files,
+ * GitHub connected or disconnected. And
+ * what one task holds, read as its tabs draw it: its
+ * earlier work and conversation, its repository's files,
  * folders, skills, pull requests, and issues, a fenced block coloured, its
  * plan's history, pages, pictures, and comments, and a task given its
  * status and priority.
@@ -345,10 +327,6 @@ export const TASKS_ACT_KIND = {
   ADMIN_FAVORITE: "admin.favorite",
   /** The account's GitHub disconnected on the service under the Mac's session; the connection arrives on the document at once. */
   GITHUB_DISCONNECT: "github.disconnect",
-  /** An agent's Call button: a call into that agent of the task the panel has open, opened, or its microphone toggled. */
-  TASKS_TALK: "tasks.talk",
-  /** The open task's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
-  TASKS_BOARD_SAVE: "tasks.boardSave",
   /** A task given its status and priority on the service; answers whether it saved. */
   TASKS_SET_STANDING: "tasks.setStanding",
   /** A File tab's window of a file of the open task's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
@@ -466,7 +444,7 @@ export const TERMINAL_ACT_KIND = {
 } as const;
 
 /**
- * This Mac's `luke-host` as Settings › Agents reaches it
+ * This Mac's `luke-host` as Settings › Hosts reaches it
  * (`this-mac-host.ts`): where it stands, read while the switch is drawn, and
  * an explicit turn-on, which enrolls the Mac again where Luke removed it or
  * the last turn-on failed. Answered by the host, which runs it.
@@ -486,27 +464,6 @@ export const UPDATE_ACT_KIND = {
   UPDATE_INSTALL: "update.install",
   UPDATE_OPEN_RELEASE: "update.openRelease",
   UPDATE_OPEN_CHANGELOG: "update.openChangelog",
-} as const;
-
-/**
- * The voice window's runtime: a command to it from a panel or the call
- * window; the call card's way back, Luke's window brought forward on the
- * call's own agent; the voice window as a GPT Live peer, its SDP offer handed
- * to the host, which creates the one session and answers the SDP, the
- * hang-up it asks the host to decide, and the two reports the host reads its
- * transport and its idle from, none carrying a credential; Escape's stop;
- * the voice diagnostics; and the microphone's privacy settings opened.
- */
-export const VOICE_RUNTIME_ACT_KIND = {
-  VOICE_COMMAND: "voice.command",
-  CALL_SHOW_AGENT: "call.showAgent",
-  VOICE_CREATE_LIVE_SESSION: "voice.createLiveSession",
-  VOICE_END_LIVE_SESSION: "voice.endLiveSession",
-  VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
-  VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
-  VOICE_STOP_SPEAKING: "voice.stopSpeaking",
-  VOICE_DIAGNOSTICS: "voice.diagnostics",
-  MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
 } as const;
 
 /**
@@ -535,13 +492,9 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_INVITATION_CANCEL: "workspace.invitationCancel",
   WORKSPACE_GITHUB_CONNECT: "workspace.githubConnect",
   WORKSPACE_GITHUB_DISCONNECT: "workspace.githubDisconnect",
-  WORKSPACE_LINEAR_CONNECT: "workspace.linearConnect",
-  WORKSPACE_LINEAR_DISCONNECT: "workspace.linearDisconnect",
-  WORKSPACE_LINEAR_ISSUES: "workspace.linearIssues",
   WORKSPACE_SENTRY_READ: "workspace.sentryRead",
   WORKSPACE_SENTRY_INSTALL: "workspace.sentryInstall",
   WORKSPACE_SENTRY_DISCONNECT: "workspace.sentryDisconnect",
-  WORKSPACE_GITHUB_ISSUES: "workspace.githubIssues",
   WORKSPACE_MEMBERS_READ: "workspace.membersRead",
   WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
   /**
@@ -568,8 +521,9 @@ export const WORKSPACE_ACT_KIND = {
 
 /**
  * What a window asks of the system it is drawn on: the microphone asked for
- * and its route read afresh, the notification settings opened, a new mail to the people who make Luke, the panel
- * focused, words copied, a file saved, and feedback sent.
+ * and its route read afresh, the microphone's and the notifications' settings
+ * opened, a new mail to the people who make Luke, the panel focused, words
+ * copied, a file saved, and feedback sent.
  */
 export const WINDOW_SURFACE_ACT_KIND = {
   MICROPHONE_REQUEST: "microphone.request",
@@ -580,6 +534,7 @@ export const WINDOW_SURFACE_ACT_KIND = {
    * presses.
    */
   MICROPHONE_ROUTE: "microphone.route",
+  MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
   NOTIFICATIONS_OPEN_SETTINGS: "notifications.openSettings",
   /** A new message to the people who make Luke, in the system's mail app, to the address main holds. */
   CONTACT_EMAIL: "contact.email",
@@ -602,19 +557,6 @@ export const WINDOW_SURFACE_ACT_KIND = {
   FEEDBACK_SEND: "feedback.send",
 } as const;
 
-/**
- * A task's linked issues, GitHub's and Linear's, as its page asks for them:
- * read with where each stands now, one linked, one's keyword changed, and
- * one let go. Each answers the service's answer whole, or why there is none,
- * which the page says.
- */
-export const TASK_ISSUE_ACT_KIND = {
-  TASK_ISSUES_READ: "taskIssues.read",
-  TASK_ISSUES_LINK: "taskIssues.link",
-  TASK_ISSUES_RELATE: "taskIssues.relate",
-  TASK_ISSUES_UNLINK: "taskIssues.unlink",
-} as const;
-
 /** Every kind the act port answers, one spread per domain, in alphabetical order. */
 export const PORT_ACT_KIND = {
   ...ACCOUNT_ACT_KIND,
@@ -622,7 +564,6 @@ export const PORT_ACT_KIND = {
   ...AGENT_ACT_KIND,
   ...AGENT_INBOX_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
-  ...AVATAR_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
   ...CHANNEL_ACT_KIND,
   ...CHAPTERS_ACT_KIND,
@@ -632,11 +573,9 @@ export const PORT_ACT_KIND = {
   ...MAC_TERMINAL_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
-  ...TASK_ISSUE_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...THIS_MAC_HOST_ACT_KIND,
   ...UPDATE_ACT_KIND,
-  ...VOICE_RUNTIME_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,
   ...WORKSPACE_ACT_KIND,
 } as const;
@@ -649,12 +588,10 @@ export type PortActKind = (typeof PORT_ACT_KIND)[keyof typeof PORT_ACT_KIND];
  * the host's procedures answer every other.
  */
 export const PLATFORM_PORT_ACT_KIND = {
-  ...AVATAR_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...UPDATE_ACT_KIND,
-  ...VOICE_RUNTIME_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,
 } as const;
 

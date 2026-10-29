@@ -1,11 +1,8 @@
 /**
  * window-root.tsx -- what every window's entry runs to draw: the one root, the surface it mounts once the window's document reads, and tracing once it has drawn.
  *
- * Each window role has an entry of its own, so a window parses only the
- * surface it mounts: the panels `index.tsx`, the hidden voice window
- * `voice/index.tsx`, and the floating call window `call/index.tsx`, each
- * loaded by its own document, and the code they have in common lands in
- * shared chunks. This module is the startup they share, and a runtime edge
+ * The panel's entry (`index.tsx`, loaded by `index.html`) runs it. This
+ * module is the window's startup, and a runtime edge
  * (`tools/anti-slop/effect-edges.json`) where it runs the first read: it is
  * evaluated once per window, so no two windows share a browser registry.
  */

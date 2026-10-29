@@ -1,11 +1,11 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { keptImageOf } from "@luke/database/models/attached-file-parts";
 import {
-  type CodingAgent,
+  type Agent,
   type LineSent,
   lineSendersOf,
-  listPublishedCodingAgentsById,
-} from "@luke/database/models/coding-agent-store";
+  listPublishedAgentsById,
+} from "@luke/database/models/agent-store";
+import { keptImageOf } from "@luke/database/models/attached-file-parts";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import {
   listMessagesBefore,
@@ -14,7 +14,7 @@ import {
   type StoredMessageRecord,
 } from "@luke/database/models/message-reads";
 import { readTaskHeader } from "@luke/database/models/task-store";
-import type { StoredStartedFrom } from "@luke/database/schemas/coding-agent";
+import type { StoredStartedFrom } from "@luke/database/schemas/agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   firstMessageParts,
@@ -31,16 +31,17 @@ import {
 } from "@luke/features/agent-replay";
 import { CLAUDE_CODE_TOOL, CODEX_TOOL } from "@luke/features/agent-tools";
 import {
+  AGENT_ATTACHMENT_TYPE,
+  AGENT_BOUNDS,
+  type AgentAttachment,
+  type AgentAttachmentType,
+  type AgentPullRequest,
+  type AgentStartFrom,
   base64Bytes,
-  CODING_AGENT_ATTACHMENT_TYPE,
-  CODING_AGENT_BOUNDS,
-  type CodingAgentAttachment,
-  type CodingAgentAttachmentType,
-  type CodingAgentPullRequest,
-  type CodingAgentStartFrom,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { isVideoType } from "@luke/features/conversation-picture-wire";
+import { mentionMarkdownLink } from "@luke/features/link-grammar";
 import { agentName } from "@luke/features/model-label";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { CALL_KIND, CALL_WORDS as ROW_CALL_WORDS } from "@luke/features/turn-rows";
@@ -188,7 +189,7 @@ const REPLAY_WORDS = {
   DEVELOPER: "The developer",
   LUKE: "Luke",
   FORMER_MEMBER: "A former member",
-  STARTING_AGENT: "The coding agent that started it",
+  STARTING_AGENT: "The agent that started it",
   ATTACHED: "Attached file",
 } as const;
 
@@ -198,7 +199,7 @@ const NOTE_SPEAKER: ReadonlyMap<StartNoteHeading, string> = new Map([
   [START_NOTE_HEADING.AGENT, REPLAY_WORDS.STARTING_AGENT],
 ]);
 
-const ATTACHMENT_TYPES: ReadonlySet<string> = new Set(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
+const ATTACHMENT_TYPES: ReadonlySet<string> = new Set(Object.values(AGENT_ATTACHMENT_TYPE));
 
 /** What a source that left no branch, carried none, and could not be copied is taken up from. */
 const NO_BRANCH_WORDS =
@@ -418,29 +419,25 @@ function noteStep(heading: StartNoteHeading, text: string, sentAt: Date | undefi
 }
 
 /** A file the source's prompt carried, as a Start attaches one again; nothing where eve kept no bytes of it. */
-function attachmentOf(
-  url: string,
-  mediaType: string,
-  name: string,
-): CodingAgentAttachment | undefined {
+function attachmentOf(url: string, mediaType: string, name: string): AgentAttachment | undefined {
   const prefix = `data:${mediaType};base64,`;
   if (!url.startsWith(prefix) || !ATTACHMENT_TYPES.has(mediaType)) return undefined;
   // SAFETY: the type was checked against the vocabulary just above.
   return {
     name,
-    mediaType: mediaType as CodingAgentAttachmentType,
+    mediaType: mediaType as AgentAttachmentType,
     data: url.slice(prefix.length),
   };
 }
 
 /** The files a source's prompt carried, as the new agent takes them up: those attached again, and the names of those that cannot be. */
 interface SourceFiles {
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   readonly unkept: readonly string[];
 }
 
 /** The bytes a message's files hold together, as the wire bounds them. */
-function filesBytes(files: readonly CodingAgentAttachment[]): number {
+function filesBytes(files: readonly AgentAttachment[]): number {
   return files.reduce((sum, file) => sum + base64Bytes(file.data), 0);
 }
 
@@ -450,7 +447,7 @@ function filesBytes(files: readonly CodingAgentAttachment[]): number {
  * the source's conversation, which a row names by id with no bytes once it
  * was kept (`attached-file-parts.ts`); nothing where neither stands.
  */
-const sourceFileOf = (source: CodingAgent, file: FileUIPart, name: string) =>
+const sourceFileOf = (source: Agent, file: FileUIPart, name: string) =>
   Effect.gen(function* () {
     const inline = attachmentOf(file.url, file.mediaType, name);
     const kept = keptImageOf(file);
@@ -462,7 +459,7 @@ const sourceFileOf = (source: CodingAgent, file: FileUIPart, name: string) =>
       name,
       mediaType: picture.value.contentType,
       data: Buffer.from(picture.value.bytes).toString("base64"),
-    } satisfies CodingAgentAttachment;
+    } satisfies AgentAttachment;
   });
 
 /**
@@ -473,13 +470,13 @@ const sourceFileOf = (source: CodingAgent, file: FileUIPart, name: string) =>
  * they are what the developer attached now.
  */
 const filesOf = (
-  source: CodingAgent,
+  source: Agent,
   first: StoredMessageRecord | undefined,
-  noteFiles: readonly CodingAgentAttachment[],
+  noteFiles: readonly AgentAttachment[],
 ) =>
   Effect.gen(function* () {
     const files = (first?.message.parts ?? []).filter(isFileUIPart);
-    const attachments: CodingAgentAttachment[] = [];
+    const attachments: AgentAttachment[] = [];
     const unkept: string[] = [];
     let count = noteFiles.length;
     let bytes = filesBytes(noteFiles);
@@ -488,8 +485,7 @@ const filesOf = (
       const attached = yield* sourceFileOf(source, file, name);
       const size = attached === undefined ? 0 : base64Bytes(attached.data);
       const fits =
-        count < CODING_AGENT_BOUNDS.MAX_ATTACHMENTS &&
-        bytes + size <= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES;
+        count < AGENT_BOUNDS.MAX_ATTACHMENTS && bytes + size <= AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES;
       if (attached === undefined || !fits) {
         unkept.push(name);
       } else {
@@ -519,7 +515,7 @@ interface SourceRecords {
  * a page does not read, which the Start answers as unavailable, because a
  * replay missing rows would pass for the whole.
  */
-const recordsOf = (source: CodingAgent, messageId: string | undefined) =>
+const recordsOf = (source: Agent, messageId: string | undefined) =>
   Effect.gen(function* () {
     const { userId, conversationId } = source;
     const opening = yield* listMessagesPast(
@@ -577,19 +573,19 @@ function capitalized(words: string): string {
 }
 
 /** An agent as the preamble names it: as its tab does (`agentName`), and its id. */
-function agentNamedWithId(agent: CodingAgent): string {
+function agentNamedWithId(agent: Agent): string {
   return `"${agentName(agent)}" (agent id ${agent.id})`;
 }
 
 /** A pull request as it follows the branch it is from; nothing where there is none. */
-function pullWords(published: CodingAgentPullRequest | null): string {
+function pullWords(published: AgentPullRequest | null): string {
   return published === null
     ? ""
-    : `, with its pull request #${published.number} (${published.url})`;
+    : `, with its pull request ${mentionMarkdownLink(`#${published.number}`, published.url)}`;
 }
 
 /** Whether a pull request is still open, a draft among them, so work that goes on goes on in it. */
-function stillOpen(published: CodingAgentPullRequest | null): boolean {
+function stillOpen(published: AgentPullRequest | null): boolean {
   return (
     published !== null &&
     (published.state === PULL_REQUEST_STATE.OPEN || published.state === PULL_REQUEST_STATE.DRAFT)
@@ -603,11 +599,7 @@ function stillOpen(published: CodingAgentPullRequest | null): boolean {
  * answered no, so the continue opens a pull request of its own rather than
  * pushing to a branch that may be done.
  */
-const goesOnInPullRequest = (
-  userId: string,
-  source: CodingAgent,
-  stored: CodingAgentPullRequest | null,
-) =>
+const goesOnInPullRequest = (userId: string, source: Agent, stored: AgentPullRequest | null) =>
   source.branch === null || !stillOpen(stored)
     ? Effect.succeed(false)
     : agentPublished(userId, source).pipe(
@@ -640,16 +632,15 @@ function carryOntoWords(copied: string, branch: string): string {
 /** The work a source that made no branch of its own took up: the agent it came from, that agent's pull request, and the branch that agent's work was copied to for the source, where it was. */
 interface CarriedWork {
   /** None where that agent can no longer be read, and only the copy made of its work stands. */
-  readonly agent: CodingAgent | undefined;
-  readonly published: CodingAgentPullRequest | null;
+  readonly agent: Agent | undefined;
+  readonly published: AgentPullRequest | null;
   readonly copiedBranch: string | undefined;
 }
 
 /** Where the work a source carried stands, for a source that made no branch of its own: the copy made for it of the agent it took up, or that agent's own branch and pull request. */
 function carriedWhere(carried: CarriedWork): string {
   const { agent, copiedBranch } = carried;
-  const named =
-    agent === undefined ? "another coding agent" : `the coding agent ${agentNamedWithId(agent)}`;
+  const named = agent === undefined ? "another agent" : `the agent ${agentNamedWithId(agent)}`;
   const lead = `It never made a branch of its own: it took up the work of ${named}`;
   const branch = agent?.branch ?? null;
   const own =
@@ -679,8 +670,8 @@ function carriedWhere(carried: CarriedWork): string {
  * own, opens its own.
  */
 function whereOf(
-  source: CodingAgent,
-  published: CodingAgentPullRequest | null,
+  source: Agent,
+  published: AgentPullRequest | null,
   copy: SnapshotOutcome,
   carried: CarriedWork | undefined,
   inPullRequest: boolean,
@@ -696,7 +687,7 @@ function whereOf(
         ? ` Its own branch was \`${source.branch}\`${pull}.`
         : taken === undefined || taken.branch === null
           ? ""
-          : ` It made no branch of its own; the coding agent it took up, ${agentNamedWithId(taken)}, worked on \`${taken.branch}\`${pullWords(carried?.published ?? null)}.`;
+          : ` It made no branch of its own; the agent it took up, ${agentNamedWithId(taken)}, worked on \`${taken.branch}\`${pullWords(carried?.published ?? null)}.`;
     if (inPullRequest && source.branch !== null) {
       return (
         `Its checkout, ${what}, is copied to the branch \`${copy.branch}\`, made for you: ${fetchWords(copy.branch)}.` +
@@ -738,8 +729,8 @@ function forkCaveat(forked: boolean, edited: readonly string[] | undefined): str
 
 /** What the new agent is told before the steps: whose work it takes up and how, where that work stands, and what was left out. */
 function preambleOf(
-  source: CodingAgent,
-  published: CodingAgentPullRequest | null,
+  source: Agent,
+  published: AgentPullRequest | null,
   copy: SnapshotOutcome,
   carried: CarriedWork | undefined,
   forked: { readonly at: boolean; readonly edited: readonly string[] | undefined },
@@ -749,8 +740,8 @@ function preambleOf(
 ): string {
   const name = agentNamedWithId(source);
   const lead = forked.at
-    ? `You are a fork of the coding agent ${name}, taken at one of its messages: you start from its transcript as it stood there, and it may have gone on since without you.`
-    : `You continue the work of the coding agent ${name}, which stopped before it was done.`;
+    ? `You are a fork of the agent ${name}, taken at one of its messages: you start from its transcript as it stood there, and it may have gone on since without you.`
+    : `You continue the work of the agent ${name}, which stopped before it was done.`;
   const where = `${whereOf(source, published, copy, carried, inPullRequest)}${forkCaveat(forked.at, forked.edited)}`;
   const left = counts.total - counts.kept - counts.summarized;
   const unfit = counts.total - counts.kept;
@@ -778,12 +769,12 @@ function preambleOf(
 
 /** What a Start from another agent is handed and runs on: the source's brief, the replay, the source's files that fit beside the note's, the choice and servers it runs on unless the Start names its own, the words its servers are read from, and what the new agent keeps of where it came from. */
 export interface StartFrom {
-  readonly source: CodingAgent;
+  readonly source: Agent;
   /** The agents the source's work came down through, the source first, read back while one made no branch of its own (`lineageOf`); whose context the replay is bounded by is read from the first that measured one. */
-  readonly lineage: readonly CodingAgent[];
+  readonly lineage: readonly Agent[];
   /** The source's prompt as the new agent's prompt; none where the source was handed the plan, which the new agent is handed as it stands now. */
   readonly prompt: string | undefined;
-  readonly attachments: readonly CodingAgentAttachment[];
+  readonly attachments: readonly AgentAttachment[];
   /** Every step the replay could hand on, oldest first, its chain's carried ahead of its own, before any bound; and how many there were. */
   readonly steps: readonly ReplayStep[];
   readonly totalSteps: number;
@@ -799,7 +790,7 @@ export interface StartFrom {
 
 /** What a replay says of where it came from, beside its steps: the source and its pull request, the copy of its work, the fork and the files edited after it, the files not passed on, and the message it was forked at. */
 interface ReplayTold {
-  readonly published: CodingAgentPullRequest | null;
+  readonly published: AgentPullRequest | null;
   readonly copy: SnapshotOutcome;
   /** The work a source that made no branch of its own carried, where an agent before it left a branch. */
   readonly carried: CarriedWork | undefined;
@@ -885,7 +876,7 @@ function editedFiles(part: StoredToolPart): readonly string[] {
  * the fork or naming some of the files as all of them, because the fork
  * replays none of those rows and only its caveat names them.
  */
-const editedAfter = (source: CodingAgent, cutSeq: number, rest: Parts) =>
+const editedAfter = (source: Agent, cutSeq: number, rest: Parts) =>
   Effect.gen(function* () {
     const files = new Set(rest.filter(isStoredToolPart).flatMap(editedFiles));
     // A cursor past every revision reads the rows after the cut alone, never one amended before it.
@@ -937,15 +928,15 @@ function sameRepository(one: string | null, other: string | null): boolean {
  * that the walk goes on past the work it found, because the context that
  * bounds the replay is that of the first agent that measured one.
  */
-const lineageOf = (userId: string, source: CodingAgent, repository: string | null) =>
+const lineageOf = (userId: string, source: Agent, repository: string | null) =>
   Effect.gen(function* () {
-    const lineage: CodingAgent[] = [source];
+    const lineage: Agent[] = [source];
     let carried: CarriedWork | undefined;
     let at = source;
     for (let depth = 0; depth < REPLAY_BOUNDS.CHAIN_DEPTH; depth += 1) {
       const link = at.startedFrom;
       if (at.branch !== null || link === null || !sameRepository(at.repository, repository)) break;
-      const [found] = yield* listPublishedCodingAgentsById(userId, [link.agentId]);
+      const [found] = yield* listPublishedAgentsById(userId, [link.agentId]);
       const reached =
         found !== undefined &&
         found.agent.taskId === source.taskId &&
@@ -1053,9 +1044,9 @@ function transcriptSteps(
 
 /**
  * Where a Start puts its agent: a task, or a workspace with no task and the
- * repository the agent clones there, or none, which only the member's
- * operator stands in (`start.ts`'s `landingOf`); an agent it is started
- * from must stand in the same place.
+ * repository the agent clones there, or none, where the member's operator
+ * and any coder handed words alone stand (`start.ts`'s `landingOf`); an
+ * agent it is started from must stand in the same place.
  */
 export type StartWhere =
   | { readonly taskId: string }
@@ -1085,13 +1076,11 @@ const placeRepository = (userId: string, place: StartWhere) =>
 export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   place: StartWhere,
-  from: CodingAgentStartFrom,
-  noteFiles: readonly CodingAgentAttachment[],
+  from: AgentStartFrom,
+  noteFiles: readonly AgentAttachment[],
   idempotencyKey: string,
 ): Effect.fn.Return<StartFrom, HostedRefusal, DatabaseServices | SourceCopyServices> {
-  const [found] = yield* hostedStoreOrUnavailable(
-    listPublishedCodingAgentsById(userId, [from.agentId]),
-  );
+  const [found] = yield* hostedStoreOrUnavailable(listPublishedAgentsById(userId, [from.agentId]));
   const inPlace =
     found !== undefined &&
     found.agent.taskId === place.taskId &&

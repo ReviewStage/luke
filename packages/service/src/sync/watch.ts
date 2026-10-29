@@ -14,7 +14,7 @@
  * nothing waits as it always has.
  */
 import type { SyncTopic } from "@luke/database/sync/notification";
-import { Context, type Duration, Effect, type Scope } from "effect";
+import { Context, type Duration, Effect, Option, type Scope } from "effect";
 
 /** The topics a watch with none names: it waits its fallback alone. */
 export const NO_TOPICS: readonly SyncTopic[] = [];
@@ -31,6 +31,12 @@ export interface SyncWatch {
    * where the hub cannot wake it.
    */
   readonly next: Effect.Effect<readonly string[]>;
+  /**
+   * The instant, in clock milliseconds, the earliest write the last `next`
+   * answered was heard, which is how long a reader that read after it
+   * took to answer; none where that `next` answered no write.
+   */
+  readonly heardAt: Effect.Effect<Option.Option<number>>;
 }
 
 export interface SyncShape {
@@ -48,6 +54,7 @@ export interface SyncShape {
 /** A watch only its clock wakes. */
 export const clockWatch = (fallback: Duration.Duration): SyncWatch => ({
   next: Effect.as(Effect.sleep(fallback), NO_TXIDS),
+  heardAt: Effect.succeed(Option.none()),
 });
 
 /** Luke Sync turned off: every watch waits on its clock. */

@@ -139,7 +139,7 @@ export function resultPageWord(page: SettingsView): string {
  * What an empty search says, the words module's miss line and then what to try,
  * because a miss that only says it missed leaves the reader nothing to do.
  */
-const SETTINGS_NO_MATCH_WORDS = `${noMatchWords(TERM.RESULT)}. Try a page's name, such as Voice, or fewer words.`;
+const SETTINGS_NO_MATCH_WORDS = `${noMatchWords(TERM.RESULT)}. Try a page's name, such as Appearance, or fewer words.`;
 
 /** The words every integration's row can be found by, beside its own name. */
 const INTEGRATION_WORDS = "connect disconnect integration mcp";
@@ -238,24 +238,15 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Delete account", "account erase remove"],
         }
       : undefined,
-    // The Voice page's permission row, drawn once there is a voice to reach and a microphone to ask for.
-    input.settings.voiceAvailable && input.capabilities.includes(HOST_CAPABILITY.MICROPHONE)
+    // This Mac's microphone permission row, drawn wherever there is a microphone to ask for.
+    input.capabilities.includes(HOST_CAPABILITY.MICROPHONE)
       ? {
           id: SETTINGS_SEARCH_ROW.MICROPHONE,
           label: "Microphone",
-          page: SETTINGS_VIEW.VOICE,
-          haystack: ["Microphone", "permission access allow privacy system settings"],
-        }
-      : undefined,
-    // The account's plan template, which is the account's on the service: drawn once an account is signed in.
-    input.accountDrawn
-      ? {
-          id: SETTINGS_SEARCH_ROW.PLAN_TEMPLATE,
-          label: "Plan template",
-          page: SETTINGS_VIEW.PLAN_TEMPLATE,
+          page: SETTINGS_VIEW.THIS_MAC,
           haystack: [
-            "Plan template",
-            "new task plan starter document markdown sections headings default",
+            "Microphone",
+            "permission access allow privacy system settings dictation dictate",
           ],
         }
       : undefined,
@@ -271,26 +262,26 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     // The coding agents' default, which is the account's on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {
-          id: SETTINGS_SEARCH_ROW.CODING_AGENT_MODEL,
+          id: SETTINGS_SEARCH_ROW.AGENT_MODEL,
           label: "Default model",
-          page: SETTINGS_VIEW.CODING_AGENTS,
-          haystack: ["Default model", "model coding agent claude gpt start"],
+          page: SETTINGS_VIEW.AGENTS,
+          haystack: ["Default model", "model agent claude gpt start"],
         }
       : undefined,
     input.accountDrawn
       ? {
-          id: SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT,
+          id: SETTINGS_SEARCH_ROW.AGENT_EFFORT,
           label: "Effort",
-          page: SETTINGS_VIEW.CODING_AGENTS,
-          haystack: ["Effort", "default effort coding agent reasoning low medium high max"],
+          page: SETTINGS_VIEW.AGENTS,
+          haystack: ["Effort", "default effort agent reasoning low medium high max"],
         }
       : undefined,
     input.accountDrawn
       ? {
-          id: SETTINGS_SEARCH_ROW.CODING_AGENT_FAST,
+          id: SETTINGS_SEARCH_ROW.AGENT_FAST,
           label: "Fast",
-          page: SETTINGS_VIEW.CODING_AGENTS,
-          haystack: ["Fast", "coding agent fast version speed quick model"],
+          page: SETTINGS_VIEW.AGENTS,
+          haystack: ["Fast", "agent fast version speed quick model"],
         }
       : undefined,
     // The chapters model, which is the account's on the service: drawn once an account is signed in.
@@ -298,7 +289,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       ? {
           id: SETTINGS_SEARCH_ROW.CHAPTERS_MODEL,
           label: "Chapters model",
-          page: SETTINGS_VIEW.CODING_AGENTS,
+          page: SETTINGS_VIEW.AGENTS,
           haystack: [
             "Chapters model",
             "pull request chapters generate claude haiku sonnet opus review",
@@ -310,7 +301,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       ? {
           id: SETTINGS_SEARCH_ROW.API_KEY_ANTHROPIC,
           label: "Claude",
-          page: SETTINGS_VIEW.CODING_AGENTS,
+          page: SETTINGS_VIEW.AGENTS,
           haystack: [
             "Claude",
             "claude code anthropic api key byok own key claude plan subscription setup-token max pro billing provider credential",
@@ -321,11 +312,20 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       ? {
           id: SETTINGS_SEARCH_ROW.API_KEY_OPENAI,
           label: "Codex",
-          page: SETTINGS_VIEW.CODING_AGENTS,
+          page: SETTINGS_VIEW.AGENTS,
           haystack: [
             "Codex",
-            "openai api key byok own key gpt chatgpt plan subscription billing provider credential voice call dictation dictate",
+            "openai api key byok own key gpt chatgpt plan subscription billing provider credential dictation dictate",
           ],
+        }
+      : undefined,
+    // The Hosts page's Add hosts button, drawn once an account is signed in, under the machines the service lists.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.ADD_HOSTS,
+          label: "Add hosts",
+          page: SETTINGS_VIEW.HOSTS,
+          haystack: ["Add hosts", "machine host server linux mac install luke-host"],
         }
       : undefined,
     // The Workspace page's groups, as it draws them for the workspace it
@@ -362,7 +362,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           page: SETTINGS_VIEW.WORKSPACE,
           haystack: [
             WORKSPACE_CONNECTIONS,
-            "integrations GitHub Linear issues repositories connect choose manage disconnect organization",
+            "integrations GitHub repositories connect choose manage disconnect organization",
           ],
         }
       : undefined,

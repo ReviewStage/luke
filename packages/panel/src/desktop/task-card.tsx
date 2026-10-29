@@ -4,7 +4,6 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import {
   AttentionMark,
   AVATAR_SIZE,
-  Badge,
   CountParts,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -15,24 +14,24 @@ import {
   linesCount,
   TaskAgentsMark,
   TaskPriorityMark,
-  TaskStatusMark as TaskStatusGlyph,
+  TaskStatusMark,
   TIME_LOOK,
   Time,
+  Tooltip,
 } from "@luke/ui";
 import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { repositoryPageUrl } from "@luke/ui/tasks-model";
-import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { useCreator, useMemberDirectory, usePerson } from "../member-directory.js";
 import { useActorDoor } from "../person-door.js";
 import { RepositoryPicture } from "../repository-picture.js";
+import { agentName, pullRequestNumberLabel } from "../tasks/agent-model.js";
 import { WorkspaceDirectory } from "../tasks/chip-cards.js";
-import { agentName, pullRequestNumberLabel } from "../tasks/coding-agent-model.js";
 import { PullRequestMark } from "../tasks/pull-request-mark.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import {
   NO_ASSIGNEE_WORDS,
-  TASK_CARD_STANDING,
   TASK_PRIORITY_WORDS,
   TASK_STATUS_WORDS,
   TaskKey,
@@ -42,6 +41,7 @@ import { useTaskMaker } from "../tasks/use-task-origin.js";
 import { useTaskWork } from "../tasks/use-task-work.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { strandedHome } from "./move-task-dialog.js";
+import { priorityOf, statusOf } from "./task-row-parts.js";
 import { WorkspaceRef } from "./workspace-ref.js";
 
 /**
@@ -49,23 +49,26 @@ import { WorkspaceRef } from "./workspace-ref.js";
  *
  * The icon is how the task's agents stand, most pressing first: a question
  * waiting on the reader, a failure, an agent at work, or the pull request
- * they left, in `@luke/ui`'s `TaskAgentsMark` (`task-agents-model.ts`). The card names the task, its repository, and
- * how long ago it was updated at its head, in a workspace others share who
- * created it, then a row for each of its
+ * they left, in `@luke/ui`'s `TaskAgentsMark` (`task-agents-model.ts`). The card leads, as the
+ * task board's card does, with its status's mark and its name, its key, its
+ * repository, and how long ago it was updated under the name, and its
+ * priority's mark and its assignee's face in the corner, icons alone, each
+ * saying its words to a screen reader and to a pointer resting on it; it
+ * only says where the task stands, so none of them is a picker. Then a row for each of its
  * agents, drawn as its tab draws it: its harness's mark wearing where it
  * stands, its tab's label, and a failure's mark at its end, with no word for where it stands, since no
  * agent anywhere else in the window says one. Then a row for each of its
- * pull requests, its mark, and its size.
+ * pull requests, its mark, and its size, and at its foot, in a workspace
+ * others share, who created it.
  * Each list names every one, scrolling past a few rows' height rather than
  * counting the rest. Everything is read from the task list and what the
  * window holds beside it (`use-task-work.ts`), so the card fetches nothing.
  *
- * Three of its lines are buttons, as a GitHub hover card's are: the
- * repository opens its page on GitHub, a pull request its agent's Pull
- * request tab where the window knows the agent and GitHub otherwise, and an agent
- * opens the task on its tab. Each is also offered where the card is not:
- * the task's menu opens the repository, and the agent's tab its pull
- * request. The rest are facts, left as text. Its rows are `@luke/ui`'s
+ * Its list rows are buttons, as a GitHub hover card's are: a pull request
+ * opens its agent's Pull request tab where the window knows the agent and
+ * GitHub otherwise, and an agent opens the task on its tab; the creator's
+ * line opens their page where the window offers one. The rest are facts,
+ * left as text, the repository among them, which the task's menu opens. Its rows are `@luke/ui`'s
  * `HoverCardRow`, set as a menu's rows are, and a pinned tab's card
  * (`sidebar-pinned-tab.tsx`) is drawn from the same rows
  * (`RepositoryDetail`, `PullRequestLine`).
@@ -93,20 +96,13 @@ export const TASK_MARK_GLYPH =
 
 /**
  * The one icon at a task row's end, before its time: how its agents stand
- * and whether a question waits on the reader (`TaskAgentsMark`). Note that
+ * (`TaskAgentsMark`). Note that
  * a task whose repository belongs to another of the account's workspaces
  * wears no mark of its own here, because its card and its banner name that
  * workspace, and the row's one icon stays how its agents stand.
  */
-export function TaskRowStatus({
-  task,
-  waiting,
-}: {
-  task: TaskSummary;
-  /** How many of the task's questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
-  waiting: number;
-}): React.JSX.Element | null {
-  return <TaskAgentsMark agents={task.agents} waiting={waiting} />;
+export function TaskRowStatus({ task }: { task: TaskSummary }): React.JSX.Element | null {
+  return <TaskAgentsMark agents={task.agents} />;
 }
 
 /** A repository's line under a card's name, its owner's picture before it, which opens it on GitHub. */
@@ -171,7 +167,7 @@ function CreatorDetail({
           {maker === undefined
             ? `Created by ${by} · `
             : `Created by ${actorName(maker.actor)} for ${by}${maker.fromTask === undefined ? "" : ` · from ${maker.fromTask}`} · `}
-          <Time at={task.createdAt} now={now} hint={false} look={TIME_LOOK.AGO} />
+          <Time at={task.createdAt} now={now} hint={false} look={TIME_LOOK.PROVENANCE} />
         </>
       }
       onPress={door}
@@ -236,11 +232,12 @@ export function PullRequestLine({
 }
 
 /**
- * The card a sidebar task hangs: its name, wrapped to two lines, and how
- * long ago it was updated at the head's right; its repository under the
- * name, and, where others share its workspace and the list names its
- * creator, who created it; then every one of its agents and its pull
- * requests, each list scrolling past a few rows' height. A card hung
+ * The card a sidebar task hangs: its status's mark and its name, wrapped to
+ * two lines, its key, its repository, and how long ago it was updated under
+ * the name, and its priority and assignee as marks at the head's right
+ * (`TaskSub`, `TaskMarks`); then every one of its agents and its pull
+ * requests, each list scrolling past a few rows' height, and, where others
+ * share its workspace and the list names its creator, who created it. A card hung
  * from a place within the task, a section or a version a chip names
  * (`../tasks/chip-cards.tsx`), says that place on its own line in their
  * stead.
@@ -248,9 +245,7 @@ export function PullRequestLine({
 export function TaskCard({
   task,
   models,
-  pictures,
   now,
-  onOpenGitHub,
   onShowAgent,
   stranded,
   shared,
@@ -259,7 +254,7 @@ export function TaskCard({
   workspaceName,
 }: {
   task: TaskSummary;
-  /** The name of the task's workspace, which its key is read under; none where the window holds no such workspace, and the card says no key. */
+  /** The name of the task's workspace, which its key is read under; none where the window holds no such workspace, and the card's sub says no key. */
   workspaceName?: string | undefined;
   /** The place within the task the card is hung for, its glyph and its words, said under the head in the agents' and pull requests' stead. */
   focus?: { readonly glyph: React.ReactNode; readonly words: React.ReactNode } | undefined;
@@ -273,18 +268,13 @@ export function TaskCard({
   readerId?: string | undefined;
   /** The catalog as last read, which names each agent's model; empty before the first read. */
   models: readonly CatalogModel[];
-  /** Whether owners' pictures are drawn at all: not in a fixture run. */
-  pictures: boolean;
   /** The time the card's times are counted back from. */
   now: number;
-  /** Opens a page on GitHub: the repository's, or a pull request's. */
-  onOpenGitHub: (url: string) => void;
   /** Opens the task on one of its agents' tabs. */
   onShowAgent: (agentId: string) => void;
-  /** The workspace the task's repository belongs to, where the reader may move it there, which the card names under the repository. */
+  /** The workspace the task's repository belongs to, where the reader may move it there, which the card names at its foot. */
   stranded?: Workspace | undefined;
 }): React.JSX.Element {
-  const { repository } = task;
   const { members } = useMemberDirectory();
   const { agents: agentRows, pullRequests: pullRequestRows } = useTaskWork(task);
   // Note that a task Luke or an agent made says so in a workspace of one too, where its member's own needs no saying.
@@ -293,10 +283,15 @@ export function TaskCard({
     (task.createdBy !== undefined || task.ownerId !== undefined);
   return (
     <HoverCard data-task-card="">
-      <TaskStanding task={task} workspaceName={workspaceName} />
       <HoverCardHead
+        glyph={
+          <StandingMark words={`Status: ${TASK_STATUS_WORDS[statusOf(task)]}`}>
+            <TaskStatusMark status={statusOf(task)} />
+          </StandingMark>
+        }
         name={task.name}
-        corner={<Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />}
+        sub={<TaskSub task={task} workspaceName={workspaceName} now={now} />}
+        corner={<TaskMarks task={task} />}
       />
       {focus === undefined ? null : (
         <>
@@ -334,19 +329,12 @@ export function TaskCard({
           </HoverCardList>
         </>
       )}
-      {/* Where the task lives and who made it stand at the card's foot, under what is moving on it. */}
-      {repository === null && !creatorShown && stranded === undefined ? null : (
+      {/* Who made the task, and where its repository belongs, stand at the card's foot, under what is moving on it. */}
+      {!creatorShown && stranded === undefined ? null : (
         <>
           {focus !== undefined || agentRows.length > 0 || pullRequestRows.length > 0 ? (
             <HoverCardRule />
           ) : null}
-          {repository === null ? null : (
-            <RepositoryDetail
-              repository={repository}
-              pictures={pictures}
-              onOpenGitHub={onOpenGitHub}
-            />
-          )}
           {creatorShown ? <CreatorDetail task={task} readerId={readerId} now={now} /> : null}
           {stranded === undefined ? null : (
             <HoverCardRow
@@ -366,57 +354,88 @@ export function TaskCard({
 }
 
 /**
- * Where a task stands, as its card leads with it: its key in plain words, as
- * every place draws it (`TaskKey`), then its status and its priority, each a
- * small chip of its mark and its words; none it has not got, as a task from
- * a service before keys, statuses, or priorities. Then who is on it, their
- * face and name, or the dashed unassigned mark and No assignee, as the
- * task's page's chip says it; the card only says, so it is no picker.
+ * One mark of where a task stands, as its board card draws it, named for a
+ * screen reader by `words`, "Status: In progress", which a pointer resting
+ * on it is told too, as the board's chip tells it, or hangs `card` in their
+ * place, as an assignee's face hangs theirs. It only says: no press, no menu.
  */
-function TaskStanding({
-  task,
-  workspaceName,
+function StandingMark({
+  words,
+  card,
+  children,
 }: {
-  task: TaskSummary;
-  workspaceName: string | undefined;
-}): React.JSX.Element | null {
-  const keyed = task.number !== undefined && workspaceName !== undefined;
-  // Note that a task with nothing else to stand on and no one on it, as one from a service before keys, says nothing, rather than No assignee alone.
-  const bare = task.status === undefined && task.priority === undefined;
-  if (!keyed && bare && task.assignee === undefined) return null;
+  words: string;
+  card?: React.ReactNode;
+  /** The mark, hidden from a screen reader, which hears `words` instead. */
+  children: React.ReactNode;
+}): React.JSX.Element {
   return (
-    <div className={TASK_CARD_STANDING}>
-      <TaskKey workspaceName={workspaceName} number={task.number} />
-      {task.status === undefined ? null : (
-        <Badge icon={<TaskStatusGlyph status={task.status} />}>
-          {TASK_STATUS_WORDS[task.status]}
-        </Badge>
-      )}
-      {task.priority === undefined ? null : (
-        <Badge icon={<TaskPriorityMark priority={task.priority} />}>
-          {TASK_PRIORITY_WORDS[task.priority]}
-        </Badge>
-      )}
-      <AssigneeChip assignee={task.assignee} />
-    </div>
+    <Tooltip label={words} card={card}>
+      <span
+        className="task-card-mark inline-flex flex-none items-center justify-center [&>svg]:size-hover-card-glyph"
+        role="img"
+        aria-label={words}
+      >
+        {children}
+      </span>
+    </Tooltip>
   );
 }
 
-/** Who a task's card says is on it: the assignee's face and name, read against the members around the card, or the dashed unassigned mark and No assignee. */
-function AssigneeChip({ assignee }: { assignee: TaskSummary["assignee"] }): React.JSX.Element {
-  const person = usePerson(assignee);
+/**
+ * The line under a task card's name: its key, its repository, and how long
+ * ago it saw activity, "ACME-42 · acme/relay · 3h", each where it has one,
+ * the time always.
+ */
+function TaskSub({
+  task,
+  workspaceName,
+  now,
+}: {
+  task: TaskSummary;
+  workspaceName: string | undefined;
+  now: number;
+}): React.JSX.Element {
+  const keyed = task.number !== undefined && workspaceName !== undefined;
   return (
-    <Badge
-      icon={
-        assignee === undefined ? (
+    <span>
+      {keyed ? (
+        <>
+          <TaskKey workspaceName={workspaceName} number={task.number} />
+          {" · "}
+        </>
+      ) : null}
+      {task.repository === null ? null : `${task.repository} · `}
+      <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />
+    </span>
+  );
+}
+
+/**
+ * A task card's corner: its priority's mark and who is on it, by face or the
+ * dashed unassigned mark, icons alone, as the task board's card draws them
+ * (`tasks-board.tsx`), a task from a service before priorities standing at
+ * No priority as it does there.
+ */
+function TaskMarks({ task }: { task: TaskSummary }): React.JSX.Element {
+  const person = usePerson(task.assignee);
+  const priority = priorityOf(task);
+  return (
+    <span className="task-card-marks inline-flex items-center gap-tight-gap">
+      <StandingMark words={`Priority: ${TASK_PRIORITY_WORDS[priority]}`}>
+        <TaskPriorityMark priority={priority} />
+      </StandingMark>
+      <StandingMark
+        words={`Assignee: ${task.assignee?.name ?? NO_ASSIGNEE_WORDS}`}
+        card={task.assignee === undefined ? undefined : actorCard(person)}
+      >
+        {task.assignee === undefined ? (
           <UnassignedMark size={ACTOR_SIZE.MARK} decorative />
         ) : (
           <ActorMark actor={person} size={ACTOR_SIZE.MARK} />
-        )
-      }
-    >
-      {assignee === undefined ? NO_ASSIGNEE_WORDS : assignee.name}
-    </Badge>
+        )}
+      </StandingMark>
+    </span>
   );
 }
 
@@ -451,9 +470,7 @@ export function taskCardOf(
       readerId={tasks.me}
       workspaceName={tasks.workspaces.find((each) => each.id === task.workspaceId)?.name}
       models={tasks.agents.models ?? []}
-      pictures={tasks.repositories.pictures}
       now={now}
-      onOpenGitHub={tasks.repositories.openGitHub}
       onShowAgent={(agentId) => tasks.onShowAgent(task.id, agentId)}
     />
   );

@@ -30,11 +30,10 @@ import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { useActorDoor } from "../person-door.js";
 import { needsYouWords } from "../tasks/inbox-model.js";
 import {
-  assigneeRows,
   NO_ASSIGNEE,
-  NO_ASSIGNEE_WORDS,
   TASK_PRIORITY_WORDS,
   TASK_STATUS_WORDS,
+  useAssigneeRows,
 } from "../tasks/task-standing.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -87,7 +86,7 @@ export function taskSubject(
 type ChipTask = Pick<TaskSummary, "status" | "priority" | "assignee">;
 
 /** A task's priority, No priority for one from a service before priorities. */
-function priorityOf(task: ChipTask): TaskPriority {
+export function priorityOf(task: ChipTask): TaskPriority {
   return task.priority ?? TASK_PRIORITY.NONE;
 }
 
@@ -222,20 +221,9 @@ export function AssigneeChip({
   look: ChipLook;
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
-  const { members, readerId } = useMemberDirectory();
   const person = usePerson(task.assignee);
   const value = task.assignee?.userId ?? NO_ASSIGNEE;
-  const listed = assigneeRows(members, readerId);
-  const rows = listed.some((row) => row.id === value)
-    ? listed
-    : [
-        ...listed,
-        {
-          id: value,
-          label: task.assignee?.name ?? NO_ASSIGNEE_WORDS,
-          icon: <ActorMark actor={person} size={ACTOR_SIZE.INLINE} />,
-        },
-      ];
+  const rows = useAssigneeRows(task.assignee);
   const words = Object.fromEntries(rows.map((row) => [row.id, row.label]));
   const icons = new Map(rows.map((row) => [row.id, row.icon]));
   return (

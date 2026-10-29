@@ -16,8 +16,8 @@
  * does. Every name, address, and line here is invented.
  */
 
-import type { CodingAgentTranscriptPage } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import type { AgentTranscriptPage } from "@luke/features/agent-view";
+import { AGENT_STATUS, type AgentTranscriptMessage } from "@luke/features/agent-wire";
 import { FIXTURE_IDS } from "@luke/host/fixture-stage";
 import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@luke/wire";
 import { AsyncIteratorClass } from "@orpc/client";
@@ -183,7 +183,7 @@ function startAgentPart(turn: number): WireRecord {
         model: "anthropic/claude-opus-5.5",
         modelName: "Opus 5.5",
         effort: "high",
-        status: CODING_AGENT_STATUS.RUNNING,
+        status: AGENT_STATUS.RUNNING,
         onYourTask: true,
       },
     },
@@ -241,11 +241,10 @@ function turnParts(turn: number): WireRecord[] {
 }
 
 /** The line that opened a turn: a teammate's, or the developer's own naming what to do next. */
-function turnLine(turn: number): CodingAgentMessage {
+function turnLine(turn: number): AgentTranscriptMessage {
   const at = RUN_STARTED_AT + turn * 70 * MINUTE;
   return {
     id: `long-run-line-${turn}`,
-    turnId: `long-run-turn-${turn}`,
     role: MESSAGE_ROLE.USER,
     parts: [
       {
@@ -262,19 +261,20 @@ function turnJournal(turn: number, parts: readonly WireRecord[], running: boolea
   const at = RUN_STARTED_AT + turn * 70 * MINUTE;
   return {
     id: `long-run-journal-${turn}`,
-    turnId: `long-run-turn-${turn}`,
     role: MESSAGE_ROLE.ASSISTANT,
     parts,
     startedAt: at,
     ...(running ? undefined : { finishedAt: at + 60 * MINUTE }),
-  } satisfies CodingAgentMessage;
+  } satisfies AgentTranscriptMessage;
 }
 
 /** Every turn but the newest, whole, then the newest's line. */
-const SETTLED: readonly CodingAgentMessage[] = Array.from({ length: LONG_RUN.TURNS }, (_, turn) =>
-  turn === LONG_RUN.TURNS - 1
-    ? [turnLine(turn)]
-    : [turnLine(turn), turnJournal(turn, turnParts(turn), false)],
+const SETTLED: readonly AgentTranscriptMessage[] = Array.from(
+  { length: LONG_RUN.TURNS },
+  (_, turn) =>
+    turn === LONG_RUN.TURNS - 1
+      ? [turnLine(turn)]
+      : [turnLine(turn), turnJournal(turn, turnParts(turn), false)],
 ).flat();
 
 /** The rounds the newest turn has done, each a finished turn's work, numbered after the settled turns. */
@@ -295,7 +295,7 @@ const ROUND_STEPS: readonly number[] = ROUND_PARTS.map(
 );
 
 /** A teammate's line that reached the newest turn after every third round, as a steer does. */
-const ARRIVED: readonly CodingAgentMessage[] = ROUND_STEPS.flatMap((afterStep, round) =>
+const ARRIVED: readonly AgentTranscriptMessage[] = ROUND_STEPS.flatMap((afterStep, round) =>
   round % 3 === 2
     ? [
         {
@@ -308,7 +308,7 @@ const ARRIVED: readonly CodingAgentMessage[] = ROUND_STEPS.flatMap((afterStep, r
 );
 
 /** The newest turn's journal: its rounds, then `steps` steps written while the tab is open, its last call still under way. */
-function newestJournal(steps: number): CodingAgentMessage {
+function newestJournal(steps: number): AgentTranscriptMessage {
   const turn = LONG_RUN.TURNS - 1;
   const parts: WireRecord[] = ROUND_PARTS.flat();
   for (let at = 0; at < steps; at += 1) {
@@ -329,14 +329,14 @@ function isRecord(value: WireValue | undefined): value is WireRecord {
 
 /** A page of the run as the stream pushes it: running, caught up. */
 function runPage(
-  messages: readonly CodingAgentMessage[],
+  messages: readonly AgentTranscriptMessage[],
   step: number,
   newest: boolean,
-): CodingAgentTranscriptPage {
+): AgentTranscriptPage {
   return {
     messages,
     cursor: `${step}:0`,
-    status: CODING_AGENT_STATUS.RUNNING,
+    status: AGENT_STATUS.RUNNING,
     runStartedAt: RUN_STARTED_AT + (LONG_RUN.TURNS - 1) * 70 * MINUTE,
     title: "Roll out the polish waves",
     ...(newest ? { newest: true } : undefined),
@@ -345,7 +345,7 @@ function runPage(
 }
 
 /** The run's whole transcript as its first page opens on it. */
-export function longRunMessages(): readonly CodingAgentMessage[] {
+export function longRunMessages(): readonly AgentTranscriptMessage[] {
   return [...SETTLED, newestJournal(1), ...ARRIVED];
 }
 
@@ -354,10 +354,10 @@ export function longRunMessages(): readonly CodingAgentMessage[] {
  * transcript, then its newest journal again every `LONG_RUN.STEP_MS`, a step
  * longer, until the tab closes it.
  */
-export function longRunStream(): AsyncIteratorClass<CodingAgentTranscriptPage, void> {
+export function longRunStream(): AsyncIteratorClass<AgentTranscriptPage, void> {
   let step = 0;
   let closed = false;
-  return new AsyncIteratorClass<CodingAgentTranscriptPage, void>(
+  return new AsyncIteratorClass<AgentTranscriptPage, void>(
     async () => {
       if (closed) return { done: true, value: undefined };
       step += 1;

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { sidebarLiveRowsSchema, sidebarOfLiveRows } from "@luke/features/sidebar-live";
+import {
+  type SidebarRows,
+  sidebarLiveRowsSchema,
+  sidebarRowsOfLive,
+} from "@luke/features/sidebar-live";
 import {
   TASK_SECTION_GLYPH,
   TASK_SECTION_ICON_KIND,
@@ -14,8 +18,8 @@ import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
+import { agentTable } from "../../schemas/agent.js";
 import { organization, user } from "../../schemas/auth.js";
-import { codingAgent } from "../../schemas/coding-agent.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, leaveWorkspace, openWorkspace } from "../../testing/index.js";
@@ -71,7 +75,7 @@ const openAgent = (userId: string, organizationId: string, taskId?: string) =>
     yield* db
       .insert(conversations)
       .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
-    yield* db.insert(codingAgent).values({
+    yield* db.insert(agentTable).values({
       id,
       organizationId,
       userId,
@@ -128,7 +132,19 @@ const placeAgent = (
   ...(position === undefined ? undefined : { position }),
 });
 
-/** The sidebar as the desktop builds it from the live statements' rows, run as Realtime runs them. */
+/** Every part's rows in one order, by what keys each, since the live statements keep none and the host orders them. */
+function byKey(rows: SidebarRows): SidebarRows {
+  const sorted = <Row>(each: readonly Row[], key: (row: Row) => string) =>
+    each.toSorted((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
+  return {
+    sections: sorted(rows.sections, (row) => row.id),
+    entries: sorted(rows.entries, (row) => row.taskId),
+    agentEntries: sorted(rows.agentEntries, (row) => row.agentId),
+    pins: sorted(rows.pins, (row) => row.repository),
+  };
+}
+
+/** The sidebar's rows as the host takes them from the live statements, run as the service runs them. */
 const liveSidebarOf = (userId: string) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -140,7 +156,7 @@ const liveSidebarOf = (userId: string) =>
       agentEntries: sql.unsafe(sections.agentEntries.sql, [...sections.agentEntries.params]),
       pins: sql.unsafe(pins.sql, [...pins.params]),
     });
-    return sidebarOfLiveRows(yield* Schema.decodeUnknownEffect(sidebarLiveRowsSchema)(rows));
+    return byKey(sidebarRowsOfLive(yield* Schema.decodeUnknownEffect(sidebarLiveRowsSchema)(rows)));
   });
 
 it.layer(getTestDB())("an account's task sections", (it) => {
@@ -168,27 +184,26 @@ it.layer(getTestDB())("an account's task sections", (it) => {
         yield* setRepositoryPin(dean, "acme/web", true);
 
         for (const reader of [dean, charles, outsider]) {
-          assert.deepEqual(yield* liveSidebarOf(reader), {
-            taskSections: yield* listTaskSections(reader),
-            repositoryPins: yield* listRepositoryPins(reader),
-          });
+          const held = yield* listTaskSections(reader);
+          assert.deepEqual(
+            yield* liveSidebarOf(reader),
+            byKey({ ...held, pins: yield* listRepositoryPins(reader) }),
+          );
         }
         const deans = yield* liveSidebarOf(dean);
         assert.deepEqual(
-          [
-            deans.taskSections.sections.length,
-            deans.taskSections.entries.length,
-            deans.taskSections.agentEntries.length,
-          ],
+          [deans.sections.length, deans.entries.length, deans.agentEntries.length],
           [2, 2, 1],
         );
         assert.deepEqual(
-          deans.repositoryPins.map((pin) => pin.repository),
-          ["acme/web", "acme/relay"],
+          deans.pins.map((pin) => pin.repository),
+          ["acme/relay", "acme/web"],
         );
         assert.deepEqual(yield* liveSidebarOf(outsider), {
-          taskSections: { sections: [], entries: [], agentEntries: [] },
-          repositoryPins: [],
+          sections: [],
+          entries: [],
+          agentEntries: [],
+          pins: [],
         });
       }),
   );
@@ -540,7 +555,7 @@ it.layer(getTestDB())("an account's task sections", (it) => {
         yield* written(dean, placeAgent(agent, launch));
         yield* written(dean, placeAgent(doomed, launch));
 
-        yield* Database.use((db) => db.delete(codingAgent).where(eq(codingAgent.id, doomed)));
+        yield* Database.use((db) => db.delete(agentTable).where(eq(agentTable.id, doomed)));
         assert.deepEqual(
           (yield* listTaskSections(dean)).agentEntries.map(({ agentId }) => agentId),
           [agent],

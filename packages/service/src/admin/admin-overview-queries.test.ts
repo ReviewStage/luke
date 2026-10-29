@@ -6,19 +6,17 @@ import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
 } from "@luke/database/github-installation-vocabulary";
+import { agentTable, type StoredPullRequest } from "@luke/database/schemas/agent";
 import { session, user } from "@luke/database/schemas/auth";
 import { automation, automationRun } from "@luke/database/schemas/automation";
-import { codingAgent, type StoredPullRequest } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { integrationConnection } from "@luke/database/schemas/integration";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { conversations } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
-import { voiceSessions } from "@luke/database/schemas/voice";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
-import { VOICE_DELEGATION_MODE } from "@luke/database/voice-vocabulary";
 import {
   DAILY_COUNT,
   type DailyCount,
@@ -26,6 +24,7 @@ import {
   REACH_FEATURE,
 } from "@luke/features/admin-overview-vocabulary";
 import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -33,7 +32,6 @@ import {
   AUTOMATION_RUN_STATUS,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import { PLAN_ACTOR, type PlanActor } from "@luke/features/task-wire";
@@ -43,8 +41,8 @@ import { readAdminOverviewSource } from "./admin-overview-queries.js";
 
 /**
  * admin-overview-queries.test.ts -- the Overview's reads over a real dialect:
- * a meaningful action is a task, the developer's own plan revision, an agent
- * started, or a call held, and nothing else makes an account active; each
+ * a meaningful action is a task, the developer's own plan revision, or an
+ * agent started, and nothing else makes an account active; each
  * daily count lands on its own UTC day; the funnel counts what the window's
  * new accounts ever did; reach counts the week's active developers alone;
  * the most active accounts carry their own counts; and hiding admins leaves
@@ -119,7 +117,7 @@ const startAgent = (
   userId: string,
   organizationId: string,
   createdAt: string,
-  extra: Partial<typeof codingAgent.$inferInsert> = {},
+  extra: Partial<typeof agentTable.$inferInsert> = {},
 ) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -128,7 +126,7 @@ const startAgent = (
     yield* db
       .insert(conversations)
       .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
-    yield* db.insert(codingAgent).values({
+    yield* db.insert(agentTable).values({
       id,
       organizationId,
       userId,
@@ -141,18 +139,6 @@ const startAgent = (
       ...extra,
     });
     return id;
-  });
-
-const holdCall = (userId: string, startedAt: string, seconds: number) =>
-  Effect.gen(function* () {
-    const db = yield* Database;
-    yield* db.insert(voiceSessions).values({
-      userId,
-      liveSessionId: randomUUID(),
-      delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-      startedAt: at(startedAt),
-      usage: { seconds, confirmed: true },
-    });
   });
 
 const answerInboxItem = (userId: string, organizationId: string, agentId: string, when: string) =>
@@ -233,7 +219,7 @@ const signIn = (userId: string, updatedAt: string) =>
 /**
  * Ada joined this week and did one of everything. Bob joined long ago, made a
  * task in the prior week, and this week only had Luke's notetaker write on his
- * call, which is the call's and not a meaningful action of his own. Carol joined
+ * plan, which is Luke's and not a meaningful action of his own. Carol joined
  * this week and did nothing. Root is an admin who joined this week and acted.
  */
 const seedService = Effect.gen(function* () {
@@ -259,9 +245,15 @@ const seedService = Effect.gen(function* () {
   const merged = yield* startAgent(ada, adaWorkspace, "2026-10-20T11:00:00Z", {
     published: MERGED_PULL_REQUEST,
   });
-  const automationId = yield* fireAutomation(ada, adaWorkspace, "2026-10-20T02:00:00Z");
-  yield* startAgent(ada, adaWorkspace, "2026-10-19T02:00:00Z", { automationId });
-  yield* holdCall(ada, "2026-10-19T16:00:00Z", 600);
+  yield* fireAutomation(ada, adaWorkspace, "2026-10-20T02:00:00Z");
+  // Note that the agent's automation is deleted since, so its row keeps the run's origin and no id.
+  yield* startAgent(ada, adaWorkspace, "2026-10-19T02:00:00Z", {
+    automationOrigin: {
+      name: "Synthetic automation",
+      firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: Date.parse("2026-10-19T02:00:00Z") },
+      prompt: "",
+    },
+  });
   yield* answerInboxItem(ada, adaWorkspace, merged, "2026-10-20T12:00:00Z");
   yield* connectIntegration(ada);
   yield* signIn(ada, "2026-10-21T09:00:00Z");
@@ -273,7 +265,6 @@ const seedService = Effect.gen(function* () {
 
   const rootWorkspace = yield* openWorkspace(root);
   yield* createTask(root, rootWorkspace, "2026-10-20T10:00:00Z");
-  yield* holdCall(root, "2026-10-20T16:00:00Z", 120);
 
   return { ada, root };
 });
@@ -317,7 +308,6 @@ it.layer(getTestDB())("the overview's reads", (it) => {
           "2026-10-18": 1,
           "2026-10-20": 1,
         });
-        assert.deepEqual(daysOf(source.daily, DAILY_COUNT.CALLS_HELD), { "2026-10-19": 1 });
         assert.deepEqual(daysOf(source.daily, DAILY_COUNT.INBOX_ANSWERED), { "2026-10-20": 1 });
         // The guard's skip started nothing, so it is no run.
         assert.deepEqual(daysOf(source.daily, DAILY_COUNT.AUTOMATION_RUNS), { "2026-10-20": 1 });
@@ -327,7 +317,6 @@ it.layer(getTestDB())("the overview's reads", (it) => {
           [FUNNEL_STEP.SIGNED_UP]: 2,
           [FUNNEL_STEP.GITHUB_CONNECTED]: 1,
           [FUNNEL_STEP.CREATED_TASK]: 1,
-          [FUNNEL_STEP.HELD_CALL]: 1,
           [FUNNEL_STEP.STARTED_AGENT]: 1,
           [FUNNEL_STEP.OPENED_PR]: 1,
           [FUNNEL_STEP.MERGED_PR]: 1,
@@ -335,9 +324,8 @@ it.layer(getTestDB())("the overview's reads", (it) => {
         // Bob's own connected integration is not reach: he was not active this week.
         assert.deepEqual(Object.fromEntries(source.reach), {
           [REACH_FEATURE.TASKS]: 1,
-          [REACH_FEATURE.CODING_AGENTS]: 1,
+          [REACH_FEATURE.AGENTS]: 1,
           [REACH_FEATURE.INBOX]: 1,
-          [REACH_FEATURE.VOICE_CALLS]: 1,
           [REACH_FEATURE.INTEGRATIONS]: 1,
           [REACH_FEATURE.AUTOMATIONS]: 1,
         });
@@ -349,11 +337,10 @@ it.layer(getTestDB())("the overview's reads", (it) => {
         assert.equal(source.accountCounts.tasks.get(ada), 1);
         assert.equal(source.accountCounts.agents.get(ada), 2);
         assert.equal(source.accountCounts.prsMerged.get(ada), 1);
-        assert.equal(source.accountCounts.callSeconds.get(ada), 600);
         assert.equal(source.accountCounts.lastSeenAt.get(ada), Date.parse("2026-10-21T09:00:00Z"));
         assert.equal(source.accountCounts.tasks.get(root), undefined);
 
-        // Ada's Sunday revision lands in her signup week; her agents and call in the next.
+        // Ada's Sunday revision lands in her signup week; her agents in the next.
         assert.deepEqual(
           Object.fromEntries(source.retention.activeByCohortWeek.get("2026-10-12") ?? []),
           { "2026-10-12": 1, "2026-10-19": 1 },
@@ -375,7 +362,7 @@ it.layer(getTestDB())("the overview's reads", (it) => {
           everyone.topAccounts.map((account) => account.id),
           [ada, root],
         );
-        assert.equal(everyone.accountCounts.callSeconds.get(root), 120);
+        assert.equal(everyone.accountCounts.tasks.get(root), 1);
       }),
   );
 });

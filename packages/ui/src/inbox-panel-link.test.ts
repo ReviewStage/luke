@@ -44,7 +44,7 @@ test("a long run of slashes is read at once, as any other address no pull reques
   assert.equal(inboxPanelTarget(href, PLACE), undefined);
 });
 
-test("a file of the task's repository and the task's own page and Pull request tab open in the panel; another task's page, and a file with no task, do not", () => {
+test("a file of the item's repository and the task's own page and Pull request tab open in the panel, a file of an agent with no task among them; another task's page does not", () => {
   assert.deepEqual(
     inboxPanelTarget("https://github.com/acme/relay/blob/HEAD/src/invites.ts", PLACE),
     { kind: INBOX_PANEL_TARGET.FILE, path: "src/invites.ts", lines: undefined },
@@ -61,16 +61,16 @@ test("a file of the task's repository and the task's own page and Pull request t
     ),
     undefined,
   );
-  assert.equal(
+  assert.deepEqual(
     inboxPanelTarget("https://github.com/acme/relay/blob/HEAD/src/invites.ts", {
       ...PLACE,
       taskId: undefined,
     }),
-    undefined,
+    { kind: INBOX_PANEL_TARGET.FILE, path: "src/invites.ts", lines: undefined },
   );
 });
 
-test("a Luke link to an agent of the item's own task reads beside the item, and one to another task's agent, or to an agent on no task, is the window's to open", () => {
+test("a Luke link to an agent of the item's own task reads beside the item, under the task or the agent, and one to another task's agent, or to an agent on no task, is the window's to open", () => {
   assert.deepEqual(
     inboxPanelTarget(`https://tryluke.dev/acme/plan/${TASK}/agent/${AGENT}`, PLACE),
     {
@@ -84,4 +84,13 @@ test("a Luke link to an agent of the item's own task reads beside the item, and 
     undefined,
   );
   assert.equal(inboxPanelTarget(`https://tryluke.dev/acme/agent/${AGENT}`, PLACE), undefined);
+  // An archived agent, held by the item's task though no longer one of its tabs, still opens its Changes beside the item.
+  assert.deepEqual(
+    inboxPanelTarget(`https://tryluke.dev/acme/agent/${AGENT}/changes`, {
+      ...PLACE,
+      agentIds: [],
+      heldIds: [AGENT],
+    }),
+    { kind: INBOX_PANEL_TARGET.CHANGES, agentId: AGENT },
+  );
 });

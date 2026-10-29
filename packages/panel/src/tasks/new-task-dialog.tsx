@@ -13,14 +13,14 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * The window asks the way Linear's and Notion's "New …" ask: it dims over
  * whatever stood open, and a card holds New task's composer
  * (`new-task-composer.tsx`), which takes focus, the card named by the
- * composer's own head row: "New task", the repository chip after it, and
- * the Issue chip at the row's right end, as the welcome draws it too. The task starts in the workspace the
+ * composer's own head row: "New task", named to a reader alone, and the
+ * repository chip after it, as the welcome draws it too. The task starts in the workspace the
  * window lists, and the dialog offers no other; the composer lists that
- * workspace's repositories and its Linear issues.
+ * workspace's repositories.
  *
  * What the composer starts is its own to say: in Agent mode a task with an
  * empty plan and a coding agent on the words, opened on the agent's tab; in
- * Plan mode the plan template and a call with Luke. Tab stays inside the
+ * Plan mode an empty plan and a call with Luke. Tab stays inside the
  * card, and focus goes back to whatever opened it. Escape, with no menu or
  * dictation standing in the card, and a press on the dimmed window put the
  * card away with nothing started, its words and files kept as New task's

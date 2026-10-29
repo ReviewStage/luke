@@ -6,10 +6,10 @@ import { SCHEMA_REFUSAL } from "./schema-vocabulary.js";
  * What a stored message says about itself beside its parts. The message
  * itself is the AI SDK's `UIMessage`, one row per message with its parts as
  * JSON; this is the `metadata` field on that row, and the one place the
- * storage says who wrote a message and how it arrived. Each role has its own
+ * storage says how a message arrived and what wrote it. Each role has its own
  * shape, because a user row and an assistant row answer different questions:
- * a user row says whose words these are and which channel carried them, an
- * assistant row says which of Luke's parts spoke and whether the row is a
+ * a user row says which channel carried it, or which note the runtime wrote
+ * down, an assistant row says which model spoke and whether the row is a
  * compaction standing in for the rows before it. A system row carries no
  * metadata at all. Declared here so the desktop and the service
  * decode one shape, and so a key the schema does not name is refused rather
@@ -32,15 +32,16 @@ export type MessageRole = (typeof MESSAGE_ROLE)[keyof typeof MESSAGE_ROLE];
 export const MessageRoleSchema = EffectSchema.Literals(Object.values(MESSAGE_ROLE));
 
 /**
- * Who wrote a message: the developer, Luke's own judgment, the voice model,
- * a child run, or another coding agent, whose message a line carries.
+ * Who wrote a message where its channel does not say: on a call, the
+ * developer's own words or the voice model's delegation of them; on an
+ * assistant row, the model that answered the turn or the voice model on a
+ * call. Any other user row names what carried it by its channel or its
+ * source alone, and who sent it by the row's sender columns.
  */
 export const MESSAGE_AUTHOR = {
   DEVELOPER: "developer",
-  BRAIN: "brain",
+  MODEL: "model",
   VOICE_MODEL: "voice_model",
-  CHILD: "child",
-  AGENT: "agent",
 } as const;
 
 /**
@@ -106,10 +107,10 @@ export const GITHUB_LINE_BOUNDS = {
 } as const;
 
 /**
- * What the brain wrote a user row down for itself about: the words a turn
- * opened with that no developer typed or spoke. The turn's origin names the
- * first three the way the turns table does; the rest are the notes the host
- * hands a turn beside its own words.
+ * What a runtime note is about: the words a turn opened with that no one
+ * typed, spoke, or sent. The turn's origin names the first three the way the
+ * turns table does; the rest are the notes the host hands a turn beside its
+ * own words.
  */
 export const OBSERVATION_SOURCE = {
   /**
@@ -151,16 +152,19 @@ const spanInstant = nonNegativeInteger;
  * A user row is one of these things, and the shape says which: the
  * developer's typed ask, a spoken ask cut from a voice session, a line
  * steered into a coding agent by what carried it (another coding agent's
- * message, a thread, a plan comment, a Start, GitHub, Luke, or an automation), or an observation the
- * brain wrote down for itself. A struct each rather than one with every field optional, so an
- * observation carrying a channel has no shape to arrive in. A typed ask
+ * message, a thread, a plan comment, a Start, GitHub, Luke, or an
+ * automation), or a note the runtime wrote down. A struct each rather than one
+ * with every field optional, so a note carrying a channel has no shape to
+ * arrive in. Only a spoken ask says who wrote it, since a call carries both
+ * the developer's words and the voice model's; every other line is told apart
+ * by its channel, and who sent it is the row's sender columns, never its
+ * metadata. A typed ask
  * names a voice session only where it was typed into that call, with the
  * instant on the call's clock it was typed at, so the voice's reply to it
  * finds it as the line it followed; it carries no span, since nothing of it
  * was said.
  */
 const TYPED_ASK_METADATA = EffectSchema.Struct({
-  author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.TYPED),
   voice_session_id: EffectSchema.optional(identifier),
   from_ms: EffectSchema.optional(spanInstant),
@@ -195,21 +199,12 @@ const SPOKEN_ASK_METADATA = SPOKEN_ASK_STRUCT.check(EffectSchema.makeFilter(cohe
 
 /**
  * An agent message is a line another coding agent sent with `message_agent`,
- * steered into the receiving agent's turn: what the sender is called, its
- * name as a card draws it, within `AGENT_MESSAGE_FROM_CHARS`, never a link
- * or a handle. The words are the sender's, never the developer's, so a
+ * steered into the receiving agent's turn; the sender is the row's, by its
+ * sender columns. The words are the sender's, never the developer's, so a
  * reader that names the developer's task passes this row by.
  */
-/** The most UTF-16 code units an agent message names its sender in. */
-export const AGENT_MESSAGE_FROM_CHARS = 128;
-
 const AGENT_MESSAGE_METADATA = EffectSchema.Struct({
-  author: EffectSchema.Literal(MESSAGE_AUTHOR.AGENT),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.AGENT_MESSAGE),
-  // Optional because a row reworked to name its sender elsewhere (`sentBy`) no longer carries it.
-  from: EffectSchema.optional(
-    trimmedText.check(EffectSchema.isMaxLength(AGENT_MESSAGE_FROM_CHARS)),
-  ),
 });
 
 export type AgentMessageMetadata = EffectSchema.Schema.Type<typeof AGENT_MESSAGE_METADATA>;
@@ -219,7 +214,6 @@ export type AgentMessageMetadata = EffectSchema.Schema.Type<typeof AGENT_MESSAGE
  * their close of it, steered into the thread's agent: the item it is on.
  */
 const THREAD_LINE_METADATA = EffectSchema.Struct({
-  author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.THREAD),
   event: EffectSchema.Literals(Object.values(THREAD_LINE_EVENT)),
   item_id: identifier,
@@ -229,7 +223,6 @@ export type ThreadLineMetadata = EffectSchema.Schema.Type<typeof THREAD_LINE_MET
 
 /** A comment line is a plan's comment thread a member sent the agent to answer: the thread it hands over. */
 const COMMENT_LINE_METADATA = EffectSchema.Struct({
-  author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.COMMENT),
   thread_id: identifier,
 });
@@ -242,7 +235,6 @@ export type CommentLineMetadata = EffectSchema.Schema.Type<typeof COMMENT_LINE_M
  * no other brief names. Who started it is the row's sender.
  */
 const START_LINE_STRUCT = EffectSchema.Struct({
-  author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.START),
   brief: EffectSchema.Literals(Object.values(START_LINE_BRIEF)),
   source_agent_id: EffectSchema.optional(identifier),
@@ -279,10 +271,10 @@ const GITHUB_LINE_COMMENT = EffectSchema.Struct({
  * with its words, a failed check, or every check finished on a commit; the
  * repository, the pull request where GitHub named it, the page, and who
  * caused it, by their login. The words are the reviewer's, never the
- * developer's, whatever `author` says until it is reworked.
+ * developer's, and whether anyone but the agent's owner wrote them, which
+ * `run_on_mac` reads; absent from a line kept before it was said.
  */
 const GITHUB_LINE_METADATA = EffectSchema.Struct({
-  author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.GITHUB),
   event: EffectSchema.Literals(Object.values(GITHUB_LINE_EVENT)),
   repository: githubName(GITHUB_LINE_BOUNDS.NAME_CHARS),
@@ -297,29 +289,33 @@ const GITHUB_LINE_METADATA = EffectSchema.Struct({
     ),
   ),
   sha: EffectSchema.optional(githubName(GITHUB_LINE_BOUNDS.NAME_CHARS)),
+  outside_words: EffectSchema.optional(EffectSchema.Boolean),
 });
 
 export type GitHubLineMetadata = EffectSchema.Schema.Type<typeof GITHUB_LINE_METADATA>;
 
 /** A Luke line is one Luke sent the agent on its own: a wakeup it set, or an operator's opening or wake. */
 const LUKE_LINE_METADATA = EffectSchema.Struct({
-  author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.LUKE),
 });
 
 export type LukeLineMetadata = EffectSchema.Schema.Type<typeof LUKE_LINE_METADATA>;
 
-/** An automation line is an automation's run's prompt, the agent's first line or a later one. */
+/**
+ * An automation line is an automation's run's prompt, the agent's first line
+ * or a later one, and whether what fired the run put words its owner did not
+ * write beside that prompt, such as a webhook's body, which `run_on_mac`
+ * reads; absent from a line kept before it was said.
+ */
 const AUTOMATION_LINE_METADATA = EffectSchema.Struct({
-  author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.AUTOMATION),
+  outside_words: EffectSchema.optional(EffectSchema.Boolean),
 });
 
 export type AutomationLineMetadata = EffectSchema.Schema.Type<typeof AUTOMATION_LINE_METADATA>;
 
-/** An observation arrives on no channel: the brain's own note of what opened the turn or what the host handed it. */
+/** A runtime note arrives on no channel: the runtime's own note of what opened the turn or what the host handed it. */
 const OBSERVATION_METADATA = EffectSchema.Struct({
-  author: EffectSchema.Literal(MESSAGE_AUTHOR.BRAIN),
   source: ObservationSourceSchema,
 });
 
@@ -352,6 +348,17 @@ export const USER_MESSAGE_METADATA = EffectSchema.Union([
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 /**
+ * Whether a user row's words stand as the developer's own: every line but
+ * the voice model's delegation on a call, another coding agent's message,
+ * and a runtime note.
+ */
+export function isDeveloperLine(metadata: UserMessageMetadata): boolean {
+  if ("source" in metadata) return false;
+  if (metadata.channel === MESSAGE_CHANNEL.AGENT_MESSAGE) return false;
+  return metadata.channel !== MESSAGE_CHANNEL.VOICE || metadata.author === MESSAGE_AUTHOR.DEVELOPER;
+}
+
+/**
  * A compaction row's account of what it folded: the first message the model
  * still reads after it, which is always knowable, and how many tokens the
  * folded messages had cost, where the runtime that folded them reported it.
@@ -366,7 +373,9 @@ export const COMPACTION_METADATA = EffectSchema.Struct({
 export type CompactionMetadata = EffectSchema.Schema.Type<typeof COMPACTION_METADATA>;
 
 /**
- * What an assistant row says about itself: who wrote it, and, for a row of
+ * What an assistant row says about itself: which model wrote it, the one
+ * that answered the turn, whatever harness ran it, or the voice model on a
+ * call, and, for a row of
  * the voice model's — one of Luke's settled utterances cut from a voice
  * session — the session and span it was cut from, the delegation it followed
  * where the developer's line before it was handed to the brain, and the
@@ -376,11 +385,7 @@ export type CompactionMetadata = EffectSchema.Schema.Type<typeof COMPACTION_META
  * any of those, and its span runs forward or comes together.
  */
 const ASSISTANT_MESSAGE_STRUCT = EffectSchema.Struct({
-  author: EffectSchema.Literals([
-    MESSAGE_AUTHOR.BRAIN,
-    MESSAGE_AUTHOR.VOICE_MODEL,
-    MESSAGE_AUTHOR.CHILD,
-  ]),
+  author: EffectSchema.Literals([MESSAGE_AUTHOR.MODEL, MESSAGE_AUTHOR.VOICE_MODEL]),
   compaction: EffectSchema.optional(COMPACTION_METADATA),
   channel: EffectSchema.optional(EffectSchema.Literal(MESSAGE_CHANNEL.VOICE)),
   voice_session_id: EffectSchema.optional(identifier),

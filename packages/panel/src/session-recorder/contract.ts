@@ -2,8 +2,8 @@
  * contract.ts -- what session replay and the recorder's bundle say to each other: the one name the client finds it by.
  *
  * The recorder (rrweb and the library's replay engine) is nearly a tenth of
- * what the panel's bundle would otherwise carry, and a window that never
- * records, the voice window and the call window, would parse it for nothing.
+ * what the panel's bundle would otherwise carry, and a run that never records
+ * would parse it for nothing.
  * So it ships as a bundle of its own (`session-recorder.js`, built from
  * `./index.ts`) that `../session-replay.ts` loads before it starts the
  * client, the first time a run is to be recorded. That bundle is the

@@ -1,8 +1,9 @@
 /**
  * runner.ts -- one launch of a Luke agent: the bearer and the config line read, the harness the config names run (Claude Code here, Codex in `codex.ts`), and the launch's last event posted; for Claude Code, `query()` started in streaming input mode, Luke's lines fed to it, its messages posted out, and the launch ended when the agent's turn is.
  *
- * Two loops run side by side. The input loop reads Luke's stdin lines and
- * acts on each at once: a message joins the prompt stream, a stop calls
+ * Two loops run side by side. The input loop reads Luke's lines, from stdin
+ * or, where the config names the read, from Luke (`lines.ts`), and acts on
+ * each at once: a message joins the prompt stream, a stop calls
  * `interrupt()`, a model change calls `setModel()` or `applyFlagSettings()`.
  * It never waits on the session's output, so a stop reaches the CLI even
  * while a long foreground command holds the turn (P00 found exactly this).
@@ -62,6 +63,7 @@ import {
   type RunnerSelf,
   runsOnHost,
 } from "./launch.js";
+import { readLines } from "./lines.js";
 import { openMcpRelay } from "./mcp-relay.js";
 import { SANDBOX_TOOL_ENV, SHARED_FILES_DIRECTORY } from "./pins.js";
 import { ProcessTable } from "./processes.js";
@@ -75,6 +77,7 @@ import {
   INSTALLED_SKILLS,
   type InputLine,
   InputLineSchema,
+  RUNNER_CONTROL,
   RUNNER_END,
   RUNNER_ENV,
   RUNNER_EVENT,
@@ -116,7 +119,7 @@ const WORKER: AgentDefinition = {
   description:
     "A read-only worker for one scoped job, such as a broad search, a comparison of approaches, or an investigation: it reads the checkout and the web and answers, and never edits, commits, or pushes.",
   prompt:
-    "You are a read-only worker for a coding agent. Do the one job you were handed and answer with what it asks for. You are read-only in the checkout: never write, edit, move, or delete a file, never commit or push, and never change anything elsewhere, such as on GitHub; run only commands that read.",
+    "You are a read-only worker for an agent. Do the one job you were handed and answer with what it asks for. You are read-only in the checkout: never write, edit, move, or delete a file, never commit or push, and never change anything elsewhere, such as on GitHub; run only commands that read.",
   model: "inherit",
   disallowedTools: ["Edit", "Write", "NotebookEdit", "Agent", `mcp__${MCP_SERVER}`],
 };
@@ -297,11 +300,21 @@ interface Launch {
   readonly firstSequence: number;
 }
 
-/** Calls one of the session's control requests, reporting a failure rather than ending the launch on it. */
-function control(step: string, call: () => Promise<void>) {
+/**
+ * Calls one of the session's control requests, reporting a failure rather
+ * than ending the launch on it; answers whether the CLI answered within
+ * `RUNNER_CONTROL.ANSWER_MS`. Note that one it never answers is let go, so
+ * it holds up none of Luke's later lines.
+ */
+function control(step: string, call: () => Promise<unknown>) {
   return Effect.tryPromise(call).pipe(
-    Effect.catch(() => Effect.logWarning(`agent-runner: ${step} failed`)),
-    Effect.asVoid,
+    Effect.timeoutOption(Duration.millis(RUNNER_CONTROL.ANSWER_MS)),
+    Effect.flatMap((answer) =>
+      Option.isSome(answer)
+        ? Effect.succeed(true)
+        : Effect.as(Effect.logWarning(`agent-runner: ${step} went unanswered`), false),
+    ),
+    Effect.catch(() => Effect.as(Effect.logWarning(`agent-runner: ${step} failed`), true)),
   );
 }
 
@@ -320,7 +333,8 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
       const uuid = (value.uuid as UUID | undefined) ?? randomUUID();
       return yield* launch.admission.withPermit(
         Effect.gen(function* () {
-          // A launch a released wait ended takes nothing more: the line stays unaccepted, for Luke's next send to relaunch on.
+          // A launch a released wait ended takes nothing more: the line stays unaccepted, for the
+          // launch Luke starts on its END, or on its next send, to be handed.
           if ((yield* Ref.get(launch.released)) !== undefined) {
             return yield* Effect.logWarning(
               "agent-runner: skipped a message for a released launch",
@@ -347,9 +361,10 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
         return;
       }
       yield* Ref.set(launch.stopping, true);
-      yield* control("interrupt", async () => {
-        await launch.session.interrupt();
-      });
+      // An interrupt the CLI never answers ends the launch, whose end closes the CLI.
+      if (!(yield* control("interrupt", () => launch.session.interrupt()))) {
+        yield* Deferred.succeed(launch.ended, RUNNER_END.STOPPED);
+      }
       return;
     }
     case INPUT_LINE.RETIRE: {
@@ -627,20 +642,27 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
       },
     }),
   );
-  const loops = [
+  const reading = [
     yield* Effect.forkScoped(inputLoop),
-    yield* Effect.forkScoped(outputLoop),
     yield* sink.undelivered.pipe(
       Effect.andThen(Deferred.succeed(launch.ended, RUNNER_END.FAILED)),
       Effect.forkScoped,
     ),
   ];
+  const posting = yield* Effect.forkScoped(outputLoop);
 
-  // The loops stop before the session closes, so nothing it emits on the
-  // way down is numbered after the launch's last event.
+  // The loops stop before the launch's last event is posted, so nothing the
+  // CLI emits on the way down is numbered after it. Note that Luke's lines
+  // stop first, so none is taken into a CLI being closed, and the CLI is
+  // closed before the output loop is waited on, because the SDK's iterator
+  // answers its return only once the read under way does, which a quiet CLI
+  // (a wait on a wakeup, a warm launch) answers only when it next writes:
+  // waiting on it first held an ended launch, deaf to every line, for up to
+  // the hour its wakeup was set for.
   const end = yield* Deferred.await(launch.ended);
-  yield* Fiber.interruptAll(loops);
+  yield* Fiber.interruptAll(reading);
   session.close();
+  yield* Fiber.interrupt(posting);
   const wakeups = yield* Ref.get(launch.released);
   return (
     wakeups === undefined ? { end, failure } : { end, failure, wakeups }
@@ -666,15 +688,32 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
   const secrets = [bearer, ...tokens];
 
   // Stdin is read in a loop of its own from the first line on, so nothing
-  // the session does can hold up a line Luke wrote.
+  // the session does can hold up a line Luke wrote. Its end ends Luke's lines
+  // only where the config names no read of them, since a launch that reads
+  // them from Luke goes on past it, and at once where it ended before the
+  // config, which then never comes.
   const lines = yield* Queue.unbounded<string, Cause.Done>();
-  yield* input.lines.pipe(Stream.runIntoQueue(lines), Effect.forkScoped);
+  const readsLines = yield* Deferred.make<boolean>();
+  const read = yield* Ref.make(0);
+  yield* input.lines.pipe(
+    Stream.runForEach((text) =>
+      Effect.andThen(
+        Ref.update(read, (count) => count + 1),
+        Queue.offer(lines, text),
+      ),
+    ),
+    Effect.andThen(Ref.get(read)),
+    Effect.flatMap((count) => (count === 0 ? Effect.succeed(false) : Deferred.await(readsLines))),
+    Effect.flatMap((reads) => (reads ? Effect.void : Queue.end(lines))),
+    Effect.forkScoped,
+  );
   const first = yield* Queue.take(lines).pipe(
     Effect.mapError(() => new RunnerFailed({ detail: "stdin closed before the config line" })),
   );
   const config = yield* decodeConfig(first).pipe(
     Effect.mapError(() => new RunnerFailed({ detail: "the config line is not a runner config" })),
   );
+  yield* Deferred.succeed(readsLines, config.linesUrl !== undefined);
 
   const sink = yield* makeEventSink({
     url: config.eventsUrl,
@@ -682,6 +721,12 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     firstSequence: config.firstSequence,
     secrets,
   });
+  // A config that names the read has Luke's later lines read from Luke, beside any stdin still
+  // carries, into the same queue, so neither harness knows where a line came from.
+  if (config.linesUrl !== undefined) {
+    const read = { url: config.linesUrl, bearer, launch: config.firstSequence };
+    yield* Effect.forkScoped(readLines(read, lines));
+  }
   const context = { lines, env: input.env, bearer, sink, self: input.self };
   const outcome: LaunchOutcome =
     config.harness === RUNNER_HARNESS.CODEX
@@ -695,6 +740,7 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     ...(wakeups === undefined ? undefined : { wakeups }),
   };
   yield* sink.emit(last);
-  yield* sink.drain;
+  // A stopped launch is Luke's own doing, so it does not wait out an outage for its last events.
+  yield* end === RUNNER_END.STOPPED ? sink.drainStopped : sink.drain;
   return end;
 });

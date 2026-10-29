@@ -44,8 +44,8 @@ function scanned(rows: readonly TurnRow<Block>[]): unknown[] {
 }
 
 /** The rows of a turn of `blocks`, moving or finished. */
-function rowsOf(blocks: readonly Block[], moving: boolean, said = false) {
-  return scanned(turnRows(blocks, READING, { key: "turn", moving, done: !moving, said }));
+function rowsOf(blocks: readonly Block[], moving: boolean) {
+  return scanned(turnRows(blocks, READING, { key: "turn", moving, done: !moving }));
 }
 
 test("a thought between two calls joins their group, whose line counts the calls alone", () => {
@@ -131,44 +131,6 @@ test("a finished turn whose lead is one call alone draws that call on its own ro
   assert.deepEqual(
     rowsOf([thought("Delete it."), call("delete_section"), words("Deleted.")], false),
     [["1 tool call", ["Delete it.", "delete_section"]], "Deleted."],
-  );
-});
-
-test("a spoken turn's words run with its calls: inside the open group while it moves, where a run of words alone draws none of them, and once it has finished, all of it folded closed, its words counted as messages", () => {
-  const spoken = [
-    call("end_call"),
-    words("Started a worker."),
-    subagent("Compare the queues."),
-    words("Seven days."),
-  ];
-  assert.deepEqual(rowsOf(spoken, true, true), [
-    [
-      "1 tool call, 1 subagent",
-      ["end_call", "Started a worker.", "Compare the queues.", "Seven days."],
-      { open: true, running: false },
-    ],
-  ]);
-  assert.deepEqual(rowsOf(spoken, false, true), [
-    [
-      "1 tool call, 1 subagent, 2 messages",
-      ["end_call", "Started a worker.", "Compare the queues.", "Seven days."],
-    ],
-  ]);
-  assert.deepEqual(rowsOf([words("Seven days.")], true, true), []);
-});
-
-test("a finished spoken turn with no call folds its thoughts and words all the same, and one of a thought alone keeps its row", () => {
-  assert.deepEqual(rowsOf([thought("Just answer."), words("Seven days.")], false, true), [
-    ["1 message", ["Just answer.", "Seven days."]],
-  ]);
-  assert.deepEqual(rowsOf([words("Seven days.")], false, true), [["1 message", ["Seven days."]]]);
-  assert.deepEqual(rowsOf([thought("Nothing to say.")], false, true), ["Nothing to say."]);
-});
-
-test("a finished spoken turn a message reached while it ran folds the work on either side of it, the message standing between", () => {
-  assert.deepEqual(
-    rowsOf([call("ls"), arrived("Also the queue."), words("Seven days.")], false, true),
-    ["ls", "Also the queue.", ["1 message", ["Seven days."]]],
   );
 });
 

@@ -1,11 +1,11 @@
 import {
-  CODING_AGENT_MACHINE,
-  type CodingAgentSummary,
+  AGENT_MACHINE,
+  type AgentSummary,
   DEVICE_STANDING,
   type DeviceStanding,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { Badge, STATUS_TONE, useSecond, VisuallyHidden } from "@luke/ui";
+import { Badge, STATUS_TONE, useSecond, VISUALLY_HIDDEN_UNDER, VisuallyHidden } from "@luke/ui";
 import { GLYPH, LaptopIcon } from "@luke/ui/icons";
 import { presenceStanding, useDevicePresence } from "../device-presence.js";
 import { useExperiment } from "../use-app-state.js";
@@ -30,7 +30,9 @@ import { useExperiment } from "../use-app-state.js";
  * its label is its name alone. Nothing is drawn for an agent on a device the
  * service no longer names, since it is neither in the cloud nor anywhere that
  * can be named, or while the local agents experiment is off, like every Runs on
- * surface.
+ * surface. In a card too narrow for its words, where the branch's chip draws
+ * its mark alone too, the badge draws its glyph alone and keeps the words for
+ * a reader, rather than wrapping them a letter to a line.
  */
 
 /** What a reader hears before the name, which the glyph says to the eye. */
@@ -48,11 +50,11 @@ function macWords(name: string, standing: DeviceStanding | undefined): string {
 export function AgentPlace({
   agent,
 }: {
-  agent: Pick<CodingAgentSummary, "mac" | "machine">;
+  agent: Pick<AgentSummary, "mac" | "machine">;
 }): React.JSX.Element | null {
   const on = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   if (!on) return null;
-  if (agent.machine !== CODING_AGENT_MACHINE.DEVICE) return <CloudBadge />;
+  if (agent.machine !== AGENT_MACHINE.DEVICE) return <CloudBadge />;
   if (agent.mac === undefined) return null;
   return <MacBadge mac={agent.mac} />;
 }
@@ -60,7 +62,11 @@ export function AgentPlace({
 /** The chip of an agent in a sandbox. */
 function CloudBadge(): React.JSX.Element {
   return (
-    <Badge tone={STATUS_TONE.NEUTRAL} icon={<GLYPH.CLOUD aria-hidden="true" />}>
+    <Badge
+      tone={STATUS_TONE.NEUTRAL}
+      icon={<GLYPH.CLOUD aria-hidden="true" />}
+      hideWordsUnder={VISUALLY_HIDDEN_UNDER.SNUG}
+    >
       <VisuallyHidden>{RUNS_ON}</VisuallyHidden>
       Cloud
     </Badge>
@@ -68,7 +74,7 @@ function CloudBadge(): React.JSX.Element {
 }
 
 /** The label itself, held against the window's clock, so a Mac that goes quiet reads offline without another read. */
-function MacBadge({ mac }: { mac: NonNullable<CodingAgentSummary["mac"]> }): React.JSX.Element {
+function MacBadge({ mac }: { mac: NonNullable<AgentSummary["mac"]> }): React.JSX.Element {
   const presence = useDevicePresence(true);
   // Note that the clock only redraws the label as a beat ages, since the standing is read off the book's own monotonic clock.
   useSecond();
@@ -81,6 +87,7 @@ function MacBadge({ mac }: { mac: NonNullable<CodingAgentSummary["mac"]> }): Rea
     <Badge
       tone={quiet ? STATUS_TONE.NEUTRAL : STATUS_TONE.ATTENTION}
       icon={<LaptopIcon aria-hidden="true" />}
+      hideWordsUnder={VISUALLY_HIDDEN_UNDER.SNUG}
     >
       <VisuallyHidden>{RUNS_ON}</VisuallyHidden>
       {macWords(mac.name, standing)}

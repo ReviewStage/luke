@@ -20,6 +20,7 @@ import { useAct } from "../act.js";
 import { encodeImage } from "../feedback-images.js";
 import { TOAST_HOLD, undoToast, useToast, useWorkingToast } from "../toast.js";
 import type { ViewerAction } from "./attachment-viewer.js";
+import { holderTaskId } from "./mention-holder.js";
 import { useTaskMentions } from "./task-mentions.js";
 
 /**
@@ -126,8 +127,9 @@ export function useAddToPlan(): ViewerAction | undefined {
   const toast = useToast();
   const working = useWorkingToast();
   return useMemo(() => {
-    if (page === undefined || page.taskId === "" || page.workspace === "") return undefined;
-    const { taskId, workspace } = page;
+    const taskId = holderTaskId(page?.holder);
+    if (page === undefined || taskId === undefined || page.workspace === "") return undefined;
+    const { workspace } = page;
     const save = (base: string, value: string): Promise<TasksEditAnswer> =>
       act(ACT_KIND.TASKS_EDIT, { taskId: taskId, edit: { document: { base, value } } }).catch(
         (): TasksEditAnswer => ({ failure: TASK_CALL_FAILURE.UNANSWERED }),

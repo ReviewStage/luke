@@ -60,6 +60,7 @@
 
 import type { ReachedBrowserTab } from "@luke/database/models/agent-browser-tabs";
 import { browserTabDriver } from "@luke/database/models/agent-browser-tabs";
+import type { BrowserTabsPlace } from "@luke/features/agent-browser-tab-wire";
 import { BROWSER_SHOWN_MAX_CHARS, isBrowserAddress } from "@luke/features/browser-acts";
 import type { CdpCommand, CdpEvent, CdpFailure, CdpSession } from "@luke/features/browser-cdp";
 import {
@@ -108,10 +109,10 @@ export interface BrowserLiveViewer extends RelaySocket {
   readonly buffered: Effect.Effect<number>;
 }
 
-/** What a socket asks for: whose it is, and the task and tab it names. */
+/** What a socket asks for: whose it is, the agent it names (or, from a desktop built before, the task), and the tab. */
 export interface BrowserLiveAsk {
   readonly userId: string;
-  readonly taskId: string;
+  readonly place: BrowserTabsPlace;
   readonly tabId: string;
 }
 
@@ -120,7 +121,7 @@ export interface BrowserLiveDependencies {
   /** The tab, where the member reaches it; none otherwise, and a failure where the store could not say. */
   readonly readTab: (
     userId: string,
-    taskId: string,
+    place: BrowserTabsPlace,
     tabId: string,
   ) => Effect.Effect<Option.Option<ReachedBrowserTab>, unknown>;
   /** The eve session the agent's sandbox is tagged with; none before the agent first ran. */
@@ -472,7 +473,7 @@ function publishDriver(view: LiveView, row: ReachedBrowserTab): Effect.Effect<vo
 function checkTab(view: LiveView): Effect.Effect<boolean> {
   return Effect.gen(function* () {
     const { ask, deps } = view;
-    const found = yield* Effect.result(deps.readTab(ask.userId, ask.taskId, ask.tabId));
+    const found = yield* Effect.result(deps.readTab(ask.userId, ask.place, ask.tabId));
     if (Result.isFailure(found)) return true;
     if (Option.isNone(found.success)) return false;
     yield* publishDriver(view, found.success.value);
@@ -560,7 +561,7 @@ function releaseOnClose(view: LiveView): Effect.Effect<void> {
     const writtenAt = yield* Ref.get(view.driving);
     if (writtenAt === undefined && !(yield* Ref.get(view.releasePending))) return;
     if (writtenAt !== undefined) {
-      const found = yield* Effect.result(deps.readTab(ask.userId, ask.taskId, ask.tabId));
+      const found = yield* Effect.result(deps.readTab(ask.userId, ask.place, ask.tabId));
       const heldUntil = Result.isSuccess(found)
         ? Option.getOrUndefined(found.success)?.tab.heldUntil
         : undefined;
@@ -904,7 +905,7 @@ function watchBrowser(view: LiveView): Effect.Effect<LiveEnd, never, Scope.Scope
     );
     // The tab is read again, since a browser that started afresh reopened it on a new target.
     const current = yield* Effect.result(
-      deps.readTab(view.ask.userId, view.ask.taskId, view.ask.tabId),
+      deps.readTab(view.ask.userId, view.ask.place, view.ask.tabId),
     );
     // A store that could not say is unavailable, and a tab the member no longer reaches, or that closed, is gone.
     if (Result.isFailure(current)) return BROWSER_LIVE_CLOSE_REASON.UNAVAILABLE;

@@ -20,22 +20,20 @@ import { parsedUrl } from "./parsed-url.js";
  * `/pull/1` are:
  *
  * - a task, `/plan/<id>`, and its section, `#<anchor>`, its version,
- *   `/plan/<id>/version/<seq>`, a page an agent wrote for it,
- *   `/plan/<id>/page/<pageId>`, and a turn of Luke's own work on it,
- *   `/plan/<id>/work/<at>`;
- * - one of its agents, `/plan/<id>/agent/<agentId>`, and under it a worker,
- *   `/worker/<callId>`, its Changes, `/changes`, one review thread of its
- *   pull request in one of that tab's views,
- *   `/changes/<conversation|files>/thread/<threadId>`, or a message,
- *   `/message/<messageId>`; a worker of Luke's own is `/plan/<id>/worker/<callId>`;
- * - an agent with no task, `/agent/<agentId>`, a message of its own, and a
- *   page it showed, which stands on it rather than a task,
- *   `/agent/<agentId>/page/<pageId>`;
- * - the Inbox, `/inbox`, and an item in it under the task or the agent with
- *   no task that holds it, `/plan/<id>/inbox/<itemId>` or
- *   `/agent/<agentId>/inbox/<itemId>`, since the Inbox is read by its holders;
+ *   `/plan/<id>/version/<seq>`, and a page an agent wrote for it,
+ *   `/plan/<id>/page/<pageId>`;
+ * - an agent, `/agent/<agentId>`, whether or not it works on a task, and
+ *   under it what is its own: a worker, `/worker/<callId>`, its Changes,
+ *   `/changes`, one review thread of its pull request in one of that tab's
+ *   views, `/changes/<conversation|files>/thread/<threadId>`, a message,
+ *   `/message/<messageId>`, and, on no task, a page it showed,
+ *   `/page/<pageId>`; which task's panel it opens in is the reader's to
+ *   find, by the agent;
+ * - the Inbox, `/inbox`, and an item in it under the agent that posted it,
+ *   `/agent/<agentId>/inbox/<itemId>`, whose task, where it has one, is the
+ *   reader's to find, by the agent, to open the item in that task's Inbox;
  * - a channel of the workspace, `/channel/<channelId>`, whose threads are
- *   those Inbox items, each still linked under its holder;
+ *   those Inbox items, each still linked under its agent;
  * - the Automations page, `/automations`, an automation,
  *   `/automation/<id>`, and one of its runs, `/automation/<id>/run/<runId>`;
  * - a page of Settings, `/settings[/<page>]`;
@@ -50,6 +48,14 @@ import { parsedUrl } from "./parsed-url.js";
  * An issue's page, `/issue/<issueId>`, is no place now that Luke keeps no
  * issues of its own, and Factory's, `/factory`, none now that Factory is
  * gone, so an old link to either reads as a link it does not know.
+ *
+ * An agent's place was once written under its task too,
+ * `/plan/<id>/agent/<agentId>/…`, and an Inbox item under its agent's task,
+ * `/plan/<id>/inbox/<itemId>`, each still read, the task kept, and still
+ * written while a writer names the task. A turn of Luke's own work,
+ * `/plan/<id>/work/<at>`, and a worker of Luke's own,
+ * `/plan/<id>/worker/<callId>`, are drawn nowhere now, so each is read as
+ * its task and written no more.
  *
  * A picture in a plan, `/plan/<id>/files/<picture>` (`plan-attachment-link.ts`),
  * is read as its task, and a picture in an Inbox item's words, the item's
@@ -93,7 +99,6 @@ export const LINK_PLACE = {
   COMMENT: "comment",
   VERSION: "version",
   PAGE: "page",
-  TURN: "turn",
   AGENT: "agent",
   WORKER: "worker",
   CHANGES: "changes",
@@ -322,29 +327,24 @@ const linkPlaceSchema = EffectSchema.Union([
     pageId: idSchema,
   }),
   EffectSchema.Struct({
-    kind: EffectSchema.Literal(LINK_PLACE.TURN),
-    planId: idSchema,
-    at: wholeSchema,
-  }),
-  EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.AGENT),
     planId: EffectSchema.optionalKey(idSchema),
     agentId: idSchema,
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.WORKER),
-    planId: idSchema,
-    agentId: EffectSchema.optionalKey(idSchema),
+    planId: EffectSchema.optionalKey(idSchema),
+    agentId: idSchema,
     callId: idSchema,
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.CHANGES),
-    planId: idSchema,
+    planId: EffectSchema.optionalKey(idSchema),
     agentId: idSchema,
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.PULL_REQUEST_THREAD),
-    planId: idSchema,
+    planId: EffectSchema.optionalKey(idSchema),
     agentId: idSchema,
     threadId: idSchema,
     view: EffectSchema.Literals(Object.values(PULL_REQUEST_THREAD_VIEW)),
@@ -400,7 +400,11 @@ const linkPlaceSchema = EffectSchema.Union([
   }),
 ]);
 
-/** A place in Luke a link can send someone to, by the ids that find it. */
+/**
+ * A place in Luke a link can send someone to, by the ids that find it. An
+ * agent's place names its task only where a link written under the task
+ * did, or a writer still does, so a reader finds the task by the agent.
+ */
 export type LinkPlace = typeof linkPlaceSchema.Type;
 
 /** The kind of place a link sends someone to. */
@@ -450,7 +454,7 @@ function namesItemPicture(more: readonly string[]): boolean {
   return step === STEP.FILES && id !== undefined && PICTURE_ID.test(id) && after.length === 0;
 }
 
-/** The steps after a task's id: a version, a page, a turn, an agent's, or a worker of Luke's. */
+/** The steps after a task's id: a version, a page, an agent's, or an Inbox item; a turn of Luke's or a worker of Luke's read as the task, since each is drawn nowhere now. */
 function taskFields(taskId: string, rest: readonly string[]) {
   const [step, id, ...more] = rest;
   if (step === STEP.AGENT && id !== undefined) return agentFields(taskId, id, more);
@@ -467,9 +471,9 @@ function taskFields(taskId: string, rest: readonly string[]) {
     case STEP.PAGE:
       return { kind: LINK_PLACE.PAGE, planId: taskId, pageId: id };
     case STEP.WORK:
-      return WHOLE.test(id) ? { kind: LINK_PLACE.TURN, planId: taskId, at: Number(id) } : undefined;
+      return WHOLE.test(id) ? { kind: LINK_PLACE.TASK, planId: taskId } : undefined;
     case STEP.WORKER:
-      return { kind: LINK_PLACE.WORKER, planId: taskId, callId: id };
+      return { kind: LINK_PLACE.TASK, planId: taskId };
     case STEP.INBOX:
       return { kind: LINK_PLACE.INBOX_ITEM, planId: taskId, itemId: id };
     // A picture of the task's plan opens the task, and nothing of the picture.
@@ -480,15 +484,14 @@ function taskFields(taskId: string, rest: readonly string[]) {
   }
 }
 
-/** The steps after an agent's id, under its task where it has one: the agent itself, a worker, its Changes, a message, or, on no task, a page of its own. */
+/** The steps after an agent's id, under the task an older link names it under or none: the agent itself, a worker, its Changes, a message, or, on no task, a page or an Inbox item of its own. */
 function agentFields(taskId: string | undefined, agentId: string, rest: readonly string[]) {
   const [step, id, ...more] = rest;
   const task = taskId === undefined ? {} : { planId: taskId };
   if (step === undefined) return { kind: LINK_PLACE.AGENT, ...task, agentId };
-  if (step === STEP.CHANGES && id === undefined && taskId !== undefined) {
-    return { kind: LINK_PLACE.CHANGES, planId: taskId, agentId };
-  }
-  if (step === STEP.CHANGES && taskId !== undefined) return threadFields(taskId, agentId, rest);
+  if (step === STEP.CHANGES && id === undefined)
+    return { kind: LINK_PLACE.CHANGES, ...task, agentId };
+  if (step === STEP.CHANGES) return threadFields(task, agentId, rest);
   if (step === STEP.INBOX && taskId === undefined && id !== undefined && namesItemPicture(more)) {
     return { kind: LINK_PLACE.INBOX_ITEM, agentId, itemId: id };
   }
@@ -499,18 +502,20 @@ function agentFields(taskId: string | undefined, agentId: string, rest: readonly
   if (step === STEP.INBOX && taskId === undefined) {
     return { kind: LINK_PLACE.INBOX_ITEM, agentId, itemId: id };
   }
-  if (step === STEP.WORKER && taskId !== undefined) {
-    return { kind: LINK_PLACE.WORKER, planId: taskId, agentId, callId: id };
-  }
+  if (step === STEP.WORKER) return { kind: LINK_PLACE.WORKER, ...task, agentId, callId: id };
   return undefined;
 }
 
 /** A review thread's steps after its agent's Changes, `<view>/thread/<threadId>`; nothing for any other. */
-function threadFields(taskId: string, agentId: string, rest: readonly string[]) {
+function threadFields(
+  task: { readonly planId?: string },
+  agentId: string,
+  rest: readonly string[],
+) {
   const [, view, step, threadId, ...more] = rest;
   if (view === undefined || !THREAD_VIEWS.has(view) || step !== STEP.THREAD) return undefined;
   if (threadId === undefined || more.length > 0) return undefined;
-  return { kind: LINK_PLACE.PULL_REQUEST_THREAD, planId: taskId, agentId, threadId, view };
+  return { kind: LINK_PLACE.PULL_REQUEST_THREAD, ...task, agentId, threadId, view };
 }
 
 /** The fields a link's steps after its workspace spell, for the schema to read; nothing where they name no place. */
@@ -587,14 +592,10 @@ function placePath(place: LinkPlace): readonly string[] {
       return "planId" in place
         ? [STEP.PLAN, place.planId, STEP.PAGE, place.pageId]
         : [STEP.AGENT, place.agentId, STEP.PAGE, place.pageId];
-    case LINK_PLACE.TURN:
-      return [STEP.PLAN, place.planId, STEP.WORK, String(place.at)];
     case LINK_PLACE.AGENT:
       return agentPath(place.planId, place.agentId);
     case LINK_PLACE.WORKER:
-      return place.agentId === undefined
-        ? [STEP.PLAN, place.planId, STEP.WORKER, place.callId]
-        : [...agentPath(place.planId, place.agentId), STEP.WORKER, place.callId];
+      return [...agentPath(place.planId, place.agentId), STEP.WORKER, place.callId];
     case LINK_PLACE.CHANGES:
       return [...agentPath(place.planId, place.agentId), STEP.CHANGES];
     case LINK_PLACE.PULL_REQUEST_THREAD:
@@ -632,7 +633,7 @@ function placePath(place: LinkPlace): readonly string[] {
   }
 }
 
-/** An agent's path: under its task where it has one, else under the workspace. */
+/** An agent's path: under the workspace, or under the task a writer still names it under. */
 function agentPath(taskId: string | undefined, agentId: string): readonly string[] {
   return taskId === undefined ? [STEP.AGENT, agentId] : [STEP.PLAN, taskId, STEP.AGENT, agentId];
 }

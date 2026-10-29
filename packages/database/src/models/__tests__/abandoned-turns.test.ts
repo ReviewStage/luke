@@ -2,22 +2,24 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import {
-  BRAIN_REQUEST_FAILURE,
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
-} from "@luke/features/brain";
+  RUN_EVENT,
+  RUN_STATUS,
+  RUN_TURN_ORIGIN,
+  TURN_FAILURE,
+  TURN_TRIGGER,
+} from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
+import { sentLineId } from "@luke/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { conversations } from "../../schemas/storage.js";
-import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
+import { conversations, messages } from "../../schemas/storage.js";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
 import {
+  purgeWithdrawnLines,
   runningTurnIds,
   settleEndedSession,
   settleEndedSessionTurn,
@@ -25,7 +27,7 @@ import {
   sweepAbandonedTurns,
   TURN_ABANDON,
 } from "../abandoned-turns.js";
-import { latestTurnsOfReached } from "../coding-agent-store.js";
+import { latestTurnsOfReached } from "../agent-store.js";
 import { type ConversationTarget, type StoreWriter, storeWriter } from "../writer.js";
 
 /**
@@ -71,18 +73,18 @@ const turnIn = (
     if (stands === TURN_STATUS.QUEUED) return turnId;
     yield* writer.consume(target, {
       ...turn,
-      kind: BRAIN_RUN_EVENT.TURN_STARTED,
+      kind: RUN_EVENT.TURN_STARTED,
       sequence: 1,
-      origin: BRAIN_TURN_ORIGIN.TYPED,
-      trigger: BRAIN_TURN_TRIGGER.ASK,
+      origin: RUN_TURN_ORIGIN.TYPED,
+      trigger: TURN_TRIGGER.ASK,
       at: STARTED_AT,
     });
     if (stands === TURN_STATUS.RUNNING) return turnId;
     yield* writer.consume(target, {
       ...turn,
-      kind: BRAIN_RUN_EVENT.TURN_ENDED,
+      kind: RUN_EVENT.TURN_ENDED,
       sequence: 2,
-      status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+      status: RUN_STATUS.SUCCEEDED,
       responseIds: [],
       at: STARTED_AT + 1,
     });
@@ -123,10 +125,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         const running = yield* turnIn(writer, agent, TURN_STATUS.RUNNING);
         yield* holding(agent, running);
         assert.equal(yield* lose(agent), 1);
-        assert.deepEqual(yield* newestTurnOf(agent), [
-          TURN_STATUS.FAILED,
-          BRAIN_REQUEST_FAILURE.MODEL,
-        ]);
+        assert.deepEqual(yield* newestTurnOf(agent), [TURN_STATUS.FAILED, TURN_FAILURE.MODEL]);
         assert.deepEqual(yield* projectionOf(agent), { session: "cli" });
         assert.equal(yield* lose(agent), 0, "a second settle writes nothing");
 
@@ -169,7 +168,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         const writer = yield* storeWriter({ tools: {} });
         const settle = (target: ConversationTarget, id: string) =>
           settleEndedSessionTurn(writer, { id, ...target }, STARTED_AT + 10);
-        const ended = [TURN_STATUS.FAILED, BRAIN_REQUEST_FAILURE.SESSION_ENDED];
+        const ended = [TURN_STATUS.FAILED, TURN_FAILURE.SESSION_ENDED];
 
         const running = yield* openAgentConversation;
         const runningTurn = yield* turnIn(writer, running, TURN_STATUS.RUNNING);
@@ -198,7 +197,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
       Effect.gen(function* () {
         const db = yield* Database;
         const writer = yield* storeWriter({ tools: {} });
-        const ended = [TURN_STATUS.FAILED, BRAIN_REQUEST_FAILURE.SESSION_ENDED];
+        const ended = [TURN_STATUS.FAILED, TURN_FAILURE.SESSION_ENDED];
         const endOf = (session: string) =>
           settleEndedSession(writer, session, { now: STARTED_AT + 10 });
 
@@ -267,7 +266,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         );
         assert.deepEqual(yield* newestTurnOf(busy), [
           TURN_STATUS.FAILED,
-          BRAIN_REQUEST_FAILURE.SESSION_ENDED,
+          TURN_FAILURE.SESSION_ENDED,
         ]);
       }),
   );
@@ -284,22 +283,24 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         assert.deepEqual(yield* newestTurnOf(target), [TURN_STATUS.RUNNING, null]);
         yield* sweepAbandonedTurns(
           { writer },
-          { now: STARTED_AT + TURN_ABANDON.CODING_AGENT_AFTER_MS + 1 },
+          { now: STARTED_AT + TURN_ABANDON.AGENT_AFTER_MS + 1 },
         );
-        assert.deepEqual(yield* newestTurnOf(target), [
-          TURN_STATUS.FAILED,
-          BRAIN_REQUEST_FAILURE.ABANDONED,
-        ]);
+        assert.deepEqual(yield* newestTurnOf(target), [TURN_STATUS.FAILED, TURN_FAILURE.ABANDONED]);
       }),
   );
 
   it.effect(
-    "the sweep settles a turn whose Stop eve never confirmed as cancelled once past the Stop's bound, and not before",
+    "the sweep settles a turn whose Stop eve never confirmed as cancelled once past the Stop's bound, and not before, dropping the turn a native projection holds",
     () =>
       Effect.gen(function* () {
+        const db = yield* Database;
         const writer = yield* storeWriter({ tools: {} });
         const target = yield* openAgentConversation;
         const turnId = yield* turnIn(writer, target, TURN_STATUS.RUNNING);
+        yield* db
+          .update(conversations)
+          .set({ nativeProjection: { session: "cli", turn: { id: turnId } } })
+          .where(eq(conversations.id, target.conversationId));
         const stoppedAt = STARTED_AT + 60_000;
         yield* writer.requestTurnCancel(target, { turnId, at: new Date(stoppedAt) });
 
@@ -314,6 +315,11 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
           { now: stoppedAt + TURN_ABANDON.CANCEL_AFTER_MS + 1 },
         );
         assert.deepEqual(yield* newestTurnOf(target), [TURN_STATUS.CANCELLED, null]);
+        const [row] = yield* db
+          .select({ projection: conversations.nativeProjection })
+          .from(conversations)
+          .where(eq(conversations.id, target.conversationId));
+        assert.deepEqual(row?.projection, { session: "cli" });
       }),
   );
 
@@ -337,6 +343,45 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
 
         assert.equal(settled, 1);
         assert.deepEqual(yield* runningTurnIds(agent.conversationId), [begunSince]);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the sweep over withdrawn lines", (it) => {
+  it.effect(
+    "a line whose hand-over answered nothing stays until a coding agent's turn bound has passed since, then goes, and one a turn took after all stays",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const target = yield* openAgentConversation;
+        const writer = yield* storeWriter({ tools: {} });
+        for (const text of ["Rerun the tests.", "Push the branch."]) {
+          yield* writer.writeAwaitingLine(
+            target,
+            { text, clientKey: text, sender: { kind: MESSAGE_SENDER.LUKE } },
+            Effect.succeed(false),
+          );
+        }
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "t_0" });
+        yield* writer.takeAwaitingLine(target, { text: "Push the branch.", turnId });
+        const standing = Effect.map(
+          db
+            .select({ clientId: messages.clientId })
+            .from(messages)
+            .where(eq(messages.conversationId, target.conversationId)),
+          (rows) => rows.map((row) => row.clientId).sort(),
+        );
+        // Note that the lines were withdrawn at the test clock's start, the epoch.
+        yield* purgeWithdrawnLines(TURN_ABANDON.AGENT_AFTER_MS);
+        const withinBound = yield* standing;
+        yield* purgeWithdrawnLines(TURN_ABANDON.AGENT_AFTER_MS + 1);
+
+        assert.deepEqual(withinBound, [
+          sentLineId("Push the branch."),
+          sentLineId("Rerun the tests."),
+        ]);
+        assert.deepEqual(yield* standing, [sentLineId("Push the branch.")]);
       }),
   );
 });

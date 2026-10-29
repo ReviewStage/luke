@@ -65,27 +65,344 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
-## 0.23.0 — 2026-10-26
+## 0.23.0 — 2026-10-28
+
+### The Browser tab
+
+Watch an agent's cloud browser live in a Browser tab beside your plan, its
+pointer drawn as it clicks and types, and press Take over to sign in or steer
+it with back, forward, reload, and the address bar, then Hand back. A task's
+side panel holds every tab its agents have open, an agent's own page holds
+that agent's, and New browser tab, from the panel's "+" or ⌘K, opens an
+address in an agent's browser for you.
+([#5695](https://github.com/ReviewStage/luke/pull/5695),
+[#5794](https://github.com/ReviewStage/luke/pull/5794))
+
+### One mark for how a task stands
+
+Every task row, in the sidebar, Recent, ⌘K, and the Tasks page's List and
+Columns, wears one icon for how its agents stand: failed as a red triangle,
+working, or its pull request in GitHub's colour, a closed one included. It
+takes the place of the Tasks page's working count and pull request chips.
+([#5601](https://github.com/ReviewStage/luke/pull/5601),
+[#5605](https://github.com/ReviewStage/luke/pull/5605),
+[#5636](https://github.com/ReviewStage/luke/pull/5636),
+[#5799](https://github.com/ReviewStage/luke/pull/5799))
+
+### One menu, in one order
+
+Every menu keeps one order, Copy link first and Permanently delete last, and
+an agent's menu is the same on its tab, its row, its page, and beside an Inbox
+thread, where it adds Open in task (⌘O). Copy link always copies a Luke link,
+a pull request's own address is Copy GitHub link, the plan's title and
+sections show a Copy link button, and a Settings row with a single act shows
+it as a button.
+([#5754](https://github.com/ReviewStage/luke/pull/5754),
+[#5756](https://github.com/ReviewStage/luke/pull/5756),
+[#5758](https://github.com/ReviewStage/luke/pull/5758),
+[#5763](https://github.com/ReviewStage/luke/pull/5763),
+[#5766](https://github.com/ReviewStage/luke/pull/5766),
+[#5772](https://github.com/ReviewStage/luke/pull/5772))
 
 ### Improvements
 
-- Claude Code and Codex agents on a call can queue questions for the voice
-  and hang up, as Luke's own agents do
-  ([#5544](https://github.com/ReviewStage/luke/pull/5544))
+- The sidebar, the Inbox, the task list, a task's page and transcript,
+  automations, and a workspace's people update the moment a change lands, from
+  another window or a teammate, rather than on Luke's next look
+  ([#5666](https://github.com/ReviewStage/luke/pull/5666),
+  [#5672](https://github.com/ReviewStage/luke/pull/5672),
+  [#5686](https://github.com/ReviewStage/luke/pull/5686),
+  [#5724](https://github.com/ReviewStage/luke/pull/5724),
+  [#5725](https://github.com/ReviewStage/luke/pull/5725),
+  [#5726](https://github.com/ReviewStage/luke/pull/5726),
+  [#5727](https://github.com/ReviewStage/luke/pull/5727),
+  [#5731](https://github.com/ReviewStage/luke/pull/5731),
+  [#5796](https://github.com/ReviewStage/luke/pull/5796),
+  [#5798](https://github.com/ReviewStage/luke/pull/5798))
+- The Inbox draws at once when you come back to it, rather than filling in
+  task by task, and stays current from one feed for your whole account
+  ([#5807](https://github.com/ReviewStage/luke/pull/5807),
+  [#5809](https://github.com/ReviewStage/luke/pull/5809),
+  [#5818](https://github.com/ReviewStage/luke/pull/5818),
+  [#5827](https://github.com/ReviewStage/luke/pull/5827))
+- The sidebar's Inbox count draws in the unread blue and reads "N for you",
+  counting the same threads For you lists: each question waiting on you and
+  each update you haven't opened
+  ([#5784](https://github.com/ReviewStage/luke/pull/5784),
+  [#5825](https://github.com/ReviewStage/luke/pull/5825))
+- The Dock badge and a task's count on the Tasks page count only the questions
+  waiting on you, so they can reach zero
+  ([#5602](https://github.com/ReviewStage/luke/pull/5602),
+  [#5624](https://github.com/ReviewStage/luke/pull/5624))
+- An Inbox item settles on its own once its task is marked done or canceled or
+  its agent is archived
+  ([#5609](https://github.com/ReviewStage/luke/pull/5609))
+- A question waiting on you has × on its card to resolve it without answering
+  ([#5615](https://github.com/ReviewStage/luke/pull/5615))
+- An Inbox item's reply box, under an open question too, starts a new thread
+  to its agent when you tick Send as a new thread, in place of the New thread
+  button atop the Inbox
+  ([#5757](https://github.com/ReviewStage/luke/pull/5757),
+  [#5842](https://github.com/ReviewStage/luke/pull/5842))
+- An ask an agent addressed to someone by name says so, "To you" or "To" with
+  their face and name, on its message and its Inbox row
+  ([#5665](https://github.com/ReviewStage/luke/pull/5665))
+- A thread's chip leads with what it asks, a decision, a to-do, or an answer,
+  rather than its agent's tile
+  ([#5626](https://github.com/ReviewStage/luke/pull/5626))
+- An Inbox question's Mark done, Couldn't do it, Approve, and Request changes
+  wear their icons before you answer, not only after
+  ([#5786](https://github.com/ReviewStage/luke/pull/5786))
+- ⌘K opens and narrows at once, even over thousands of tasks and a long Inbox
+  ([#5625](https://github.com/ReviewStage/luke/pull/5625),
+  [#5633](https://github.com/ReviewStage/luke/pull/5633),
+  [#5640](https://github.com/ReviewStage/luke/pull/5640),
+  [#5651](https://github.com/ReviewStage/luke/pull/5651))
+- Menu actions take one set of shortcuts: ⇧⌘C copies a link, ⌥⌘C the plan or
+  an agent's concise transcript and ⌥⇧⌘C its full one, ⌥⇧⌘H opens Version
+  history, ⇧⌘O opens on GitHub, ⌥⌘W closes other tabs, and U and P mark the
+  focused row read and pin it
+  ([#5762](https://github.com/ReviewStage/luke/pull/5762))
+- A task's row menu, a group header, and a selection offer Status ▸,
+  Priority ▸, and Assignee ▸ in place of Mark done and Cancel task, and S opens
+  Status on the focused or chosen tasks
+  ([#5797](https://github.com/ReviewStage/luke/pull/5797),
+  [#5841](https://github.com/ReviewStage/luke/pull/5841))
+- A row in the Tasks page's List and a Columns card show a checkbox that
+  chooses them, X chooses the focused task, and the sidebar chooses tasks with
+  ⌘-click and ⇧-click so a right-click acts on them all
+  ([#5761](https://github.com/ReviewStage/luke/pull/5761),
+  [#5845](https://github.com/ReviewStage/luke/pull/5845))
+- The task's ⋯ moves from the column's toolbar to its Plan tab, with Copy
+  plan, Version history, Move to section, Move to workspace, and Open on
+  GitHub ([#5789](https://github.com/ReviewStage/luke/pull/5789))
+- Turning off Open a task once it starts, under Settings › Account, keeps you
+  where you were when New task starts a task, with a toast to open it
+  ([#5850](https://github.com/ReviewStage/luke/pull/5850))
+- A task's plan lists its agents at the top, working ones first, each opening
+  its agent and showing its pull request as a chip
+  ([#5603](https://github.com/ReviewStage/luke/pull/5603))
+- A task's sidebar row turns unread when its agents finish, fail, or open a
+  pull request, not only when its plan changes
+  ([#5612](https://github.com/ReviewStage/luke/pull/5612))
+- A task summary's Tabs, Agents, Pull requests, and Pages fold as the
+  sidebar's groups do, counting what they hide, and stay folded from task to
+  task ([#5741](https://github.com/ReviewStage/luke/pull/5741))
+- Selecting words you can edit in a plan, or in a pull request's description,
+  raises the full format toolbar rather than Comment alone
+  ([#5720](https://github.com/ReviewStage/luke/pull/5720))
+- The file viewer shows Previous and Next arrows beside its card and a strip of
+  every file's preview beneath it
+  ([#5600](https://github.com/ReviewStage/luke/pull/5600),
+  [#5667](https://github.com/ReviewStage/luke/pull/5667))
+- The file viewer draws a Mermaid file (.mmd or .mermaid) as its diagram, which
+  you can zoom and copy like a picture
+  ([#5829](https://github.com/ReviewStage/luke/pull/5829))
+- In an agent's transcript, a GitHub review, comment, or failed check reads as
+  a card saying who did what on the pull request, and a thread message stands
+  under its thread's chip rather than as raw prompt text
+  ([#5682](https://github.com/ReviewStage/luke/pull/5682),
+  [#5685](https://github.com/ReviewStage/luke/pull/5685))
+- An agent's transcript draws as soon as you open its tab, rather than waiting
+  on its pull request, which joins once GitHub answers
+  ([#5588](https://github.com/ReviewStage/luke/pull/5588))
+- A task's pull request card names who opened it, with their face
+  ([#5652](https://github.com/ReviewStage/luke/pull/5652))
+- On a phone, the Pull request tab's Conversation filters fold into one chip
+  whose menu holds Hide resolved and Hide bots with their counts
+  ([#5594](https://github.com/ReviewStage/luke/pull/5594))
+- An automation's finished runs leave the sidebar's Tasks, a run staying only
+  while it works, failed, ended unseen, waits on you, or has a pull request
+  open ([#5637](https://github.com/ReviewStage/luke/pull/5637))
+- Automations, an automation's card, and its Sharing settings name who made
+  it, whose GitHub access, model keys, and integrations its runs use
+  ([#5639](https://github.com/ReviewStage/luke/pull/5639))
+- A coding agent knows which teammate sent each message, rather than taking a
+  teammate's words as its starter's
+  ([#5611](https://github.com/ReviewStage/luke/pull/5611))
+- An agent hears when an agent it started fails, is stopped, or is archived,
+  rather than waiting on a report that will never come
+  ([#5779](https://github.com/ReviewStage/luke/pull/5779),
+  [#5792](https://github.com/ReviewStage/luke/pull/5792))
+- A file chip or code block from an agent with no task, such as an
+  automation's, opens its file in Luke
+  ([#5780](https://github.com/ReviewStage/luke/pull/5780),
+  [#5788](https://github.com/ReviewStage/luke/pull/5788))
 - Claude Code agents search with Glob and Grep, keep a to-do list, and hand
   read-only jobs to a worker
   ([#5533](https://github.com/ReviewStage/luke/pull/5533),
   [#5563](https://github.com/ReviewStage/luke/pull/5563))
-- The voice on a call names only the tools its agent holds, and speaks to
-  whether that agent is scoping a task, already at work, or on none
-  ([#5537](https://github.com/ReviewStage/luke/pull/5537))
 - An agent's tool descriptions say what its tools actually do
   ([#5541](https://github.com/ReviewStage/luke/pull/5541))
+- Toasts stand in the window's bottom-right corner rather than rising above
+  the message box ([#5630](https://github.com/ReviewStage/luke/pull/5630))
 
 ### Fixes
 
+- Fixed a message or Stop sent to a cloud agent counting as delivered when the
+  agent never read it
+  ([#5781](https://github.com/ReviewStage/luke/pull/5781),
+  [#5813](https://github.com/ReviewStage/luke/pull/5813))
+- Fixed a Claude Code agent not taking your messages or Stop for up to an
+  hour, and Stop leaving a stuck agent running
+  ([#5716](https://github.com/ReviewStage/luke/pull/5716))
+- Fixed a message to a cloud agent answering "Luke didn't hear back." while
+  the agent was still starting or its sandbox was stopping
+  ([#5728](https://github.com/ReviewStage/luke/pull/5728),
+  [#5816](https://github.com/ReviewStage/luke/pull/5816),
+  [#5838](https://github.com/ReviewStage/luke/pull/5838))
+- Fixed a Claude Code or Codex agent's turn failing after it lost touch with
+  Luke for about ten minutes
+  ([#5708](https://github.com/ReviewStage/luke/pull/5708))
+- Fixed editing a message to a cloud agent while it was still sending saying
+  "This agent no longer exists."
+  ([#5730](https://github.com/ReviewStage/luke/pull/5730))
+- Fixed an agent being able to run a command on your Mac after an automation's
+  event, or someone else's review or comment on its pull request, put an
+  outsider's words in its conversation
+  ([#5737](https://github.com/ReviewStage/luke/pull/5737),
+  [#5793](https://github.com/ReviewStage/luke/pull/5793))
+- Fixed an agent's commands on your Mac answering that your Mac did not say
+  what they did in time, until you restarted Luke
+  ([#5598](https://github.com/ReviewStage/luke/pull/5598))
+- Fixed an agent doing what you asked on a thread without replying there
+  ([#5653](https://github.com/ReviewStage/luke/pull/5653))
+- Fixed screenshots and pages a Claude Code agent saved to its temporary
+  folder never reaching you
+  ([#5641](https://github.com/ReviewStage/luke/pull/5641))
+- Fixed an agent's commands finding no Playwright or Chromium in its cloud
+  sandbox ([#5662](https://github.com/ReviewStage/luke/pull/5662))
 - Fixed opening a task freezing the app for seconds at a time
   ([#5564](https://github.com/ReviewStage/luke/pull/5564))
+- Fixed the sidebar's tasks and the Tasks page loading slowly
+  ([#5619](https://github.com/ReviewStage/luke/pull/5619))
+- Fixed the sidebar and other live lists freezing until you relaunched Luke
+  after its service briefly couldn't check your sign-in
+  ([#5663](https://github.com/ReviewStage/luke/pull/5663))
+- Fixed the sidebar's tasks keeping their order until you relaunched Luke,
+  rather than sorting anew once the pointer leaves the sidebar
+  ([#5646](https://github.com/ReviewStage/luke/pull/5646))
+- Fixed a task in the sidebar jumping to the top of Updated when one of its
+  agents only started a turn
+  ([#5830](https://github.com/ReviewStage/luke/pull/5830))
+- Fixed New task with an agent opening a stray New agent draft or the task's
+  plan beside the agent
+  ([#5613](https://github.com/ReviewStage/luke/pull/5613),
+  [#5628](https://github.com/ReviewStage/luke/pull/5628))
+- Fixed an automation's Archive finished runs archiving an agent whose pull
+  request was still open
+  ([#5635](https://github.com/ReviewStage/luke/pull/5635))
+- Fixed a narrow Inbox opening straight onto a thread, or on a phone with its
+  first row's buttons showing, and a task's Inbox tab with one thread leaving
+  no way back to its list
+  ([#5657](https://github.com/ReviewStage/luke/pull/5657),
+  [#5748](https://github.com/ReviewStage/luke/pull/5748))
+- Fixed the Inbox choosing a thread on its own when opened, then dropping back
+  to its list when you opened a page from that thread
+  ([#5765](https://github.com/ReviewStage/luke/pull/5765))
+- Fixed an Inbox thread on a phone repeating its title in the bar above it
+  ([#5746](https://github.com/ReviewStage/luke/pull/5746))
+- Fixed the agent's recommendation disappearing from a yes/no ask
+  ([#5749](https://github.com/ReviewStage/luke/pull/5749))
+- Fixed a to-do step in an ask showing its Markdown as raw asterisks and
+  backticks ([#5743](https://github.com/ReviewStage/luke/pull/5743))
+- Fixed words in an Inbox ask or answer that wouldn't select or quote into a
+  reply ([#5760](https://github.com/ReviewStage/luke/pull/5760))
+- Fixed Send doing nothing, without saying why, on an unfinished answer
+  ([#5745](https://github.com/ReviewStage/luke/pull/5745))
+- Fixed the Pull request tab's + Reviewer saying "Nobody else may be asked."
+  when your teammates reach the repository through its organization
+  ([#5773](https://github.com/ReviewStage/luke/pull/5773))
+- Fixed the Tasks page's Filter menu choosing nothing for every field but
+  Status in the desktop app
+  ([#5580](https://github.com/ReviewStage/luke/pull/5580))
+- Fixed the rows beneath showing through the Tasks page's selection bar in the
+  dark appearance ([#5833](https://github.com/ReviewStage/luke/pull/5833))
+- Fixed a menu opened inside a scrolling card, such as the diff's Changed
+  words menu, being cut off by that card
+  ([#5656](https://github.com/ReviewStage/luke/pull/5656))
+- Fixed the file tree's resize edge drawing over, and taking presses from, the
+  diff's View options menu
+  ([#5848](https://github.com/ReviewStage/luke/pull/5848))
+- Fixed View options' rows sitting on their cards' edges, and a file's or
+  page's source drawing as a grey card inside its tab
+  ([#5579](https://github.com/ReviewStage/luke/pull/5579))
+- Fixed ticked task lists in a pull request's description, a review comment,
+  or an agent's message fading to pale grey in the light theme
+  ([#5585](https://github.com/ReviewStage/luke/pull/5585))
+- Fixed the Pull request tab's Conversation heading being cut mid-word on a
+  phone, and its folded title sliding sideways to its Edit title pencil
+  ([#5586](https://github.com/ReviewStage/luke/pull/5586),
+  [#5592](https://github.com/ReviewStage/luke/pull/5592))
+- Fixed the Pull request tab's folded Conversation, Checks, and Chapters icons
+  naming nothing on hover in a narrow side panel
+  ([#5595](https://github.com/ReviewStage/luke/pull/5595))
+- Fixed the automation crumb at the head of an automation agent's page doing
+  nothing when clicked in the desktop app
+  ([#5627](https://github.com/ReviewStage/luke/pull/5627))
+- Fixed a Mermaid flowchart with a line break in a label saying "This diagram
+  could not be drawn." ([#5801](https://github.com/ReviewStage/luke/pull/5801))
+- Fixed GitHub and Linear chips in a plan flickering to their bare address
+  each time a section opened or closed
+  ([#5705](https://github.com/ReviewStage/luke/pull/5705))
+- Fixed a transcript's thread and pull request chips cutting their title short
+  with room to spare
+  ([#5834](https://github.com/ReviewStage/luke/pull/5834))
+- Fixed a button's trailing chevron, such as the format toolbar's Turn into ▾,
+  sitting above the middle of its words
+  ([#5769](https://github.com/ReviewStage/luke/pull/5769))
+- Fixed VoiceOver repeating an agent's past failures as you scrolled, and two
+  load failures leaving you no Retry or Open Settings
+  ([#5593](https://github.com/ReviewStage/luke/pull/5593))
+- Fixed a screen reader announcing a row's Mark as read, Resolve without
+  answering, Pin, or Mark done without the row it acts on
+  ([#5692](https://github.com/ReviewStage/luke/pull/5692))
+- Fixed a running turn's calls reading "3 tools called" and rewording to
+  "3 tool calls" once it finished
+  ([#5085](https://github.com/ReviewStage/luke/pull/5085))
+- Fixed a message box's length counter writing 3420/4000 rather than
+  3,420/4,000 ([#5086](https://github.com/ReviewStage/luke/pull/5086))
+
+### Misc
+
+- Removed voice calls: an agent's Call button, New voice chat, the call
+  window, past calls in transcripts, and the tools agents used on a call,
+  while Dictate stays
+  ([#5704](https://github.com/ReviewStage/luke/pull/5704),
+  [#5706](https://github.com/ReviewStage/luke/pull/5706),
+  [#5712](https://github.com/ReviewStage/luke/pull/5712),
+  [#5721](https://github.com/ReviewStage/luke/pull/5721),
+  [#5736](https://github.com/ReviewStage/luke/pull/5736),
+  [#5750](https://github.com/ReviewStage/luke/pull/5750),
+  [#5764](https://github.com/ReviewStage/luke/pull/5764),
+  [#5778](https://github.com/ReviewStage/luke/pull/5778),
+  [#5803](https://github.com/ReviewStage/luke/pull/5803),
+  [#5805](https://github.com/ReviewStage/luke/pull/5805),
+  [#5822](https://github.com/ReviewStage/luke/pull/5822))
+- Removed the side panel's Code tab and the code agents showed in it
+  ([#5701](https://github.com/ReviewStage/luke/pull/5701),
+  [#5703](https://github.com/ReviewStage/luke/pull/5703),
+  [#5735](https://github.com/ReviewStage/luke/pull/5735))
+- Removed the task whiteboard and its Board tab in the side panel
+  ([#5700](https://github.com/ReviewStage/luke/pull/5700),
+  [#5701](https://github.com/ReviewStage/luke/pull/5701),
+  [#5742](https://github.com/ReviewStage/luke/pull/5742))
+- Removed linking issues to a task: the task page's Linked issues, New task's
+  Issue chip, and the issue tags on Columns cards
+  ([#5698](https://github.com/ReviewStage/luke/pull/5698),
+  [#5701](https://github.com/ReviewStage/luke/pull/5701),
+  [#5759](https://github.com/ReviewStage/luke/pull/5759))
+- Removed the plan template and Settings › Plan template, so a new plan starts
+  empty ([#5723](https://github.com/ReviewStage/luke/pull/5723))
+- Removed the workspace Linear connection, so agents use each member's own
+  Linear connection
+  ([#5771](https://github.com/ReviewStage/luke/pull/5771))
+- Removed the task toolbar's Start, since the "+" menu's New agent starts an
+  agent ([#5566](https://github.com/ReviewStage/luke/pull/5566))
+- Added screenshots to the 0.20.0, 0.21.0, and 0.22.0 entries
+  ([#5717](https://github.com/ReviewStage/luke/pull/5717))
+- Updated PRIVACY.md to say which Inbox questions the sidebar and the Dock
+  count ([#5610](https://github.com/ReviewStage/luke/pull/5610))
 
 ## 0.22.0 — 2026-10-26
 
@@ -95,6 +412,8 @@ On a phone, or in a window small enough to draw the phone layout, a row's ⋯,
 a long press, and a right-click open their menu as a sheet from the bottom of
 the screen, every item in reach, rather than a menu floating over the page.
 ([#5552](https://github.com/ReviewStage/luke/pull/5552))
+
+![Luke's web app in Safari on an iPhone, its Tasks page dimmed under a sheet risen from the bottom for Rotate webhook signing secrets: Copy link, Mark as unread, Rename, Version history, Pin, Mark done, Cancel task, Move to section, Change repository, Open on GitHub, and Permanently delete, each a full-width row.](apps/web/public/changelog/0.22.0/menus-rise-from-the-bottom-on-a-phone.png)
 
 ### Long transcripts stay fast
 
@@ -198,6 +517,8 @@ and the Inbox marks its chosen items read or resolves them together.
 [#5092](https://github.com/ReviewStage/luke/pull/5092),
 [#5124](https://github.com/ReviewStage/luke/pull/5124))
 
+![The Tasks page's List, close up, with four Todo tasks chosen and the bar at its foot reading 4 selected, Mark done, Set status, Move to section, and Clear.](apps/web/public/changelog/0.21.0/select-several-at-once.png)
+
 ### Nothing you write is lost
 
 Esc, closing, or clicking away keeps your words in a message's Edit box, a
@@ -267,6 +588,8 @@ and its arrows step through that automation's runs.
 [#5450](https://github.com/ReviewStage/luke/pull/5450),
 [#5459](https://github.com/ReviewStage/luke/pull/5459))
 
+![Automations on its Runs tab over the whole window: acme's runs newest first, three working and two failed, fired by Sentry issues and alerts, schedules, GitHub, and a webhook, with Running 3 and Failed 2 beside All and the sidebar's Automations row counting 3.](apps/web/public/changelog/0.21.0/automation-runs.png)
+
 ### Write on pull requests as you write plans
 
 Click into a pull request's description in its tab to edit it in place, and
@@ -283,6 +606,8 @@ in a sheet of their own beneath them. The chosen tab is a raised pill, drawn
 as the sidebar's open place is.
 ([#5324](https://github.com/ReviewStage/luke/pull/5324),
 [#4938](https://github.com/ReviewStage/luke/pull/4938))
+
+![Teammate invitations on its Add teammate invitations agent, its tab row level with the traffic lights, beside #214's Files changed in the side panel, the page and the panel each in a sheet of its own.](apps/web/public/changelog/0.21.0/tabs-on-the-windows-frame.png)
 
 ### Menus and arrow keys on every row
 
@@ -305,6 +630,8 @@ icon, and shortcut everywhere.
 [#5069](https://github.com/ReviewStage/luke/pull/5069),
 [#5111](https://github.com/ReviewStage/luke/pull/5111),
 [#5115](https://github.com/ReviewStage/luke/pull/5115))
+
+![The sidebar, close up, with the pinned Teammate invitations row's menu open: Move up and Move down with ⇧⌘↑ and ⇧⌘↓, then Copy plan, Copy link, Unpin, Mark done, Move to section, and the rest with their shortcuts.](apps/web/public/changelog/0.21.0/menus-and-arrow-keys-on-every-row.png)
 
 ### Luke with a screen reader
 
@@ -850,6 +1177,8 @@ titles among them, now runs on your own subscription or key, never Luke's.
 [#4661](https://github.com/ReviewStage/luke/pull/4661),
 [#4803](https://github.com/ReviewStage/luke/pull/4803))
 
+![Settings › Agents over the whole window: Claude and Codex each Connected via subscription, the default model Opus 5.5 at High effort, and Chapters on Sonnet 5.5.](apps/web/public/changelog/0.20.0/coding-agents-on-your-plan.png)
+
 ### Installed skills
 
 Install skills for your coding agents from Settings › Skills: paste an
@@ -870,6 +1199,8 @@ Workspace, or Personal badge.
 [#4757](https://github.com/ReviewStage/luke/pull/4757),
 [#4830](https://github.com/ReviewStage/luke/pull/4830),
 [#4901](https://github.com/ReviewStage/luke/pull/4901))
+
+![A coding agent's message box with / typed, close up: its picker lists db-migration and members-tests marked Repo, acme-style, postmortem, and email-preview marked Workspace, and pr-description marked Personal.](apps/web/public/changelog/0.20.0/installed-skills.png)
 
 ### A new look, in motion
 
@@ -924,6 +1255,8 @@ itself once its pull request merges and nothing waits on you.
 [#4679](https://github.com/ReviewStage/luke/pull/4679),
 [#4816](https://github.com/ReviewStage/luke/pull/4816),
 [#4886](https://github.com/ReviewStage/luke/pull/4886))
+
+![The Tasks page's List beside the sidebar: acme's tasks grouped In progress, Todo, Backlog, and Done, each row with its priority, key such as ACME-42, repository, its assignee's face, and its creator's face.](apps/web/public/changelog/0.20.0/the-tasks-page.png)
 
 ### Sections
 
@@ -980,6 +1313,8 @@ over the agent's work, and a line you type while the call is up goes to it.
 [#4467](https://github.com/ReviewStage/luke/pull/4467),
 [#4495](https://github.com/ReviewStage/luke/pull/4495))
 
+![Add teammate invitations on a call: an earlier call between its Call started and Call ended markers, the standing one marked Live, each spoken answer over its folded tool calls, and the call's mute and end controls in the message box.](apps/web/public/changelog/0.20.0/calls-on-agents.png)
+
 ### Formatting in plans and messages
 
 Format a plan from a toolbar over your selection, or type / to insert a
@@ -994,6 +1329,8 @@ Markdown, by shortcut, or from the toolbar.
 [#4838](https://github.com/ReviewStage/luke/pull/4838),
 [#4841](https://github.com/ReviewStage/luke/pull/4841),
 [#4844](https://github.com/ReviewStage/luke/pull/4844))
+
+![The Teammate invitations plan open to edit, close up, with / typed under its Context and the insert menu showing Quote, Code block, Diagram, Table, Divider, Picture, and Mention.](apps/web/public/changelog/0.20.0/formatting-in-plans-and-messages.png)
 
 ### Preview tabs
 

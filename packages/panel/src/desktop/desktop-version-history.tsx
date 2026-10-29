@@ -1,5 +1,5 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
@@ -41,18 +41,18 @@ import {
   useMinute,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
-import { ArrowUpRightIcon, GLYPH, LinkIcon, RotateCcwIcon } from "@luke/ui/icons";
+import { ArrowUpRightIcon, GLYPH, RotateCcwIcon } from "@luke/ui/icons";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
-import { ColumnFoot } from "../call/call-card.js";
 import { useListEdge, useScreenRef, useScreenSplit } from "../column-split.js";
-import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
+import { useCopyToast } from "../copy-feedback.js";
+import { copyLinkItem, useChordLinks } from "../copy-link-item.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
+import { centreWithin } from "../scroll-within.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { centreWithin } from "../tasks/code-pane.js";
 import {
   type ChangedSection,
   changedSections,
@@ -129,8 +129,7 @@ import type { SidebarCollapse } from "./sidebar-collapse.js";
  * (`ph-no-capture`) as a second line behind the recording's text masking.
  *
  * What the history is of is handed in as its subject: the open task's
- * (`taskVersionSubject`), or the account's plan template's, whose versions
- * are the developer's alone (`../settings/plan-template-history.tsx`).
+ * (`taskVersionSubject`).
  */
 
 /** Who wrote a version, in the label's type, on its row and over its sections alike. */
@@ -146,25 +145,21 @@ const VERSION_PANE = "version-log-pane flex min-h-0 min-w-0 flex-col px-ring-rea
 
 /**
  * What a version history is of, as the view draws it: the history as read
- * and its presses, the words it names what the versions are of in, the title
- * every version is drawn under, and what applies to its versions.
+ * and its presses, the title every version is drawn under, and what applies
+ * to its versions.
  */
 export interface VersionSubject {
   readonly versions: PlanHistoryControl;
-  /** What the versions are of, in the view's own words: "plan", or "template". */
-  readonly noun: string;
   readonly title: string | undefined;
   /** The coding agents whose harness a revision of theirs wears. */
-  readonly agents: readonly Pick<CodingAgentSummary, "id" | "model">[];
+  readonly agents: readonly Pick<AgentSummary, "id" | "model">[];
   /** What a revision did, in a few words. */
   readonly summary: (line: PlanRevisionLine) => string;
   /** Goes to the place that wrote a revision; none where nothing else in the window writes the subject. */
   readonly onShowSource: ((source: RevisionSource) => void) | undefined;
-  /** Whether every person's revision is the reader's own, as the account's template's are; a task's are its members'. */
-  readonly own: boolean;
-  /** The workspace whose members wrote the revisions, whose pictures their rows wear; none for the account's own template. */
+  /** The workspace whose members wrote the revisions, whose pictures their rows wear; none where the task's is not listed. */
   readonly workspace: Pick<Workspace, "id" | "memberCount"> | undefined;
-  /** The task the versions are of, which their mentions are read against; none for the account's own template. */
+  /** The task the versions are of, which their mentions are read against; none while it is read. */
   readonly task?: MentionedTask | undefined;
 }
 
@@ -237,7 +232,7 @@ function RevisionRow({
   onOpenSections,
   source,
   onRestore,
-  onCopyLink,
+  copyLink,
   summary,
 }: {
   line: PlanRevisionLine;
@@ -252,23 +247,19 @@ function RevisionRow({
   source: SourceDoor | undefined;
   /** Restores the version, asking nothing; none for the plan as it stands. */
   onRestore: (() => void) | undefined;
-  /** Copies the version's link; none for a history with no link of its own. */
-  onCopyLink: (() => void) | undefined;
+  /** Copy link, the version's; none for a history with no link of its own. */
+  copyLink: MenuAction | undefined;
   /** What the revision did, in a few words. */
   summary: string;
 }): React.JSX.Element {
   const { lastEdit } = line;
   const groups = [
     [
+      ...(copyLink === undefined ? [] : [copyLink]),
       ...(onOpenSections === undefined
         ? []
         : [{ label: SECTIONS_LABEL, icon: <GLYPH.SECTION />, onSelect: onOpenSections }]),
       ...(source === undefined ? [] : [sourceItem(source)]),
-      ...(onCopyLink === undefined
-        ? []
-        : [
-            { label: LINK_COPY.LABEL, icon: <LinkIcon aria-hidden="true" />, onSelect: onCopyLink },
-          ]),
     ],
     onRestore === undefined
       ? []
@@ -277,7 +268,7 @@ function RevisionRow({
   // Note that the author's card hangs beside the row as the pointer rests on it; an author with none, Luke or an agent, hangs nothing.
   const card = actorCard(author);
   return (
-    <RowHintOptions card={card} cardBeside>
+    <RowHintOptions card={card}>
       <ListRow
         ref={rowRef}
         leading={<ActorMark actor={author} size={ACTOR_SIZE.ROW} />}
@@ -354,13 +345,14 @@ function SectionsHead({
   );
 }
 
-/** One section a revision changed: its name, and a quiet word where it was added or removed rather than edited; lit while it is drawn. */
+/** One section a revision changed: its name, and a quiet word where it was added or removed rather than edited; lit while it is drawn; its right-click offering Copy link and its revision's source. */
 function SectionRow({
   section,
   selected,
   rowRef,
   onSelect,
   source,
+  copyLink,
 }: {
   section: ChangedSection;
   selected: boolean;
@@ -368,8 +360,14 @@ function SectionRow({
   onSelect: () => void;
   /** The way to the place that wrote its revision, which its right-click offers. */
   source: SourceDoor | undefined;
+  /** Copy link, its revision's, since a link names no section of a version; none for a history with no link of its own. */
+  copyLink: MenuAction | undefined;
 }): React.JSX.Element {
   const word = SECTION_CHANGE_WORDS[section.change];
+  const items = [
+    ...(copyLink === undefined ? [] : [copyLink]),
+    ...(source === undefined ? [] : [sourceItem(source)]),
+  ];
   return (
     <ListRow
       ref={rowRef}
@@ -377,7 +375,7 @@ function SectionRow({
       meta={word}
       current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
       onPress={onSelect}
-      menu={source === undefined ? undefined : rowMenu(SECTION_THING, [[sourceItem(source)]])}
+      menu={items.length === 0 ? undefined : rowMenu(SECTION_THING, [items])}
     />
   );
 }
@@ -674,20 +672,18 @@ export function taskVersionSubject(tasks: TasksControl): VersionSubject {
             ),
           },
     versions: tasks.history,
-    noun: "plan",
     title: task?.name,
     agents: tasks.agents.agents ?? [],
     summary: revisionSummary,
     onShowSource:
       boundFor === undefined ? undefined : (source) => tasks.onShowSource(boundFor, source),
-    own: false,
   };
 }
 
 /**
  * A version history over the whole window: the versions where the sidebar
- * stands, with the way back at their head and the call card at their foot,
- * as the sidebar holds them, and the version chosen beside them. `onExit`
+ * stands, with the way back at their head, and the version chosen beside
+ * them. `onExit`
  * leaves for wherever it was opened from, and `onRestored` for what a
  * restore landed on. A narrow room, or a history narrower than the split's
  * line by its own width (`column-split.ts`), shows the list or the version,
@@ -731,7 +727,19 @@ export function DesktopVersionHistory({
   const members = useWorkspaceMembers(subject.workspace);
   // A version of a plan has a link of its own, its plan's under its revision; another history's has none.
   const copy = useCopyToast();
+  const chord = useChordLinks();
   const linked = subject.task;
+  const versionLinkItem = (revision: number): MenuAction | undefined =>
+    linked === undefined
+      ? undefined
+      : copyLinkItem(
+          copy,
+          linkOf(
+            { kind: LINK_PLACE.VERSION, planId: linked.taskId, revision },
+            linked.place.workspace,
+          ),
+          chord,
+        );
   const former = useFormerMembers(subject.workspace);
   const reader = readerOf(account, members, former);
   // A restore that lands leaves for the task it restored, which is not always the one Back returns to.
@@ -749,9 +757,7 @@ export function DesktopVersionHistory({
     sections?.find((section) => section.heading === opened?.heading) ?? sections?.[0];
   const unit = chosenSection?.unit;
   const openedAuthor =
-    openedLine === undefined
-      ? undefined
-      : revisionAuthorOf(openedLine, reader, agents, subject.own);
+    openedLine === undefined ? undefined : revisionAuthorOf(openedLine, reader, agents);
   const openedSource =
     openedLine === undefined || openedAuthor === undefined
       ? undefined
@@ -786,7 +792,7 @@ export function DesktopVersionHistory({
   const hidden = hiddenColumns(split.columns, versions.listed);
   const screen = useScreenRef(useNarrowFocus(split.columns, versions.listed), split.ref);
   const narrow = room === SHELL_ROOM.NARROW;
-  const exitPlaceName = exitPlace ?? backPlaceOf(history, subject.title ?? subject.noun);
+  const exitPlaceName = exitPlace ?? backPlaceOf(history, subject.title ?? "plan");
 
   return (
     <div
@@ -862,7 +868,7 @@ export function DesktopVersionHistory({
                   {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
                   <List label={LIST_LABEL.VERSIONS}>
                     {revisions.map((line) => {
-                      const author = revisionAuthorOf(line, reader, agents, subject.own);
+                      const author = revisionAuthorOf(line, reader, agents);
                       return (
                         <RevisionRow
                           key={line.seq}
@@ -880,22 +886,7 @@ export function DesktopVersionHistory({
                             opensSections(line) ? () => openSections(line.seq) : undefined
                           }
                           onRestore={restoreOf(line)}
-                          onCopyLink={
-                            linked === undefined
-                              ? undefined
-                              : () =>
-                                  copy(
-                                    linkOf(
-                                      {
-                                        kind: LINK_PLACE.VERSION,
-                                        planId: linked.taskId,
-                                        revision: line.seq,
-                                      },
-                                      linked.place.workspace,
-                                    ),
-                                    LINK_COPY.COPIED,
-                                  )
-                          }
+                          copyLink={versionLinkItem(line.seq)}
                           summary={subject.summary(line)}
                         />
                       );
@@ -924,9 +915,7 @@ export function DesktopVersionHistory({
                 {openedLine === undefined ? null : (
                   <>
                     <SectionsHead
-                      author={
-                        openedAuthor ?? revisionAuthorOf(openedLine, reader, agents, subject.own)
-                      }
+                      author={openedAuthor ?? revisionAuthorOf(openedLine, reader, agents)}
                       source={openedSource}
                       onBack={narrow ? undefined : closeSections}
                     />
@@ -952,6 +941,7 @@ export function DesktopVersionHistory({
                           }}
                           onSelect={() => chooseUnit(section.unit)}
                           source={openedSource}
+                          copyLink={opened === undefined ? undefined : versionLinkItem(opened.seq)}
                         />
                       ))}
                     </List>
@@ -961,7 +951,6 @@ export function DesktopVersionHistory({
             </ScrollArea>
           </Fill>
         </div>
-        <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         {split.single ? null : <ResizeEdge edge={edge} />}
       </nav>

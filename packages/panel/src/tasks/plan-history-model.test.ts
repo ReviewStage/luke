@@ -32,7 +32,7 @@ const CHARLES = { userId: "user-charles", name: "Charles Pan" };
 function line(overrides: Partial<PlanRevisionLine> = {}): PlanRevisionLine {
   return {
     seq: 3,
-    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: NOW - 2 * HOUR, duringCall: true },
+    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: NOW - 2 * HOUR, duringCall: false },
     startedAt: NOW - 3 * HOUR,
     changes: 14,
     ...overrides,
@@ -443,6 +443,4 @@ test("a person's revision the service names nobody for, or read with no account 
     actorName(revisionAuthorOf(named, { ...reader, id: undefined }, [])),
     "Dean Stratakos",
   );
-  // The account's own template is theirs alone, so its every revision is the reader's.
-  assert.equal(actorName(revisionAuthorOf(unnamed, reader, [], true)), "You");
 });

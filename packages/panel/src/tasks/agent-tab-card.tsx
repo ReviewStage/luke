@@ -1,27 +1,29 @@
 import type {
-  CodingAgentMessage,
-  CodingAgentPullRequest,
-  CodingAgentStatus,
-} from "@luke/features/coding-agent-wire";
+  AgentPullRequest,
+  AgentStatus,
+  AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
 import {
+  HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
-  HoverCardRule,
+  HoverCardRow,
   Time,
   useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
+import { GLYPH } from "@luke/ui/icons";
 import {
   ACTOR_SIZE,
-  ActorLine,
   ActorMark,
-  ActorRef,
   AutomationCard,
   automationActor,
+  PROVENANCE_VERB,
+  ProvenanceRow,
 } from "../actor-ref.js";
 import { useAutomation } from "../automation-directory.js";
 import { usePerson } from "../member-directory.js";
@@ -32,7 +34,7 @@ import {
   agentStillWriting,
   isDelegation,
   pullRequestNumberLabel,
-} from "./coding-agent-model.js";
+} from "./agent-model.js";
 import { ModelLabel } from "./model-label.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { delegationView } from "./tool-call-model.js";
@@ -61,12 +63,12 @@ import { WorkingTime } from "./working-time.js";
  *
  * An agent's card, and a subagent's or a brain's worker's, wears its tile
  * beside its name (`actor-ref.tsx`), its harness giving way to the working
- * mark while it works. An agent's card also wears its
- * pull request at the corner's lead where the place holds one, and
- * "Started by" and who did: the automation whose run started it, by its
- * clock and name, where the window knows it, or else, for a teammate's
- * agent, the teammate's disc and name; either hangs its own card over this
- * one. An archived agent's says who archived it, Luke or another agent on a
+ * mark while it works. Under the head, an agent's card says in provenance
+ * rows (`ProvenanceRow`) who started it and when: the automation whose run
+ * started it, by its tile and name, where the window knows it, or else, for
+ * a teammate's agent, the teammate's face and name; either hangs its own
+ * card over this one. Then its pull request where the place holds one, by
+ * its mark, number, and title. An archived agent's says who archived it, Luke or another agent on a
  * member's behalf among them, and the reason given. The card has no way to the tab of its own: wherever it hangs, the
  * name it hangs from is what a press opens, so the card only says.
  *
@@ -100,8 +102,8 @@ const ENDED_SEPARATOR = " · ";
 
 /** The transcript an agent's or a worker's tab last drew, and where the agent stood, since when its run began, and the titles it and its workers bear, as the page it was read from said. */
 export interface HeldTranscript {
-  readonly messages: readonly CodingAgentMessage[];
-  readonly status: CodingAgentStatus;
+  readonly messages: readonly AgentTranscriptMessage[];
+  readonly status: AgentStatus;
   readonly runStartedAt: number | undefined;
   /** A worker's own title, on a worker's; an agent's is its summary's. */
   readonly title: string | undefined;
@@ -114,14 +116,18 @@ export interface CardReading {
   readonly corner: CardCorner;
   readonly choice: ModelChoice | undefined;
   readonly transcript: CopiedTranscript | undefined;
-  /** The teammate who started the agent, as the wire names them, drawn "Started by [disc] Charles Pan"; none for the reader's own, or a card that is no agent's. */
+  /** The teammate who started the agent, as the wire names them, drawn "[face] Started by Charles Pan · 3d ago"; none for the reader's own, or a card that is no agent's. */
   readonly startedBy?: PlanEditor | undefined;
-  /** The automation whose run started the agent, drawn "Started by [clock] Morning Sentry triage" in the starter's place where the window knows it. */
+  /** The automation whose run started the agent, drawn "[tile] Started by Morning Sentry triage · 3d ago" in the starter's place where the window knows it. */
   readonly automationId?: string | undefined;
+  /** When the agent was started, said after whoever started it, where known. */
+  readonly startedAt?: number | undefined;
   /** The agent's own tile, beside its name; none on a card that is no agent's, or of one the place does not hold. */
   readonly tile?: Actor | undefined;
-  /** The pull request the agent opened, where the place holds it, at the head's corner. */
-  readonly pullRequest?: Pick<CodingAgentPullRequest, "number" | "state" | "checks"> | undefined;
+  /** The pull request the agent opened, where the place holds it, on a row of its own under the head. */
+  readonly pullRequest?:
+    | Pick<AgentPullRequest, "number" | "title" | "state" | "checks">
+    | undefined;
   /** Who archived the agent and why, on an archived agent's card where the service said. */
   readonly archivedBy?: ArchivedByReading | undefined;
 }
@@ -153,59 +159,51 @@ function cornerSays(corner: CardCorner): boolean {
   return corner.kind !== CARD_CORNER.WORKING || corner.startedAt !== undefined;
 }
 
-/** What the head says at its right: the agent's pull request where the place holds one, then where the agent stands; nothing where neither is known. */
-function headCorner(
-  corner: CardCorner,
-  pullRequest: CardReading["pullRequest"],
-): React.ReactNode | undefined {
-  const standing = cornerSays(corner) ? <Corner corner={corner} /> : undefined;
-  if (pullRequest === undefined) return standing;
-  return (
-    <>
-      <PullRequestMark
-        pullRequest={pullRequest}
-        className="card-corner-mark mr-tight-gap size-luke-12 align-[-2px]"
-      />
-      {pullRequestNumberLabel(pullRequest)}
-      {standing === undefined ? null : ENDED_SEPARATOR}
-      {standing}
-    </>
-  );
-}
-
 /**
- * Who started the agent: the automation whose run did, by its clock and
- * name, which hang its card and open its page, where the window knows it
- * (`automation-directory.tsx`); else a teammate, by their disc and name,
+ * Who started the agent and when: the automation whose run did, by its tile
+ * and name, which hang its card and open its page, where the window knows
+ * it (`automation-directory.tsx`); else a teammate, by their face and name,
  * which hang their card; else nobody.
  */
 function StartedBy({
   by,
   automationId,
+  at,
 }: {
   by: PlanEditor | undefined;
   automationId: string | undefined;
+  at: number | undefined;
 }): React.JSX.Element | null {
+  const now = useMinute();
   const person = usePerson(by);
   const known = useAutomation(automationId);
   if (known === undefined && by === undefined) return null;
+  return known === undefined ? (
+    <ProvenanceRow verb={PROVENANCE_VERB.STARTED} actor={person} at={at} now={now} />
+  ) : (
+    <ProvenanceRow
+      verb={PROVENANCE_VERB.STARTED}
+      actor={automationActor(known.automation)}
+      card={<AutomationCard automation={known.automation} workspaceName={known.workspaceName} />}
+      onOpen={known.onOpen}
+      at={at}
+      now={now}
+    />
+  );
+}
+
+/** The agent's pull request: its mark, saying where it stands, and its number before its title. */
+function PullRequestRow({
+  pullRequest,
+}: {
+  pullRequest: NonNullable<CardReading["pullRequest"]>;
+}): React.JSX.Element {
   return (
-    <HoverCardNote oneLine>
-      <ActorLine>
-        {"Started by "}
-        {known === undefined ? (
-          <ActorRef actor={person} />
-        ) : (
-          <ActorRef
-            actor={automationActor(known.automation)}
-            card={
-              <AutomationCard automation={known.automation} workspaceName={known.workspaceName} />
-            }
-            onOpen={known.onOpen}
-          />
-        )}
-      </ActorLine>
-    </HoverCardNote>
+    <HoverCardRow
+      look={HOVER_CARD_ROW_LOOK.DETAIL}
+      glyph={<PullRequestMark pullRequest={pullRequest} />}
+      label={`${pullRequestNumberLabel(pullRequest)} ${pullRequest.title}`}
+    />
   );
 }
 
@@ -260,7 +258,7 @@ export function cardCorner(input: {
 
 /** When the latest of the agent's turns among `messages` answered or ended, where the service said. */
 export function lastFinished(
-  messages: readonly CodingAgentMessage[] | undefined,
+  messages: readonly AgentTranscriptMessage[] | undefined,
 ): number | undefined {
   return messages?.findLast((message) => message.finishedAt !== undefined)?.finishedAt;
 }
@@ -271,7 +269,7 @@ export function lastFinished(
  * being the agent's own (`own`); nothing where the call is not held.
  */
 export function delegatedChoice(
-  messages: readonly CodingAgentMessage[] | undefined,
+  messages: readonly AgentTranscriptMessage[] | undefined,
   callId: string,
   own: ModelChoice,
 ): ModelChoice | undefined {
@@ -293,17 +291,28 @@ export function heldLatest(
   held: HeldTranscript | undefined,
   now: { writing: boolean; runStartedAt: number | undefined },
   chosen: boolean,
-): readonly CodingAgentMessage[] | undefined {
+): readonly AgentTranscriptMessage[] | undefined {
   if (held === undefined || held.runStartedAt !== now.runStartedAt) return undefined;
   if (chosen) return held.messages;
   return !agentStillWriting(held.status) && !now.writing ? held.messages : undefined;
 }
 
+/** A line a place other than the agent's own tab adds at the card's foot, with its glyph: the task it works on, or whose sandbox a Terminal tab's shells run in. */
+export interface CardFoot {
+  readonly glyph: React.ReactNode;
+  readonly words: React.ReactNode;
+}
+
+/** The foot naming the task an agent works on, by the plan's glyph: "On Teammate invitations", "On no task". */
+export function taskFoot(words: string): CardFoot {
+  return { glyph: <GLYPH.PLAN />, words };
+}
+
 /**
  * The card: the agent's tile, the name, its model under it, and its
- * corner, then who started it, the latest step where the tab holds one
- * current, and under a rule what a tab of the agent's other than its own
- * adds, as its Terminal tab says whose sandbox it is in.
+ * corner, then who started it and its pull request, the latest step where
+ * the tab holds one current, and what a tab of the agent's other than its
+ * own adds, as its Terminal tab says whose sandbox it is in.
  */
 export function AgentTabCard({
   name,
@@ -319,18 +328,27 @@ export function AgentTabCard({
   models: readonly CatalogModel[];
   /** What the card says, read from what the tab holds as the card is hung. */
   read: () => CardReading;
-  /** One line under a rule, said by a tab of the agent's other than its own. */
-  foot?: React.ReactNode;
+  /** One row at the foot, said by a place other than the agent's own tab. */
+  foot?: CardFoot | undefined;
 }): React.JSX.Element {
-  const { corner, choice, transcript, startedBy, automationId, tile, pullRequest, archivedBy } =
-    read();
+  const {
+    corner,
+    choice,
+    transcript,
+    startedBy,
+    automationId,
+    startedAt,
+    tile,
+    pullRequest,
+    archivedBy,
+  } = read();
   const head = (
     <HoverCardHead
       mark={tile === undefined ? undefined : <ActorMark actor={tile} size={ACTOR_SIZE.CARD} />}
       name={name}
       oneLine={untitled}
       sub={choice === undefined ? undefined : <ModelLabel choice={choice} models={models} />}
-      corner={headCorner(corner, pullRequest)}
+      corner={cornerSays(corner) ? <Corner corner={corner} /> : undefined}
     />
   );
   return (
@@ -340,14 +358,12 @@ export function AgentTabCard({
         // Note that the word is a reader's alone, because the tile that shows the work hides its mark from a reader and nothing drawn says it.
         <VisuallyHidden>{glyphStateWords(GLYPH_STATE.WORKING, false)}</VisuallyHidden>
       ) : null}
-      <StartedBy by={startedBy} automationId={automationId} />
+      <StartedBy by={startedBy} automationId={automationId} at={startedAt} />
+      {pullRequest === undefined ? null : <PullRequestRow pullRequest={pullRequest} />}
       {archivedBy === undefined ? null : <ArchivedByNote archivedBy={archivedBy} />}
       {transcript === undefined ? null : <ActivityLine transcript={transcript} />}
       {foot === undefined ? null : (
-        <>
-          <HoverCardRule />
-          <HoverCardNote>{foot}</HoverCardNote>
-        </>
+        <HoverCardRow look={HOVER_CARD_ROW_LOOK.DETAIL} glyph={foot.glyph} label={foot.words} />
       )}
     </HoverCard>
   );

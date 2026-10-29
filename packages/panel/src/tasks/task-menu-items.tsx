@@ -5,7 +5,7 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { Atom } from "effect/reactivity";
 import { useEffect } from "react";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
-import { LINK_COPY } from "../copy-feedback.js";
+import { copyLinkItem } from "../copy-link-item.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 
 /**
@@ -32,20 +32,19 @@ export function taskLinkPlace(
 
 /**
  * Copy link, the plan's, through `copy`, the window's menu copy
- * (`useCopyToast`), which says so in a toast. Note that it prints no ⌥⌘C,
- * because the chord copies the most specific link at hand, an agent's tab's
- * over its task's (`links-at-hand.ts`), so it need not copy this one.
+ * (`useCopyToast`), which says so in a toast. Note that it prints ⇧⌘C only
+ * while the chord would copy this link, because the chord copies the most
+ * specific link at hand, an agent's tab's over its task's
+ * (`links-at-hand.ts`), so the open task's item need not be its target.
  */
 export function copyTaskLinkItem(
   copy: (words: string, label: string) => void,
   taskId: string,
   place: MentionPlace,
+  chord: readonly string[],
 ): MenuAction {
-  return commandAction(
-    PANEL_COMMAND.COPY_LINK,
-    () => copy(encodeMention({ kind: MENTION_KIND.TASK, taskId: taskId }, place), LINK_COPY.COPIED),
-    false,
-  );
+  const link = encodeMention({ kind: MENTION_KIND.TASK, taskId: taskId }, place);
+  return copyLinkItem(copy, link, chord);
 }
 
 /** Whether a task is unread, as its sidebar row's weight says, and the mark that makes it unread or read. */
@@ -54,11 +53,11 @@ export interface ReadMark {
   readonly onMark: (unread: boolean) => void;
 }
 
-/** Mark as unread, or Mark as read on a task already unread. */
-export function markReadItem({ unread, onMark }: ReadMark): MenuAction {
+/** Mark as unread, or Mark as read on a task already unread, printing U where `keyed`: on the focused sidebar row's menu and the open thing's, which the key marks. */
+export function markReadItem({ unread, onMark }: ReadMark, keyed = false): MenuAction {
   return unread
-    ? commandAction(PANEL_COMMAND.MARK_READ, () => onMark(false), false)
-    : commandAction(PANEL_COMMAND.MARK_UNREAD, () => onMark(true), false);
+    ? commandAction(PANEL_COMMAND.MARK_READ, () => onMark(false), keyed)
+    : commandAction(PANEL_COMMAND.MARK_UNREAD, () => onMark(true), keyed);
 }
 
 /** Rename, editing the name where the menu's door draws it. */
@@ -96,7 +95,7 @@ export function useTaskRenameOffer(): OpenTaskRename | undefined {
   return useAtomValue(openTaskRenameAtom);
 }
 
-/** Version history, opening the plan's versions over the window. */
-export function versionHistoryItem(open: () => void): MenuAction {
-  return commandAction(PANEL_COMMAND.VERSION_HISTORY, open, false);
+/** Version history, opening the plan's versions over the window, printing ⌥⇧⌘H where `keyed`: on the open task's menu, whose versions the chord opens. */
+export function versionHistoryItem(open: () => void, keyed = false): MenuAction {
+  return commandAction(PANEL_COMMAND.VERSION_HISTORY, open, keyed);
 }

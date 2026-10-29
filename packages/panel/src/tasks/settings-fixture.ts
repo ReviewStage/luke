@@ -78,10 +78,9 @@ const ACCOUNT: AccountSnapshot = {
 /** An admin of Luke, read, so Admin stands rather than waiting on the read. */
 const ADMIN_ACCESS = { admin: true } as const;
 
-/** The experiments the staged pages stand behind: Memory's page, the Code review automation the Automations page suggests, and the Hosts group on Agents. */
+/** The experiments the staged pages stand behind: Memory's page and the Hosts group on Agents. */
 const STAGED_EXPERIMENTS = {
   [EXPERIMENT.MEMORY]: true,
-  [EXPERIMENT.CODE_REVIEW]: true,
   [EXPERIMENT.LOCAL_AGENTS]: true,
 } as const;
 
@@ -100,7 +99,8 @@ const STAGED_INSTALL_SCRIPT = "https://luke.test/install.sh";
 const SETTINGS_LINKS: ReadonlyMap<string, SettingsLink> = new Map<string, SettingsLink>([
   [RUN_PROFILE.SETTINGS_ACCOUNT, { page: SETTINGS_VIEW.ACCOUNT }],
   [RUN_PROFILE.SETTINGS_WORKSPACE, { page: SETTINGS_VIEW.WORKSPACE, workspaceId: WORKSPACE.ACME }],
-  [RUN_PROFILE.SETTINGS_AGENTS, { page: SETTINGS_VIEW.CODING_AGENTS }],
+  [RUN_PROFILE.SETTINGS_AGENTS, { page: SETTINGS_VIEW.AGENTS }],
+  [RUN_PROFILE.SETTINGS_HOSTS, { page: SETTINGS_VIEW.HOSTS }],
   [RUN_PROFILE.SETTINGS_INTEGRATIONS, { page: SETTINGS_VIEW.INTEGRATIONS }],
   [RUN_PROFILE.SETTINGS_SKILLS, { page: SETTINGS_VIEW.SKILLS, workspaceId: WORKSPACE.ACME }],
   [RUN_PROFILE.SETTINGS_MEMORY, { page: SETTINGS_VIEW.MEMORY, workspaceId: WORKSPACE.ACME }],
@@ -159,8 +159,7 @@ const MEMBERS: ReadonlyMap<string, readonly WorkspaceMember[]> = new Map([
 
 /**
  * The workspaces as the Settings profiles list them, from the list the tasks
- * profiles draw: each counting its members, and Acme's Linear connected with
- * its sign-in since expired, which its row says.
+ * profiles draw: each counting its members.
  */
 export function settingsTasksView(profile: string, list: TasksView): TasksView | undefined {
   if (!SETTINGS_LINKS.has(profile)) return undefined;
@@ -169,7 +168,6 @@ export function settingsTasksView(profile: string, list: TasksView): TasksView |
     workspaces: list.workspaces.map((workspace) => ({
       ...workspace,
       memberCount: MEMBERS.get(workspace.id)?.length ?? 1,
-      ...(workspace.id === WORKSPACE.ACME ? { linear: { active: false } } : undefined),
     })),
   };
 }
@@ -434,7 +432,6 @@ function topAccount(id: string, name: string, activeDays: number, admin = false)
     tasks: activeDays * 2,
     agents: activeDays * 3,
     prsMerged: activeDays,
-    callMinutes: activeDays * 14,
     lastSeenAt: NOW - activeDays * HOUR,
   };
 }
@@ -465,7 +462,6 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
     [FUNNEL_STEP.SIGNED_UP, 64],
     [FUNNEL_STEP.GITHUB_CONNECTED, 51],
     [FUNNEL_STEP.CREATED_TASK, 43],
-    [FUNNEL_STEP.HELD_CALL, 31],
     [FUNNEL_STEP.STARTED_AGENT, 27],
     [FUNNEL_STEP.OPENED_PR, 19],
     [FUNNEL_STEP.MERGED_PR, 14],
@@ -475,9 +471,8 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
   const signedUp = dailySignups.reduce((sum, day) => sum + day.count, 0);
   const reach = [
     [REACH_FEATURE.TASKS, 38],
-    [REACH_FEATURE.CODING_AGENTS, 33],
+    [REACH_FEATURE.AGENTS, 33],
     [REACH_FEATURE.INBOX, 26],
-    [REACH_FEATURE.VOICE_CALLS, 21],
     [REACH_FEATURE.INTEGRATIONS, 29],
     [REACH_FEATURE.AUTOMATIONS, 9],
   ] as const;
@@ -511,7 +506,6 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
           day,
           [ACTIVITY_FEATURE.AGENTS_STARTED]: wave(index, 20, 0.6),
           [ACTIVITY_FEATURE.PLAN_REVISIONS]: wave(index, 34, 0.5),
-          [ACTIVITY_FEATURE.CALLS_HELD]: wave(index, 8, 0.2),
           [ACTIVITY_FEATURE.INBOX_ANSWERED]: wave(index, 15, 0.4),
           [ACTIVITY_FEATURE.AUTOMATION_RUNS]: wave(index, 4, 0.2),
         })),
@@ -578,8 +572,8 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
       },
     ],
   }),
-  [ACT_KIND.CODING_AGENTS_MODELS]: () => ({ models: MODELS }),
-  [ACT_KIND.CODING_AGENTS_DEFAULT_READ]: () => ({
+  [ACT_KIND.AGENTS_MODELS]: () => ({ models: MODELS }),
+  [ACT_KIND.AGENTS_DEFAULT_READ]: () => ({
     choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
   }),
   [ACT_KIND.CHAPTERS_MODEL_READ]: () => ({ model: CHAPTERS_MODEL.SONNET }),

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import type { IntegrationProviderParams } from "@luke/features/integration-view";
 import {
@@ -24,8 +24,6 @@ import {
 } from "@luke/features/repository-reach-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { SettingsLink } from "@luke/settings/settings-views";
-import { appSettingsWire, settingsView } from "@luke/settings/testing";
-import { CALL_LABEL } from "@luke/ui/tasks-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -44,12 +42,11 @@ import {
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
-import type { AgentCallDoors } from "./agent-call.js";
-import { startFailureNote } from "./coding-agent-model.js";
+import { agentsControl } from "../testing/tasks-control.js";
+import { startFailureNote } from "./agent-model.js";
 import { DraftAgentTab } from "./draft-agent-tab.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy.js";
-import type { AgentDraft, CodingAgentsControl, DraftCallStart } from "./use-coding-agents.js";
+import type { AgentDraft, AgentsControl } from "./use-agents.js";
 
 /**
  * A draft agent's first message through the bridge the host answers: a
@@ -146,13 +143,12 @@ function sentence(alert: Element | null): string | undefined {
 function mount(
   answers: (Failure | undefined)[],
   draft: AgentDraft = DRAFT,
-  extra: Partial<CodingAgentsControl> = {},
-  call?: AgentCallDoors,
+  extra: Partial<AgentsControl> = {},
 ) {
   const starts: string[] = [];
   const links: SettingsLink[] = [];
   const settings = { integrationsOpened: false };
-  const control = codingAgentsControl({
+  const control = agentsControl({
     startPrompt: (_draftId, prompt) => {
       starts.push(prompt);
       return Promise.resolve(answers.shift());
@@ -201,7 +197,7 @@ function mount(
             createElement(
               RepositoryRemedyProvider,
               { value: doors },
-              createElement(DraftAgentTab, { draft, control, call }),
+              createElement(DraftAgentTab, { draft, control }),
             ),
           ),
         ),
@@ -245,7 +241,7 @@ function mount(
 
 test("a refused Start offers Retry, which sends the message again", async () => {
   const tab = mount([
-    startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }, TASK_ID),
+    startFailureNote({ failure: AGENT_CALL_FAILURE.UNANSWERED }, TASK_ID),
     undefined,
   ]);
   await tab.send();
@@ -257,10 +253,7 @@ test("a refused Start offers Retry, which sends the message again", async () => 
 
 /** A Start refused for the repository out of reach, as the host hears the service say why. */
 const unreachable = (unreached: RepositoryUnreached): Failure =>
-  startFailureNote(
-    { failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE, unreached },
-    TASK_ID,
-  );
+  startFailureNote({ failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE, unreached }, TASK_ID);
 
 test("a Start refused because the workspace has no GitHub connected names the repository, and Connect GitHub opens the plan's workspace's GitHub with Retry beside it", async () => {
   const tab = mount([
@@ -351,8 +344,8 @@ test("a Start refused because the repository's owner is connected to another wor
 
 test("a Start GitHub did not answer says so and offers Retry alone, and one from a service that gave no reason says the repository is out of reach", async () => {
   const tab = mount([
-    startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED }, TASK_ID),
-    startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE }, TASK_ID),
+    startFailureNote({ failure: AGENT_CALL_FAILURE.GITHUB_UNANSWERED }, TASK_ID),
+    startFailureNote({ failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE }, TASK_ID),
   ]);
   await tab.send();
 
@@ -475,14 +468,14 @@ test("a fork's draft names its source and the message over the box, starts on th
   const SOURCE = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
   const MESSAGE = "4f1e2d3c-5b6a-4978-8a1b-2c3d4e5f6a7b";
   const fork = { agentId: SOURCE, messageId: MESSAGE, opening: "I moved the invite email…" };
-  const source: CodingAgentSummary = {
+  const source: AgentSummary = {
     id: SOURCE,
     planId: TASK_ID,
     model: "openai/gpt-6.1-sol",
     effort: "xhigh",
     title: "Queue the invite email",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
   const forks: unknown[] = [];
@@ -527,14 +520,14 @@ test("a fork's draft names its source and the message over the box, starts on th
 test("a continue's draft names its source alone over the box, stands on a working line copying the source's work while its Start is out, and gives way to the new agent as it lands, or to the note and Retry with the words kept", async () => {
   const SOURCE = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
   const fork = { agentId: SOURCE, opening: "" };
-  const source: CodingAgentSummary = {
+  const source: AgentSummary = {
     id: SOURCE,
     planId: TASK_ID,
     model: "openai/gpt-6.1-sol",
     effort: "xhigh",
     title: "Queue the invite email",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.FAILED,
+    status: AGENT_STATUS.FAILED,
     turnId: null,
   };
   const answers: ((failed: Failure | undefined) => void)[] = [];
@@ -568,7 +561,7 @@ test("a continue's draft names its source alone over the box, stands on a workin
   assert.equal(tab.button("Sending")?.getAttribute("aria-busy"), "true", "its Send busy");
 
   await act(async () =>
-    answers.shift()?.(startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }, TASK_ID)),
+    answers.shift()?.(startFailureNote({ failure: AGENT_CALL_FAILURE.UNANSWERED }, TASK_ID)),
   );
   await settle();
   assert.equal(working(), undefined, "a Start that did not land leaves the line");
@@ -590,7 +583,7 @@ test("a draft New task handed over after its agent was refused sends nothing by 
   const handed: AgentDraft = {
     ...DRAFT,
     prompt: "Make the sidebar keep its folds.",
-    refused: startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }, TASK_ID),
+    refused: startFailureNote({ failure: AGENT_CALL_FAILURE.UNANSWERED }, TASK_ID),
   };
   const marks: unknown[] = [];
   const tab = mount([undefined], handed, {
@@ -671,83 +664,4 @@ test("an account with a plan connected starts on Settings' choice alone: no paye
       for (const root of roots.splice(0)) root.unmount();
     });
   }
-});
-
-/** A desktop whose voice can take a call, the microphone granted. */
-function voiced(): void {
-  handState({}, { settings: appSettingsWire(settingsView({ voiceAvailable: true })) });
-}
-
-/** A draft's tab whose Call starts the agent given, each draft it was handed and each call opened written down. */
-function draftWithCall(
-  draft: AgentDraft,
-  answer: DraftCallStart,
-  extra: Partial<CodingAgentsControl> = {},
-) {
-  const called: AgentDraft[] = [];
-  const opened: string[] = [];
-  const tab = mount(
-    [],
-    draft,
-    {
-      startCall: (held) => {
-        called.push(held);
-        return Promise.resolve(answer);
-      },
-      ...extra,
-    },
-    { onPress: (agentId) => opened.push(agentId) },
-  );
-  return { ...tab, called, opened };
-}
-
-test("Call on an empty draft starts its agent blank and opens a call into the agent it started", async () => {
-  voiced();
-  const tab = draftWithCall({ ...DRAFT, prompt: "" }, { agentId: "agent-voice" });
-  await settle();
-  await tab.press(CALL_LABEL);
-
-  assert.deepEqual(
-    tab.called.map((held) => [held.id, held.prompt]),
-    [[DRAFT.id, ""]],
-  );
-  assert.deepEqual(tab.opened, ["agent-voice"]);
-});
-
-test("Call on a draft holding words starts its agent on them and opens a call into it, and one that did not start keeps the words, its Retry calling again", async () => {
-  voiced();
-  const tab = draftWithCall(DRAFT, { agentId: "agent-words" });
-  await settle();
-  await tab.press(CALL_LABEL);
-  assert.deepEqual(
-    tab.called.map((held) => held.prompt),
-    [DRAFT.prompt],
-  );
-  assert.deepEqual(tab.opened, ["agent-words"]);
-
-  const refused = draftWithCall(DRAFT, {
-    failure: startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }, TASK_ID),
-  });
-  await settle();
-  await refused.press(CALL_LABEL);
-  assert.match(refused.note() ?? "", /could not be started/u);
-  assert.equal(refused.draft(), DRAFT.prompt);
-  await refused.press("Retry");
-  assert.equal(refused.called.length, 2, "Retry presses Call again");
-  assert.deepEqual(refused.starts, [], "and never sends the words without a call");
-  assert.deepEqual(refused.opened, []);
-});
-
-test("a draft offers no Call where the platform takes no calls, nor on a fork, which starts from its source", async () => {
-  voiced();
-  const web = mount([], DRAFT, { startCall: () => Promise.resolve({ agentId: "x" }) });
-  await settle();
-  assert.equal(web.button(CALL_LABEL), undefined);
-
-  const fork = draftWithCall(
-    { ...DRAFT, fork: { agentId: "agent-source", messageId: "message-1", opening: "Fix it." } },
-    { agentId: "x" },
-  );
-  await settle();
-  assert.equal(fork.button(CALL_LABEL), undefined);
 });

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { DEVICE_ARCH } from "@luke/features/device-agent-wire";
-import { DARWIN_HOST } from "@luke/host/daemon";
+import { DARWIN_HOST, darwinStandaloneLaunchAgentFile } from "@luke/host/daemon";
 import {
   HOST_LOGIN_ITEM_ACT,
   HOST_LOGIN_ITEM_STATUS,
@@ -37,6 +37,11 @@ const machine = Effect.sync(() => ({
   platform: DARWIN_HOST.platform,
   arch: DEVICE_ARCH.ARM64,
 }));
+
+/** Whether the install command put its standalone `luke-host` down for this user, beside which This Mac is never turned on. */
+const standaloneInstalled = Effect.sync(() =>
+  existsSync(darwinStandaloneLaunchAgentFile(app.getPath("home"))),
+);
 
 /** How long the command may take; `SMAppService` answers at once. */
 const ACT_WITHIN = Duration.seconds(30);
@@ -89,6 +94,7 @@ const packagedHost: ThisMacHostSeam = (() => {
       ),
     version: printedBy(command, ["version"]),
     machine,
+    standaloneInstalled,
   };
 })();
 
@@ -148,6 +154,7 @@ const developmentHost = (stateRoot: string) =>
         staged() ? printedBy(node, [bundle, "version"]) : Effect.succeed(Result.fail(unstaged)),
       ),
       machine,
+      standaloneInstalled,
     };
     return seam;
   });

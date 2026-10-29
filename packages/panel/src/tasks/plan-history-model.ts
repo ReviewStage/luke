@@ -1,4 +1,4 @@
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import { type WordChange, wordChanges } from "@luke/features/plan-diff";
 import { type PlanSection, planSections } from "@luke/features/plan-document";
 import {
@@ -22,7 +22,7 @@ import {
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { diffArrays } from "diff";
 import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message.js";
-import { providerOf } from "./coding-agent-model.js";
+import { providerOf } from "./agent-model.js";
 
 /**
  * plan-history-model.ts -- the version history's words for each revision, and a version of the plan drawn against another with its changes marked.
@@ -87,13 +87,12 @@ export interface HistoryReader {
 
 /**
  * The member a person's revision names, as its row draws them: the reader,
- * by their own name and picture, where it is theirs or where every revision
- * is (`own`, the account's template); a teammate as the members read lists
+ * by their own name and picture, where it is theirs; a teammate as the members read lists
  * them, or as a former member where it no longer does; someone unnamed
  * where the service names nobody.
  */
-function personOf(by: PlanEditor | undefined, reader: HistoryReader, own: boolean): Actor {
-  const yours = own || (by !== undefined && reader.id !== undefined && by.userId === reader.id);
+function personOf(by: PlanEditor | undefined, reader: HistoryReader): Actor {
+  const yours = by !== undefined && reader.id !== undefined && by.userId === reader.id;
   if (!yours) return personActor(by, reader.members, undefined, reader.former);
   const you: PersonActor = {
     kind: ACTOR_KIND.PERSON,
@@ -106,28 +105,26 @@ function personOf(by: PlanEditor | undefined, reader: HistoryReader, own: boolea
 
 /**
  * Who wrote a revision: a member, the reader as You only where the revision
- * names them, or every revision where `own` says the history is theirs
- * alone; Luke; a coding agent by the title its row has now, wearing
+ * names them; Luke; a coding agent by the title its row has now, wearing
  * the harness of the agent the line names among the task's `agents`, or no
  * harness where the agent is not among them; or the plan before history.
  */
 export function revisionAuthorOf(
   line: Pick<PlanRevisionLine, "lastEdit" | "agentId">,
   reader: HistoryReader,
-  agents: readonly Pick<CodingAgentSummary, "id" | "model">[],
-  own = false,
+  agents: readonly Pick<AgentSummary, "id" | "model">[],
 ): Actor {
   const { lastEdit } = line;
   switch (lastEdit.actor) {
     case PLAN_ACTOR.DEVELOPER:
-      return personOf(lastEdit.by, reader, own);
+      return personOf(lastEdit.by, reader);
     case PLAN_ACTOR.NOTETAKER:
       return LUKE_ACTOR;
     case PLAN_ACTOR.AGENT: {
       const agent = agents.find((each) => each.id === line.agentId);
       return {
         kind: ACTOR_KIND.AGENT,
-        name: lastEdit.label ?? TAB_WORDS.CODING_AGENT,
+        name: lastEdit.label ?? TAB_WORDS.AGENT,
         provider: agent === undefined ? undefined : providerOf(agent.model),
         state: ACTOR_STATE.REST,
       };

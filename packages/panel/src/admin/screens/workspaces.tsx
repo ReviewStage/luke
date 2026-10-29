@@ -1,12 +1,9 @@
 import type {
   AdminWorkspaceInstallation,
-  AdminWorkspaceIntegration,
   AdminWorkspaceList,
   AdminWorkspaceRow,
 } from "@luke/features/admin-answer-wire";
 import { ADMIN_READ, ADMIN_USERS_SEARCH_MAX_LENGTH } from "@luke/features/admin-wire";
-import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
-import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import { formatCount, formatPercent } from "@luke/features/number-format";
 import { formatDate } from "@luke/features/time-format";
 import {
@@ -48,12 +45,7 @@ import {
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { WORKSPACES_SHARED_ONLY } from "../prefs.js";
 import { SEARCH_DEBOUNCE_MS, searchTerm, workspacesReadQuery } from "../routing.js";
-import {
-  connectionTone,
-  connectionWord,
-  INSTALLATION_LABEL,
-  INSTALLATION_TONE,
-} from "../status-words.js";
+import { INSTALLATION_LABEL, INSTALLATION_TONE } from "../status-words.js";
 import { useAdminRead } from "../use-admin-read.js";
 
 /**
@@ -61,8 +53,8 @@ import { useAdminRead } from "../use-admin-read.js";
  * whether they are active, invite each other, and installed the GitHub App,
  * over a table of the workspaces themselves, busiest week first.
  *
- * A row names its workspace, its owner, counts, and the GitHub account and
- * integrations it connected; opening one opens its owner's account page,
+ * A row names its workspace, its owner, counts, and the GitHub account it
+ * connected; opening one opens its owner's account page,
  * since a workspace has no page of its own.
  */
 
@@ -81,7 +73,6 @@ const WORKSPACE_COLUMN = {
   OWNER: "owner",
   MEMBERS: "members",
   GITHUB: "github",
-  INTEGRATIONS: "integrations",
   TASKS: "tasks",
   AGENTS: "agents",
   MERGED: "merged",
@@ -115,31 +106,6 @@ function InstallationsCell({
         </Stack>
       ))}
     </Stack>
-  );
-}
-
-function IntegrationsCell({
-  integrations,
-}: {
-  integrations: readonly AdminWorkspaceIntegration[];
-}): React.JSX.Element {
-  if (integrations.length === 0) {
-    return (
-      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-        None
-      </Text>
-    );
-  }
-  return (
-    <Inline gap={GAP.ICON}>
-      {integrations.map((integration) => (
-        <Badge key={integration.provider} tone={connectionTone(integration.status)}>
-          {integration.status === INTEGRATION_ROW_STATUS.CONNECTED
-            ? INTEGRATION_NAME[integration.provider]
-            : `${INTEGRATION_NAME[integration.provider]} · ${connectionWord(integration.status)}`}
-        </Badge>
-      ))}
-    </Inline>
   );
 }
 
@@ -181,11 +147,6 @@ function workspaceColumns(
       label: "GitHub",
       cell: (row) => <InstallationsCell installations={row.installations} />,
     },
-    {
-      key: WORKSPACE_COLUMN.INTEGRATIONS,
-      label: "Integrations",
-      cell: (row) => <IntegrationsCell integrations={row.integrations} />,
-    },
     count(WORKSPACE_COLUMN.TASKS, "Tasks", (row) => row.tasksWeek),
     count(WORKSPACE_COLUMN.AGENTS, "Agents", (row) => row.agentsWeek),
     count(WORKSPACE_COLUMN.MERGED, "Merged", (row) => row.prsMergedWeek),
@@ -212,7 +173,7 @@ const WORKSPACE_STATS: readonly StatSpec<AdminWorkspaceList>[] = [
     value: ({ summary }) => formatCount(summary.sharedActiveWeek),
     hint: ({ summary }) =>
       `${formatPercent(summary.shared === 0 ? null : summary.sharedActiveWeek / summary.shared)} of shared`,
-    title: () => "A task or coding agent started, or a plan revised, in the last 7 UTC days",
+    title: () => "A task or agent started, or a plan revised, in the last 7 UTC days",
   },
   {
     key: "invites",

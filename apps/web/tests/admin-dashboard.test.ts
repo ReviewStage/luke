@@ -62,7 +62,6 @@ function overview(overrides: Partial<AdminOverview> = {}): AdminOverview {
           day: "2026-10-17",
           [ACTIVITY_FEATURE.AGENTS_STARTED]: 4,
           [ACTIVITY_FEATURE.PLAN_REVISIONS]: 3,
-          [ACTIVITY_FEATURE.CALLS_HELD]: 2,
           [ACTIVITY_FEATURE.INBOX_ANSWERED]: 1,
           [ACTIVITY_FEATURE.AUTOMATION_RUNS]: 1,
         },
@@ -73,7 +72,6 @@ function overview(overrides: Partial<AdminOverview> = {}): AdminOverview {
       { step: FUNNEL_STEP.SIGNED_UP, accounts: 50, share: 1 },
       { step: FUNNEL_STEP.GITHUB_CONNECTED, accounts: 30, share: 0.6 },
       { step: FUNNEL_STEP.CREATED_TASK, accounts: 25, share: 0.5 },
-      { step: FUNNEL_STEP.HELD_CALL, accounts: 10, share: 0.2 },
       { step: FUNNEL_STEP.STARTED_AGENT, accounts: 20, share: 0.4 },
       { step: FUNNEL_STEP.OPENED_PR, accounts: 12, share: 0.24 },
       { step: FUNNEL_STEP.MERGED_PR, accounts: 8, share: 0.16 },
@@ -82,9 +80,8 @@ function overview(overrides: Partial<AdminOverview> = {}): AdminOverview {
       activeDevelopers: 12,
       features: [
         { feature: REACH_FEATURE.TASKS, developers: 12, share: 1 },
-        { feature: REACH_FEATURE.CODING_AGENTS, developers: 9, share: 0.75 },
+        { feature: REACH_FEATURE.AGENTS, developers: 9, share: 0.75 },
         { feature: REACH_FEATURE.INBOX, developers: 6, share: 0.5 },
-        { feature: REACH_FEATURE.VOICE_CALLS, developers: 3, share: 0.25 },
         { feature: REACH_FEATURE.INTEGRATIONS, developers: 4, share: 1 / 3 },
         { feature: REACH_FEATURE.AUTOMATIONS, developers: 1, share: 1 / 12 },
       ],
@@ -100,7 +97,6 @@ function overview(overrides: Partial<AdminOverview> = {}): AdminOverview {
         tasks: 4,
         agents: 1234,
         prsMerged: 3,
-        callMinutes: 42,
         lastSeenAt: null,
       },
     ],
@@ -280,16 +276,14 @@ test("the funnel and reach read each row's count and its share of the base", () 
     "Signed up | 50 | 100%",
     "GitHub connected | 30 | 60%",
     "Created a task | 25 | 50%",
-    "Held a call | 10 | 20%",
     "Started an agent | 20 | 40%",
     "Opened a PR | 12 | 24%",
     "Merged a PR | 8 | 16%",
   ]);
   expect(listRows(page, "Feature reach")).toEqual([
     "Tasks & plans | 12 | 100%",
-    "Coding agents | 9 | 75%",
+    "Agents | 9 | 75%",
     "Inbox | 6 | 50%",
-    "Voice calls | 3 | 25%",
     "Integration connected | 4 | 33%",
     "Automations | 1 | 8%",
   ]);
@@ -313,7 +307,7 @@ test("retention counts meaningful actions until the hosted basis is chosen", () 
   expect(chosen()).toEqual(["Any hosted call"]);
   expect(page.textContent).toContain("20%");
   expect(page.textContent).not.toContain("70%");
-  expect(page.textContent).toContain("spent hosted voice or attention");
+  expect(page.textContent).toContain("made a hosted-tier call");
 });
 
 test("the most active accounts read each one's days and per-feature counts", () => {
@@ -322,16 +316,8 @@ test("the most active accounts read each one's days and per-feature counts", () 
   const headers = Array.from(table?.querySelectorAll("th") ?? [], (cell) => cell.textContent);
   const cells = Array.from(table?.querySelectorAll("tbody td") ?? [], (cell) => cell.textContent);
 
-  expect(headers).toEqual([
-    "Account",
-    "Active days",
-    "Tasks",
-    "Agents",
-    "PRs merged",
-    "Call min",
-    "Last seen",
-  ]);
-  expect(cells.slice(1)).toEqual(["6 of 7", "4", "1,234", "3", "42", "—"]);
+  expect(headers).toEqual(["Account", "Active days", "Tasks", "Agents", "PRs merged", "Last seen"]);
+  expect(cells.slice(1)).toEqual(["6 of 7", "4", "1,234", "3", "—"]);
 });
 
 /** The button whose words are `words`. */

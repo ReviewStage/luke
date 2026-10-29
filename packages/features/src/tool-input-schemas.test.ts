@@ -1,15 +1,12 @@
 import { jsonSchemaGoldenRoot, settleJsonSchemaGolden } from "@luke/wire/testing";
 import type { Schema } from "effect";
 import { test } from "vitest";
+import { agentDelegationInputSchema, agentTodosInputSchema } from "./agent-wire.js";
 import {
   channelCreateInputSchema,
   channelUpdateInputSchema,
   threadMoveInputSchema,
 } from "./channel-wire.js";
-import {
-  codingAgentDelegationInputSchema,
-  codingAgentTodosInputSchema,
-} from "./coding-agent-wire.js";
 import {
   inboxReadInputSchema,
   inboxThreadPostInputSchema,
@@ -33,8 +30,8 @@ const TOOL_INPUTS: readonly (readonly [string, Schema.Top])[] = [
   ["channel-wire-channelCreateInputSchema", channelCreateInputSchema],
   ["channel-wire-channelUpdateInputSchema", channelUpdateInputSchema],
   ["channel-wire-threadMoveInputSchema", threadMoveInputSchema],
-  ["coding-agent-wire-codingAgentDelegationInputSchema", codingAgentDelegationInputSchema],
-  ["coding-agent-wire-codingAgentTodosInputSchema", codingAgentTodosInputSchema],
+  ["agent-wire-agentDelegationInputSchema", agentDelegationInputSchema],
+  ["agent-wire-agentTodosInputSchema", agentTodosInputSchema],
 ];
 
 test.for(TOOL_INPUTS)("%s emits the recorded JSON Schema", async ([name, schema]) => {

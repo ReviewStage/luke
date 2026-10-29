@@ -1,4 +1,4 @@
-import type { BrainModelUsage, BrainRunUsage } from "@luke/features/brain";
+import type { RunModelUsage, RunUsage } from "@luke/features/turn-run";
 import {
   MESSAGE_ROLE,
   type MessageRole,
@@ -158,6 +158,20 @@ export function turnlessUserLine(table: {
 }
 
 /**
+ * That a row of `messages` is no developer's line its hand-over withdrew
+ * and no turn took since: every read that shows a line reads it through
+ * this. A turn's own row stands whatever its stamp says, because a release
+ * that kept no stamp takes a withdrawn line into its turn and leaves the
+ * stamp behind.
+ */
+export function standingLine(table: {
+  readonly withdrawnAt: SQLWrapper;
+  readonly turnId: SQLWrapper;
+}): SQL {
+  return sql`(${table.withdrawnAt} is null or ${table.turnId} is not null)`;
+}
+
+/**
  * One `UIMessage` per row. A message in flight is mutable until
  * `finished_at` is set, and its tool parts are written before the tool runs
  * and completed after, so the row is the write-ahead record a resume reads;
@@ -234,6 +248,17 @@ export const messages = pgTable(
      * kept.
      */
     takenAfterStep: integer("taken_after_step"),
+    /**
+     * When the hand-over of a developer's line to a coding agent answered
+     * that the runtime did not take it; null on every other row, and on a
+     * withdrawn line a turn took all the same. Note that the row is kept
+     * rather than deleted, because a hand-over past its deadline, or whose
+     * record failed after the runtime took it, may still reach a turn, and
+     * the row is the one record of what the line says carried it and who
+     * sent it. Every read leaves such a row out until a turn takes it, and
+     * the maintenance sweep deletes it once no turn can.
+     */
+    withdrawnAt: timestamptz("withdrawn_at"),
   },
   (table) => [
     unique("messages_conversation_client").on(table.conversationId, table.clientId),
@@ -250,6 +275,8 @@ export const messages = pgTable(
     // The foreign key's check on every turn deleted, by the purge, an agent's delete, or a rewind,
     // finds the messages that turn wrote, which a scan of the table would read through to the last.
     index("messages_turn").on(table.turnId).where(sql`${table.turnId} is not null`),
+    // The sweep finds the withdrawn lines no turn took in time, a handful among every row.
+    index("messages_withdrawn").on(table.withdrawnAt).where(sql`${table.withdrawnAt} is not null`),
   ],
 );
 
@@ -260,8 +287,8 @@ export const messages = pgTable(
  * absent on a row from before the breakdown was kept, whose every step is
  * read as the row's `model`.
  */
-export interface StoredTurnUsage extends BrainRunUsage {
-  readonly byModel?: readonly BrainModelUsage[];
+export interface StoredTurnUsage extends RunUsage {
+  readonly byModel?: readonly RunModelUsage[];
 }
 
 /**
@@ -311,6 +338,15 @@ export const turns = pgTable(
      * for a Stop the developer pressed, or none.
      */
     cancelRequestKey: text("cancel_request_key"),
+    /**
+     * The coding agent whose `stop_agent`, or whose Start continuing this
+     * turn's agent, made the Stop, written with `cancel_requested_at`, so the
+     * agent's starter is not told of a Stop it made itself
+     * (`starter-notices.ts`). Null for a Stop the developer pressed or Luke
+     * made, and for none. Named by id and held to nothing, so the turn
+     * outlives that agent.
+     */
+    cancelRequestedBy: uuid("cancel_requested_by"),
     /** Whether Anthropic refused Fast for a step of the turn, which then ran at standard speed instead (`coder-host/model.ts`). */
     fastRefused: boolean("fast_refused").notNull().default(false),
     /** How many notes a native coding agent's turn has taken on its plan over Luke's MCP server, reserved before each save (`edit_plan`'s per-turn cap); eve keeps its own count in its session. */
@@ -351,78 +387,4 @@ export const dispatchWaiters = pgTable(
     seenAt: timestamptz("seen_at").notNull().defaultNow(),
   },
   (table) => [index("dispatch_waiters_conversation_place").on(table.conversationId, table.place)],
-);
-
-/**
- * A developer's ask between its accept and its turn. eve folds asks that
- * arrive while a turn runs into the next turn and names no turn at accept
- * time, so the ask stands on its own row from the accept, keyed by the
- * client's id once per conversation, and learns its turn when eve's
- * `turn.started` names the delivery it was handed as. The id is what the
- * caller reads and stops the ask by; `turn_id` is `hostTurnId` once known,
- * the one turn-id scheme, so a read by either id resolves through one path.
- * A retry with the same client id dispatches again where the first dispatch
- * never reached eve. A Stop asked of a queued ask stamps
- * `cancel_requested_at`, for the start that names its delivery to honour. CLAUDE.md calls the local record of
- * these "the requests"; this is the hosted tier's. An ask goes with its
- * conversation.
- *
- * A spoken ask also carries what a re-attached connection needs to pick it
- * up again: the live session it was delegated in, its ask revision in that
- * session's order, how far its turn's events were told to the voice, and
- * when the run's end was told. A typed ask has none of them.
- */
-export const asks = pgTable(
-  "asks",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    conversationId: uuid("conversation_id")
-      .notNull()
-      .references(() => conversations.id, { onDelete: "cascade" }),
-    /** The client's own id for the ask: the idempotency key, unique in its conversation. */
-    clientId: text("client_id").notNull(),
-    origin: text("origin").$type<TurnOrigin>().notNull(),
-    /** The eve session the ask was handed to, once eve accepted it. */
-    sessionId: text("session_id"),
-    /** The delivery eve named for a follow-up; an ask that opened its session has none, its turn is the session's first. */
-    deliveryId: text("delivery_id"),
-    /** The turn the ask ran in, as the store keys it, once known. */
-    turnId: uuid("turn_id"),
-    createdAt: createdAt(),
-    cancelRequestedAt: timestamptz("cancel_requested_at"),
-    /** The Live API's id of the voice session a spoken ask was delegated in; null for a typed ask. */
-    voiceSessionId: text("voice_session_id"),
-    /** The spoken ask's place in its voice session's order of delegations: a higher revision supersedes a lower. */
-    askRevision: integer("ask_revision"),
-    /** The last event of the ask's turn told to the voice under this ask short of its end, written before it is told. */
-    toldSeq: integer("told_seq").notNull().default(0),
-    /** When the run's end was told to the voice under this ask, written before it is told. */
-    endToldAt: timestamptz("end_told_at"),
-    /**
-     * For a spoken ask bound to a typed turn, which it joined under way: how
-     * many of that turn's steps had begun before it, from which its answer
-     * is read and its line placed. Null for every other ask, which opened its
-     * turn or joined one of its own kind, and is the whole turn's.
-     */
-    joinedAfterStep: integer("joined_after_step"),
-    /**
-     * The dispatch claim the ask was handed over under (`dispatch-claim.ts`),
-     * written before the runtime hears it and cleared where it answered
-     * nothing: one standing beside no session is a hand-over whose holder
-     * died before writing what the runtime answered, which is never handed
-     * over again. Null on an ask never handed over and on one eve took.
-     */
-    dispatchClaim: uuid("dispatch_claim"),
-  },
-  (table) => [
-    uniqueIndex("asks_conversation_client").on(table.conversationId, table.clientId),
-    index("asks_by_user").on(table.userId),
-    index("asks_conversation_delivery").on(table.conversationId, table.deliveryId),
-    index("asks_by_voice_session")
-      .on(table.userId, table.voiceSessionId)
-      .where(sql`${table.voiceSessionId} is not null`),
-  ],
 );

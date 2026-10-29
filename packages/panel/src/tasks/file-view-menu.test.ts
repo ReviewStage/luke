@@ -1,5 +1,5 @@
 /**
- * file-view-menu.test.ts -- the end of a File tab's bar as the developer meets it: View settings offering the settings a File tab's lines follow, its wrap, numbers, minimized notes, syntax theme, and type, each drawn at once, and a ⋯ of actions alone, its Copy path copying the file's path. Synthetic files only.
+ * file-view-menu.test.ts -- the end of a File tab's bar as the developer meets it: View settings offering the settings a File tab's lines follow, its wrap, numbers, syntax theme, and type, each drawn at once, and a ⋯ of actions alone, its Copy path copying the file's path. Synthetic files only.
  */
 
 // @vitest-environment jsdom
@@ -108,7 +108,7 @@ function press(container: HTMLElement, name: string): void {
   act(() => button.click());
 }
 
-test("View settings on a File tab offers its lines' wrap, numbers, minimized notes, syntax theme, and type, and each is drawn on its lines at once", async () => {
+test("View settings on a File tab offers its lines' wrap, numbers, syntax theme, and type, and each is drawn on its lines at once", async () => {
   const container = mount();
   await wholeFileDrawn(container);
   press(container, "View options");
@@ -126,7 +126,6 @@ test("View settings on a File tab offers its lines' wrap, numbers, minimized not
     [
       "Word wrap",
       "Line numbers",
-      "Minimize inline comments",
       "Syntax theme",
       "For dark mode",
       "Font",
@@ -206,8 +205,6 @@ test("Copy file contents copies the text the tab draws, read at its commit, rath
           taskId: "task-1",
           repository: null,
           file: { path: PATH, range: undefined, opened: 1 },
-          snippet: undefined,
-          shownCode: [],
           readFile,
           readFolder: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
           readWhole: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
@@ -216,7 +213,6 @@ test("Copy file contents copies the text the tab draws, read at its commit, rath
           onToggleTree: () => undefined,
           onBrowse: () => undefined,
           history: { canGoBack: false, canGoForward: false, onStep: () => undefined },
-          onFoldNote: () => undefined,
         }),
       ),
     ),
@@ -258,8 +254,6 @@ test("on a phone a File tab draws no bar, and the task's header's ⋯ offers eve
       taskId: "task-1",
       repository: "acme/relay",
       file: { path: PATH, range: undefined, opened: 1 },
-      snippet: undefined,
-      shownCode: [],
       readFile,
       readFolder: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
       readWhole: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
@@ -268,7 +262,6 @@ test("on a phone a File tab draws no bar, and the task's header's ⋯ offers eve
       onToggleTree: () => undefined,
       onBrowse: () => undefined,
       history: { canGoBack: true, canGoForward: false, onStep: (step) => steps.push(step) },
-      onFoldNote: () => undefined,
     }),
   );
   const container = document.body.appendChild(document.createElement("div"));

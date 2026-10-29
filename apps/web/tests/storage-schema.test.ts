@@ -10,13 +10,7 @@ import {
   insertTurn,
   openHostedStoreTestDatabase,
 } from "@luke/database/testing";
-import {
-  MESSAGE_AUTHOR,
-  MESSAGE_CHANNEL,
-  MESSAGE_ROLE,
-  TURN_ORIGIN,
-  TURN_STATUS,
-} from "@luke/wire";
+import { MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { getColumnTable, getTableName } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -41,14 +35,12 @@ afterAll(() => database.close());
 const DECLARED_TABLES = [
   "account",
   "account_chatgpt_host",
-  "account_plan_template_revision",
   "account_preference",
   "account_provider_key",
   "admin_favorite",
   "agent_browser_tab",
   "agent_pin",
   "agent_section_entry",
-  "asks",
   "attachment",
   "automation",
   "automation_run",
@@ -104,12 +96,11 @@ const DECLARED_TABLES = [
   "plan_revision",
   "pull_request_chapters",
   "repository_pin",
+  "runner_line",
   "sandbox_terminal_lease",
   "session",
   "session_sandbox_cleanup",
   "task",
-  "task_board",
-  "task_issue",
   "task_number_counter",
   "task_pin",
   "task_section",
@@ -118,11 +109,6 @@ const DECLARED_TABLES = [
   "turns",
   "user",
   "verification",
-  "voice_avatar_sessions",
-  "voice_session_usage",
-  "voice_sessions",
-  "voice_transcript_segments",
-  "workspace_integration_connection",
   "workspace_token_repository",
 ].sort();
 
@@ -176,7 +162,7 @@ async function insertTestMessage(
     clientId: "client-1",
     role: MESSAGE_ROLE.USER,
     parts: [{ type: "text", text: "hello" }],
-    metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
+    metadata: { channel: MESSAGE_CHANNEL.TYPED },
     ...row,
   });
 }

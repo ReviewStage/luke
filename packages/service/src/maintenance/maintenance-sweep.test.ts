@@ -4,7 +4,6 @@ import { noDatabase } from "@luke/database/testing/no-database";
 import { Effect, Exit, Redacted } from "effect";
 import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import { HOSTED_API_ERROR } from "../http/http.js";
-import type { VoiceOrphanSweepOutcome } from "../voice/orphan-sweep.js";
 import type { EveSandboxSweepOutcome } from "./eve-sandbox-sweep.js";
 import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import {
@@ -17,8 +16,6 @@ import type { SandboxRetentionSweepOutcome } from "./sandbox-retention-sweep.js"
 import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 
 const CRON_SECRET = Redacted.make("cron-secret-1");
-/** What the sweep over the detached voice sessions answers. */
-const VOICED: VoiceOrphanSweepOutcome = { closed: 2, lost: 1, pending: 1, failed: 0 };
 /** What the sweep over the queued sessions' sandboxes answers. */
 const SANDBOXED: SessionSandboxSweepOutcome = { deleted: 4, pending: 1 };
 /** What the sweep over the lapsed terminal leases answers. */
@@ -57,9 +54,8 @@ function sweepRequest(
 /** The instant each sweep was handed, recorded for the test to read back. */
 interface Recorded {
   purged: number[];
-  purgedCalls: number[];
   abandoned: number[];
-  voiced: number[];
+  deviceLeases: number[];
   sandboxed: number[];
   terminals: number[];
   native: number[];
@@ -67,6 +63,8 @@ interface Recorded {
   retention: number[];
   wakeups: number[];
   operatorWakes: number[];
+  starterNotices: number[];
+  withdrawnLines: number[];
   automated: number[];
   pictures: number[];
   tokenPullRequests: number[];
@@ -77,9 +75,8 @@ interface Recorded {
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
   const recorded: Recorded = {
     purged: [],
-    purgedCalls: [],
     abandoned: [],
-    voiced: [],
+    deviceLeases: [],
     sandboxed: [],
     terminals: [],
     native: [],
@@ -87,6 +84,8 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     retention: [],
     wakeups: [],
     operatorWakes: [],
+    starterNotices: [],
+    withdrawnLines: [],
     automated: [],
     pictures: [],
     tokenPullRequests: [],
@@ -102,20 +101,15 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.purged.push(now);
         return 2;
       }),
-    purgeDeletedTaskCalls: (now) =>
-      Effect.sync(() => {
-        recorded.purgedCalls.push(now);
-        return 3;
-      }),
     sweepAbandonedTurns: (now) =>
       Effect.sync(() => {
         recorded.abandoned.push(now);
         return 1;
       }),
-    sweepVoice: (now) =>
+    sweepDeviceLeases: (now) =>
       Effect.sync(() => {
-        recorded.voiced.push(now);
-        return VOICED;
+        recorded.deviceLeases.push(now);
+        return { lapsed: 1, busy: 0, failed: 0 };
       }),
     sweepSandboxes: (now) =>
       Effect.sync(() => {
@@ -151,6 +145,16 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.operatorWakes.push(now);
         return { woken: 1, failed: 0 };
+      }),
+    sweepStarterNotices: (now) =>
+      Effect.sync(() => {
+        recorded.starterNotices.push(now);
+        return { told: 1, failed: 0 };
+      }),
+    purgeWithdrawnLines: (now) =>
+      Effect.sync(() => {
+        recorded.withdrawnLines.push(now);
+        return 2;
       }),
     sweepAutomations: (now) =>
       Effect.sync(() => {
@@ -198,9 +202,8 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
     assert.equal(answer.body.error, HOSTED_API_ERROR.UNAVAILABLE);
     assert.deepEqual(recorded, {
       purged: [],
-      purgedCalls: [],
       abandoned: [],
-      voiced: [],
+      deviceLeases: [],
       sandboxed: [],
       terminals: [],
       native: [],
@@ -208,6 +211,8 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       retention: [],
       wakeups: [],
       operatorWakes: [],
+      starterNotices: [],
+      withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -229,9 +234,8 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
     assert.equal(missingAnswer.status, 401);
     assert.deepEqual(wrong.recorded, {
       purged: [],
-      purgedCalls: [],
       abandoned: [],
-      voiced: [],
+      deviceLeases: [],
       sandboxed: [],
       terminals: [],
       native: [],
@@ -239,6 +243,8 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       retention: [],
       wakeups: [],
       operatorWakes: [],
+      starterNotices: [],
+      withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -247,9 +253,8 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
     });
     assert.deepEqual(missing.recorded, {
       purged: [],
-      purgedCalls: [],
       abandoned: [],
-      voiced: [],
+      deviceLeases: [],
       sandboxed: [],
       terminals: [],
       native: [],
@@ -257,6 +262,8 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       retention: [],
       wakeups: [],
       operatorWakes: [],
+      starterNotices: [],
+      withdrawnLines: [],
       automated: [],
       pictures: [],
       tokenPullRequests: [],
@@ -280,6 +287,7 @@ it.effect(
       assert.deepEqual(answer.body.sandboxRetention, RETAINED);
       assert.deepEqual(answer.body.nativeWakeups, { delivered: 1, failed: 0 });
       assert.deepEqual(answer.body.operatorWakes, { woken: 1, failed: 0 });
+      assert.deepEqual(answer.body.starterNotices, { told: 1, failed: 0 });
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(answer.body.purgedPictures, 4);
       assert.deepEqual(answer.body.tokenPullRequests, { polled: 2, told: 1 });
@@ -289,9 +297,8 @@ it.effect(
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
         purged: [instant],
-        purgedCalls: [instant],
         abandoned: [instant],
-        voiced: [instant],
+        deviceLeases: [instant],
         sandboxed: [instant],
         terminals: [instant],
         native: [instant],
@@ -299,6 +306,8 @@ it.effect(
         retention: [instant],
         wakeups: [instant],
         operatorWakes: [instant],
+        starterNotices: [instant],
+        withdrawnLines: [instant],
         automated: [instant],
         pictures: [instant],
         tokenPullRequests: [instant],
@@ -314,7 +323,7 @@ it.effect(
     Effect.gen(function* () {
       const checkIns: string[] = [];
       const { options, recorded } = sweepOptions({
-        sweepVoice: () => Effect.fail(new Error("the voice upstream refused")),
+        sweepAbandonedTurns: () => Effect.fail(new Error("a turn's row could not be read")),
         sweepAutomations: () => Effect.die(new Error("an automation's row could not be read")),
         // The cron monitor as Sentry's check-in reads the run: failed where its effect failed.
         monitor: {
@@ -330,7 +339,7 @@ it.effect(
 
       assert.equal(answer.status, 500);
       assert.deepEqual(checkIns, ["error"]);
-      assert.deepEqual(answer.body.voice, SWEEP_FAILED);
+      assert.deepEqual(answer.body.abandoned, SWEEP_FAILED);
       assert.deepEqual(answer.body.automations, SWEEP_FAILED);
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.deepEqual(answer.body.imageTemplates, { current: "ready", deleted: 1 });

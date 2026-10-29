@@ -12,7 +12,7 @@
  * earlier entries left on GitHub, names nothing here, and opens on GitHub.
  */
 
-import type { ConversationEntry, ReviewThread } from "@luke/features/coding-agent-wire";
+import type { ConversationEntry, ReviewThread } from "@luke/features/agent-wire";
 import { pullRequestAddressOf } from "@luke/features/link-grammar";
 
 /** What a link to a pull request's own comment names: a review thread, or an entry of its conversation. */

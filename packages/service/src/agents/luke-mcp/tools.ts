@@ -18,15 +18,10 @@
  * tool finds it, its tabs kept under the agent's own conversation; its
  * screenshots reach the agent as images, which the transcript leaves out.
  *
- * The call's own tools (`queue_question`, `withdraw_question`, `end_call`)
- * are served on every turn, as eve offers them on every turn of its own, so
- * the list a harness reads at its launch is the same whatever turn it is
- * on; each runs on a spoken turn and is refused on any other
- * (`runCallTool`), the turn's kind read off what the session's last message
- * handed rather than a request's header (`nativeTurnKind`). Left out, beside the harness's own
- * shell, files, todos, waiting, subagents, skills, and web reads: eve's
- * `connection_search` and `connection_execute`, since each integration the
- * agent is handed is an MCP server of its own beside this one (`app.ts`).
+ * Left out, beside the harness's own shell, files, todos, waiting,
+ * subagents, skills, and web reads: eve's `connection_search` and
+ * `connection_execute`, since each integration the agent is handed is an
+ * MCP server of its own beside this one (`app.ts`).
  *
  * Two things eve's tool files keep in the session's own state are kept
  * otherwise here, since the server keeps no session: a call's id, which the
@@ -46,34 +41,23 @@
 
 import type { DatabaseServices, StoreFailure } from "@luke/database/core/query";
 import {
-  type CodingAgent,
-  readNativeHanded,
+  type Agent,
   reserveTurnPlanNotes,
   settleTurnPlanNotes,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
+import { AGENT_KIND, AGENT_MACHINE } from "@luke/features/agent-wire";
 import { CHANNEL_TOOL } from "@luke/features/channel-wire";
-import { CODING_AGENT_KIND, CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { pictureTypeSchema } from "@luke/features/picture-wire";
-import {
-  ACTION_RESULT_STATUS,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireRecord,
-} from "@luke/wire";
+import { ACTION_RESULT_STATUS, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
-import { Effect, Exit, Option, Result, Schema } from "effect";
+import { Effect, Exit, Option, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import type { HostedEnvironment } from "../../environment.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import type {
-  IntegrationConnect,
-  WorkspaceLinearConnect,
-} from "../../integrations/integration-connect.js";
+import type { IntegrationConnect } from "../../integrations/integration-connect.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
-import { LOOK_AT_BOARD_STATUS, LOOK_AT_BOARD_TOOL } from "../../tasks/board-look.js";
-import { DRAW_ON_BOARD_TOOL } from "../../tasks/board-tool.js";
 import {
   type CommentToolName,
   READ_COMMENTS_TOOL,
@@ -81,21 +65,24 @@ import {
   REPLY_TO_COMMENT_TOOL,
   RESOLVE_THREAD_TOOL,
 } from "../../tasks/comment-tools.js";
-import { END_CALL_TOOL, runEndCall } from "../../tasks/end-call.js";
 import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import {
   LOOK_AT_PICTURE_TOOL,
   lookNamedOnly,
   PICTURE_LOOK_STATUS,
 } from "../../tasks/picture-look.js";
-import {
-  QUEUE_QUESTION_TOOL,
-  runQueueQuestion,
-  runWithdrawQuestion,
-  WITHDRAW_QUESTION_TOOL,
-} from "../../tasks/queue-question.js";
-import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
 import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
+import {
+  CODER_READ_AGENT_TOOL,
+  LIST_AGENTS_TOOL,
+  LIST_MODELS_TOOL,
+  LIST_TASKS_TOOL,
+  READ_PAGE_TOOL,
+  START_AGENT_TOOL,
+  STOP_AGENT_TOOL,
+  UPDATE_AGENT_TOOL,
+  UPDATE_TASK_TOOL,
+} from "../agent-tools.js";
 import {
   CREATE_AUTOMATION_TOOL,
   DELETE_AUTOMATION_TOOL,
@@ -103,8 +90,6 @@ import {
   RUN_AUTOMATION_TOOL,
   UPDATE_AUTOMATION_TOOL,
 } from "../automation-tools.js";
-import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
 import {
   BROWSER_TOOL,
@@ -117,12 +102,10 @@ import {
 import {
   type AgentDoorSeams,
   type AgentToolCall,
-  runAgentBoard,
   runAgentComment,
   runAgentEditPlan,
   runAgentLookAtPicture,
   runAgentOpenPullRequest,
-  runAgentShowCode,
   runAgentShowImage,
   runAgentShowPage,
   runAgentTools,
@@ -140,30 +123,16 @@ import {
 import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
 import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
 import {
-  type CallTool,
   CODER_TOOL,
   kindToolsOf,
   machineToolsOf,
   repositoryToolsOf,
-  runCallTool,
   taskToolsOf,
 } from "../coder-host/tool-set.js";
-import { TurnHandedSchema } from "../coder-host/turn-context.js";
-import {
-  CODER_READ_AGENT_TOOL,
-  LIST_AGENTS_TOOL,
-  LIST_MODELS_TOOL,
-  LIST_TASKS_TOOL,
-  READ_PAGE_TOOL,
-  START_AGENT_TOOL,
-  STOP_AGENT_TOOL,
-  UPDATE_AGENT_TOOL,
-  UPDATE_TASK_TOOL,
-} from "../coding-agent-tools.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
 import { RECALL_TOOL, REMEMBER_TOOL } from "../memory-tools.js";
 import { LIST_OPEN_ASKS_TOOL } from "../operator-desk.js";
-import type { RepositorySandboxDoor } from "../repository-shell.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
 
@@ -176,7 +145,6 @@ export type LukeMcpServices =
   | HttpClient.HttpClient
   | GitHubApp
   | ModelCatalog
-  | WorkspaceLinearConnect
   | IntegrationConnect
   | HostedEnvironment
   | SentryApp;
@@ -184,10 +152,9 @@ export type LukeMcpServices =
 /** What a tool runs against: the doors' services, and the agent's browser, which the server provides itself (`app.ts`). */
 type LukeMcpToolServices = LukeMcpServices | AgentBrowser;
 
-/** What a call carries beside its input: the doors to the agent's sandbox, where a tool reads a file the agent names by its path or `show_code` reads its checkout; the key it runs under, read from the store by the tools that key a row on it (`call-key.ts`); and the seams the doors that reach eve or the store's writer read. */
+/** What a call carries beside its input: the door to the agent's sandbox, where a tool reads a file the agent names by its path; the key it runs under, read from the store by the tools that key a row on it (`call-key.ts`); and the seams the doors that reach eve or the store's writer read. */
 interface LukeMcpCallContext {
   readonly sandbox: InboxSandboxDoor;
-  readonly repository: RepositorySandboxDoor;
   readonly callKey: Effect.Effect<string, StoreFailure, DatabaseServices>;
   readonly seams: AgentDoorSeams;
 }
@@ -269,41 +236,6 @@ function commentTool(spec: ToolSpec & { readonly name: CommentToolName }) {
   return entry(spec, (admitted, input) => runAgentComment(admitted, spec.name, input));
 }
 
-/** What the session's messages handed, read back off the conversation's row; a row holding nothing, or a shape this build no longer reads, handed none of it. */
-const readHanded = Schema.decodeUnknownResult(TurnHandedSchema);
-
-/**
- * The kind of turn the agent is on, as eve's `turnKind` answers it for an
- * eve agent: the kind of the newest line handed to the agent, since eve moves
- * a session's current auth to each line's as it arrives, a spoken ask that
- * joins a typed turn under way included (`../coder-host/host.ts`'s `relay`).
- * A native runner takes its lines off its stdin, where no header names a
- * kind, so the kind is read off what the last message written to it handed
- * (`../coder-host/turn-message.ts`, `native_handed`), by the same send that
- * put the turn's words ahead of the developer's line: spoken where that
- * message was a spoken turn's, and typed otherwise, the unheard last line
- * of an ended call included, so the words the agent reads and this gate
- * agree. An agent handed no message yet is on a typed turn.
- */
-function nativeTurnKind(
-  admitted: AdmittedConversation,
-): Effect.Effect<BrainHostTurn, unknown, DatabaseServices> {
-  return Effect.map(readNativeHanded(admitted.target), (kept) => {
-    const handed = kept === null ? undefined : Result.getOrUndefined(readHanded(kept));
-    return handed?.spoken === true ? BRAIN_HOST_TURN.SPOKEN : BRAIN_HOST_TURN.TYPED;
-  });
-}
-
-/** One of the call's own tools, run as its eve tool file runs it (`apps/dev/tools/<name>.ts`): on a spoken turn, and refused on any other (`runCallTool`). */
-function callTool(
-  spec: ToolSpec & { readonly name: CallTool },
-  run: (input: UnparsedWireValue) => WireRecord,
-) {
-  return entry(spec, (admitted, input) =>
-    Effect.map(nativeTurnKind(admitted), (turn) => runCallTool(turn, spec.name, () => run(input))),
-  );
-}
-
 /** A look that answered a picture: its bytes as base64 and an image's type, never a video's, which no model is handed. */
 const isLooked = Schema.is(
   Schema.Struct({
@@ -312,14 +244,6 @@ const isLooked = Schema.is(
     mediaType: pictureTypeSchema,
   }),
 );
-
-/** A look at the whiteboard that answered its image, a PNG as base64. */
-const isBoardLooked = Schema.is(
-  Schema.Struct({ status: Schema.Literal(LOOK_AT_BOARD_STATUS.LOOKED), image: Schema.String }),
-);
-
-/** The type the whiteboard's image is drawn in (`../../tasks/board-look.ts`). */
-const BOARD_IMAGE_TYPE = "image/png";
 
 /**
  * A look's text block where it looked: its status alone, as JSON. Note that
@@ -331,14 +255,6 @@ const LOOKED_TEXT: McpContent = {
   type: "text",
   text: JSON.stringify({ status: PICTURE_LOOK_STATUS.LOOKED }),
 };
-
-/** What the agent is shown of a look at the whiteboard: its status and its image, as an image, where it looked; its JSON otherwise. */
-function lookedBoardContent(result: LukeMcpToolResult): readonly McpContent[] {
-  if (isBoardLooked(result)) {
-    return [LOOKED_TEXT, { type: "image", data: result.image, mimeType: BOARD_IMAGE_TYPE }];
-  }
-  return [{ type: "text", text: JSON.stringify(result) }];
-}
 
 /** What the agent is shown of a look: its status and the picture itself, as an image, where it looked; its JSON otherwise. */
 function lookedPictureContent(result: LukeMcpToolResult): readonly McpContent[] {
@@ -481,18 +397,6 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
     runAgentShowPage(admitted, input, sandbox),
   ),
   agentTool(READ_PAGE_TOOL),
-  entry(SHOW_CODE_TOOL, (admitted, input, { repository }) =>
-    runAgentShowCode(admitted, input, repository),
-  ),
-  // The task's whiteboard.
-  entry(DRAW_ON_BOARD_TOOL, (admitted, input) =>
-    runAgentBoard(admitted, CODER_TOOL.DRAW_ON_BOARD, input),
-  ),
-  entry(
-    LOOK_AT_BOARD_TOOL,
-    (admitted, input) => runAgentBoard(admitted, CODER_TOOL.LOOK_AT_BOARD, input),
-    lookedBoardContent,
-  ),
   // The workspace's agents.
   agentTool(START_AGENT_TOOL),
   agentTool(STOP_AGENT_TOOL),
@@ -502,7 +406,7 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   agentTool(UPDATE_AGENT_TOOL),
   agentTool(LIST_MODELS_TOOL),
   agentTool(LIST_OPEN_ASKS_TOOL),
-  // Tasks, sections, and issues.
+  // Tasks and sections.
   agentTool(LIST_TASKS_TOOL),
   agentTool(READ_TASK_TOOL),
   agentTool(CREATE_TASK_TOOL),
@@ -527,14 +431,10 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   entry(RUN_ON_MAC_TOOL, (admitted, input) => runOnMacTool(admitted.target, input)),
   // The agent's browser.
   entry(BROWSER_TOOL, runAgentBrowser, browserContent),
-  // The call the agent is spoken into: its question queue and its hang-up, carried to the voice by the journaled call.
-  callTool(QUEUE_QUESTION_TOOL, runQueueQuestion),
-  callTool(WITHDRAW_QUESTION_TOOL, runWithdrawQuestion),
-  callTool(END_CALL_TOOL, runEndCall),
 ]);
 
 /** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */
-export type LukeMcpOfferedTo = Pick<CodingAgent, "taskId" | "repository" | "kind" | "machine">;
+export type LukeMcpOfferedTo = Pick<Agent, "taskId" | "repository" | "kind" | "machine">;
 
 /** The workspace's shared memory, which eve offers only where the agent's starter turned Memory on (`apps/dev/tools/remember.ts`'s `memoryOffered`). */
 const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL];
@@ -544,9 +444,9 @@ const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...MEMORY_TOOLS,
   ...taskToolsOf({ taskId: "any" }),
   ...repositoryToolsOf({ repository: "any" }),
-  ...kindToolsOf({ kind: CODING_AGENT_KIND.OPERATOR }),
-  ...kindToolsOf({ kind: CODING_AGENT_KIND.CODER }),
-  ...machineToolsOf({ machine: CODING_AGENT_MACHINE.VERCEL }),
+  ...kindToolsOf({ kind: AGENT_KIND.OPERATOR }),
+  ...kindToolsOf({ kind: AGENT_KIND.CODER }),
+  ...machineToolsOf({ machine: AGENT_MACHINE.VERCEL }),
 ]);
 
 /**

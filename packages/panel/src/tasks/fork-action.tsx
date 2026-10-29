@@ -1,8 +1,4 @@
-import {
-  CODING_AGENT_MACHINE,
-  type CodingAgentAttachment,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE, type AgentAttachment, type AgentSummary } from "@luke/features/agent-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import {
   CARD_CORNER,
@@ -21,11 +17,11 @@ import { ArrowRightIcon, SplitIcon, XIcon } from "lucide-react";
 import { createContext, Fragment, type ReactNode, useContext } from "react";
 import { ActorRef } from "../actor-ref.js";
 import { MessageAction } from "../ai-elements/message.js";
+import { agentActor, agentName } from "./agent-model.js";
 import type { TranscriptCards } from "./agent-tab.js";
-import { agentActor, agentName } from "./coding-agent-model.js";
 import { type AgentFork, FORK_WORDS, type ForkCut, forksOf, messageOpening } from "./fork-model.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import { useOpenPlace } from "./use-open-link.js";
 
 /**
@@ -52,7 +48,7 @@ interface ForkDoors {
 }
 
 /** Opens the task's draft as a continue of the agent, prefilled with the words and files given. */
-export type ContinueDoor = (words: string, attachments: readonly CodingAgentAttachment[]) => void;
+export type ContinueDoor = (words: string, attachments: readonly AgentAttachment[]) => void;
 
 const ForkContext = createContext<ForkDoors | undefined>(undefined);
 
@@ -88,14 +84,14 @@ export function useContinueDoor(): ContinueDoor | undefined {
 /** An agent as its chip wears it where the place hands no cards: by its tab's name where the task lists it, else by the title its source's summary names, and else as a coding agent. */
 function bareActor(
   agentId: string,
-  known: CodingAgentSummary | undefined,
+  known: AgentSummary | undefined,
   title: string | null = null,
 ): Actor {
   if (known !== undefined) return agentActor(known, agentName(known, undefined));
   return {
     kind: ACTOR_KIND.AGENT,
     agentId,
-    name: title ?? TAB_WORDS.CODING_AGENT,
+    name: title ?? TAB_WORDS.AGENT,
     provider: undefined,
     state: ACTOR_STATE.REST,
   };
@@ -104,7 +100,7 @@ function bareActor(
 /** One of the task's agents as a chip, hanging its card, its press `open`, none where it opens nothing. */
 function agentChip(
   agentId: string,
-  known: CodingAgentSummary | undefined,
+  known: AgentSummary | undefined,
   cards: TranscriptCards | undefined,
   open: ((agentId: string) => void) | undefined,
   title: string | null = null,
@@ -127,12 +123,12 @@ function agentChip(
  * each of its messages as chips.
  */
 export function agentForkDoors(input: {
-  agent: CodingAgentSummary;
-  control: Pick<CodingAgentsControl, "agents" | "archived" | "onUnarchive">;
+  agent: AgentSummary;
+  control: Pick<AgentsControl, "agents" | "archived" | "onUnarchive">;
   onFork: ((fork: AgentFork) => void) | undefined;
   /** Opens the draft, the task's or the agent page's, as a continue of an agent, by its id, with the words and files given; none where no draft opens. */
   onContinue?:
-    | ((agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) => void)
+    | ((agentId: string, words: string, attachments: readonly AgentAttachment[]) => void)
     | undefined;
   cards: TranscriptCards | undefined;
   onOpenTarget: ((target: ToolTarget) => void) | undefined;
@@ -152,7 +148,7 @@ export function agentForkDoors(input: {
   // Note that an agent with no task is forked and continued as a task's is, its draft on its own page.
   const drafts = control.onUnarchive === undefined;
   // Note that a local agent has no sandbox snapshot to fork from, so it offers no fork.
-  const forkable = onFork !== undefined && drafts && agent.machine !== CODING_AGENT_MACHINE.DEVICE;
+  const forkable = onFork !== undefined && drafts && agent.machine !== AGENT_MACHINE.DEVICE;
   const open =
     onOpenTarget === undefined
       ? undefined
@@ -249,7 +245,7 @@ export function ForkChip({
 }: {
   fork: AgentFork;
   /** The source as the task lists it, whose task its message is opened under; none where the list does not hold it. */
-  source: CodingAgentSummary | undefined;
+  source: AgentSummary | undefined;
   cards: TranscriptCards | undefined;
   onDrop: () => void;
 }): React.JSX.Element {
