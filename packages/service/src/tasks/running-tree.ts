@@ -37,9 +37,9 @@ import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 import { pilotOf } from "./pilot-switch-notice.js";
 
-/** What an agent the switch stopped is told when Running is switched on again. */
+/** What an agent a Stop halted is told when someone presses Start again. */
 const RUNNING_RESUME_MESSAGE =
-  "Running is on again. Carry on where you stopped, and first re-read your pull request's " +
+  "Work started again. Carry on where you stopped, and first re-read your pull request's " +
   "reviews, comments, and checks, since nothing woke you while stopped.";
 
 /** How many agents the switch stops or tells at once: under the web pool's five connections, as a task's archive stops its agents. */

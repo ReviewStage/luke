@@ -227,12 +227,6 @@
     gap: var(--luke-space-2);
   }
 
-  /* A row's attachments stand on a line of their own under its words, in a
-     run that is cut at the row's end rather than wrapping. */
-  .luke-list-row-attachments {
-    margin-block-start: var(--luke-space-4);
-  }
-
   .luke-list-row-title,
   .luke-list-row-description {
     overflow: hidden;
@@ -272,16 +266,15 @@
   /* A row whose thing is done with stands back in the palette's quieter
      inks rather than by fading its words, which still name what it opens
      and so read at AA (`docs/DESIGN.md`): its title takes the muted ink
-     its description and metadata already wear. Only its marks,
-     the leading glyph and the attachments its words already say, fade.
+     its description and metadata already wear. Only its mark,
+     the leading glyph its words already say, fades.
      Its fill, which says it is open or in hand, and its acts stay as they
      are. */
   .luke-list-row[data-muted="true"] .luke-list-row-title {
     color: var(--luke-color-text-muted);
   }
 
-  .luke-list-row[data-muted="true"] .luke-list-row-leading,
-  .luke-list-row[data-muted="true"] .luke-list-row-attachments {
+  .luke-list-row[data-muted="true"] .luke-list-row-leading {
     opacity: 0.45;
   }
 
@@ -308,7 +301,7 @@
   }
 
   /* Metadata on the title's line ends it, the title giving way first, and
-     the description and attachments run the words' and the end's tracks
+     the description runs the words' and the end's tracks
      whole under both; the row's marks stand level with the title's line
      rather than the row's middle. A lead on a line of its own over the title
      takes the title's place on that first line, as tall as the title's so
@@ -336,7 +329,7 @@
     height: var(--luke-type-label-leading);
   }
 
-  .luke-list-row[data-meta="title"] :is(.luke-list-row-description, .luke-list-row-attachments) {
+  .luke-list-row[data-meta="title"] .luke-list-row-description {
     grid-column: text-start / end-end;
   }
 
@@ -346,10 +339,6 @@
 
   .luke-list-row[data-meta="title"] .luke-list-row-description {
     margin-block-start: var(--luke-space-2);
-  }
-
-  .luke-list-row[data-meta="title"] .luke-list-row-attachments {
-    margin-block-start: var(--luke-space-6);
   }
 
   /* Acts that always stand do so in their own track beside the press, as

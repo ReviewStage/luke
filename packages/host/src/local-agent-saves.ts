@@ -12,6 +12,7 @@ import {
   type HostedDeviceAgentClient,
 } from "@luke/features";
 import type {
+  DeviceAgentLaunchState,
   DeviceAgentLayout,
   DeviceAgentStateSaveAnswer,
 } from "@luke/features/device-agent-wire";
@@ -29,7 +30,7 @@ import {
 } from "./local-agent-state.js";
 
 /**
- * local-agent-saves.ts -- each local agent's state saved as its turn ends: packed and verified in its VM, sealed on the device under the agent's key once the VM is gone, uploaded straight to Luke's store and committed as the agent's next generation; a bundle that could not be committed kept in the device's state and tried again on the beat.
+ * local-agent-saves.ts -- each local agent's state saved as its turn ends: packed and verified in its VM, sealed on the device under the agent's key once the VM is gone, uploaded straight to Luke's store and committed as the agent's next generation; a bundle that could not be committed kept in the device's state and tried again on the beat; and a saved generation restored into a folder the device holds none of.
  *
  * A runner's end (`compose-local-agents.ts`'s `turnLetGo`) runs the
  * runner bundle's `state pack` and then `state verify` in the agent's VM,
@@ -68,21 +69,41 @@ import {
  * next opens, and its agent recorded as unsaved, so no sweep takes its
  * folder for saved.
  *
+ * A launch that finds none of the agent's work on the device, and names a
+ * generation Luke holds, restores it (`compose-local-agents.ts`' `launched`):
+ * the restore is recorded as begun (`AgentSave.restoring`) before anything
+ * of it is made, so a folder it did not finish is never taken for the
+ * agent's work, nor saved at a turn's end. The bundle is downloaded through
+ * the launch's read into the device's own state (`RESTORES_FOLDER`),
+ * outside every folder a VM mounts, held to the size its save committed,
+ * checked against its SHA-256, and opened under the agent's key, held in
+ * memory alone, into the pack in its `tmp/`
+ * (`LocalAgentPlatformSeam.stateOpened`); the runner bundle's `state
+ * restore` applies it in the agent's VM as its user, onto a repository
+ * made at the pack's base. A restore that fails at any step is said and
+ * refused, and deletes nothing: the record still names it, so the agent's
+ * next launch restores again rather than going on from what it left.
+ *
  * The device's report names sizes, digests, generations, and seconds, and
- * the plain words a failed pack or verify gave; never a URL, the key, or a
- * byte of a pack, and no bundle enters a trace (`HttpClient.TracerDisabledWhen`).
+ * the plain words a failed pack, verify, or restore gave; never a URL, the
+ * key, or a byte of a pack, and no bundle enters a trace
+ * (`HttpClient.TracerDisabledWhen`).
  */
 
 /** The pack's file under the agent's `tmp/`, which the VM writes and the device seals. */
 const PACK_FILE = "state.pack";
 /** The folder in the device's state each agent's sealed bundle waits in until committed, named for the agent. */
 const BUNDLES_FOLDER = "agent-state";
+/** The folder in the device's state a restore downloads the agent's bundle into, named for the agent, until it is opened. */
+const RESTORES_FOLDER = "agent-state-restores";
 /** How long packing the agent's state in its VM, and then verifying it, may each take. */
 const STATE_STEP_TIMEOUT = Duration.minutes(10);
 /** How long a state command has to end after SIGTERM before it is sent SIGKILL. */
 const KILL_GRACE = Duration.seconds(3);
 /** How long one upload of a bundle may take: as long as its grant stands. */
 const UPLOAD_TIMEOUT = Duration.minutes(15);
+/** How long a restore's download of a bundle may take, as long as an upload may. */
+const DOWNLOAD_TIMEOUT = Duration.minutes(15);
 /** How long after its grant an uploaded bundle's commit is asked again under its path rather than a new save, well inside the hour the service takes one. */
 const COMMIT_WITHIN = Duration.minutes(45);
 /** How long a bundle that could not be committed waits before it is tried again: the first wait, doubled after each failed try up to the last. */
@@ -102,14 +123,24 @@ const SENT = {
 
 type Sent = (typeof SENT)[keyof typeof SENT];
 
-/** One of the agent's turns as it ends: the account and device it ran under, its launch line, the agent and its folder, and what a command in its VM is started with of the device's own. */
-interface EndingTurn {
-  readonly userId: string;
-  readonly deviceId: string;
-  readonly lineId: string;
+/** The agent a state command runs in the VM of, its folder, and what a command there is started with of the device's own. */
+interface InVm {
   readonly agentId: string;
   readonly layout: DeviceAgentLayout;
   readonly shellVariables: Readonly<Record<string, string>>;
+}
+
+/** One of the agent's turns as it ends: the account and device it ran under, its launch line, and the VM it ran in. */
+interface EndingTurn extends InVm {
+  readonly userId: string;
+  readonly deviceId: string;
+  readonly lineId: string;
+}
+
+/** A launch's restore of the agent's saved state: the account it runs under, the agent's VM, and the generation it restores. */
+interface Restore extends InVm {
+  readonly userId: string;
+  readonly generation: number;
 }
 
 /** A state command's run in the VM: how it exited, and what it printed. */
@@ -202,6 +233,7 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
       return made;
     };
     const bundleOf = (agentId: string) => path.join(stateRoot, BUNDLES_FOLDER, agentId);
+    const downloadOf = (agentId: string) => path.join(stateRoot, RESTORES_FOLDER, agentId);
     const packOf = (layout: DeviceAgentLayout) => path.join(layout.temp, PACK_FILE);
     const saveOf = (agentId: string) =>
       Effect.map(dependencies.state, (current) => current.saves?.[agentId]);
@@ -226,7 +258,7 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
       );
 
     /** One state command run in the agent's VM as its user, on the pack in its `tmp/`; none where it could not start or outlasted `STATE_STEP_TIMEOUT`. */
-    const ranInVm = (turn: EndingTurn, action: StateAction) =>
+    const ranInVm = (turn: InVm, action: StateAction) =>
       Effect.scoped(
         Effect.gen(function* () {
           const { agentId, layout } = turn;
@@ -537,15 +569,18 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
      * One of the agent's turns saved as it ends, its VM let go of between
      * (`vmDeleted`): packed and verified in the VM, and once the VM is gone
      * sealed and sent. Whether the VM is gone. A VM left standing may still
-     * run the agent's processes, so its pack is never read. Note that the
-     * pack and the send are interruptible and the delete is not, because a
-     * turn's end runs as its runner's scope closes, which a quit or a gate
-     * shutting closes too: there the save is cut short, or never begins, and
-     * the agent is recorded as unsaved, while its VM still goes.
+     * run the agent's processes, so its pack is never read, and a folder a
+     * restore did not finish holds no turn of the agent's, so its VM is let
+     * go of with nothing packed. Note that the pack and the send are
+     * interruptible and the delete is not, because a turn's end runs as its
+     * runner's scope closes, which a quit or a gate shutting closes too:
+     * there the save is cut short, or never begins, and the agent is
+     * recorded as unsaved, while its VM still goes.
      */
     const turnEnded = (turn: EndingTurn, vmDeleted: Effect.Effect<boolean>) =>
       Effect.gen(function* () {
         const { userId, agentId } = turn;
+        if ((yield* saveOf(agentId))?.restoring !== undefined) return yield* vmDeleted;
         const since = yield* Clock.currentTimeMillis;
         const base = yield* Effect.exit(Effect.interruptible(packedInVm(turn)));
         const gone = yield* vmDeleted;
@@ -583,7 +618,8 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
      * having expired, which lets the record's go, so the next save starts
      * afresh. A save this device committed since the claim, as the runner the
      * launch replaces saved, is newer than whatever the launch says, so the
-     * record stands. And the agent's state key, held for its next seal.
+     * record stands. And the agent's state key, held for its next seal. A
+     * restore the record names stays for the launch to act on (`restoring`).
      */
     const launched = (
       userId: string,
@@ -634,6 +670,145 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
         }
       });
 
+    /** The generation a restore into the agent's folder began from and did not finish, which its next launch restores again; none where no restore is left unfinished. */
+    const restoring = (agentId: string) => Effect.map(saveOf(agentId), (save) => save?.restoring);
+
+    /** The agent recorded as restoring the generation given into its folder, before anything of the restore is made. */
+    const restoreBegun = (userId: string, agentId: string, generation: number) =>
+      saveChanged(userId, agentId, (save) => ({ ...save, restoring: generation }));
+
+    /** The agent's unfinished restore let go of, once what it made is set aside, since Luke no longer holds the generation it restored. */
+    const restoreLetGo = (userId: string, agentId: string) =>
+      saveChanged(userId, agentId, ({ restoring: _restoring, ...save }) => save);
+
+    /** A restore refused, and why said with its generation: false. Nothing of the agent's is deleted and its record still names the restore, so its next launch tries again. */
+    const notRestored = (generation: number, said: string) =>
+      Effect.sync(() => {
+        report(
+          `a local agent's state of generation ${generation} was not restored, so its launch was refused: ${said}`,
+        );
+        return false;
+      });
+
+    /**
+     * The launch's bundle downloaded through its read to `to`, held to the
+     * size its save committed: why not, where it was not, in words naming
+     * no URL. Note that the read's URL is its whole grant, so no span
+     * records it.
+     */
+    const downloaded = (state: DeviceAgentLaunchState, to: string) =>
+      Effect.gen(function* () {
+        const response = yield* HttpClient.get(state.url);
+        if (response.status < 200 || response.status >= 300) {
+          return Option.some(`Luke's store answered its read with ${response.status}`);
+        }
+        let received = 0;
+        yield* response.stream.pipe(
+          Stream.map((chunk) => {
+            received += chunk.length;
+            return chunk;
+          }),
+          Stream.takeWhile(() => received <= state.bytes),
+          Stream.run(fileSystem.sink(to, { flag: "w", mode: 0o600 })),
+        );
+        return received > state.bytes
+          ? Option.some(`its bundle is over the ${state.bytes} bytes its save committed`)
+          : Option.none<string>();
+      }).pipe(
+        Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
+        Effect.timeoutOption(DOWNLOAD_TIMEOUT),
+        Effect.map(Option.getOrElse(() => Option.some("its bundle's download outlasted its time"))),
+        Effect.orElseSucceed(() => Option.some("its bundle could not be downloaded")),
+        Effect.provideContext(services),
+      );
+
+    /**
+     * The launch's saved state (`state`, from its secrets) made ready for a
+     * restore of the generation it names: its bundle downloaded into the
+     * device's own state, its size and SHA-256 checked against its save's,
+     * and opened under the agent's key into the pack in its `tmp/`, which
+     * the restore reads in its VM; the bundle let go of either way. The
+     * state, where it is ready; where not, why is said (`notRestored`), as
+     * it is where this device committed a newer save than the launch names,
+     * which the agent's next launch names.
+     */
+    const fetched = (restore: Restore, state: DeviceAgentLaunchState | undefined) =>
+      Effect.gen(function* () {
+        const { agentId, layout, generation } = restore;
+        const none = (said: string) => Effect.as(notRestored(generation, said), Option.none());
+        if (state === undefined || state.generation !== generation) {
+          return yield* none("Luke handed no read or key for it");
+        }
+        const kept = (yield* saveOf(agentId))?.generation;
+        if (kept !== undefined && kept > generation) {
+          return yield* none(`this device committed a newer save of it, generation ${kept}`);
+        }
+        const download = downloadOf(agentId);
+        yield* fileSystem
+          .makeDirectory(path.dirname(download), { recursive: true, mode: 0o700 })
+          .pipe(Effect.ignore);
+        return yield* Effect.gen(function* () {
+          const failed = yield* downloaded(state, download);
+          if (Option.isSome(failed)) return yield* none(failed.value);
+          const opened = yield* Effect.result(
+            platform.stateOpened({
+              from: download,
+              to: packOf(layout),
+              within: layout.temp,
+              key: state.key,
+              bytes: state.bytes,
+              sha256: state.sha256,
+            }),
+          );
+          if (Result.isFailure(opened)) return yield* none(opened.failure.detail);
+          return Option.some(state);
+        }).pipe(Effect.ensuring(Effect.ignore(fileSystem.remove(download, { force: true }))));
+      });
+
+    /**
+     * The pack in the agent's `tmp/` restored into its folder by the runner
+     * bundle's `state restore`, in its VM as its user, which writes nothing
+     * until every part of the pack matches its manifest; the pack let go of
+     * either way. Once restored, the folder stands at the generation
+     * restored, as its record says from then, which is said with the
+     * bundle's size and digest and the seconds `since` the restore began;
+     * where not, why is said in the command's own words (`notRestored`).
+     */
+    const restored = (restore: Restore, state: DeviceAgentLaunchState, since: number) =>
+      Effect.gen(function* () {
+        const { userId, agentId, layout, generation } = restore;
+        const run = yield* ranInVm(restore, STATE_ACTION.RESTORE);
+        yield* Effect.ignore(fileSystem.remove(packOf(layout), { force: true }));
+        if (Option.isNone(run)) {
+          return yield* notRestored(generation, "its restore could not run in its VM in time");
+        }
+        if (run.value.code !== STATE_EXIT.DONE) {
+          return yield* notRestored(
+            generation,
+            failureWords(run.value.stderr) ?? "its pack could not be restored into its folder",
+          );
+        }
+        yield* saveChanged(userId, agentId, ({ restoring: _restoring, ...save }) => ({
+          ...save,
+          generation,
+        }));
+        const seconds = ((yield* Clock.currentTimeMillis) - since) / 1000;
+        report(
+          `a local agent's state was restored from generation ${generation}: ${state.bytes} bytes, sha256 ${state.sha256}, in ${seconds.toFixed(1)} s`,
+        );
+        return true;
+      });
+
+    /** Why the agent's last save failed for a reason in its own folder, where its record says, which its next launch tells it. */
+    const whyUnsaved = (agentId: string) =>
+      Effect.map(saveOf(agentId), (save) => save?.unsaved?.why);
+
+    /** Why the agent's last save failed let go of, once a launch has told it; its folder stays unsaved until a save commits. */
+    const whySaid = (userId: string, agentId: string) =>
+      saveChanged(userId, agentId, (save) =>
+        save.unsaved?.why === undefined ? save : { ...save, unsaved: {} },
+      );
+
     /** The account's agents whose waiting bundle is due to be tried again. */
     const due = (userId: string) =>
       Effect.gen(function* () {
@@ -678,6 +853,14 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
       turnEnded,
       commitMark,
       launched,
+      restoring,
+      restoreBegun,
+      restoreLetGo,
+      notRestored,
+      fetched,
+      restored,
+      whyUnsaved,
+      whySaid,
       unsavedMarked,
       straysLetGo,
       due,

@@ -46,7 +46,6 @@
   "packages/panel/src/tasks/fork-action.tsx": 1,
   "packages/panel/src/tasks/inbox-pager.tsx": 1,
   "packages/panel/src/tasks/inbox-pane.tsx": 1,
-  "packages/panel/src/tasks/inbox-row-media.tsx": 1,
   "packages/panel/src/tasks/issue-mark.tsx": 1,
   "packages/panel/src/tasks/lone-link-card.tsx": 1,
   "packages/panel/src/tasks/mention-picker.tsx": 1,

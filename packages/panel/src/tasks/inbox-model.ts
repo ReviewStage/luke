@@ -44,10 +44,8 @@ import {
   openAskOf,
   recommendedLabels,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/link-grammar";
-import { insideCode, linksIn } from "@luke/features/mention-link";
+import { insideCode } from "@luke/features/mention-link";
 import { agentGivenName, OPERATOR_NAME } from "@luke/features/model-label";
-import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem, AppInboxWaitingItem } from "@luke/host/app-state";
@@ -817,81 +815,6 @@ function filesWords(files: readonly unknown[] | undefined): string | undefined {
 /** A word set as the start of a sentence. */
 function sentenceCased(words: string): string {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
-}
-
-/** What a row's media strip shows of an item: a picture by its attachment, or a page by its place, a task or an agent with no task, and id. */
-export const INBOX_MEDIA = {
-  IMAGE: "image",
-  PAGE: "page",
-} as const;
-
-export type InboxMedia =
-  | {
-      readonly kind: typeof INBOX_MEDIA.IMAGE;
-      readonly attachmentId: string;
-    }
-  | {
-      readonly kind: typeof INBOX_MEDIA.PAGE;
-      /** What the page stands on: a task, or an agent with no task. */
-      readonly place: PagePlace;
-      readonly pageId: string;
-    };
-
-/** How many of an item's media its row shows at most, so a row stays a row. */
-const MAX_ROW_MEDIA = 4;
-
-/** The types a file on the thread may be drawn as a picture by: the ones an image block's attachment is kept as, or a WebM an agent recorded, played where a picture is drawn. */
-const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(CONVERSATION_MEDIA_TYPE));
-
-/** The page a link's place names as media: a task's, or an agent with no task's; none for a place that is no page. */
-function pageMediaOf(place: ReadLink["place"] | undefined): InboxMedia | undefined {
-  if (place?.kind !== LINK_PLACE.PAGE) return undefined;
-  const owner = "planId" in place ? { taskId: place.planId } : { agentId: place.agentId };
-  return { kind: INBOX_MEDIA.PAGE, place: owner, pageId: place.pageId };
-}
-
-/** Whether two media are one picture, or one page of one place. */
-function sameMedia(a: InboxMedia, b: InboxMedia): boolean {
-  if (a.kind === INBOX_MEDIA.IMAGE) {
-    return b.kind === INBOX_MEDIA.IMAGE && b.attachmentId === a.attachmentId;
-  }
-  return (
-    b.kind === INBOX_MEDIA.PAGE &&
-    b.pageId === a.pageId &&
-    pagePlaceId(b.place) === pagePlaceId(a.place)
-  );
-}
-
-/**
- * The media an item carries, as its row shows them, at most
- * {@link MAX_ROW_MEDIA}: each message's of its thread in turn, oldest
- * first, the pictures its words draw by their addresses (`picturesDrawn`)
- * and the pages it links to, outside code, labelled, an `@` mention, or
- * bare, in the order its words name them, each once, then the pictures
- * among its files. A file that is no picture is no media.
- */
-export function inboxMedia(item: InboxItem): readonly InboxMedia[] {
-  const found: InboxMedia[] = [];
-  const add = (media: InboxMedia) => {
-    if (!found.some((each) => sameMedia(each, media))) found.push(media);
-  };
-  for (const message of item.thread ?? []) {
-    const named: { readonly at: number; readonly media: InboxMedia }[] = [];
-    for (const { at, attachmentId } of picturesDrawn(message.text, item.id)) {
-      named.push({ at, media: { kind: INBOX_MEDIA.IMAGE, attachmentId } });
-    }
-    for (const link of linksIn(message.text)) {
-      const media = pageMediaOf(readLink(link.target)?.place);
-      if (media !== undefined) named.push({ at: link.start, media });
-    }
-    for (const each of named.toSorted((a, b) => a.at - b.at)) add(each.media);
-    for (const file of message.files ?? []) {
-      if (PICTURE_TYPES.has(file.mediaType)) {
-        add({ kind: INBOX_MEDIA.IMAGE, attachmentId: file.attachmentId });
-      }
-    }
-  }
-  return found.slice(0, MAX_ROW_MEDIA);
 }
 
 /**

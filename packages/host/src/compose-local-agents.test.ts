@@ -301,6 +301,7 @@ const followingDevice = (
         deviceCapabilities: [],
         worktreeScript: () => "exit 0",
         stateSealed: () => Effect.die("this device saves no state"),
+        stateOpened: () => Effect.die("this device restores no state"),
       }),
     );
     const clock = options.clock ?? (yield* Clock.Clock);
