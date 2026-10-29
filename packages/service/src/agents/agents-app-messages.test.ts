@@ -539,9 +539,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         db.update(taskTable).set({ mode: TASK_MODE.PILOT }).where(eq(taskTable.id, top.task.id)),
       );
       yield* Database.use((db) =>
-        db.update(taskTable).set({ parentTaskId: top.task.id }).where(eq(taskTable.id, child.id)),
-      );
-      yield* Database.use((db) =>
         db
           .update(agentTable)
           .set({ kind: AGENT_KIND.PILOT })
@@ -550,6 +547,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       const coder = yield* agentStartedOn({ ...top, task: child }, eve, { running: true });
       // An agent on the child whose turn had ended is neither stopped nor told to carry on.
       yield* agentStartedOn({ ...top, task: child }, eve, { running: false });
+      // The child joins the tree only now, since no agent starts on a child of a stopped tree.
+      yield* Database.use((db) =>
+        db.update(taskTable).set({ parentTaskId: top.task.id }).where(eq(taskTable.id, child.id)),
+      );
       const switched = (member: string, running: boolean) =>
         Effect.map(
           top.ask(request(TASK(top.task.id), member, { method: "PATCH", body: { running } })),
