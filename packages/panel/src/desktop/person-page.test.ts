@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import { AGENT_STATUS } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
@@ -23,6 +23,7 @@ import {
 import { TASK_STATUS, type TaskAgentLine, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { type AppHostRead, type AppInboxItems, UNREAD } from "@luke/host/app-state";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -33,9 +34,8 @@ import { OpenSettingsProvider } from "../open-settings.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handState } from "../testing/app-state.js";
+import { handInboxItems, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { followedInboxes } from "../testing/followed-inboxes.js";
 import { restOn } from "../testing/hint-rest.js";
 import { playListMotions } from "../testing/pane-motion.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
@@ -245,16 +245,7 @@ beforeEach(() => {
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   window.localStorage.clear();
   fakeAppBridge({});
-  // The host pushes each task's inbox, and the sweep agent's, as it is followed, unless the test holds or refuses them.
-  const host = followedInboxes(({ kind, id }) => {
-    if (inboxHeld) return undefined;
-    if (kind === INBOX_SCOPE_KIND.AGENT) return { items: [SWEEP_ITEM] };
-    return inboxRefused
-      ? { failure: AGENT_CALL_FAILURE.UNANSWERED }
-      : { items: INBOXES.get(id) ?? [] };
-  });
   fakeActPort({
-    ...host.procedures,
     [ACT_KIND.AUTOMATIONS_LIST]: () => {
       if (automationsHeld) return new Promise(() => undefined);
       if (automationsRefused) return Promise.reject(refusedOnPort("Not here."));
@@ -306,6 +297,20 @@ interface Opened {
 }
 
 /** `userId`'s page over the fixture workspace, read by Dean, opened knowing `name`, every door it opens recorded. */
+/** The account's feed as the host holds it: each task's items and the sweep agent's, unless the test holds or refuses it. */
+function feedNow(): AppHostRead<AppInboxItems> {
+  if (inboxHeld) return UNREAD;
+  if (inboxRefused) return { failed: true };
+  return {
+    rows: {
+      [INBOX_SCOPE_KIND.PLAN]: Object.fromEntries(
+        [...INBOXES].filter(([, items]) => items.length > 0),
+      ),
+      [INBOX_SCOPE_KIND.AGENT]: { [SWEEP_AGENT]: [SWEEP_ITEM] },
+    },
+  };
+}
+
 function mount(userId: string, name?: string, memberCount = MEMBERS.length) {
   return mountWith({}, userId, name, memberCount);
 }
@@ -319,6 +324,7 @@ function mountWith(
   away?: { label: string; onPress: () => void },
 ) {
   const opened: Opened = { tasks: [], agents: [], inbox: [], settings: [] };
+  handInboxItems(feedNow());
   const control = (more: Partial<TasksControl>) =>
     tasksControl({
       me: DEAN.userId,

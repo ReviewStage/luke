@@ -2,7 +2,7 @@
  * agent-inbox.ts -- the Inbox's asks of the host, as procedures.
  *
  * What a task's coding agents need of the developer: a task's or an agent's
- * inbox followed, and every item the account reaches; one item answered,
+ * inbox followed, and every item the account reaches read again; one item answered,
  * closed, messaged, or marked, a thread started, every item marked read, and
  * an item's image and an agent's picture.
  *
@@ -18,7 +18,6 @@
  */
 
 import {
-  type AgentAccountItems,
   type AgentInboxChanged,
   agentInboxAnsweredViewSchema,
   agentInboxAnswerParamsSchema,
@@ -46,11 +45,11 @@ export const agentInboxActsContract = {
   )
     .input(exactInput(agentInboxScopeSchema))
     .output(eventIterator(type<AgentInboxChanged["inbox"]>())),
-  [AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW]: actProcedure(
-    "Could not follow the inbox on this system.",
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ITEMS_RETRY]: actProcedure(
+    "Could not read the inbox again on this system.",
   )
     .input(exactInput(EffectSchema.Undefined))
-    .output(eventIterator(type<AgentAccountItems>())),
+    .output(EffectSchema.Void),
   [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ANSWER]: actProcedure(
     "Could not acknowledge the inbox item on this system.",
   )

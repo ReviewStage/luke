@@ -1,8 +1,8 @@
 /**
  * desktop-inbox.ts -- the window every `desktop-inbox-*.test.ts` stands the Inbox in: its fakes, `mount`, and the helpers more than one of those files reads.
  *
- * Importing it registers the `beforeEach` that answers the Inbox's acts and
- * main's follows from `world`, and the `afterEach` that unmounts what a test
+ * Importing it registers the `beforeEach` that answers the Inbox's acts,
+ * main's follows, and the account's feed of every item from `world`, and the `afterEach` that unmounts what a test
  * drew, as `announcer.ts` registers its own, so each file of the Inbox's
  * tests meets the same window. What one file alone reads stays in that file,
  * beside the assertions it serves.
@@ -10,7 +10,6 @@
 
 import {
   AGENT_CALL_FAILURE,
-  type AgentAccountItems,
   type AgentInboxAnswerView,
   type AgentInboxMessagedView,
   type AgentInboxMessageParams,
@@ -46,15 +45,16 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type {
+  AppHostRead,
   AppInboxAgentHolding,
+  AppInboxItems,
   AppInboxTask,
   AppInboxTaskHolding,
   AppInboxTasklessItem,
 } from "@luke/host/app-state";
-import { AGENT_INBOX_ACT_KIND } from "@luke/host/contract";
+import { UNREAD } from "@luke/host/app-state";
 import { isTranscriptTab } from "@luke/ui/tab-strip-model";
 import type { TaskMark } from "@luke/ui/tasks-model";
-import { AsyncIteratorClass } from "@orpc/client";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -66,7 +66,6 @@ import { DesktopInbox } from "../desktop/desktop-inbox.js";
 import { DesktopSidebar } from "../desktop/desktop-sidebar.js";
 import { DRAFT_WORD } from "../draft-mark.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { HeldInboxesProvider } from "../tasks/held-inboxes.js";
 import { chooseChannel, leaveChannel } from "../tasks/use-channels.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab.js";
@@ -75,13 +74,13 @@ import {
   type AnyAct,
   FAKE_ANSWER,
   type FakeActAnswer,
-  type FakeActPort,
   fakeActPort,
   fakeActPortCalls,
   fakeActs,
   fakeActsAnswer,
 } from "./app-bridge.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "./app-platform.js";
+import { handInboxItems } from "./app-state.js";
 import { attachmentChipName } from "./attachment-chip.js";
 import {
   composerEditor,
@@ -312,8 +311,14 @@ class InboxWorld {
   ) => void = () => undefined;
   /** Whether an agent's own inbox read answers that it could not be read. */
   agentReadFails = false;
-  /** Whether the account's feed answers that it is not answering, rather than with every task's items. */
+  /** Whether the account's feed says it could not answer before it ever had, rather than holding every task's items. */
   feedRefused = false;
+  /** Whether the account's feed has not answered yet, as for a moment after a sign-in. */
+  feedUnread = false;
+  /** The tasks and agents the account's feed leaves out, as it leaves out one whose items all settled past its bound. */
+  feedLeavesOut: ReadonlySet<string> = new Set();
+  /** Delivers the account's feed to the window as it now stands, as main delivers a move of it; nothing before a mount. */
+  deliverFeed: (read: AppHostRead<AppInboxItems>) => void = () => undefined;
   /** Whether a read of a plan's agents is held open, never answering. */
   agentListHeld = false;
   /** Holds the next agent read's answer, handing the test what lands it, where a test asks. */
@@ -397,6 +402,7 @@ function drawnByHost(drawn: (item: InboxItem) => InboxItem | undefined): void {
   };
   draw(INBOX_SCOPE_KIND.PLAN, world.inboxes);
   draw(INBOX_SCOPE_KIND.AGENT, world.agentInboxes);
+  deliverFeed();
 }
 
 /** Each held item named marked read or unread, as the host draws a mark. */
@@ -404,8 +410,9 @@ function marked(itemIds: ReadonlySet<string>, unread: boolean): void {
   drawnByHost((item) => (itemIds.has(item.id) ? { ...item, unread } : undefined));
 }
 
-/** Every followed inbox pushed again as it now stands, as main pushes a change. */
+/** Every followed inbox, and the account's feed, pushed again as it now stands, as main pushes a change. */
 export function pushAgain(): void {
+  deliverFeed();
   for (const taskId of [...world.inboxes.keys(), BILLING.id, INVITES.id]) {
     const scope = { kind: INBOX_SCOPE_KIND.PLAN, id: taskId };
     if (!world.main.isFollowed(scope)) continue;
@@ -418,6 +425,27 @@ export function pushAgain(): void {
     const inbox = answerAgent(agentId);
     if (inbox !== undefined) world.main.push(scope, inbox);
   }
+}
+
+/** The account's feed of every item as the host holds it for the session: every task's and agent's with no task that holds one, or refused. */
+function feedNow(): AppHostRead<AppInboxItems> {
+  if (world.feedUnread) return UNREAD;
+  if (world.feedRefused) return { failed: true };
+  const holding = (held: ReadonlyMap<string, readonly InboxItem[]>) =>
+    Object.fromEntries(
+      [...held].filter(([id, items]) => items.length > 0 && !world.feedLeavesOut.has(id)),
+    );
+  return {
+    rows: {
+      [INBOX_SCOPE_KIND.PLAN]: holding(world.inboxes),
+      [INBOX_SCOPE_KIND.AGENT]: holding(world.agentInboxes),
+    },
+  };
+}
+
+/** The account's feed delivered to the window as it now stands, as main delivers a move of it. */
+function deliverFeed(): void {
+  world.deliverFeed(feedNow());
 }
 
 beforeEach(() => {
@@ -442,6 +470,9 @@ beforeEach(() => {
   world.agentReads = [];
   world.agentReadFails = false;
   world.feedRefused = false;
+  world.feedUnread = false;
+  world.feedLeavesOut = new Set();
+  world.deliverFeed = () => undefined;
   world.agentListHeld = false;
   world.holdAgentRead = undefined;
   world.listedWorkspace = undefined;
@@ -459,6 +490,10 @@ beforeEach(() => {
   );
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.AGENTS_INBOX_ITEMS_RETRY) {
+        deliverFeed();
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
+      }
       if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,
@@ -611,40 +646,6 @@ const MAIN_WAITING: readonly AppInboxTask[] = [
   { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
 ];
 
-/** The account's feed of every item, as the host streams it: each task's and each agent with no task's items whole, then nothing more until the window lets it go. */
-const ACCOUNT_FEED: Pick<FakeActPort, typeof AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW> = {
-  [AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
-    let sent = false;
-    const closed = Promise.withResolvers<void>();
-    const next = async (): Promise<IteratorResult<AgentAccountItems, undefined>> => {
-      if (sent) {
-        await closed.promise;
-        return { done: true, value: undefined };
-      }
-      sent = true;
-      if (world.feedRefused) {
-        return { done: false, value: { failure: AGENT_CALL_FAILURE.UNANSWERED } };
-      }
-      const scopes = [
-        ...[...world.inboxes].map(([id, items]) => ({
-          scope: { kind: INBOX_SCOPE_KIND.PLAN, id },
-          items,
-        })),
-        ...[...world.agentInboxes].map(([id, items]) => ({
-          scope: { kind: INBOX_SCOPE_KIND.AGENT, id },
-          items,
-        })),
-      ];
-      return { done: false, value: { whole: true, scopes } };
-    };
-    return Promise.resolve(
-      new AsyncIteratorClass<AgentAccountItems, undefined, void>(next, async () => {
-        closed.resolve();
-      }),
-    );
-  },
-};
-
 /** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded, on nothing chosen or on `chosen`; or, `listUnread`, opened before the account's task list is first read; or over the tasks given; or, `room`, under the side panel itself in that room, as the tasks tab holds it while the Inbox has chosen nothing. */
 export function mount(
   firstTaskless: readonly AppInboxTasklessItem[] = [],
@@ -660,8 +661,7 @@ export function mount(
     toasts = false,
     channels = false,
     chosen: firstChosen,
-    windowRoot = false,
-    accountFeed = false,
+    drawnWhileOpen = false,
     agents: firstAgents = agentHoldingsOf(firstTaskless),
   }: {
     listUnread?: boolean;
@@ -683,20 +683,16 @@ export function mount(
     channels?: boolean;
     /** The item the Inbox opens on, as a row's press chose it before; none where nothing is chosen yet. */
     chosen?: InboxChoice;
-    /** Whether the Inbox stands under the window's root, holding the window's inboxes, and is drawn only while open, as the shell draws it. */
-    windowRoot?: boolean;
-    /** Whether the account's feed of every item answers, pushing each task's items as the service answers a read of it. */
-    accountFeed?: boolean;
+    /** Whether the Inbox is drawn only while open, as the shell draws it. */
+    drawnWhileOpen?: boolean;
     /** Main's first word of the agents with no task holding items; those the items given name where none are given. */
     agents?: readonly AppInboxAgentHolding[];
   } = {},
 ) {
   // Note that the host's inbox streams are answered beside whatever acts the test answers by now.
-  fakeActPort({
-    ...fakeActPortCalls(),
-    ...world.main.procedures,
-    ...(accountFeed ? ACCOUNT_FEED : undefined),
-  });
+  fakeActPort({ ...fakeActPortCalls(), ...world.main.procedures });
+  // Note that the account's feed is laid over whatever document the test handed the window, its experiments among it.
+  world.deliverFeed = handInboxItems(feedNow());
   const asked: Asked = {
     shownTasks: [],
     shownAgents: [],
@@ -777,7 +773,7 @@ export function mount(
       },
     });
     const inbox =
-      windowRoot && !inboxOpen
+      drawnWhileOpen && !inboxOpen
         ? null
         : createElement(DesktopInbox, { tasks: control, room: room ?? SHELL_ROOM.WIDE });
     return withSidebar
@@ -806,10 +802,7 @@ export function mount(
       : createElement(Panelled, { at: room });
   const page = toasts ? createElement(Fragment, null, inbox, createElement(ToastHost)) : inbox;
   if (channels) chooseChannel(GENERAL.id);
-  const rooted = windowRoot
-    ? createElement(HeldInboxesProvider, { account: READER.userId }, page)
-    : page;
-  act(() => world.root?.render(onRegistry(AtomRegistry.make(), rooted)));
+  act(() => world.root?.render(onRegistry(AtomRegistry.make(), page)));
   return { page: container, asked };
 }
 

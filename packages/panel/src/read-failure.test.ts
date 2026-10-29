@@ -2,7 +2,11 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { AGENT_CALL_FAILURE, type AgentChangesAnswerView } from "@luke/features/agent-view";
+import {
+  AGENT_CALL_FAILURE,
+  type AgentChangesAnswerView,
+  INBOX_SCOPE_KIND,
+} from "@luke/features/agent-view";
 import { PLAN_ACTOR, type PlanRevisionLine, type TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -20,8 +24,9 @@ import { AgentAuthSection } from "./settings/agent-auth-section.js";
 import { WorkspacePage } from "./settings/workspace-page.js";
 import { SHELL_ROOM } from "./shell-room.js";
 import { HISTORY_READ } from "./tasks/use-plan-history.js";
-import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
+import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
+import { handInboxItems } from "./testing/app-state.js";
 import { ChangesTabReading } from "./testing/changes-tab.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
@@ -183,7 +188,16 @@ test("the sidebar's plans that could not be read say so, and Retry reads the lis
   assert.equal(retried, 1);
 });
 
-test("the Inbox's list says a plan it could not read as the sidebar does, and Retry lists what the plan holds", async () => {
+test("the Inbox's list says its feed could not be read as the sidebar does, and Retry lists what the plan holds", async () => {
+  // The account's feed could not be read until it is read again, then holds nothing of the plan.
+  const deliver = handInboxItems({ failed: true });
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.AGENTS_INBOX_ITEMS_RETRY]: () => {
+      deliver({ rows: { [INBOX_SCOPE_KIND.PLAN]: {}, [INBOX_SCOPE_KIND.AGENT]: {} } });
+      return Promise.resolve(undefined);
+    },
+  });
   const page = await mount(
     createElement(DesktopInbox, {
       tasks: tasksControl({
@@ -206,7 +220,6 @@ test("the Inbox's list says a plan it could not read as the sidebar does, and Re
   );
   const failure = readFailure(page);
   assertSaidAlike(failure, "Some items could not be read.");
-  answering = true;
   failure.retry();
   await settle();
   assert.equal(page.querySelector('[role="alert"]'), null, "the read landed, so nothing fails");

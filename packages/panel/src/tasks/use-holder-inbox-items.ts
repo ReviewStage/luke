@@ -1,31 +1,32 @@
 import { type AgentInboxScope, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
+import { LIVE_READ } from "@luke/features/live-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
-import type { AppInboxAgentHolding, AppInboxTaskHolding } from "@luke/host/app-state";
+import type {
+  AppInboxAgentHolding,
+  AppInboxItems,
+  AppInboxTaskHolding,
+} from "@luke/host/app-state";
 import { useMemo } from "react";
-import { useFedInboxes, useFeedFailed, useRetryFeed, useUnderWindowRoot } from "./held-inboxes.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import {
   agentGroups,
   type InboxGroup,
   type TasklessInboxAgent,
   taskHolder,
 } from "./inbox-model.js";
-import { useFollowedInboxes, windowInboxFollower } from "./use-followed-inboxes.js";
 
 /**
- * use-holder-inbox-items.ts -- every holder's inbox items for the window's Inbox, each task or agent with no task followed while it is listed and pushed as it changes.
+ * use-holder-inbox-items.ts -- every holder's inbox items for the window's Inbox, its search, and a person's page, drawn from the account's feed of every item the host holds for the session.
  *
  * The window's Inbox lists the items of every holder of one, settled as
  * well as waiting, and main's read of the account carries only what waits,
- * in brief. So under a window's root every holder, a task or an agent with
- * no task, is drawn from the account's feed of whole items the root holds
- * (`held-inboxes.tsx`), which stands for every holder whole: one it holds
- * nothing of holds nothing now. A surface drawn outside a window's root,
- * as a test or the catalog draws one, follows each holder handed here on
- * its own instead (`use-followed-inboxes.ts`). The holder whose item is
- * chosen is followed by its own control besides (`use-task-inbox.ts`),
- * which reads its settled items past the feed's bound and is drawn in this
- * one's place.
+ * in brief. So every holder, a task or an agent with no task, is drawn from
+ * the account's feed of whole items (`useHostRead`), which stands for every
+ * holder whole: one it holds nothing of holds nothing now. The holder whose
+ * item is chosen is followed by its own control besides
+ * (`use-task-inbox.ts`), which reads its settled items past the feed's
+ * bound and is drawn in this one's place.
  */
 
 type ScopeKind = AgentInboxScope["kind"];
@@ -109,11 +110,11 @@ function newest(items: readonly InboxItem[]): number {
   return items.reduce((latest, item) => Math.max(latest, item.updatedAt), Number.NEGATIVE_INFINITY);
 }
 
-/** No holder followed on its own. */
-const NO_IDS: readonly string[] = [];
-
 /** No holder held, as the feed stands before it first answers. */
 const NOTHING_HELD: ReadonlyMap<string, readonly InboxItem[]> = new Map();
+
+/** The holders of one kind the feed holds, by id; none until it first answers. */
+type FedKind = AppInboxItems[ScopeKind] | undefined;
 
 /**
  * The holders of one kind as the account's feed stands: each it holds with
@@ -121,21 +122,16 @@ const NOTHING_HELD: ReadonlyMap<string, readonly InboxItem[]> = new Map();
  * the feed stands for every holder whole; nothing until it first answers.
  */
 function feedStanding(
-  fed: ReadonlyMap<string, readonly InboxItem[]> | undefined,
+  fed: FedKind,
   holdings: readonly InboxHolding[],
   kind: ScopeKind,
 ): ReadonlyMap<string, readonly InboxItem[]> {
   if (fed === undefined) return NOTHING_HELD;
-  const standing = new Map(fed);
+  const standing = new Map(Object.entries(fed));
   for (const holding of holdings) {
     if (holding.kind === kind && !standing.has(holding.id)) standing.set(holding.id, []);
   }
   return standing;
-}
-
-/** The ids of the holders of one kind. */
-function idsOf(holdings: readonly InboxHolding[], kind: ScopeKind): readonly string[] {
-  return holdings.flatMap((holding) => (holding.kind === kind ? [holding.id] : []));
 }
 
 /**
@@ -148,13 +144,13 @@ function currentOf(
   pushed: ReadonlyMap<string, readonly InboxItem[]>,
   holdings: readonly InboxHolding[],
   kind: ScopeKind,
-  /** The account's feed, where `pushed` stands as it does: a holder it holds nothing of is current. */
-  fed?: ReadonlyMap<string, readonly InboxItem[]>,
+  /** The account's feed: a holder it holds nothing of is current. */
+  fed: FedKind,
 ): ReadonlySet<string> {
   return new Set(
     [...pushed].flatMap(([id, held]) => {
       const holding = holdings.find((each) => each.kind === kind && each.id === id);
-      const absentFromFeed = fed !== undefined && !fed.has(id);
+      const absentFromFeed = fed !== undefined && !Object.hasOwn(fed, id);
       return holding === undefined || absentFromFeed || newest(held) >= holding.updatedAt
         ? [id]
         : [];
@@ -163,73 +159,54 @@ function currentOf(
 }
 
 export function useHolderInboxItems(holdings: readonly InboxHolding[]): HolderInboxItems {
-  const fromFeed = useUnderWindowRoot();
-  const fedTasks = useFedInboxes(INBOX_SCOPE_KIND.PLAN);
-  const fedAgents = useFedInboxes(INBOX_SCOPE_KIND.AGENT);
-  const feedFailed = useFeedFailed();
-  const retryFeed = useRetryFeed();
-  const taskIds = useMemo(
-    () => (fromFeed ? NO_IDS : idsOf(holdings, INBOX_SCOPE_KIND.PLAN)),
-    [fromFeed, holdings],
-  );
-  const agentIds = useMemo(
-    () => (fromFeed ? NO_IDS : idsOf(holdings, INBOX_SCOPE_KIND.AGENT)),
-    [fromFeed, holdings],
-  );
-  const tasks = useFollowedInboxes(INBOX_SCOPE_KIND.PLAN, taskIds, windowInboxFollower);
-  const agents = useFollowedInboxes(INBOX_SCOPE_KIND.AGENT, agentIds, windowInboxFollower);
+  const feed = useHostRead(LIVE_READ.INBOX_ITEMS);
+  const fed = feed.rows;
   const items = useMemo(
     () => ({
-      [INBOX_SCOPE_KIND.PLAN]: fromFeed
-        ? feedStanding(fedTasks, holdings, INBOX_SCOPE_KIND.PLAN)
-        : tasks.items,
-      [INBOX_SCOPE_KIND.AGENT]: fromFeed
-        ? feedStanding(fedAgents, holdings, INBOX_SCOPE_KIND.AGENT)
-        : agents.items,
+      [INBOX_SCOPE_KIND.PLAN]: feedStanding(
+        fed?.[INBOX_SCOPE_KIND.PLAN],
+        holdings,
+        INBOX_SCOPE_KIND.PLAN,
+      ),
+      [INBOX_SCOPE_KIND.AGENT]: feedStanding(
+        fed?.[INBOX_SCOPE_KIND.AGENT],
+        holdings,
+        INBOX_SCOPE_KIND.AGENT,
+      ),
     }),
-    [fromFeed, fedTasks, fedAgents, holdings, tasks.items, agents.items],
+    [fed, holdings],
   );
   // Note that a holder the feed holds nothing of is current with none, since the feed stands for every holder whole.
   const current = useMemo(() => {
-    const ofKind = (kind: ScopeKind, fed: ReadonlyMap<string, readonly InboxItem[]> | undefined) =>
-      currentOf(items[kind], holdings, kind, fromFeed ? (fed ?? NOTHING_HELD) : undefined);
+    const ofKind = (kind: ScopeKind) => currentOf(items[kind], holdings, kind, fed?.[kind]);
     return {
-      [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN, fedTasks),
-      [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT, fedAgents),
+      [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN),
+      [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT),
     };
-  }, [items, holdings, fromFeed, fedTasks, fedAgents]);
+  }, [items, holdings, fed]);
   const feedHoldsNothing = useMemo(() => {
-    const ofKind = (kind: ScopeKind, fed: ReadonlyMap<string, readonly InboxItem[]> | undefined) =>
-      new Set(
-        fromFeed && fed !== undefined
-          ? holdings.flatMap((holding) =>
-              holding.kind === kind && !fed.has(holding.id) ? [holding.id] : [],
-            )
-          : [],
+    const ofKind = (kind: ScopeKind) => {
+      const held = fed?.[kind];
+      return new Set(
+        held === undefined
+          ? []
+          : holdings.flatMap((holding) =>
+              holding.kind === kind && !Object.hasOwn(held, holding.id) ? [holding.id] : [],
+            ),
       );
-    return {
-      [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN, fedTasks),
-      [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT, fedAgents),
     };
-  }, [fromFeed, fedTasks, fedAgents, holdings]);
-  const failedOf = (holding: InboxHolding) =>
-    fromFeed
-      ? feedFailed
-      : (holding.kind === INBOX_SCOPE_KIND.PLAN ? tasks : agents).failed.has(holding.id);
-  const { onRetry: retryTasks } = tasks;
-  const { onRetry: retryAgents } = agents;
+    return {
+      [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN),
+      [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT),
+    };
+  }, [fed, holdings]);
+  const failed = holdings.length > 0 && feed.status === HOST_READ_STATUS.FAILED;
   return {
     items,
-    failed: holdings.some(failedOf),
-    pending: holdings.some(
-      (holding) => !current[holding.kind].has(holding.id) && !failedOf(holding),
-    ),
+    failed,
+    pending: !failed && holdings.some((holding) => !current[holding.kind].has(holding.id)),
     current,
     feedHoldsNothing,
-    onRetry: () => {
-      if (fromFeed) retryFeed();
-      retryTasks();
-      retryAgents();
-    },
+    onRetry: feed.retry,
   };
 }

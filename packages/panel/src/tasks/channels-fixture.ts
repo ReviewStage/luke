@@ -13,7 +13,6 @@
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import {
   AGENT_CALL_FAILURE,
-  type AgentAccountItems,
   type AgentInboxChanged,
   INBOX_SCOPE_KIND,
 } from "@luke/features/agent-view";
@@ -38,6 +37,7 @@ import {
   threadNeedsReader,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
+import { LIVE_READ } from "@luke/features/live-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { OPERATOR_NAME } from "@luke/features/model-label";
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
@@ -49,6 +49,7 @@ import {
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  type AppInboxItems,
   type AppInboxTask,
   type AppInboxTaskHolding,
   type AppInboxTasklessItem,
@@ -1158,6 +1159,17 @@ function stagedSettings(
 }
 
 /** Main's document under the channels profiles: the reader signed in, what waits on them, Stage among the workspaces, and Channels on. */
+/** The account's feed of every item, which the window's Inbox draws from: each task's threads, and the stray agent's. */
+function fedItems(): AppInboxItems {
+  const taskIds = new Set(
+    THREADS.flatMap((each) => (each.taskId === undefined ? [] : [each.taskId])),
+  );
+  return {
+    [INBOX_SCOPE_KIND.PLAN]: Object.fromEntries([...taskIds].map((id) => [id, itemsOf(id)])),
+    [INBOX_SCOPE_KIND.AGENT]: { [STRAY.agentId]: strayItems() },
+  };
+}
+
 export function channelsAppState(state: AppStateSnapshot): AppStateSnapshot {
   const reader = READERS.get(state.run.profile);
   if (reader === undefined) return state;
@@ -1166,6 +1178,7 @@ export function channelsAppState(state: AppStateSnapshot): AppStateSnapshot {
     ...state,
     account: accountOf(READER),
     inbox: { ...state.inbox, waiting: waiting(), tasks: holdings(), taskless: taskless() },
+    [LIVE_READ.INBOX_ITEMS]: { rows: fedItems() },
     ...(state.tasks === undefined || state.tasks.workspaces.length > 0
       ? undefined
       : { tasks: { ...state.tasks, workspaces: [STAGE] } }),
@@ -1234,23 +1247,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.AGENTS_INBOX_FOLLOW]: ({ kind, id }) => {
     const pushed: AgentInboxChanged["inbox"] = {
       items: kind === INBOX_SCOPE_KIND.AGENT ? strayItems() : itemsOf(id),
-    };
-    return pushedOnce(pushed);
-  },
-  // The account's feed of every item, which the window's Inbox draws from: each task's threads, and the stray agent's.
-  [ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
-    const taskIds = new Set(
-      THREADS.flatMap((each) => (each.taskId === undefined ? [] : [each.taskId])),
-    );
-    const pushed: AgentAccountItems = {
-      whole: true,
-      scopes: [
-        ...[...taskIds].map((id) => ({
-          scope: { kind: INBOX_SCOPE_KIND.PLAN, id },
-          items: itemsOf(id),
-        })),
-        { scope: { kind: INBOX_SCOPE_KIND.AGENT, id: STRAY.agentId }, items: strayItems() },
-      ],
     };
     return pushedOnce(pushed);
   },

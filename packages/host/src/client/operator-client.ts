@@ -2,6 +2,7 @@
  * operator-client.ts -- the one operator a client is: the host's events written into the document, and the bootstrap every later decision is read from.
  */
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { LIVE_READ } from "@luke/features/live-wire";
 import type { GatewayHost, NodeRegistry } from "@luke/gateway";
 import type { AppSettings } from "@luke/settings/wire";
 import { Effect, Option, type Scope } from "effect";
@@ -82,6 +83,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       }),
       gateway.host.onMacCommandAsksChanged((asks) => {
         state.update({ macCommands: { asks } });
+      }),
+      gateway.host.onInboxItemsChanged((read) => {
+        state.update({ [LIVE_READ.INBOX_ITEMS]: read });
       }),
       // The host's own answer about recording stands the halt down: it is the
       // account transition the halt was waiting on.

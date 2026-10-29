@@ -1,6 +1,9 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
+import type { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { AgentKind } from "@luke/features/agent-wire";
+import type { InboxItem } from "@luke/features/inbox-wire";
+import { LIVE_READ } from "@luke/features/live-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
@@ -239,6 +242,38 @@ export interface AppInboxSlice {
 }
 
 /**
+ * One read the host holds for the panel (`live-collection.ts`), as every
+ * window draws it: its rows as it last answered, absent until it first
+ * does, and whether it said it could not answer before it ever had. A read
+ * that stops answering once it has keeps its rows, since its next answer
+ * brings them up to date. What the panel reads through `useHostRead`.
+ */
+export interface AppHostRead<Rows> {
+  rows?: Rows;
+  failed?: true;
+}
+
+/** A read that has not answered yet, as every read stands as a session opens. */
+export const UNREAD: AppHostRead<never> = {};
+
+/**
+ * Every inbox item the account reaches, settled ones of the read's window
+ * among them, by the plan each is on, or its agent where that has no task,
+ * each holder's in the order its own read answers them. A holder it holds
+ * nothing of holds nothing now.
+ */
+export type AppInboxItems = {
+  readonly [Kind in (typeof INBOX_SCOPE_KIND)[keyof typeof INBOX_SCOPE_KIND]]: Readonly<
+    Record<string, readonly InboxItem[]>
+  >;
+};
+
+/** The rows of each read the host holds for the panel, by its name. */
+export interface AppHostReads {
+  [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
+}
+
+/**
  * The commands agents asked to run on this Mac that wait on the developer's
  * answer, the earliest first, as the host holds them while Settings › This
  * Mac asks every time (`compose-mac-commands.ts`): what the panel's prompt
@@ -314,6 +349,8 @@ export interface AppState {
   tasks: TasksView;
   agents: AppAgentsSlice;
   inbox: AppInboxSlice;
+  /** Every inbox item the account reaches, held for the signed-in session: what the window's Inbox, its search, and a person's page list. */
+  [LIVE_READ.INBOX_ITEMS]: AppHostRead<AppInboxItems>;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;
   network: AppNetworkSlice;
