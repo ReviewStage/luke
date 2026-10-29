@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { isComposingKey } from "../../composing-key.js";
 import {
   CONFIRM_STAGE,
+  type ConfirmFailure,
   type ConfirmSurroundings,
   confirmAsked,
   confirmWithdrawable,
@@ -86,8 +87,9 @@ export interface DialogConfirm extends HeldConfirm {
 export function useConfirmDialog(
   surroundings: ConfirmSurroundings,
   action: () => Promise<ActionResult>,
+  failure: ConfirmFailure,
 ): DialogConfirm {
-  const held = useConfirm(surroundings, action);
+  const held = useConfirm(surroundings, action, failure);
   const standing = surroundings.subject && surroundings.surfaceOpen;
   if (!standing && held.rejection !== undefined && held.stage !== CONFIRM_STAGE.ACTING) {
     held.clear();
@@ -223,7 +225,7 @@ function ConfirmCard({
           )}
         </FormField>
       )}
-      <ErrorLine>{rejection !== undefined && !acting ? rejection : null}</ErrorLine>
+      <ErrorLine error={rejection !== undefined && !acting ? rejection : undefined} />
     </Dialog>
   );
 }
@@ -391,7 +393,7 @@ export function FootQuestion({
             {question.body}
           </p>
         ) : null}
-        <ErrorLine>{refused ? confirm.rejection : null}</ErrorLine>
+        <ErrorLine error={refused ? confirm.rejection : undefined} />
       </div>
       <div className={DIALOG_ANSWERS}>
         <DialogActions

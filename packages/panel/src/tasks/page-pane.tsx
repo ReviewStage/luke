@@ -6,6 +6,7 @@ import {
   pageFindAnswerSchema,
 } from "@luke/features/page-find";
 import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
 import { readingWords } from "@luke/features/words";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -32,6 +33,7 @@ import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
+import { unreadShown } from "../failure-report.js";
 import {
   type FindChord,
   FindScope,
@@ -327,7 +329,11 @@ function PageSource({
     return <SpinnerRegion delay label={readingWords("the source")} />;
   if (read.kind === SOURCE_READ.FAILED) {
     return (
-      <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+      <ErrorState
+        failure={unreadShown(FAILURE_SURFACE.PAGE_READ)}
+        onRetry={onRetry}
+        placement={ERROR_STATE_PLACEMENT.CENTRED}
+      >
         The page's source could not be read.
       </ErrorState>
     );

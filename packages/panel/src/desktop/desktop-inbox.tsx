@@ -17,6 +17,7 @@ import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
+import { unreadShown } from "../failure-report.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
@@ -641,7 +642,11 @@ export function DesktopInbox({
                         }
                       />
                     ) : chosenFailed ? (
-                      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={onRetryChosen}>
+                      <ErrorState
+                        failure={unreadShown(FAILURE_SURFACE.INBOX_ITEM_READ)}
+                        placement={ERROR_STATE_PLACEMENT.CENTRED}
+                        onRetry={onRetryChosen}
+                      >
                         {ITEM_NOT_READ}
                       </ErrorState>
                     ) : failed || reading || filteredOut || searched !== undefined ? null : (

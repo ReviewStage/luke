@@ -7,6 +7,7 @@ import {
   pinPositionsForInsert,
   pinPositionsForMove,
 } from "@luke/features/pin-order";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskSectionWrite } from "@luke/features/task-section-wire";
 import { isAgentEntry, type SectionMember } from "@luke/features/task-section-writes";
 import type { TaskAgentPin, TaskStatus, TaskSummary } from "@luke/features/task-wire";
@@ -126,6 +127,7 @@ import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
+import { unreadShown } from "../failure-report.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import {
   type HistoryPage,
@@ -2643,6 +2645,7 @@ function SidebarColumn({
                     ) : null}
                     {tasks.listFailed ? (
                       <ErrorState
+                        failure={unreadShown(FAILURE_SURFACE.TASKS_READ)}
                         onRetry={tasks.onRetryList}
                         placement={ERROR_STATE_PLACEMENT.ROWS}
                       >

@@ -14,6 +14,7 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useState } from "react";
 import { firstRefusal, type Kept } from "../act.js";
 import { COMMAND_PLACE, commandWords, PANEL_COMMAND } from "../command-items.js";
+import { confirmFailure } from "../failure-report.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { closeAllQuestion, closedNote, type InboxCloser } from "./inbox-close.js";
 import { type InboxListed, isUnread } from "./inbox-model.js";
@@ -80,23 +81,29 @@ export function InboxSelectionBar({
     open.some((each) => each.item.id === item.id && each.item.revision === item.revision),
   );
   const asked = unchanged ? resolving : [];
-  const confirm = useConfirmDialog({ subject: asked.length > 0, surfaceOpen: shown }, () => {
-    const closing = asked;
-    if (onClose !== undefined) {
-      void Promise.all(closing.map(({ item }) => onClose(item, { quiet: true }))).then((taken) => {
-        const refused = taken.filter((each) => !each.kept).length;
-        if (refused === 0) return;
-        toast({
-          words: closedNote(taken.length - refused, refused),
-          tone: STATUS_TONE.DANGER,
-          hold: TOAST_HOLD.FAILED,
-          failure: { surface: FAILURE_SURFACE.INBOX_CLOSE, cause: firstRefusal(taken) },
-        });
-      });
-    }
-    onClear();
-    return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-  });
+  const confirm = useConfirmDialog(
+    { subject: asked.length > 0, surfaceOpen: shown },
+    () => {
+      const closing = asked;
+      if (onClose !== undefined) {
+        void Promise.all(closing.map(({ item }) => onClose(item, { quiet: true }))).then(
+          (taken) => {
+            const refused = taken.filter((each) => !each.kept).length;
+            if (refused === 0) return;
+            toast({
+              words: closedNote(taken.length - refused, refused),
+              tone: STATUS_TONE.DANGER,
+              hold: TOAST_HOLD.FAILED,
+              failure: { surface: FAILURE_SURFACE.INBOX_CLOSE, cause: firstRefusal(taken) },
+            });
+          },
+        );
+      }
+      onClear();
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+    confirmFailure(FAILURE_SURFACE.INBOX_CLOSE),
+  );
 
   // Note that each item's mark goes on its own, there being no act marking several, and one toast answers them all once each did.
   const markAll = (marking: readonly InboxListed[], unread: boolean, undoable: boolean) => {

@@ -1,4 +1,5 @@
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskFileRequest } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import { readingWords } from "@luke/features/words";
@@ -13,6 +14,7 @@ import {
 } from "@luke/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
+import { unreadShown } from "../failure-report.js";
 import { fileName } from "./file-ref-model.js";
 import {
   FILE_READ,
@@ -142,7 +144,11 @@ function ReadNotice({
         ? "The file could not be read."
         : refusalLine(read.refusal, read.branch, commit);
     return (
-      <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+      <ErrorState
+        failure={unreadShown(FAILURE_SURFACE.FILE_READ)}
+        onRetry={onRetry}
+        placement={ERROR_STATE_PLACEMENT.CENTRED}
+      >
         {line}
       </ErrorState>
     );

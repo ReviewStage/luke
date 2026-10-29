@@ -1,4 +1,5 @@
 import type { AgentSummary } from "@luke/features/agent-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
   CONFIRM_LOSS,
@@ -9,6 +10,7 @@ import {
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
+import { confirmFailure } from "../failure-report.js";
 import { agentName } from "../tasks/agent-model.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
 import type { MenuAction } from "./action-menu.js";
@@ -57,11 +59,14 @@ export function useAgentDelete(
   input: { readonly shown: boolean; readonly onDeleted?: (() => void) | undefined },
 ): AgentDelete {
   const { shown, onDeleted } = input;
-  const confirm = useConfirmDialog({ subject: true, surfaceOpen: shown }, () =>
-    agents.onDelete(agent.id).then((result) => {
-      if (result.status === ACTION_RESULT_STATUS.ACCEPTED) onDeleted?.();
-      return result;
-    }),
+  const confirm = useConfirmDialog(
+    { subject: true, surfaceOpen: shown },
+    () =>
+      agents.onDelete(agent.id).then((result) => {
+        if (result.status === ACTION_RESULT_STATUS.ACCEPTED) onDeleted?.();
+        return result;
+      }),
+    confirmFailure(FAILURE_SURFACE.AGENT_DELETE, { agentId: agent.id }),
   );
   return {
     action: { ...commandAction(PANEL_COMMAND.DELETE_AGENT, confirm.ask, false), danger: true },

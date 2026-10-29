@@ -1,6 +1,9 @@
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { ChipWidth, SettingsRowDensity } from "@luke/ui";
+import type { ShownError } from "@luke/ui/reported-failure";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
+import { refusalShown } from "../failure-report.js";
 import { PickerRow } from "./picker-row.js";
 
 /** What the menu says when a search over a short fixed set matches nothing, which it has no search to say. */
@@ -49,7 +52,7 @@ export function SelectRow<Value extends string | number>({
   /** How wide its chip stands; the settings column where none is named. */
   width?: ChipWidth | undefined;
   /** What stops the caller's own save at this row, said where no write of the row's was refused. */
-  error?: string | undefined;
+  error?: ShownError | undefined;
   // biome-ignore lint/suspicious/noConfusingVoidType: the voice and pace cannot be refused, so those writes answer void
   onChange: (value: Value) => void | Promise<ActionResult>;
 }): React.JSX.Element {
@@ -61,7 +64,7 @@ export function SelectRow<Value extends string | number>({
       detail={detail}
       changed={changed}
       saves={saves}
-      error={rejection ?? error}
+      error={refusalShown(rejection, FAILURE_SURFACE.SETTING_WRITE) ?? error}
       density={density}
       width={width}
       value={String(value)}

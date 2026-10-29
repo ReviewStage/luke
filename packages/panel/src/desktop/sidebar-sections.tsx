@@ -1,3 +1,4 @@
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   TASK_SECTION_BOUNDS,
   TASK_SECTION_WRITE,
@@ -50,6 +51,7 @@ import {
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
+import { confirmFailure } from "../failure-report.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { undoToast, useToast } from "../toast.js";
@@ -203,6 +205,7 @@ export function useSectionDialogs(tasks: TasksControl, surfaceOpen: boolean): Se
       tasks.onWriteSections(answerWrites(ask, trimmed, icon));
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
+    confirmFailure(FAILURE_SURFACE.SECTION_WRITE),
   );
   const open = (next: SectionAsk, words: string, chosen: TaskSectionIcon | undefined) => {
     setAsk(next);

@@ -4,6 +4,7 @@ import { LANDING_TONE } from "@luke/features/landing-outcome";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
+import { recordedFailure } from "../../testing/reported-failure.js";
 import { BUTTON_VARIANT, Button } from "../button/button.js";
 import { AuthMark } from "./auth-mark.js";
 import { AuthPage } from "./auth-page.js";
@@ -33,13 +34,16 @@ function mount(element: React.ReactElement): HTMLElement {
   return container;
 }
 
+/** The failure beneath a sign-in that could not start. */
+const { failure: FAILURE } = recordedFailure();
+
 /** A sign-in page whose provider choice fails to start when pressed. */
 function SignIn(): React.JSX.Element {
   const [failure, setFailure] = useState<string | undefined>(undefined);
   return createElement(AuthPage, {
     mark: createElement("svg", { width: 52, height: 52 }),
     title: "Sign in to Luke",
-    error: failure,
+    error: failure === undefined ? undefined : { words: failure, failure: FAILURE },
     footnote: "You can close this window after Luke confirms the sign-in.",
     children: createElement(Button, {
       variant: BUTTON_VARIANT.OUTLINE,

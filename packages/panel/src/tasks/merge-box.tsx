@@ -13,6 +13,7 @@ import {
   PULL_REQUEST_ACTION,
   type PullRequestAction,
 } from "@luke/features/pull-request-write-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   Badge,
   BUTTON_VARIANT,
@@ -37,6 +38,7 @@ import { Schema } from "effect";
 import { CircleXIcon, GitMergeIcon, TriangleAlertIcon, UserRoundIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { confirmFailure } from "../failure-report.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { queuedLabel } from "./agent-model.js";
 import { type PullRequestWrites, QUEUE_WARNING } from "./pull-request-writes.js";
@@ -426,15 +428,18 @@ export function MergeControl({
   // Whether Remove from queue is being asked about; the question goes once a read finds it out of the queue, so it never asks to dequeue what no longer stands in it.
   const [asked, setAsked] = useState(false);
   const inQueue = (merging?.queued ?? null) !== null;
-  const confirm = useConfirmDialog({ subject: asked && inQueue, surfaceOpen: shown }, () =>
-    writes
-      .write({ action: PULL_REQUEST_ACTION.DEQUEUE })
-      .then(
-        (outcome): ActionResult =>
-          outcome.done
-            ? { status: ACTION_RESULT_STATUS.ACCEPTED }
-            : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
-      ),
+  const confirm = useConfirmDialog(
+    { subject: asked && inQueue, surfaceOpen: shown },
+    () =>
+      writes
+        .write({ action: PULL_REQUEST_ACTION.DEQUEUE })
+        .then(
+          (outcome): ActionResult =>
+            outcome.done
+              ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+              : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
+        ),
+    confirmFailure(FAILURE_SURFACE.PULL_REQUEST_DEQUEUE),
   );
   // Note that a question left behind as its panel hides is let go whole, so the panel comes back asking nothing; one already answered finishes.
   if ((!shown || !inQueue) && asked && !confirm.busy) setAsked(false);

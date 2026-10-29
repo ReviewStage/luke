@@ -20,7 +20,9 @@ import {
   Text,
 } from "@luke/ui";
 import { AtSign, GLYPH, Mic } from "@luke/ui/icons";
+import { UNREPORTED } from "@luke/ui/reported-failure";
 import type { ComponentProps, ReactNode } from "react";
+import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -154,16 +156,24 @@ function ComposerFoots(): React.JSX.Element {
             <Box
               words="The start of a long paste."
               counter={{ length: LIMIT, limit: LIMIT }}
-              note={{ words: "Only the first 4,000 characters were pasted." }}
+              note={{
+                words: "Only the first 4,000 characters were pasted.",
+                failure: UNREPORTED.INPUT,
+              }}
             />
             <Box
               words="Can you take a look?"
-              note={{ words: "The message could not be sent.", onRetry: ignore }}
+              note={{
+                words: "The message could not be sent.",
+                onRetry: ignore,
+                failure: CATALOG_FAILURE,
+              }}
             />
             <Box
               words=""
               send={{ label: "Send", empty: true, held: true }}
               note={{
+                failure: CATALOG_FAILURE,
                 words: "The agent takes no more messages.",
                 mends: (
                   <Button variant={BUTTON_VARIANT.OUTLINE} onClick={ignore}>

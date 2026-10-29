@@ -71,10 +71,27 @@ export interface EmptyStateAction {
   readonly turns?: boolean | undefined;
 }
 
+/** One way on from an empty place, as a button in its look; nothing where none is given. */
+function WayOn({ way }: { way: EmptyStateAction | undefined }): React.JSX.Element | null {
+  if (way === undefined) return null;
+  return (
+    <Button
+      variant={ACTION_BUTTON[way.look ?? EMPTY_STATE_ACTION_LOOK.QUIET]}
+      icon={way.icon}
+      disabled={way.disabled}
+      turns={way.turns}
+      onClick={way.onClick}
+    >
+      {way.label}
+    </Button>
+  );
+}
+
 /**
  * A place with nothing in it yet: `icon`, the place's own glyph (left out only
  * where a place has none to say), drawn large and muted over `title` where one is given, over the line `children` says where one is given,
- * over `action` where one is given; one alert where `alert` says a failure
+ * over `action` where one is given, with `beside` in a row with it, or alone
+ * in its place where no action is; one alert where `alert` says a failure
  * left it empty.
  */
 export function EmptyState({
@@ -82,6 +99,7 @@ export function EmptyState({
   title,
   action,
   secondary,
+  beside,
   alert = false,
   children,
 }: {
@@ -90,6 +108,8 @@ export function EmptyState({
   action?: EmptyStateAction | undefined;
   /** A second way on, under the first, where the place offers two (Retry, then Close). */
   secondary?: EmptyStateAction | undefined;
+  /** A glyph's press beside the first way on, as a failure's Copy details stands by its Retry. */
+  beside?: ReactNode;
   alert?: boolean | undefined;
   children?: ReactNode;
 }): React.JSX.Element {
@@ -105,20 +125,15 @@ export function EmptyState({
           )}
           {children === undefined ? null : <Text tone={TEXT_TONE.MUTED}>{children}</Text>}
         </EmptyHeader>
-        {[action, secondary].map((way) =>
-          way === undefined ? null : (
-            <Button
-              key={way.label}
-              variant={ACTION_BUTTON[way.look ?? EMPTY_STATE_ACTION_LOOK.QUIET]}
-              icon={way.icon}
-              disabled={way.disabled}
-              turns={way.turns}
-              onClick={way.onClick}
-            >
-              {way.label}
-            </Button>
-          ),
+        {beside === undefined || beside === null ? (
+          <WayOn way={action} />
+        ) : (
+          <div className="luke-empty-state-beside flex items-center gap-control-gap">
+            <WayOn way={action} />
+            {beside}
+          </div>
         )}
+        <WayOn way={secondary} />
       </Empty>
     </div>
   );

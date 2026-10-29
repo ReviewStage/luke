@@ -1,11 +1,14 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { readingWords } from "@luke/features/words";
 import { ERROR_STATE_PLACEMENT, ErrorState, Fill, ScrollArea, SpinnerRegion } from "@luke/ui";
+import { Cause } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSideBundles } from "../bundle-loader.js";
 import type { FileLineRange, FileViewHandle, FileViewProps } from "../diff-view/contract.js";
+import { failureShown } from "../failure-report.js";
 import { type FIND_STEP, type FindSource, type FindTally, useFindSource } from "../find-in-tab.js";
 import {
   type FindPainting,
@@ -362,7 +365,14 @@ export function WholeFile({
 
   if (AsyncResult.isFailure(loaded)) {
     return (
-      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={retry}>
+      <ErrorState
+        failure={failureShown({
+          surface: FAILURE_SURFACE.FILE_READ,
+          cause: Cause.squash(loaded.cause),
+        })}
+        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        onRetry={retry}
+      >
         {FILE_LOAD_FAILED}
       </ErrorState>
     );

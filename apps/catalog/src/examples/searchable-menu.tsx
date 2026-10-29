@@ -21,6 +21,7 @@ import {
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useId, useRef, useState } from "react";
+import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -173,7 +174,7 @@ function Failed(): React.JSX.Element {
           : {
               rows: [],
               note: (
-                <ErrorState onRetry={() => setRead(true)}>
+                <ErrorState failure={CATALOG_FAILURE} onRetry={() => setRead(true)}>
                   {readFailedWords("your repositories")}
                 </ErrorState>
               ),

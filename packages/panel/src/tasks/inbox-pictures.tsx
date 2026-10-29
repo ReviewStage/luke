@@ -1,5 +1,6 @@
 import type { FileChip } from "@luke/features/attachment-model";
 import { inboxAttachmentOf } from "@luke/features/inbox-attachment-link";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { ErrorState } from "@luke/ui";
 import { PICTURE_STATE } from "@luke/ui/picture-cache";
 import {
@@ -15,6 +16,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { unreadShown } from "../failure-report.js";
 import { PictureBlock } from "../picture-block.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import type { TaskInboxControl } from "./use-task-inbox.js";
@@ -141,7 +143,12 @@ export function InboxPicture({
         className="picture-block my-block-gap block w-fit max-w-full"
         data-inbox-image-failed=""
       >
-        <ErrorState onRetry={() => door.onRetryImage(attachmentId)}>{IMAGE_FAILED_LINE}</ErrorState>
+        <ErrorState
+          failure={unreadShown(FAILURE_SURFACE.PICTURE_READ)}
+          onRetry={() => door.onRetryImage(attachmentId)}
+        >
+          {IMAGE_FAILED_LINE}
+        </ErrorState>
       </span>
     );
   }

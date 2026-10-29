@@ -8,6 +8,7 @@ import {
   threadInChapter,
 } from "@luke/features/pull-request-chapters";
 import { PULL_REQUEST_CHAPTERS_FAILURE_KIND } from "@luke/features/pull-request-chapters-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
   CHAPTERS_KEY,
@@ -88,6 +89,7 @@ import {
   useState,
 } from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
+import { failureShown, unreadShown } from "../failure-report.js";
 import { SettingsPageLink } from "../open-settings.js";
 import {
   AgentChangesTab,
@@ -1015,7 +1017,11 @@ function chaptersState(
       return <SpinnerRegion delay label={CHAPTERS_WORDS.READING} />;
     case CHAPTERS_SHOWN.FAILED:
       return (
-        <ErrorState onRetry={read.ask} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+        <ErrorState
+          failure={unreadShown(FAILURE_SURFACE.AGENT_CHAPTERS_READ)}
+          onRetry={read.ask}
+          placement={ERROR_STATE_PLACEMENT.CENTRED}
+        >
           {CHAPTERS_WORDS.FAILED}
         </ErrorState>
       );
@@ -1056,6 +1062,10 @@ function chaptersState(
     case CHAPTERS_SHOWN.GENERATION_FAILED:
       return (
         <ErrorState
+          failure={failureShown({
+            surface: FAILURE_SURFACE.AGENT_CHAPTERS_GENERATE,
+            cause: state.failureKind,
+          })}
           onRetry={state.generatable ? read.generate : undefined}
           placement={ERROR_STATE_PLACEMENT.CENTRED}
         >
@@ -1108,7 +1118,11 @@ export function AgentChaptersTab({
   }
   if ("failure" in answer) {
     return (
-      <ErrorState onRetry={changes.ask} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+      <ErrorState
+        failure={failureShown({ surface: FAILURE_SURFACE.AGENT_CHANGES_READ, cause: answer })}
+        onRetry={changes.ask}
+        placement={ERROR_STATE_PLACEMENT.CENTRED}
+      >
         {CHANGES_WORDS.FAILED}
       </ErrorState>
     );

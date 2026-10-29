@@ -15,6 +15,7 @@ import {
   useConfirmDialog,
 } from "@luke/ui";
 import { useRef, useState } from "react";
+import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -52,8 +53,10 @@ function Asking({
   gate?: string;
   answer?: () => ActionResult;
 }): React.JSX.Element {
-  const confirm = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    Promise.resolve(answer()),
+  const confirm = useConfirmDialog(
+    { subject: true, surfaceOpen: true },
+    () => Promise.resolve(answer()),
+    () => CATALOG_FAILURE,
   );
   return (
     <>
@@ -91,8 +94,10 @@ function RefusedOnce(): React.JSX.Element {
 function Named(): React.JSX.Element {
   const [name, setName] = useState("");
   const field = useRef<HTMLInputElement | null>(null);
-  const confirm = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    Promise.resolve(name.trim() === "" ? refused("Name the new owner.") : ACCEPTED),
+  const confirm = useConfirmDialog(
+    { subject: true, surfaceOpen: true },
+    () => Promise.resolve(name.trim() === "" ? refused("Name the new owner.") : ACCEPTED),
+    () => CATALOG_FAILURE,
   );
   return (
     <>
@@ -138,14 +143,18 @@ function KeyInADialog(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [key, setKey] = useState(true);
   const [triedOnce, setTriedOnce] = useState(false);
-  const removal = useConfirmDialog({ subject: key, surfaceOpen: open }, () => {
-    if (!triedOnce) {
-      setTriedOnce(true);
-      return Promise.resolve(refused("The keychain is locked. Unlock it and try again."));
-    }
-    setKey(false);
-    return Promise.resolve(ACCEPTED);
-  });
+  const removal = useConfirmDialog(
+    { subject: key, surfaceOpen: open },
+    () => {
+      if (!triedOnce) {
+        setTriedOnce(true);
+        return Promise.resolve(refused("The keychain is locked. Unlock it and try again."));
+      }
+      setKey(false);
+      return Promise.resolve(ACCEPTED);
+    },
+    () => CATALOG_FAILURE,
+  );
   return (
     <>
       <Button

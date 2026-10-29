@@ -1,4 +1,5 @@
 import type { MacOffer } from "@luke/features/models-wire";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   MERGE_POLICY,
   TASK_PRIORITY,
@@ -37,6 +38,7 @@ import {
 import { useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
+import { failureShown, unreadShown } from "../failure-report.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
@@ -208,7 +210,9 @@ function TaskAssigneePicker({
       noMatch={noMatchWords(TERM.MEMBER)}
       note={
         membersRefused ? (
-          <ErrorState onRetry={retry}>{readFailedWords(TERM.MEMBER.many)}</ErrorState>
+          <ErrorState failure={unreadShown(FAILURE_SURFACE.MEMBERS_READ)} onRetry={retry}>
+            {readFailedWords(TERM.MEMBER.many)}
+          </ErrorState>
         ) : membersReading ? (
           <Spinner delay label="Reading members" />
         ) : undefined
@@ -433,7 +437,17 @@ export function TaskStandingChips({
             width={CHIP_WIDTH.AUTO}
           />
         )}
-        {repository?.note === undefined ? null : <FailureNote>{repository.note}</FailureNote>}
+        {repository?.note === undefined ? null : (
+          <FailureNote
+            failure={failureShown({
+              surface: FAILURE_SURFACE.REPOSITORY_PIN,
+              cause: FAILURE_CONDITION.REFUSED,
+              refused: true,
+            })}
+          >
+            {repository.note}
+          </FailureNote>
+        )}
         {runsOnDrawn ? <TaskRunsOnChip runsOn={task.runsOn} /> : null}
         {mergePolicy === undefined ? null : (
           <LabeledSwitch

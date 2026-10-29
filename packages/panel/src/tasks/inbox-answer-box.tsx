@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { AGENT_STATUS, type AgentAttachment, type AgentSummary } from "@luke/features/agent-wire";
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
-import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { pasteCutWords } from "@luke/features/words";
 import { EXPERIMENT } from "@luke/settings";
 import {
@@ -13,11 +13,13 @@ import {
   STATUS_TONE,
 } from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
+import { UNREPORTED } from "@luke/ui/reported-failure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useRef, useState } from "react";
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
+import { failureShown, unreadShown } from "../failure-report.js";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
 import {
   COMPOSER_INPUT,
@@ -462,6 +464,8 @@ function AnswerCard({
 }: AnswerBoxProps & { statuses: IntegrationStatuses }): React.JSX.Element {
   const toast = useToast();
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  // Whether the refusal standing is the files handed to the box checked, which is the person's input and no failure of the app's.
+  const [filesRefused, setFilesRefused] = useState(false);
   // Whether the last paste was cut to the room the box has left, until the words change again.
   const [cut, setCut] = useState(false);
   const draft = control.draftOf(item);
@@ -481,7 +485,10 @@ function AnswerCard({
       attachments: draft.attachments,
       update: (next) => control.onAttachments(item, next),
     },
-    onRefusal: setRefusal,
+    onRefusal: (words) => {
+      setRefusal(words);
+      setFilesRefused(words !== undefined);
+    },
   });
   // Note that a notice opening acknowledges offers no Got it, since opening it was the nod (`useNodOnOpen`), save while its holder's held read has failed, when opening acknowledges nothing.
   const channels = useExperiment(EXPERIMENT.CHANNELS);
@@ -511,7 +518,10 @@ function AnswerCard({
     skills,
     keywords,
     statuses,
-    onNote: setRefusal,
+    onNote: (words) => {
+      setRefusal(words);
+      setFilesRefused(false);
+    },
   });
   const { editor, room, module } = field;
   const { dictating } = field.pickers;
@@ -522,6 +532,18 @@ function AnswerCard({
     refusal ??
     (cut ? pasteCutWords(INBOX_BOUNDS.MAX_MESSAGE_CHARS) : undefined) ??
     (field.failed ? EDITOR_LOAD_FAILED : undefined);
+  // Note that a cut paste and files refused are the person's input checked; every other note is the app's, reported as a refusal by its condition.
+  const noteFailure =
+    noted === undefined && (refusal === undefined ? cut : filesRefused)
+      ? UNREPORTED.INPUT
+      : noted === undefined && refusal === undefined && field.failed
+        ? unreadShown(FAILURE_SURFACE.BUNDLE_LOAD)
+        : failureShown({
+            surface: FAILURE_SURFACE.INBOX_ANSWER,
+            cause: FAILURE_CONDITION.REFUSED,
+            about: { inboxItemId: item.id },
+            refused: true,
+          });
   // Note that the note is let go once the agent is back, since what it said no longer stands, and only that note, never one a later send left meanwhile.
   const unarchive = () =>
     void onUnarchiveAgent().then((result) => {
@@ -569,6 +591,7 @@ function AnswerCard({
         return;
       }
       setRefusal(refused);
+      setFilesRefused(false);
       if (emptyBox(standing.current)) control.onDraft(item, { ...standing.current, ...sent });
     });
   };
@@ -607,8 +630,12 @@ function AnswerCard({
           note === undefined
             ? undefined
             : noted?.unarchive === true
-              ? { words: note, remedy: { label: UNARCHIVE, onClick: unarchive } }
-              : { words: note }
+              ? {
+                  words: note,
+                  failure: noteFailure,
+                  remedy: { label: UNARCHIVE, onClick: unarchive },
+                }
+              : { words: note, failure: noteFailure }
         }
         nod={nod}
         starts={starts}

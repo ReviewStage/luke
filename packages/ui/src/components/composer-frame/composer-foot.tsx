@@ -1,5 +1,6 @@
 import type { ShortcutChord } from "@luke/settings/shortcuts";
 import { type ReactNode, useId } from "react";
+import { inputProblem, type ReportedFailure, type Unreported } from "../../reported-failure.js";
 import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
@@ -51,7 +52,11 @@ import { Tooltip } from "../tooltip/hint.js";
  * where trying again can mend it or a remedy where it cannot ("Unarchive"),
  * a paste cut to the room left, or a file refused. It is a failure's line (`ErrorState`), said as it lands,
  * with what mends it under the line where that is more than one press
- * (`mends`), as a closed agent's Continue in new agent is.
+ * (`mends`), as a closed agent's Continue in new agent is, and the failure
+ * beneath it, reported as it first stands and offered to copy.
+ *
+ * Why the empty send was refused ("Pick an option.") is the person's input
+ * checked, so it is said in an `ErrorLine` that reports nothing.
  *
  * Where the foot stands in its frame is the frame's look: a card's foot at
  * a card's inset, a field's and an input's a step tighter, and a bare
@@ -100,6 +105,8 @@ export type ComposerStop = {
 export interface ComposerNote {
   /** What went wrong or what happened to the words, as "Only the first 4,000 characters were pasted." */
   readonly words: string;
+  /** The failure beneath the words, as the app reports it, or the person's input checked (a paste cut to the room left). */
+  readonly failure: ReportedFailure | Unreported;
   /** Retry's press, for a send that was refused. */
   readonly onRetry?: (() => void) | undefined;
   /** The press that mends what went wrong where trying again alone cannot, as "Unarchive". */
@@ -267,11 +274,11 @@ export function ComposerFoot({
       </FootBar>
       {/* Note that the line stands, empty, for as long as the send can refuse, so what it says lands as said. */}
       {send.refuses === undefined ? null : (
-        <ErrorLine id={refusalId}>{send.refuses.words}</ErrorLine>
+        <ErrorLine id={refusalId} error={inputProblem(send.refuses.words)} />
       )}
       {note === undefined ? null : (
         <div className="luke-composer-foot-note flex flex-col items-start gap-tight-gap">
-          <ErrorState onRetry={note.onRetry} remedy={note.remedy}>
+          <ErrorState onRetry={note.onRetry} remedy={note.remedy} failure={note.failure}>
             {note.words}
           </ErrorState>
           {note.mends}

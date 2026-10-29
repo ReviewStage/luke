@@ -25,6 +25,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Schema } from "effect";
 import { useRef, useState } from "react";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
+import { confirmFailure } from "../failure-report.js";
 import { useBusyPress } from "../settings/busy-press.js";
 import { agentName, agentStillWriting, teammateStarter } from "../tasks/agent-model.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
@@ -157,8 +158,10 @@ export function useAgentArchive(
 ): AgentArchive {
   const press = useArchivePress(agents);
   // Note that an archive asked about waits on its answer, so the dialog stands to say a refusal.
-  const confirm = useConfirmDialog({ subject: true, surfaceOpen: shown }, () =>
-    agents.onArchive(agent.id, true, ARCHIVE_DRAWN.ON_ANSWER),
+  const confirm = useConfirmDialog(
+    { subject: true, surfaceOpen: shown },
+    () => agents.onArchive(agent.id, true, ARCHIVE_DRAWN.ON_ANSWER),
+    confirmFailure(FAILURE_SURFACE.AGENT_ARCHIVE, { agentId: agent.id }),
   );
   const [reading, setReading] = useState(false);
   const teammate = teammateStarter(agent.startedBy, agents.me) !== undefined;

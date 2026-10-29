@@ -1,8 +1,9 @@
 /**
  * failure-note.test.ts -- a failure's line is one alert saying its words and,
  * where it is given a press, Retry, whose press tries again, then a second
- * act of the caller's where one is given; with none it says its words alone;
- * its mark says nothing to a reader; and one that is history is no alert.
+ * act of the caller's where one is given, then Copy details where it is the
+ * app's; a tool's error with no Retry says its words alone; its mark says
+ * nothing to a reader; and one that is history is no alert.
  */
 
 // @vitest-environment jsdom
@@ -11,6 +12,8 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { FAILURE_NOTE_TIME, FailureNote } from "../../index.js";
+import { UNREPORTED } from "../../reported-failure.js";
+import { recordedFailure } from "../../testing/reported-failure.js";
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -24,6 +27,9 @@ class SilentResizeObserver {
 }
 
 const WORDS = "The message could not be sent.";
+
+/** The failure beneath every line drawn here that is the app's. */
+const { failure: FAILURE } = recordedFailure();
 
 const roots: Root[] = [];
 
@@ -58,11 +64,15 @@ test("a failure is one alert saying its words and Retry, whose press tries again
       onRetry: () => {
         tries += 1;
       },
+      failure: FAILURE,
       children: WORDS,
     }),
   );
   const buttons = alert.querySelectorAll("button");
-  expect(buttons).toHaveLength(1);
+  expect([...buttons].map((button) => button.ariaLabel ?? button.textContent)).toEqual([
+    "Retry",
+    "Copy details",
+  ]);
   expect(alert.textContent).toBe(`${WORDS}Retry`);
 
   act(() => buttons[0]?.click());
@@ -70,15 +80,19 @@ test("a failure is one alert saying its words and Retry, whose press tries again
   expect(tries).toBe(1);
 });
 
-test("a failure with no Retry says its words alone, and offers no button", () => {
-  const alert = mountAlert(createElement(FailureNote, { children: WORDS }));
+test("a tool's error with no Retry says its words alone, and offers no button", () => {
+  const alert = mountAlert(
+    createElement(FailureNote, { failure: UNREPORTED.TOOL, children: WORDS }),
+  );
 
   expect(alert.textContent).toBe(WORDS);
   expect(alert.querySelector("button")).toBeNull();
 });
 
 test("a failure's mark says nothing to a reader", () => {
-  const alert = mountAlert(createElement(FailureNote, { children: WORDS }));
+  const alert = mountAlert(
+    createElement(FailureNote, { failure: UNREPORTED.TOOL, children: WORDS }),
+  );
   const marks = [...alert.querySelectorAll("svg")];
 
   expect(marks).toHaveLength(1);
@@ -104,6 +118,7 @@ test("a failure's second act stands after Retry in the same alert, and works alo
         tries += 1;
       },
       also: discard,
+      failure: FAILURE,
       children: WORDS,
     }),
   );
@@ -115,7 +130,9 @@ test("a failure's second act stands after Retry in the same alert, and works alo
 
   expect([tries, discards]).toEqual([1, 1]);
 
-  const alone = mountAlert(createElement(FailureNote, { also: discard, children: WORDS }));
+  const alone = mountAlert(
+    createElement(FailureNote, { also: discard, failure: FAILURE, children: WORDS }),
+  );
   expect(alone.textContent).toBe(`${WORDS}Discard`);
 });
 
@@ -124,7 +141,13 @@ test("a failure that is history says its words but is no alert", () => {
   const root = createRoot(container);
   roots.push(root);
   act(() =>
-    root.render(createElement(FailureNote, { time: FAILURE_NOTE_TIME.PAST, children: WORDS })),
+    root.render(
+      createElement(FailureNote, {
+        time: FAILURE_NOTE_TIME.PAST,
+        failure: UNREPORTED.TOOL,
+        children: WORDS,
+      }),
+    ),
   );
 
   expect(container.textContent).toBe(WORDS);

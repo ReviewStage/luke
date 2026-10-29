@@ -20,6 +20,8 @@ import {
   Text,
   TextButton,
 } from "@luke/ui";
+import { UNREPORTED } from "@luke/ui/reported-failure";
+import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -31,52 +33,74 @@ function ErrorStates(): React.JSX.Element {
     <>
       <CatalogSection id="error-state-inline" title="Among rows">
         <div className="catalog-frame">
-          <ErrorState onRetry={stay}>Your tasks could not be read.</ErrorState>
+          <ErrorState failure={CATALOG_FAILURE} onRetry={stay}>
+            Your tasks could not be read.
+          </ErrorState>
         </div>
       </CatalogSection>
       <CatalogSection id="error-state-rows" title="At a list's rows' inset">
         <div className="catalog-frame">
-          <ErrorState onRetry={stay} placement={ERROR_STATE_PLACEMENT.ROWS}>
+          <ErrorState
+            failure={CATALOG_FAILURE}
+            onRetry={stay}
+            placement={ERROR_STATE_PLACEMENT.ROWS}
+          >
             Your tasks could not be read.
           </ErrorState>
         </div>
       </CatalogSection>
       <CatalogSection id="error-state-centred" title="Alone in its region">
         <div className="catalog-frame catalog-region catalog-error-region">
-          <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={stay}>
+          <ErrorState
+            failure={CATALOG_FAILURE}
+            placement={ERROR_STATE_PLACEMENT.CENTRED}
+            onRetry={stay}
+          >
             The changes could not be read.
           </ErrorState>
         </div>
       </CatalogSection>
       <CatalogSection id="error-state-reload" title="A place that failed to draw">
         <div className="catalog-frame catalog-region catalog-error-region">
-          <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onReload={stay}>
+          <ErrorState
+            failure={UNREPORTED.BOUNDARY}
+            placement={ERROR_STATE_PLACEMENT.CENTRED}
+            onReload={stay}
+          >
             This window could not be shown.
           </ErrorState>
         </div>
       </CatalogSection>
       <CatalogSection id="error-state-alone" title="No Retry">
         <div className="catalog-frame">
-          <ErrorState>This file is too large to show.</ErrorState>
+          <ErrorState failure={CATALOG_FAILURE}>This file is too large to show.</ErrorState>
         </div>
       </CatalogSection>
       <CatalogSection id="error-state-remedy" title="A remedy beside Retry">
         <div className="catalog-frame">
-          <ErrorState remedy={{ label: "Connect GitHub", onClick: stay }} onRetry={stay}>
+          <ErrorState
+            failure={CATALOG_FAILURE}
+            remedy={{ label: "Connect GitHub", onClick: stay }}
+            onRetry={stay}
+          >
             This workspace has no GitHub connected.
           </ErrorState>
         </div>
       </CatalogSection>
       <CatalogSection id="error-state-remove" title="Retry and Remove">
         <div className="catalog-frame">
-          <ErrorState onRetry={stay} onRemove={stay}>
+          <ErrorState failure={CATALOG_FAILURE} onRetry={stay} onRemove={stay}>
             The picture could not be uploaded.
           </ErrorState>
         </div>
       </CatalogSection>
       <CatalogSection id="error-state-dismiss" title="A remedy and Dismiss">
         <div className="catalog-frame">
-          <ErrorState remedy={{ label: "Sign in with GitHub", onClick: stay }} onDismiss={stay}>
+          <ErrorState
+            failure={CATALOG_FAILURE}
+            remedy={{ label: "Sign in with GitHub", onClick: stay }}
+            onDismiss={stay}
+          >
             GitHub needs you to sign in again before it takes this change.
           </ErrorState>
         </div>
@@ -84,6 +108,7 @@ function ErrorStates(): React.JSX.Element {
       <CatalogSection id="error-state-toolbar" title="On a toolbar, short of room">
         <div className="catalog-frame catalog-error-toolbar">
           <ErrorState
+            failure={CATALOG_FAILURE}
             placement={ERROR_STATE_PLACEMENT.TOOLBAR}
             remedy={{ label: "Connect GitHub", onClick: stay }}
             onRetry={stay}
@@ -95,6 +120,7 @@ function ErrorStates(): React.JSX.Element {
       <CatalogSection id="error-state-long-remedy" title="Narrow pane, long remedy">
         <div className="catalog-frame catalog-error-narrow">
           <ErrorState
+            failure={CATALOG_FAILURE}
             remedy={{
               label: "Add acme/a-very-long-repository-name to Luke on GitHub",
               onClick: stay,
@@ -107,7 +133,7 @@ function ErrorStates(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="error-state-narrow" title="Narrow pane, long words">
         <div className="catalog-frame catalog-error-narrow">
-          <ErrorState onRetry={stay}>
+          <ErrorState failure={CATALOG_FAILURE} onRetry={stay}>
             The questions your agents asked while you were away could not be read.
           </ErrorState>
         </div>

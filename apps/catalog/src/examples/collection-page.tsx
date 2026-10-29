@@ -21,6 +21,7 @@ import {
   TextField,
 } from "@luke/ui";
 import { useState } from "react";
+import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -112,7 +113,11 @@ function Tasks({
       loadingLabel="Reading tasks"
       skeleton={skeleton}
       empty={<p>No tasks yet. Start one by talking it through.</p>}
-      error={<FailureNote>Tasks could not be read. Try again in a moment.</FailureNote>}
+      error={
+        <FailureNote failure={CATALOG_FAILURE}>
+          Tasks could not be read. Try again in a moment.
+        </FailureNote>
+      }
     >
       <List label="Tasks">
         {TASKS.map((task) => (
@@ -162,7 +167,11 @@ function TasksUnderToolbar({ state }: { state: CollectionState }): React.JSX.Ele
       state={state}
       loadingLabel="Reading tasks"
       empty={<p>No tasks yet. Start one by talking it through.</p>}
-      error={<FailureNote>Tasks could not be read. Try again in a moment.</FailureNote>}
+      error={
+        <FailureNote failure={CATALOG_FAILURE}>
+          Tasks could not be read. Try again in a moment.
+        </FailureNote>
+      }
     >
       <List label="Tasks">
         {TASKS.map((task) => (

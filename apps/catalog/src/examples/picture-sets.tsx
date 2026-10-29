@@ -9,6 +9,7 @@ import {
 } from "@luke/ui";
 import { PICTURE_STATE, type PictureState } from "@luke/ui/picture-cache";
 import { useState } from "react";
+import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -117,7 +118,11 @@ function PictureSets(): React.JSX.Element {
               why="not kept · 6.4 MB"
             />
             <PictureSetTile
-              state={{ kind: PICTURE_STATE.FAILED, retry: () => undefined }}
+              state={{
+                kind: PICTURE_STATE.FAILED,
+                retry: () => undefined,
+                failure: CATALOG_FAILURE,
+              }}
               width={1280}
               height={800}
               words="screenshot-5"
@@ -136,6 +141,7 @@ function PictureSets(): React.JSX.Element {
           <PictureStandIn state={PICTURE_STATE.MISSING} words="" />
           <PictureStandIn
             state={PICTURE_STATE.FAILED}
+            failure={CATALOG_FAILURE}
             words="Members page"
             onRetry={() => undefined}
           />

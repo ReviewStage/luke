@@ -1,3 +1,4 @@
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { countWords, IRREVERSIBLE_WORDS, TERM } from "@luke/features/words";
 import {
   CONFIRM_LOSS,
@@ -19,6 +20,7 @@ import {
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { createContext, useId, useRef, useState } from "react";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
+import { confirmFailure } from "../failure-report.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { undoToast, useToast } from "../toast.js";
 import { sectionGlyph } from "./section-icon-picker.js";
@@ -233,6 +235,7 @@ export function useTasksSelection(tasks: TasksControl, drawn: ReadonlySet<string
       );
       return answers.find((answer) => answer.status !== ACTION_RESULT_STATUS.ACCEPTED) ?? ACCEPTED;
     },
+    confirmFailure(FAILURE_SURFACE.TASK_DELETE),
   );
   const acts = selectionActs(tasks, () => latest.current, [...selected], toast, {
     onActed: onClear,

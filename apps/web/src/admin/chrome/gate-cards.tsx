@@ -1,5 +1,6 @@
 import { SIGN_IN_CHOSEN } from "@luke/panel/admin/prefs";
 import { AuthPage, BUTTON_VARIANT, Button, FaceMark, SocialSignInCard } from "@luke/ui";
+import { UNREPORTED } from "@luke/ui/reported-failure";
 import { useSocialSignIn } from "../../sign-in-choices";
 import { authClient } from "../auth-client";
 
@@ -22,7 +23,7 @@ export function SignInCard(): React.JSX.Element {
       mark={<AdminMark />}
       title="Luke admin"
       pending={pending}
-      failed={failed}
+      failed={failed ? UNREPORTED.NO_REPORTER : undefined}
       onPress={begin}
     />
   );

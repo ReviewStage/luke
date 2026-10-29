@@ -68,8 +68,10 @@
 import type { ReactNode } from "react";
 import { CloseIcon } from "../../face/glyphs.js";
 import { AlertIcon, RetryIcon } from "../../icons/lucide-glyphs.js";
+import type { ReportedFailure, Unreported } from "../../reported-failure.js";
 import { BUTTON_VARIANT, Button, IconButton } from "../button/button.js";
 import { EmptyState } from "../empty-state/empty-state.js";
+import { FailureCopy } from "../failure-copy/failure-copy.js";
 import { Tooltip } from "../tooltip/hint.js";
 
 /** Where a failure stands: among the rows it failed to draw, at a list's rows' inset among them, alone in the region it would have filled, or on one line of a toolbar. */
@@ -179,15 +181,18 @@ const WORDS = {
  * Retry that tries again, said together as an alert and drawn at
  * `placement`; among rows, with the remedy, Remove, and Dismiss where each
  * is given; alone in its region, with Reload in Retry's place where
- * `onReload` is given.
+ * `onReload` is given; and, wherever it stands, Copy details for the
+ * failure beneath it, which is reported as it first stands.
  */
 export function ErrorState(
   props: {
     /** Retry's press; with none, the failure says its sentence alone. */
     onRetry?: (() => void) | undefined;
+    /** The failure beneath the sentence, as the app reports it, or what names it as none to report. */
+    failure: ReportedFailure | Unreported;
   } & Placed,
 ): React.JSX.Element {
-  const { onRetry, onReload, remedy, onRemove, onDismiss, children } = props;
+  const { onRetry, onReload, remedy, onRemove, onDismiss, failure, children } = props;
   const Line = props.as ?? ERROR_STATE_ELEMENT.PARAGRAPH;
   const placement = props.placement ?? ERROR_STATE_PLACEMENT.INLINE;
   if (placement === ERROR_STATE_PLACEMENT.CENTRED) {
@@ -203,6 +208,7 @@ export function ErrorState(
         alert
         action={again === undefined ? undefined : { ...again, icon: <RetryIcon />, turns: true }}
         secondary={props.placement === ERROR_STATE_PLACEMENT.CENTRED ? props.exit : undefined}
+        beside={<FailureCopy failure={failure} />}
       >
         {children}
       </EmptyState>
@@ -224,35 +230,31 @@ export function ErrorState(
       >
         {children}
       </span>
-      {remedy === undefined &&
-      onRetry === undefined &&
-      onRemove === undefined &&
-      onDismiss === undefined ? null : (
-        <span className={`luke-error-state-actions flex min-w-0 gap-control-gap ${look.actions}`}>
-          {remedy === undefined ? null : (
-            <Button variant={BUTTON_VARIANT.OUTLINE} onClick={remedy.onClick}>
-              {remedy.label}
+      <span className={`luke-error-state-actions flex min-w-0 gap-control-gap ${look.actions}`}>
+        {remedy === undefined ? null : (
+          <Button variant={BUTTON_VARIANT.OUTLINE} onClick={remedy.onClick}>
+            {remedy.label}
+          </Button>
+        )}
+        {onRetry === undefined ? null : (
+          <span className="luke-error-state-retry contents">
+            <Button variant={BUTTON_VARIANT.QUIET} icon={<RetryIcon />} turns onClick={onRetry}>
+              {WORDS.RETRY}
             </Button>
-          )}
-          {onRetry === undefined ? null : (
-            <span className="luke-error-state-retry contents">
-              <Button variant={BUTTON_VARIANT.QUIET} icon={<RetryIcon />} turns onClick={onRetry}>
-                {WORDS.RETRY}
-              </Button>
-            </span>
-          )}
-          {onRemove === undefined ? null : (
-            <Button variant={BUTTON_VARIANT.QUIET} onClick={onRemove}>
-              {WORDS.REMOVE}
-            </Button>
-          )}
-          {onDismiss === undefined ? null : (
-            <Tooltip label={WORDS.DISMISS}>
-              <IconButton icon={<CloseIcon />} label={WORDS.DISMISS} onClick={onDismiss} />
-            </Tooltip>
-          )}
-        </span>
-      )}
+          </span>
+        )}
+        <FailureCopy failure={failure} />
+        {onRemove === undefined ? null : (
+          <Button variant={BUTTON_VARIANT.QUIET} onClick={onRemove}>
+            {WORDS.REMOVE}
+          </Button>
+        )}
+        {onDismiss === undefined ? null : (
+          <Tooltip label={WORDS.DISMISS}>
+            <IconButton icon={<CloseIcon />} label={WORDS.DISMISS} onClick={onDismiss} />
+          </Tooltip>
+        )}
+      </span>
     </Line>
   );
 }

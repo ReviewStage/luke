@@ -1,4 +1,5 @@
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   Button,
   cssCustomProperties,
@@ -15,6 +16,7 @@ import {
   usePressAway,
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
+import { Cause } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { MessageSquarePlusIcon } from "lucide-react";
 import {
@@ -46,6 +48,7 @@ import {
   sameLook,
   sameNotes,
 } from "../diff-view/contract.js";
+import { failureShown } from "../failure-report.js";
 import { CHANGES_WORDS } from "./changes-model.js";
 
 /**
@@ -476,7 +479,14 @@ export function PierreDiffList({
 
   if (AsyncResult.isFailure(loaded)) {
     return (
-      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={retry}>
+      <ErrorState
+        failure={failureShown({
+          surface: FAILURE_SURFACE.DIFF_READ,
+          cause: Cause.squash(loaded.cause),
+        })}
+        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        onRetry={retry}
+      >
         {DIFF_LOAD_FAILED}
       </ErrorState>
     );

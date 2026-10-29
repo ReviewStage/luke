@@ -1,5 +1,10 @@
 import type { DialogAct, DialogConfirm } from "@luke/ui";
-import { CONFIRM_STAGE, confirmAsked, confirmWithdrawable } from "@luke/ui/confirm-state";
+import {
+  CONFIRM_STAGE,
+  type ConfirmRejection,
+  confirmAsked,
+  confirmWithdrawable,
+} from "@luke/ui/confirm-state";
 import { useState } from "react";
 
 /**
@@ -23,8 +28,8 @@ interface FormDialog {
   open: boolean;
   /** Whether the answer is under way or its check is showing, which stills the card. */
   settling: boolean;
-  /** Why the last answer was refused, while no other is under way. */
-  refusal: string | undefined;
+  /** Why the last answer was refused, and the refusal as reported, while no other is under way. */
+  refusal: ConfirmRejection | undefined;
   /** Escape and Cancel: puts the question away, unless it has been answered. */
   dismiss: () => void;
   /** Enter in a field: answers where the form is valid. */

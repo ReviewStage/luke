@@ -14,6 +14,13 @@ import {
   pictureNow,
   usePicture,
 } from "./picture-cache.js";
+import { recordedFailure } from "./testing/reported-failure.js";
+
+/** What a read that did not land is reported as. */
+const { failure: UNREAD } = recordedFailure();
+
+/** Builds the failure of a read that did not land. */
+const FAILED = () => UNREAD;
 
 /**
  * picture-cache.test.ts -- the pictures a window keeps stand within a byte
@@ -87,7 +94,7 @@ test("pictures drawn together past the budget all land, none sent back to readin
   const ids = ["a", "b", "c", "d", "e", "f"];
   const shown = new Map<string, string>();
   function Picture({ id }: { id: string }): ReactElement | null {
-    shown.set(id, usePicture(OWNER, id, read).kind);
+    shown.set(id, usePicture(OWNER, id, read, FAILED).kind);
     return null;
   }
   const root = createRoot(document.createElement("div"));
@@ -115,7 +122,7 @@ test("pictures read ahead and drawn nowhere are let go by the budget, the newest
   const base64 = "A".repeat(QUARTER - "data:image/png;base64,".length);
   const read = () => Promise.resolve<PictureAnswer>({ contentType: "image/png", base64 });
   function Ahead({ id }: { id: string }): null {
-    usePicture(OWNER, id, read, false);
+    usePicture(OWNER, id, read, FAILED, false);
     return null;
   }
   const root = createRoot(document.createElement("div"));
@@ -137,7 +144,7 @@ async function drawPicture(
 ): Promise<{ readonly now: () => PictureState }> {
   let drawn: PictureState = { kind: PICTURE_STATE.READING };
   function Picture(): null {
-    drawn = usePicture(OWNER, id, read);
+    drawn = usePicture(OWNER, id, read, FAILED);
     return null;
   }
   const root = createRoot(document.createElement("div"));

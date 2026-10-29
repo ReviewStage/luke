@@ -1,5 +1,6 @@
 import type { GitHubPerson, PendingReviewComment, ReviewThread } from "@luke/features/agent-wire";
 import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
   Badge,
@@ -18,6 +19,7 @@ import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { createContext, type ReactNode, useContext, useState } from "react";
 import { ActorRef, commentAuthor } from "../actor-ref.js";
+import { confirmFailure } from "../failure-report.js";
 import { ACTS_AT_END_CLASS } from "./pull-request-look.js";
 import { useNamer } from "./pull-request-people.js";
 import { noop, useThreadWriting } from "./pull-request-thread-actions.js";
@@ -177,15 +179,18 @@ export function PendingComment({
   const writes = usePullRequestWrites(writing?.agentId ?? "", writing?.onWritten ?? noop);
   const [editing, setEditing] = useState(false);
   const surfaceOpen = useContext(PendingSurfaceContext);
-  const deleting = useConfirmDialog({ subject: true, surfaceOpen }, () =>
-    writes
-      .write({ action: PULL_REQUEST_ACTION.DELETE_REVIEW_COMMENT, commentId: draft.id })
-      .then(
-        (outcome): ActionResult =>
-          outcome.done
-            ? { status: ACTION_RESULT_STATUS.ACCEPTED }
-            : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
-      ),
+  const deleting = useConfirmDialog(
+    { subject: true, surfaceOpen },
+    () =>
+      writes
+        .write({ action: PULL_REQUEST_ACTION.DELETE_REVIEW_COMMENT, commentId: draft.id })
+        .then(
+          (outcome): ActionResult =>
+            outcome.done
+              ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+              : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
+        ),
+    confirmFailure(FAILURE_SURFACE.PULL_REQUEST_COMMENT_DELETE),
   );
   const out = writes.pending;
   const name = useNamer();

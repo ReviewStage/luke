@@ -35,6 +35,7 @@ import { useEffect, useRef, useState } from "react";
 import { landingDescription, useConnectReturn } from "./connect-return";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
+import { UNREPORTED } from "@luke/ui/reported-failure";
 import { mountPrerenderedPage } from "./mount-page";
 
 /**
@@ -203,7 +204,11 @@ function ConnectGitHub(): React.JSX.Element {
           </>
         )
       }
-      error={view.kind === VIEW.SIGN_IN && signInChoices.failed ? SIGN_IN_UNFINISHED : undefined}
+      error={
+        view.kind === VIEW.SIGN_IN && signInChoices.failed
+          ? { words: SIGN_IN_UNFINISHED, failure: UNREPORTED.NO_REPORTER }
+          : undefined
+      }
       action={open}
     >
       {view.kind === VIEW.SIGN_IN ? (

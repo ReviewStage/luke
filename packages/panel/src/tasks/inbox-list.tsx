@@ -1,5 +1,6 @@
 import { type InboxPerson, inboxAddressedTo } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   ANNOUNCE,
@@ -115,6 +116,7 @@ import {
 } from "../desktop/phone-head.js";
 import { groupCount, sidebarFold } from "../desktop/sidebar-fold.js";
 import { type TabActionGroups, useTabActions } from "../desktop/strip-tabs.js";
+import { refusedShown, unreadShown } from "../failure-report.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { PEOPLE_FILTER, PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
 import { usePhoneRoom } from "../stage-room.js";
@@ -1199,7 +1201,10 @@ function ListHead({
           asked={{ ask: asked.ask }}
         />
         {search}
-        <ErrorLine level={ANNOUNCE.ALERT}>{channel?.refusal}</ErrorLine>
+        <ErrorLine
+          level={ANNOUNCE.ALERT}
+          error={refusedShown(channel?.refusal, FAILURE_SURFACE.CHANNEL_POST)}
+        />
         {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
       </>
     );
@@ -1241,7 +1246,10 @@ function ListHead({
         />
       )}
       {search}
-      <ErrorLine level={ANNOUNCE.ALERT}>{channel?.refusal}</ErrorLine>
+      <ErrorLine
+        level={ANNOUNCE.ALERT}
+        error={refusedShown(channel?.refusal, FAILURE_SURFACE.CHANNEL_POST)}
+      />
       {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
     </>
   );
@@ -1345,7 +1353,11 @@ export function InboxListNote({
 }): React.JSX.Element | null {
   if (failed) {
     return (
-      <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.ROWS}>
+      <ErrorState
+        failure={unreadShown(FAILURE_SURFACE.INBOX_READ)}
+        onRetry={onRetry}
+        placement={ERROR_STATE_PLACEMENT.ROWS}
+      >
         {INBOX_NOT_READ}
       </ErrorState>
     );

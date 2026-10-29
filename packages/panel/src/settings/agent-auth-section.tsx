@@ -13,6 +13,7 @@ import {
   type ProviderKeysAnswer,
   type SubscriptionKeySummary,
 } from "@luke/features/provider-key-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { dayAndTimeText } from "@luke/features/time-format";
 import { readingWords, SIGNED_OUT_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -77,6 +78,7 @@ import { InfoIcon } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
 import { useSettleOpenAiKey } from "../openai-key.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
@@ -522,7 +524,11 @@ function ClaudeTokenPanel({
         }),
     [act, onAnswer],
   );
-  const removal = useConfirmDialog({ subject: plan !== undefined, surfaceOpen: true }, disconnect);
+  const removal = useConfirmDialog(
+    { subject: plan !== undefined, surfaceOpen: true },
+    disconnect,
+    confirmFailure(FAILURE_SURFACE.AGENT_KEY_REMOVE),
+  );
 
   const cancel = () => {
     setPasted("");
@@ -601,7 +607,7 @@ function ClaudeTokenPanel({
             ref={field}
             label="Claude setup-token"
             description={plan === undefined ? undefined : WORDS.REPLACES_TOKEN}
-            error={rejection}
+            error={refusedShown(rejection, FAILURE_SURFACE.AGENT_KEY_SAVE)}
             saved={plan !== undefined}
             placeholder='Paste the token from "claude setup-token"'
             disabled={saving}
@@ -724,7 +730,11 @@ function ChatGptPanel({
         }),
     [act, onAnswer],
   );
-  const removal = useConfirmDialog({ subject: plan !== undefined, surfaceOpen: true }, disconnect);
+  const removal = useConfirmDialog(
+    { subject: plan !== undefined, surfaceOpen: true },
+    disconnect,
+    confirmFailure(FAILURE_SURFACE.AGENT_KEY_REMOVE),
+  );
   const dismissNotice = useCallback(() => {
     markNoticeSeen();
     setNotice(false);
@@ -837,7 +847,11 @@ function ApiKeyPanel({
         }),
     [act, onAnswer, provider],
   );
-  const removal = useConfirmDialog({ subject: stored !== undefined, surfaceOpen: true }, remove);
+  const removal = useConfirmDialog(
+    { subject: stored !== undefined, surfaceOpen: true },
+    remove,
+    confirmFailure(FAILURE_SURFACE.AGENT_KEY_REMOVE),
+  );
 
   const cancel = () => {
     setPasted("");
@@ -883,7 +897,7 @@ function ApiKeyPanel({
             ref={field}
             label={`${name} API key`}
             description={stored === undefined ? undefined : WORDS.REPLACES_KEY}
-            error={rejection}
+            error={refusedShown(rejection, FAILURE_SURFACE.AGENT_KEY_SAVE)}
             saved={stored !== undefined}
             placeholder={`Paste your ${name} API key`}
             disabled={saving}
@@ -1179,7 +1193,10 @@ export function AgentAuthSection({
           })
         ) : readFailed ? (
           <SettingsLine>
-            <ErrorState onRetry={() => setAttempt((count) => count + 1)}>
+            <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.AGENT_KEYS_READ)}
+              onRetry={() => setAttempt((count) => count + 1)}
+            >
               {WORDS.READ_FAILED}
             </ErrorState>
           </SettingsLine>

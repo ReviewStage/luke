@@ -1,6 +1,7 @@
 import { CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import { remedyLabel } from "@luke/features/failure-remedy";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { readingWords } from "@luke/features/words";
 import {
   ErrorState,
@@ -12,6 +13,7 @@ import {
   SearchableMenu,
   Spinner,
 } from "@luke/ui";
+import { unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
 import { OPEN_SETTINGS_LABEL } from "../open-settings.js";
 import {
@@ -302,7 +304,9 @@ export function ModelMenu(props: {
       note={
         models === undefined ? (
           props.failed ? (
-            <ErrorState onRetry={props.onRetry}>{MODELS_READ_FAILED}</ErrorState>
+            <ErrorState failure={unreadShown(FAILURE_SURFACE.MODELS_READ)} onRetry={props.onRetry}>
+              {MODELS_READ_FAILED}
+            </ErrorState>
           ) : (
             <Spinner delay label={readingWords("models")} />
           )

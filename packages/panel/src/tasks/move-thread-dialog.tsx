@@ -1,5 +1,6 @@
 import type { Channel } from "@luke/features/channel-wire";
 import type { InboxItem } from "@luke/features/inbox-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   ChoiceList,
   DIALOG_SIZE,
@@ -14,6 +15,7 @@ import {
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useRef, useState } from "react";
 import { useFormDialog } from "../desktop/use-form-dialog.js";
+import { confirmFailure } from "../failure-report.js";
 import type { MoveRefused } from "./use-channels.js";
 
 /**
@@ -92,6 +94,7 @@ export function useMoveThreadDialog({
         return { status: ACTION_RESULT_STATUS.ACCEPTED };
       });
     },
+    confirmFailure(FAILURE_SURFACE.CHANNEL_MOVE),
   );
   const form = useFormDialog(confirm, chosen !== undefined);
   return {
@@ -141,7 +144,7 @@ export function useMoveThreadDialog({
             }}
           />
         </ScrollArea>
-        <ErrorLine>{form.refusal}</ErrorLine>
+        <ErrorLine error={form.refusal} />
       </Dialog>
     ),
   };

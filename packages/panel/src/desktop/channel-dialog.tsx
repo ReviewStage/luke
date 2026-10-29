@@ -1,4 +1,5 @@
 import { CHANNEL_BOUNDS, type Channel } from "@luke/features/channel-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   DIALOG_TONE,
   Dialog,
@@ -13,6 +14,7 @@ import {
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useId, useRef, useState } from "react";
+import { confirmFailure } from "../failure-report.js";
 import { channelEditable, channelSlug } from "../tasks/channels-model.js";
 import type { ChannelsControl } from "../tasks/use-channels.js";
 import { useFormDialog } from "./use-form-dialog.js";
@@ -120,6 +122,7 @@ export function useChannelDialog({
         return answered(undefined);
       });
     },
+    confirmFailure(FAILURE_SURFACE.CHANNEL_WRITE, { channelId: edited?.id }),
   );
   const editing = edited !== undefined;
   const nameLocked = edited !== undefined && !channelEditable(edited);
@@ -206,7 +209,7 @@ export function useChannelDialog({
           )}
         </FormField>
       </Stack>
-      <ErrorLine>{form.refusal}</ErrorLine>
+      <ErrorLine error={form.refusal} />
     </Dialog>
   );
   return {

@@ -20,6 +20,7 @@ import {
   useDisclosurePreviewShown,
   useDisclosureState,
 } from "@luke/ui";
+import { UNREPORTED } from "@luke/ui/reported-failure";
 import type { ReactNode } from "react";
 import { copyThroughShell } from "../copy-feedback.js";
 import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph.js";
@@ -351,7 +352,9 @@ export function ToolOutput({ block, errorText }: ToolOutputProps): ReactNode {
   if (errorText !== undefined) {
     return (
       <div data-tool-output="">
-        <FailureNote time={FAILURE_NOTE_TIME.PAST}>{errorText}</FailureNote>
+        <FailureNote failure={UNREPORTED.TOOL} time={FAILURE_NOTE_TIME.PAST}>
+          {errorText}
+        </FailureNote>
       </div>
     );
   }

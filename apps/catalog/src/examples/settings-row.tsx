@@ -35,6 +35,7 @@ import {
   TextField,
 } from "@luke/ui";
 import { useState } from "react";
+import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -83,7 +84,7 @@ function Rows(): React.JSX.Element {
       <SettingsRow
         label="Show captions"
         description="Words the call hears stand under its video."
-        error="The setting could not be saved. Try again."
+        error={{ words: "The setting could not be saved. Try again.", failure: CATALOG_FAILURE }}
       >
         {(control) => <HeldSwitch label="Show captions" control={control} />}
       </SettingsRow>
@@ -144,7 +145,10 @@ function SlottedRows(): React.JSX.Element {
         label="Linear"
         leading={<Mark provider={MARK_PROVIDER.LINEAR} />}
         below={() => <KeyForm />}
-        error="Linear did not accept this key. Check it and try again."
+        error={{
+          words: "Linear did not accept this key. Check it and try again.",
+          failure: CATALOG_FAILURE,
+        }}
       >
         {() => null}
       </SettingsRow>
@@ -267,7 +271,7 @@ function CompactRows(): React.JSX.Element {
       <SettingsRow
         density={SETTINGS_ROW_DENSITY.COMPACT}
         label="Line numbers"
-        error="The setting could not be saved. Try again."
+        error={{ words: "The setting could not be saved. Try again.", failure: CATALOG_FAILURE }}
       >
         {(control) => <HeldSwitch label="Line numbers" control={control} />}
       </SettingsRow>

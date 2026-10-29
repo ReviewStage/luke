@@ -8,6 +8,7 @@ import {
 } from "@luke/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
 import { formatBytes } from "@luke/features/number-format";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { readingWords } from "@luke/features/words";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -54,6 +55,7 @@ import type { SkillOption } from "@luke/ui/skill-mention";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { SkillCard, SkillMark } from "../tasks/skill-ref.js";
 import { SkillSourceBadge } from "../tasks/skill-source-badge.js";
@@ -228,7 +230,12 @@ function SkillFileDialog({
       {read.kind === LIST.READING ? (
         <SpinnerRegion label={`Reading ${skill.name}`} delay />
       ) : read.kind === LIST.FAILED ? (
-        <ErrorState onRetry={() => setAttempt((count) => count + 1)}>{read.line}</ErrorState>
+        <ErrorState
+          failure={unreadShown(FAILURE_SURFACE.SKILL_READ)}
+          onRetry={() => setAttempt((count) => count + 1)}
+        >
+          {read.line}
+        </ErrorState>
       ) : (
         <Stack gap={GAP.FIELD}>
           <MarkdownMessage words={fencedSkillFile(read.content.skillFile)} />
@@ -308,29 +315,35 @@ function SkillRowView({
       });
   };
 
-  const removal = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    act(ACT_KIND.INSTALLED_SKILLS_REMOVE, { skillId: skill.id })
-      .catch(() => undefined)
-      .then((answer): ActionResult => {
-        if (answer === undefined) return rejected(UNANSWERED_LINE);
-        if ("failure" in answer) return rejected(failureLine(answer));
-        onRemoved(skill.id);
-        return ACCEPTED;
-      }),
+  const removal = useConfirmDialog(
+    { subject: true, surfaceOpen: true },
+    () =>
+      act(ACT_KIND.INSTALLED_SKILLS_REMOVE, { skillId: skill.id })
+        .catch(() => undefined)
+        .then((answer): ActionResult => {
+          if (answer === undefined) return rejected(UNANSWERED_LINE);
+          if ("failure" in answer) return rejected(failureLine(answer));
+          onRemoved(skill.id);
+          return ACCEPTED;
+        }),
+    confirmFailure(FAILURE_SURFACE.SKILL_REMOVE),
   );
 
   // Note that a share moves the skill, so the row the answer lands is the
   // workspace's, and the list draws it there; a name the workspace already
   // holds stays in the question, said for that workspace.
-  const sharing = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
-    act(ACT_KIND.INSTALLED_SKILLS_SHARE, { workspaceId: workspace.id, skillId: skill.id })
-      .catch(() => undefined)
-      .then((answer): ActionResult => {
-        if (answer === undefined) return rejected(UNANSWERED_LINE);
-        if ("failure" in answer) return rejected(shareFailureLine(answer, skill.name, workspace));
-        onChanged(answer.skill, false);
-        return ACCEPTED;
-      }),
+  const sharing = useConfirmDialog(
+    { subject: true, surfaceOpen: true },
+    () =>
+      act(ACT_KIND.INSTALLED_SKILLS_SHARE, { workspaceId: workspace.id, skillId: skill.id })
+        .catch(() => undefined)
+        .then((answer): ActionResult => {
+          if (answer === undefined) return rejected(UNANSWERED_LINE);
+          if ("failure" in answer) return rejected(shareFailureLine(answer, skill.name, workspace));
+          onChanged(answer.skill, false);
+          return ACCEPTED;
+        }),
+    confirmFailure(FAILURE_SURFACE.SKILL_SHARE, { workspaceId: workspace.id }),
   );
 
   const press = {
@@ -383,7 +396,7 @@ function SkillRowView({
                   </SettingsRowStateLine>
                 </>
               ),
-              error,
+              error: refusedShown(error, FAILURE_SURFACE.SKILL_WRITE),
               landed,
               control: <SkillSourceBadge source={row.source} />,
               describedControl: (control) => (
@@ -547,7 +560,12 @@ function ShownSkills({
       {list.kind === LIST.FAILED ? (
         <SettingsSection>
           <SettingsLine>
-            <ErrorState onRetry={() => setAttempt((count) => count + 1)}>{list.line}</ErrorState>
+            <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.SKILLS_READ)}
+              onRetry={() => setAttempt((count) => count + 1)}
+            >
+              {list.line}
+            </ErrorState>
           </SettingsLine>
         </SettingsSection>
       ) : (
@@ -593,7 +611,12 @@ export function SkillsPage({
     return control.listFailed ? (
       <SettingsSection>
         <SettingsLine>
-          <ErrorState onRetry={control.onRetryList}>Your workspaces could not be read.</ErrorState>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.WORKSPACES_READ)}
+            onRetry={control.onRetryList}
+          >
+            Your workspaces could not be read.
+          </ErrorState>
         </SettingsLine>
       </SettingsSection>
     ) : (

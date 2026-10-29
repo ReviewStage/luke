@@ -34,6 +34,7 @@ import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./a
 import { openLukeFromMac } from "./open-luke";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
+import { UNREPORTED } from "@luke/ui/reported-failure";
 import { mountPrerenderedPage } from "./mount-page";
 
 const authClient = createAuthClient();
@@ -124,7 +125,11 @@ function DesktopSession(): React.JSX.Element {
       mark={<AuthMark tone={view.kind === VIEW.SAID ? LANDING_TONE.DANGER : undefined} />}
       title={view.kind === VIEW.WORKING ? "Finishing sign-in…" : view.title}
       description={view.kind === VIEW.WORKING ? undefined : view.body}
-      error={view.kind === VIEW.SIGN_IN && signInChoices.failed ? SIGN_IN_UNFINISHED : undefined}
+      error={
+        view.kind === VIEW.SIGN_IN && signInChoices.failed
+          ? { words: SIGN_IN_UNFINISHED, failure: UNREPORTED.NO_REPORTER }
+          : undefined
+      }
       action={view.kind === VIEW.SAID ? openLukeFromMac() : undefined}
     >
       {view.kind === VIEW.SIGN_IN ? (

@@ -35,6 +35,7 @@ import {
   type FeedbackKind,
   type FeedbackSubmission,
 } from "@luke/features/feedback";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { pasteCutWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENTS, type Experiment } from "@luke/settings";
@@ -60,10 +61,12 @@ import {
   Tooltip,
   useFilePicker,
 } from "@luke/ui";
+import { UNREPORTED } from "@luke/ui/reported-failure";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "./act.js";
 import { enterKeyHint, enterSubmitKey } from "./enter-sends.js";
+import { failureShown } from "./failure-report.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
 import { DROP_LEAVE, useFileDrop } from "./use-file-drop.js";
 
@@ -94,6 +97,9 @@ const IMAGE_REFUSAL = {
   UNREADABLE: "That file could not be attached.",
   FULL: `You can attach up to ${FEEDBACK_LIMITS.MAX_IMAGES} screenshots.`,
 } as const;
+
+/** The refusals of pictures handed to a note, which are the person's input checked rather than a failure of the app's. */
+const IMAGE_REFUSALS: ReadonlySet<string> = new Set(Object.values(IMAGE_REFUSAL));
 
 const SEND_REFUSAL = "Could not send that. Try again.";
 
@@ -471,7 +477,21 @@ export function FeedbackDialog({
             </Text>
           </div>
         ) : null}
-        {rejection === undefined ? null : <ErrorState>{rejection}</ErrorState>}
+        {rejection === undefined ? null : (
+          <ErrorState
+            failure={
+              IMAGE_REFUSALS.has(rejection)
+                ? UNREPORTED.INPUT
+                : failureShown({
+                    surface: FAILURE_SURFACE.FEEDBACK_SEND,
+                    cause: FAILURE_CONDITION.REFUSED,
+                    refused: true,
+                  })
+            }
+          >
+            {rejection}
+          </ErrorState>
+        )}
       </div>
     </Dialog>
   );

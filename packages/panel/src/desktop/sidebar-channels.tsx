@@ -1,4 +1,5 @@
 import type { Channel } from "@luke/features/channel-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { readingWords } from "@luke/features/words";
 import {
   BUTTON_SIZE,
@@ -16,6 +17,7 @@ import {
 } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
 import { useRef } from "react";
+import { unreadShown } from "../failure-report.js";
 import { ChannelCard } from "../tasks/channel-card.js";
 import { useChannelMenu } from "../tasks/channel-menu.js";
 import { CHANNEL_SECTIONS, channelSections, channelUnread } from "../tasks/channels-model.js";
@@ -208,7 +210,11 @@ export function SidebarChannels({
     <SidebarFilters label={CHANNELS_LABEL}>
       {sections === undefined ? (
         channels.failed ? (
-          <ErrorState placement={ERROR_STATE_PLACEMENT.ROWS} onRetry={channels.onRefresh}>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.CHANNELS_READ)}
+            placement={ERROR_STATE_PLACEMENT.ROWS}
+            onRetry={channels.onRefresh}
+          >
             {CHANNELS_NOT_READ}
           </ErrorState>
         ) : (

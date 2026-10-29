@@ -1,6 +1,7 @@
 import type { AgentStatus } from "@luke/features/agent-wire";
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskBlockRequest, TaskStanding } from "@luke/features/task-wire";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -31,6 +32,7 @@ import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
+import { failureShown, unreadShown } from "../failure-report.js";
 import { FindScope } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -949,6 +951,7 @@ function PlanDocument({
         <Fill as={FILL_ELEMENT.SECTION} className="desktop-empty-region">
           {region.kind === DOCUMENT_REGION.FAILED ? (
             <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.TASK_DOCUMENT_READ)}
               onRetry={tasks.onRetryDocument}
               placement={ERROR_STATE_PLACEMENT.CENTRED}
               exit={close}
@@ -1153,7 +1156,15 @@ function PlanDocument({
                           actions={
                             <>
                               {rename.refused ? (
-                                <FailureNote>{RENAME_FAILED_NOTE}</FailureNote>
+                                <FailureNote
+                                  failure={failureShown({
+                                    surface: FAILURE_SURFACE.TASK_RENAME,
+                                    cause: FAILURE_CONDITION.REFUSED,
+                                    refused: true,
+                                  })}
+                                >
+                                  {RENAME_FAILED_NOTE}
+                                </FailureNote>
                               ) : null}
                               <CopyChord copy={tasks.copy} />
                               {terminalDoors.terminals ? (

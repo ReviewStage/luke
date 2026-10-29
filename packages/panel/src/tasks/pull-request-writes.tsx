@@ -18,6 +18,7 @@ import {
   type PullRequestActionRequest,
   type PullRequestRefusal,
 } from "@luke/features/pull-request-write-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import {
@@ -65,6 +66,7 @@ import {
 } from "react";
 import { useAct } from "../act.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { confirmFailure, failureShown } from "../failure-report.js";
 import { useGitHubConnection } from "../github-connect.js";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
 import { useToast, useWithdrawToast } from "../toast.js";
@@ -410,15 +412,18 @@ export function PullRequestStateMenu({
   // Note that a place in the queue left unread, as a failed merge read leaves it, may be one, so it is asked about as one is: only a read saying it holds it nowhere lets Close act at once.
   const unread = queued === undefined && pullRequest.state === PULL_REQUEST_STATE.OPEN;
   const mayBeQueued = inQueue || unread;
-  const confirm = useConfirmDialog({ subject: asked && mayBeQueued, surfaceOpen: shown }, () =>
-    writes
-      .write({ action: PULL_REQUEST_ACTION.CLOSE })
-      .then(
-        (outcome): ActionResult =>
-          outcome.done
-            ? { status: ACTION_RESULT_STATUS.ACCEPTED }
-            : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
-      ),
+  const confirm = useConfirmDialog(
+    { subject: asked && mayBeQueued, surfaceOpen: shown },
+    () =>
+      writes
+        .write({ action: PULL_REQUEST_ACTION.CLOSE })
+        .then(
+          (outcome): ActionResult =>
+            outcome.done
+              ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+              : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
+        ),
+    confirmFailure(FAILURE_SURFACE.PULL_REQUEST_DEQUEUE),
   );
   // Note that a question left behind as its panel hides is let go whole, so the panel comes back asking nothing; one already answered finishes.
   if ((!shown || !mayBeQueued) && asked && !confirm.busy) setAsked(false);
@@ -539,12 +544,19 @@ export function PullRequestWriteNote({
       : openWorkspaceGitHub(place.taskId);
   const { note, dismiss } = writes;
   if (note === undefined) return null;
+  // Note that the note is the answer the write kept, the same object while it stands, and names its refusal.
+  const failure = failureShown({
+    surface: FAILURE_SURFACE.PULL_REQUEST_WRITE,
+    cause: note,
+    refused: true,
+  });
   return (
     <div className={className}>
       {note.kind === WRITE_NOTE.SIGN_IN ? (
         <ErrorState
           remedy={{ label: WRITE_WORDS.SIGN_IN_PRESS, onClick: () => void connect() }}
           onDismiss={dismiss}
+          failure={failure}
         >
           {WRITE_WORDS.SIGN_IN}
         </ErrorState>
@@ -552,11 +564,13 @@ export function PullRequestWriteNote({
         <ErrorState
           remedy={{ label: OPEN_SETTINGS_LABEL, onClick: openAccess }}
           onDismiss={dismiss}
+          failure={failure}
         >
           {note.words}
         </ErrorState>
       ) : (
         <FailureNote
+          failure={failure}
           also={<IconButton icon={<GLYPH.CLOSE />} label={WRITE_WORDS.DISMISS} onClick={dismiss} />}
         >
           {noteWords(note)}

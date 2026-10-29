@@ -15,6 +15,7 @@ import {
   type SettingsRowDensity,
   Tooltip,
 } from "@luke/ui";
+import type { ShownError } from "@luke/ui/reported-failure";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { SettingMarks } from "./marks.js";
@@ -202,7 +203,7 @@ export function PickerRow({
   /** How many of the row's writes have landed, which its Saved tick confirms each of. */
   saves?: number | undefined;
   /** What the last write was refused with, or nothing while none was. */
-  error?: React.ReactNode;
+  error?: ShownError | undefined;
   /** How the row stands; in a settings card where none is named. */
   density?: SettingsRowDensity | undefined;
 }): React.JSX.Element {

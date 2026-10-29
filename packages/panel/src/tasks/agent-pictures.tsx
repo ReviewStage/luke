@@ -26,6 +26,7 @@ import {
   useState,
 } from "react";
 import { useAct } from "../act.js";
+import { pictureUnread } from "../failure-report.js";
 import { PictureBlock } from "../picture-block.js";
 import { useAddToPlan } from "./add-to-plan.js";
 import { AttachedFileChips, messageFileChips } from "./attached-file-chips.js";
@@ -134,7 +135,7 @@ function PictureWatch({
   id: string;
   onSettled: () => void;
 }): null {
-  const state = usePicture(door.owner, id, door.read);
+  const state = usePicture(door.owner, id, door.read, pictureUnread);
   useEffect(() => onSettled(), [state.kind, onSettled]);
   return null;
 }
@@ -217,7 +218,7 @@ function ShownOne({
   shown: ShownPicture & { readonly picture: KeptPicture };
   onOpen: () => void;
 }): ReactNode {
-  const state = usePicture(door.owner, shown.picture.id, door.read);
+  const state = usePicture(door.owner, shown.picture.id, door.read, pictureUnread);
   // Note that a picture is described by its file's name, since its caption is drawn beside it, but a video's player is named by the caption, because "Video: flow" says nothing of what it shows.
   const video = state.kind === PICTURE_STATE.READY && isVideoDataUrl(state.url);
   return (
@@ -277,7 +278,7 @@ function KeptTile({
 }): ReactNode {
   return (
     <PictureSetTile
-      state={usePicture(door.owner, picture.id, door.read)}
+      state={usePicture(door.owner, picture.id, door.read, pictureUnread)}
       width={picture.width}
       height={picture.height}
       words={words}
@@ -289,7 +290,7 @@ function KeptTile({
 
 /** A picture of a set past the six drawn, read all the same, so the viewer walks the whole set. */
 function UnseenPicture({ door, picture }: { door: AgentPictureDoor; picture: KeptPicture }): null {
-  usePicture(door.owner, picture.id, door.read, false);
+  usePicture(door.owner, picture.id, door.read, pictureUnread, false);
   return null;
 }
 

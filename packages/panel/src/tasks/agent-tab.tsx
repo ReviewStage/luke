@@ -88,6 +88,7 @@ import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
 import { appPlatform } from "../app-platform.js";
 import { useAutomation } from "../automation-directory.js";
 import { copyThroughShell, useCopyToast } from "../copy-feedback.js";
+import { failureShown, unreadShown } from "../failure-report.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
@@ -1566,7 +1567,13 @@ function AgentEndLine({
   if (ended.failed) {
     return (
       <div className={END_LINE_CLASS} data-ended="" data-failed="">
-        <FailureNote time={FAILURE_NOTE_TIME.PAST}>
+        <FailureNote
+          failure={failureShown({
+            surface: FAILURE_SURFACE.AGENT_TURN,
+            cause: endReason ?? FAILURE_CONDITION.UNREAD,
+          })}
+          time={FAILURE_NOTE_TIME.PAST}
+        >
           {ended.words}
           {remedyButton}
         </FailureNote>
@@ -2053,6 +2060,7 @@ function AgentTranscriptView({
   delegation,
   reading,
   failed,
+  failedWith,
   working,
   pageRuns = false,
   sessionStarting = false,
@@ -2094,6 +2102,8 @@ function AgentTranscriptView({
   delegation?: DelegationDoors | undefined;
   reading: boolean;
   failed: boolean;
+  /** Why the transcript could not be read, as its read answered, where it failed. */
+  failedWith?: unknown;
   /** Whether the agent may still write, which is when the transcript ends on a working line. */
   working: boolean;
   /** Whether the last page read said the turn runs, after which an end that lands is said; none where no page tells it. */
@@ -2225,7 +2235,12 @@ function AgentTranscriptView({
                 <div
                   className={`${FLOATING_OVER_LOG_CLASS} top-luke-8 z-1 max-w-conversation-older bg-well px-list-inset py-tight-gap`}
                 >
-                  <ErrorState onRetry={onOlder}>{OLDER_FAILED_LINE}</ErrorState>
+                  <ErrorState
+                    failure={unreadShown(FAILURE_SURFACE.AGENT_TRANSCRIPT_OLDER_READ)}
+                    onRetry={onOlder}
+                  >
+                    {OLDER_FAILED_LINE}
+                  </ErrorState>
                 </div>
               ) : null}
               {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
@@ -2324,7 +2339,16 @@ function AgentTranscriptView({
                   </div>
                 )}
                 {failed ? (
-                  <ErrorState onRetry={onRetry}>{TRANSCRIPT_FAILED_LINE}</ErrorState>
+                  <ErrorState
+                    failure={failureShown({
+                      surface: FAILURE_SURFACE.AGENT_TRANSCRIPT_READ,
+                      cause: failedWith ?? FAILURE_CONDITION.UNREAD,
+                      about: { agentId },
+                    })}
+                    onRetry={onRetry}
+                  >
+                    {TRANSCRIPT_FAILED_LINE}
+                  </ErrorState>
                 ) : null}
               </ConversationContent>
               <ConversationScrollButton />
@@ -2336,7 +2360,15 @@ function AgentTranscriptView({
   }
   if (failed) {
     return (
-      <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+      <ErrorState
+        failure={failureShown({
+          surface: FAILURE_SURFACE.AGENT_TRANSCRIPT_READ,
+          cause: failedWith ?? FAILURE_CONDITION.UNREAD,
+          about: { agentId },
+        })}
+        onRetry={onRetry}
+        placement={ERROR_STATE_PLACEMENT.CENTRED}
+      >
         {TRANSCRIPT_FAILED_LINE}
       </ErrorState>
     );
@@ -2630,6 +2662,7 @@ function AgentTabView({
                     reading={transcript.reading || holding}
                     holding={holding}
                     failed={transcript.failed}
+                    failedWith={transcript.failedWith}
                     // Note that a rewind draws the working line from its press until its line reads back, however slow its stop and relaunch.
                     working={working || composer.rewinding}
                     pageRuns={
@@ -3167,6 +3200,7 @@ export function AgentSubagentTab({
               delegation={delegation}
               reading={transcript.reading}
               failed={transcript.failed}
+              failedWith={transcript.failedWith}
               working={agentStillWriting(status)}
               pageRuns={
                 transcript.pageStatus !== undefined && agentStillWriting(transcript.pageStatus)

@@ -25,6 +25,15 @@
  * that did not go; it stands after Retry in the same row, and holds the
  * line's control-tall first row on its own where there is no Retry.
  *
+ * A failure of the app's comes with the failure beneath it (`failure`),
+ * reported as it first stands, and offers the details of that report to
+ * copy, the copy glyph alone, named "Copy details", last in the row, so its
+ * first row is a control tall whatever else stands in it. A tool's error an
+ * agent met is no failure of the app's, but the agent's record, so it names
+ * itself so (`UNREPORTED.TOOL`): nothing reports it and it offers nothing
+ * to copy, and the same holds for the person's input checked
+ * (`UNREPORTED.INPUT`).
+ *
  * Inside what it failed in the line takes no inset of its own, standing
  * where the words around it stand (`LINE`). Where it stands in a list's
  * place instead, as a tree whose files could not be listed, it stands at the
@@ -37,12 +46,15 @@
  * failed in. The line's first row is a caption's leading tall, or a
  * control's where a press stands in it, and the mark and the words' first
  * line are centred in that row, so a failure of several lines keeps its
- * mark by its first.
+ * mark by its first. The words keep at least half the line, so presses that
+ * would take more wrap, whole, under them.
  */
 
 import type { ReactNode } from "react";
 import { GLYPH } from "../../icons/glyph-registry.js";
+import { isReported, type ReportedFailure, type Unreported } from "../../reported-failure.js";
 import { STATUS_TONE } from "../../status-tone.js";
+import { FailureCopy } from "../failure-copy/failure-copy.js";
 import { RetryButton } from "../retry-button/retry-button.js";
 
 /** Where a failure note stands: among the words of what failed, or in a list's place. */
@@ -63,7 +75,7 @@ export type FailureNoteTime = (typeof FAILURE_NOTE_TIME)[keyof typeof FAILURE_NO
 
 /** The line: the mark, the words, and the presses on one row, in the danger tone's ink at a caption's size, inset as a list's note where it stands in a list's place. */
 const LINE =
-  "luke-failure-note m-0 flex min-w-0 items-start gap-icon-gap font-ui text-caption text-tone-ink data-[look=list]:px-list-inset data-[look=list]:py-row-inset";
+  "luke-failure-note m-0 flex min-w-0 flex-wrap items-start gap-icon-gap font-ui text-caption text-tone-ink data-[look=list]:px-list-inset data-[look=list]:py-row-inset";
 
 /**
  * Each part, by whether a press stands in the first row, which is then a
@@ -74,7 +86,7 @@ const PART = {
   ROW: {
     mark: "luke-failure-note-mark flex h-control flex-none items-center [&_svg]:size-control-icon",
     words:
-      "luke-failure-note-words min-w-0 flex-[1_1_0] py-state-row-inset wrap-anywhere whitespace-pre-wrap select-text",
+      "luke-failure-note-words min-w-1/2 flex-[1_1_0] py-state-row-inset wrap-anywhere whitespace-pre-wrap select-text",
   },
   LINE: {
     mark: "luke-failure-note-mark flex h-failure-note-row flex-none items-center [&_svg]:size-control-icon",
@@ -83,15 +95,21 @@ const PART = {
   },
 } as const;
 
-/** The presses after the words, Retry then `also`. */
-const ACTS = "luke-failure-note-retry flex flex-none items-center gap-icon-gap";
+/**
+ * The presses after the words, Retry, then `also`, then Copy details. Note
+ * that the words keep at least half the line, so presses that would take
+ * more go, whole, onto the line under them, at its end, as a failure line's
+ * do (`ErrorState`).
+ */
+const ACTS = "luke-failure-note-retry ms-auto flex max-w-full flex-none items-center gap-icon-gap";
 
-/** A failure's words, `children`, behind the failed mark in the danger tone, and Retry after them where `onRetry` is given, then `also`, standing as `look` asks, an alert unless `time` says it is past. */
+/** A failure's words, `children`, behind the failed mark in the danger tone, and Retry after them where `onRetry` is given, then `also`, then Copy details where it is the app's, standing as `look` asks, an alert unless `time` says it is past. */
 export function FailureNote({
   look = FAILURE_NOTE_LOOK.LINE,
   time = FAILURE_NOTE_TIME.NOW,
   onRetry,
   also,
+  failure,
   children,
 }: {
   look?: FailureNoteLook;
@@ -101,11 +119,13 @@ export function FailureNote({
   onRetry?: (() => void) | undefined;
   /** A second act after Retry, drawn by the caller as a `@luke/ui` control; with neither, the line says its words alone. */
   also?: ReactNode;
+  /** The failure beneath the words, as the app reports it, or what names them as no failure of the app's. */
+  failure: ReportedFailure | Unreported;
   /** What failed, as "The answer could not be sent." */
   children: ReactNode;
 }): React.JSX.Element {
   const Mark = GLYPH.FAILED;
-  const acts = onRetry !== undefined || also !== undefined;
+  const acts = onRetry !== undefined || also !== undefined || isReported(failure);
   const part = acts ? PART.ROW : PART.LINE;
   return (
     <p
@@ -123,6 +143,7 @@ export function FailureNote({
         <span className={ACTS}>
           {onRetry === undefined ? null : <RetryButton onRetry={onRetry} />}
           {also}
+          <FailureCopy failure={failure} />
         </span>
       ) : null}
     </p>

@@ -3,6 +3,8 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
+import { UNREPORTED } from "../../reported-failure.js";
+import { recordedFailure } from "../../testing/reported-failure.js";
 import { ComposerFoot } from "./composer-foot.js";
 
 /**
@@ -107,12 +109,15 @@ test("a send still out is named by its busy words and takes no second press", ()
   expect(sent).toEqual([]);
 });
 
+/** The failure beneath a note that says one. */
+const { failure: FAILURE } = recordedFailure();
+
 test("the note line says a cut paste as it lands", () => {
   const words = "Only the first 4,000 characters were pasted.";
   const { container, redraw } = draw({ send: { label: "Send", empty: false } });
   expect(container.querySelector('[role="alert"]')).toBeNull();
 
-  redraw({ send: { label: "Send", empty: false }, note: { words } });
+  redraw({ send: { label: "Send", empty: false }, note: { words, failure: UNREPORTED.INPUT } });
   expect(container.querySelector('[role="alert"]')?.textContent).toBe(words);
 });
 
@@ -120,7 +125,11 @@ test("a refused send's note offers Retry, which tries again", () => {
   const tries: string[] = [];
   const { container } = draw({
     send: { label: "Send", empty: false },
-    note: { words: "The message could not be sent.", onRetry: () => tries.push("again") },
+    note: {
+      words: "The message could not be sent.",
+      onRetry: () => tries.push("again"),
+      failure: FAILURE,
+    },
   });
   act(() => button(container, "Retry").click());
   expect(tries).toEqual(["again"]);
@@ -133,6 +142,7 @@ test("a note's remedy mends what Retry cannot, and a send in words says what it 
     send: { label: "Got it", empty: false, inWords: true, onSend: () => settled.push("nod") },
     note: {
       words: "The agent is archived.",
+      failure: FAILURE,
       remedy: { label: "Unarchive", onClick: () => mended.push("back") },
     },
   });
@@ -148,6 +158,7 @@ test("a note's mend stands under its line, as a closed agent's Continue does", (
     send: { label: "Send", empty: true },
     note: {
       words: "The agent takes no more messages.",
+      failure: FAILURE,
       mends: createElement("span", { className: "mend" }, "Continue in new agent"),
     },
   });

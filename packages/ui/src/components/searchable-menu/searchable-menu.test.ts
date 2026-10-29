@@ -7,6 +7,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { POPOVER_ALIGN, POPOVER_BOUNDS, type PopoverBounds } from "../../index.js";
+import { recordedFailure } from "../../testing/reported-failure.js";
 import { ErrorState } from "../error-state/error-state.js";
 import {
   type FootRow,
@@ -286,6 +287,7 @@ test("a read that failed says so in the list's place with Retry, and never that 
       onRetry: () => {
         retried.push("retry");
       },
+      failure: recordedFailure().failure,
       children: readFailedWords("your repositories"),
     }),
   });

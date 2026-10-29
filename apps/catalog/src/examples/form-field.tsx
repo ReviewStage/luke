@@ -1,5 +1,6 @@
 import { type FieldControl, FormField, GAP, Stack, TextField } from "@luke/ui";
 import { useState } from "react";
+import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -50,7 +51,10 @@ function FormFields(): React.JSX.Element {
             <FormField
               label="Workspace name"
               description="Everyone in the workspace sees it."
-              error="A workspace by that name already exists."
+              error={{
+                words: "A workspace by that name already exists.",
+                failure: CATALOG_FAILURE,
+              }}
             >
               {(control) => <SampleInput control={control} />}
             </FormField>
@@ -74,7 +78,10 @@ function FormFields(): React.JSX.Element {
           <FormField
             label="The repository an automation's runs check out before they start"
             description="Pick one the workspace's GitHub installation can reach, or the runs start with no checkout at all."
-            error="The installation no longer reaches acme/a-repository-whose-name-runs-long."
+            error={{
+              words: "The installation no longer reaches acme/a-repository-whose-name-runs-long.",
+              failure: CATALOG_FAILURE,
+            }}
           >
             {(control) => <SampleInput control={control} />}
           </FormField>

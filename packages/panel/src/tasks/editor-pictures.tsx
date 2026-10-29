@@ -1,5 +1,6 @@
 import { PICTURE_BOUNDS } from "@luke/features/picture-wire";
 import { planAttachmentAddress, planAttachmentOf } from "@luke/features/plan-attachment-link";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { PICTURE_KEEP_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -26,6 +27,7 @@ import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "
 import { createPortal } from "react-dom";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
+import { failureShown, pictureUnread } from "../failure-report.js";
 import { encodeImage } from "../feedback-images.js";
 import {
   PICTURE_BLOCK_CLASS,
@@ -190,6 +192,11 @@ function UploadingPicture({
       ) : (
         <span className="mt-item-gap block">
           <ErrorState
+            failure={failureShown({
+              surface: FAILURE_SURFACE.PICTURE_KEEP,
+              cause: upload ?? FAILURE_CONDITION.NOT_KEPT,
+              ...(upload?.kind === UPLOAD.FAILED ? { refused: true } : undefined),
+            })}
             onRetry={upload?.kind === UPLOAD.FAILED ? onRetry : undefined}
             onRemove={onRemove}
           >
@@ -321,7 +328,12 @@ function KeptPicture({
 }): React.JSX.Element {
   const { picture, selected, doors } = drawn;
   const named = planAttachmentOf(picture.src);
-  const state = usePicture(named?.taskId ?? "", named?.attachmentId ?? "", door.read);
+  const state = usePicture(
+    named?.taskId ?? "",
+    named?.attachmentId ?? "",
+    door.read,
+    pictureUnread,
+  );
   const [describing, setDescribing] = useState<Describing | undefined>(undefined);
   const own = named?.taskId === door.taskId;
   const tools: PictureTool[] = [

@@ -1,4 +1,5 @@
 import type { Channel } from "@luke/features/channel-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { agoText } from "@luke/features/time-format";
 import {
   EmptyState,
@@ -9,6 +10,7 @@ import {
   Toolbar,
 } from "@luke/ui";
 import { useState } from "react";
+import { unreadShown } from "../failure-report.js";
 import type { InboxChannelHead } from "./inbox-list.js";
 
 /**
@@ -107,7 +109,11 @@ export function ChannelsNotRead({ onRetry }: { onRetry: () => void }): React.JSX
       aria-label="Channels not read"
     >
       <Toolbar end={TOOLBAR_INSET.COLUMN} />
-      <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={onRetry}>
+      <ErrorState
+        failure={unreadShown(FAILURE_SURFACE.CHANNEL_READ)}
+        placement={ERROR_STATE_PLACEMENT.CENTRED}
+        onRetry={onRetry}
+      >
         {CHANNELS_NOT_READ}
       </ErrorState>
     </section>
