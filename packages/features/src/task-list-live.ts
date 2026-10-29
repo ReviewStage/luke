@@ -101,6 +101,8 @@ const taskLiveRowSchema = EffectSchema.Struct({
   ),
   /** The coding agent that made the task; null for any other maker and once its row is gone. */
   creatorAgentId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  /** The task this one is a child of; null for a task at the top. Absent from a service before child tasks. */
+  parentTaskId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
 });
 
 /** Who archived an agent as its row holds it. */
@@ -367,6 +369,9 @@ function taskSummaryOf(
     ...(row.assigneeId === null || row.assigneeName === null
       ? undefined
       : { assignee: { userId: row.assigneeId, name: row.assigneeName } }),
+    ...(row.parentTaskId === undefined || row.parentTaskId === null
+      ? undefined
+      : { parentTaskId: row.parentTaskId }),
     ...(agents === undefined ? undefined : { agents: agentsSummaryOf(agents, now) }),
   };
 }

@@ -26,6 +26,7 @@ import { readAccountNames } from "@luke/database/models/workspace-store";
 import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
 import { messages, turns } from "@luke/database/schemas/storage";
+import { task } from "@luke/database/schemas/task";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import {
   DEVICE_LAYOUT,
@@ -365,7 +366,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
   );
 
   it.effect(
-    "deliver the rows the held list is built from, every status, pin, archive, and pull request alike, to every member and to no one else",
+    "deliver the rows the held list is built from, every status, pin, archive, parent, and pull request alike, to every member and to no one else",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
@@ -440,6 +441,9 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           name: "Audit log export",
           origin: { actor: PLAN_ACTOR.NOTETAKER },
         });
+        // A child task, written as a row since no start names a parent yet.
+        const db = yield* Database;
+        yield* db.update(task).set({ parentTaskId: plan.id }).where(eq(task.id, followUp.id));
 
         for (const reader of [owner, teammate, outsider]) {
           assert.deepEqual(yield* liveListOf(reader, NOW), yield* heldListOf(reader, NOW));
@@ -478,6 +482,9 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
             { actor: PLAN_ACTOR.NOTETAKER },
           ],
         );
+        const parentOf = (taskId: string) =>
+          read.plans.find((each) => each.id === taskId)?.parentTaskId;
+        assert.deepEqual([parentOf(plan.id), parentOf(followUp.id)], [undefined, plan.id]);
         const agents = read.plans.find((each) => each.id === plan.id)?.agents;
         assert.deepEqual(
           [agents?.total, agents?.working, agents?.failed, agents?.pullRequestTotal],
