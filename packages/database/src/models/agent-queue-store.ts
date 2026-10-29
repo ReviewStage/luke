@@ -313,9 +313,14 @@ const updateClaim = SqlSchema.findAll({
 
 /** A claimed message let go of, its send refused, so it stands queued in its place again; answers it where it stood claimed. */
 const updateRelease = SqlSchema.findAll({
-  Request: Schema.Struct({ agentId: Schema.String, messageId: Schema.String, now: Schema.Date }),
+  Request: Schema.Struct({
+    agentId: Schema.String,
+    messageId: Schema.String,
+    claimedAt: Schema.Date,
+    now: Schema.Date,
+  }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ agentId, messageId, now }) =>
+  execute: ({ agentId, messageId, claimedAt, now }) =>
     Database.use((db) =>
       db
         .update(queuedMessage)
@@ -324,7 +329,8 @@ const updateRelease = SqlSchema.findAll({
           and(
             eq(queuedMessage.agentId, agentId),
             eq(queuedMessage.id, messageId),
-            sql`${queuedMessage.claimedAt} is not null`,
+            // Note that only the claim that sent it is let go of: one taken again since it lapsed is another send's.
+            eq(queuedMessage.claimedAt, claimedAt),
           ),
         )
         .returning({ id: queuedMessage.id }),
@@ -353,15 +359,21 @@ const updatePosition = SqlSchema.void({
     ),
 });
 
-/** A message deleted; where `unclaimedAt` names a time, only one no send stood claimed on then, as a member's delete or steer takes. */
+/**
+ * A message deleted: a member's, only where no send stood claimed on it at
+ * `unclaimedAt`; a send's, only under the claim it was sent under
+ * (`claimedAt`), so a send that outlived its claim deletes nothing another
+ * claim now sends.
+ */
 const deleteMessage = SqlSchema.findAll({
   Request: Schema.Struct({
     agentId: Schema.String,
     messageId: Schema.String,
     unclaimedAt: Schema.NullOr(Schema.Date),
+    claimedAt: Schema.NullOr(Schema.Date),
   }),
   Result: QueuedRowSchema,
-  execute: ({ agentId, messageId, unclaimedAt: now }) =>
+  execute: ({ agentId, messageId, unclaimedAt: now, claimedAt }) =>
     Database.use((db) =>
       db
         .delete(queuedMessage)
@@ -370,6 +382,7 @@ const deleteMessage = SqlSchema.findAll({
             eq(queuedMessage.agentId, agentId),
             eq(queuedMessage.id, messageId),
             now === null ? undefined : unclaimedAt(now),
+            claimedAt === null ? undefined : eq(queuedMessage.claimedAt, claimedAt),
           ),
         )
         .returning({
@@ -481,8 +494,8 @@ function reaches(userId: string, agentId: string): AgentQueueEffect<boolean> {
   return Effect.map(findReached({ userId, agentId }), (rows) => rows.length > 0);
 }
 
-/** The agent's queue as it stands, its messages in order, its pause, and its revision, for a caller that already asked whether the reader reaches the agent. */
-export function agentQueueNow(agentId: string): AgentQueueEffect<AgentQueueRead> {
+/** The queue's three parts as they stand, read inside a caller's transaction. */
+function queueRead(agentId: string): AgentQueueEffect<AgentQueueRead> {
   return Effect.gen(function* () {
     const rows = yield* findMessages({ agentId });
     const [pause] = yield* findPause({ agentId });
@@ -500,6 +513,24 @@ export function agentQueueNow(agentId: string): AgentQueueEffect<AgentQueueRead>
       revision: revision?.revision ?? 0,
     };
   });
+}
+
+/**
+ * The agent's queue as it stands, its messages in order, its pause, and its
+ * revision, for a caller that already asked whether the reader reaches the
+ * agent. Note that the three are read as one, holding the queue's lock
+ * shared, which every write holds whole, so no read joins rows from before a
+ * write to a revision from after it.
+ */
+export function agentQueueNow(agentId: string): AgentQueueEffect<AgentQueueRead> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.andThen(
+        client`select pg_advisory_xact_lock_shared(hashtextextended(${agentId}, 7))`,
+        queueRead(agentId),
+      ),
+    ),
+  );
 }
 
 /**
@@ -647,7 +678,12 @@ export function takeQueuedMessage(
     Effect.gen(function* () {
       if (!(yield* reaches(userId, agentId))) return Option.none();
       const now = yield* DateTime.nowAsDate;
-      const [taken] = yield* deleteMessage({ agentId, messageId, unclaimedAt: now });
+      const [taken] = yield* deleteMessage({
+        agentId,
+        messageId,
+        unclaimedAt: now,
+        claimedAt: null,
+      });
       yield* deletePauseIfEmpty({ agentId });
       return Option.some(Option.map(Option.fromNullishOr(taken), messageOf));
     }),
@@ -733,22 +769,32 @@ export function resumeAgentQueue(
 /**
  * The agent's queue paused for `because` where it holds a message, naming
  * the refusal for a hand-off refused; a queue already paused keeps the reason
- * it paused for first, and an empty queue is not paused.
+ * it paused for first, and an empty queue is not paused. Answers whether
+ * this pause is the one that now stands.
  */
 export function pauseAgentQueue(
   agentId: string,
   because: QueuePause,
   refusal?: HostedApiError,
-): AgentQueueEffect<void> {
+): AgentQueueEffect<boolean> {
+  return underQueueLock(
+    agentId,
+    Effect.gen(function* () {
+      const now = yield* DateTime.nowAsDate;
+      const paused = yield* insertPause({ agentId, because, refusal: refusal ?? null, now });
+      return paused.length > 0;
+    }),
+    (paused) => paused,
+  );
+}
+
+/** A pause the service wrote taken back, as a Stop that stopped nothing takes back the one it wrote first. */
+export function liftAgentQueuePause(agentId: string): AgentQueueEffect<void> {
   return Effect.asVoid(
     underQueueLock(
       agentId,
-      Effect.gen(function* () {
-        const now = yield* DateTime.nowAsDate;
-        const paused = yield* insertPause({ agentId, because, refusal: refusal ?? null, now });
-        return paused.length > 0;
-      }),
-      (paused) => paused,
+      Effect.map(deletePause({ agentId }), (lifted) => lifted.length > 0),
+      (lifted) => lifted,
     ),
   );
 }
@@ -764,7 +810,7 @@ export function claimQueueHead(agentId: string): AgentQueueEffect<Option.Option<
   return underQueueLock(
     agentId,
     Effect.gen(function* () {
-      const queue = yield* agentQueueNow(agentId);
+      const queue = yield* queueRead(agentId);
       const now = yield* DateTime.nowAsDate;
       if (queue.paused !== undefined) return Option.none();
       if (queue.messages.some((message) => claimedAt(message, now))) return Option.none();
@@ -777,16 +823,59 @@ export function claimQueueHead(agentId: string): AgentQueueEffect<Option.Option<
   );
 }
 
-/** A claimed message let go of, its send refused, so it stands queued in its place again (CLAIMED -> QUEUED). */
-export function releaseQueuedMessage(agentId: string, messageId: string): AgentQueueEffect<void> {
+/** A claimed message let go of under the claim it was sent under, its send refused, so it stands queued in its place again (CLAIMED -> QUEUED). */
+export function releaseQueuedMessage(
+  agentId: string,
+  message: Pick<QueuedMessageRow, "id" | "claimedAt">,
+): AgentQueueEffect<void> {
+  return Effect.asVoid(
+    underQueueLock(agentId, released(agentId, message), (wasReleased) => wasReleased),
+  );
+}
+
+/** The release itself, inside a caller's lock, answering whether it let the claim go. */
+function released(
+  agentId: string,
+  message: Pick<QueuedMessageRow, "id" | "claimedAt">,
+): AgentQueueEffect<boolean> {
+  return Effect.gen(function* () {
+    if (message.claimedAt === undefined) return false;
+    const now = yield* DateTime.nowAsDate;
+    const rows = yield* updateRelease({
+      agentId,
+      messageId: message.id,
+      claimedAt: message.claimedAt,
+      now,
+    });
+    return rows.length > 0;
+  });
+}
+
+/**
+ * A claimed message whose send the service refused: let go of under its
+ * claim, and the queue paused under the refusal, in one transaction, so no
+ * hand-off claims it again between the two (CLAIMED -> QUEUED, paused).
+ */
+export function refuseQueuedMessage(
+  agentId: string,
+  message: Pick<QueuedMessageRow, "id" | "claimedAt">,
+  refusal: HostedApiError,
+): AgentQueueEffect<void> {
   return Effect.asVoid(
     underQueueLock(
       agentId,
       Effect.gen(function* () {
+        const wasReleased = yield* released(agentId, message);
         const now = yield* DateTime.nowAsDate;
-        return (yield* updateRelease({ agentId, messageId, now })).length > 0;
+        const paused = yield* insertPause({
+          agentId,
+          because: QUEUE_PAUSE.REFUSED,
+          refusal,
+          now,
+        });
+        return wasReleased || paused.length > 0;
       }),
-      (released) => released,
+      (changed) => changed,
     ),
   );
 }
@@ -851,13 +940,21 @@ export function unpausedQueues(
   return findUnpausedQueues({ limit });
 }
 
-/** A claimed message sent, taken out of the agent's queue (CLAIMED -> gone), the pause going with the last; nothing where it stood queued no longer. */
-export function dropQueuedMessage(agentId: string, messageId: string): AgentQueueEffect<void> {
+/** A claimed message sent, taken out of the agent's queue under the claim it was sent under (CLAIMED -> gone), the pause going with the last; nothing where that claim stands no longer. */
+export function dropQueuedMessage(
+  agentId: string,
+  message: Pick<QueuedMessageRow, "id" | "claimedAt">,
+): AgentQueueEffect<void> {
   return Effect.asVoid(
     underQueueLock(
       agentId,
       Effect.gen(function* () {
-        const dropped = yield* deleteMessage({ agentId, messageId, unclaimedAt: null });
+        const dropped = yield* deleteMessage({
+          agentId,
+          messageId: message.id,
+          unclaimedAt: null,
+          claimedAt: message.claimedAt ?? null,
+        });
         yield* deletePauseIfEmpty({ agentId });
         return dropped.length > 0;
       }),

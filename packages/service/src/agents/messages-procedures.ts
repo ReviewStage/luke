@@ -86,7 +86,6 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
-import { controlsAgent } from "./agent-reach.js";
 import {
   claimNext,
   queueEveFor,
@@ -411,8 +410,8 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
     }) {
       const { agent } = yield* reachedAgent(context.userId, input.params.id);
       const { userId } = context;
-      // The queue is the agent's messages to come, so whoever may message the agent alone may change it.
-      if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+      // The queue is its starter's own messages to come, so the starter alone changes it; a teammate reads it.
+      if (agent.userId !== userId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
       const eve = queueEveFor(seams, context.request, userId);
       const body = input.body;
       /** A store's answer for the account's agent, its absence answered as no such agent. */
@@ -461,7 +460,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           const message = claimed.value;
           yield* sendQueued(eve, agent, message).pipe(
             Effect.tapError(() =>
-              hostedStoreOrUnavailable(releaseQueuedMessage(agent.id, message.id)),
+              hostedStoreOrUnavailable(releaseQueuedMessage(agent.id, message)),
             ),
           );
           break;

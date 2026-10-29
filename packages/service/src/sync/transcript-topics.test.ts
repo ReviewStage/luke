@@ -160,7 +160,7 @@ it.layer(getTestDB())("what moves a coding agent's transcript notifies", (it) =>
           queueAgentMessage(userId, agentId, { clientKey: randomUUID(), text: "Second" }),
         );
         const head = Option.getOrThrow(yield* moved(claimQueueHead(agentId)));
-        yield* moved(dropQueuedMessage(agentId, head.id));
+        yield* moved(dropQueuedMessage(agentId, head));
         const [second] = Option.getOrThrow(yield* readAgentQueue(userId, agentId)).messages;
         assert.ok(second !== undefined);
         yield* moved(holdQueuedMessage(userId, agentId, second.id, true));

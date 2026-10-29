@@ -1,5 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { pauseAgentQueue } from "@luke/database/models/agent-queue-store";
+import { liftAgentQueuePause, pauseAgentQueue } from "@luke/database/models/agent-queue-store";
 import {
   type Agent,
   type AgentLatestTurn,
@@ -217,9 +217,15 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   // An agent its starter's plan pays for is stopped by those the plan's policy admits.
   yield* admitsPlanWriter(account, agent);
-  yield* cancelledTurn(eveFor(reach, request, account), writer, agent);
-  // The developer's Stop pauses what is queued behind the turn too, once it went, so nothing more goes until Resume.
-  yield* hostedStoreOrUnavailable(pauseAgentQueue(agent.id, QUEUE_PAUSE.STOPPED));
+  // The developer's Stop pauses what is queued behind the turn too, so nothing more goes until Resume. Note that it
+  // pauses before the cancel goes out, because the turn's end may land before eve answers it, and would hand on
+  // a queue not yet paused; and that a cancel refused, or one that stopped nothing, takes the pause back.
+  const paused = yield* hostedStoreOrUnavailable(pauseAgentQueue(agent.id, QUEUE_PAUSE.STOPPED));
+  const lifted = paused ? hostedStoreOrUnavailable(liftAgentQueuePause(agent.id)) : Effect.void;
+  const stopped = yield* cancelledTurn(eveFor(reach, request, account), writer, agent).pipe(
+    Effect.onError(() => Effect.orElseSucceed(lifted, () => undefined)),
+  );
+  if (!stopped) yield* lifted;
 });
 
 /**

@@ -1,4 +1,6 @@
+import { useAtomValue } from "@effect/atom-react";
 import type { AgentQueue, QueuedMessage } from "@luke/features/agent-queue-wire";
+import { LINE_GRACE_MILLIS } from "@luke/features/agent-status";
 import { AGENT_CALL_FAILURE, type AgentQueueAnswerView } from "@luke/features/agent-view";
 import {
   type AgentAttachment,
@@ -8,8 +10,12 @@ import {
 } from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { Clock, Duration, Option, Schedule, Stream } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import type { HeldComposer } from "./use-agent-composer.js";
 
 /**
@@ -33,6 +39,20 @@ const UNANSWERED: AgentQueueAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERE
 /** What a refused delete says in its dialog. */
 const DELETE_REFUSED = "Luke could not delete the message. Try again.";
 
+/** How often an open edit's hold is sent again: within the grace it lapses after (`LINE_GRACE_MILLIS`). */
+const HOLD_RENEWAL = Duration.millis(LINE_GRACE_MILLIS / 2);
+
+/** The renderer clock read each `HOLD_RENEWAL`, which an open edit renews its hold on. */
+const holdRenewalAtom = rendererRuntime.atom(
+  // Note that its first reading, as the edit opens, is dropped, since the edit's own hold has just gone.
+  Stream.fromEffectSchedule(Clock.currentTimeMillis, Schedule.spaced(HOLD_RENEWAL)).pipe(
+    Stream.drop(1),
+  ),
+);
+
+/** No reading, while no edit stands open. */
+const NO_RENEWAL = Atom.make(AsyncResult.initial<number>());
+
 /** A queue with nothing in it, as an agent's page before its first change carries none. */
 const EMPTY: AgentQueue = { messages: [], revision: 0 };
 
@@ -47,6 +67,8 @@ interface Out {
 function drawnWith(queue: AgentQueue, change: AgentQueueChange): AgentQueue {
   switch (change.change) {
     case QUEUE_CHANGE.ADD:
+      // A message the page lists under its key has landed, and is drawn as the page draws it.
+      if (queue.messages.some((message) => message.clientKey === change.clientKey)) return queue;
       return {
         ...queue,
         messages: [
@@ -99,6 +121,8 @@ export interface AgentQueueControl {
   readonly messages: readonly QueuedMessage[];
   /** The messages queued from this tab that have not landed yet, by the id they are drawn under, which take no press. */
   readonly landing: ReadonlySet<string>;
+  /** The messages the service's queue lists now, by id, whatever this tab's changes still out draw over them. */
+  readonly listed: ReadonlySet<string>;
   readonly paused: AgentQueue["paused"];
   /** One change, answered as the service answered it, sent once `after` settles where one is given. */
   readonly change: (
@@ -127,11 +151,15 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
     );
   }, [standing.length, out.length, page.revision]);
   const drawn = standing.reduce((held, each) => drawnWith(held, each.change), page);
+  const landed = new Set(page.messages.flatMap((message) => message.clientKey ?? []));
   const landing = new Set(
     standing.flatMap((each) =>
-      each.change.change === QUEUE_CHANGE.ADD ? [each.change.clientKey] : [],
+      each.change.change === QUEUE_CHANGE.ADD && !landed.has(each.change.clientKey)
+        ? [each.change.clientKey]
+        : [],
     ),
   );
+  const listed = new Set(page.messages.map((message) => message.id));
   const change = (next: AgentQueueChange, after?: Promise<unknown>) => {
     counter.current += 1;
     const id = counter.current;
@@ -166,7 +194,7 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
           ? { status: ACTION_RESULT_STATUS.REJECTED, reason: DELETE_REFUSED }
           : { status: ACTION_RESULT_STATUS.ACCEPTED },
     );
-  return { messages: drawn.messages, landing, paused: drawn.paused, change, move, remove };
+  return { messages: drawn.messages, landing, listed, paused: drawn.paused, change, move, remove };
 }
 
 /** The box's words and files kept aside while it holds a queued message's words being edited. */
@@ -209,11 +237,26 @@ export function useQueueEditing(
     HeldComposer,
     "draft" | "setDraft" | "attachments" | "setAttachments" | "sendsSettled"
   >,
-  queue: Pick<AgentQueueControl, "change">,
+  queue: Pick<AgentQueueControl, "change" | "listed">,
 ): QueueEditing {
   const [stashed, setStashed] = useState<Stashed | undefined>();
   const held = useRef<string | undefined>(undefined);
   held.current = stashed?.id;
+  // Whether the service's queue has listed the message since its edit opened, which its leaving the queue is read against.
+  const seen = useRef(false);
+  const listed = stashed !== undefined && queue.listed.has(stashed.id);
+  if (listed) seen.current = true;
+  if (stashed === undefined) seen.current = false;
+  // A message that left the queue while its edit stood open, sent or deleted elsewhere, is no longer the box's to
+  // edit: the edit closes, its words left in the box.
+  const left = stashed !== undefined && seen.current && !listed;
+  useEffect(() => {
+    if (left) setStashed(undefined);
+  }, [left]);
+  // The hold renewed while the edit stands open, before it lapses, so the hand-off never sends the words it replaces.
+  const renewal = Option.getOrUndefined(
+    AsyncResult.value(useAtomValue(stashed === undefined ? NO_RENEWAL : holdRenewalAtom)),
+  );
   // The box's words as they stand now, which an answer that lands later reads rather than those of the draw that asked.
   const draft = useRef(composer.draft);
   draft.current = composer.draft;
@@ -233,6 +276,11 @@ export function useQueueEditing(
     },
     [],
   );
+  useEffect(() => {
+    const id = held.current;
+    if (renewal === undefined || id === undefined) return;
+    void latestChange.current({ change: QUEUE_CHANGE.HOLD, messageId: id, held: true });
+  }, [renewal]);
   const giveBack = (stash: Stashed) => {
     composer.setDraft(stash.text);
     composer.setAttachments(() => stash.attachments);

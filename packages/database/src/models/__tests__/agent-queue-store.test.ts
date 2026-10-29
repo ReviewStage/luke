@@ -119,7 +119,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         // The head claimed and let go of, as a refused send lets it go, so each claim below reads it afresh.
         const claimed = Effect.fn(function* () {
           const head = Option.getOrThrow(yield* claimQueueHead(agentId));
-          yield* releaseQueuedMessage(agentId, head.id);
+          yield* releaseQueuedMessage(agentId, head);
           return head;
         });
         const head = yield* claimed();
@@ -132,7 +132,7 @@ it.layer(getTestDB())("an agent's queue", (it) => {
         yield* holdQueuedMessage(userId, agentId, head.id, true);
         yield* TestClock.adjust(Duration.millis(LINE_GRACE_MILLIS));
         assert.equal((yield* claimed()).text, "First");
-        yield* dropQueuedMessage(agentId, head.id);
+        yield* dropQueuedMessage(agentId, Option.getOrThrow(yield* claimQueueHead(agentId)));
         yield* pauseAgentQueue(agentId, QUEUE_PAUSE.TURN_FAILED);
         const [last] = Option.getOrThrow(yield* readAgentQueue(userId, agentId)).messages;
         assert.ok(last !== undefined);
@@ -178,8 +178,17 @@ it.layer(getTestDB())("an agent's queue", (it) => {
 
         // A send cut off before it answered is sent again once its claim lapses.
         yield* TestClock.adjust(Duration.millis(LINE_GRACE_MILLIS));
-        assert.equal(Option.getOrThrow(yield* claimQueueHead(agentId)).id, sending.id);
-        yield* releaseQueuedMessage(agentId, sending.id);
+        const again = Option.getOrThrow(yield* claimQueueHead(agentId));
+        assert.equal(again.id, sending.id);
+        // The first send, answering late, lets go of and drops nothing under the claim taken since.
+        yield* releaseQueuedMessage(agentId, sending);
+        yield* dropQueuedMessage(agentId, sending);
+        assert.deepEqual(
+          yield* editQueuedMessage(userId, agentId, sending.id, "First, reworded"),
+          Option.some(false),
+          "the message still stands claimed by the second send",
+        );
+        yield* releaseQueuedMessage(agentId, again);
         assert.deepEqual(
           yield* editQueuedMessage(userId, agentId, sending.id, "First, reworded"),
           Option.some(true),

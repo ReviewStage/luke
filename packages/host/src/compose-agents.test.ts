@@ -1542,6 +1542,30 @@ it.effect(
 );
 
 it.effect(
+  "a followed transcript reads its page again at the edge a page names though it would not hold, as a queued message's edit lapsing",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, sealTranscript, pageNow: script, pageNewest, live } = yield* subject();
+      sealTranscript(LIVE_ANSWERED);
+      pageNewest(newestPage("1:0", "Reading the invites.", "40"));
+      script({ ...pageNow("1:0", { holds: false, text: "Reading the invites." }), wakeIn: 3_000 });
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      transcriptRows(live, 1);
+      yield* settled;
+      const reads = () => asked.filter((ask) => ask.startsWith("messages-now")).length;
+      const before = reads();
+
+      yield* TestClock.adjust("2 seconds");
+      yield* settled;
+      assert.equal(reads(), before, "nothing is read before the edge");
+      yield* TestClock.adjust("1 second");
+      yield* settled;
+      assert.equal(reads(), before + 1, "the edge reads the page");
+    }),
+);
+
+it.effect(
   "a followed transcript reads its page again when only the agent's queue moves, or a line of the developer's lands awaiting its turn, whoever wrote it",
   () =>
     Effect.gen(function* () {

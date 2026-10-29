@@ -66,7 +66,7 @@ import {
 } from "../../core.js";
 import { heldUntil } from "../../http/held-read.js";
 import { ModelCatalog, type OfferedModel } from "../../providers/model-catalog.js";
-import { queueOnPage } from "./agent-queue.js";
+import { queueLapseAt, queueOnPage } from "./agent-queue.js";
 import { CODER } from "./bounds.js";
 import { agentContextOf, contextWindowOf } from "./context.js";
 import {
@@ -808,7 +808,7 @@ export function transcriptPast(
 export interface TranscriptNow {
   readonly page: TranscriptPage;
   readonly holds: boolean;
-  /** Milliseconds from now until an agent past its grace or a title's window closing may end the hold, which no row changing says; absent where nothing but a row may. */
+  /** Milliseconds from now until an agent past its grace or a title's window closing may end the hold, or a queued message's edit or send lapses, which no row changing says; absent where nothing but a row may. */
   readonly wakeIn?: number;
 }
 
@@ -834,11 +834,13 @@ export function transcriptNow(
     const { page, turn, graceEdge } = yield* pagePast(target, tools, after, agent);
     const holds = yield* holdsFor(page, titleAwaited);
     const read = { page: yield* withUsage(target, tools, page, turn, own), holds };
-    if (!holds) return read;
-    const edge = yield* holdEdgeOf(page, graceEdge, titleEdge);
-    if (edge === undefined) return read;
+    const holdEdge = holds ? yield* holdEdgeOf(page, graceEdge, titleEdge) : undefined;
+    // A queued message's edit or send lapsing moves the queue with no row written, so the page names it too.
+    const queueEdge = own === undefined ? undefined : yield* queueLapseAt(own.id);
+    const edges = [holdEdge, queueEdge].filter((edge) => edge !== undefined);
+    if (edges.length === 0) return read;
     const now = yield* Clock.currentTimeMillis;
-    return { ...read, wakeIn: Math.max(1, edge - now) };
+    return { ...read, wakeIn: Math.max(1, Math.min(...edges) - now) };
   });
 }
 

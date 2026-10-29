@@ -32,7 +32,7 @@ import {
   heldAt,
   pauseAgentQueue,
   type QueuedMessageRow,
-  releaseQueuedMessage,
+  refuseQueuedMessage,
   unpausedQueues,
 } from "@luke/database/models/agent-queue-store";
 import { type Agent, readAgent } from "@luke/database/models/agent-store";
@@ -41,6 +41,7 @@ import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import type { HostedApiError } from "@luke/features";
 import { type AgentQueue, QUEUE_PAUSE, type QueuePause } from "@luke/features/agent-queue-wire";
+import { LINE_GRACE_MILLIS } from "@luke/features/agent-status";
 import { AGENT_STATUS } from "@luke/features/agent-wire";
 import { TURN_STATUS } from "@luke/wire";
 import { Clock, DateTime, Effect, Option } from "effect";
@@ -95,6 +96,7 @@ export function wireQueue(read: AgentQueueRead, now: Date): AgentQueue {
       id: message.id,
       text: message.text,
       queuedBy: message.userId,
+      clientKey: message.clientKey,
       ...(heldAt(message, now) ? { editing: true as const } : undefined),
       ...(message.attachments.length === 0
         ? undefined
@@ -105,7 +107,8 @@ export function wireQueue(read: AgentQueueRead, now: Date): AgentQueue {
             })),
           }),
     })),
-    ...(read.paused === undefined
+    // Note that a pause stands only over messages, so one a member's messages cascaded out from under reads as none.
+    ...(read.paused === undefined || queued.length === 0
       ? undefined
       : {
           paused: {
@@ -122,6 +125,23 @@ export function queueOnPage(agentId: string) {
   return Effect.gen(function* () {
     const read = yield* agentQueueNow(agentId);
     return wireQueue(read, yield* DateTime.nowAsDate);
+  });
+}
+
+/** When the next of the queue's edits or sends lapses, in epoch milliseconds, which moves it with no row written; none where none stands. */
+export function queueLapseAt(agentId: string) {
+  return Effect.gen(function* () {
+    const read = yield* agentQueueNow(agentId);
+    const now = yield* DateTime.nowAsDate;
+    const lapses = read.messages.flatMap((message) => [
+      ...(heldAt(message, now) && message.heldUntil !== undefined
+        ? [message.heldUntil.getTime()]
+        : []),
+      ...(claimedAt(message, now) && message.claimedAt !== undefined
+        ? [message.claimedAt.getTime() + LINE_GRACE_MILLIS]
+        : []),
+    ]);
+    return lapses.length === 0 ? undefined : Math.min(...lapses);
   });
 }
 
@@ -158,7 +178,13 @@ export const sendQueued = Effect.fn("web/sendQueued")(function* (
     ...(message.attachments.length === 0 ? undefined : { attachments: message.attachments }),
     sender: { kind: MESSAGE_SENDER.MEMBER, userId: message.userId },
   });
-  yield* hostedStoreOrUnavailable(dropQueuedMessage(agent.id, message.id));
+  // Note that the message went, so a failure to take it out of the queue is no refusal of it: it is logged, and
+  // its claim left to lapse, after which the next hand-off sends it again under its key, answered as a repeat.
+  yield* dropQueuedMessage(agent.id, message).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning("agent-queue: a sent message's drop failed", cause),
+    ),
+  );
 });
 
 /**
@@ -196,10 +222,7 @@ export const sendClaimed = Effect.fn("web/sendClaimedQueued")(function* (
   yield* sendQueued(eveFor, agent, message).pipe(
     Effect.catch((refusal: HostedRefusal) =>
       hostedStoreOrUnavailable(
-        Effect.andThen(
-          releaseQueuedMessage(agent.id, message.id),
-          pauseAgentQueue(agent.id, QUEUE_PAUSE.REFUSED, refusal.error as HostedApiError),
-        ),
+        refuseQueuedMessage(agent.id, message, refusal.error as HostedApiError),
       ),
     ),
     Effect.catchCause((cause) => Effect.logWarning("agent-queue: a hand-off failed", cause)),
@@ -232,7 +255,7 @@ export const queueAtTurnEnd = Effect.fn("web/queueAtTurnEnd")(function* (
   const status = turns?.get(agent.conversationId)?.status;
   const because = PAUSE_OF_TURN.get(status ?? "");
   if (because !== undefined) {
-    return yield* pauseAgentQueue(agent.id, because).pipe(
+    return yield* Effect.asVoid(pauseAgentQueue(agent.id, because)).pipe(
       Effect.catchCause((cause) => Effect.logWarning("agent-queue: a pause failed", cause)),
     );
   }

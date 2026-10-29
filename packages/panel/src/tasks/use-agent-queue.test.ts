@@ -205,3 +205,33 @@ test("an edit steered is one change of the message it edits, with its new words,
   assert.equal(now().editing.editing, undefined);
   assert.equal(sent.filter((each) => each.change === QUEUE_CHANGE.ADD).length, 0);
 });
+
+test("a message queued is drawn once, never beside its own row on a page that lists it before the queue answers", async () => {
+  act(() => now().page({ messages: [], revision: 1 }));
+  act(() => now().composer.setDraft("Hello"));
+  act(() => now().editing.queue());
+  await settle();
+  const [added] = sent;
+  assert.ok(added?.change === QUEUE_CHANGE.ADD);
+
+  act(() =>
+    now().page({
+      messages: [{ ...message("m1", "Hello"), clientKey: added.clientKey }],
+      revision: 2,
+    }),
+  );
+
+  assert.deepEqual(texts(), ["Hello"]);
+});
+
+test("an edit whose message left the queue, sent or deleted elsewhere, closes and keeps its words in the box", async () => {
+  act(() => now().page({ messages: [message("m1", "Run tests")], revision: 1 }));
+  act(() => now().editing.edit(message("m1", "Run tests")));
+  await answer({ queue: { messages: [message("m1", "Run tests")], revision: 2 } });
+  act(() => now().composer.setDraft("Run tests and fix failures"));
+
+  act(() => now().page({ messages: [], revision: 3 }));
+
+  assert.equal(now().editing.editing, undefined);
+  assert.equal(now().composer.draft, "Run tests and fix failures");
+});

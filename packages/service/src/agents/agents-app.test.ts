@@ -438,6 +438,8 @@ function fakeEve(
     readonly cancelsTogether?: number;
     /** What eve looks at as it is asked to retire a session, written down beside the retire. */
     readonly resetSees?: Effect.Effect<boolean>;
+    /** What happens while a cancel is out, before eve answers it, as a turn's end racing the Stop does. */
+    readonly cancelling?: Effect.Effect<void>;
   } = {},
 ) {
   const together = Latch.makeUnsafe(options.cancelsTogether === undefined);
@@ -499,7 +501,7 @@ function fakeEve(
         cancelledAs.push(authorization);
         if (cancelled.length >= (options.cancelsTogether ?? 0)) together.openUnsafe();
         return Effect.as(
-          together.await,
+          Effect.andThen(together.await, options.cancelling ?? Effect.void),
           options.cancels === false
             ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
             : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED },
@@ -5374,12 +5376,16 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       /** One queued message handed on, as a hand-off does once it read the queue's head. */
       const handedOn = (message: QueuedMessageRow) =>
         sendQueued(eveFor, stored, message).pipe(Effect.provide(reach));
-      // Note that the read at once says whether it would have held, which the page itself does not carry.
+      // Note that the read at once says whether it would have held, and when the clock alone moves it, which the page itself does not carry.
       const queued = Effect.map(
         ask(request(AGENT_MESSAGES, owner, { id: agent.id, wait: "none" })),
         (answered) => {
           // SAFETY: the route answers a page as a JSON object.
-          const { holds: _holds, ...page } = answered.body as Record<string, WireBoundaryInput>;
+          const {
+            holds: _holds,
+            wakeIn: _wakeIn,
+            ...page
+          } = answered.body as Record<string, WireBoundaryInput>;
           return readAnswer(agentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, {
             status: answered.status,
             body: page,
@@ -5478,6 +5484,29 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           [],
           "the message left the queue rather than standing claimed",
         );
+      }),
+  );
+
+  it.effect(
+    "an idle agent's page names when a queued message's edit lapses, which moves the queue with no row written",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { agent, ask, owner, queued } = yield* queuedBehindEndedTurn(eve, ["Edited"]);
+        const [edited] = (yield* queued)?.messages ?? [];
+        assert.ok(edited !== undefined);
+        yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.HOLD,
+          messageId: edited.id,
+          held: true,
+        });
+
+        const read = yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, wait: "none" }));
+
+        // SAFETY: the route answers a page as a JSON object.
+        const body = read.body as Record<string, WireBoundaryInput>;
+        assert.equal(body.holds, false, "nothing runs, so the read would not hold");
+        assert.equal(body.wakeIn, LINE_GRACE_MILLIS);
       }),
   );
 
@@ -5749,6 +5778,102 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const resumed = yield* queueChanged(ask, owner, agent.id, { change: QUEUE_CHANGE.RESUME });
         assert.equal(resumed.paused, undefined);
       }),
+  );
+
+  it.effect(
+    "only the agent's starter changes its queue: a teammate who may message the agent reads its queue and changes none of it",
+    () =>
+      Effect.gen(function* () {
+        const opened = yield* startedAgent(fakeEve(), { running: true });
+        yield* joinWorkspace(opened.task.workspaceId, opened.other);
+        const { agent, ask, owner, other } = opened;
+        yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.ADD,
+          text: "Open the pull request.",
+          clientKey: randomUUID(),
+        });
+
+        const changed = yield* ask(
+          request(AGENT_QUEUE, undefined, {
+            method: "POST",
+            id: agent.id,
+            cookie: sessionCookieOf(other),
+            body: { change: QUEUE_CHANGE.ADD, text: "Also the docs.", clientKey: randomUUID() },
+          }),
+        );
+
+        assert.equal(changed.status, HOSTED_HTTP_STATUS.FORBIDDEN);
+        const read = readAnswer(
+          agentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(AGENT_MESSAGES, undefined, { id: agent.id, cookie: sessionCookieOf(other) }),
+          ),
+        );
+        assert.deepEqual(
+          read.queue?.messages.map((message) => message.text),
+          ["Open the pull request."],
+        );
+      }),
+  );
+
+  it.effect(
+    "a turn's end that lands while the Stop's cancel is out finds the queue already paused, and sends nothing",
+    () =>
+      Effect.gen(function* () {
+        let racing: Effect.Effect<void> = Effect.void;
+        const eve = fakeEve({ cancelling: Effect.suspend(() => racing) });
+        const { agent, ask, owner, target, writer, turnId, github } = yield* startedAgent(eve, {
+          running: true,
+        });
+        yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.ADD,
+          text: "Open the pull request.",
+          clientKey: randomUUID(),
+        });
+        const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
+        const eveFor = (account: string) => Effect.succeed(eve.eve(`deployment:${account}`));
+        // The runner ends the turn as stopped, and its events hand on the queue, before eve answers the cancel.
+        const database = yield* Effect.context<DatabaseServices>();
+        racing = Effect.andThen(
+          writer.consume(target, {
+            kind: RUN_EVENT.TURN_ENDED,
+            conversationId: sessionKey(target.conversationId),
+            turnId,
+            sequence: 2,
+            status: RUN_STATUS.CANCELLED,
+            responseIds: [],
+            at: 0,
+          }),
+          queueAtTurnEnd(eveFor, stored).pipe(
+            Effect.provide(Layer.mergeAll(github.layer, noNetwork)),
+          ),
+        ).pipe(Effect.provideContext(database), Effect.orDie);
+
+        yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
+
+        assert.equal(handedCount(eve, "Open the pull request."), 0, "nothing went after the Stop");
+        const page = readAnswer(
+          agentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        );
+        assert.equal(page.queue?.paused?.because, QUEUE_PAUSE.STOPPED);
+      }),
+  );
+
+  it.effect("a Stop of an agent whose turn has nothing to stop pauses nothing queued", () =>
+    Effect.gen(function* () {
+      const eve = fakeEve();
+      // The turn ended with a message still queued, which the turn's end has not handed on yet.
+      const { agent, ask, owner, queued } = yield* queuedBehindEndedTurn(eve, [
+        "Open the pull request.",
+      ]);
+
+      yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
+
+      assert.equal((yield* queued)?.paused, undefined);
+    }),
   );
 
   it.effect("a Stop eve refuses stops nothing, so it pauses nothing queued behind the turn", () =>

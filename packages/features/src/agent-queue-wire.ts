@@ -44,6 +44,8 @@ export const queuedMessageSchema = EffectSchema.Struct({
   queuedBy: EffectSchema.String,
   /** Whether a member is editing it in their composer, which holds it out of the hand-off; absent while nobody is. */
   editing: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+  /** The key it was queued and goes under, by which the window that queued it knows its own message landed; absent from a service older than it. */
+  clientKey: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type QueuedMessage = typeof queuedMessageSchema.Type;

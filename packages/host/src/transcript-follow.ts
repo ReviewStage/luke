@@ -543,7 +543,9 @@ export function followTranscript<Key>(
           Stream.takeUntil(movedFrom(was)),
           Stream.runForEach((now) => tellDrawn(page, now)),
         );
-        const wakeIn = "holds" in answer && answer.holds ? answer.wakeIn : undefined;
+        // Note that the page names when the clock alone moves what it says: an agent's grace while it holds, or a
+        // queued message's edit or send lapsing whether it holds or not.
+        const wakeIn = "wakeIn" in answer ? answer.wakeIn : undefined;
         wake =
           wakeIn === undefined ? moved : Effect.race(moved, Effect.sleep(Duration.millis(wakeIn)));
       }
