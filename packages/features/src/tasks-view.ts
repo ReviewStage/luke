@@ -39,6 +39,7 @@ import {
 } from "./sentry-install-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
+  mergePolicySchema,
   planRevisionAnswerSchema,
   planRevisionSeqSchema,
   planRevisionsAnswerSchema,
@@ -46,6 +47,7 @@ import {
   repositoryPinSchema,
   taskAgentPinSchema,
   taskAssigneeIdSchema,
+  taskBlockRequestSchema,
   taskCreateRequestSchema,
   taskFileRefusalSchema,
   taskFileRequestSchema,
@@ -297,23 +299,28 @@ export const tasksSetRepositoryParamsSchema = EffectSchema.Struct({
 
 export type TasksSetRepositoryParams = typeof tasksSetRepositoryParamsSchema.Type;
 
-/** Whether a change of where a task stands names its status, its priority, its assignee, or any of them. */
+/** Whether a change of where a task stands names its status, its priority, its assignee, its merge policy, or any of them. */
 function namesAStanding(params: {
   status?: unknown;
   priority?: unknown;
   assigneeId?: unknown;
+  mergePolicy?: unknown;
 }): boolean {
   return (
-    params.status !== undefined || params.priority !== undefined || params.assigneeId !== undefined
+    params.status !== undefined ||
+    params.priority !== undefined ||
+    params.assigneeId !== undefined ||
+    params.mergePolicy !== undefined
   );
 }
 
-/** Setting where a task stands, how much it matters, who it is assigned to (null for no one), or any of them, as the window asks it. */
+/** Setting where a task stands, how much it matters, who it is assigned to (null for no one), its merge policy, or any of them, as the window asks it. */
 export const tasksSetStandingParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
+  mergePolicy: EffectSchema.optionalKey(mergePolicySchema),
   /** The name the window knows the member assigned by, which the host draws them by until the list carries them; never sent to the service. */
   assigneeName: EffectSchema.optionalKey(EffectSchema.String),
 }).check(EffectSchema.makeFilter(namesAStanding));
@@ -327,6 +334,14 @@ export const tasksMoveParamsSchema = EffectSchema.Struct({
 });
 
 export type TasksMoveParams = typeof tasksMoveParamsSchema.Type;
+
+/** One block of a task added or taken away, as the window asks it: the task, and the change the service takes. */
+export const tasksBlockParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  block: taskBlockRequestSchema,
+});
+
+export type TasksBlockParams = typeof tasksBlockParamsSchema.Type;
 
 /** Why a task call answered nothing a window can draw. */
 export const TASK_CALL_FAILURE = {
@@ -407,6 +422,31 @@ export const tasksMoveAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksMoveAnswer = typeof tasksMoveAnswerSchema.Type;
+
+/** Why a block change wrote nothing a call's other reasons do not say: it would close a cycle. */
+export const TASK_BLOCK_FAILURE = {
+  CYCLE: "block-cycle",
+} as const;
+
+/** Why a block change wrote nothing: the service did not answer, a task is not the account's or not of the workspace, or it would close a cycle. */
+const BLOCK_CALL_FAILURES = [
+  TASK_CALL_FAILURE.UNANSWERED,
+  TASK_CALL_FAILURE.NOT_FOUND,
+  TASK_BLOCK_FAILURE.CYCLE,
+] as const;
+
+export type BlockCallFailure = (typeof BLOCK_CALL_FAILURES)[number];
+
+/** A task's block changed, as the window hears it: the task's blocks as they then stand, or why it is unchanged. */
+export const tasksBlockAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    blockedBy: EffectSchema.Array(EffectSchema.String),
+    blocks: EffectSchema.Array(EffectSchema.String),
+  }),
+  EffectSchema.Struct({ failure: EffectSchema.Literals(BLOCK_CALL_FAILURES) }),
+]);
+
+export type TasksBlockAnswer = typeof tasksBlockAnswerSchema.Type;
 
 /** The developer's edit of a task's document, as the window asks it saved: the task, and the edit as the service takes it. */
 export const tasksEditParamsSchema = EffectSchema.Struct({

@@ -690,7 +690,6 @@ it.effect(
       const answer = {
         pullRequest: {
           number: 7,
-          headSha: "c0ffee1",
           generatable: true,
           chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
         },
@@ -705,10 +704,9 @@ it.effect(
         yield* Effect.provide(client().generateChapters(AGENT_ID, 7), api.layer),
         answer,
       );
-      assert.deepEqual(yield* Effect.provide(client().chapters(AGENT_ID), api.layer), answer);
       assert.deepEqual(
         api.requests().map((request) => `${request.method} ${request.pathname}${request.search}`),
-        [`GET ${path}?number=7`, `POST ${path}?number=7`, `GET ${path}`],
+        [`GET ${path}?number=7`, `POST ${path}?number=7`],
       );
       assert.equal(api.requests()[1]?.body ?? "", "");
 

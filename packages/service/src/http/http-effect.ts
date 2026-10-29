@@ -68,6 +68,8 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.HOST_STILL_ENROLLED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.DEVICE_REMOVED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.RUNS_ON_LOCKED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.TASK_BLOCK_CYCLE]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -175,6 +177,10 @@ export const HOSTED_REFUSAL = {
   DEVICE_REMOVED: { error: HOSTED_API_ERROR.DEVICE_REMOVED },
   /** Where a task runs is set when it is created (`taskRunsOnRequestSchema`); a change that names another is refused, nothing written. */
   RUNS_ON_LOCKED: { error: HOSTED_API_ERROR.RUNS_ON_LOCKED },
+  /** A child task works in its parent's repository; a create that names another is refused, nothing written. */
+  CHILD_REPOSITORY_LOCKED: { error: HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED },
+  /** A block asked for would close a cycle among the workspace's tasks; nothing was written. */
+  TASK_BLOCK_CYCLE: { error: HOSTED_API_ERROR.TASK_BLOCK_CYCLE },
 } as const satisfies Record<string, HostedRefusal>;
 
 /** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */

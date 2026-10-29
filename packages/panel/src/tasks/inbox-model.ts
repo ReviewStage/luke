@@ -1138,7 +1138,7 @@ export function needsYouWords(count: number): string {
   return `${count} ${count === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`;
 }
 
-/** A count of threads with its words, as a channel's card or the Inbox's empty pane says it: "1 thread", "3 threads". */
+/** A count of threads with its words, as a channel's card says it: "1 thread", "3 threads". */
 export function threadsWords(count: number): string {
   return `${count} ${count === 1 ? "thread" : "threads"}`;
 }
@@ -1897,6 +1897,17 @@ export function inboxSteps(
   const at = rowed.findIndex(({ item }) => item.id === chosen);
   if (at < 0) return undefined;
   return { at: at + 1, total: rowed.length, previous: rowed[at - 1], next: rowed[at + 1] };
+}
+
+/** The list's first and last rows, in its own order, its grouping and filter as drawn and a folded group's items left out; none where it draws no row. */
+export function inboxEnds(
+  view: InboxListView,
+  folded: (key: string) => boolean,
+): { readonly first: InboxListed; readonly last: InboxListed } | undefined {
+  const rowed = rowedItems(view, folded, undefined);
+  const first = rowed[0];
+  const last = rowed.at(-1);
+  return first === undefined || last === undefined ? undefined : { first, last };
 }
 
 /** Which way the reader last stepped through the list, K up and J down, which Next follows. */

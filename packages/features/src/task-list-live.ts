@@ -15,6 +15,7 @@ import {
   type AgentArchivedBy,
   type AgentStatus,
   type AgentSummary,
+  agentKindSchema,
   agentPullRequestSchema,
   agentSummarySchema,
   CONTEXT_WINDOW,
@@ -101,6 +102,14 @@ const taskLiveRowSchema = EffectSchema.Struct({
   ),
   /** The coding agent that made the task; null for any other maker and once its row is gone. */
   creatorAgentId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  /** The task this one is a child of; null for a task at the top. Absent from a service before child tasks. */
+  parentTaskId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  /** How the task is worked; absent from a service before modes. */
+  mode: plan.mode,
+  /** What becomes of its agents' pull requests once their checks pass; absent from a service before it. */
+  mergePolicy: plan.mergePolicy,
+  /** Whether it waits on an open task the reader reaches; absent from a service before blocks. */
+  blocked: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 /** Who archived an agent as its row holds it. */
@@ -122,8 +131,10 @@ const agentLiveRowSchema = EffectSchema.Struct({
   effort: EffectSchema.String,
   contextWindow: EffectSchema.NullOr(EffectSchema.String),
   title: EffectSchema.NullOr(EffectSchema.String),
-  /** What kind of agent it is, a coder or a member's operator; absent from a statement before operators. */
-  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_KIND))),
+  /** What kind of agent it is, a member's operator or a coder, as which a task's pilot is delivered too; absent from a statement before operators. */
+  kind: EffectSchema.optionalKey(agentKindSchema),
+  /** Whether the agent is its task's pilot; absent from a statement before pilots. */
+  pilot: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Whether the agent was handed a prompt rather than its plan. */
   /** What the agent was handed as its first message: the plan, the developer's prompt, or nothing, for one started blank. */
   brief: EffectSchema.Literals(Object.values(AGENT_BRIEF)),
@@ -131,6 +142,11 @@ const agentLiveRowSchema = EffectSchema.Struct({
   repository: EffectSchema.NullOr(EffectSchema.String),
   starterId: EffectSchema.String,
   starterName: EffectSchema.NullOr(EffectSchema.String),
+  /** The pilot that started the agent, by its id, task, title, and model; null where no pilot did, and absent from a statement before it was carried. */
+  starterPilotId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  starterPilotTaskId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  starterPilotTitle: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  starterPilotModel: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   automationId: EffectSchema.NullOr(EffectSchema.String),
   automationName: EffectSchema.NullOr(EffectSchema.String),
   archivedAt: EffectSchema.NullOr(countedNumber),
@@ -367,6 +383,12 @@ function taskSummaryOf(
     ...(row.assigneeId === null || row.assigneeName === null
       ? undefined
       : { assignee: { userId: row.assigneeId, name: row.assigneeName } }),
+    ...(row.parentTaskId === undefined || row.parentTaskId === null
+      ? undefined
+      : { parentTaskId: row.parentTaskId }),
+    ...(row.mode === undefined ? undefined : { mode: row.mode }),
+    ...(row.mergePolicy === undefined ? undefined : { mergePolicy: row.mergePolicy }),
+    ...(row.blocked === true ? { blocked: true } : undefined),
     ...(agents === undefined ? undefined : { agents: agentsSummaryOf(agents, now) }),
   };
 }
@@ -409,6 +431,20 @@ function continuationsOf(rows: readonly AgentLiveRow[]): Continuations {
 }
 
 /** The Mac a local agent runs on as its summary names it, with no beat; none for one in a sandbox, or whose Mac is gone. */
+/** The pilot that started the agent, as its summary names it; none where no pilot did. */
+function startedByPilotOf(row: AgentLiveRow): AgentSummary["startedByPilot"] {
+  const { starterPilotId, starterPilotTaskId, starterPilotModel } = row;
+  if (starterPilotId == null || starterPilotTaskId == null || starterPilotModel == null) {
+    return undefined;
+  }
+  return {
+    agentId: starterPilotId,
+    taskId: starterPilotTaskId,
+    title: row.starterPilotTitle ?? null,
+    model: starterPilotModel,
+  };
+}
+
 function macOf(row: AgentLiveRow): AgentSummary["mac"] {
   const { deviceId, deviceName } = row;
   if (row.machine !== AGENT_MACHINE.DEVICE || deviceId == null || deviceName == null) {
@@ -429,6 +465,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number, continued: Continuations
   const runtime = NATIVE_AGENT_RUNTIMES.find((each) => each === row.runtime);
   const mac = macOf(row);
   const continuedBy = continued.get(row.id);
+  const startedByPilot = startedByPilotOf(row);
   return {
     id: row.id,
     planId: row.planId,
@@ -440,6 +477,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number, continued: Continuations
     ...(runtime === undefined ? undefined : { runtime }),
     title: row.title,
     ...(row.kind === AGENT_KIND.OPERATOR ? { kind: row.kind } : undefined),
+    ...(row.pilot === true ? { pilot: true } : undefined),
     ...(row.machine === AGENT_MACHINE.DEVICE ? { machine: AGENT_MACHINE.DEVICE } : undefined),
     ...(mac === undefined ? undefined : { mac }),
     createdAt: row.createdAt,
@@ -453,6 +491,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number, continued: Continuations
     ...(row.starterName === null
       ? undefined
       : { startedBy: { userId: row.starterId, name: row.starterName } }),
+    ...(startedByPilot === undefined ? undefined : { startedByPilot }),
     ...(row.automationId === null ? undefined : { automationId: row.automationId }),
     ...(row.automationName === null ? undefined : { automationName: row.automationName }),
     ...(row.startedFrom === null ? undefined : { from: row.startedFrom }),

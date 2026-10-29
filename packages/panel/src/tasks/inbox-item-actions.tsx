@@ -38,8 +38,6 @@ interface InboxItemDoors {
 
 /** An item's acts as a menu draws them. */
 interface InboxItemActions {
-  /** Mark as read or unread, which a row presses from its hover too; none where no mark is handed down. */
-  readonly read: MenuAction | undefined;
   /** The close, its menu item and its question, which the surface draws. */
   readonly close: InboxClose;
   /** The menu's groups, with `lead` over the item's own: a phone's, standing for what its bar draws. */
@@ -72,5 +70,5 @@ export function useInboxItemActions(item: InboxItem, doors: InboxItemDoors): Inb
       move === undefined ? [] : [move],
       close.action === undefined ? [] : [close.action],
     ].filter((group) => group.length > 0);
-  return { read, close, groups };
+  return { close, groups };
 }

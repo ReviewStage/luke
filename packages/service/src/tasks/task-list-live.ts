@@ -4,6 +4,7 @@ import {
   liveStatementOf,
 } from "@luke/database/core/live-statement";
 import { queryBuilder } from "@luke/database/core/query";
+import { taskBlockedFor } from "@luke/database/models/task-block-store";
 import {
   AGENT_WORKSPACE,
   agentVisibleTo,
@@ -13,7 +14,7 @@ import { agentPin, conversations, device, taskPin } from "@luke/database/schemas
 import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
 import { task } from "@luke/database/schemas/task";
-import { AGENT_BRIEF } from "@luke/features/agent-wire";
+import { AGENT_BRIEF, AGENT_KIND, type AgentKind } from "@luke/features/agent-wire";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
@@ -33,8 +34,8 @@ import {
  * `withTaskAgents`, and `listTasklessAgents`), with every archived plan
  * and agent among them, as the desktop asks for them: the plans with the
  * reader's own pin and the owner's name, and the agents with their newest
- * turn, when the newest line of the developer's awaiting its turn was
- * written and whether that turn's session ended, when the newest turn to end
+ * turn, the pilot that started each where one did, when the newest line
+ * of the developer's awaiting its turn was written and whether that turn's session ended, when the newest turn to end
  * ended, what each last published, the harness its conversation runs on, the
  * Mac a local one runs on, and the names of the members each names. A third, the issues
  * the plans linked, answers no rows now that a plan links none, and stands
@@ -48,6 +49,7 @@ import {
 const starter = alias(user, "starter");
 const archiver = alias(user, "archiver");
 const assignee = alias(user, "assignee");
+const starterPilot = alias(agentTable, "starter_pilot");
 
 /** The statements the plan list is subscribed to live. */
 export interface TaskListLiveStatements {
@@ -57,8 +59,9 @@ export interface TaskListLiveStatements {
 }
 
 /**
- * The plans the account reaches, each with the reader's own pin and its
- * owner's name. Note that `archivedAt` is still answered, as null, because
+ * The plans the account reaches, each with the reader's own pin, its
+ * owner's name, and whether it waits on an open task the account reaches
+ * (`taskBlockedFor`). Note that `archivedAt` is still answered, as null, because
  * a desktop from before #4541 decodes a row without it as no row: no
  * plan is archived any more, and the column is dropped. The key goes with
  * the minimum supported desktop version, not with a service deploy, since a
@@ -84,6 +87,10 @@ function tasksStatement(userId: string) {
           number: task.number,
           creatorActor: task.creatorActor,
           creatorAgentId: task.creatorAgentId,
+          parentTaskId: task.parentTaskId,
+          mode: task.mode,
+          mergePolicy: task.mergePolicy,
+          blocked: taskBlockedFor(userId),
         },
         {
           pinnedAt: taskPin.pinnedAt,
@@ -119,7 +126,12 @@ function issuesStatement() {
  * its conversation runs on, and the Mac it runs on by its name, as
  * `devicesNamed` reads them. Note that the Mac's last beat is not read,
  * because a beat wakes nothing (`deviceSync`) and a window judges a Mac by
- * its own presence read.
+ * its own presence read. Note too that the kind is answered as a coder for
+ * every agent but an operator, a task's pilot among them, because a desktop
+ * from before pilots decodes a kind it does not know as no list at all, and
+ * a pilot is said by a column of its own, which such a desktop ignores; it
+ * goes with the minimum supported desktop version, as `archivedAt` above
+ * does, once that version reads an unknown kind as a coder (`agentKindSchema`).
  */
 function agentsStatement(userId: string) {
   const latest = latestTurnOf(agentTable.conversationId, "latest_turn");
@@ -134,11 +146,15 @@ function agentsStatement(userId: string) {
           effort: agentTable.effort,
           contextWindow: agentTable.contextWindow,
           title: agentTable.title,
-          kind: agentTable.kind,
+          kind: sql<AgentKind>`case when ${agentTable.kind} = ${AGENT_KIND.OPERATOR} then ${AGENT_KIND.OPERATOR} else ${AGENT_KIND.CODER} end`,
           brief: sql<string>`case when ${agentTable.prompt} is not null then ${AGENT_BRIEF.PROMPT} when ${agentTable.planSnapshot} is not null then ${AGENT_BRIEF.PLAN} else ${AGENT_BRIEF.BLANK} end`,
           repository: agentTable.repository,
           starterId: agentTable.userId,
           starterName: starter.name,
+          starterPilotId: starterPilot.id,
+          starterPilotTaskId: starterPilot.taskId,
+          starterPilotTitle: starterPilot.title,
+          starterPilotModel: starterPilot.model,
           automationId: agentTable.automationId,
           automationName: sql<string | null>`${agentTable.automationOrigin} ->> 'name'`,
           archivedBy: agentTable.archivedBy,
@@ -156,6 +172,7 @@ function agentsStatement(userId: string) {
           cancelRequested: isNotNull(latest.cancelRequestedAt),
           turnSessionEnded: sessionEndedOf(latest),
           quietTurn: quietTurnOf(agentTable.kind, agentTable.conversationId, latest),
+          pilot: sql<boolean>`${agentTable.kind} = ${AGENT_KIND.PILOT}`,
         },
         {
           archivedAt: agentTable.archivedAt,
@@ -173,6 +190,13 @@ function agentsStatement(userId: string) {
     .from(agentTable)
     .leftJoin(agentPin, and(eq(agentPin.agentId, agentTable.id), eq(agentPin.userId, userId)))
     .leftJoin(starter, eq(starter.id, agentTable.userId))
+    .leftJoin(
+      starterPilot,
+      and(
+        eq(starterPilot.id, agentTable.startedByAgentId),
+        eq(starterPilot.kind, AGENT_KIND.PILOT),
+      ),
+    )
     .leftJoin(archiver, eq(archiver.id, sql`${agentTable.archivedBy} ->> 'userId'`))
     .leftJoin(conversations, eq(conversations.id, agentTable.conversationId))
     .leftJoin(device, eq(device.id, agentTable.deviceId))

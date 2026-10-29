@@ -121,7 +121,6 @@ const PUBLISHED = {
 const CHAPTERS = {
   pullRequest: {
     number: 11,
-    headSha: "c0ffee1",
     generatable: true,
     chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
   },
@@ -435,7 +434,7 @@ function fakeService() {
       }),
     chapters: (agentId, number) =>
       Effect.sync(() => {
-        asked.push(`chapters:${agentId}${number === undefined ? "" : `#${number}`}`);
+        asked.push(`chapters:${agentId}#${number}`);
         return CHAPTERS;
       }),
     generateChapters: (agentId, number) =>
@@ -998,7 +997,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       yield* call(GATEWAY_METHOD.AGENTS_CHANGES, { agentId: AGENT_ID, number: 11 }),
       CHANGES,
     );
-    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_CHAPTERS, { agentId: AGENT_ID }), CHAPTERS);
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.AGENTS_CHAPTERS, { agentId: AGENT_ID, number: 11 }),
+      CHAPTERS,
+    );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.AGENTS_CHAPTERS_GENERATE, {
         agentId: AGENT_ID,
@@ -1181,7 +1183,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
       `changes:${AGENT_ID}#11`,
-      `chapters:${AGENT_ID}`,
+      `chapters:${AGENT_ID}#11`,
       `chapters-generate:${AGENT_ID}#11`,
       "chapters-model",
       `chapters-model-write:${CHAPTERS_MODEL.OPUS}`,

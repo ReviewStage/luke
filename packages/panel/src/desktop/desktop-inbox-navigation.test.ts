@@ -278,7 +278,7 @@ test("the Inbox joins only once narrowed past the band, keeping the item it show
   assert.deepEqual(columnsShown(page), ["list"]);
 });
 
-test("one column wide, the item's bar says where it stands in the list, and its arrows, K, and J step up and down the list in its order, a settled item among them, stopping at its ends", async () => {
+test("one column wide, the item's bar says where it stands in the list, and its arrows, K, and J step up and down the list in its order, a settled item among them, stopping at its ends with the arrows still in the tab order", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const keys = standKeymap();
@@ -287,7 +287,11 @@ test("one column wide, the item's bar says where it stands in the list, and its 
 
   act(() => arrowNamed(page, "Previous item").click());
   assert.deepEqual([readTitle(page), pagerOf(page)], ["How is a failed email retried?", "1 of 3"]);
-  assert.equal(arrowNamed(page, "Previous item").disabled, true, "nothing above the first");
+  assert.equal(
+    arrowNamed(page, "Previous item").getAttribute("aria-disabled"),
+    "true",
+    "nothing above the first, the arrow keeping the keyboard",
+  );
   pressKey("k");
   assert.equal(readTitle(page), "How is a failed email retried?");
 
@@ -295,9 +299,24 @@ test("one column wide, the item's bar says where it stands in the list, and its 
   assert.deepEqual([readTitle(page), pagerOf(page)], ["Alert at 80%?", "2 of 3"]);
   act(() => arrowNamed(page, "Next item").click());
   assert.deepEqual([readTitle(page), pagerOf(page)], ["Expire after 7 days?", "3 of 3"]);
-  assert.equal(arrowNamed(page, "Next item").disabled, true, "nothing below the last");
+  assert.equal(
+    arrowNamed(page, "Next item").getAttribute("aria-disabled"),
+    "true",
+    "nothing below the last, the arrow keeping the keyboard",
+  );
   pressKey("j");
   assert.equal(readTitle(page), "Expire after 7 days?");
+  act(() => keys.unmount());
+});
+
+test("with nothing chosen, J chooses the list's first row, as the empty pane beside it says", async () => {
+  const { page } = mount();
+  await settle();
+  const keys = standKeymap();
+  layOut(page, 900);
+  assert.equal(page.querySelector("[data-inbox-title]"), null, "nothing is chosen");
+  pressKey("j");
+  assert.equal(readTitle(page), "How is a failed email retried?");
   act(() => keys.unmount());
 });
 
@@ -315,7 +334,10 @@ test("a chosen item whose plan leaves the account's list, deleted on another Mac
   await settle();
   assert.deepEqual(listed(page), ["# Invites", "*Expire after 7 days?"]);
   assert.equal(page.querySelector(".inbox-view-items [data-inbox-title]"), null);
-  assert.equal(page.querySelector(".inbox-view-items")?.textContent, "1 thread");
+  assert.equal(
+    page.querySelector(".inbox-view-items")?.textContent,
+    "Choose an item, or step with J K",
+  );
 });
 
 test("an item of an agent with no plan stands under the automation that started it, and opens on its agent's own read under the automation's crumb", async () => {

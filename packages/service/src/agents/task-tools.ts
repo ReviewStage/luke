@@ -23,6 +23,7 @@ import {
   wireUuidSchema,
 } from "../core.js";
 import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
+import { taskParentOf } from "../tasks/task-parent.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
   AGENT_TOOL_REFUSAL,
@@ -42,6 +43,7 @@ import {
 import { calledId } from "./called-id.js";
 import { agentMadeRunsOn } from "./coder-host/agent-runtime-choice.js";
 import { assigneeIdOf, TASK_ASSIGNEE_INPUT } from "./task-assignee.js";
+import { taskBlockReadings } from "./task-block-changes.js";
 import { workspaceNamingOf, writtenMention } from "./written-mentions.js";
 
 /**
@@ -54,7 +56,8 @@ import { workspaceNamingOf, writtenMention } from "./written-mentions.js";
  * caller acts for could open it in the sidebar, read on that member's
  * standing now; a task of another workspace is none of the caller's, even
  * where the member is also in it. It answers the task as its row stands, the
- * brief the developer started it with, and its plan's saved text cut on a
+ * brief the developer started it with, the tasks it is blocked by and blocks
+ * that the member reaches, and its plan's saved text cut on a
  * line to a bound, so an agent reads another task's plan without its being
  * mentioned.
  *
@@ -66,7 +69,11 @@ import { workspaceNamingOf, writtenMention } from "./written-mentions.js";
  * and no agent on it; `start_agent` starts one on it by its id. It runs where the member last ran a task, the device New
  * task last named or the cloud (`agentMadeRunsOn`), even an assignee's
  * other than the member, and is refused by name where that device was
- * removed since, never sent to the cloud instead. It is made
+ * removed since, never sent to the cloud instead. Given a parent task of
+ * the caller's workspace that the member reaches, it is made that task's
+ * child, to any depth, and takes the parent's repository and machine
+ * rather than its own, refused where the call names another repository
+ * (`tasks/task-parent.ts`). It is made
  * under an id drawn from eve's key for the call (`called-id.ts`), so a call
  * run again answers the task it made and makes no second.
  * Every answer is data the model reads, never a credential.
@@ -96,8 +103,9 @@ export const READ_TASK_TOOL = {
     "Read one task of your workspace by its id, a teammate's included: its " +
     "key (such as ACME-42), name, where it stands (its status) and how much it matters (its " +
     "priority), repository, who started it, whether it is the task you " +
-    "work on, its mention, the brief the developer started it with (null for none), and its " +
-    `plan as last saved, cut on a line at ${PLAN_TEXT_READ_CHARS} characters with how many were ` +
+    "work on, its mention, the brief the developer started it with (null for none), the tasks " +
+    "it is blocked by and the tasks it blocks (each with its id, name, status, and mention), " +
+    `and its plan as last saved, cut on a line at ${PLAN_TEXT_READ_CHARS} characters with how many were ` +
     `left out. Read one before you start an agent on it, or to learn what another task is about; ` +
     `${AGENT_TOOL.LIST_AGENTS} with its taskId names the agents on it.`,
   inputSchema: READ_TASK_INPUT,
@@ -128,6 +136,7 @@ export function runReadTask(
       const { task, text, saved, brief } = stored.value;
       const { step, name } = yield* workspaceNamingOf(userId, workspace.value);
       const plan = cutOnLine(text, PLAN_TEXT_READ_CHARS);
+      const blocks = yield* taskBlockReadings(userId, task, step);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         task: {
@@ -139,6 +148,7 @@ export function runReadTask(
           isYourTask: task.id === callerTask(call.caller),
           mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
           brief: brief ?? null,
+          ...blocks,
         },
         plan: { text: plan.text, saved, leftOutChars: plan.leftOutChars },
       };
@@ -154,8 +164,8 @@ export const CREATE_TASK_REFUSAL = {
     `${TASK_BOUNDS.MAX_BRIEF_CHARS} characters or none, a plan of at most ` +
     `${TASK_BOUNDS.MAX_BODY_CHARS} characters or none, a status ` +
     `(${Object.values(TASK_STATUS).join(", ")}) or none, a priority ` +
-    `(${Object.values(TASK_PRIORITY).join(", ")}) or none, and an assignee as a member's ` +
-    "mention link or none.",
+    `(${Object.values(TASK_PRIORITY).join(", ")}) or none, an assignee as a member's ` +
+    `mention link or none, and a parent task by the id ${AGENT_TOOL.LIST_TASKS} answered or none.`,
   NOT_MEMBER:
     "Not made: that assignee is no member of the workspace, or names no person; name a member by " +
     `the mention link ${AGENT_TOOL.LIST_TASKS} hands you, or leave it out for no one.`,
@@ -163,6 +173,10 @@ export const CREATE_TASK_REFUSAL = {
     "Not made: the device the member last chose to run tasks on has been removed, so there is " +
     "nowhere they asked this task to run; ask them to start a task from New task, choosing where " +
     "it runs, and try again.",
+  NO_PARENT: `Not made: no task of your workspace has that id to be its parent; ${AGENT_TOOL.LIST_TASKS} names them.`,
+  PARENT_REPOSITORY:
+    "Not made: a child task always works in its parent's repository; leave repository out to " +
+    "take the parent's, or make it with no parent to work in another.",
 } as const;
 
 const CREATE_TASK_INPUT = Schema.Struct({
@@ -174,7 +188,8 @@ const CREATE_TASK_INPUT = Schema.Struct({
     describeWire(
       Schema.NullOr(githubRepositoryFullNameSchema),
       "The GitHub repository its agents work in, as owner/name, which the workspace's GitHub " +
-        "installation must reach; null for none, and left out for the one you work in.",
+        "installation must reach; null for none, and left out for the one you work in, or the " +
+        "parent's where you give a parent.",
     ),
   ),
   brief: Schema.optionalKey(
@@ -200,6 +215,14 @@ const CREATE_TASK_INPUT = Schema.Struct({
   ),
   priority: Schema.optionalKey(describeWire(taskPrioritySchema, TASK_PRIORITY_WORDS)),
   assignee: Schema.optionalKey(TASK_ASSIGNEE_INPUT),
+  parentTaskId: Schema.optionalKey(
+    describeWire(
+      wireUuidSchema,
+      `The task to make it a child of, by the id ${AGENT_TOOL.LIST_TASKS} answered: a part of ` +
+        "that task's work, which works in its repository and runs on its machine. Left out, it " +
+        "stands at the top.",
+    ),
+  ),
 });
 
 const readCreateAsked = Schema.decodeUnknownResult(CREATE_TASK_INPUT);
@@ -212,7 +235,9 @@ export const CREATE_TASK_TOOL = {
     "and a plan to start from where given, and no agent on it. Make one for a separate piece of work that should stand as a task of its own, " +
     "where the developer asked for it or you " +
     `work on no task; then start an agent on it with ${AGENT_TOOL.START_AGENT}'s taskId. ` +
-    "Give it a status, a priority, and an assignee where the developer said them. Answers " +
+    "Give it a status, a priority, and an assignee where the developer said them. Give it a " +
+    "parentTaskId to make it a child task of another, to any depth: a child always works in " +
+    "its parent's repository and on its machine, so leave repository out for one. Answers " +
     "`accepted` with the task's id, key, name, status, priority, assignee, repository, and " +
     "mention, or `rejected` and why.",
   inputSchema: CREATE_TASK_INPUT,
@@ -239,6 +264,20 @@ function originOf(call: AgentCall): TaskOrigin {
 /** Who a revision is written by, as the history keeps it. */
 type RevisionWriter = Parameters<typeof recordRevision>[0]["writer"];
 
+/** The parent a make names, confirmed (`taskParentOf`), or why it makes nothing, in words the model can act on. */
+const parentOf = (
+  userId: string,
+  workspaceId: string,
+  parentTaskId: string,
+  repository: string | null | undefined,
+) =>
+  taskParentOf(userId, workspaceId, parentTaskId, repository).pipe(
+    Effect.catchTag("TaskParentUnreached", () => Effect.succeed(CREATE_TASK_REFUSAL.NO_PARENT)),
+    Effect.catchTag("TaskParentRepositoryDiffers", () =>
+      Effect.succeed(CREATE_TASK_REFUSAL.PARENT_REPOSITORY),
+    ),
+  );
+
 /** One call of `create_task`: a task made in the caller's workspace for its member, once under the call's key. */
 export function runCreateTask(
   call: AgentCall,
@@ -248,7 +287,7 @@ export function runCreateTask(
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.UNREADABLE));
   }
-  const { name, brief, plan, status, priority, assignee } = asked.success;
+  const { name, brief, plan, status, priority, assignee, parentTaskId } = asked.success;
   const assigneeId =
     assignee === undefined || assignee === null ? undefined : assigneeIdOf(assignee);
   if (assignee !== undefined && assignee !== null && assigneeId === undefined) {
@@ -280,17 +319,26 @@ export function runCreateTask(
       // The call run again finds the task it made, and makes no second.
       const before = yield* readTask(userId, id);
       if (Option.isSome(before)) return answer(before.value.task);
-      const named =
+      const parent =
+        parentTaskId === undefined
+          ? undefined
+          : yield* parentOf(userId, workspace.value, parentTaskId, asked.success.repository);
+      if (typeof parent === "string") return agentToolRejected(parent);
+      const repositoryAsked =
         asked.success.repository === undefined
           ? yield* workedRepository(call.caller)
           : asked.success.repository;
+      const named = parent === undefined ? repositoryAsked : parent.repository;
       const reached = yield* reachedRepository(workspace.value, named, userId);
       if (Result.isFailure(reached)) return agentToolRejected(reached.failure);
-      // Where the member last ran a task is where this one runs; a device since removed makes none.
-      const runsOn = yield* agentMadeRunsOn(userId).pipe(
-        Effect.map((asked) => ({ asked })),
-        Effect.catchTag("RunsOnPickRemoved", () => Effect.succeed(undefined)),
-      );
+      // A child runs where its parent runs; any other task where the member last ran one, and a device since removed makes none.
+      const runsOn =
+        parent === undefined
+          ? yield* agentMadeRunsOn(userId).pipe(
+              Effect.map((asked) => ({ asked })),
+              Effect.catchTag("RunsOnPickRemoved", () => Effect.succeed(undefined)),
+            )
+          : { asked: parent.runsOn };
       if (runsOn === undefined) return agentToolRejected(CREATE_TASK_REFUSAL.PICK_REMOVED);
       const text = planTextOf(plan ?? "");
       // The make and its plan's first revision are one write, so a call run again at once makes one task.
@@ -309,6 +357,7 @@ export function runCreateTask(
               ...(priority === undefined ? undefined : { priority }),
               ...(assigneeId === undefined ? undefined : { assigneeId }),
               ...(runsOn.asked === undefined ? undefined : { runsOn: runsOn.asked }),
+              ...(parent === undefined ? undefined : { parentTaskId: parent.id }),
               origin: originOf(call),
             });
             if (Option.isSome(once) && text !== "") {

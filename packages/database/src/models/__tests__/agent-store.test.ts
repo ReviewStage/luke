@@ -27,7 +27,7 @@ import { eq } from "drizzle-orm";
 import { Clock, DateTime, Deferred, Effect, Fiber, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
-import { agentTable } from "../../schemas/agent.js";
+import { agentTable, type StoredStartedFrom } from "../../schemas/agent.js";
 import { agentPin } from "../../schemas/agent-pin.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
@@ -50,6 +50,7 @@ import {
   createAgent,
   delegationsOf,
   deleteAgent,
+  discardAgent,
   dispatchMentioningServers,
   forgetAgentPublishedRead,
   IDLE_ARCHIVE,
@@ -1549,6 +1550,64 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
   );
 
   it.effect(
+    "a continue of a pilot takes over the unarchived agents its source started, from an earlier continue of it among them, and its discard hands them back",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        const task = yield* createTask(owner, { organizationId: workspace, name: "Rollout" });
+        const start = (
+          more: Pick<NewAgent, "startedByAgentId" | "startedFrom" | "takesOverFrom">,
+        ): NewAgent => ({
+          taskId: task.id,
+          planSnapshot: "# Rollout",
+          prompt: null,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/api",
+          ...more,
+        });
+        const pilot = Option.getOrThrow(yield* createAgent(owner, start({}))).agent;
+        const working = Option.getOrThrow(
+          yield* createAgent(owner, start({ startedByAgentId: pilot.id })),
+        ).agent;
+        const archived = Option.getOrThrow(
+          yield* createAgent(owner, start({ startedByAgentId: pilot.id })),
+        ).agent;
+        yield* archiveAgent(owner, archived.id, true);
+        const starterOf = (agentId: string) =>
+          Effect.map(readAgent(owner, agentId), (read) => Option.getOrThrow(read).startedByAgentId);
+
+        const continuedFrom = (agentId: string) =>
+          Effect.map(
+            createAgent(
+              owner,
+              start({
+                startedFrom: { agentId, steps: 1, totalSteps: 1 },
+                takesOverFrom: agentId,
+              }),
+            ),
+            (made) => Option.getOrThrow(made).agent,
+          );
+
+        const first = yield* continuedFrom(pilot.id);
+        assert.deepEqual(
+          [yield* starterOf(working.id), yield* starterOf(archived.id)],
+          [first.id, pilot.id],
+        );
+        yield* Database.use((db) =>
+          db.update(agentTable).set({ kind: AGENT_KIND.PILOT }).where(eq(agentTable.id, first.id)),
+        );
+        const continued = yield* continuedFrom(pilot.id);
+        assert.equal(yield* starterOf(working.id), continued.id, "the latest continue takes over");
+
+        assert.equal(yield* discardAgent(owner, continued.id), true);
+        assert.equal(yield* starterOf(working.id), pilot.id);
+      }),
+  );
+
+  it.effect(
     "an agent's continues and forks are read by its id oldest first, an archived one among them, by a teammate as by its starter, and by no outsider",
     () =>
       Effect.gen(function* () {
@@ -2661,6 +2720,46 @@ it.layer(getTestDB())("the coding-agent store's search of a workspace's agents",
         assert.equal((yield* found(owner, "  \t ")).length, 5);
         assert.deepEqual(yield* found(outsider, "invite"), []);
         assert.deepEqual(yield* found(outsider, "luke"), []);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's pilots", (it) => {
+  it.effect(
+    "a pilot asked of a task another member's pilot stands on is made a coder, but one continuing that pilot is a pilot",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const teammate = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, teammate);
+        const piloted = yield* createTask(owner, {
+          organizationId: workspace,
+          name: "Invitations",
+          repository: "acme/relay",
+        });
+        const pilotOn = (startedFrom?: StoredStartedFrom): NewAgent => ({
+          taskId: piloted.id,
+          planSnapshot: "# Invitations\n",
+          prompt: null,
+          kind: AGENT_KIND.PILOT,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          startedFrom,
+        });
+
+        const first = Option.getOrThrow(yield* createAgent(owner, pilotOn()));
+        const raced = Option.getOrThrow(yield* createAgent(teammate, pilotOn()));
+        const continued = Option.getOrThrow(
+          yield* createAgent(owner, pilotOn({ agentId: first.agent.id, steps: 0, totalSteps: 0 })),
+        );
+
+        assert.deepEqual(
+          [first.agent.kind, raced.agent.kind, continued.agent.kind],
+          [AGENT_KIND.PILOT, AGENT_KIND.CODER, AGENT_KIND.PILOT],
+        );
       }),
   );
 });

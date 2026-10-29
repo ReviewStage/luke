@@ -228,6 +228,7 @@ import {
   chaptersModelAnswerViewSchema,
   type PullRequestChaptersAnswerView,
   type PullRequestChaptersParams,
+  type PullRequestChaptersReadParams,
   pullRequestChaptersAnswerViewSchema,
 } from "@luke/features/pull-request-chapters-view";
 import {
@@ -239,6 +240,8 @@ import {
   type TaskHistoryFollowed,
   type TaskPagesFollow,
   type TaskPagesFollowed,
+  type TasksBlockAnswer,
+  type TasksBlockParams,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
   type TasksBrowserTabsAnswer,
@@ -315,6 +318,7 @@ import {
   taskBrowserTabsFollowedSchema,
   taskHistoryFollowedSchema,
   taskPagesFollowedSchema,
+  tasksBlockAnswerSchema,
   tasksBrowserTabOpenAnswerSchema,
   tasksBrowserTabsAnswerSchema,
   tasksCommentAnswerSchema,
@@ -500,6 +504,8 @@ export interface HostOperator {
   tasksSetRepository(params: TasksSetRepositoryParams): Effect.Effect<TasksSetRepositoryAnswer>;
   /** One task moved to another of the account's workspaces; the workspace it now belongs to, or why it stands where it was. */
   tasksMove(params: TasksMoveParams): Effect.Effect<TasksMoveAnswer>;
+  /** One block of a task added or taken away; the task's blocks as they then stand, or why they are unchanged. */
+  tasksBlock(params: TasksBlockParams): Effect.Effect<TasksBlockAnswer>;
   /** The developer's edit of a task's document; saved, a conflict with the text as it stands now, or why nothing was saved. */
   tasksEdit(params: TasksEditParams): Effect.Effect<TasksEditAnswer>;
   /** A window of a file of a task's repository, coloured; or why it is not shown. */
@@ -738,9 +744,9 @@ export interface HostOperator {
   onAutomationsChanged(listener: (followed: AutomationFollowed) => void): () => void;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
-  /** The workspace's newest chapters of one agent's pull request, with its head as GitHub holds it; or why there are none. */
+  /** The workspace's newest chapters of one agent's pull request by its number; or why there are none. */
   pullRequestChapters(
-    params: PullRequestChaptersParams,
+    params: PullRequestChaptersReadParams,
   ): Effect.Effect<PullRequestChaptersAnswerView>;
   /** One agent's pull request's chapters generated for its head, or the generation already under way; the chapters as they then stand, or why there are none. */
   pullRequestChaptersGenerate(
@@ -1643,6 +1649,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(tasksMoveAnswerSchema, TASK_UNANSWERED),
       ),
+    tasksBlock: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_BLOCK, { taskId: params.taskId, block: params.block }),
+        answerOf(tasksBlockAnswerSchema, TASK_UNANSWERED),
+      ),
     tasksEdit: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_EDIT, { taskId: params.taskId, edit: params.edit }),
@@ -1931,7 +1942,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     pullRequestChapters: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS, pullRequestChaptersRead(params)),
+        client.call(GATEWAY_METHOD.AGENTS_CHAPTERS, {
+          agentId: params.agentId,
+          number: params.number,
+        }),
         answerOf(pullRequestChaptersAnswerViewSchema, AGENT_UNANSWERED),
       ),
     pullRequestChaptersGenerate: (params) =>

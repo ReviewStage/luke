@@ -95,6 +95,7 @@ import {
   chaptersModelWriteParamsSchema,
   type PullRequestChaptersAnswerView,
   pullRequestChaptersParamsSchema,
+  pullRequestChaptersReadParamsSchema,
 } from "@luke/features/pull-request-chapters-view";
 import {
   carried,
@@ -861,9 +862,9 @@ function composed(
     [GATEWAY_METHOD.AGENTS_CHAPTERS]: (params) =>
       Effect.gen(function* () {
         const { agentId, number } = yield* readParams(
-          pullRequestChaptersParamsSchema,
+          pullRequestChaptersReadParamsSchema,
           params,
-          "reading a pull request's chapters names one agent",
+          "reading a pull request's chapters names one agent and its pull request's number",
         );
         const answer = yield* asked(client.chapters(agentId, number));
         return carried<PullRequestChaptersAnswerView>(answer);

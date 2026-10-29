@@ -2,16 +2,21 @@ import { AGENT_MACHINE, type AgentMachineKind } from "@luke/features/agent-wire"
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
 import {
+  MERGE_POLICY,
+  type MergePolicy,
   PLAN_ACTOR,
+  TASK_MODE,
   TASK_PRIORITY,
   TASK_STATUS,
   type TaskCreatorActor,
+  type TaskMode,
   type TaskPriority,
   type TaskStatus,
 } from "@luke/features/task-wire";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
+  check,
   index,
   integer,
   jsonb,
@@ -60,6 +65,22 @@ export const task = pgTable(
      * workspace takes the next number there.
      */
     number: integer("number").notNull(),
+    /**
+     * The task this one is a child of, which it breaks down a part of; null
+     * for a task at the top, and once its parent's row is gone. Children
+     * nest to any depth, and a child works in its parent's repository, which
+     * the write that names a parent holds to.
+     */
+    parentTaskId: uuid("parent_task_id").references((): AnyPgColumn => task.id, {
+      onDelete: "set null",
+    }),
+    /** How the task is worked (`TASK_MODE`): by its agents, or by a pilot; fixed as it starts. */
+    mode: text("mode").$type<TaskMode>().notNull().default(TASK_MODE.AGENT),
+    /** What becomes of its agents' pull requests once their checks pass (`MERGE_POLICY`). */
+    mergePolicy: text("merge_policy")
+      .$type<MergePolicy>()
+      .notNull()
+      .default(MERGE_POLICY.MERGE_ON_GREEN),
     /** Where the task stands (`TASK_STATUS`). */
     status: text("status").$type<TaskStatus>().notNull().default(TASK_STATUS.TODO),
     /** How much the task matters (`TASK_PRIORITY`); none until someone weighs it. */
@@ -153,6 +174,9 @@ export const task = pgTable(
     uniqueIndex("task_organization_number").on(table.organizationId, table.number),
     // A workspace's tasks assigned to one member, and that member leaving letting each of them go.
     index("task_organization_assignee").on(table.organizationId, table.assigneeId),
+    // A task's children, and its delete letting each of them go.
+    index("task_parent").on(table.parentTaskId).where(sql`${table.parentTaskId} is not null`),
+    check("task_parent_not_self", sql`${table.parentTaskId} <> ${table.id}`),
   ],
 );
 

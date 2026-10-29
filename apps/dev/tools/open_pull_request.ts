@@ -16,8 +16,8 @@ import { deepenCheckout, offeredRepositoryTools, runPullRequestTool } from "../h
  * deepened first where it still stands shallow (`deepenCheckout`), as every
  * write's is, so the branch the pull request is opened from stands on the
  * whole history with the write credential at the firewall. It is offered at
- * each turn's start only to an agent working in a repository
- * (`repositoryToolsOf`).
+ * each turn's start only to an agent working in a repository, never to a
+ * pilot (`repositoryToolsOf`).
  */
 export default defineDynamic({
   events: {

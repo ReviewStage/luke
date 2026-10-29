@@ -1,9 +1,9 @@
 import { WireValueSchema } from "@luke/wire";
 import { Schema as EffectSchema } from "effect";
 import {
-  AGENT_KIND,
   AGENT_MACHINE,
   AGENT_STATUS,
+  agentKindSchema,
   agentStartRequestFields,
   agentSummarySchema,
   CHECK_SUMMARY,
@@ -45,6 +45,14 @@ import { trimmedText } from "./text-schema.js";
  * can mark a task at work or with a pull request without a read per row.
  * A task belongs to one workspace, which its summary names; a start names
  * the workspace it starts in, or none for the account's first one.
+ * A task may be the child of another, to any depth, which its summary names
+ * by id.
+ * A task is worked by its agents or by a pilot (`TASK_MODE`), which its
+ * summary names.
+ * A task's agents' pull requests merge on green or wait for a member's go
+ * (`MERGE_POLICY`), which its summary names.
+ * A task opened whole also names, by id, the tasks it waits on and the tasks
+ * that wait on it, as Linear's blocked-by and blocks.
  * The starting account and the conversation a task resumes in are the
  * service's own and never travel here.
  *
@@ -127,9 +135,38 @@ export const TASK_PRIORITY_ORDER: readonly TaskPriority[] = [
   TASK_PRIORITY.NONE,
 ];
 
+/**
+ * How a task is worked: by the agents its members start on it, or by one
+ * pilot agent that breaks it into child tasks and runs agents on them. A
+ * task's mode is fixed as it starts; every task from before it is worked by
+ * agents.
+ */
+export const TASK_MODE = {
+  AGENT: "agent",
+  PILOT: "pilot",
+} as const;
+
+export type TaskMode = (typeof TASK_MODE)[keyof typeof TASK_MODE];
+
+/**
+ * What becomes of a pull request a task's agents open once its checks pass:
+ * merged on green, or held for a member's go. A task starts at merge on
+ * green.
+ */
+export const MERGE_POLICY = {
+  MERGE_ON_GREEN: "merge-on-green",
+  HOLD: "hold",
+} as const;
+
+export type MergePolicy = (typeof MERGE_POLICY)[keyof typeof MERGE_POLICY];
+
 export const taskStatusSchema = EffectSchema.Literals(Object.values(TASK_STATUS));
 
 export const taskPrioritySchema = EffectSchema.Literals(Object.values(TASK_PRIORITY));
+
+export const taskModeSchema = EffectSchema.Literals(Object.values(TASK_MODE));
+
+export const mergePolicySchema = EffectSchema.Literals(Object.values(MERGE_POLICY));
 
 /**
  * The member a task is assigned to, by their account's id, as a start or a
@@ -235,6 +272,15 @@ function agentStartsUnplanned(request: { agent?: TaskAgentStart; planning?: bool
  * unless `assigneeId` names a member of its workspace. Its agents run in the
  * cloud unless `runsOn` names one of the starter's devices, kept on the task
  * before the agent the start asks for starts, so that agent runs there too.
+ * A `parentTaskId` makes it the child of a task the starter reaches in the
+ * same workspace, to any depth: the child takes its parent's repository and
+ * where its agents run, so a start naming another repository is refused
+ * (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), as one naming another place
+ * to run is (`HOSTED_API_ERROR.RUNS_ON_LOCKED`), and a parent the starter
+ * cannot reach is not found.
+ * A task is worked by its agents unless `mode` names a pilot, which the
+ * service refuses from an account without the Pilot experiment, and which
+ * stands as the task was started.
  * A released desktop may still send `linearIssueId` or `issues`, from when a
  * task could link issues, which are accepted and ignored.
  */
@@ -255,6 +301,8 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(taskAssigneeIdSchema),
+  parentTaskId: EffectSchema.optionalKey(wireUuidSchema),
+  mode: EffectSchema.optionalKey(taskModeSchema),
 }).check(EffectSchema.makeFilter(agentStartsUnplanned));
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
@@ -277,6 +325,7 @@ function updateNamesAChange(update: {
   status?: TaskStatus;
   priority?: TaskPriority;
   assigneeId?: string | null;
+  mergePolicy?: MergePolicy;
   runsOn?: TaskRunsOnRequest;
 }): boolean {
   return Object.keys(update).length > 0;
@@ -292,7 +341,8 @@ function positionIsPinned(update: { pinned?: boolean; pinPosition?: string }): b
  * where its pin stands in the sidebar's Pinned section (`pin-order.ts`),
  * which comes only with `pinned: true` and pins a plan not yet pinned,
  * whether it is archived, the workspace it moves to, where it stands, how
- * much it matters, who it is assigned to, or any of them at once. A rename is one of these; a repository is confirmed reachable by the
+ * much it matters, who it is assigned to, what becomes of its agents' pull
+ * requests once their checks pass, or any of them at once. A rename is one of these; a repository is confirmed reachable by the
  * workspace before it is kept, and null clears it. An assignee is confirmed a
  * member of the task's workspace before it is kept, and null clears it. A move is the task's
  * owner's alone, into a workspace they are a member of whose GitHub reaches
@@ -312,13 +362,48 @@ export const taskUpdateRequestSchema = EffectSchema.Struct({
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
+  mergePolicy: EffectSchema.optionalKey(mergePolicySchema),
   runsOn: EffectSchema.optionalKey(taskRunsOnRequestSchema),
 }).check(EffectSchema.makeFilter(updateNamesAChange), EffectSchema.makeFilter(positionIsPinned));
 
 export type TaskUpdateRequest = typeof taskUpdateRequestSchema.Type;
 
-/** What a change of where a task stands names: its status, its priority, who it is assigned to (null for no one), or any of them. */
-export type TaskStanding = Pick<TaskUpdateRequest, "status" | "priority" | "assigneeId">;
+/** What a change of where a task stands names: its status, its priority, who it is assigned to (null for no one), its merge policy, or any of them. */
+export type TaskStanding = Pick<
+  TaskUpdateRequest,
+  "status" | "priority" | "assigneeId" | "mergePolicy"
+>;
+
+/** Which side of a block the other task stands on, as the task a change names reads it: one it waits on, or one that waits on it. */
+export const TASK_BLOCK_RELATION = {
+  BLOCKED_BY: "blocked-by",
+  BLOCKS: "blocks",
+} as const;
+
+export type TaskBlockRelation = (typeof TASK_BLOCK_RELATION)[keyof typeof TASK_BLOCK_RELATION];
+
+/** Whether a block change adds the block or takes it away. */
+export const TASK_BLOCK_CHANGE = {
+  ADD: "add",
+  REMOVE: "remove",
+} as const;
+
+export type TaskBlockChange = (typeof TASK_BLOCK_CHANGE)[keyof typeof TASK_BLOCK_CHANGE];
+
+/**
+ * One block of the task the path names, added or taken away (POST): the
+ * other task, of the same workspace, and the side it stands on. A block is
+ * advice, as Linear's is; one that would close a cycle is refused
+ * (`HOSTED_API_ERROR.TASK_BLOCK_CYCLE`), and adding a block that stands, or
+ * taking away one that does not, changes nothing.
+ */
+export const taskBlockRequestSchema = EffectSchema.Struct({
+  change: EffectSchema.Literals(Object.values(TASK_BLOCK_CHANGE)),
+  relation: EffectSchema.Literals(Object.values(TASK_BLOCK_RELATION)),
+  taskId: wireUuidSchema,
+});
+
+export type TaskBlockRequest = typeof taskBlockRequestSchema.Type;
 
 /**
  * A repository the account pinned in the sidebar, and the instant it was
@@ -494,6 +579,18 @@ const taskSummaryFields = {
   assignee: EffectSchema.optionalKey(memberRefSchema),
   /** Where the task's agents run: absent for the cloud, and from a service before tasks said. */
   runsOn: EffectSchema.optionalKey(taskRunsOnSchema),
+  /** The task this one is a child of; absent for a task at the top, and from a service before child tasks. */
+  parentTaskId: EffectSchema.optionalKey(wireUuidSchema),
+  /** How the task is worked; absent from a service before modes, where every task is worked by its agents. */
+  mode: EffectSchema.optionalKey(taskModeSchema),
+  /** What becomes of its agents' pull requests once their checks pass; absent from a service before it, where they merge on green. */
+  mergePolicy: EffectSchema.optionalKey(mergePolicySchema),
+  /**
+   * True while a task it waits on (`blockedBy`) is neither done nor
+   * canceled, as its sidebar row is marked; absent while none is, and from a
+   * service before blocks.
+   */
+  blocked: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 };
 
 /** How much of a task's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */
@@ -510,7 +607,7 @@ const taskAgentLineSchema = EffectSchema.Struct({
   /** The agent's title; null where it has none, when it is named by its model. */
   title: EffectSchema.NullOr(EffectSchema.String),
   /** What kind of agent it is, said only of a member's operator, which every window names Luke (`agentName`); absent for a coder, and from a service before it was said. */
-  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_KIND))),
+  kind: EffectSchema.optionalKey(agentKindSchema),
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: EffectSchema.String,
   effort: EffectSchema.String,
@@ -683,7 +780,7 @@ const planSectionEditSchema = EffectSchema.Struct({
 
 export type PlanSectionEdit = typeof planSectionEditSchema.Type;
 
-/** One task with its saved document, its newest revision, who last changed each section, and the saves coding agents made on it, oldest first. */
+/** One task with its saved document, its newest revision, who last changed each section, the saves coding agents made on it, oldest first, and the tasks it waits on and that wait on it. */
 export const taskSchema = EffectSchema.Struct({
   ...taskSummaryFields,
   document: planDocumentSchema,
@@ -699,6 +796,10 @@ export const taskSchema = EffectSchema.Struct({
       EffectSchema.isMaxLength(PLAN_SECTION_BOUNDS.MAX_SECTIONS),
     ),
   ),
+  /** The tasks this one waits on, by id, the earliest added first, each one the reader reaches; absent from a service before blocks. */
+  blockedBy: EffectSchema.optionalKey(EffectSchema.Array(wireUuidSchema)),
+  /** The tasks that wait on this one, on the same terms as `blockedBy`. */
+  blocks: EffectSchema.optionalKey(EffectSchema.Array(wireUuidSchema)),
 });
 
 export type Task = typeof taskSchema.Type;

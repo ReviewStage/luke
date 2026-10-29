@@ -22,8 +22,9 @@ import type { DiffLineSpan } from "../diff-view/contract.js";
  * Generate where the deployment can make them; chapters being made, by this
  * window's own Generate or someone else's; a generation that failed; or the
  * chapters ready, stale where they were made for a head the pull request
- * has moved on from (`chaptersStale`). "Other changes" is always read last
- * (`orderedChapters`). A chapter is viewed once every file it holds is
+ * has moved on from, or for another push than the files drawn, or for any
+ * where the files name no head (`chaptersStale`). "Other changes"
+ * is always read last (`orderedChapters`). A chapter is viewed once every file it holds is
  * marked viewed on GitHub (`chapterViewed`), and marking it marks each of
  * them, or unmarks them all where all were (`chapterMarks`), so a file two
  * chapters hold is shared by both. A key change's press brings its first
@@ -87,11 +88,22 @@ export function chaptersModelLabel(model: string): string {
   return Object.hasOwn(labels, model) ? (labels[model] ?? model) : model;
 }
 
-/** Whether chapters were made for a head the pull request has since moved on from. */
-function chaptersStale(pullRequest: Pick<Answer, "headSha" | "chapters">): boolean {
-  const { chapters } = pullRequest;
+/** The heads the tab's own reads hold now, each where it holds one: its pull request's, and its files'. */
+export interface ChaptersHeads {
+  readonly pullRequest: string | undefined;
+  readonly files: string | undefined;
+}
+
+/**
+ * Whether chapters cannot be drawn over the files the tab holds: the files
+ * are of another push than the chapters were made for, or of one no read
+ * named, or the pull request has moved on past them.
+ */
+function chaptersStale(chapters: Answer["chapters"], heads: ChaptersHeads): boolean {
+  if (chapters.status === PULL_REQUEST_CHAPTERS_STATE.NONE) return false;
+  const { pullRequest, files } = heads;
   return (
-    chapters.status !== PULL_REQUEST_CHAPTERS_STATE.NONE && chapters.headSha !== pullRequest.headSha
+    files !== chapters.headSha || (pullRequest !== undefined && pullRequest !== chapters.headSha)
   );
 }
 
@@ -114,6 +126,7 @@ export function chaptersShown(
   out: boolean,
   /** When this window's own Generate was pressed, while it is out. */
   generating: number | undefined,
+  heads: ChaptersHeads = { pullRequest: undefined, files: undefined },
 ): ChaptersShown {
   if (generating !== undefined) {
     return { kind: CHAPTERS_SHOWN.GENERATING, startedAt: generating, ours: true };
@@ -139,7 +152,7 @@ export function chaptersShown(
         kind: CHAPTERS_SHOWN.READY,
         chapters: orderedChapters(chapters.chapters),
         model: chapters.model,
-        stale: chaptersStale(pullRequest),
+        stale: chaptersStale(chapters, heads),
         generatable,
       };
   }

@@ -22,7 +22,7 @@ import { messageFailureWords } from "./agent-model.js";
 import { cardTitle } from "./tool-call-model.js";
 
 /**
- * inbox-close.tsx -- an open Inbox item closed without an answer, from its row's menu and hover icon or its pane's ⋯ menu, asked first.
+ * inbox-close.tsx -- an open Inbox item closed without an answer, from its row's menu or its pane's ⋯ menu, asked first.
  *
  * A close goes to the service as an act, under a key kept for the item at
  * the revision it was pressed on, so a press again after a lost reply is
@@ -43,8 +43,8 @@ import { cardTitle } from "./tool-call-model.js";
 const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /**
- * What the close is called in a menu and on a row's icon, which is its
- * tooltip too. Note that it is not called Close, because the bar of a side
+ * What the close is called in a menu and on its question card's ×, which
+ * is its tooltip too. Note that it is not called Close, because the bar of a side
  * panel or a window standing it full screen already holds a Close that only
  * puts the panel away.
  */
@@ -177,9 +177,9 @@ export function closedNote(landed: number, refused: number): string {
     : `${countWords(landed, TERM.INBOX_ITEM)} resolved, ${refused} could not be`;
 }
 
-/** One item's close as a menu and an icon offer it, and the question it asks through, which the caller draws beside them. */
+/** One item's close as a menu and its question card's × offer it, and the question it asks through, which the caller draws beside them. */
 export interface InboxClose {
-  /** The menu's item, and what the icon presses; none where the item cannot be closed. */
+  /** The menu's item, and what the × presses; none where the item cannot be closed. */
   readonly action: MenuAction | undefined;
   readonly dialog: React.JSX.Element;
 }

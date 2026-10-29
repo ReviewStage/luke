@@ -9,6 +9,8 @@ import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
   ANNOUNCE,
+  BLOCKED_WORDS,
+  BlockedMark,
   BUTTON_SIZE,
   CONFIRM_LOSS,
   ConfirmDialog,
@@ -20,6 +22,8 @@ import {
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
+  ListRowCount,
+  type ListRowFold,
   type MenuRow,
   nextRowOrHead,
   OneLine,
@@ -34,7 +38,7 @@ import {
 } from "@luke/ui";
 import { type AssigneeFace, accountActor, assigneeFace, creatorActor } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
-import { repositoryLabel } from "@luke/ui/task-list-model";
+import { type ChildTaskCount, repositoryLabel } from "@luke/ui/task-list-model";
 import {
   DOCUMENT_REGION,
   RENAME_FAILED_NOTE,
@@ -138,7 +142,9 @@ import { ChosenTasksContext, chosenRowMenu } from "./tasks-selection.js";
  * name where the door draws it: the sidebar's row turns into a field, and
  * the Plan tab's ⋯ puts the caret in the plan's own title. Version history
  * opens the plan's versions over the whole window, opening the task first
- * where it is not the open one, the one item that moves it. Pin moves the
+ * where it is not the open one, the one item that moves it. New child task
+ * opens New task's card for a child of the task, in its workspace and
+ * repository (`new-task-composer.tsx`). Pin moves the
  * task in the sidebar at once and is undone from the same menu. A pick in
  * Status sets the task there, said in a toast whose Undo puts back the
  * status it stood at, asking nothing, since no status stops an agent; a
@@ -381,7 +387,7 @@ export type TaskMenuSurface = (typeof TASK_MENU_SURFACE)[keyof typeof TASK_MENU_
  * One task's actions in the groups a rule divides, offering only those that
  * apply to it now, for the surface that offers them. A row's menu holds
  * Copy link; then Rename, Version history, and Mark as unread or read; then
- * Status, Priority, and Assignee; then Pin, Move to section, and Move to
+ * Status, Priority, and Assignee; then New child task; then Pin, Move to section, and Move to
  * workspace where the task may be moved; then the repository changed from
  * any row and Open on GitHub where it has one. The Plan tab's document
  * menu leads with Copy plan, since Copy formats the document drawn, and
@@ -424,6 +430,11 @@ function taskActionGroups(
   const lettered = drawn || doors.rowKeys;
   const read: MenuAction[] = task === undefined ? [] : [markReadItem(doors.read, lettered)];
   const rename = renameTaskItem(doors.rename);
+  const child = commandAction(
+    PANEL_COMMAND.NEW_CHILD_TASK,
+    () => tasks.onNewChildTask(taskId),
+    drawn,
+  );
   const versions = versionHistoryItem(() => tasks.history.onOpen(taskId), drawn);
   const section: MenuEntry[] = doors.section === undefined ? [] : [doors.section];
   const change = commandAction(
@@ -448,6 +459,7 @@ function taskActionGroups(
       ? [
           [...copy, ...link],
           [rename, versions, ...read],
+          [child],
           [...pinAction(tasks, task, lettered), ...section, ...move],
           open,
           [remove],
@@ -456,6 +468,7 @@ function taskActionGroups(
           link,
           [rename, versions, ...read],
           [...doors.standing],
+          [child],
           [...pinAction(tasks, task, lettered), ...section, ...move],
           [change, ...open],
           [remove],
@@ -746,7 +759,9 @@ function SidebarTaskCard({
  * body's weight unless the task is unread, and at the row's end how long ago
  * it was last updated, led by one mark for a repository that belongs to
  * another workspace, an agent at work, or a pull request (`task-card.tsx`),
- * the first named in the row's card, before that a pencil while a draft
+ * the first named in the row's card, before that a stop sign while a task
+ * it waits on is still open (`BlockedMark`), which the press says after
+ * the status, before that a pencil while a draft
  * waits in one of its boxes and it is not the plan open, whose boxes show
  * their own words (`draft-mark.tsx`), and before that the face of who
  * is on it (`rowFaceOf`, drawn as `AssigneeFaceMark`): its assignee's,
@@ -776,6 +791,9 @@ export function SidebarTask({
   at = task.updatedAt,
   repository,
   faces = EVERY_FACE,
+  depth,
+  fold,
+  childCount,
   onOpen,
 }: {
   tasks: TasksControl;
@@ -794,6 +812,12 @@ export function SidebarTask({
   repository?: string | undefined;
   /** Which faces the row may wear (`rowFaceOf`): a group by assignee, or a filter by assignee, says the one it names instead. */
   faces?: RowFaces;
+  /** How deep the row stands nested under its parent tasks: at the top unless said. */
+  depth?: number | undefined;
+  /** The child tasks nested under the row, which it folds; none where the list holds none. */
+  fold?: ListRowFold | undefined;
+  /** How many of the task's child tasks are finished, of all of them, said before its time; none where it has none. */
+  childCount?: ChildTaskCount | undefined;
   onOpen: () => void;
 }): React.JSX.Element {
   const rename = useInlineRename(task.id, tasks.onRenameTask);
@@ -860,6 +884,7 @@ export function SidebarTask({
                 {task.status === undefined ? null : (
                   <VisuallyHidden>, {TASK_STATUS_WORDS[task.status]}</VisuallyHidden>
                 )}
+                {task.blocked === true ? <VisuallyHidden>, {BLOCKED_WORDS}</VisuallyHidden> : null}
                 {unread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
                 {worn === undefined ? null : <AssigneeFaceHeard face={worn} />}
               </>
@@ -876,7 +901,15 @@ export function SidebarTask({
                 )}
                 {worn === undefined ? null : <AssigneeFaceMark face={worn} heard={false} />}
                 {drafted ? <DraftMark /> : null}
+                {task.blocked === true ? <BlockedMark aria-hidden="true" /> : null}
                 <TaskRowStatus task={task} />
+                {childCount === undefined ? null : (
+                  <ListRowCount
+                    settled={childCount.finished}
+                    total={childCount.total}
+                    label={`${childCount.finished} of ${childCount.total} child tasks finished`}
+                  />
+                )}
                 <Time at={at} now={now} hint={false} />
               </span>
             )
@@ -898,6 +931,8 @@ export function SidebarTask({
                   }
                 : { ...chosenRowMenu("Task", chosen, tasks.shown), openRequest: statusAsked }
           }
+          depth={depth}
+          fold={fold}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={
             rename.editing ? null : (

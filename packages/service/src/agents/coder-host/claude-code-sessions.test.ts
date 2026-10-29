@@ -105,15 +105,13 @@ import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { REPOSITORY_SNAPSHOT } from "../repository-snapshot.js";
 import { deploymentOidcToken, SESSION_TAG } from "../vercel-sandbox-api.js";
 import { CODER } from "./bounds.js";
-import { claudeCodeSessions } from "./claude-code-sessions.js";
-import { RunnerBundle } from "./runner-bundle.js";
 import {
-  RUNNER_ENDED,
-  type RunnerSessionsOptions,
-  retireWarmRunner,
-  runnerEnded,
-  runnerIdled,
-} from "./runner-sessions.js";
+  type ClaudeCodeSessionsOptions,
+  claudeCodeDeniedTools,
+  claudeCodeSessions,
+} from "./claude-code-sessions.js";
+import { RunnerBundle } from "./runner-bundle.js";
+import { RUNNER_ENDED, retireWarmRunner, runnerEnded, runnerIdled } from "./runner-sessions.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
 import { agentFailureOf } from "./status.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -236,7 +234,7 @@ const openAgent = Effect.tap(openAgentWithoutPlan, ({ userId }) => savePlan(user
 
 /** The sessions for the account, the next event number read from the counter given. */
 function sessionsFor(userId: string, sequence: { next: number }) {
-  const options: RunnerSessionsOptions = {
+  const options: ClaudeCodeSessionsOptions = {
     userId,
     eventsUrl: EVENTS_URL,
     linesUrl: LINES_URL,
@@ -244,6 +242,7 @@ function sessionsFor(userId: string, sequence: { next: number }) {
     integrations: () => Effect.succeed([LINEAR_SERVER]),
     instructions: () => Effect.succeed(INSTRUCTIONS),
     nextSequence: () => Effect.sync(() => sequence.next),
+    deniedTools: () => [],
   };
   return claudeCodeSessions(options);
 }
@@ -2497,6 +2496,44 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       }),
   );
 
+  it.effect("a pilot's launch denies the tools that edit a file, and a coder's denies none", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = runnerSandboxApi();
+      const { userId, agent: coder } = yield* openAgent;
+      assert.ok(coder.taskId !== null);
+      const started = yield* createAgent(userId, {
+        taskId: coder.taskId,
+        idempotencyKey: "start-pilot",
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        planSnapshot: null,
+        prompt: null,
+        repository: null,
+        kind: AGENT_KIND.PILOT,
+      });
+      assert.ok(Option.isSome(started));
+      const sessions = yield* claudeCodeSessions({
+        userId,
+        eventsUrl: EVENTS_URL,
+        linesUrl: LINES_URL,
+        mcpUrl: MCP_URL,
+        integrations: () => Effect.succeed([]),
+        instructions: () => Effect.succeed(INSTRUCTIONS),
+        nextSequence: () => Effect.succeed(0),
+        deniedTools: claudeCodeDeniedTools,
+      }).pipe(Effect.provide(services(api)));
+
+      yield* sessions.open(message(started.value.agent, "Plan it."));
+      yield* sessions.open(message(coder, "Fix it."));
+
+      const [pilotConfig] = (yield* launchLines(api.commands[0])) as [ClaudeCodeConfig];
+      const [coderConfig] = (yield* launchLines(api.commands[1])) as [ClaudeCodeConfig];
+      assert.deepEqual(pilotConfig.deniedTools, ["Edit", "Write", "NotebookEdit"]);
+      assert.equal(coderConfig.deniedTools, undefined);
+    }),
+  );
+
   it.effect(
     "a warm runner whose integrations changed since its launch is ended and relaunched for the next message, and one at work keeps going on what it has",
     () =>
@@ -2514,6 +2551,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           integrations: () => Effect.sync(() => handed.servers),
           instructions: () => Effect.succeed(INSTRUCTIONS),
           nextSequence: () => Effect.sync(() => sequence.next),
+          deniedTools: () => [],
         }).pipe(Effect.provide(services(api)));
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);

@@ -139,6 +139,7 @@ export const PANEL_COMMAND = {
   CANCEL_TASK: unkeyed("Cancel task", <TaskStatusMark status={TASK_STATUS.CANCELED} />),
   CHANGE_REPOSITORY: unkeyed("Change repository", <GLYPH.REPOSITORY />),
   MOVE_TO_WORKSPACE: unkeyed("Move to workspace", <GLYPH.MOVE />),
+  NEW_CHILD_TASK: unkeyed("New child task", <GLYPH.ADD />),
   OPEN_ON_GITHUB: keyed(APP_COMMAND.OPEN_ON_GITHUB, <GLYPH.OPEN_ON_GITHUB />),
   COPY_GITHUB_LINK: unkeyed("Copy GitHub link", <GLYPH.LINK />),
 } as const satisfies Record<string, PanelCommand>;

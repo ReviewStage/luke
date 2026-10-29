@@ -151,17 +151,34 @@ const CREDENTIAL_HELPER_KEY = "credential.https://github.com.helper";
 /** An agent id fit to name a machine and a folder: no separator, no dot, nothing a shell or a path would read. */
 const AGENT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
 
+/**
+ * Where a VM mounts the runner's folder when the folder's own path holds a
+ * character `/proc/mounts` writes escaped, a space as a Mac's
+ * `Application Support` has among them: smolvm checks that a mount came back
+ * by reading that file split on whitespace and comparing the path
+ * unescaped, so such a mount is never found and the machine never starts.
+ */
+const VM_RUNNER_FOLDER = "/opt/luke-runner";
+
+/** A character `/proc/mounts` writes as an octal escape. */
+const MOUNTS_ESCAPED = /[\s\\]/u;
+
 interface SmolvmSandboxOptions {
   /** The `smolvm` the device runs: a program at the path given, as on a Linux host, or the pinned release it fetches and checks under its state, as on a Mac. */
   readonly smolvm: string | AgentToolPin;
   /** The device's own state, under which each agent's GitHub credential is kept, outside every folder a VM mounts. */
   readonly stateRoot: string;
-  /** The folder of the runner's bundle, mounted read-only at the same path. */
+  /** The folder of the runner's bundle, mounted read-only in each VM (`vmRunnerFolder`). */
   readonly runnerFolder: string;
   /** The device's own user, which every command in a VM runs as. */
   readonly user: { readonly uid: number; readonly gid: number };
   /** Whether each VM may run VMs of its own: where the device has `/dev/kvm`, and never on a Mac. */
   readonly nested: boolean;
+}
+
+/** Where a VM sees the runner's folder: at its own path, as every machine made before this mounts it, or at `VM_RUNNER_FOLDER` where that path would never be found mounted. */
+function vmRunnerFolder(runnerFolder: string): string {
+  return MOUNTS_ESCAPED.test(runnerFolder) ? VM_RUNNER_FOLDER : runnerFolder;
 }
 
 /** A word quoted for a POSIX shell. */
@@ -235,6 +252,8 @@ function failureOf(printed: string): { readonly code: string | undefined; readon
 export function smolvmSandbox(options: SmolvmSandboxOptions): {
   readonly launch: (runner: LocalAgentRunner) => LocalAgentCommand;
   readonly sandbox: LocalAgentSandbox;
+  /** Where each VM sees the runner's folder, under which a launch names its bundle. */
+  readonly runnerFolder: string;
 } {
   const user = `${options.user.uid}:${options.user.gid}`;
   const pinned = typeof options.smolvm === "string" ? undefined : options.smolvm;
@@ -348,7 +367,7 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
       "-v",
       `${folder}:${folder}`,
       "-v",
-      `${options.runnerFolder}:${options.runnerFolder}:ro`,
+      `${options.runnerFolder}:${vmRunnerFolder(options.runnerFolder)}:ro`,
       ...(options.nested ? ["--nested"] : []),
       ...(github
         ? [
@@ -527,14 +546,16 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
 
     deleted: (agentId) =>
       Effect.gen(function* () {
-        if (!AGENT_ID.test(agentId)) return;
+        if (!AGENT_ID.test(agentId)) return true;
         const name = machineOf(agentId);
         yield* ran(["machine", "stop", "--name", name], STOP_TIMEOUT);
-        yield* ran(["machine", "delete", "--name", name, "-f"], STOP_TIMEOUT);
+        const removed = yield* succeeded(["machine", "delete", "--name", name, "-f"], STOP_TIMEOUT);
         const fileSystem = yield* FileSystem.FileSystem;
         yield* Effect.ignore(
           fileSystem.remove(credentialsOf(agentId).folder, { recursive: true, force: true }),
         );
+        // Note that a delete smolvm refused for a machine it no longer has leaves nothing standing.
+        return removed || Option.isNone(yield* statusOf(agentId));
       }),
 
     githubToken: (agentId, token) =>
@@ -565,5 +586,6 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
         env: runner.env,
       }),
     sandbox,
+    runnerFolder: vmRunnerFolder(options.runnerFolder),
   };
 }

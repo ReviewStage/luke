@@ -1,5 +1,6 @@
 import { type InboxPerson, inboxAddressedTo } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   ANNOUNCE,
   AttentionMark,
@@ -27,7 +28,6 @@ import {
   LAYOUT_ELEMENT,
   LIST_LEAVING_SELECTOR,
   LIST_MOTION_WAY,
-  LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   LIST_ROW_LEAD,
@@ -48,6 +48,7 @@ import {
   ScrollArea,
   SearchField,
   SelectionRegion,
+  Shortcut,
   Skeleton,
   SkeletonRegion,
   Stack,
@@ -167,7 +168,6 @@ import {
   listedItems,
   NEEDS_YOU,
   needsYou as needsYouOf,
-  threadsWords,
 } from "./inbox-model.js";
 import {
   RowMedia,
@@ -386,11 +386,12 @@ function drawnWidth(width: number, alone: boolean): string | undefined {
  * the one standing beside the list, which shows its own words, the row wears
  * the Draft pencil before its marks, as a sidebar task's row does
  * (`draft-mark.tsx`).
- * Where the list hands down `onMark`, the row offers to mark it read or unread:
- * a press over its time while the pointer rests on it or it holds the
- * keyboard, the time and its marks stepping aside, and the first item of
- * its menu, which names the key that does the same to the
- * chosen item (`APP_COMMAND.TOGGLE_READ`); and a swipe right, a
+ * The row's acts stand in its menu alone, its ⋯ the one press over its
+ * time while the pointer rests on it or it holds the keyboard, so the title
+ * keeps the room a row of buttons would cover. Where the list hands down
+ * `onMark`, the row offers to mark it read or unread: an item of its menu,
+ * which names the key that does the same to the chosen item
+ * (`APP_COMMAND.TOGGLE_READ`); and a swipe right, a
  * short one leaving the row open on a Read or Unread button, a long one
  * marking it as it is let go (`@luke/ui`'s `ListRow` swipe). A list its tasks
  * do not head is the person page's, or the Inbox's own grouped by anything
@@ -401,9 +402,7 @@ function drawnWidth(width: number, alone: boolean): string | undefined {
  * down its media reads (`media`), the row shows the pictures and pages its
  * item carries under its preview (`inbox-row-media.tsx`). Where the list
  * hands down `onClose`, an open item's row offers to close it without an
- * answer, asked first (`inbox-close.tsx`): a press beside its mark while
- * the pointer rests on it or it holds the keyboard, and the last item of
- * its menu.
+ * answer, asked first (`inbox-close.tsx`), as the last item of its menu.
  */
 export function InboxItemRow({
   listed,
@@ -471,7 +470,7 @@ export function InboxItemRow({
   const carried = useMemo(() => inboxMedia(item), [item]);
   useRowMediaAsks(item.id, item.updatedAt, carried, media);
   // Note that U acts only on the chosen item, so only its row names the chord.
-  const { read, close, groups } = useInboxItemActions(item, {
+  const { close, groups } = useInboxItemActions(item, {
     onMark: onMark === undefined ? undefined : (_item, next) => onMark(listed, next),
     onMove: onAskMove === undefined ? undefined : () => onAskMove(listed),
     onClose,
@@ -536,33 +535,6 @@ export function InboxItemRow({
             />
           }
           metaAt={LIST_ROW_META.TITLE}
-          actions={
-            read === undefined && close.action === undefined ? undefined : (
-              <>
-                {read === undefined ? null : (
-                  <Tooltip label={read.label} command={read.command}>
-                    <IconButton
-                      icon={unread ? <MailOpenIcon /> : <MailIcon />}
-                      label={read.label}
-                      size={BUTTON_SIZE.COMPACT}
-                      onClick={read.onSelect}
-                    />
-                  </Tooltip>
-                )}
-                {close.action === undefined ? null : (
-                  <Tooltip label={close.action.label}>
-                    <IconButton
-                      icon={close.action.icon}
-                      label={close.action.label}
-                      size={BUTTON_SIZE.COMPACT}
-                      onClick={close.action.onSelect}
-                    />
-                  </Tooltip>
-                )}
-              </>
-            )
-          }
-          actionsAt={LIST_ROW_ACTIONS.HOVER}
           swipe={
             onMark === undefined
               ? undefined
@@ -1300,19 +1272,25 @@ export function newTaskAction(onNewTask: (() => void) | undefined): EmptyStateAc
       };
 }
 
+/** What the pane beside a list with items in it says while none is chosen. */
+const CHOOSE_AN_ITEM = "Choose an item";
+
 /**
  * The pane beside the list while nothing is chosen, as a mail app's stands
- * empty: how many threads the list holds, or, holding none, that nothing
- * needs the reader, over New task where one can start.
+ * empty: how to choose an item, by a press or by stepping with the keys that
+ * step through the list (J and K), or, holding none, that nothing needs the
+ * reader, over New task where one can start. Under a finger there is no
+ * keyboard to step with, so it names the press alone.
  */
 export function InboxPaneEmpty({
   listed,
   newTask,
 }: {
-  /** How many threads the list holds. */
+  /** How many items the list holds. */
   listed: number;
   newTask?: (() => void) | undefined;
 }): React.JSX.Element {
+  const coarse = useCoarsePointer();
   if (listed === 0) {
     return (
       <EmptyState icon={<InboxIcon />} action={newTaskAction(newTask)}>
@@ -1320,7 +1298,19 @@ export function InboxPaneEmpty({
       </EmptyState>
     );
   }
-  return <EmptyState icon={<InboxIcon />}>{threadsWords(listed)}</EmptyState>;
+  return (
+    <EmptyState icon={<InboxIcon />}>
+      {coarse ? (
+        CHOOSE_AN_ITEM
+      ) : (
+        <>
+          {CHOOSE_AN_ITEM}, or step with{" "}
+          <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEXT_INBOX_ITEM].chord} spoken />{" "}
+          <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.PREVIOUS_INBOX_ITEM].chord} spoken />
+        </>
+      )}
+    </EmptyState>
+  );
 }
 
 /** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, the scope's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */

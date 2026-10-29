@@ -209,7 +209,7 @@ export interface Agent {
   readonly author: AgentAuthor | null;
   /** How its repository was reached as it started: the workspace's GitHub App, or its starter's own token. */
   readonly githubAccess: GitHubAccess;
-  /** What the agent is: a coder, or its member's operator. */
+  /** What the agent is: a coder, a task's pilot, or its member's operator. */
   readonly kind: AgentKind;
   readonly createdAt: Date;
   /** Where its runner runs: a Vercel Sandbox, or its starter's Mac; a Vercel Sandbox where unsaid. */
@@ -278,16 +278,16 @@ export type AgentBriefText =
 
 /**
  * Where a Start puts the agent: on a task, whose workspace it joins and
- * whose text or the developer's prompt it is handed, or in a workspace with
- * no task, as an automation's run puts one, handed a prompt, since there is
- * no plan to hand it; or, as the member's operator alone, in a workspace
- * with no task and handed nothing.
+ * whose text or the developer's prompt it is handed, a coder or the task's
+ * pilot; or in a workspace with no task, as an automation's run puts one,
+ * handed a prompt, since there is no plan to hand it; or, as the member's
+ * operator alone, in a workspace with no task and handed nothing.
  */
 export type AgentPlace =
   | (AgentBriefText & {
       readonly taskId: string;
       readonly organizationId?: undefined;
-      readonly kind?: typeof AGENT_KIND.CODER | undefined;
+      readonly kind?: typeof AGENT_KIND.CODER | typeof AGENT_KIND.PILOT | undefined;
     })
   | {
       readonly taskId: null;
@@ -314,6 +314,8 @@ export type NewAgent = AgentPlace & {
   readonly startedFrom?: StoredStartedFrom | undefined;
   /** The coding agent whose `start_agent` starts this one; none for a Start by a member, Luke, or an automation. */
   readonly startedByAgentId?: string | undefined;
+  /** The pilot this one continues, whose unarchived agents of the account now report to this one; none for any other Start. */
+  readonly takesOverFrom?: string | undefined;
   /** The agent's title from the start, a run's fixed name; none where it is named later. */
   readonly title?: string | undefined;
   readonly idempotencyKey: string;
@@ -628,6 +630,65 @@ const findOwnAgentId = SqlSchema.findOneOption({
     ),
 });
 
+/** The pilots that took over from the agent before, by continuing it. */
+const earlierPilot = alias(agentTable, "earlier_pilot");
+
+/**
+ * The account's unarchived agents a pilot started, or any pilot that took
+ * over from it before, moved to the one that takes over from it now. Note
+ * that the earlier pilots' are moved too, because a pilot continued again
+ * is taken over by its latest continue, which its agents report to.
+ */
+const updateTakenOver = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, from: Schema.String, to: Schema.String }),
+  execute: ({ userId, from, to }) =>
+    Database.use((db) =>
+      db
+        .update(agentTable)
+        .set({ startedByAgentId: to })
+        .where(
+          and(
+            or(
+              eq(agentTable.startedByAgentId, from),
+              inArray(
+                agentTable.startedByAgentId,
+                db
+                  .select({ id: earlierPilot.id })
+                  .from(earlierPilot)
+                  .where(
+                    and(
+                      eq(earlierPilot.kind, AGENT_KIND.PILOT),
+                      sql`${earlierPilot.startedFrom} ->> 'agentId' = ${from}`,
+                      sql`${earlierPilot.startedFrom} ->> 'messageId' is null`,
+                    ),
+                  ),
+              ),
+            ),
+            eq(agentTable.userId, userId),
+            isNull(agentTable.archivedAt),
+          ),
+        ),
+    ),
+});
+
+/** The account's unarchived agents one agent started, moved to another as their starter. */
+const updateStartedBy = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, from: Schema.String, to: Schema.String }),
+  execute: ({ userId, from, to }) =>
+    Database.use((db) =>
+      db
+        .update(agentTable)
+        .set({ startedByAgentId: to })
+        .where(
+          and(
+            eq(agentTable.startedByAgentId, from),
+            eq(agentTable.userId, userId),
+            isNull(agentTable.archivedAt),
+          ),
+        ),
+    ),
+});
+
 /**
  * The starter a Start records: the account's own agent under the id it
  * names, and none for no id or another account's agent. Note that only the
@@ -689,6 +750,31 @@ function liveOperatorOf(userId: string, organizationId: string): SQL | undefined
     isNull(agentTable.archivedAt),
   );
 }
+
+/**
+ * The task's pilot standing unarchived, any but the one named, by the task's
+ * id alone: a pilot is the task's whoever started it and whoever asks, so no
+ * reader's reach narrows it, and a caller has reached the task before asking.
+ */
+const findLivePilot = SqlSchema.findOneOption({
+  Request: Schema.Struct({ taskId: Schema.String, besides: Schema.NullOr(Schema.String) }),
+  Result: IdRowSchema,
+  execute: ({ taskId, besides }) =>
+    Database.use((db) =>
+      db
+        .select({ id: agentTable.id })
+        .from(agentTable)
+        .where(
+          and(
+            eq(agentTable.taskId, taskId),
+            eq(agentTable.kind, AGENT_KIND.PILOT),
+            isNull(agentTable.archivedAt),
+            besides === null ? undefined : ne(agentTable.id, besides),
+          ),
+        )
+        .limit(1),
+    ),
+});
 
 /** Read under the workspace's lock a Start takes, by the member alone, since only they reach their operator. */
 const findLiveOperator = SqlSchema.findOneOption({
@@ -1886,6 +1972,32 @@ const findVisibleAgent = SqlSchema.findOneOption({
     ),
 });
 
+/** The most continues of a pilot a message follows to the pilot that took over from it, every one archived but the last. */
+const TAKEOVER_HOPS = 10;
+
+/** The newest pilot that continued the agent, where the account may read it (`agentVisibleTo`), archived or not; a fork is none. */
+const findTakingOverPilot = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: AgentRowSchema,
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select(AGENT_COLUMNS)
+        .from(agentTable)
+        .where(
+          and(
+            // Note that the source is matched on the expression its index is built on.
+            sql`(${agentTable.startedFrom}->>'agentId') = ${agentId}`,
+            sql`${agentTable.startedFrom}->>'messageId' is null`,
+            eq(agentTable.kind, AGENT_KIND.PILOT),
+            agentVisibleTo(userId),
+          ),
+        )
+        .orderBy(desc(agentTable.createdAt), desc(agentTable.id))
+        .limit(1),
+    ),
+});
+
 /** The account's pin of the agent, from now; one already standing keeps its instant. */
 const insertAgentPin = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, now: Schema.Date }),
@@ -2005,18 +2117,32 @@ const deleteConversationRow = SqlSchema.void({
     Database.use((db) => db.delete(conversations).where(eq(conversations.id, conversationId))),
 });
 
+/** The kind a Start makes, read under its task's lock: the kind asked, bar a pilot where another pilot of the task stands, which makes a coder. */
+const kindUnderLock = Effect.fnUntraced(function* (started: NewAgent) {
+  if (started.kind !== AGENT_KIND.PILOT) return started.kind ?? AGENT_KIND.CODER;
+  const besides = started.startedFrom?.agentId ?? null;
+  const standing = yield* findLivePilot({ taskId: started.taskId, besides });
+  return Option.isSome(standing) ? AGENT_KIND.CODER : AGENT_KIND.PILOT;
+});
+
 /**
  * Starts an agent on a task of the account's workspace, or in a workspace
  * of the account's with no task: a `coding_agent` conversation of the
  * account's and the row that binds it to the task or the workspace, with
  * the plan text or the prompt, the repository, the automation whose run
  * started it with that run, and the account's own agent whose `start_agent`
- * started it, as handed. A Start whose key the account has already used answers the agent
+ * started it, as handed. A continue of a pilot takes over its agents in the
+ * same transaction: the account's agents it started, or any pilot that
+ * took over from it before started, that stand unarchived report to the
+ * new pilot from then on. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
  * A Start of the member's operator answers the one standing in the
  * workspace where there is one, whatever its key, and writes nothing; one
  * the index finds another Start made first meanwhile is answered too, the
- * conversation opened for it taken back.
+ * conversation opened for it taken back. A task has one pilot, so a pilot
+ * asked of a task another stands on unarchived, as a Start that raced
+ * another finds under the task's lock, is made a coder; the pilot a
+ * continue goes on from is no other.
  * Nothing where the account reaches no such task or is no member of the
  * workspace.
  */
@@ -2037,6 +2163,7 @@ export function createAgent(
           return Option.some({ agent: existing.value, created: false });
         }
         const organizationId = reached.value.organizationId;
+        const kind = yield* kindUnderLock(started);
         // A member's operator is one per workspace, so a Start of it answers the one standing.
         if (started.kind === AGENT_KIND.OPERATOR) {
           const standing = yield* findLiveOperator({ userId, organizationId });
@@ -2074,13 +2201,17 @@ export function createAgent(
           mentionedServers: storedServers(started.mentionedServers ?? []),
           githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
           payer: started.payer ?? null,
-          kind: started.kind ?? AGENT_KIND.CODER,
+          kind,
           machine: started.machine ?? AGENT_MACHINE.VERCEL,
           deviceId: started.deviceId ?? null,
           now,
         });
         if (Option.isSome(inserted)) {
           const { txid, ...row } = inserted.value;
+          // The pilot's agents report to the one that continues it from the moment it stands.
+          if (started.takesOverFrom !== undefined) {
+            yield* updateTakenOver({ userId, from: started.takesOverFrom, to: row.id });
+          }
           return Option.some({ agent: row, created: true, txid });
         }
         // Only the operator's index answers an insert with no row: the one another Start made stands.
@@ -2098,12 +2229,19 @@ export function createAgent(
 /**
  * Discards an agent a Start could not open an eve session for: its row and
  * its conversation, with every message and turn the conversation holds,
- * which is none. Answers whether the account reached such an agent.
+ * which is none. The agents a continue of a pilot took over go back to the
+ * pilot it was started from first, since the row's delete would leave them
+ * reporting to no one. Answers whether the account reached such an agent.
  */
 export function discardAgent(userId: string, agentId: string): AgentStoreEffect<boolean> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
+        // Note that an agent never run started none of its own, so every agent it starts was taken over.
+        const source = Option.getOrUndefined(yield* findAgent({ userId, agentId }))?.startedFrom;
+        if (source !== undefined && source !== null) {
+          yield* updateStartedBy({ userId, from: agentId, to: source.agentId });
+        }
         const [deleted] = yield* deleteAgentRow({ userId, agentId });
         if (deleted === undefined) return false;
         yield* deleteConversationRow(deleted.conversationId);
@@ -2477,6 +2615,28 @@ export function readVisibleAgent(
   return findVisibleAgent({ userId, agentId });
 }
 
+/**
+ * The pilot that took over from the agent, where the account may read it:
+ * the newest pilot that continued it, or, where that one is archived too,
+ * the newest that continued that one, and so on for at most
+ * `TAKEOVER_HOPS` continues; nothing where the chain ends archived or no
+ * pilot continued the agent.
+ */
+export function readTakeoverPilot(
+  userId: string,
+  agentId: string,
+): AgentStoreEffect<Option.Option<Agent>> {
+  return Effect.gen(function* () {
+    let from = agentId;
+    for (let hop = 0; hop < TAKEOVER_HOPS; hop += 1) {
+      const next = yield* findTakingOverPilot({ userId, agentId: from });
+      if (Option.isNone(next) || next.value.archivedAt === null) return next;
+      from = next.value.id;
+    }
+    return Option.none();
+  });
+}
+
 /** The agent given another model, effort, and context window, which its next step runs on, the model's whole window where the choice names none; nothing for an agent of a workspace the account is not in. */
 export function updateAgentChoice(
   userId: string,
@@ -2707,6 +2867,11 @@ const updateLiveOperatorArchived = SqlSchema.findAll({
         .returning({ id: agentTable.id }),
     ),
 });
+
+/** Whether a pilot of the task stands unarchived, whoever started it, read by the task's id alone for a caller that has reached the task. */
+export function taskPilotStands(taskId: string): AgentStoreEffect<boolean> {
+  return Effect.map(findLivePilot({ taskId, besides: null }), Option.isSome);
+}
 
 /** The member's operator standing in the workspace; none where none stands or the member is no member of it. */
 export function readStandingOperator(
@@ -3383,6 +3548,43 @@ export function readAgentHeaderOfConversation(
   conversationId: string,
 ): AgentStoreEffect<Option.Option<AgentHeader>> {
   return findAgentHeaderOfConversation({ userId, conversationId });
+}
+
+/**
+ * Whether the agent in the row read is under a pilot: started by an agent
+ * of kind pilot (`AGENT_KIND.PILOT`), a coding agent and a sub-pilot alike.
+ * Such an agent reports to that pilot with `message_agent` and posts no
+ * thread the developer reads, which are the top pilot's alone; one started
+ * by a coder, by no agent, or by an agent since deleted is under none.
+ */
+export function agentUnderPilot(): SQL<boolean> {
+  const starter = alias(agentTable, "pilot_starter");
+  return exists(
+    queryBuilder
+      .select({ id: starter.id })
+      .from(starter)
+      .where(and(eq(starter.id, agentTable.startedByAgentId), eq(starter.kind, AGENT_KIND.PILOT))),
+  ).mapWith(Boolean);
+}
+
+const findAgentUnderPilot = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ underPilot: Schema.Boolean }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ underPilot: agentUnderPilot() })
+        .from(agentTable)
+        .where(and(eq(agentTable.id, agentId), agentReachableBy(userId))),
+    ),
+});
+
+/** Whether the agent is under a pilot (`agentUnderPilot`); false for an agent the account does not reach. */
+export function readAgentUnderPilot(userId: string, agentId: string): AgentStoreEffect<boolean> {
+  return Effect.map(
+    findAgentUnderPilot({ userId, agentId }),
+    Option.exists((row) => row.underPilot),
+  );
 }
 
 /** What the agent's own conversation holds in its model's context: the model it runs on now, its newest step, and when eve last compacted it; null for each of the last two before it happens. */

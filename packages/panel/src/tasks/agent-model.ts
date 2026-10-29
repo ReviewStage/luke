@@ -62,7 +62,7 @@ import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
-import type { PlanEditor } from "@luke/features/task-wire";
+import { type PlanEditor, TASK_MODE, type TaskMode } from "@luke/features/task-wire";
 import { dayAndTimeText } from "@luke/features/time-format";
 import {
   ROW_PART,
@@ -110,6 +110,7 @@ import {
   plainWords,
   remoteCallOf,
   TOOL_TARGET,
+  type ToolTarget,
   toolTarget,
 } from "./tool-call-model.js";
 
@@ -439,6 +440,9 @@ export const START_NEEDS_REPOSITORY = "Choose a repository";
 /** What a call refused for a repository out of the workspace's reach says, wherever it is refused. */
 export const REPOSITORY_UNREACHED_NOTE = "Luke cannot reach this task's repository on GitHub.";
 
+/** What a message no answer came back for says, which may have reached the agent all the same. */
+const NOT_HEARD_BACK = "Luke didn't hear back.";
+
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {
   [AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]: REPOSITORY_UNREACHED_NOTE,
@@ -549,6 +553,28 @@ export function endLineOffersContinue(input: {
 }): boolean {
   if (!endLineContinues(input.status, input.endReason)) return false;
   return input.continued || !input.boxClosed;
+}
+
+/**
+ * Whether the developer starts agents of their own on a task worked in this
+ * mode: New agent, the draft a task with no tab opens, and a Fork. A pilot
+ * task offers none, because its pilot starts every agent on it; a task read
+ * from a service before modes is worked by its agents.
+ */
+export function startsOwnAgents(mode: TaskMode | undefined): boolean {
+  return mode !== TASK_MODE.PILOT;
+}
+
+/**
+ * Whether an agent offers Continue in new agent on a task worked in this
+ * mode: every agent, but on a pilot task its pilot alone, whose Continue
+ * takes over the agents it started rather than adding one of the developer's.
+ */
+export function offersContinue(
+  mode: TaskMode | undefined,
+  agent: { readonly pilot?: true | undefined },
+): boolean {
+  return startsOwnAgents(mode) || agent.pilot === true;
 }
 
 /** Said under an agent's box when the model or effort its chip chose could not be changed. */
@@ -1099,6 +1125,8 @@ function messageNoteWords(failure: AgentCallFailure): string {
       return MESSAGE_NOT_SENT;
     case AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
       return SHARED_FAILURE_NOTE[failure];
+    case AGENT_CALL_FAILURE.UNANSWERED:
+      return NOT_HEARD_BACK;
     default:
       return messageFailureWords(failure);
   }
@@ -1119,7 +1147,7 @@ export function messageFailureWords(failure: AgentCallFailure): string {
       return localAgentRefusalWords(LOCAL_AGENT_REFUSAL.MAC_AWAY, undefined);
     // No answer is not a refusal: the words may have reached the agent, and Retry carries the same key, so they reach it once.
     case AGENT_CALL_FAILURE.UNANSWERED:
-      return "Luke didn't hear back.";
+      return `${NOT_HEARD_BACK} Try again.`;
     case AGENT_CALL_FAILURE.AGENT_RETIRED:
       return MESSAGE_RETIRED;
     case AGENT_CALL_FAILURE.DEVICE_REMOVED:
@@ -1149,6 +1177,23 @@ export function closesComposer(failure: AgentCallFailure): boolean {
   return (
     failure === AGENT_CALL_FAILURE.AGENT_RETIRED || failure === AGENT_CALL_FAILURE.DEVICE_REMOVED
   );
+}
+
+/**
+ * Where the note in an agent's composer's place opens the pilot it reports
+ * to: the pilot's tab, where it stands on the agent's own task, as a coding
+ * agent's pilot does, else its tab on the pilot's task, as a sub-pilot's does. None for
+ * an agent no pilot started, which keeps its composer: a member talks to the
+ * top pilot of a pilot tree alone, and to any agent outside one.
+ */
+export function pilotTarget(
+  agent: Pick<AgentSummary, "planId" | "startedByPilot">,
+): ToolTarget | undefined {
+  const pilot = agent.startedByPilot;
+  if (pilot === undefined) return undefined;
+  return pilot.taskId === agent.planId
+    ? { kind: TOOL_TARGET.AGENT, agent: pilot.agentId }
+    : { kind: TOOL_TARGET.TASK, task: pilot.taskId, agent: pilot.agentId };
 }
 
 /**

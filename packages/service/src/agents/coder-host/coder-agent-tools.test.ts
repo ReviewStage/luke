@@ -80,7 +80,13 @@ import {
   PROVIDER_KEY_PROVIDER,
 } from "@luke/features/provider-key-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
-import { PLAN_ACTOR, TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
+import {
+  PLAN_ACTOR,
+  TASK_BOUNDS,
+  TASK_MODE,
+  TASK_PRIORITY,
+  TASK_STATUS,
+} from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { MESSAGE_CHANNEL, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { settleJsonSchemaGolden } from "@luke/wire/testing";
@@ -140,6 +146,7 @@ import { EVE_HOST_ATTRIBUTE, EVE_HOST_HEADER, EVE_HOST_TURN } from "../eve-host/
 import { claimRuntimeSession } from "../eve-host/conversation.js";
 import { LIST_OPEN_ASKS_REFUSAL } from "../operator-desk.js";
 import { STEWARD_CONTINUED_REFUSAL, STEWARD_DELETE_REFUSAL } from "../steward.js";
+import { TASK_BLOCK_REFUSAL } from "../task-block-changes.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
@@ -998,6 +1005,34 @@ test("start_agent with a title names the agent by it from the start, and a title
       reason: START_AGENT_REFUSAL.UNREADABLE,
     });
   }
+});
+
+test("start_agent on a pilot task with no pilot starts its pilot, held to Pilot as the caller's starter has it rather than the task's owner, and refused saying why where it is off", async () => {
+  const { workspaceId, agents, plans } = await openWorkspaces();
+  const { caller, teammates } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  await database.run(
+    Effect.flatMap(Database, (db) =>
+      db.update(task).set({ mode: TASK_MODE.PILOT }).where(eq(task.id, plans.billing)),
+    ),
+  );
+  const pilotOn = { experiments: { [EXPERIMENT.PILOT]: true } };
+  await database.run(writeAccountPreferences(teammates.userId, pilotOn));
+  const start = { taskId: plans.billing, prompt: "Bill by seat." };
+
+  assert.deepEqual(await call(CODER_TOOL.START_AGENT, start, "call-pilot-off"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: START_AGENT_REFUSAL.PILOT_OFF,
+  });
+  assert.equal(eve.sent.length, 0, "a refused pilot starts nothing");
+  await database.run(writeAccountPreferences(caller.userId, pilotOn));
+  const started = await call(CODER_TOOL.START_AGENT, start, "call-pilot-on");
+
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  assert.ok(isRecord(started.agent) && isWireString(started.agent.id));
+  const pilot = Option.getOrThrow(await database.run(readAgent(caller.userId, started.agent.id)));
+  assert.equal(pilot.kind, AGENT_KIND.PILOT);
 });
 
 test("start_agent with a branch starts an agent whose checkout is cloned at that branch and who is told to cut its own from it, and a branch GitHub does not hold is refused before anything starts", async () => {
@@ -2193,6 +2228,59 @@ test("update_task refuses a task of another workspace its starter is also in, a 
   }
 });
 
+test("update_task adds and takes away a task's blocks, which read_task names on both tasks, and refuses a task of another workspace, a stranger's, and a block that closes a cycle, taking back the call's every change", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const strangersTask = Option.getOrThrow(
+    await database.run(readAgent(agents.strangers.userId, agents.strangers.id)),
+  ).taskId;
+  assert.ok(strangersTask !== null);
+  const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+  const blockIds = async (taskId: string) => {
+    const read = await call(CODER_TOOL.READ_TASK, { taskId });
+    assert.ok(isRecord(read.task), JSON.stringify(read));
+    const ids = (side: unknown) =>
+      Array.isArray(side) ? side.map((each) => (isRecord(each) ? each.id : undefined)) : side;
+    return { blockedBy: ids(read.task.blockedBy), blocks: ids(read.task.blocks) };
+  };
+
+  const added = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: tasks.billing, blockedBy: { add: [tasks.invitations] } },
+    "call-1",
+  );
+  assert.equal(added.already, false, JSON.stringify(added));
+  assert.deepEqual(await blockIds(tasks.billing), { blockedBy: [tasks.invitations], blocks: [] });
+  assert.deepEqual(await blockIds(tasks.invitations), { blockedBy: [], blocks: [tasks.billing] });
+
+  const cycle = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: tasks.billing, name: "Seat billing", blocks: { add: [tasks.invitations] } },
+    "call-2",
+  );
+  assert.deepEqual(cycle, rejected(TASK_BLOCK_REFUSAL.CYCLE));
+  for (const other of [tasks.elsewhere, strangersTask]) {
+    assert.deepEqual(
+      await call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.billing, blocks: { add: [other] } }),
+      rejected(TASK_BLOCK_REFUSAL.NO_TASK),
+    );
+  }
+  const billing = Option.getOrThrow(
+    await database.run(readTask(agents.caller.userId, tasks.billing)),
+  );
+  assert.notEqual(billing.task.name, "Seat billing", "the refused block took the rename back");
+  assert.deepEqual(await blockIds(tasks.billing), { blockedBy: [tasks.invitations], blocks: [] });
+
+  const removed = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: tasks.invitations, blocks: { remove: [tasks.billing] } },
+    "call-3",
+  );
+  assert.equal(removed.already, false, JSON.stringify(removed));
+  assert.deepEqual(await blockIds(tasks.billing), { blockedBy: [], blocks: [] });
+});
+
 test("archive_agent refuses an agent whose turn a Stop was asked of but which still runs, since the turn goes on until eve ends it", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
@@ -2311,6 +2399,52 @@ test("message_agent hands another agent of the workspace the words under the sen
       reason: MESSAGE_AGENT_REFUSAL.SELF,
     },
   );
+});
+
+test("message_agent to a pilot a continue took over and archived reaches the pilot that took it over, and answers that pilot", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  const start = {
+    ...AGENT_CHOICE,
+    taskId: tasks.invitations,
+    planSnapshot: "# Teammate invitations",
+    prompt: null,
+  };
+  const pilot = await claimed(agents.caller.userId, {
+    ...start,
+    idempotencyKey: randomUUID(),
+    kind: AGENT_KIND.PILOT,
+  });
+  const worker = await claimed(agents.caller.userId, {
+    ...start,
+    idempotencyKey: randomUUID(),
+    startedByAgentId: pilot.id,
+  });
+  const continued = await claimed(agents.caller.userId, {
+    ...start,
+    idempotencyKey: randomUUID(),
+    kind: AGENT_KIND.PILOT,
+    startedFrom: { agentId: pilot.id, steps: 1, totalSteps: 1 },
+    takesOverFrom: pilot.id,
+  });
+  await database.run(archiveAgent(agents.caller.userId, pilot.id, true));
+
+  const sent = await directMessage(host, worker, pilot, eve.services);
+
+  assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
+  assert.equal(isRecord(sent.agent) ? sent.agent.id : undefined, continued.id);
+  const [line] = await database.run(
+    Database.use((db) =>
+      db
+        .select({ metadata: messages.metadata })
+        .from(messages)
+        .where(eq(messages.conversationId, continued.conversationId))
+        .orderBy(desc(messages.seq))
+        .limit(1),
+    ),
+  );
+  assert.deepEqual(line?.metadata, { channel: MESSAGE_CHANNEL.AGENT_MESSAGE });
 });
 
 test("a message to an agent whose session eve no longer runs opens a fresh session over its conversation rather than being refused, and settles the turn the ended session was running as failed for its session's end, once", async () => {

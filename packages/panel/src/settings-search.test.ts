@@ -188,7 +188,7 @@ test("an experiment is found by its name, what it brings, and what other apps ca
   for (const query of ["Experimental", "beta", "labs"]) {
     assert.deepEqual(
       experimentalFound(query, true),
-      ["Local agents", "Channels", "Memory", "Luke, your operator"],
+      ["Pilot", "Local agents", "Channels", "Memory", "Luke, your operator"],
       query,
     );
   }

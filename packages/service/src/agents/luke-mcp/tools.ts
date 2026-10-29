@@ -126,7 +126,9 @@ import {
   CODER_TOOL,
   kindToolsOf,
   machineToolsOf,
+  type OfferedBeside,
   repositoryToolsOf,
+  starterToolsOf,
   taskToolsOf,
 } from "../coder-host/tool-set.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
@@ -439,33 +441,37 @@ export type LukeMcpOfferedTo = Pick<Agent, "taskId" | "repository" | "kind" | "m
 /** The workspace's shared memory, which eve offers only where the agent's starter turned Memory on (`apps/dev/tools/remember.ts`'s `memoryOffered`). */
 const MEMORY_TOOLS: readonly string[] = [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL];
 
-/** The tools eve offers some agents and not others: each one some agent's task, repository, kind, or starter's Memory withholds. */
+/** The tools eve offers some agents and not others: each one some agent's task, repository, kind, starter, or starter's Memory withholds. */
 const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...MEMORY_TOOLS,
   ...taskToolsOf({ taskId: "any" }),
-  ...repositoryToolsOf({ repository: "any" }),
+  ...repositoryToolsOf({ repository: "any", kind: AGENT_KIND.CODER }),
   ...kindToolsOf({ kind: AGENT_KIND.OPERATOR }),
   ...kindToolsOf({ kind: AGENT_KIND.CODER }),
+  ...starterToolsOf({ underPilot: false }),
   ...machineToolsOf({ machine: AGENT_MACHINE.VERCEL }),
 ]);
 
 /**
  * Whether the server lists a tool to an agent: every tool eve offers every
  * agent, and each narrowed one where eve offers it to this agent, by its
- * task, its repository, its kind, and whether its starter has Memory on
- * (`memoryOn`), the same rules eve's tool files read at each turn. Note that
- * a harness reads the list as its launch begins, so an agent is narrowed
- * launch by launch, as eve's is turn by turn.
+ * task, its repository, its kind, whether a pilot started it, and whether
+ * its starter has Memory on (`beside`), the same rules eve's tool files read
+ * at each turn. Note that a harness reads the list as its launch begins, so
+ * an agent is narrowed launch by launch, as eve's is turn by turn, and that
+ * a tool left off the list still runs when called, so each narrowed tool's
+ * door refuses on its own.
  */
 export function offeredLukeMcpTool(
   agent: LukeMcpOfferedTo,
-  memoryOn: boolean,
+  beside: OfferedBeside,
 ): (name: string) => boolean {
   const offered: ReadonlySet<string> = new Set<string>([
-    ...(memoryOn ? MEMORY_TOOLS : []),
+    ...(beside.memoryOn ? MEMORY_TOOLS : []),
     ...taskToolsOf(agent),
     ...repositoryToolsOf(agent),
     ...kindToolsOf(agent),
+    ...starterToolsOf(beside),
     ...machineToolsOf(agent),
   ]);
   return (name) => !NARROWED_TOOLS.has(name) || offered.has(name);

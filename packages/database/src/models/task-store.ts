@@ -11,17 +11,22 @@ import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
 import { type PlanAgentEdit, planAgentEditSchema } from "@luke/features/plan-template";
 import {
+  type MergePolicy,
+  mergePolicySchema,
   PLAN_ACTOR,
   type PlanLastEdit,
   type PlanSectionEdit,
+  TASK_MODE,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
+  type TaskMode,
   type TaskOrigin,
   type TaskPriority,
   type TaskRunsOn,
   type TaskStatus,
   type TaskSummary,
+  taskModeSchema,
   taskPrioritySchema,
   taskStatusSchema,
   UNKNOWN_AGENT_LABEL,
@@ -63,6 +68,7 @@ import { reopenTaskInboxItems, settleTaskInboxItems } from "./inbox-settle.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
 import { stampConversationsDeleted } from "./soft-delete.js";
+import { leaveTaskBlocks, readTaskBlocks, taskBlockedFor } from "./task-block-store.js";
 import {
   isWorkspaceMember,
   reachableTask,
@@ -202,6 +208,10 @@ export interface NewTask {
   readonly origin?: TaskOrigin;
   /** Where its agents run; a sandbox where none is named. */
   readonly runsOn?: TaskRunsOnWrite;
+  /** The task it is a child of, which the caller confirmed it reaches in the same workspace, and whose repository and machine it took; none for a task at the top. */
+  readonly parentTaskId?: string;
+  /** How the task is worked, fixed as it starts; by its agents where none is named. */
+  readonly mode?: TaskMode;
 }
 
 /**
@@ -223,6 +233,8 @@ export interface TaskChanges {
   readonly priority?: TaskPriority;
   /** The member the task is assigned to, who must be a member of its workspace, or of the one it moves to; null for no one. */
   readonly assigneeId?: string | null;
+  /** What becomes of its agents' pull requests once their checks pass. */
+  readonly mergePolicy?: MergePolicy;
 }
 
 /** How a task's repository was reached, as a write takes it. */
@@ -260,6 +272,9 @@ const TASK_SUMMARY_COLUMNS = {
   githubAccess: task.githubAccess,
   machine: task.machine,
   deviceId: task.deviceId,
+  parentTaskId: task.parentTaskId,
+  mode: task.mode,
+  mergePolicy: task.mergePolicy,
   completedAt: task.completedAt,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -288,6 +303,9 @@ const TaskSummaryRowSchema = Schema.Struct({
   githubAccess: GitHubAccessSchema,
   machine: MachineSchema,
   deviceId: Schema.NullOr(Schema.String),
+  parentTaskId: Schema.NullOr(Schema.String),
+  mode: taskModeSchema,
+  mergePolicy: mergePolicySchema,
   completedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -308,6 +326,7 @@ const TaskListRowSchema = Schema.Struct({
   ...TaskSummaryRowSchema.fields,
   pinnedAt: Schema.NullOr(InstantColumnSchema),
   pinPosition: Schema.NullOr(Schema.String),
+  blocked: Schema.Boolean,
 });
 
 const TaskRowSchema = Schema.Struct({
@@ -488,7 +507,9 @@ function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
  * The row's plan, as the window and the model read it for `userId`, the
  * reader, whose own pin it carries: its text as the
  * document's body with no assumptions, since they are a section of the text,
- * and who last changed each section, as its revisions read. The row's own account is the one its
+ * who last changed each section, as its revisions read, and the tasks it
+ * waits on and that wait on it, each one the reader reaches
+ * (`task-block-store.ts`). The row's own account is the one its
  * agents are read under. Its last edit is its newest revision, or, before its
  * history begins, the newest save a coding agent made. A task is saved once
  * a save has moved its last save past its start, which no creation and no
@@ -506,6 +527,7 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
           Effect.map(agentLabelsOf(row, sectionWriters), (labels) => ({ sectionWriters, labels })),
         ),
         lastRevision: readLastEdit(row.id),
+        blocks: readTaskBlocks(userId, row.id),
       },
       { concurrency: yield* readConcurrency },
     );
@@ -525,6 +547,7 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
         ...(Option.isSome(lastEdit) ? { lastEdit: lastEdit.value } : undefined),
         document: { body: row.document, assumptions: [] },
         sectionEdits: sectionWriters.map((writer) => sectionEditOf(writer, labels)),
+        ...Option.getOrUndefined(read.blocks),
       },
       ownerId: row.userId,
       githubAccess: row.githubAccess,
@@ -638,6 +661,9 @@ function summaryOf(
       ? undefined
       : { assignee: { userId: row.assigneeId, name: assignee } }),
     ...runsOnOf(row, names, devices),
+    ...(row.parentTaskId === null ? undefined : { parentTaskId: row.parentTaskId }),
+    mode: row.mode,
+    mergePolicy: row.mergePolicy,
   };
 }
 
@@ -656,6 +682,7 @@ const TaskInsertSchema = Schema.Struct({
   organizationId: Schema.String,
   name: Schema.String,
   number: Schema.Number,
+  mode: taskModeSchema,
   status: taskStatusSchema,
   priority: taskPrioritySchema,
   assigneeId: Schema.NullOr(Schema.String),
@@ -665,6 +692,7 @@ const TaskInsertSchema = Schema.Struct({
   githubAccess: GitHubAccessSchema,
   machine: MachineSchema,
   deviceId: Schema.NullOr(Schema.String),
+  parentTaskId: Schema.NullOr(Schema.String),
   document: Schema.String,
   brief: Schema.NullOr(Schema.String),
   now: Schema.Date,
@@ -683,6 +711,7 @@ function taskValues(write: typeof TaskInsertSchema.Type) {
     organizationId: write.organizationId,
     name: write.name,
     number: write.number,
+    mode: write.mode,
     status: write.status,
     completedAt: completedAtOf(write.status, write.now),
     priority: write.priority,
@@ -693,6 +722,7 @@ function taskValues(write: typeof TaskInsertSchema.Type) {
     githubAccess: write.githubAccess,
     machine: write.machine,
     deviceId: write.deviceId,
+    parentTaskId: write.parentTaskId,
     document: write.document,
     brief: write.brief,
     createdAt: write.now,
@@ -767,6 +797,7 @@ const findTasks = SqlSchema.findAll({
           ...TASK_SUMMARY_COLUMNS,
           pinnedAt: taskPin.pinnedAt,
           pinPosition: taskPin.position,
+          blocked: taskBlockedFor(userId),
         })
         .from(task)
         .leftJoin(taskPin, readersPin(userId))
@@ -808,6 +839,9 @@ const findTaskHeader = SqlSchema.findOneOption({
     status: taskStatusSchema,
     machine: MachineSchema,
     deviceId: Schema.NullOr(Schema.String),
+    parentTaskId: Schema.NullOr(Schema.String),
+    mode: taskModeSchema,
+    mergePolicy: mergePolicySchema,
   }),
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
@@ -820,6 +854,9 @@ const findTaskHeader = SqlSchema.findOneOption({
           status: task.status,
           machine: task.machine,
           deviceId: task.deviceId,
+          parentTaskId: task.parentTaskId,
+          mode: task.mode,
+          mergePolicy: task.mergePolicy,
         })
         .from(task)
         .where(reachableTask(userId, taskId))
@@ -871,13 +908,14 @@ const TaskColumnChangesSchema = Schema.Struct({
   completedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
   priority: Schema.optionalKey(taskPrioritySchema),
   assigneeId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  mergePolicy: Schema.optionalKey(mergePolicySchema),
   machine: Schema.optionalKey(MachineSchema),
   deviceId: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
 type TaskColumnChanges = typeof TaskColumnChangesSchema.Type;
 
-/** The row changed: whichever of the name, the workspace and its number there, the repository, the status, the priority, and the assignee the change names, in one statement. */
+/** The row changed: whichever of the name, the workspace and its number there, the repository, the status, the priority, the assignee, and the merge policy the change names, in one statement. */
 const applyChanges = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -957,8 +995,10 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
       machine: (started.runsOn ?? TASK_RUNS_IN_CLOUD).machine,
       deviceId: (started.runsOn ?? TASK_RUNS_IN_CLOUD).deviceId,
+      parentTaskId: started.parentTaskId ?? null,
       document: "",
       brief: brief.length > 0 ? brief : null,
+      mode: started.mode ?? TASK_MODE.AGENT,
       status: started.status ?? TASK_STATUS.TODO,
       priority: started.priority ?? TASK_PRIORITY.NONE,
       assigneeId: started.assigneeId ?? null,
@@ -984,6 +1024,11 @@ function assigneeAdmitted(
 export interface TaskCommitted<A> {
   readonly task: A;
   readonly txid?: string;
+}
+
+/** A task changed, as `updateTaskCommitted` answers it: whether its merge policy moved, judged under the row's lock, beside what `TaskCommitted` carries. */
+export interface TaskUpdated<A> extends TaskCommitted<A> {
+  readonly mergePolicyMoved: boolean;
 }
 
 /**
@@ -1046,21 +1091,24 @@ export function createTaskOnce(
  * Every task of every workspace the account is a member of, newest started first, without their documents.
  * Nothing but starting a task moves the order: opening, reading, saving,
  * pinning, and settling one leave every row where it stood, and the order a
- * pin draws is the window's to draw from `pinPosition` and `pinnedAt`.
+ * pin draws is the window's to draw from `pinPosition` and `pinnedAt`. A
+ * task waiting on an open task the account reaches is marked blocked
+ * (`taskBlockedFor`).
  */
 export function listTasks(userId: string): TaskStoreEffect<readonly TaskSummary[]> {
   return Effect.gen(function* () {
     const rows = yield* findTasks({ userId });
     const devices = yield* devicesOf(rows);
     const names = yield* readAccountNames(namedAccountsOf(rows, devices));
-    return rows.map((row) =>
-      summaryOf(
+    return rows.map((row) => ({
+      ...summaryOf(
         row,
         row.pinnedAt === null ? null : { pinnedAt: row.pinnedAt, pinPosition: row.pinPosition },
         names,
         devices,
       ),
-    );
+      ...(row.blocked ? { blocked: true } : undefined),
+    }));
   });
 }
 
@@ -1115,6 +1163,12 @@ export interface TaskHeader {
   readonly status: TaskStatus;
   /** Where the task's agents run, as its row holds it. */
   readonly runsOn: TaskRunsOnWrite;
+  /** The task it is a child of; null for a task at the top. */
+  readonly parentTaskId: string | null;
+  /** How the task is worked. */
+  readonly mode: TaskMode;
+  /** What becomes of its agents' pull requests once their checks pass. */
+  readonly mergePolicy: MergePolicy;
 }
 
 /**
@@ -1136,6 +1190,9 @@ export function readTaskHeader(
       repository: row.repository,
       status: row.status,
       runsOn: { machine: row.machine, deviceId: row.deviceId },
+      parentTaskId: row.parentTaskId,
+      mode: row.mode,
+      mergePolicy: row.mergePolicy,
     })),
   );
 }
@@ -1210,6 +1267,9 @@ function columnChangesOf(
       : { status: changes.status, completedAt: completedAtOf(changes.status, now) }),
     ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
     ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
+    ...(changes.mergePolicy === undefined || changes.mergePolicy === standing.mergePolicy
+      ? undefined
+      : { mergePolicy: changes.mergePolicy }),
   };
 }
 
@@ -1337,7 +1397,9 @@ export function updateTask<E = never, R = never>(
 /**
  * A task changed, as `updateTask` changes one, and the transaction the change
  * committed in, read from the write that changed the row or the reader's pin;
- * none where the change wrote neither.
+ * none where the change wrote neither. Whether the merge policy moved is
+ * judged against the row as it stood under the lock, so of two switches
+ * racing, the one that lands second is the one that moved it.
  */
 export function updateTaskCommitted<E = never, R = never>(
   userId: string,
@@ -1345,7 +1407,7 @@ export function updateTaskCommitted<E = never, R = never>(
   changes: TaskChanges,
   moveGuard?: TaskMoveGuard<E, R>,
 ): Effect.Effect<
-  Option.Option<TaskCommitted<Task>>,
+  Option.Option<TaskUpdated<Task>>,
   TaskStoreFailure | TaskAssigneeNotMember | E,
   DatabaseServices | R
 > {
@@ -1406,7 +1468,10 @@ export function updateTaskCommitted<E = never, R = never>(
         const txid = written ?? Option.getOrUndefined(pinned)?.txid;
         if (changes.organizationId !== undefined) {
           yield* followingAgentsAndInbox(taskId, row.organizationId, moved, now);
-          if (row.organizationId !== locked.value.organizationId) yield* leaveSections(taskId);
+          if (row.organizationId !== locked.value.organizationId) {
+            yield* leaveSections(taskId);
+            yield* leaveTaskBlocks(taskId);
+          }
         }
         // A task moved to Done or Canceled settles its open inbox items, and one moved off them to work
         // again opens again the items that move settled, by its stamp. Note that this runs after its
@@ -1419,7 +1484,12 @@ export function updateTaskCommitted<E = never, R = never>(
           }
         }
         const changed = yield* taskOf(userId, row);
-        return Option.some(txid === undefined ? { task: changed } : { task: changed, txid });
+        const mergePolicyMoved = columns.mergePolicy !== undefined;
+        return Option.some(
+          txid === undefined
+            ? { task: changed, mergePolicyMoved }
+            : { task: changed, txid, mergePolicyMoved },
+        );
       }),
     ),
   );

@@ -5,7 +5,7 @@ import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation.js";
 import { AgentComposer } from "./agent-composer.js";
-import { agentName, modelLabel } from "./agent-model.js";
+import { agentName } from "./agent-model.js";
 import type { TranscriptCards } from "./agent-tab.js";
 import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { ArchivedComposerNote } from "./archived-note.js";
@@ -207,7 +207,7 @@ export function DraftAgentTab({
           }}
           doors={NO_DOORS}
           onStop={NOTHING_TO_STOP}
-          agentName={choice === undefined ? undefined : modelLabel(choice.model, control.models)}
+          followsUp={false}
           keywords={control.keywords}
           skills={control.readSkills}
         />

@@ -34,6 +34,7 @@ import {
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TaskCallFailure,
+  type TasksBlockAnswer,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabsAnswer,
   type TasksCommentAnswer,
@@ -70,6 +71,7 @@ import {
   taskBrowserTabsFollowSchema,
   taskHistoryFollowSchema,
   taskPagesFollowSchema,
+  tasksBlockParamsSchema,
   tasksBrowserTabOpenParamsSchema,
   tasksBrowserTabsParamsSchema,
   tasksCommentActParamsSchema,
@@ -276,6 +278,7 @@ export type TasksClient = Pick<
   | "delete"
   | "rename"
   | "mark"
+  | "block"
   | "pinRepository"
   | "sidebarLive"
   | "writeTaskSection"
@@ -1329,14 +1332,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * change a teammate or an agent made reaches the open task as it reaches
    * the list. Note that the row is the whole of what the task carries but
    * its document, so a field the row leaves out is one the task no longer
-   * has, and that the last save is the document's own, kept with its body.
+   * has, and that the last save is the document's own, kept with its body,
+   * as are its blocks, which a row of the list never carries.
    */
   function heldAsListed(taskId: string): void {
     const held = heldTaskOf(taskId);
     const listed = view.tasks.find((row) => row.id === taskId);
     if (held === undefined || listed === undefined) return;
     const { agents: _agents, ...row } = listed;
-    const { updatedAt, document, agentEdits, lastEdit, sectionEdits } = held;
+    const { updatedAt, document, agentEdits, lastEdit, sectionEdits, blockedBy, blocks } = held;
     const task: Task = {
       ...row,
       updatedAt,
@@ -1344,6 +1348,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ...(agentEdits === undefined ? undefined : { agentEdits }),
       ...(lastEdit === undefined ? undefined : { lastEdit }),
       ...(sectionEdits === undefined ? undefined : { sectionEdits }),
+      ...(blockedBy === undefined ? undefined : { blockedBy }),
+      ...(blocks === undefined ? undefined : { blocks }),
     };
     write({ document: { ...view.document, task } });
   }
@@ -2098,7 +2104,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const read = yield* readParams(
           tasksSetStandingParamsSchema,
           params,
-          "setting where a task stands names it and its status, priority, or assignee",
+          "setting where a task stands names it and its status, priority, assignee, or merge policy",
         );
         if (!gate()) return { changed: false };
         const { taskId, assigneeName, ...standing } = read;
@@ -2118,6 +2124,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                         : null,
                 }),
             ...(standing.priority === undefined ? undefined : { priority: standing.priority }),
+            ...(standing.mergePolicy === undefined
+              ? undefined
+              : { mergePolicy: standing.mergePolicy }),
             ...(standing.assigneeId === undefined
               ? undefined
               : {
@@ -2262,6 +2271,36 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               carried<TasksMoveAnswer>({ workspaceId: moved.answer.task.workspaceId }),
               moved.answer.txid,
               takeAnswered(moved.answer.task),
+            ] as const;
+          }),
+        );
+      }),
+    // The service answers the task with its blocks as they then stand, so the
+    // open document takes them in place and nothing is read again.
+    [GATEWAY_METHOD.TASKS_BLOCK]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksBlockParamsSchema,
+          params,
+          "a block change names the task, the other task, and the side it stands on",
+        );
+        if (!gate()) {
+          return carried<TasksBlockAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        }
+        return yield* writtenThenListed(
+          Effect.gen(function* () {
+            const changed = yield* served(client.block(read.taskId, read.block));
+            if (!changed.ok) {
+              return [carried<TasksBlockAnswer>({ failure: changed.failure }), undefined] as const;
+            }
+            const { task } = changed.answer;
+            return [
+              carried<TasksBlockAnswer>({
+                blockedBy: task.blockedBy ?? [],
+                blocks: task.blocks ?? [],
+              }),
+              changed.answer.txid,
+              takeAnswered(task),
             ] as const;
           }),
         );

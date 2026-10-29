@@ -28,6 +28,8 @@ import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { ConfigProvider, Duration, Effect, Layer, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "../compose-local-agents.js";
+import { LINUX_HOST } from "../daemon/host-os.js";
+import { hostPlatform } from "../daemon/host-platform.js";
 import { Environment, LocalAgentPlatform, Reporter } from "../effect/seams.js";
 import { type ScriptedSpawner, scriptedSpawner } from "../testing/scripted-spawner.js";
 import { smolvmSandbox } from "./smolvm-sandbox.js";
@@ -622,4 +624,53 @@ it.effect.each([
     }
     assert.equal(readFileSync(token, "utf8"), "ghs_fixture_1");
   }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a runner folder whose path holds a space, as a Mac's Application Support does, is mounted at a folder of its own in the VM, where the runner's bundle is launched from",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* temporaryDirectoryScoped("luke-smolvm-spaced-");
+      const folder = `${root}/agent`;
+      const spaced = "/Users/ada/Library/Application Support/Luke Host/luke-host/lib";
+      // Note that the fake smolvm has no machine until it is made, so the start makes one.
+      let stands = false;
+      const spawner = scriptedSpawner((program, args) => {
+        const each = { program, args };
+        if (isSmolvm("status")(each)) return { exitCode: 1 };
+        if (isSmolvm("create")(each)) {
+          stands = true;
+          return { exitCode: 0 };
+        }
+        if (isSmolvm("start")(each)) {
+          return stands
+            ? { exitCode: 0 }
+            : {
+                exitCode: 1,
+                stderr: '{"error":{"code":"NOT_FOUND","message":"no such machine"}}\n',
+              };
+        }
+        return undefined;
+      });
+      const platform = hostPlatform({
+        os: LINUX_HOST,
+        installFolder: "/opt/luke-host",
+        runnerFolder: spaced,
+        arch: DEVICE_ARCH.ARM64,
+        stateRoot: `${root}/state`,
+        smolvm: SMOLVM,
+        user: USER,
+      });
+
+      yield* platform.sandbox
+        .started({ agentId: AGENT_ID, folder, github: false })
+        .pipe(Effect.provide(spawner.layer));
+
+      const create = spawner.spawned.find(isSmolvm("create"));
+      assert.deepEqual(valuesOf(create?.args ?? [], "-v"), [
+        `${folder}:${folder}`,
+        `${spaced}:/opt/luke-runner:ro`,
+      ]);
+      assert.equal(platform.runnerBundle, "/opt/luke-runner/agent-runner.mjs");
+    }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
 );

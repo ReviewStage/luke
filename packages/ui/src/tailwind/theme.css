@@ -366,6 +366,13 @@
   /* A row nested under a place stands in by the place's glyph and its gap,
      so its own glyph stands under the place's name (`SidebarFilters`). */
   --spacing-nav-nest: calc(var(--luke-control-icon) + var(--luke-icon-gap));
+  /* A list row nested under another stands in by that nest once for each
+     level it stands at (`ListRow`'s `depth`), so its glyph stands under the
+     name of the row it is nested under. */
+  --spacing-list-row-nest: calc(
+    var(--luke-list-row-depth, 0) *
+    (var(--luke-control-icon) + var(--luke-icon-gap))
+  );
 
   /* The panel's places beside the sidebar (`@luke/panel`: Automations,
      Settings, a version history, the Admin place, the sign-in): the

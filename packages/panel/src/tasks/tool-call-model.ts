@@ -1194,7 +1194,7 @@ export const TOOL_TARGET = {
   PLAN: "plan",
   /** The task's Inbox tab, on the item a call names by its key where it names one. */
   INBOX: "inbox",
-  /** Another task of the workspace, opened on its plan as the sidebar opens it. */
+  /** Another task of the workspace, opened on its plan as the sidebar opens it, or on one of its agents' tabs where the target names one. */
   TASK: "task",
   /** A pull request the agent opened, its Pull request tab where the window has one and GitHub's page otherwise; its row opens it through the link opener (`useOpenLink`), as a link to the pull request does, so no window's `onOpenTarget` is asked for it. */
   PULL_REQUEST: "pull-request",
@@ -1209,7 +1209,12 @@ export type ToolTarget =
       /** The key of the calling agent's thread the call posted on or withdrew, whose item the Inbox opens on; none for a read of the whole Inbox. */
       readonly key?: string;
     }
-  | { readonly kind: typeof TOOL_TARGET.TASK; readonly task: string }
+  | {
+      readonly kind: typeof TOOL_TARGET.TASK;
+      readonly task: string;
+      /** One of its agents to open, its tab chosen; none to open the task as the sidebar opens it. */
+      readonly agent?: string;
+    }
   | { readonly kind: typeof TOOL_TARGET.PULL_REQUEST; readonly url: string };
 
 /** What the hover over a row says it opens, by its target's kind. */

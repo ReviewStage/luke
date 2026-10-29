@@ -101,6 +101,7 @@ const DECLARED_TABLES = [
   "session",
   "session_sandbox_cleanup",
   "task",
+  "task_block",
   "task_number_counter",
   "task_pin",
   "task_section",

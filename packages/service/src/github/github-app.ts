@@ -12,10 +12,10 @@
  * minted for the listing alone (`GET /installation/repositories`); a
  * repository is the workspace's only where that listing holds it, and only
  * then is a token minted for it: contents read for a checkout or a file,
- * contents and pull requests read for what a coding agent published, and
- * contents and pull requests write for its branch and pull request, with
- * what reads its pull request's CI beside the last two where the
- * installation grants it. So what a member of the workspace reaches through
+ * contents and pull requests read for what a coding agent published and for
+ * a pilot's sandbox, which ships no code, and contents and pull requests
+ * write for a coding agent's branch and pull request, with what reads a pull
+ * request's CI beside the last two where the installation grants it. So what a member of the workspace reaches through
  * the App is what the installation reaches, whoever they are on GitHub, and
  * what an agent pushes through it is pushed as the App.
  *
@@ -32,9 +32,9 @@
  * the store still links its installation to the workspace, running, so a
  * disconnect, or a removal GitHub's webhook reported, stops it at once; and
  * GitHub itself ends a token's access to a repository removed from its
- * installation. A failure, and a repository not reached, are never kept. A write token leaves for a sandbox's whole run
- * rather than for one request, so it is minted afresh with its whole hour
- * every time it is asked for.
+ * installation. A failure, and a repository not reached, are never kept. A sandbox's token, a write token or a pilot's
+ * read one, leaves for the sandbox's whole run rather than for one request,
+ * so it is minted afresh with its whole hour every time it is asked for.
  *
  * A member who saved their own classic personal access token
  * (`./github-token.ts`) reaches, beside that, a repository no installation
@@ -223,7 +223,7 @@ const KEPT = {
   TOKEN_MARGIN: Duration.minutes(10),
 } as const;
 
-/** Whether a repository token is kept for the instance's later asks, or minted afresh for each, as a write token leaving for a sandbox's whole run is. */
+/** Whether a repository token is kept for the instance's later asks, or minted afresh for each, as a token leaving for a sandbox's whole run is. */
 const TOKEN_KEEPING = { KEPT: "kept", FRESH: "fresh" } as const;
 type TokenKeeping = (typeof TOKEN_KEEPING)[keyof typeof TOKEN_KEEPING];
 
@@ -293,6 +293,13 @@ interface GitHubInstallation {
   readonly issuesReadable: boolean;
   /** Whether the account it is on suspended it, which leaves it minting nothing until it is brought back. */
   readonly suspended: boolean;
+}
+
+/** What reads a pull request on the installation: contents and pull requests read, with CI read where it grants it. */
+function pullRequestPermissions(on: GitHubInstallation): InstallationTokenPermissions {
+  return on.ciReadable
+    ? INSTALLATION_TOKEN_PERMISSIONS.PULL_REQUESTS_READING_CI
+    : INSTALLATION_TOKEN_PERMISSIONS.PULL_REQUESTS;
 }
 
 /** One GitHub account as a commit names it: its id and login, which together make its noreply address, and the name it set, if any. */
@@ -666,6 +673,21 @@ export interface GitHubAppService {
    * read beside them where the installation grants it.
    */
   readonly repositoryWriteToken: (
+    organizationId: string,
+    fullName: string,
+    member: string | undefined,
+  ) => Effect.Effect<
+    Option.Option<GitHubRepositoryToken>,
+    GitHubWorkspaceReadFailure,
+    HttpClient.HttpClient | DatabaseServices
+  >;
+  /**
+   * The same mint as `repositoryPullRequestToken`, minted afresh with its
+   * whole hour as a write token is, since it too leaves for a sandbox's
+   * whole run: what a pilot's sandbox reads the repository, its pull
+   * requests, and their CI on, and can push and merge nothing with.
+   */
+  readonly repositorySandboxReadToken: (
     organizationId: string,
     fullName: string,
     member: string | undefined,
@@ -1899,11 +1921,7 @@ function githubAppService(
         ),
       publicReadToken,
       repositoryPullRequestToken: (organizationId, fullName, member) =>
-        repositoryToken(organizationId, fullName, member, (on) =>
-          on.ciReadable
-            ? INSTALLATION_TOKEN_PERMISSIONS.PULL_REQUESTS_READING_CI
-            : INSTALLATION_TOKEN_PERMISSIONS.PULL_REQUESTS,
-        ),
+        repositoryToken(organizationId, fullName, member, pullRequestPermissions),
       repositoryIssueToken: (organizationId, fullName, member) =>
         repositoryToken(organizationId, fullName, member, (on) =>
           on.issuesReadable ? INSTALLATION_TOKEN_PERMISSIONS.ISSUES : undefined,
@@ -1924,6 +1942,14 @@ function githubAppService(
             on.ciReadable
               ? INSTALLATION_TOKEN_PERMISSIONS.WRITE_READING_CI
               : INSTALLATION_TOKEN_PERMISSIONS.WRITE,
+          TOKEN_KEEPING.FRESH,
+        ),
+      repositorySandboxReadToken: (organizationId, fullName, member) =>
+        repositoryToken(
+          organizationId,
+          fullName,
+          member,
+          pullRequestPermissions,
           TOKEN_KEEPING.FRESH,
         ),
       userPusher: (userId, fullName) =>
