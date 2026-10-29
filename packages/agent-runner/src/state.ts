@@ -34,7 +34,14 @@ import { dirname, join, resolve } from "node:path";
 import { Console, Data, Effect, Option, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { CLAUDE_CODE_PIN, CODEX_PIN } from "./pins.js";
-import { STATE_ACTION, STATE_CAP_BYTES, STATE_EXIT, type StateAction } from "./protocol.js";
+import {
+  STATE_ACTION,
+  STATE_CAP_BYTES,
+  STATE_EXIT,
+  STATE_FAILED_LEAD,
+  STATE_PACK_BASE,
+  type StateAction,
+} from "./protocol.js";
 import {
   readTar,
   TAR_ENTRY,
@@ -173,6 +180,8 @@ interface StatePacked {
   readonly leftOut: number;
   readonly bytes: number;
   readonly sha256: string;
+  /** The work's base, which a restore makes the repository at; none where it needs none. */
+  readonly base: string | null;
 }
 
 /** A carried entry found under the agent's folder, by its path there. */
@@ -451,6 +460,7 @@ export const packState = (folder: string, file: string) =>
         leftOut: carried.leftOut,
         bytes: written.bytes,
         sha256: written.sha256,
+        base: Option.isSome(captured) ? captured.value.work.base : null,
       } satisfies StatePacked;
     }),
   );
@@ -637,7 +647,8 @@ const USAGE = `usage: agent-runner state ${Object.values(STATE_ACTION).join("|")
 /**
  * The runner's `state` command: the action and its two paths, the agent's
  * folder and the pack file, run, and the process's exit code answered
- * (`STATE_EXIT`). Sizes and digests go to stdout, why it failed to stderr.
+ * (`STATE_EXIT`). Sizes and digests go to stdout, a pack's base last
+ * (`STATE_PACK_BASE`), and why it failed to stderr.
  */
 export const stateCommand = (args: readonly string[]) =>
   Effect.gen(function* () {
@@ -662,6 +673,7 @@ export const stateCommand = (args: readonly string[]) =>
       yield* Console.log(
         `agent-runner state pack: wrote ${packed.bytes} bytes, sha256 ${packed.sha256}`,
       );
+      yield* Console.log(`${STATE_PACK_BASE.PREFIX}${packed.base ?? STATE_PACK_BASE.NONE}`);
     } else {
       const groups = yield* (named === STATE_ACTION.VERIFY ? verifyState : restoreState)(
         agentFolder,
@@ -674,9 +686,9 @@ export const stateCommand = (args: readonly string[]) =>
   }).pipe(
     Effect.catchTags({
       StateTooLarge: (refusal) =>
-        Effect.as(Console.error(`agent-runner state: ${refusal.detail}`), STATE_EXIT.TOO_LARGE),
+        Effect.as(Console.error(`${STATE_FAILED_LEAD}${refusal.detail}`), STATE_EXIT.TOO_LARGE),
       StateFailed: (failure) =>
-        Effect.as(Console.error(`agent-runner state: ${failure.detail}`), STATE_EXIT.FAILED),
+        Effect.as(Console.error(`${STATE_FAILED_LEAD}${failure.detail}`), STATE_EXIT.FAILED),
     }),
-    Effect.catch(() => Effect.as(Console.error("agent-runner state: failed"), STATE_EXIT.FAILED)),
+    Effect.catch(() => Effect.as(Console.error(`${STATE_FAILED_LEAD}failed`), STATE_EXIT.FAILED)),
   );

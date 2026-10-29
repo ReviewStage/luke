@@ -12,6 +12,7 @@ import {
 } from "@luke/features/checkout-identity";
 import {
   DEVICE_AGENT_LINE_KIND,
+  DEVICE_CAPABILITY,
   DEVICE_ISOLATION,
   DEVICE_LAUNCH_REFUSAL,
   DEVICE_SETUP,
@@ -64,6 +65,7 @@ import {
 import { releaseFollowerLock, renewFollowerLock, takeFollowerLock } from "./follower-lock.js";
 import type { HostKernel } from "./host-kernel.js";
 import { answeredLocalAgentRequest } from "./local-agent-requests.js";
+import { localAgentSaves } from "./local-agent-saves.js";
 import {
   forgetOwnedAgent,
   keepOwnedAgent,
@@ -130,12 +132,19 @@ import type { RunMode } from "./run-mode.js";
  * fresh and started before the runner starts in it; the runner is
  * signalled in it before its command is killed, since killing it would end
  * the runner with no signal at all; and once the runner has ended, whatever
- * ended it, the turn is let go of in one step (`turnLetGo`): the VM is
- * deleted with the GitHub token kept for it, and the folder's `tmp`
- * emptied, while the rest of the folder stays for the next turn, whose
- * fresh VM mounts it and whose runner resumes the harness's session from
- * it. A discard deletes any VM still standing before it removes the
- * agent's folder. The runner runs on the VM's
+ * ended it, the turn is let go of in one step (`turnLetGo`): on a device
+ * that registers `DEVICE_CAPABILITY.AGENT_STATE`, the agent's state is
+ * packed and verified in the VM, the VM is deleted with the GitHub token
+ * kept for it, the pack is sealed, uploaded to Luke's store and committed
+ * (`local-agent-saves.ts`), and the folder's `tmp` emptied,
+ * while the rest of the folder stays for the next turn, whose fresh VM
+ * mounts it and whose runner resumes the harness's session from it. A save
+ * that fails keeps the folder and records the agent as unsaved, and a
+ * bundle sealed but not committed is tried again on the beat. A launch
+ * records the generation of the agent's saved state it names and holds the
+ * agent's state key in memory; a discard that removes the folder lets go
+ * of the agent's record. A discard deletes any VM still standing before it
+ * removes the agent's folder. The runner runs on the VM's
  * own Node, Claude Code and Codex, which the device registers. For an agent
  * working in a repository, the device asks the service for an installation
  * token before the repository is made, and again once the last is
@@ -274,6 +283,8 @@ type LocalAgentClient = Pick<
   | "claimRequest"
   | "answerRequest"
   | "githubToken"
+  | "saveState"
+  | "commitState"
 >;
 
 export interface LocalAgentsDependencies {
@@ -382,6 +393,16 @@ export function composeLocalAgents(
     /** The kept launches whose VM could not be deleted as their turn ended, by line id, with how many more times a beat deletes it again before they are settled regardless. */
     const undeleted = new Map<string, number>();
 
+    /** Whether this device saves each agent's state at its turn's end, as it registers. */
+    const savesState = platform.deviceCapabilities.includes(DEVICE_CAPABILITY.AGENT_STATE);
+    const saves = yield* localAgentSaves({
+      stateRoot: kernel.stateRoot,
+      client,
+      state: Ref.get(state),
+      updated: (change) => Effect.provideContext(updateState(change), services),
+      report,
+    });
+
     const keepLaunch = (userId: string, id: string, agentId: string) =>
       updateState((current) => ({
         ...current,
@@ -446,14 +467,34 @@ export function composeLocalAgents(
      * gate; whether its VM is gone. A VM lives for one turn, so it is deleted
      * with the GitHub token kept for it, and the folder's `tmp` is emptied;
      * the rest of the folder, its repository, home and caches, stays for the
-     * agent's next turn. Note that this is the one step between a runner's
-     * end and its VM's delete, so whatever a turn's end must still do in its
-     * VM goes here, before the delete.
+     * agent's next turn. A runner's end (`ran`, the account, device and shell
+     * it ran under, and its launch line) saves the agent's state first, packed in the VM before
+     * the delete and sent once it is gone (`local-agent-saves.ts`). Note that
+     * this is the one step between a runner's end and its VM's delete, so
+     * whatever a turn's end must still do in its VM goes here, before the
+     * delete.
      */
-    const turnLetGo = (folder: string, agentId: string) =>
+    const turnLetGo = (
+      folder: string,
+      agentId: string,
+      ran?: {
+        readonly userId: string;
+        readonly deviceId: string;
+        readonly lineId: string;
+        readonly shellVariables: Readonly<Record<string, string>>;
+      },
+    ) =>
       Effect.gen(function* () {
-        const gone = yield* platform.sandbox.deleted(agentId);
-        yield* tempEmptied(deviceAgentLayout(folder, agentId));
+        const layout = deviceAgentLayout(folder, agentId);
+        const deleted = platform.sandbox.deleted(agentId);
+        const gone =
+          ran === undefined
+            ? yield* deleted
+            : yield* saves.turnEnded(
+                { ...ran, agentId, layout },
+                Effect.provideContext(deleted, services),
+              );
+        yield* tempEmptied(layout);
         return gone;
       });
 
@@ -608,12 +649,16 @@ export function composeLocalAgents(
         const vmLocks = new Map<string, Semaphore.Semaphore>();
         /** The launch lines claimed and handed to their agents whose runners are not yet running or settled unstarted, which no beat settles. */
         const starting = new Set<string>();
+        /** Where this device's commits of saved state stood as each launch line still to be delivered was claimed (`saves.commitMark`), by its id. */
+        const launchClaims = new Map<string, number>();
         /** How each launch whose settle the service has not taken yet ended, by its line's id. */
         const endings = new Map<string, LaunchEnding>();
         /** Held by each claim and by a beat's settle of a launch the device never kept, so neither runs while the other is unanswered. */
         const claiming = yield* Semaphore.make(1);
         /** The runners a beat stops, since the service no longer holds the device to their launches. */
         const stopping = yield* FiberSet.make();
+        /** The tries a beat starts at committing a bundle left waiting, one per agent. */
+        const saving = yield* FiberMap.make<string>();
 
         /** The lock over the agent's VM's start and delete, one per agent, so one agent's slow start holds up no other's. */
         const vmLockOf = (agentId: string) => {
@@ -631,9 +676,9 @@ export function composeLocalAgents(
          * turn (`turnLetGo`), which deletes the VM, so a check between turns
          * never leaves one standing, and none is deleted under a runner. A VM
          * a discard deleted is held by nothing. Where a runner's launch
-         * (`lineId`) holds it and the delete fails, the launch joins
-         * `undeleted`, so a beat deletes it again before the launch is
-         * settled.
+         * (`lineId`) holds it, its turn's end saves the agent's state, and
+         * where the delete fails, the launch joins `undeleted`, so a beat
+         * deletes it again before the launch is settled.
          */
         const vmHeld = <E, R>(
           agentId: string,
@@ -658,7 +703,11 @@ export function composeLocalAgents(
                     if (held === undefined) return;
                     if (held > 1) return vmHolds.set(agentId, held - 1);
                     vmHolds.delete(agentId);
-                    if (yield* turnLetGo(folder, agentId)) return;
+                    const ran =
+                      lineId === undefined || !savesState
+                        ? undefined
+                        : { userId, deviceId, lineId, shellVariables };
+                    if (yield* turnLetGo(folder, agentId, ran)) return;
                     if (lineId !== undefined) undeleted.set(lineId, VM_DELETE_TRIES);
                     report("a local agent's VM could not be deleted");
                   }),
@@ -822,6 +871,7 @@ export function composeLocalAgents(
           agentScope: Scope.Scope,
         ) =>
           Effect.gen(function* () {
+            const claimedAt = launchClaims.get(line.id) ?? saves.commitMark();
             const layout = deviceAgentLayout(folder, agentId);
             const payload = decodeLaunch(line.payload);
             // Note that a launch naming a worktree outside the agent's own folder is never made.
@@ -844,6 +894,16 @@ export function composeLocalAgents(
             }
             if (platform.formerlyDirect && Option.isNone(ran)) {
               yield* keepMode(agentId, DEVICE_ISOLATION.SANDBOX);
+            }
+            // Note that only a launch on a device that saves names the generation of the agent's saved state, so on any other its absence says nothing.
+            if (savesState) {
+              yield* saves.launched(
+                userId,
+                agentId,
+                payload.value.stateGeneration,
+                secrets.state?.key,
+                claimedAt,
+              );
             }
             // Note that the agent is kept as this machine's before its folder or VM is made, so an uninstall finds whatever a launch cut off left.
             yield* keepOwnedAgent(kernel.stateRoot, agentId);
@@ -1073,6 +1133,7 @@ export function composeLocalAgents(
               );
             }
             yield* fileSystem.remove(layout.folder, { recursive: true, force: true });
+            yield* saves.forgotten(userId, agentId);
             // Note that a VM left standing keeps the agent in the record, so an uninstall deletes it yet.
             if (vmGone) yield* forgetOwnedAgent(kernel.stateRoot, agentId);
             // Note that a folder kept keeps its record too, so the agent, launched again, runs the way it ran.
@@ -1134,7 +1195,14 @@ export function composeLocalAgents(
                   // Note that a launch whose claim was asked again lost its secrets with the first answer, so it is settled as a runner gone, which ends its turn in words.
                   if (claimed.secretsGone === true) return yield* settle(line.id);
                   return yield* launched(agentId, line, claimed.secrets, agentScope);
-                }).pipe(Effect.ensuring(Effect.sync(() => starting.delete(line.id))));
+                }).pipe(
+                  Effect.ensuring(
+                    Effect.sync(() => {
+                      starting.delete(line.id);
+                      launchClaims.delete(line.id);
+                    }),
+                  ),
+                );
               case DEVICE_AGENT_LINE_KIND.MESSAGE:
               case DEVICE_AGENT_LINE_KIND.RETUNE: {
                 const text = decodeStdin(line.payload);
@@ -1160,7 +1228,10 @@ export function composeLocalAgents(
         /** A claimed line handed to its agent's worker, a launch marked starting first, so no beat settles it before its runner runs. */
         const handedOver = (claimed: DeviceAgentClaimedLine) =>
           Effect.gen(function* () {
-            if (claimed.line.kind === DEVICE_AGENT_LINE_KIND.LAUNCH) starting.add(claimed.line.id);
+            if (claimed.line.kind === DEVICE_AGENT_LINE_KIND.LAUNCH) {
+              starting.add(claimed.line.id);
+              launchClaims.set(claimed.line.id, saves.commitMark());
+            }
             yield* Queue.offer(yield* mailboxOf(claimed.line.agentId), claimed);
           });
 
@@ -1352,7 +1423,8 @@ export function composeLocalAgents(
          * runner that ran as the beat was sent whose launch the answer does
          * not name stopped, as a stop line stops it; and every launch the
          * answer names that the device neither ran, started, nor kept as the
-         * beat was sent, and still does not, settled as a runner gone. Note
+         * beat was sent, and still does not, settled as a runner gone; and
+         * every agent's bundle left waiting that is due tried again. Note
          * that what the device runs is read before the beat is sent, because
          * the answer is read after it: a launch claimed later is never judged
          * against an answer that could not have named it. An answer naming no
@@ -1371,6 +1443,11 @@ export function composeLocalAgents(
           );
           const open = beat?.openLaunches === undefined ? undefined : new Set(beat.openLaunches);
           yield* pendingSettled(open);
+          for (const agentId of yield* saves.due(userId)) {
+            yield* FiberMap.run(saving, agentId, saves.tried(userId, deviceId, agentId), {
+              onlyIfMissing: true,
+            });
+          }
           if (open === undefined) return;
           for (const [agentId, runner] of ran) {
             if (open.has(runner.lineId) || runners.get(agentId) !== runner) continue;
@@ -1480,8 +1557,13 @@ export function composeLocalAgents(
         }
         const shellVariables = yield* shellEnvironment;
         if (!(yield* asked(registered({})))) return yield* Effect.sleep(IDLE);
+        if (savesState) yield* saves.straysLetGo(userId);
         const left = (yield* Ref.get(state)).launches.filter((launch) => launch.userId === userId);
         for (const launch of left) {
+          // Note that a runner that ended with the app saved nothing of its turn, so its folder holds state no save committed.
+          if (savesState && launch.agentId !== undefined) {
+            yield* saves.unsavedMarked(userId, launch.agentId, launch.id);
+          }
           // Note that a runner that ended with the app left its VM standing, so its launch is settled only once its turn is let go of, which a beat tries again (`vmLetGo`).
           if (launch.agentId !== undefined && !(yield* turnLetGo(folder, launch.agentId))) {
             undeleted.set(launch.id, VM_DELETE_TRIES);

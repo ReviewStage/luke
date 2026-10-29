@@ -539,6 +539,8 @@ export const deviceAgentStateSaveAnswerSchema = EffectSchema.Struct({
   key: EffectSchema.String,
 });
 
+export type DeviceAgentStateSaveAnswer = typeof deviceAgentStateSaveAnswerSchema.Type;
+
 /**
  * A save the device uploaded, committed: the agent, the generation the save
  * started from, as its ask named it, the path it was granted, the bundle's
@@ -558,6 +560,8 @@ export const deviceAgentStateCommitRequestSchema = EffectSchema.Struct({
   sha256: sha256Schema,
   baseCommit: EffectSchema.NullOr(commitIdSchema),
 });
+
+export type DeviceAgentStateCommitRequest = typeof deviceAgentStateCommitRequestSchema.Type;
 
 /** The generation a commit was kept as. */
 export const deviceAgentStateCommitAnswerSchema = EffectSchema.Struct({

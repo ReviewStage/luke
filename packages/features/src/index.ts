@@ -28,9 +28,11 @@ export {
 export { HostedChannelClient, type HostedChannelClientOptions } from "./channel-client.js";
 export {
   DEVICE_AGENT_NOT_CLAIMED,
+  DEVICE_AGENT_STATE_REFUSAL,
   type DeviceAgentBeat,
   type DeviceAgentClaimedLine,
   type DeviceAgentDevice,
+  type DeviceAgentStateRefused,
   enrollHost,
   HOST_ENROLL_OUTCOME,
   type HostEnrollOutcome,

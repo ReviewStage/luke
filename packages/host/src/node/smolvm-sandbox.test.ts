@@ -207,6 +207,9 @@ const following = (input: {
           asked.push(agentId);
           return `ghs_fixture_${asked.length}`;
         }),
+
+      saveState: () => Effect.succeed(undefined),
+      commitState: () => Effect.succeed(undefined),
     };
     const vm = smolvmSandbox({
       smolvm: SMOLVM,
@@ -235,6 +238,7 @@ const following = (input: {
         deviceCapabilities: [],
         worktreeScript: () => "exit 0",
         unsavedWorkScript: input.checksUnsavedWork === true ? () => UNSAVED_WORK_SCRIPT : undefined,
+        stateSealed: () => Effect.die("this device saves no state"),
       }),
     );
     const composer = yield* composeLocalAgents({

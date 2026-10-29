@@ -3,7 +3,7 @@ import { Effect, Option, Path, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 
 /**
- * local-agent-state.ts -- what a machine keeps of its local agents between runs (`local-agents.json` in its state): the device id each account registered under, the launches no exit has settled yet, and how each agent has run there; read and written alike by the follower (`compose-local-agents.ts`) and by This Mac's turn-on (`compose-this-mac-host.ts`). Beside it, which agents' folders and VMs this machine made (`owned-agents`).
+ * local-agent-state.ts -- what a machine keeps of its local agents between runs (`local-agents.json` in its state): the device id each account registered under, the launches no exit has settled yet, how each agent has run there, and where each agent's saved state stands; read and written alike by the follower (`compose-local-agents.ts`) and by This Mac's turn-on (`compose-this-mac-host.ts`). Beside it, which agents' folders and VMs this machine made (`owned-agents`).
  *
  * The follower holds the state while it follows and writes it whole; This
  * Mac's turn-on, in the app, reads and changes it in place, never while the
@@ -30,12 +30,61 @@ const STATE_FILE = "local-agents.json";
 const OWNED_FOLDER = "owned-agents";
 
 /**
+ * A sealed bundle of an agent's state this device has not yet had
+ * committed, kept in its state (`local-agent-saves.ts`) and tried again on
+ * the beat: the launch line of the turn it holds the end of, the generation
+ * its save starts from, none where the agent had none, the commit its work
+ * applies to, the bundle's size and SHA-256, and the last path the service
+ * granted for it, when (epoch milliseconds), and whether its upload landed
+ * there. No URL, key, or byte of the bundle.
+ */
+const PendingSaveSchema = Schema.Struct({
+  lineId: Schema.String,
+  fromGeneration: Schema.NullOr(Schema.Int),
+  baseCommit: Schema.NullOr(Schema.String),
+  bytes: Schema.Int,
+  sha256: Schema.String,
+  granted: Schema.optionalKey(
+    Schema.Struct({ path: Schema.String, at: Schema.Int, uploaded: Schema.Boolean }),
+  ),
+});
+
+export type PendingSave = typeof PendingSaveSchema.Type;
+
+/**
+ * Where one agent's saved state stands on this device, under the account
+ * it was saved for: the generation of it Luke's store holds that the
+ * agent's folder stands at, the last this device committed or its newest
+ * launch named, absent where it has none; whether its folder holds state
+ * that neither the store nor a bundle waiting holds (`unsaved`), its last
+ * turn's save having failed or never run, and, where the save was refused
+ * for a reason in the agent's own folder that trying again will not clear,
+ * why, in plain words of at most `UNSAVED_WHY_CHARACTERS`, which the
+ * agent's next launch reads and clears; and its bundle waiting to be
+ * committed, where one is. An agent's folder is saved only where its record
+ * names neither: a sweep keeps the folder of one that is unsaved or has a
+ * bundle waiting, and of one with no record, which never saved.
+ */
+const AgentSaveSchema = Schema.Struct({
+  userId: Schema.String,
+  generation: Schema.optionalKey(Schema.Int),
+  unsaved: Schema.optionalKey(Schema.Struct({ why: Schema.optionalKey(Schema.String) })),
+  pending: Schema.optionalKey(PendingSaveSchema),
+});
+
+export type AgentSave = typeof AgentSaveSchema.Type;
+
+/** The most characters of why an agent's save failed that its record keeps. */
+export const UNSAVED_WHY_CHARACTERS = 300;
+
+/**
  * The state: the device id each account registered under, the launches
  * whose runners this device started and the service has not yet taken a
  * settle of, each with the agent whose VM it ran in, absent from a launch
- * kept before it, and, on a device whose agents may have run directly on it
+ * kept before it, on a device whose agents may have run directly on it
  * (`formerlyDirect`), how each agent has run here, in a VM or directly,
- * absent from a state file from before it.
+ * and where each agent's saved state stands, by agent id; each of the last
+ * two absent from a state file from before it.
  */
 const LocalAgentStateSchema = Schema.Struct({
   devices: Schema.Record(Schema.String, Schema.String),
@@ -49,6 +98,7 @@ const LocalAgentStateSchema = Schema.Struct({
   modes: Schema.optionalKey(
     Schema.Record(Schema.String, Schema.Literals(Object.values(DEVICE_ISOLATION))),
   ),
+  saves: Schema.optionalKey(Schema.Record(Schema.String, AgentSaveSchema)),
 });
 
 export type LocalAgentState = typeof LocalAgentStateSchema.Type;

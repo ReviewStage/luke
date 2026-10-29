@@ -224,6 +224,9 @@ const followingDevice = (
           asked.push(agentId);
           return `ghs_fixture_${asked.length}`;
         }),
+
+      saveState: () => Effect.succeed(undefined),
+      commitState: () => Effect.succeed(undefined),
     };
     const vm = fakeSandbox(ready);
     let deleteFails = options.vmDeleteFails ?? 0;
@@ -297,6 +300,7 @@ const followingDevice = (
         deviceIsolation: DEVICE_ISOLATION.SANDBOX,
         deviceCapabilities: [],
         worktreeScript: () => "exit 0",
+        stateSealed: () => Effect.die("this device saves no state"),
       }),
     );
     const clock = options.clock ?? (yield* Clock.Clock);

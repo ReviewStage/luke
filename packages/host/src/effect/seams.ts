@@ -240,6 +240,11 @@ export class LocalAgentSandboxUnavailable extends Data.TaggedError("LocalAgentSa
   readonly detail: string;
 }> {}
 
+/** Why an agent's packed state could not be sealed, in words naming no path, key, or byte of it. */
+export class LocalAgentStateUnsealed extends Data.TaggedError("LocalAgentStateUnsealed")<{
+  readonly detail: string;
+}> {}
+
 /**
  * What a local agent's runner is started with on this device
  * (`compose-local-agents.ts`): the VM each agent runs in (`sandbox`), how
@@ -294,6 +299,19 @@ export interface LocalAgentPlatformSeam {
    * the device.
    */
   readonly sandbox: LocalAgentSandbox;
+  /**
+   * The agent's packed state at `from`, which must be a plain file standing
+   * in the folder `within` by its real path, sealed under the agent's state
+   * key (standard base64 of its 32 bytes) into a bundle at `to`, outside
+   * every folder a VM mounts (`node/agent-state-seal.ts`): its size and
+   * SHA-256 in hex, which the save's commit names.
+   */
+  readonly stateSealed: (input: {
+    readonly from: string;
+    readonly within: string;
+    readonly to: string;
+    readonly key: string;
+  }) => Effect.Effect<{ readonly bytes: number; readonly sha256: string }, LocalAgentStateUnsealed>;
   /**
    * Whether agents on this device may have run directly on it, before every
    * agent ran in a VM: This Mac's did, a host's never. On such a device the

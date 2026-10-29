@@ -10,7 +10,10 @@ what we collect, who we send it to, and how to turn it off.
 - **What Luke stores.** On your Mac, only its window layout and the messages
   you have not sent yet. On our service: your account, your tasks and their
   plans, your agents' transcripts, and your conversation. Agents work
-  in sandboxes on our service, not on your Mac. See [What we
+  in sandboxes on our service, not on your Mac. An agent you run on This Mac
+  or on a host works in a folder there instead, and as each of its turns ends
+  saves its unpushed work, its session files, and its attachments, encrypted,
+  to a private store of ours, kept seven days after its last save. See [What we
   collect](#what-we-collect) and [Storage](#storage).
 - **Models run on your keys.** Dictation goes to OpenAI, and
   agents go to Anthropic or OpenAI, on the API key or subscription you
@@ -488,13 +491,33 @@ service hands your Mac, as for a host below: the token stays on your Mac,
 outside the machine and every folder it can see, and the agent sees only a
 placeholder. Each machine lasts only for one turn of its agent's: it is made
 fresh as the turn starts and deleted as the turn ends, whatever ended it, and
-the token kept for it is deleted with it. The agent's folder stays on your
-Mac between turns. To run them, the app downloads smolvm from its GitHub release
-once, keeps it in Luke's own folder on your Mac only once it matches the
-checksum Luke pins, checks the files it runs against those checksums again
-before each use, and pulls the public sandbox image our hosts run. An agent
-that ran directly on your Mac before this is not started again; continue it
-into a new agent.
+the token kept for it is deleted with it. As a turn ends, Luke saves what of
+the agent nothing else holds: the work in its repository that no remote has
+(commits not pushed, changes not committed, stashes), the session files Claude
+Code or Codex resumes from, and the files attached to its messages, but never
+a credential file of Claude Code's, Codex's, or `gh`'s. Inside the agent's
+machine, before it is deleted, they are packed into one file in the agent's
+folder; once the machine is gone, your Mac encrypts that file with AES-256-GCM
+under a key drawn for that agent alone, which our service keeps encrypted
+under a server-only secret and hands your Mac only to save or restore the
+agent, and which your Mac holds in memory alone, and uploads it straight to a
+private Vercel Blob store of Luke's. Our service holds both the file and its
+key, so the encryption keeps it from anyone who reaches the store alone, not
+from our service. Each save goes once a newer one lands, and the newest seven
+days after it was made, or later while the agent runs; all of them go sooner
+with the agent's transcript, seven days after you delete the agent or its
+task, and at once with your account. A save that fails leaves the agent's
+folder as it is, and a file already encrypted waits in Luke's own folder on
+your Mac, outside every folder the machine sees, until it uploads or a later
+turn's save replaces it; a state over 500 MB is not saved, and the reason is
+said in plain words. Luke's log on your Mac names each
+save's size, digest, generation, and how long it took, never what it holds.
+For now the agent's folder stays on your Mac between turns, saved or not. To
+run them, the app downloads smolvm from its GitHub release once, keeps it in
+Luke's own folder on your Mac only once it matches the checksum Luke pins,
+checks the files it runs against those checksums again before each use, and
+pulls the public sandbox image our hosts run. An agent that ran directly on
+your Mac before this is not started again; continue it into a new agent.
 
 **A local agent on a host.** A host is your own Linux server that you add
 to Luke to run your agents, as This Mac does. It has no git login of yours, so
@@ -507,8 +530,13 @@ outside that machine and outside every folder it can see: the host keeps it in
 a file readable only by its own user for one turn of the agent's, and
 deletes it as the turn ends. The agent's machine lasts only for that turn too:
 it is made fresh as the turn starts and deleted as the turn ends, whatever
-ended it, while the agent's folder stays on the box between turns. The agent
-sees only a placeholder. Its `git` and
+ended it. As on This Mac, as each turn ends the host saves the agent's
+unpushed work, its session files, and its attachments, encrypted on the box
+under the agent's own key, straight to Luke's private store, on the same
+terms and for as long; a save that fails leaves its file, already encrypted,
+in the host's own state folder until it uploads. For now the agent's folder
+stays on the box between turns, saved or not. The agent sees only a
+placeholder. Its `git` and
 `gh` send that placeholder, and smolvm, on the box, puts the real token in
 place of it only on HTTPS requests to GitHub. The token is never logged and
 never written to the conversation's record. As on This Mac, a Claude Code agent's plan

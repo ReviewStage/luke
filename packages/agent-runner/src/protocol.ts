@@ -162,7 +162,8 @@ export const CODEX_TOKEN_COMMAND = "codex-token";
  * The argument that starts the runner's bundle as the command that keeps an
  * agent's state between turns (`state.ts`), run inside the agent's VM as its
  * user: `node <bundle> state <action> <agent folder> <pack file>`. It prints
- * sizes and digests alone on stdout, and why it failed on stderr.
+ * sizes and digests alone on stdout, a pack its work's base commit last
+ * (`STATE_PACK_BASE`), and why it failed on stderr.
  */
 export const STATE_COMMAND = "state";
 
@@ -191,6 +192,19 @@ export const STATE_EXIT = {
 
 /** The most a pack may hold, its parts' sizes summed before compression: 500 MB. */
 export const STATE_CAP_BYTES = 500_000_000;
+
+/**
+ * The line a pack prints its work's base on, last on its stdout: the
+ * commit a restore makes the agent's repository at, or `NONE` where the
+ * work needs none, which a device commits beside the pack as its base.
+ */
+export const STATE_PACK_BASE = {
+  PREFIX: "agent-runner state pack: base ",
+  NONE: "none",
+} as const;
+
+/** What leads the line the state command says why it failed on, last on its stderr. */
+export const STATE_FAILED_LEAD = "agent-runner state: ";
 
 /** What Luke's token route answers a runner: the plan's access token, good for at least the route's margin. */
 export const RunnerTokenAnswerSchema = Schema.Struct({ accessToken: Schema.String });

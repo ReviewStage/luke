@@ -6,6 +6,7 @@ import {
   type DeviceArch,
 } from "@luke/features/device-agent-wire";
 import type { LocalAgentPlatformSeam } from "../effect/seams.js";
+import { sealAgentState } from "../node/agent-state-seal.js";
 import { agentWorktreeScript, cloneFolder, worktreesRoot } from "../node/open-on-mac.js";
 import { smolvmSandbox } from "../node/smolvm-sandbox.js";
 import type { HostOs } from "./host-os.js";
@@ -65,9 +66,9 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
     formerlyDirect: options.os.formerlyDirect,
     deviceName: options.os.deviceName(),
     devicePlatform: options.os.platform,
-    // Note that a host runs every agent in a sandbox and lets go of an archived agent's folder (`discard`).
+    // Note that a host runs every agent in a sandbox, lets go of an archived agent's folder (`discard`), and saves each agent's state at its turn's end (`agent-state`).
     deviceIsolation: DEVICE_ISOLATION.SANDBOX,
-    deviceCapabilities: [DEVICE_CAPABILITY.DISCARD],
+    deviceCapabilities: [DEVICE_CAPABILITY.DISCARD, DEVICE_CAPABILITY.AGENT_STATE],
     deviceArch: options.arch,
     worktreeScript: ({ home, repository, worktree, branch }) =>
       agentWorktreeScript({
@@ -77,5 +78,6 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
         branch,
       }),
     unsavedWorkScript: options.os.unsavedWorkScript,
+    stateSealed: sealAgentState,
   };
 }
