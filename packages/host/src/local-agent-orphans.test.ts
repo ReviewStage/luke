@@ -1,5 +1,5 @@
 /**
- * local-agent-orphans.test.ts -- the follower letting go of what a device holds for agents the service no longer lists there: an agent's VM, credentials and folder removed once two successful reads in a row leave it out, never on a read that was not answered, never under a runner or a launch still kept, never anything not named as an agent's, a Mac's folder with unsaved work kept once and never checked again, at most five a pass, and a VM whose delete failed tried again.
+ * local-agent-orphans.test.ts -- the follower letting go of what a device holds for agents the service no longer lists there: an agent's VM, credentials and folder removed once two successful reads in a row leave it out, never on a read that was not answered, never under a runner or a launch still kept, never anything not named as an agent's, a Mac's folder with unsaved work kept once and never checked again, at most five a pass, and a VM whose delete failed tried again, and a pass that died never the last.
  *
  * The follower runs the real smolvm sandbox over a fake `smolvm` that keeps
  * its machines in a set, on a real temporary folder, against a fake service
@@ -73,6 +73,8 @@ const following = (input: {
   readonly failedDeletes?: number;
   readonly launches?: (home: string) => readonly DeviceAgentClaimedLine[];
   readonly keptLaunches?: readonly { readonly id: string; readonly agentId: string }[];
+  /** The first listing of what the VMs hold dies, as a bug would. */
+  readonly firstListingDies?: boolean;
 }) =>
   Effect.gen(function* () {
     const root = yield* temporaryDirectoryScoped("luke-agent-orphans-");
@@ -180,6 +182,15 @@ const following = (input: {
       user: { uid: 990, gid: 991 },
       nested: false,
     });
+    let listings = 0;
+    const sandbox = {
+      ...vm.sandbox,
+      held: Effect.suspend(() =>
+        input.firstListingDies === true && listings++ === 0
+          ? Effect.die(new Error("the listing broke"))
+          : vm.sandbox.held,
+      ),
+    };
     const reported: string[] = [];
     const services = Layer.mergeAll(
       spawner.layer,
@@ -190,7 +201,7 @@ const following = (input: {
       Layer.succeed(Reporter, { report: (line) => reported.push(line) }),
       Layer.succeed(LocalAgentPlatform, {
         launch: vm.launch,
-        sandbox: vm.sandbox,
+        sandbox,
         runnerBundle: `${RUNNER_FOLDER}/agent-runner.mjs`,
         runnerEnv: {},
         formerlyDirect: false,
@@ -434,4 +445,21 @@ it.effect(
         assert.deepEqual(device.holdsOf(AGENT.ORPHAN), NOTHING);
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect("a pass that died is reported, and the passes after it still run", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const device = yield* following({
+        held: { whole: [AGENT.ORPHAN] },
+        reads: [[], []],
+        firstListingDies: true,
+      });
+      // Note that the pass that died read nothing, so the two reads are the two passes after it.
+      yield* device.passed(2);
+
+      assert.deepEqual(device.holdsOf(AGENT.ORPHAN), NOTHING);
+      assert.ok(device.reported.some((line) => line.includes("failed")));
+    }),
+  ).pipe(Effect.provide(NodeFileSystem.layer)),
 );

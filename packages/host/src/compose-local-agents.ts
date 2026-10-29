@@ -1482,10 +1482,14 @@ export function composeLocalAgents(
 
         yield* Effect.forkScoped(linesFollowed);
         yield* Effect.forkScoped(requestsFollowed);
+        // Note that a pass that died is reported and the next still runs, since a repeat ends at the first failure and nothing else would start it again before the follow does.
+        const orphanPass = Effect.catchDefect(orphansLetGo, () =>
+          Effect.sync(() => report("a pass over the local agents no longer listed here failed")),
+        );
         yield* Effect.forkScoped(
           Effect.andThen(
             Deferred.await(beaten),
-            Effect.repeat(orphansLetGo, Schedule.spaced(LIVE_READ_EVERY)),
+            Effect.repeat(orphanPass, Schedule.spaced(LIVE_READ_EVERY)),
           ),
         );
         yield* presence(userId, deviceId, Effect.provideContext(reconciledBeat, services));
