@@ -890,12 +890,13 @@ export class HostedAgentClient {
   agentToolAppCall({
     agentId,
     connection,
+    tool,
     ...call
   }: AgentToolAppCallParams): Effect.Effect<AgentToolAppCallView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(
         this.#hosted.messages.agentToolAppCall,
-        { params: { id: agentId, connection }, body: call },
+        { params: { id: agentId, connection, tool }, body: call },
         HOSTED_DEADLINE.TOOL_APP,
       ),
       ROW_REFUSALS,

@@ -1,3 +1,4 @@
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import type { AgentToolAppAnswer } from "@luke/features/mcp-app-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { McpApp } from "@luke/ui/mcp-app";
@@ -19,9 +20,10 @@ import { remoteCallOf } from "./tool-call-model.js";
  * the connection the agent called it on (`ACT_KIND.AGENTS_TOOL_APP`), which
  * the service answers for the agent's starter alone, whose grant it is read
  * on; anyone else, a tool that ships none, and a read that failed draw the
- * row alone. The answer is held for the window's life by the agent, the
- * connection, and the tool, so a row drawn again, or another call of the
- * same tool, asks nothing. The app is drawn by `@luke/ui/mcp-app`, whose
+ * row alone. An app, or the service's word that there is none, is held for
+ * the window's life by the agent, the connection, and the tool, so a row
+ * drawn again, or another call of the same tool, asks nothing; a read that
+ * failed is let go, so the next row drawn asks again. The app is drawn by `@luke/ui/mcp-app`, whose
  * bridge loads only once one is drawn, in the frame the shell serves
  * (`appPlatform().mcpAppFrameUrl`), and a shell that serves none, as the
  * web's does not, draws no app. It is handed the call's input and result as
@@ -38,10 +40,10 @@ const NOT_CALLED: WireRecord = {
   isError: true,
 };
 
-/** Each tool's app as the service answered it, or none, by agent, connection, and tool, for the window's life. */
+/** Each tool's app as the service answered it, or its word that there is none, by agent, connection, and tool, for the window's life. */
 const asked = new Map<string, Map<string, Map<string, Promise<AgentToolAppAnswer | undefined>>>>();
 
-/** The tool's app, asked of the service once per agent, connection, and tool. */
+/** The tool's app, asked of the service once per agent, connection, and tool, but again after a read that failed. */
 function toolApp(
   act: ActHandle["act"],
   agentId: string,
@@ -54,10 +56,14 @@ function toolApp(
   byConnection.set(connection, byTool);
   const held = byTool.get(tool);
   if (held !== undefined) return held;
-  const asking = act(ACT_KIND.AGENTS_TOOL_APP, { agentId, connection, tool }).then(
-    (answer) => ("html" in answer ? answer : undefined),
-    () => undefined,
-  );
+  const failed = () => {
+    byTool.delete(tool);
+    return undefined;
+  };
+  const asking = act(ACT_KIND.AGENTS_TOOL_APP, { agentId, connection, tool }).then((answer) => {
+    if ("html" in answer) return answer;
+    return answer.failure === AGENT_CALL_FAILURE.NOT_FOUND ? undefined : failed();
+  }, failed);
   byTool.set(tool, asking);
   return asking;
 }
@@ -113,7 +119,13 @@ function AnsweredToolApp({
   }, [act, agentId, connection, tool]);
   if (app === undefined) return null;
   const onCallTool = (name: string, args: WireRecord) =>
-    act(ACT_KIND.AGENTS_TOOL_APP_CALL, { agentId, connection, name, arguments: args }).then(
+    act(ACT_KIND.AGENTS_TOOL_APP_CALL, {
+      agentId,
+      connection,
+      tool,
+      name,
+      arguments: args,
+    }).then(
       (answer) => ("result" in answer ? answer.result : NOT_CALLED),
       () => NOT_CALLED,
     );

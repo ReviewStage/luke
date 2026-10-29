@@ -513,9 +513,25 @@ export function modelMayCall(tool: McpToolSchema): boolean {
 }
 
 /** Whether a tool's app may call a tool of its server: any but one whose UI says only the model may. */
-export function appMayCall(tool: McpToolSchema): boolean {
+function appMayCall(tool: McpToolSchema): boolean {
   const visibility = tool.ui?.visibility;
   return visibility === undefined || visibility.includes(MCP_APP_VISIBILITY.APP);
+}
+
+/**
+ * Whether the app drawn from the tool named `app` may call a tool of its
+ * server, of the tools the server lists, without asking the member: not one
+ * only the model may call (`appMayCall`), and of the rest, only a tool of
+ * the same app, naming its resource, or one its server marks read-only. Any
+ * other would need the member's approval, which nothing asks yet.
+ */
+export function appMayCallFor(app: string) {
+  return (tool: McpToolSchema, tools: readonly McpToolSchema[]): boolean => {
+    if (!appMayCall(tool)) return false;
+    const resource = tools.find((each) => each.name === app)?.ui?.resourceUri;
+    const sameApp = resource !== undefined && tool.ui?.resourceUri === resource;
+    return sameApp || tool.annotations?.readOnlyHint === true;
+  };
 }
 
 /** A listed tool as a model is shown it: its name, its title, words, and hints, and its schemas untouched, with the UI it declares. */
@@ -577,13 +593,13 @@ export const callMcpTool = /* @__PURE__ */ Effect.fn("web/callMcpTool")(function
   token: string,
   name: string,
   input: WireRecord,
-  callable: (tool: McpToolSchema) => boolean = modelMayCall,
+  callable: (tool: McpToolSchema, tools: readonly McpToolSchema[]) => boolean = modelMayCall,
 ): Effect.fn.Return<McpToolCall, McpToolsFailure, HttpClient.HttpClient> {
   return yield* inMcpSession(url, token, CALL_TIMEOUT, (send) =>
     Effect.gen(function* () {
       const tools = (yield* listedTools(send)).map(toolSchema);
-      // A tool the caller may not call, by who the tool's UI says may (`modelMayCall`, `appMayCall`), is called no more than one the server lists none of.
-      const tool = tools.find((each) => each.name === name && callable(each));
+      // A tool the caller may not call (`modelMayCall`, `appMayCallFor`) is called no more than one the server lists none of.
+      const tool = tools.find((each) => each.name === name && callable(each, tools));
       if (tool === undefined) return { called: false, tools } as const;
       const called = Effect.gen(function* () {
         const result = yield* send(MCP_METHOD.TOOLS_CALL, { name, arguments: input });

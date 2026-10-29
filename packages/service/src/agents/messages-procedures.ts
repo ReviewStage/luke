@@ -74,7 +74,7 @@ import {
   callConnectionTool,
   readConnectionToolApp,
 } from "../integrations/connection-door.js";
-import { appMayCall } from "../integrations/mcp-tools.js";
+import { appMayCallFor } from "../integrations/mcp-tools.js";
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
 import { cutMessage, wholePartOf } from "./coder-host/part-cut.js";
 import { startedBlank } from "./coder-host/status.js";
@@ -481,7 +481,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
         params.connection,
         body.name,
         body.arguments ?? {},
-        appMayCall,
+        appMayCallFor(params.tool),
       );
       return {
         result: Result.isSuccess(called) ? called.success : refusedAppCall(called.failure),

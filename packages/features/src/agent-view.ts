@@ -793,10 +793,9 @@ export const agentToolAppViewSchema = EffectSchema.Union([agentToolAppAnswerSche
 
 export type AgentToolAppView = typeof agentToolAppViewSchema.Type;
 
-/** A call an agent's tool's app asks of its own server, on the connection the agent called the tool on. */
+/** A call the app of an agent's tool (`tool`) asks of its own server, on the connection the agent called the tool on. */
 export const agentToolAppCallParamsSchema = EffectSchema.Struct({
-  agentId: EffectSchema.NonEmptyString,
-  connection: EffectSchema.NonEmptyString,
+  ...agentToolAppParamsSchema.fields,
   ...agentToolAppCallRequestSchema.fields,
 });
 

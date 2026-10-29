@@ -7,7 +7,7 @@
  * picture, and an error of the tool's own; `list_issues` refuses one team
  * with a JSON-RPC error instead. A suite may list `LINEAR_APP_TOOLS` too:
  * a board that ships an MCP App, whose HTML its `resources/read` serves,
- * and a tool only that app may call. Vercel Connect is a fake that
+ * a tool only that app may call, and a tool of no app. Vercel Connect is a fake that
  * issues each account a token naming it, for Linear and Notion; every
  * other provider is one this deployment never set up.
  */
@@ -100,6 +100,7 @@ export const LINEAR_APP_TOOLS = [
     inputSchema: { type: "object" },
     _meta: { ui: { resourceUri: LINEAR_BOARD_APP.uri, visibility: ["app"] } },
   },
+  { name: "archive_team", description: "Archives a team.", inputSchema: { type: "object" } },
 ];
 
 /** The team `list_issues` refuses with a JSON-RPC error, after the session listed its tools. */

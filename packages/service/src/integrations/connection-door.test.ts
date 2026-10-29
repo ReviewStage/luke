@@ -64,7 +64,7 @@ import {
 import { INTEGRATION_GRANT_HOLDER, integrationUnavailable } from "./integration-token.js";
 import { storeTools } from "./integration-tool-store.js";
 import { INTEGRATION } from "./integrations.js";
-import { appMayCall } from "./mcp-tools.js";
+import { appMayCallFor } from "./mcp-tools.js";
 
 /**
  * A native agent's integration servers, listed and called through their
@@ -321,7 +321,7 @@ it.layer(getTestDB())("the integrations' door", (it) => {
   );
 
   it.effect(
-    "a tool's app is read from the resource its kept list names, and a tool only its app may call is the app's alone",
+    "a tool's app is read from the resource its listing names, and calls its own tools alone, one only it may call among them",
     () =>
       Effect.gen(function* () {
         const member = yield* memberWithLinear;
@@ -331,26 +331,26 @@ it.layer(getTestDB())("the integrations' door", (it) => {
           LINEAR_AND_NOTION_CONNECT,
           linearServer(linearTokenOf(member.userId), heard, LINEAR_APP_TOOLS),
         );
-        const call = (tool: string, callable?: typeof appMayCall) =>
+        const call = (tool: string, callable?: ReturnType<typeof appMayCallFor>) =>
           callConnectionTool(member.admitted, LINEAR, tool, {}, callable).pipe(
             Effect.provide(services),
           );
 
-        // The agent's call keeps the list that names the board's app.
-        yield* call("show_board");
         const app = yield* readConnectionToolApp(member.admitted, LINEAR, "show_board").pipe(
           Effect.provide(services),
         );
         const byModel = yield* call("move_card");
-        const byApp = yield* call("move_card", appMayCall);
+        const byApp = yield* call("move_card", appMayCallFor("show_board"));
+        const elsewhere = yield* call("archive_team", appMayCallFor("show_board"));
 
         assert.ok(Result.isSuccess(app));
         assert.deepEqual(app.success, { html: LINEAR_BOARD_APP.html });
         assert.ok(Result.isFailure(byModel));
         assert.ok(Result.isSuccess(byApp));
+        assert.ok(Result.isFailure(elsewhere));
         assert.deepEqual(
           heard.calls.map((each) => each.name),
-          ["show_board", "move_card"],
+          ["move_card"],
         );
       }),
   );

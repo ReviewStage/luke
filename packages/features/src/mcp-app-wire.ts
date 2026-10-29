@@ -12,9 +12,10 @@
  * sent it, a record nothing on this side reads yet.
  *
  * An app may call a tool of its own server, which the window forwards to the
- * service by name with its arguments; the answer is the server's own MCP
- * result, its refusal an MCP error result, as an agent's call of the tool
- * reads it.
+ * service by name with its arguments, under the tool the app was drawn for;
+ * the service calls only the app's own tools and read-only ones. The answer
+ * is the server's own MCP result, its refusal an MCP error result, as an
+ * agent's call of the tool reads it.
  */
 
 import { WireRecordShapeSchema } from "@luke/wire";

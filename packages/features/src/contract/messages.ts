@@ -64,9 +64,6 @@ const byTool = {
   tool: EffectSchema.String,
 };
 
-/** One of an agent's connections, by its name, a path segment the handler checks. */
-const byConnection = { id: EffectSchema.String, connection: EffectSchema.String };
-
 /** An app's call is a tool's name and its arguments, which a single-file app's own reads stay well under. */
 const TOOL_APP_CALL_BODY_BYTES = 256 * 1_024;
 
@@ -145,17 +142,17 @@ export const messagesContract = {
     )
     .input(EffectSchema.Struct(byTool))
     .output(EffectSchema.flip(agentToolAppAnswerSchema)),
-  /** A call an agent's tool's app asks of its own server, forwarded on the same connection for the starter alone. */
+  /** A call the app of an agent's tool asks of its own server, forwarded on the same connection for the starter alone. */
   agentToolAppCall: hostedProcedure
     .meta(bodyCap(TOOL_APP_CALL_BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,
-        path: "/api/agents/{id}/tool-apps/{connection}/calls",
+        path: "/api/agents/{id}/tool-apps/{connection}/{tool}/calls",
         inputStructure: "detailed",
       }),
     )
-    .input(exactBodyInput(EffectSchema.Struct(byConnection), agentToolAppCallRequestSchema))
+    .input(exactBodyInput(EffectSchema.Struct(byTool), agentToolAppCallRequestSchema))
     .output(EffectSchema.flip(agentToolAppCallAnswerSchema)),
   /** One part of a message of an agent's worker's transcript, whole, read at once. */
   agentWorkerPart: hostedProcedure

@@ -420,7 +420,7 @@ export function listConnectionTools(
 /**
  * One call of a connection's tool with its input, on the member's own
  * grant, where `callable` admits it (a call of the model's by default; an
- * MCP App's own asks `appMayCall`): the provider's MCP result as it sent it,
+ * MCP App's own asks `appMayCallFor`): the provider's MCP result as it sent it,
  * its own error among them.
  * A connection the agent is not handed, one the member has not connected,
  * a tool the server lists none of or `callable` refuses, and a session that
@@ -432,7 +432,7 @@ export function callConnectionTool(
   name: string,
   tool: string,
   input: WireRecord,
-  callable: (tool: McpToolSchema) => boolean = modelMayCall,
+  callable: (tool: McpToolSchema, tools: readonly McpToolSchema[]) => boolean = modelMayCall,
 ): Effect.Effect<ConnectionCall, never, ConnectionDoorServices> {
   return Effect.gen(function* () {
     const connection = yield* handedConnection(admitted, name);
@@ -477,10 +477,12 @@ export function callConnectionTool(
 
 /**
  * The MCP App a connection's tool ships (`mcp-tools.ts`), read on the
- * member's own grant: the `ui://` resource the tool's kept list names
- * (`integration-tool-store.ts`), which every call of a tool keeps current,
+ * member's own grant: the `ui://` resource the tool's listing names, as
+ * the connection's server lists it (`listConnectionTools`: the grant's kept
+ * list while it is fresh, which every native call keeps current, else the
+ * provider's own, kept, as a grant only an eve agent called keeps none),
  * read from the provider's server in one session. A connection the agent is
- * not handed, one the member has not connected, a tool whose kept list names
+ * not handed, one the member has not connected, a tool whose listing names
  * no app, and a session that failed are each refused. The HTML is read for
  * the window that draws it and kept nowhere.
  */
@@ -496,8 +498,8 @@ export function readConnectionToolApp(
     }
     const grant = yield* connectionGrant(admitted, connection.value);
     if (Result.isFailure(grant)) return Result.fail(grant.failure);
-    const kept = yield* readStoredTools(grant.success);
-    const uri = kept?.tools.find((each) => each.name === tool)?.ui?.resourceUri;
+    const listed = yield* listConnectionTools(admitted, name);
+    const uri = listed.find((each) => each.name === tool)?.ui?.resourceUri;
     if (uri === undefined) {
       return Result.fail(refused(`The tool "${tool}" of "${name}" ships no app.`));
     }
