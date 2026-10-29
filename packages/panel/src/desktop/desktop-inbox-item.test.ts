@@ -2511,7 +2511,7 @@ function draftReplyIn(pane: HTMLElement): Element {
 function sendingMarks(page: HTMLElement): (string | undefined)[] {
   return [...itemPane(page).querySelectorAll(".inbox-thread .luke-comment-trailing")]
     .map((trailing) => wordsOf(trailing))
-    .filter((words) => words === "Sending…");
+    .filter((words) => words === "Sending");
 }
 
 test("a plain reply stands at the thread's end marked Sending the moment it is sent, and once a read or its answer holds it, the message stands in its place once; refused, it leaves the thread as its words go back into the box, which says why", async () => {
@@ -2550,7 +2550,7 @@ test("a plain reply stands at the thread's end marked Sending the moment it is s
     "You",
     "Does it matter for SSO teams?",
   ]);
-  assert.deepEqual(sendingMarks(page), ["Sending…"], "the reply says it is on its way");
+  assert.deepEqual(sendingMarks(page), ["Sending"], "the reply says it is on its way");
 
   // The push holding the reply lands before the reply's own answer does.
   const held = landed[0] ?? assert.fail("the reply is answered");
@@ -2571,7 +2571,7 @@ test("a plain reply stands at the thread's end marked Sending the moment it is s
   pressInComposer(pane, "Enter");
   await settle();
   assert.deepEqual(threadOf(page).at(-1), ["message", "person", "You", "Never mind."]);
-  assert.deepEqual(sendingMarks(page), ["Sending…"]);
+  assert.deepEqual(sendingMarks(page), ["Sending"]);
   await act(async () => lands[1]?.(true));
   await settle();
   assert.equal(

@@ -354,12 +354,12 @@ function DraftReply({
 }
 
 /** What a reply on its way says at its head's end. */
-const SENDING = "Sending…";
+const SENDING = "Sending";
 
 /**
  * The reader's plain reply on its way, as the thread's last message before
  * the draft reply: drawn as the reader's own message is, its files going
- * up, and "Sending…" at its head's end, until the item holds it, when the
+ * up, and "Sending" at its head's end, until the item holds it, when the
  * message it became stands in its place.
  */
 function PendingReply({
