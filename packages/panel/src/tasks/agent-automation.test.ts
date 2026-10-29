@@ -188,9 +188,9 @@ test("the automation's name hangs its card over the agent's: its schedule, whose
   );
   assert.equal(
     automation.querySelector(".luke-hover-card-sub")?.textContent,
-    "Weekdays at 9:00 AM · UTC",
+    "Weekdays at 9:00 AM · UTC · Acme",
   );
-  assert.equal(automation.querySelector(".luke-hover-card-corner")?.textContent, "Acme");
+  assert.equal(automation.querySelector(".luke-hover-card-corner"), null);
   const notes = [...automation.querySelectorAll(".luke-hover-card-note")].map(
     (note) => note.textContent,
   );
@@ -234,6 +234,6 @@ test("an automation a GitHub event fires says where on its card, as its row in t
   const automation = cards()[1]?.querySelector("[data-actor-card='automation']");
   assert.equal(
     automation?.querySelector(".luke-hover-card-sub")?.textContent,
-    "When a pull request by people is opened in acme/relay or acme/ledger",
+    "When a pull request by people is opened in acme/relay or acme/ledger · Acme",
   );
 });

@@ -72,7 +72,7 @@ export function useRunChoices(input: {
   const readModels = useCallback(() => {
     // The menu reads again while a read is out, so a Retry shows its reading.
     setModelsFailed(false);
-    act(ACT_KIND.CODING_AGENTS_MODELS).then(
+    act(ACT_KIND.AGENTS_MODELS).then(
       (answer) => {
         if ("failure" in answer) setModelsFailed(true);
         else {
@@ -85,7 +85,7 @@ export function useRunChoices(input: {
   }, [act]);
   useEffect(() => {
     readModels();
-    act(ACT_KIND.CODING_AGENTS_DEFAULT_READ).then(
+    act(ACT_KIND.AGENTS_DEFAULT_READ).then(
       (answer) => {
         if ("failure" in answer) setDefaultFailed(true);
         else setDefaultChoice(answer.choice);
@@ -99,7 +99,7 @@ export function useRunChoices(input: {
     // Nothing of another repository's list stands while this one's is out.
     setAgents(undefined);
     setFound(undefined);
-    act(ACT_KIND.CODING_AGENTS_WORKSPACE_LIST, {
+    act(ACT_KIND.AGENTS_WORKSPACE_LIST, {
       workspaceId,
       ...(repository === null ? undefined : { repository }),
     }).then(
@@ -120,7 +120,7 @@ export function useRunChoices(input: {
     if (!wantsAgents || workspaceId === undefined || asked === "") return;
     let live = true;
     setSearchFailed(false);
-    act(ACT_KIND.CODING_AGENTS_WORKSPACE_LIST, {
+    act(ACT_KIND.AGENTS_WORKSPACE_LIST, {
       workspaceId,
       words: asked,
       ...(repository === null ? undefined : { repository }),

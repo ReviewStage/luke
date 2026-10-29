@@ -115,7 +115,7 @@ import {
   runnerIdled,
 } from "./runner-sessions.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
-import { codingAgentFailureOf } from "./status.js";
+import { agentFailureOf } from "./status.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -369,7 +369,7 @@ const across = <A, E>(work: Effect.Effect<A, E>, step: Duration.Duration, times:
 const newestTurn = (agent: Agent) =>
   Effect.map(latestTurnsOfReached([agent.conversationId]), (turns) => {
     const turn = turns.get(agent.conversationId);
-    return { status: turn?.status, failure: codingAgentFailureOf(turn) };
+    return { status: turn?.status, failure: agentFailureOf(turn) };
   });
 
 afterEach(() => {

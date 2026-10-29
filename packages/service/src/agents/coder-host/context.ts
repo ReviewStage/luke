@@ -32,7 +32,7 @@ export function contextWindowOf(
 }
 
 /** The agent's context as the wire carries it, against the window given; nothing before its first step. */
-export function codingAgentContextOf(
+export function agentContextOf(
   row: AgentContextRow,
   windowTokens: number,
 ): AgentContext | undefined {

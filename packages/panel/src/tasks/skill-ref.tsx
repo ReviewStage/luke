@@ -1,3 +1,4 @@
+import { TASK_SKILL_SOURCE, type TaskSkillSource } from "@luke/features/task-wire";
 import { THING_KIND, THING_WORD } from "@luke/features/thing-kind";
 import {
   type ComboboxOption,
@@ -28,8 +29,7 @@ import { SkillSourceBadge } from "./skill-source-badge.js";
  * open the skill's file hangs the one card while the pointer rests on the
  * name, drawn from every card's parts (`@luke/ui`'s `HoverCard`) and a task card's
  * rows (`task-card.tsx`): the skill's mark and name at its head, with where
- * it comes from at the head's right (`skill-source-badge.tsx`), what it is
- * for under it, and, for one of the repository's, its file's line, named
+ * it comes from on the line under the name, what it is for under that, and, for one of the repository's, its file's line, named
  * from the repository's root, which says and does not open, since every
  * place hanging the card opens that file itself. A press on the name, or
  * Enter once it has the focus, opens it; an installed skill has no file
@@ -58,7 +58,14 @@ export interface SkillSubject {
   readonly onOpen: () => void;
 }
 
-/** The skill's card: its mark, name, and source, what it is for, and its file's line where it has one. */
+/** What the line under a skill's name in its card says of where it comes from. */
+const SKILL_SOURCE_SUB = {
+  [TASK_SKILL_SOURCE.REPOSITORY]: "Repository skill",
+  [TASK_SKILL_SOURCE.WORKSPACE]: "Workspace skill",
+  [TASK_SKILL_SOURCE.PERSONAL]: "Your skill",
+} as const satisfies Record<TaskSkillSource, string>;
+
+/** The skill's card: its mark and name, where it comes from under the name, what it is for, and its file's line where it has one. */
 export function SkillCard({ subject }: { subject: SkillSubject }): React.JSX.Element {
   const { skill } = subject;
   return (
@@ -66,7 +73,7 @@ export function SkillCard({ subject }: { subject: SkillSubject }): React.JSX.Ele
       <HoverCardHead
         glyph={<SkillMark />}
         name={skillWord(skill.name)}
-        corner={<SkillSourceBadge source={skill.source} />}
+        sub={SKILL_SOURCE_SUB[skill.source]}
       />
       {skill.description === "" ? null : <HoverCardNote>{skill.description}</HoverCardNote>}
       {skill.path === undefined ? null : (

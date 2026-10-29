@@ -73,6 +73,17 @@ import {
 } from "../../tasks/picture-look.js";
 import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import {
+  CODER_READ_AGENT_TOOL,
+  LIST_AGENTS_TOOL,
+  LIST_MODELS_TOOL,
+  LIST_TASKS_TOOL,
+  READ_PAGE_TOOL,
+  START_AGENT_TOOL,
+  STOP_AGENT_TOOL,
+  UPDATE_AGENT_TOOL,
+  UPDATE_TASK_TOOL,
+} from "../agent-tools.js";
+import {
   CREATE_AUTOMATION_TOOL,
   DELETE_AUTOMATION_TOOL,
   LIST_AUTOMATIONS_TOOL,
@@ -118,17 +129,6 @@ import {
   repositoryToolsOf,
   taskToolsOf,
 } from "../coder-host/tool-set.js";
-import {
-  CODER_READ_AGENT_TOOL,
-  LIST_AGENTS_TOOL,
-  LIST_MODELS_TOOL,
-  LIST_TASKS_TOOL,
-  READ_PAGE_TOOL,
-  START_AGENT_TOOL,
-  STOP_AGENT_TOOL,
-  UPDATE_AGENT_TOOL,
-  UPDATE_TASK_TOOL,
-} from "../coding-agent-tools.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
 import { RECALL_TOOL, REMEMBER_TOOL } from "../memory-tools.js";

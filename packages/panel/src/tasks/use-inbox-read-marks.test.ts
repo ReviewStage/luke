@@ -97,9 +97,9 @@ function marks() {
       });
     });
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]: ({ workspaceId, itemIds }) =>
+    [ACT_KIND.AGENTS_INBOX_READ_ALL]: ({ workspaceId, itemIds }) =>
       sending(`all:${workspaceId}:${itemIds.join(",")}`, { marked: 1 }),
-    [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) =>
+    [ACT_KIND.AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) =>
       sending(`${unread ? "unread" : "read"}:${itemId}`, { id: itemId, unread }),
   });
   let control: InboxReadMarks | undefined;

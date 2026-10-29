@@ -2,8 +2,8 @@
  * call-key.ts -- the key a native agent's tool call runs under, the same across its harness's retry of the call.
  *
  * eve keys a start or a message on its own id for the tool call, so a call
- * run again starts or sends once (`../coding-agent-tools.ts`'s
- * `CodingAgentCall`). A Claude Code or Codex agent's retry, after its
+ * run again starts or sends once (`../agent-tools.ts`'s
+ * `AgentCall`). A Claude Code or Codex agent's retry, after its
  * harness's timeout or the door's failure, is a fresh call of the harness's,
  * with a tool-use id and a JSON-RPC id of its own, so neither keys it to the
  * call it repeats; what is the same is the agent's conversation, the tool,

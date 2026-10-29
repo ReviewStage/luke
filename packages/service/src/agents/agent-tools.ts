@@ -127,11 +127,11 @@ import {
   accountModelChoices,
   placeOfAgent,
   type StartWhere,
-  startCodingAgent,
+  startAgent,
 } from "./coder-host/start.js";
 import {
-  codingAgentFailureOf,
-  codingAgentStatusOf,
+  agentFailureOf,
+  agentStatusOf,
   lineAwaitsTurn,
   startedBlank,
 } from "./coder-host/status.js";
@@ -172,7 +172,7 @@ import {
 } from "./written-mentions.js";
 
 /**
- * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them, read one's progress, start one.
+ * agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them, read one's progress, start one.
  *
  * Every coding agent is offered the same `list_agents`,
  * `read_agent`, and `start_agent`, one implementation each;
@@ -265,7 +265,7 @@ import {
 /** The most tasks a list of them answers, the newest started first. */
 const TASKS_LIST_LIMIT = 50;
 
-const CODING_AGENT_TOOL_BOUNDS = {
+const AGENT_TOOL_BOUNDS = {
   /** The newest turns a progress read walks first, the one under way included. */
   TAIL_TURNS: 3,
   /** The entries a progress read answers where it asks for no number, the newest last. */
@@ -279,7 +279,7 @@ const CODING_AGENT_TOOL_BOUNDS = {
 } as const;
 
 /** Why a call ran nothing, or sent nothing, in words the model can act on. */
-export const CODING_AGENT_TOOL_REFUSAL = {
+export const AGENT_TOOL_REFUSAL = {
   UNREADABLE: `Not run: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered.`,
   UNREADABLE_FILTER: "Not run: narrow the list by a taskId, by thisTask, or by neither.",
   UNREADABLE_TASKS:
@@ -349,7 +349,7 @@ export const READ_PAGE_REFUSAL = {
 } as const;
 
 /** Why a start made nothing, in words the model can act on; a choice the catalog refused is said with the choices (`choiceRefusal`). */
-export const START_CODING_AGENT_REFUSAL = {
+export const START_AGENT_REFUSAL = {
   UNREADABLE:
     "Not started: give a prompt as text of at most " +
     `${AGENT_BOUNDS.MAX_START_WORDS_CHARS} characters, or none to start on the plan, a note ` +
@@ -438,18 +438,18 @@ const writesAsPlanPolicy = (userId: string, agent: Agent) =>
 
 /** The start refusal's sentence for each hosted refusal a start may answer; any other is the service down. */
 const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
-  [HOSTED_API_ERROR.NO_REPOSITORY, START_CODING_AGENT_REFUSAL.NO_REPOSITORY],
-  [HOSTED_API_ERROR.BRANCH_NOT_FOUND, START_CODING_AGENT_REFUSAL.NO_BRANCH],
-  [HOSTED_API_ERROR.GITHUB_UNANSWERED, START_CODING_AGENT_REFUSAL.GITHUB_UNANSWERED],
-  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, START_CODING_AGENT_REFUSAL.NOT_REACHABLE],
-  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING, START_CODING_AGENT_REFUSAL.IMAGE_PREPARING],
-  [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT, START_CODING_AGENT_REFUSAL.PLAN_SIGNED_OUT],
-  [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE, START_CODING_AGENT_REFUSAL.PLAN_UNREACHABLE],
-  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, START_CODING_AGENT_REFUSAL.PLAN_LIMIT_REACHED],
-  [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE, START_CODING_AGENT_REFUSAL.PLAN_INELIGIBLE],
-  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING, START_CODING_AGENT_REFUSAL.CREDENTIAL_MISSING],
-  [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE, START_CODING_AGENT_REFUSAL.API_KEY_UNREADABLE],
-  [HOSTED_API_ERROR.DEVICE_REMOVED, START_CODING_AGENT_REFUSAL.DEVICE_REMOVED],
+  [HOSTED_API_ERROR.NO_REPOSITORY, START_AGENT_REFUSAL.NO_REPOSITORY],
+  [HOSTED_API_ERROR.BRANCH_NOT_FOUND, START_AGENT_REFUSAL.NO_BRANCH],
+  [HOSTED_API_ERROR.GITHUB_UNANSWERED, START_AGENT_REFUSAL.GITHUB_UNANSWERED],
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, START_AGENT_REFUSAL.NOT_REACHABLE],
+  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING, START_AGENT_REFUSAL.IMAGE_PREPARING],
+  [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT, START_AGENT_REFUSAL.PLAN_SIGNED_OUT],
+  [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE, START_AGENT_REFUSAL.PLAN_UNREACHABLE],
+  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, START_AGENT_REFUSAL.PLAN_LIMIT_REACHED],
+  [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE, START_AGENT_REFUSAL.PLAN_INELIGIBLE],
+  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING, START_AGENT_REFUSAL.CREDENTIAL_MISSING],
+  [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE, START_AGENT_REFUSAL.API_KEY_UNREADABLE],
+  [HOSTED_API_ERROR.DEVICE_REMOVED, START_AGENT_REFUSAL.DEVICE_REMOVED],
 ]);
 
 /** Why a start on a device refused it, in words the calling model can act on: by what the device refused it for, bar another member's device, which names whose it is (`notOwnerWords`). */
@@ -490,7 +490,7 @@ export const AGENT_CALLER = {
 type AgentCaller = { readonly kind: typeof AGENT_CALLER.AGENT; readonly agent: Agent };
 
 /** What a call of the agent tools runs under: who calls, eve as the deployment acting for the caller's member, the writer, and the key the one message or start is made under. */
-export interface CodingAgentCall {
+export interface AgentCall {
   readonly caller: AgentCaller;
   /** eve's coding-agent service as the deployment acting for the caller's member; nothing where the deployment names no secret or no origin for eve, which sends and starts nothing. */
   readonly eve: AgentSessions | undefined;
@@ -504,11 +504,7 @@ export interface CodingAgentCall {
 }
 
 /** What a message or a start reaches: the store, GitHub through the App on the member's standing, the network to eve, and the catalog a start's choice is checked against. */
-export type CodingAgentToolServices =
-  | DatabaseServices
-  | HttpClient.HttpClient
-  | GitHubApp
-  | ModelCatalog;
+export type AgentToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog;
 
 const AGENT_ID = describeWire(
   wireUuidSchema,
@@ -536,11 +532,11 @@ const CODER_READ_AGENT_INPUT = Schema.Struct({
   entries: Schema.optionalKey(
     describeWire(
       Schema.Int.check(
-        Schema.isBetween({ minimum: 1, maximum: CODING_AGENT_TOOL_BOUNDS.MAX_TAIL_ENTRIES }),
+        Schema.isBetween({ minimum: 1, maximum: AGENT_TOOL_BOUNDS.MAX_TAIL_ENTRIES }),
       ),
       "How many entries of its transcript to read, the newest last; " +
-        `${CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES} when left out, at most ` +
-        `${CODING_AGENT_TOOL_BOUNDS.MAX_TAIL_ENTRIES}.`,
+        `${AGENT_TOOL_BOUNDS.TAIL_ENTRIES} when left out, at most ` +
+        `${AGENT_TOOL_BOUNDS.MAX_TAIL_ENTRIES}.`,
     ),
   ),
 });
@@ -776,7 +772,7 @@ export const CODER_READ_AGENT_TOOL = {
     `what ${AGENT_TOOL.LIST_AGENTS} says of it, the branch it pushed and the pull request from it ` +
     "as GitHub holds them, and the tail of its transcript, what it last said and which tools it " +
     "called on what, newest last, each entry cut to " +
-    `${CODING_AGENT_TOOL_BOUNDS.AGENT_ENTRY_CHARS} characters and with the messageId of the ` +
+    `${AGENT_TOOL_BOUNDS.AGENT_ENTRY_CHARS} characters and with the messageId of the ` +
     `message it stands in, which ${AGENT_TOOL.START_AGENT}'s from names to fork the agent ` +
     "there. Read one to learn why an agent " +
     "went quiet, what it is stuck on, or what it did, before you message it or decide what " +
@@ -1147,7 +1143,7 @@ const standingsOf = (agents: readonly Agent[]) =>
     const now = yield* Clock.currentTimeMillis;
     return (agent: Agent) => {
       const turn = turns.get(agent.conversationId);
-      const status = codingAgentStatusOf(turn, {
+      const status = agentStatusOf(turn, {
         createdAt: agent.createdAt,
         now,
         awaitingLineAt: awaiting.get(agent.conversationId),
@@ -1156,7 +1152,7 @@ const standingsOf = (agents: readonly Agent[]) =>
       // Why the newest turn failed is said only while the agent reads as failed: a line awaiting the next turn makes it running again.
       return {
         status,
-        failureReason: status === AGENT_STATUS.FAILED ? codingAgentFailureOf(turn) : undefined,
+        failureReason: status === AGENT_STATUS.FAILED ? agentFailureOf(turn) : undefined,
       };
     };
   });
@@ -1185,7 +1181,7 @@ const readAgentReading = (
     const activity =
       newest === undefined
         ? undefined
-        : entriesOf(newest.message, CODING_AGENT_TOOL_BOUNDS.ACTIVITY_CHARS).at(-1);
+        : entriesOf(newest.message, AGENT_TOOL_BOUNDS.ACTIVITY_CHARS).at(-1);
     return {
       id: agent.id,
       ...task,
@@ -1315,7 +1311,7 @@ function startRefusalWords(refusal: HostedRefusal): string {
     return LOCAL_AGENT_REFUSAL_WORDS[refusal.localAgentRefusal];
   }
   return withReset(
-    START_REFUSAL_WORDS.get(refusal.error) ?? START_CODING_AGENT_REFUSAL.UNAVAILABLE,
+    START_REFUSAL_WORDS.get(refusal.error) ?? START_AGENT_REFUSAL.UNAVAILABLE,
     refusal,
   );
 }
@@ -1395,7 +1391,7 @@ export const orStoreRefusal = <R>(
   effect: Effect.Effect<WireRecord, StoreFailure, R>,
 ): Effect.Effect<WireRecord, never, R> =>
   Effect.catch(effect, (failure) =>
-    Effect.as(logStoreFailure(failure), agentToolRejected(CODING_AGENT_TOOL_REFUSAL.STORE)),
+    Effect.as(logStoreFailure(failure), agentToolRejected(AGENT_TOOL_REFUSAL.STORE)),
   );
 
 /** The repository the caller works in: the calling agent's own; none where it names none. */
@@ -1409,7 +1405,7 @@ export const workedRepository = (caller: AgentCaller) =>
  * starts a second agent nor tells of one in a workspace the caller left
  * behind; nothing where the call made no agent.
  */
-const startedBefore = (call: CodingAgentCall) =>
+const startedBefore = (call: AgentCall) =>
   Effect.gen(function* () {
     const { caller } = call;
     const userId = callerUserId(caller);
@@ -1418,7 +1414,7 @@ const startedBefore = (call: CodingAgentCall) =>
     const agent = made.value;
     const workspace = yield* callerWorkspace(caller);
     if (Option.isNone(workspace) || agent.organizationId !== workspace.value) {
-      return Option.some(agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SUCH_TASK));
+      return Option.some(agentToolRejected(START_AGENT_REFUSAL.NO_SUCH_TASK));
     }
     const reading = yield* startedReading(agent, yield* offeredModels, callerTask(caller));
     // A continue run again names the agents that continued its source before it, as its first answer did.
@@ -1445,22 +1441,21 @@ function readingRecord(reading: AgentReading): WireRecord {
 
 /** One call of `list_agents`: every agent of the caller's workspace, or of one task of it, the calling agent left out, archived ones marked, newest first. */
 export function runListAgents(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+): Effect.Effect<WireRecord, never, AgentToolServices> {
   const { caller } = call;
   const ownTask = callerTask(caller);
   const narrowed = listedTask(input, ownTask);
   if (Result.isFailure(narrowed)) {
     return Effect.succeed(
-      agentToolRejected(narrowed.failure ?? CODING_AGENT_TOOL_REFUSAL.UNREADABLE_FILTER),
+      agentToolRejected(narrowed.failure ?? AGENT_TOOL_REFUSAL.UNREADABLE_FILTER),
     );
   }
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(caller);
-      if (Option.isNone(workspace))
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+      if (Option.isNone(workspace)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       const { agents, taskOf } = yield* workspaceAgentsOf(callerUserId(caller), workspace.value, {
         taskId: narrowed.success,
         except: caller.agent.id,
@@ -1496,31 +1491,31 @@ const tailOf = (agent: Agent, entries: number, entryChars: number) =>
       journals.flatMap((journal) =>
         entriesOf(journal.message, entryChars).map((text) => ({ messageId: journal.id, text })),
       );
-    const newest = yield* journalsOf(agent, CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS);
+    const newest = yield* journalsOf(agent, AGENT_TOOL_BOUNDS.TAIL_TURNS);
     const read = entriesIn(newest);
     const more =
       read.length < entries &&
-      newest.length === CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS &&
-      entries > CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS;
+      newest.length === AGENT_TOOL_BOUNDS.TAIL_TURNS &&
+      entries > AGENT_TOOL_BOUNDS.TAIL_TURNS;
     const all = more ? entriesIn(yield* journalsOf(agent, entries)) : read;
     return all.slice(-entries);
   });
 
 /** One call of `read_agent`: the agent as the list reads it, and the tail of its newest turns, as long as asked and each entry cut for the caller. */
 export function runReadAgent(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+): Effect.Effect<WireRecord, never, AgentToolServices> {
   const asked = readAgentAsked(input);
   if (Result.isFailure(asked)) {
-    return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.UNREADABLE));
+    return Effect.succeed(agentToolRejected(AGENT_TOOL_REFUSAL.UNREADABLE));
   }
-  const entries = asked.success.entries ?? CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES;
-  const entryChars = CODING_AGENT_TOOL_BOUNDS.AGENT_ENTRY_CHARS;
+  const entries = asked.success.entries ?? AGENT_TOOL_BOUNDS.TAIL_ENTRIES;
+  const entryChars = AGENT_TOOL_BOUNDS.AGENT_ENTRY_CHARS;
   return orStoreRefusal(
     Effect.gen(function* () {
       const found = yield* workspaceAgentOf(call.caller, asked.success.agentId);
-      if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+      if (Option.isNone(found)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_AGENT);
       const { agent, task, workspaceId } = found.value;
       const standing = yield* standingsOf([agent]);
       const step = yield* workspaceStepOf(callerUserId(call.caller), workspaceId);
@@ -1594,7 +1589,7 @@ const sourceLanding = (
 ): Effect.Effect<Result.Result<SourceLanding, string>, StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
     const found = yield* workspaceAgentOf(caller, from.agentId);
-    if (Option.isNone(found)) return Result.fail(START_CODING_AGENT_REFUSAL.NO_SOURCE);
+    if (Option.isNone(found)) return Result.fail(START_AGENT_REFUSAL.NO_SOURCE);
     const { agent: source, workspaceId } = found.value;
     const steward = stewardRefused(caller, source, STEWARD_ACT.START_FROM);
     if (steward !== undefined) return Result.fail(steward);
@@ -1602,17 +1597,17 @@ const sourceLanding = (
       return Result.fail(`Not started: only ${yield* agentStarterName(source)} can do this.`);
     }
     if (named !== undefined && named !== source.taskId) {
-      return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_OTHER_TASK);
+      return Result.fail(START_AGENT_REFUSAL.SOURCE_OTHER_TASK);
     }
     // An agent with no task is started from in its own workspace, on the repository it cloned.
     const place = placeOfAgent(source);
-    if (place === undefined) return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_NO_REPOSITORY);
+    if (place === undefined) return Result.fail(START_AGENT_REFUSAL.SOURCE_NO_REPOSITORY);
     // A fork names one of the source's own messages, and leaves the source going on beside it.
     if (from.messageId !== undefined) {
       const { userId, conversationId } = source;
       const role = MESSAGE_ROLE.ASSISTANT;
       const at = yield* messageSeqOf(userId, conversationId, from.messageId, role);
-      if (Option.isNone(at)) return Result.fail(START_CODING_AGENT_REFUSAL.NO_MESSAGE);
+      if (Option.isNone(at)) return Result.fail(START_AGENT_REFUSAL.NO_MESSAGE);
       return Result.succeed({ place, continuedBy: [] });
     }
     // A continue takes over work that has ended; one already continued is
@@ -1621,7 +1616,7 @@ const sourceLanding = (
     // operator alone is refused the second (`steward.ts`).
     const { status } = (yield* standingsOf([source]))(source);
     if (status === AGENT_STATUS.STARTING || status === AGENT_STATUS.RUNNING) {
-      return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_RUNNING);
+      return Result.fail(START_AGENT_REFUSAL.SOURCE_RUNNING);
     }
     const at = { userId: callerUserId(caller), workspaceId, taskId: source.taskId };
     const continuedBy = yield* earlierContinuationsOf(at, source.id);
@@ -1642,10 +1637,10 @@ function earlierContinuations(
 /** A start's refusal in the model's words, said of the source where the start named one: one that is none of the caller's, or a message that is none of the source's. */
 function startFromRefusalWords(refusal: HostedRefusal, from: AgentStartFrom | undefined): string {
   if (from !== undefined && refusal.error === HOSTED_API_ERROR.NOT_FOUND) {
-    return START_CODING_AGENT_REFUSAL.NO_SOURCE;
+    return START_AGENT_REFUSAL.NO_SOURCE;
   }
   if (from?.messageId !== undefined && refusal.error === HOSTED_API_ERROR.INVALID_REQUEST) {
-    return START_CODING_AGENT_REFUSAL.NO_MESSAGE;
+    return START_AGENT_REFUSAL.NO_MESSAGE;
   }
   return startRefusalWords(refusal);
 }
@@ -1682,17 +1677,15 @@ function startInputRefusal(
   const { from } = start;
   const onTask = start.taskId !== undefined || callerTask(caller) !== null;
   if (start.repository !== undefined && (from !== undefined || onTask)) {
-    return START_CODING_AGENT_REFUSAL.REPOSITORY_ON_TASK;
+    return START_AGENT_REFUSAL.REPOSITORY_ON_TASK;
   }
   if (from === undefined) return undefined;
   const prompt = start.prompt ?? start.task;
   if (prompt !== undefined || start.branch !== undefined) {
-    return START_CODING_AGENT_REFUSAL.FROM_WITH_PROMPT;
+    return START_AGENT_REFUSAL.FROM_WITH_PROMPT;
   }
   const self = from.agentId === caller.agent.id;
-  return self && from.messageId === undefined
-    ? START_CODING_AGENT_REFUSAL.SELF_CONTINUE
-    : undefined;
+  return self && from.messageId === undefined ? START_AGENT_REFUSAL.SELF_CONTINUE : undefined;
 }
 
 /**
@@ -1707,19 +1700,19 @@ function startInputRefusal(
  * to their own timeouts well inside it (`snapshot.ts`, `replay-summary.ts`).
  */
 export function runStartAgent(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+): Effect.Effect<WireRecord, never, AgentToolServices> {
   const asked = readStart(input);
   // A choice is one thing: a model without its effort, or the reverse, names nothing to run on.
   if (
     Result.isFailure(asked) ||
     (asked.success.model === undefined) !== (asked.success.effort === undefined)
   ) {
-    return Effect.succeed(agentToolRejected(START_CODING_AGENT_REFUSAL.UNREADABLE));
+    return Effect.succeed(agentToolRejected(START_AGENT_REFUSAL.UNREADABLE));
   }
   if (asked.success.newTask !== undefined) {
-    return Effect.succeed(agentToolRejected(START_CODING_AGENT_REFUSAL.NEW_TASK));
+    return Effect.succeed(agentToolRejected(START_AGENT_REFUSAL.NEW_TASK));
   }
   const { model, effort, from } = asked.success;
   const { caller, eve } = call;
@@ -1729,8 +1722,7 @@ export function runStartAgent(
   const choice = model !== undefined && effort !== undefined ? { model, effort } : undefined;
   const named = asked.success.taskId;
   const ownTask = callerTask(caller);
-  if (eve === undefined)
-    return Effect.succeed(agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SERVICE));
+  if (eve === undefined) return Effect.succeed(agentToolRejected(START_AGENT_REFUSAL.NO_SERVICE));
   const userId = callerUserId(caller);
   return orStoreRefusal(
     Effect.gen(function* () {
@@ -1745,7 +1737,7 @@ export function runStartAgent(
       }
       if (from === undefined && named !== undefined && named !== ownTask) {
         const reached = yield* taskOfCallerWorkspace(caller, named);
-        if (!reached) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SUCH_TASK);
+        if (!reached) return agentToolRejected(START_AGENT_REFUSAL.NO_SUCH_TASK);
       }
       // A start from another agent lands in that agent's own place, its task or its workspace.
       const landing = from === undefined ? undefined : yield* sourceLanding(caller, from, named);
@@ -1765,14 +1757,14 @@ export function runStartAgent(
         place === undefined ||
         (place.taskId === null && from === undefined && prompt === undefined)
       ) {
-        return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_PROMPT);
+        return agentToolRejected(START_AGENT_REFUSAL.NO_PROMPT);
       }
       if (
         place.taskId === null &&
         place.repository === null &&
         asked.success.branch !== undefined
       ) {
-        return agentToolRejected(START_CODING_AGENT_REFUSAL.BRANCH_NO_REPOSITORY);
+        return agentToolRejected(START_AGENT_REFUSAL.BRANCH_NO_REPOSITORY);
       }
       // The pictures it is handed are read as the caller may read them, and refused whole where one is not.
       const images =
@@ -1784,7 +1776,7 @@ export function runStartAgent(
       }
       // An agent a coding agent starts hears who started it, and that it reports back to it by message.
       const note = startedByNote(caller.agent, asked.success.note);
-      const started = yield* startCodingAgent(Effect.succeed(eve), userId, {
+      const started = yield* startAgent(Effect.succeed(eve), userId, {
         ...place,
         idempotencyKey: call.clientKey,
         choice,
@@ -1844,7 +1836,7 @@ const idleForArchive = (agent: Agent) =>
     }
     if (turn !== undefined) return !RUNNING_TURN_STATUSES.has(turn.status);
     return (
-      codingAgentStatusOf(undefined, {
+      agentStatusOf(undefined, {
         createdAt: agent.createdAt,
         now,
         blank: startedBlank(agent),
@@ -1876,7 +1868,7 @@ const archiveChange = (
         archiverOf(caller, reason),
         idleForArchive,
       );
-      if (outcome === IDLE_ARCHIVE.NOT_FOUND) return CODING_AGENT_TOOL_REFUSAL.NO_AGENT;
+      if (outcome === IDLE_ARCHIVE.NOT_FOUND) return AGENT_TOOL_REFUSAL.NO_AGENT;
       if (outcome === IDLE_ARCHIVE.WORKING) return UPDATE_AGENT_REFUSAL.WORKING;
       // A local agent archived now is let go of on its device, as an archive by hand lets it go.
       // Note that the agent's line is queued under its starter, whoever archived it.
@@ -1997,7 +1989,7 @@ function repositoryRefusalWords(refusal: HostedRefusal): string {
   }
   return refusal.error === HOSTED_API_ERROR.GITHUB_UNANSWERED
     ? UPDATE_TASK_REFUSAL.GITHUB_UNANSWERED
-    : CODING_AGENT_TOOL_REFUSAL.STORE;
+    : AGENT_TOOL_REFUSAL.STORE;
 }
 
 /** A repository as a task records it: its name as GitHub spells it, none where it is cleared, and how it was reached. */
@@ -2042,9 +2034,9 @@ export const reachedRepository = (
  * that the caller never archives the task it works on.
  */
 export function runUpdateTask(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+): Effect.Effect<WireRecord, never, AgentToolServices> {
   const asked = readTaskUpdate(input);
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
@@ -2158,7 +2150,7 @@ export function runUpdateTask(
 
 /** A stop's refusal in the model's words: an agent gone meanwhile is none, a deployment with no eve says so, and anything else is the service down. */
 function stopRefusalWords(refusal: HostedRefusal, eve: AgentSessions | undefined): string {
-  if (refusal.error === HOSTED_API_ERROR.NOT_FOUND) return CODING_AGENT_TOOL_REFUSAL.NO_AGENT;
+  if (refusal.error === HOSTED_API_ERROR.NOT_FOUND) return AGENT_TOOL_REFUSAL.NO_AGENT;
   if (refusal.error === HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE) {
     return STOP_AGENT_REFUSAL.NATIVE_NOT_HERE;
   }
@@ -2197,7 +2189,7 @@ const stopOf = (
     const eveOf = eve === undefined ? Effect.fail(HOSTED_REFUSAL.UNAVAILABLE) : Effect.succeed(eve);
     const cancelled = earlier ? false : yield* cancelledTurn(eveOf, writer, agent, key, by);
     const after = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
-    const status = codingAgentStatusOf(after.turn, {
+    const status = agentStatusOf(after.turn, {
       createdAt: agent.createdAt,
       now: yield* Clock.currentTimeMillis,
       awaitingLineAt: after.awaitingLineAt,
@@ -2209,9 +2201,9 @@ const stopOf = (
 
 /** One call of `stop_agent`: the turn under way of an agent of the caller's workspace stopped as a Stop stops it, an idle one answered as idle, or why nothing was stopped. */
 export function runStopAgent(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+): Effect.Effect<WireRecord, never, AgentToolServices> {
   const asked = readAgentRef(input);
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(STOP_AGENT_REFUSAL.UNREADABLE));
@@ -2224,7 +2216,7 @@ export function runStopAgent(
   return orStoreRefusal(
     Effect.gen(function* () {
       const found = yield* workspaceAgentOf(caller, agentId);
-      if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+      if (Option.isNone(found)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_AGENT);
       const { agent, task } = found.value;
       const steward = stewardRefused(caller, agent, STEWARD_ACT.STOP);
       if (steward !== undefined) return agentToolRejected(steward);
@@ -2317,9 +2309,9 @@ const changedAgent = (userId: string, agentId: string, changes: AgentChanges) =>
  * another failed.
  */
 export function runUpdateAgent(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+): Effect.Effect<WireRecord, never, AgentToolServices> {
   const asked = readUpdateAsked(input);
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(UPDATE_AGENT_REFUSAL.UNREADABLE));
@@ -2334,7 +2326,7 @@ export function runUpdateAgent(
   return orStoreRefusal(
     Effect.gen(function* () {
       const found = yield* workspaceAgentOf(caller, agentId);
-      if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+      if (Option.isNone(found)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_AGENT);
       const steward = stewardRefused(caller, found.value.agent, STEWARD_ACT.CHANGE);
       if (steward !== undefined) return agentToolRejected(steward);
       const { task, workspaceId } = found.value;
@@ -2382,7 +2374,7 @@ export function runUpdateAgent(
           (changed): Result.Result<Option.Option<Agent>, string> => Result.succeed(changed),
         ),
         Effect.catchTag("AgentChangeLost", () =>
-          Effect.succeed(Result.fail(CODING_AGENT_TOOL_REFUSAL.NO_AGENT)),
+          Effect.succeed(Result.fail(AGENT_TOOL_REFUSAL.NO_AGENT)),
         ),
         Effect.catchTag("AgentChangeRefused", (refused) =>
           Effect.succeed(Result.fail(refused.refusal)),
@@ -2421,13 +2413,13 @@ export function runUpdateAgent(
 
 /** One call of `list_tasks`: the open tasks of the caller's workspace, and the archived ones too where asked, newest first, each with the section its member keeps it in, and those sections. */
 export function runListTasks(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+): Effect.Effect<WireRecord, never, AgentToolServices> {
   const { caller } = call;
   const asked = readTasksAsked(input);
   if (Result.isFailure(asked)) {
-    return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.UNREADABLE_TASKS));
+    return Effect.succeed(agentToolRejected(AGENT_TOOL_REFUSAL.UNREADABLE_TASKS));
   }
   const words = asked.success.nameContains?.toLowerCase();
   const offset = asked.success.offset ?? 0;
@@ -2436,13 +2428,13 @@ export function runListTasks(
   const assigneeId =
     assigned === undefined || assigned === null ? assigned : assigneeIdOf(assigned);
   if (assigned !== undefined && assigned !== null && assigneeId === undefined) {
-    return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.UNREADABLE_TASKS));
+    return Effect.succeed(agentToolRejected(AGENT_TOOL_REFUSAL.UNREADABLE_TASKS));
   }
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(caller);
       if (Option.isNone(workspace)) {
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       }
       const ownTask = callerTask(caller);
       const userId = callerUserId(caller);
@@ -2492,9 +2484,9 @@ export function runListTasks(
  * choice listed is one `start_agent` takes. It names nothing of the call's.
  */
 export function runListModels(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+): Effect.Effect<WireRecord, never, AgentToolServices> {
   const asked = readListModelsAsked(input);
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(LIST_MODELS_REFUSAL.UNREADABLE));
@@ -2507,7 +2499,7 @@ export function runListModels(
       let runtime: NativeAgentRuntime | undefined;
       if (agentId !== undefined) {
         const found = yield* workspaceAgentOf(caller, agentId);
-        if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+        if (Option.isNone(found)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_AGENT);
         runtime = yield* agentRuntimeOf(found.value.agent);
       }
       const choices = yield* Effect.result(accountModelChoices(callerUserId(caller)));
@@ -2593,9 +2585,9 @@ const pageStandingOf = (caller: AgentCaller, owner: PageOwner) =>
 
 /** One call of `read_page`: a version of a page of the caller's workspace, on a task or on an agent with no task, its HTML cut to the bound, or why there is none. */
 export function runReadPage(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+): Effect.Effect<WireRecord, never, AgentToolServices> {
   const asked = readPageAsked(input);
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(READ_PAGE_REFUSAL.UNREADABLE));
@@ -2605,7 +2597,7 @@ export function runReadPage(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(caller);
       if (Option.isNone(workspace)) {
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       }
       const userId = callerUserId(caller);
       const found = yield* readPageById(userId, asked.success.pageId, asked.success.version);

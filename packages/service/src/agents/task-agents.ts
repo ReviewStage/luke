@@ -28,10 +28,10 @@ import {
 } from "@luke/features/task-wire";
 import { Clock, Effect } from "effect";
 import {
-  codingAgentActivityAt,
-  codingAgentRunStartedAt,
-  codingAgentStatusOf,
-  codingAgentSummary,
+  agentActivityAt,
+  agentRunStartedAt,
+  agentStatusOf,
+  agentSummary,
   startedBlank,
   summaryAccounts,
 } from "./coder-host/status.js";
@@ -77,9 +77,9 @@ function agentLine(
   const { agent } = held;
   const starter = names.get(agent.userId);
   const standing = { createdAt: agent.createdAt, now, awaitingLineAt, blank: startedBlank(agent) };
-  const status = codingAgentStatusOf(turn, standing);
+  const status = agentStatusOf(turn, standing);
   const at = WORKING_STATUSES.has(status)
-    ? codingAgentRunStartedAt(turn, standing)
+    ? agentRunStartedAt(turn, standing)
     : turn?.settledAt?.getTime();
   return {
     line: {
@@ -96,7 +96,7 @@ function agentLine(
       ...(agent.automationId === null ? undefined : { automationId: agent.automationId }),
     },
     createdAt: agent.createdAt.getTime(),
-    activityAt: codingAgentActivityAt(lastSettledAt, agent),
+    activityAt: agentActivityAt(lastSettledAt, agent),
     archived: agent.archivedAt !== null,
     published: held.published,
   };
@@ -250,12 +250,12 @@ export function listTasklessAgents(
       const turn = turns.get(agent.conversationId);
       const awaitingLineAt = awaiting.get(agent.conversationId);
       return {
-        ...codingAgentSummary(agent, { turn, awaitingLineAt }, now, names),
+        ...agentSummary(agent, { turn, awaitingLineAt }, now, names),
         // The fields its own page names beside the summary; the run that started it is that page's alone.
         automationId: agent.automationId,
         workspaceId: agent.organizationId,
         repository: agent.repository,
-        activityAt: codingAgentActivityAt(settled.get(agent.conversationId), {
+        activityAt: agentActivityAt(settled.get(agent.conversationId), {
           createdAt: agent.createdAt,
         }),
         ...(agent.pinnedAt === null ? undefined : { pinnedAt: agent.pinnedAt.getTime() }),

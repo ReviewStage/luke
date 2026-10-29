@@ -162,11 +162,11 @@ afterEach(() => {
 /** What the main process answers: a task's agents, and the workspace's searched, on a task or none, or newest. */
 function answer(request: AnyAct): FakeActAnswer {
   if (!answering) return { status: FAKE_ANSWER.REFUSED, reason: "Not now." };
-  if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
+  if (request.kind === ACT_KIND.AGENTS_LIST) {
     const agents = request.payload.taskId === BILLING.id ? [PRORATE] : [];
     return { status: FAKE_ANSWER.DONE, value: { agents } };
   }
-  if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+  if (request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST) {
     const { words } = request.payload;
     const agents =
       words === undefined
@@ -176,7 +176,7 @@ function answer(request: AnyAct): FakeActAnswer {
           );
     return { status: FAKE_ANSWER.DONE, value: { agents } };
   }
-  if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST) {
+  if (request.kind === ACT_KIND.AGENTS_PULL_REQUEST) {
     const opened = request.payload.agentId === PRORATE.id;
     return {
       status: FAKE_ANSWER.DONE,
@@ -187,7 +187,7 @@ function answer(request: AnyAct): FakeActAnswer {
       },
     };
   }
-  if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
+  if (request.kind === ACT_KIND.AGENTS_PAGE) {
     return request.payload.agentId === ARCHIVIST.id
       ? {
           status: FAKE_ANSWER.DONE,
@@ -301,9 +301,9 @@ function mentionOf(agent: AgentSummary, name: string): string {
 function agentReads(): readonly AnyAct[] {
   return told.filter(
     (request) =>
-      request.kind === ACT_KIND.CODING_AGENTS_LIST ||
-      request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST ||
-      request.kind === ACT_KIND.CODING_AGENTS_PAGE,
+      request.kind === ACT_KIND.AGENTS_LIST ||
+      request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST ||
+      request.kind === ACT_KIND.AGENTS_PAGE,
   );
 }
 
@@ -355,7 +355,7 @@ test("a chip of an agent the window lists not reads the workspace's agents its n
   assert.equal(card.name, "Prorate seat changes");
   assert.deepEqual(agentReads(), [
     {
-      kind: ACT_KIND.CODING_AGENTS_WORKSPACE_LIST,
+      kind: ACT_KIND.AGENTS_WORKSPACE_LIST,
       payload: { workspaceId: ACME.id, includeArchived: true, words: "Prorate" },
     },
   ]);
@@ -441,7 +441,7 @@ test("an agent on another task hangs its tab's card, the workspace's agents its 
   assert.equal(card.foot, "On Billing by seat");
   assert.deepEqual(agentReads(), [
     {
-      kind: ACT_KIND.CODING_AGENTS_WORKSPACE_LIST,
+      kind: ACT_KIND.AGENTS_WORKSPACE_LIST,
       payload: { workspaceId: ACME.id, includeArchived: true, words: "Prorate" },
     },
   ]);

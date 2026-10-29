@@ -48,8 +48,8 @@ import {
 } from "../eve-host/eve-sessions.js";
 import { OPERATOR_HEARTBEAT } from "./instructions.js";
 import { ensureOperator } from "./operator.js";
-import { type StartAsk, startCodingAgent } from "./start.js";
-import { codingAgentSummary } from "./status.js";
+import { type StartAsk, startAgent } from "./start.js";
+import { agentSummary } from "./status.js";
 
 /**
  * operator.test.ts -- the member's operator ensured in a workspace, and reset.
@@ -222,7 +222,7 @@ it.layer(getTestDB())("the member's operator", (it) => {
         const named = (agentId: string) =>
           Effect.map(readAgent(member, agentId), (read) => {
             const agent = Option.getOrThrow(read);
-            const summary = codingAgentSummary(
+            const summary = agentSummary(
               agent,
               { turn: undefined, awaitingLineAt: undefined },
               0,
@@ -542,7 +542,7 @@ it.layer(getTestDB())("the member's operator", (it) => {
           choice: undefined,
         };
         const start = (ask: StartAsk) =>
-          Effect.result(startCodingAgent(unreachedEve, member, ask).pipe(Effect.provide(services)));
+          Effect.result(startAgent(unreachedEve, member, ask).pipe(Effect.provide(services)));
         const operator = { ...blank, kind: AGENT_KIND.OPERATOR };
 
         const refused = [

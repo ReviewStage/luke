@@ -2,7 +2,7 @@
  * held-inboxes.tsx -- the inboxes a surface follows on its own, and the account's feed of every item the window's root holds for the session, which the Inbox draws from alone.
  *
  * The window's root follows every item the account reaches, pushed by
- * scope over one stream (`codingAgents.accountItemsFollow`), while an
+ * scope over one stream (`agents.accountItemsFollow`), while an
  * account is signed in (`HeldInboxesProvider`), and holds what it pushed
  * for the session, so the Inbox left and opened again, and the person
  * page, draw at once from what the window already holds. Another account,
@@ -251,7 +251,7 @@ export function HeldInboxesProvider({
     if (account === undefined) return undefined;
     void attempt;
     return streamFrom(
-      () => askAct(ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW),
+      () => askAct(ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW),
       (pushed) => feed.feed(pushed),
     );
   }, [feed, account, attempt]);

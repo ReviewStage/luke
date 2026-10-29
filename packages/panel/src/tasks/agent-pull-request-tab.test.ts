@@ -326,13 +326,13 @@ beforeEach(() => {
       return Promise.resolve();
     },
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([CHARLES]),
-    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: (payload) => {
+    [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: (payload) => {
       changes.push([payload.agentId, payload.request]);
       changeNumbers.push(payload.number);
       const answer = changeAnswer;
       return (changeHeld ?? Promise.resolve()).then(() => answer);
     },
-    [ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: ({ src }) => {
+    [ACT_KIND.AGENTS_GITHUB_IMAGE]: ({ src }) => {
       images.push(src);
       return Promise.resolve(PIXEL);
     },

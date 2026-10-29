@@ -61,7 +61,7 @@ import { readMentioned } from "../mentioned-reads.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 import { messageCredentialMissing } from "./agent-runtime-choice.js";
 import { failedCallRefusal } from "./runtime-sessions.js";
-import { codingAgentStatusOf } from "./status.js";
+import { agentStatusOf } from "./status.js";
 
 /**
  * steer.ts -- the developer's words handed to a coding agent: the one path a message takes, from the message box or from Luke's voice.
@@ -191,7 +191,7 @@ const opensUnclaimed = (agent: Agent) =>
     Clock.currentTimeMillis,
     (now) =>
       (agent.planSnapshot === null && agent.prompt === null) ||
-      codingAgentStatusOf(undefined, { createdAt: agent.createdAt, now }) === AGENT_STATUS.FAILED,
+      agentStatusOf(undefined, { createdAt: agent.createdAt, now }) === AGENT_STATUS.FAILED,
   );
 
 /** An eve the client never reached reads as an outage, said in the log by its kind alone. */
@@ -296,20 +296,16 @@ export interface SteerWritten {
 }
 
 /** Hands the line to an agent of the account's workspace, as above; every refusal is the hosted vocabulary's, which the route answers as it is and the voice tool says in words. */
-export const steerCodingAgent = (
+export const steerAgent = (
   eve: AgentSessions<EveTypedTurn>,
   writer: Effect.Effect<StoreWriter>,
   userId: string,
   agent: Agent,
   line: SteerLine,
-) =>
-  Effect.map(
-    steerCodingAgentWritten(eve, writer, userId, agent, line),
-    (written) => written.outcome,
-  );
+) => Effect.map(steerAgentWritten(eve, writer, userId, agent, line), (written) => written.outcome);
 
-/** As `steerCodingAgent`, with the transaction that wrote the line beside what it came to. */
-export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodingAgent")(function* (
+/** As `steerAgent`, with the transaction that wrote the line beside what it came to. */
+export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodingAgent")(function* (
   eve: AgentSessions<EveTypedTurn>,
   writer: Effect.Effect<StoreWriter>,
   userId: string,

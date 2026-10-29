@@ -15,12 +15,7 @@ import { Effect, Option, Result, Schema } from "effect";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "../core.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import {
-  AGENT_CALLER,
-  type CodingAgentCall,
-  callerUserId,
-  callerWorkspace,
-} from "./coding-agent-tools.js";
+import { AGENT_CALLER, type AgentCall, callerUserId, callerWorkspace } from "./agent-tools.js";
 import { rememberRefusal } from "./memory-provenance.js";
 
 /**
@@ -359,7 +354,7 @@ export function runRecall(
  * may go off mid-run, so the refusal stands here as well.
  */
 function agentMemory(
-  call: CodingAgentCall,
+  call: AgentCall,
   run: (memory: MemoryCall) => Effect.Effect<WireRecord, never, DatabaseServices>,
   refusal?: (agent: Agent) => Effect.Effect<string | undefined, StoreFailure, DatabaseServices>,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
@@ -380,7 +375,7 @@ function agentMemory(
 
 /** One call of `remember` from a coding agent, refused on a turn whose words are no member's (`rememberRefusal`). */
 export function runAgentRemember(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return agentMemory(call, (memory) => runRemember(memory, input), rememberRefusal);
@@ -388,7 +383,7 @@ export function runAgentRemember(
 
 /** One call of `recall` from a coding agent. */
 export function runAgentRecall(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return agentMemory(call, (memory) => runRecall(memory, input));

@@ -208,7 +208,7 @@ test("an installed skill's chip is no button, yet takes the focus for its card, 
   focusRestOn(triage);
   assert.equal(document.activeElement, triage, "the installed skill's chip takes the focus");
   const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-corner")?.textContent, "Workspace");
+  assert.equal(card?.querySelector(".luke-hover-card-sub")?.textContent, "Workspace skill");
   assert.equal(card?.querySelector('.luke-hover-card-row[data-look="detail"]'), null);
   act(() => triage.click());
   assert.deepEqual(opened, [], "an installed skill has no file to open");
@@ -217,7 +217,7 @@ test("an installed skill's chip is no button, yet takes the focus for its card, 
   const repository = [...document.querySelectorAll(".luke-tooltip-card > [data-skill-card]")].at(
     -1,
   );
-  assert.equal(repository?.querySelector(".luke-hover-card-corner")?.textContent, "Repository");
+  assert.equal(repository?.querySelector(".luke-hover-card-sub")?.textContent, "Repository skill");
 });
 
 /** A node's words as drawn, without those only a screen reader hears. */

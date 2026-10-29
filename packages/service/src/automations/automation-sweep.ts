@@ -25,7 +25,7 @@ import {
 } from "@luke/features/automation-wire";
 import { Effect } from "effect";
 import type { StartServices } from "../agents/coder-host/start.js";
-import { codingAgentStatusOf } from "../agents/coder-host/status.js";
+import { agentStatusOf } from "../agents/coder-host/status.js";
 import { discardedOrLogged } from "../agents/device-discard.js";
 import { type EveForAccount, executeAutomationRun, recoverStrandedRun } from "./automation-runs.js";
 
@@ -141,7 +141,7 @@ const archiveFinishedRunAgents = Effect.fnUntraced(function* (now: number) {
   const awaiting = yield* awaitingLinesOfReached(conversations);
   const archived = yield* Effect.forEach(agents, (agent) =>
     Effect.gen(function* () {
-      const status = codingAgentStatusOf(turns.get(agent.conversationId), {
+      const status = agentStatusOf(turns.get(agent.conversationId), {
         createdAt: agent.createdAt,
         now,
         awaitingLineAt: awaiting.get(agent.conversationId),

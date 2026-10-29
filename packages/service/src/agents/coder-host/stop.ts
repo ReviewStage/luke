@@ -39,8 +39,8 @@ import {
 import { failedCallRefusal, routedSessions } from "./runtime-sessions.js";
 import {
   type AgentTurnStanding,
-  codingAgentStatusOf,
-  codingAgentSummary,
+  agentStatusOf,
+  agentSummary,
   lineAwaitsTurn,
   startedBlank,
   summaryAccounts,
@@ -55,7 +55,7 @@ import {
  * caller (`eveFor`); a continue of the agent stops it here too,
  * over the eve its Start reached (`start.ts`), and an agent's `stop_agent`
  * stops one as the deployment acting for the member the caller acts for
- * (`../coding-agent-tools.ts`). The cancel names the turn the row was
+ * (`../agent-tools.ts`). The cancel names the turn the row was
  * written for, so a turn that ended meanwhile is not followed by a newer
  * one stopped in its place, and an eve that refuses leaves the row as it
  * stood and the caller unavailable. An agent stopped for good, as an
@@ -168,7 +168,7 @@ export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));
   const continuedBy = yield* continuedByOf(userId, [agent.id]);
   const macs = yield* hostedStoreOrUnavailable(devicesNamed(summaryDevices([agent])));
-  return codingAgentSummary(
+  return agentSummary(
     agent,
     standing(agent.conversationId),
     yield* Clock.currentTimeMillis,
@@ -185,7 +185,7 @@ export const statusOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const { turn, awaitingLineAt } = (yield* standingsOf([agent.conversationId]))(
     agent.conversationId,
   );
-  return codingAgentStatusOf(turn, {
+  return agentStatusOf(turn, {
     createdAt: agent.createdAt,
     now: yield* Clock.currentTimeMillis,
     awaitingLineAt,
@@ -358,7 +358,7 @@ export const stopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (agent: 
     blank: startedBlank(agent),
   };
   if (lineAwaitsTurn(turn, standing)) return false;
-  const status = codingAgentStatusOf(turn, standing);
+  const status = agentStatusOf(turn, standing);
   if (status === AGENT_STATUS.STARTING) return false;
   return status !== AGENT_STATUS.RUNNING || stoppable(turn);
 });
@@ -379,7 +379,7 @@ export const standsStopped = /* @__PURE__ */ Effect.fnUntraced(function* (
   const awaiting = yield* awaitingLinesOfReached(conversationIds);
   const now = yield* Clock.currentTimeMillis;
   return agents.every((agent) => {
-    const status = codingAgentStatusOf(turns.get(agent.conversationId), {
+    const status = agentStatusOf(turns.get(agent.conversationId), {
       createdAt: agent.createdAt,
       now,
       awaitingLineAt: awaiting.get(agent.conversationId),

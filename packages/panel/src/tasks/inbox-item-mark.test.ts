@@ -57,7 +57,7 @@ test("an item an archived agent posted wears the harness that agent ran on, read
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> =>
       Promise.resolve(
-        request.kind === ACT_KIND.CODING_AGENTS_LIST
+        request.kind === ACT_KIND.AGENTS_LIST
           ? {
               status: FAKE_ANSWER.DONE,
               value: {

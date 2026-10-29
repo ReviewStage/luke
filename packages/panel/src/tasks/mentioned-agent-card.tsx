@@ -87,7 +87,7 @@ const NO_PULL_REQUESTS: CodingAgentsControl["pullRequests"] = new Map();
 /** The agents one task holds, archived ones among them, as the service answered; nothing where it refused. */
 function taskAgents(taskId: string): Effect.Effect<AgentsRead> {
   return Effect.promise(() =>
-    askAct(ACT_KIND.CODING_AGENTS_LIST, { taskId, includeArchived: true }).then(
+    askAct(ACT_KIND.AGENTS_LIST, { taskId, includeArchived: true }).then(
       (answer) => ("failure" in answer ? UNREAD : answer.agents),
       () => UNREAD,
     ),
@@ -100,7 +100,7 @@ function workspaceAgents(
   words: string | undefined,
 ): Effect.Effect<AgentsRead> {
   return Effect.promise(() =>
-    askAct(ACT_KIND.CODING_AGENTS_WORKSPACE_LIST, {
+    askAct(ACT_KIND.AGENTS_WORKSPACE_LIST, {
       workspaceId,
       includeArchived: true,
       ...(words === undefined ? undefined : { words }),
@@ -114,7 +114,7 @@ function workspaceAgents(
 /** One agent by its id, as its own page reads it; none where the service holds no such agent the account reaches, and nothing where it refused. */
 function agentById(agentId: string): Effect.Effect<AgentsRead> {
   return Effect.promise(() =>
-    askAct(ACT_KIND.CODING_AGENTS_PAGE, { agentId }).then(
+    askAct(ACT_KIND.AGENTS_PAGE, { agentId }).then(
       (answer) => {
         if (!("failure" in answer)) {
           // The page spells no automation as null, where the summary the card reads leaves it out.
@@ -368,7 +368,7 @@ function agentPullRequest(
   number: number | undefined,
 ): Effect.Effect<AgentPullRequest | null | typeof UNREAD> {
   return Effect.promise(() =>
-    askAct(ACT_KIND.CODING_AGENTS_PULL_REQUEST, pullRequestAsked(agentId, number)).then(
+    askAct(ACT_KIND.AGENTS_PULL_REQUEST, pullRequestAsked(agentId, number)).then(
       (answer) => ("failure" in answer ? UNREAD : answer.pullRequest),
       () => UNREAD,
     ),

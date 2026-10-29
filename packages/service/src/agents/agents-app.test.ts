@@ -239,6 +239,7 @@ import {
   sourceSandbox,
 } from "../testing/source-sandbox.js";
 import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
+import { agentsApp } from "./agents-app.js";
 import { agentsProcedures } from "./agents-procedures.js";
 import { receivedMessage } from "./attached-files.js";
 import { CODER } from "./coder-host/bounds.js";
@@ -246,7 +247,6 @@ import { instancePublishedCache } from "./coder-host/published.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import { codingAgentsApp } from "./coding-agents-app.js";
 import { EVE_HOST_TURN } from "./eve-host/bounds.js";
 import {
   type AgentSessions,
@@ -608,7 +608,7 @@ const standing = (
       keepAwake: keepAwakeDetached,
     };
     const agents = HttpRouter.toWebHandler(
-      codingAgentsApp(seams).pipe(HttpRouter.provideRequest(services)),
+      agentsApp(seams).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
     // SAFETY: the plans and messages procedures yield the services above alone, which is all a test provides of the web runtime's services.

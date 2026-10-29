@@ -6,7 +6,7 @@
  * of: a task or an agent of any other workspace answers exactly as one
  * that names nothing, and an id that is no UUID names nothing too
  * (`agent-reach.ts`). What each answers is said of it in
- * `coding-agents-app.ts`'s header, the group these moved from, and of the
+ * `agents-app.ts`'s header, the group these moved from, and of the
  * shells below.
  *
  * A Start (`POST /api/plans/{id}/agents`) takes the one path a start takes
@@ -103,8 +103,8 @@ import {
   startRequestedAgent,
 } from "./coder-host/start.js";
 import {
-  codingAgentPage,
-  codingAgentSummary,
+  agentPage,
+  agentSummary,
   pageAccounts,
   startedBlank,
   summaryAccounts,
@@ -173,14 +173,7 @@ const listedSummaries = /* @__PURE__ */ Effect.fnUntraced(function* (
   const now = yield* Clock.currentTimeMillis;
   return {
     agents: agents.map((agent) =>
-      codingAgentSummary(
-        agent,
-        standing(agent.conversationId),
-        now,
-        names,
-        continuedBy(agent.id),
-        macs,
-      ),
+      agentSummary(agent, standing(agent.conversationId), now, names, continuedBy(agent.id), macs),
     ),
   };
 });
@@ -471,7 +464,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const macs = yield* hostedStoreOrUnavailable(devicesNamed(summaryDevices([agent])));
       const now = yield* Clock.currentTimeMillis;
       return {
-        agent: codingAgentPage(
+        agent: agentPage(
           agent,
           standing(agent.conversationId),
           now,

@@ -104,7 +104,7 @@ type EnsureAsk = Record<string, never> | { readonly reset: true } | { readonly r
 /** The operator's id an ensure answered, or none for a failure or a refusal. */
 function ensuredId(workspaceId: string, ask: EnsureAsk): Promise<string | undefined> {
   return askAct(
-    ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR,
+    ACT_KIND.AGENTS_ENSURE_OPERATOR,
     // The zone this window reads in, which the heartbeat an ensure that makes Luke aims at him is read in.
     { workspaceId, ...ask, timeZone: readerZone() },
   ).then(

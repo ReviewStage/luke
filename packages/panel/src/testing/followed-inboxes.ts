@@ -47,8 +47,8 @@ export function followedInboxes(inboxOf: (scope: AgentInboxScope) => Inbox | und
     },
   };
   /** The follow procedure as the act port streams it: each change heard, until the window closes the stream. */
-  const procedures: Pick<FakeActPort, typeof AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW> = {
-    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: (scope) => {
+  const procedures: Pick<FakeActPort, typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW> = {
+    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: (scope) => {
       const queued: Inbox[] = [];
       let waiting: PromiseWithResolvers<void> | undefined;
       let closed = false;

@@ -165,7 +165,7 @@ async function inbox(options: {
                 : { ...pullRequest, state: PULL_REQUEST_STATE.MERGED },
           });
         }
-        case ACT_KIND.CODING_AGENTS_LIST:
+        case ACT_KIND.AGENTS_LIST:
           return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: [] } });
         default:
           return Promise.resolve({

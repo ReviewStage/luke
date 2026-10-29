@@ -33,7 +33,7 @@ export function useWholePartDoor(agentId: string, callId?: string): WholePartDoo
   const { act } = useAct();
   const read = useCallback(
     (messageId: string, index: number) =>
-      act(ACT_KIND.CODING_AGENTS_PART, {
+      act(ACT_KIND.AGENTS_PART, {
         agentId,
         messageId,
         index,

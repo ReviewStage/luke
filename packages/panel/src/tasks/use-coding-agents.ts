@@ -596,10 +596,10 @@ function listRead(
   agentId: string | undefined,
 ): Promise<PageList> {
   if (taskId !== undefined) {
-    return act(ACT_KIND.CODING_AGENTS_LIST, { taskId, includeArchived: true });
+    return act(ACT_KIND.AGENTS_LIST, { taskId, includeArchived: true });
   }
   // Note that a page names no automation by null where a summary leaves the key out.
-  return act(ACT_KIND.CODING_AGENTS_PAGE, { agentId: agentId ?? "" }).then((answer): PageList => {
+  return act(ACT_KIND.AGENTS_PAGE, { agentId: agentId ?? "" }).then((answer): PageList => {
     if ("failure" in answer) return answer;
     const { automationId, origin, ...agent } = answer.agent;
     return {
@@ -1017,7 +1017,7 @@ export function useCodingAgents(input: {
       );
     // The menu reads again while a read is out, so a Retry shows its reading.
     setModelsRead({ state: MODELS_READ.READING, generation });
-    act(ACT_KIND.CODING_AGENTS_MODELS).then(
+    act(ACT_KIND.AGENTS_MODELS).then(
       (answer: AgentModelsAnswer) => {
         if ("failure" in answer) return settle(MODELS_READ.FAILED);
         setModels(answer.models);
@@ -1031,7 +1031,7 @@ export function useCodingAgents(input: {
 
   const readDefault = useCallback(
     (): Promise<AgentDefaultAnswer> =>
-      act(ACT_KIND.CODING_AGENTS_DEFAULT_READ).catch(
+      act(ACT_KIND.AGENTS_DEFAULT_READ).catch(
         (): AgentDefaultAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
       ),
     [act],
@@ -1053,12 +1053,12 @@ export function useCodingAgents(input: {
   /** One Start asked of the service on the task, or, from the page's agent, where that agent is, held as under way until it answers. */
   const askStart = (
     on: string,
-    asked: Omit<PortActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "taskId">,
+    asked: Omit<PortActPayload<typeof ACT_KIND.AGENTS_START>, "taskId">,
   ): Promise<AgentAgentAnswer> => {
     setStarting(true);
     // Note that a Start from the page's agent names no task, so the service puts it where that agent is.
     const where = on === taskId ? { taskId: on } : undefined;
-    return act(ACT_KIND.CODING_AGENTS_START, { ...where, ...asked })
+    return act(ACT_KIND.AGENTS_START, { ...where, ...asked })
       .catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }))
       .then((answer) => {
         setStarting(false);
@@ -1431,7 +1431,7 @@ export function useCodingAgents(input: {
 
   // A refused Stop leaves the button as it was, so it says so in a toast.
   const onStop = async (agentId: string): Promise<void> => {
-    const answer = await act(ACT_KIND.CODING_AGENTS_STOP, { agentId }).catch(() => undefined);
+    const answer = await act(ACT_KIND.AGENTS_STOP, { agentId }).catch(() => undefined);
     if (answer !== undefined && !("failure" in answer)) {
       setList((was) =>
         was.agents === undefined
@@ -1446,7 +1446,7 @@ export function useCodingAgents(input: {
 
   const onRewind = useCallback(
     async (agentId: string, messageId: string): Promise<AgentAgentAnswer> => {
-      const answer: AgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_REWIND, {
+      const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_REWIND, {
         agentId,
         messageId,
       }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
@@ -1466,7 +1466,7 @@ export function useCodingAgents(input: {
     async (agentId, text, clientKey, attachments) => {
       // Note that a message that opens the agent's sandbox anew while its image is prepared is
       // taken at once, its relaunch waiting on the image in the service, so it is asked once.
-      const answer: AgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_MESSAGE, {
+      const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_MESSAGE, {
         agentId,
         text,
         clientKey,
@@ -1492,7 +1492,7 @@ export function useCodingAgents(input: {
     async (agentId, choice) => {
       const change = (chooses.current.get(agentId) ?? 0) + 1;
       chooses.current.set(agentId, change);
-      const answer: AgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_CHOOSE, {
+      const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_CHOOSE, {
         agentId,
         ...choiceRequest(choice),
       }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
@@ -1518,7 +1518,7 @@ export function useCodingAgents(input: {
       const before = switches.current.get(agentId);
       const change = (before?.count ?? 0) + 1;
       const sent = (before?.sent ?? Promise.resolve()).then(() =>
-        act(ACT_KIND.CODING_AGENTS_SERVERS, { agentId, disabledServers }).catch(
+        act(ACT_KIND.AGENTS_SERVERS, { agentId, disabledServers }).catch(
           (): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
         ),
       );
@@ -1552,7 +1552,7 @@ export function useCodingAgents(input: {
     renames.current.set(agentId, rename);
     const asked = pendingValue(titles.get(agentId), title, viewedAgent(agentId)?.title, sameTitle);
     setTitles((was) => new Map(was).set(agentId, asked));
-    const answer: AgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_RENAME, {
+    const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_RENAME, {
       agentId,
       title,
     }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
@@ -1585,7 +1585,7 @@ export function useCodingAgents(input: {
       sameArchive,
     );
     if (drawn === ARCHIVE_DRAWN.AT_ONCE) setArchives((was) => new Map(was).set(agentId, asked));
-    const answer: AgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_ARCHIVE, {
+    const answer: AgentAgentAnswer = await act(ACT_KIND.AGENTS_ARCHIVE, {
       agentId,
       archived,
     }).catch((): AgentAgentAnswer => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
@@ -1609,7 +1609,7 @@ export function useCodingAgents(input: {
   archiveNow.current = onArchive;
 
   const onDelete = async (agentId: string): Promise<ActionResult> => {
-    const answer = await act(ACT_KIND.CODING_AGENTS_DELETE, { agentId }).catch(() => ({
+    const answer = await act(ACT_KIND.AGENTS_DELETE, { agentId }).catch(() => ({
       failure: AGENT_CALL_FAILURE.UNANSWERED,
     }));
     if ("failure" in answer) {
@@ -1681,12 +1681,12 @@ export function useCodingAgents(input: {
   }, []);
 
   const readTranscript = useCallback<TranscriptReader>(
-    (params) => act(ACT_KIND.CODING_AGENTS_MESSAGES, params),
+    (params) => act(ACT_KIND.AGENTS_MESSAGES, params),
     [act],
   );
 
   const readPullRequestOnce = useCallback<PullRequestReader>(
-    (agentId) => act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId }),
+    (agentId) => act(ACT_KIND.AGENTS_PULL_REQUEST, { agentId }),
     [act],
   );
   // Note that an archived agent's pull request is read too, after every other agent's, since the
@@ -1707,18 +1707,16 @@ export function useCodingAgents(input: {
       numberedAsks.current.set(agentId, ofAgent);
       const ask = (ofAgent.get(number) ?? 0) + 1;
       ofAgent.set(number, ask);
-      return act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, pullRequestAsked(agentId, number)).then(
-        (answer) => {
-          if ("failure" in answer) return false;
-          if (ofAgent.get(number) === ask) {
-            const tab = { changes: agentId, number };
-            setNumberedPullRequests((was) =>
-              withPullRequestTab(was, tab, answer.pullRequest ?? undefined),
-            );
-          }
-          return answer.pullRequest !== null;
-        },
-      );
+      return act(ACT_KIND.AGENTS_PULL_REQUEST, pullRequestAsked(agentId, number)).then((answer) => {
+        if ("failure" in answer) return false;
+        if (ofAgent.get(number) === ask) {
+          const tab = { changes: agentId, number };
+          setNumberedPullRequests((was) =>
+            withPullRequestTab(was, tab, answer.pullRequest ?? undefined),
+          );
+        }
+        return answer.pullRequest !== null;
+      });
     },
     [act],
   );
@@ -1736,11 +1734,11 @@ export function useCodingAgents(input: {
     (agentId, number) => {
       // Note that another pull request's people are not this agent's, so they are never kept beside it.
       if (number !== undefined) {
-        return act(ACT_KIND.CODING_AGENTS_CHANGES, pullRequestAsked(agentId, number));
+        return act(ACT_KIND.AGENTS_CHANGES, pullRequestAsked(agentId, number));
       }
       const ask = (changesAsked.current.get(agentId) ?? 0) + 1;
       changesAsked.current.set(agentId, ask);
-      return act(ACT_KIND.CODING_AGENTS_CHANGES, { agentId }).then((answer) => {
+      return act(ACT_KIND.AGENTS_CHANGES, { agentId }).then((answer) => {
         if (changesAsked.current.get(agentId) !== ask || !("pullRequest" in answer)) return answer;
         const read = answer.pullRequest;
         setChangesPeople((was) => {
@@ -1777,47 +1775,46 @@ export function useCodingAgents(input: {
 
   const readOverviewPullRequest = useCallback<CodingAgentsControl["readOverviewPullRequest"]>(
     (agentId, number) =>
-      act(ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST, pullRequestAsked(agentId, number)),
+      act(ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST, pullRequestAsked(agentId, number)),
     [act],
   );
 
   const readReviewOptions = useCallback<CodingAgentsControl["readReviewOptions"]>(
-    (agentId) => act(ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS, { agentId }),
+    (agentId) => act(ACT_KIND.AGENTS_REVIEW_OPTIONS, { agentId }),
     [act],
   );
 
   const readOverviewChecks = useCallback<CodingAgentsControl["readOverviewChecks"]>(
-    (agentId, number) =>
-      act(ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS, pullRequestAsked(agentId, number)),
+    (agentId, number) => act(ACT_KIND.AGENTS_OVERVIEW_CHECKS, pullRequestAsked(agentId, number)),
     [act],
   );
 
   const readOverviewConversation = useCallback<CodingAgentsControl["readOverviewConversation"]>(
     (agentId, number) =>
-      act(ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION, pullRequestAsked(agentId, number)),
+      act(ACT_KIND.AGENTS_OVERVIEW_CONVERSATION, pullRequestAsked(agentId, number)),
     [act],
   );
 
   const readPullRequestViewed = useCallback<CodingAgentsControl["readPullRequestViewed"]>(
     (agentId, number) =>
-      act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED, pullRequestAsked(agentId, number)),
+      act(ACT_KIND.AGENTS_PULL_REQUEST_VIEWED, pullRequestAsked(agentId, number)),
     [act],
   );
 
   const inboxFollower = windowInboxFollower;
 
   const answerInbox = useCallback<InboxAnswerer>(
-    (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ANSWER, params),
+    (params) => act(ACT_KIND.AGENTS_INBOX_ANSWER, params),
     [act],
   );
 
   const messageInbox = useCallback<InboxMessenger>(
-    (params) => act(ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, params),
+    (params) => act(ACT_KIND.AGENTS_INBOX_MESSAGE, params),
     [act],
   );
 
   const startInboxThread = useCallback<InboxThreadStarter>(
-    (params) => act(ACT_KIND.CODING_AGENTS_INBOX_START, params),
+    (params) => act(ACT_KIND.AGENTS_INBOX_START, params),
     [act],
   );
 
@@ -1850,7 +1847,7 @@ export function useCodingAgents(input: {
   const steadyContinueAgent = useSteadyDoor(continueAgent);
 
   const readInboxImage = useCallback<InboxImageReader>(
-    (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, params),
+    (params) => act(ACT_KIND.AGENTS_INBOX_ATTACHMENT, params),
     [act],
   );
 

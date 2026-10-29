@@ -59,7 +59,7 @@ import {
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import { codingAgentSummary, summaryAccounts } from "../agents/coder-host/status.js";
+import { agentSummary, summaryAccounts } from "../agents/coder-host/status.js";
 import { standingsOf } from "../agents/coder-host/stop.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TURN_FAILURE } from "../core.js";
@@ -192,9 +192,7 @@ const heldTaskAgentsOf = (userId: string, taskId: string, now: number) =>
     const agents = yield* listAgents(userId, taskId);
     const standing = yield* standingsOf(agents.map((agent) => agent.conversationId));
     const names = yield* readAccountNames(agents.flatMap(summaryAccounts));
-    return agents.map((agent) =>
-      codingAgentSummary(agent, standing(agent.conversationId), now, names),
-    );
+    return agents.map((agent) => agentSummary(agent, standing(agent.conversationId), now, names));
   });
 
 /**

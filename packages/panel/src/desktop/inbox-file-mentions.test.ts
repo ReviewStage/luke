@@ -126,7 +126,7 @@ afterEach(() => {
 const follows = followedInboxes(() => ({ items: [ITEM] }));
 
 function answer(request: AnyAct): Promise<FakeActAnswer> {
-  if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
+  if (request.kind === ACT_KIND.AGENTS_LIST) {
     return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: [AGENT] } });
   }
   return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });

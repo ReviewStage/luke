@@ -78,12 +78,12 @@ beforeEach(() => {
   window.localStorage.clear();
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
+      if (request.kind === ACT_KIND.AGENTS_PAGE) {
         const { automationId, activityAt: _at, ...agent } = standing;
         const value = { agent: { ...agent, automationId } };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_SEEN) {
+      if (request.kind === ACT_KIND.AGENTS_SEEN) {
         seen.push(request.payload.agentId);
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
       }

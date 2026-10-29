@@ -830,7 +830,7 @@ test("a nod on a notice the agent posted over first is not taken: the notice sta
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_ANSWER) return previous(request);
       return new Promise((resolve) =>
         waiting.push((value) => resolve({ status: FAKE_ANSWER.DONE, value })),
       );
