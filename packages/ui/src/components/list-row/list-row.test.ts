@@ -268,7 +268,7 @@ test("a row's lead stands on the line under its title, before the description's 
   expect(lead?.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
 });
 
-test("a row's lead may stand on a line of its own between its title and its description, read between the two and apart from both", () => {
+test("a row's lead may stand on a line of its own over its title, read first with the time at its end, then the title, then the description", () => {
   const container = draw(
     createElement(List, {
       label: "Threads",
@@ -276,7 +276,7 @@ test("a row's lead may stand on a line of its own between its title and its desc
         title: "Retry the webhook?",
         description: "Choice · 2 options",
         lead: { icon: glyph(), label: "Billing usage alerts for every workspace" },
-        leadAt: LIST_ROW_LEAD.LINE,
+        leadAt: LIST_ROW_LEAD.ABOVE,
         meta: "2h",
         metaAt: LIST_ROW_META.TITLE,
         onPress: () => undefined,
@@ -285,7 +285,7 @@ test("a row's lead may stand on a line of its own between its title and its desc
   );
   const row = button(
     container,
-    "Retry the webhook?2hBilling usage alerts for every workspaceChoice · 2 options",
+    "Billing usage alerts for every workspace2hRetry the webhook?Choice · 2 options",
   );
   const lead = row.querySelector(".luke-list-row-lead");
   expect(lead?.querySelector("svg")?.closest('[aria-hidden="true"]')).not.toBeNull();
@@ -317,12 +317,12 @@ test("a row whose lead stands on a line of its own draws it with no description 
       children: createElement(ListRow, {
         title: "Retry the webhook?",
         lead: { icon: glyph(), label: "Billing usage alerts" },
-        leadAt: LIST_ROW_LEAD.LINE,
+        leadAt: LIST_ROW_LEAD.ABOVE,
         onPress: () => undefined,
       }),
     }),
   );
-  expect(button(container, "Retry the webhook?Billing usage alerts")).toBeTruthy();
+  expect(button(container, "Billing usage alertsRetry the webhook?")).toBeTruthy();
 });
 
 test("Tab meets the list's one row, then each row's acts, the other rows left to the arrows", () => {

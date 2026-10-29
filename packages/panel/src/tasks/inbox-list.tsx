@@ -86,7 +86,6 @@ import {
   ListIcon,
   MailIcon,
   MailOpenIcon,
-  Rows2Icon,
   SlidersHorizontalIcon,
   UserIcon,
   UsersIcon,
@@ -131,7 +130,6 @@ import {
 } from "./inbox-columns.js";
 import { useInboxItemActions } from "./inbox-item-actions.js";
 import {
-  AddressedTo,
   addressedWords,
   HolderGlyph,
   InboxItemCard,
@@ -229,9 +227,9 @@ import { cardTitle } from "./tool-call-model.js";
  * its preview (`inbox-row-media.tsx`); and under them Mark all as read,
  * which clears the dots alone. Every
  * choice is kept across launches. Grouped by person, each person's items
- * stand under their face, the reader's own first as You. Grouped by
- * anything but task, a row names its task in a chip before its preview,
- * since no task's header stands over it. Where the scope leaves out every
+ * stand under their face, the reader's own first as You. Every row, in
+ * any grouping and in a task's own Inbox alike, names its task on its
+ * first line, over its title. Where the scope leaves out every
  * item listed, the list says so in the Inbox's empty state, offering the
  * scope that holds something, as a mail app's empty unread view does; the
  * item the pane shows keeps its place there, though no row. A task's own
@@ -270,22 +268,19 @@ const MARK_ALL_READ = "Mark all as read";
 /** What the view's menu offers to show or hide the media under each row's preview with. */
 const MEDIA_PREVIEWS = "Media previews";
 
-/** What the view's menu offers to show or hide each row's second line with, its rows one line where it is off. */
-const SECOND_LINE = "Second line";
-
 /** The items whose media the rows show while they show none, kept as one so the reads see no change. */
 const NO_ITEMS: readonly string[] = [];
 
 /** What the list's placeholder rows say to a reader while its items are first read. */
 const READING_ITEMS = "Reading your inbox…";
 
-/** How wide each placeholder row's title and the preview under it stand, as shares of their lines, so the rows read as items of their own. */
+/** How wide each placeholder row's task line, the title under it, and the preview under that stand, as shares of their lines, so the rows read as items of their own. */
 const SKELETON_ROWS = [
-  { title: "68%", preview: "84%" },
-  { title: "52%", preview: "70%" },
-  { title: "74%", preview: "90%" },
-  { title: "46%", preview: "62%" },
-  { title: "60%", preview: "78%" },
+  { task: "40%", title: "68%", preview: "84%" },
+  { task: "32%", title: "52%", preview: "70%" },
+  { task: "44%", title: "74%", preview: "90%" },
+  { task: "28%", title: "46%", preview: "62%" },
+  { task: "36%", title: "60%", preview: "78%" },
 ] as const;
 
 /** How wide a placeholder row's time stands, as wide as a short "2h". */
@@ -368,12 +363,13 @@ function drawnWidth(width: number, alone: boolean): string | undefined {
 }
 
 /**
- * One item as a `ListRow` of up to three lines, as a mail app lists a
- * thread, one thing to a line so nothing is cut short to make room for
- * another: the title and how long ago it changed; then, in a list its tasks
- * do not head, what holds it, its task's status and whole name (`chip`);
- * then the last word in its thread, muted, led on a thread by what its open
- * ask asks, the steps its draft ticks counted (`inboxPreview`). The agent
+ * One item as a `ListRow` of three lines, as a mail app lists a thread,
+ * one thing to a line so nothing is cut short to make room for another:
+ * what holds it, its task's status and whole name, and whom its agent
+ * addressed it to, with how long ago it changed at that line's end, as a
+ * mail app puts the time on the sender's line; then the title; then the
+ * last word in its thread, muted, led on a thread by what its open ask
+ * asks, the steps its draft ticks counted (`inboxPreview`). The agent
  * that asked, and whether it needs the developer, are its card's to say
  * (`InboxItemCard`), a reader still hearing the latter, since an open item
  * nearly always does and a mark on every row would say nothing. A
@@ -395,9 +391,8 @@ function drawnWidth(width: number, alone: boolean): string | undefined {
  * which names the key that does the same to the chosen item
  * (`APP_COMMAND.TOGGLE_READ`); and a swipe right, a
  * short one leaving the row open on a Read or Unread button, a long one
- * marking it as it is let go (`@luke/ui`'s `ListRow` swipe). A list its tasks
- * do not head is the person page's, or the Inbox's own grouped by anything
- * but task. Its menu, opened by the row's ⋯, a right-click, and the menu key
+ * marking it as it is let go (`@luke/ui`'s `ListRow` swipe). Its menu,
+ * opened by the row's ⋯, a right-click, and the menu key
  * alike (`ListRow`'s `menu`), offers
  * Copy link, the item's link under the task or the agent that holds it, where
  * the list hands down a workspace to write it under. Where the list hands
@@ -415,8 +410,6 @@ export function InboxItemRow({
   models,
   readerId,
   face = true,
-  chip = false,
-  line = true,
   muted = false,
   media,
   ref,
@@ -438,10 +431,6 @@ export function InboxItemRow({
   readerId: string | undefined;
   /** Whether a teammate's item wears their face, which a person's group header says instead. */
   face?: boolean;
-  /** Whether the row names its task, or its automation, on a line of its own over its preview, as a list its tasks do not head does. */
-  chip?: boolean;
-  /** Whether the row draws its second line, what its item asks or how it ended; off, the row is its title's line alone, as the view's menu may choose. */
-  line?: boolean;
   /** Whether the row is drawn gray, its item done with (`isDone`), as the Inbox's own list draws it; nothing says so in words, since its marks and its card do. */
   muted?: boolean;
   /** The list's reads of its rows' media, where the row shows its item's; none where it shows none. */
@@ -491,31 +480,25 @@ export function InboxItemRow({
           leading={<UnreadMark unread={unread} />}
           title={title}
           description={
-            line ? (
-              <span
-                className="inbox-row-line [&>svg]:me-tight-gap [&>svg]:size-caption-glyph [&>svg]:align-[-0.125em] [&>svg]:text-attention data-[line=settled]:[&>svg]:text-complete"
-                data-line={lineKind}
-              >
-                {inboxLineGlyph(lineKind)}
-                {preview}
-              </span>
-            ) : undefined
+            <span
+              className="inbox-row-line [&>svg]:me-tight-gap [&>svg]:size-caption-glyph [&>svg]:align-[-0.125em] [&>svg]:text-attention data-[line=settled]:[&>svg]:text-complete"
+              data-line={lineKind}
+            >
+              {inboxLineGlyph(lineKind)}
+              {preview}
+            </span>
           }
-          lead={
-            line && chip
-              ? {
-                  icon: <HolderGlyph holder={holder} />,
-                  // Note that a thread its agent addressed by name says so after its task, since its task's assignee may be someone else.
-                  label:
-                    addressedTo === undefined
-                      ? holderName(holder)
-                      : `${holderName(holder)} · ${addressedWords(addressee)}`,
-                }
-              : undefined
-          }
-          leadAt={LIST_ROW_LEAD.LINE}
+          lead={{
+            icon: <HolderGlyph holder={holder} />,
+            // Note that a thread its agent addressed by name says so after its task, since its task's assignee may be someone else.
+            label:
+              addressedTo === undefined
+                ? holderName(holder)
+                : `${holderName(holder)} · ${addressedWords(addressee)}`,
+          }}
+          leadAt={LIST_ROW_LEAD.ABOVE}
           attachments={
-            !line || media === undefined || carried.length === 0 ? undefined : (
+            media === undefined || carried.length === 0 ? undefined : (
               <RowMedia media={carried} reads={media} />
             )
           }
@@ -527,13 +510,7 @@ export function InboxItemRow({
               open={open}
               face={face}
               standing={false}
-              before={
-                <>
-                  {unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
-                  {/* Note that a row whose task line is not drawn says whom its thread is addressed to at its end instead. */}
-                  {line && chip ? null : <AddressedTo to={addressedTo} />}
-                </>
-              }
+              before={unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
             />
           }
           metaAt={LIST_ROW_META.TITLE}
@@ -854,12 +831,6 @@ function windowEntries(
   ];
   const looks: MenuEntry[] = [
     {
-      label: SECOND_LINE,
-      icon: <Rows2Icon />,
-      checked: choices.secondLine,
-      onSelect: () => choices.onSecondLine(!choices.secondLine),
-    },
-    {
       label: MEDIA_PREVIEWS,
       icon: <ImagesIcon />,
       checked: choices.mediaPreviews,
@@ -1031,7 +1002,7 @@ export function ShowEmpty({
 
 /**
  * The list while its items are first read: rows in an item's own row, a
- * block where its title, its time, and the line under them will stand,
+ * block where its task line and its time, its title, and its preview will stand,
  * so the
  * items land where the blocks stood rather than a lone ring in the list's
  * corner. The rows open nothing and the region says what is being read. A
@@ -1052,10 +1023,12 @@ export function InboxListSkeleton({
   return (
     <SkeletonRegion label={reading}>
       <List label={list}>
-        {SKELETON_ROWS.slice(0, rows).map(({ title, preview }) => (
+        {SKELETON_ROWS.slice(0, rows).map(({ task, title, preview }) => (
           <ListRow
             key={title}
             leading={<UnreadMark unread={false} />}
+            lead={{ icon: null, label: <Skeleton width={task} /> }}
+            leadAt={LIST_ROW_LEAD.ABOVE}
             title={<Skeleton width={title} />}
             description={<Skeleton width={preview} />}
             meta={<Skeleton width={SKELETON_TIME} />}
@@ -1595,7 +1568,7 @@ export function InboxList({
     label: "Resize inbox list",
     onResize,
   });
-  // Note that a row names its task wherever no task's header stands over it, and a teammate's face wherever no person's does.
+  // Note that a row wears a teammate's face wherever no person's header stands over it.
   // A row whose item is done with is drawn gray, the chosen row kept on Needs you and every such row on All alike.
   // A row leaving the list is the list's motion's rather than one of the keyboard's rows (`ListMotion`).
   const row = (listed: InboxListed, leaving: boolean) => (
@@ -1609,8 +1582,6 @@ export function InboxList({
       models={models}
       readerId={readerId}
       face={view.grouping !== INBOX_GROUPING.PERSON}
-      chip={head.view !== undefined && view.grouping !== INBOX_GROUPING.TASK}
-      line={head.view?.choices.secondLine !== false}
       muted={isDone(listed.item)}
       media={media}
       ref={leaving ? undefined : rows.hold(listed.item.id)}

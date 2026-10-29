@@ -308,11 +308,13 @@
   }
 
   /* Metadata on the title's line ends it, the title giving way first, and
-     a lead on a line of its own, the description, and attachments run the
-     words' and the end's tracks
+     the description and attachments run the words' and the end's tracks
      whole under both; the row's marks stand level with the title's line
-     rather than the row's middle. The words and the title's line lend their
-     parts to the press's tracks, so each lands in its own. */
+     rather than the row's middle. A lead on a line of its own over the title
+     takes the title's place on that first line, as tall as the title's so
+     the marks still stand level with it, and the title runs whole under it.
+     The words and the first line lend their parts to the press's tracks, so
+     each lands in its own. */
   /* Note that a swiped row holds its press inside its slide, so the press is
      matched wherever it stands in the row. */
   .luke-list-row[data-meta="title"] :is(.luke-list-row-text, .luke-list-row-head) {
@@ -325,21 +327,21 @@
     align-self: start;
   }
 
-  .luke-list-row[data-meta="title"] .luke-list-row-title {
+  .luke-list-row[data-meta="title"]
+    :is(.luke-list-row-title, .luke-list-row-lead[data-at="above"]) {
     grid-column: text;
   }
 
-  .luke-list-row[data-meta="title"]
-    :is(
-      .luke-list-row-lead[data-at="line"],
-      .luke-list-row-description,
-      .luke-list-row-attachments
-    ) {
+  .luke-list-row[data-meta="title"] .luke-list-row-lead[data-at="above"] {
+    height: var(--luke-type-label-leading);
+  }
+
+  .luke-list-row[data-meta="title"] :is(.luke-list-row-description, .luke-list-row-attachments) {
     grid-column: text-start / end-end;
   }
 
-  .luke-list-row[data-meta="title"] .luke-list-row-lead[data-at="line"] {
-    margin-block-start: var(--luke-space-2);
+  .luke-list-row[data-meta="title"]:has(.luke-list-row-lead[data-at="above"]) .luke-list-row-title {
+    grid-column: text-start / end-end;
   }
 
   .luke-list-row[data-meta="title"] .luke-list-row-description {

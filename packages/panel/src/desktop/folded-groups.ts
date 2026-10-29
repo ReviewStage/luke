@@ -70,7 +70,6 @@ const STORAGE_KEY = {
   INBOX_WHOSE: "luke.inboxWhose",
   CHANNEL_SCOPE: "luke.channelScope",
   INBOX_MEDIA_PREVIEWS: "luke.inboxMediaPreviews",
-  INBOX_SECOND_LINE: "luke.inboxSecondLine",
   INBOX_LIST_WIDTH: "luke.inboxListWidth",
   RUNS_PANEL: "luke.automationRunsPanel",
   FILE_TREE_WIDTH: "luke.fileTreeWidth",
@@ -226,7 +225,6 @@ const KEPT = {
   WHOSE: keptKey<InboxWhose>(STORAGE_KEY.INBOX_WHOSE, storedWhose),
   CHANNEL_SCOPE: keptKey<ChannelScope>(STORAGE_KEY.CHANNEL_SCOPE, storedChannelScope),
   MEDIA_PREVIEWS: keptKey(STORAGE_KEY.INBOX_MEDIA_PREVIEWS, storedFlag),
-  SECOND_LINE: keptKey(STORAGE_KEY.INBOX_SECOND_LINE, storedFlag),
   FOLDED_GROUPS: keptKey(STORAGE_KEY.GROUPS, storedFolds),
   FOLDED_CREATORS: keptKey(STORAGE_KEY.CREATORS, storedFolds),
   FOLDED_ASSIGNEES: keptKey(STORAGE_KEY.ASSIGNEES, storedFolds),
@@ -369,9 +367,6 @@ export interface InboxViewChoices extends InboxShowChoice, InboxWhoseChoice {
   /** Whether each row shows the pictures and pages its item carries, drawn small under its preview. */
   mediaPreviews: boolean;
   onMediaPreviews: (mediaPreviews: boolean) => void;
-  /** Whether each row shows its second line, what its item asks or how it ended, under its title; off, every row is one line. */
-  secondLine: boolean;
-  onSecondLine: (secondLine: boolean) => void;
 }
 
 /** Whose items the window's Inbox lists, and the press that lists another's. */
@@ -398,7 +393,6 @@ export function useInboxViewChoices(): InboxViewChoices {
   const [sort, onSort] = useKept(KEPT.SORT, INBOX_SORT.LATEST);
   const [whose, onWhose] = useKept(KEPT.WHOSE, EVERYONES);
   const [mediaPreviews, onMediaPreviews] = useKept(KEPT.MEDIA_PREVIEWS, false);
-  const [secondLine, onSecondLine] = useKept(KEPT.SECOND_LINE, true);
   return {
     ...shown,
     grouping,
@@ -409,8 +403,6 @@ export function useInboxViewChoices(): InboxViewChoices {
     onWhose,
     mediaPreviews,
     onMediaPreviews,
-    secondLine,
-    onSecondLine,
   };
 }
 
