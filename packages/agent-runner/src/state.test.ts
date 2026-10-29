@@ -175,6 +175,12 @@ it.effect(
           "attachments/line/picture.png",
         ];
         for (const path of carried) write(join(agent, path), `${path}\n`);
+        // A carried folder the agent may read but not write.
+        const readOnly = [join(agent, "attachments/line"), join(root, "fresh/attachments/line")];
+        ctx.onTestFinished(() => {
+          for (const folder of readOnly) if (existsSync(folder)) chmodSync(folder, 0o755);
+        });
+        chmodSync(join(agent, "attachments/line"), 0o555);
 
         const pack = join(root, "state.tar.zst");
         yield* packState(agent, pack);
@@ -214,6 +220,7 @@ it.effect(
         assert.equal(read(join(restored, "debug.log")), "missing");
         for (const path of carried)
           assert.equal(read(join(fresh, path)), read(join(agent, path)), path);
+        assert.equal(lstatSync(join(fresh, "attachments/line")).mode & 0o777, 0o555);
 
         write(join(repository, "notes/later.md"), "written after the pack\n");
         const refused = yield* Effect.flip(verifyState(agent, pack));
@@ -222,35 +229,50 @@ it.effect(
     ),
 );
 
-it.effect("never packs a credential file or a gh sign-in beside the session files", (ctx) =>
-  provided(
-    Effect.gen(function* () {
-      ownGit();
-      const agent = yield* Effect.promise(() => temporaryDirectory(ctx, "luke-state-"));
-      write(join(agent, "home/.claude/projects/-work/session.jsonl"), "{}\n");
-      write(join(agent, "home/.codex/sessions/rollout.jsonl"), "{}\n");
-      for (const path of [
-        "home/.claude/.credentials.json",
-        "home/.claude/oauth.json",
-        "home/.netrc",
-        "home/.claude/projects/-work/.credentials.json",
-        "home/.codex/auth.json",
-        "home/.codex/sessions/auth.json",
-        "home/.config/gh/hosts.yml",
-        "gh/hosts.yml",
-        "attachments/line/gh/hosts.yml",
-      ]) {
-        write(join(agent, path), SECRET);
-      }
+it.effect(
+  "never packs a credential file or a gh sign-in, beside the session files or in the repository",
+  (ctx) =>
+    provided(
+      Effect.gen(function* () {
+        ownGit();
+        const agent = yield* Effect.promise(() => temporaryDirectory(ctx, "luke-state-"));
+        write(join(agent, "home/.claude/projects/-work/session.jsonl"), "{}\n");
+        write(join(agent, "home/.codex/sessions/rollout.jsonl"), "{}\n");
+        for (const path of [
+          "home/.claude/.credentials.json",
+          "home/.claude/oauth.json",
+          "home/.netrc",
+          "home/.claude/projects/-work/.credentials.json",
+          "home/.codex/auth.json",
+          "home/.codex/sessions/auth.json",
+          "home/.config/gh/hosts.yml",
+          "gh/hosts.yml",
+          "attachments/line/gh/hosts.yml",
+        ]) {
+          write(join(agent, path), SECRET);
+        }
 
-      const pack = join(agent, "state.tar.zst");
-      yield* packState(agent, pack);
+        const pack = join(agent, "state.tar.zst");
+        yield* packState(agent, pack);
 
-      const unpacked = zstdDecompressSync(readFileSync(pack));
-      assert.equal(unpacked.includes(SECRET), false);
-      assert.equal(unpacked.includes("session.jsonl"), true);
-    }),
-  ),
+        const unpacked = zstdDecompressSync(readFileSync(pack));
+        assert.equal(unpacked.includes(SECRET), false);
+        assert.equal(unpacked.includes("session.jsonl"), true);
+
+        // A repository made after that pack: verify refuses the pack, which holds none, and a pack of a credential file in it is refused.
+        const repository = join(agent, "repository");
+        mkdirSync(repository);
+        git(repository, "init", "-q");
+        write(join(repository, "notes.md"), "notes\n");
+        const stale = yield* Effect.flip(verifyState(agent, pack));
+        assert.equal(stale._tag, "StateFailed");
+        write(join(repository, ".codex/auth.json"), SECRET);
+        const again = join(agent, "again.tar.zst");
+        const refused = yield* Effect.flip(packState(agent, again));
+        assert.equal(refused._tag, "StateFailed");
+        assert.equal(existsSync(again), false);
+      }),
+    ),
 );
 
 it.effect("refuses a state over the cap, naming its largest part, and writes no pack", (ctx) =>

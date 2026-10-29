@@ -47,6 +47,14 @@ const STASH_REF = "refs/stash";
 /** A gitlink's mode in an index or a tree: a submodule's commit, which no bundle of this repository holds. */
 const GITLINK_MODE = "160000";
 
+/**
+ * A harness's credential file and the `gh` sign-in's, by the folder and
+ * name they stand under, which no pack carries in the work either: a pack
+ * whose work holds one, tracked, staged or untracked, is refused, since
+ * taking it out would restore a repository other than the agent's.
+ */
+const CREDENTIAL_FILES = [".claude/.credentials.json", ".codex/auth.json", "gh/hosts.yml"] as const;
+
 /** A git config key the state sets on a restore: a local branch's upstream, and nothing else. */
 const UPSTREAM_KEY = /^branch\..+\.(remote|merge)$/u;
 
@@ -333,19 +341,52 @@ const treeBlobs = (place: GitPlace, revision: string) =>
 const stagedCommit = (place: GitPlace, worktree: string, head: Option.Option<string>) =>
   Effect.gen(function* () {
     const indexed = records(yield* git(place, ["ls-files", "-s", "-z"]))
-      .map((record) => record.split("\t")[0]?.split(" ") ?? [])
-      .filter(([mode]) => mode !== GITLINK_MODE)
-      .map(([, oid]) => oid ?? "");
+      .map((record) => {
+        const [entry = "", path = ""] = record.split("\t");
+        const [mode = "", oid = ""] = entry.split(" ");
+        return { mode, oid, path };
+      })
+      .filter(({ mode }) => mode !== GITLINK_MODE);
     const held = new Set(yield* treeBlobs(place, worktree));
     if (Option.isSome(head)) for (const oid of yield* treeBlobs(place, head.value)) held.add(oid);
-    const only = [...new Set(indexed)].filter((oid) => !held.has(oid)).sort();
-    if (only.length === 0) return Option.none<string>();
+    const onlyHere = indexed.filter(({ oid }) => !held.has(oid));
+    const only = [...new Set(onlyHere.map(({ oid }) => oid))].sort();
+    // Note that the commit names each blob by its id, so the paths the index gives them are answered beside it.
+    const paths = onlyHere.map(({ path }) => path);
+    if (only.length === 0) return { commit: Option.none<string>(), paths };
     const tree = (yield* git(place, ["mktree"], {
       input: only.map((oid) => `100644 blob ${oid}\t${oid}\n`).join(""),
     })).trim();
-    return Option.some(
-      yield* commitTree(place, tree, Option.none(), "Luke: blobs only the index holds"),
+    const commit = yield* commitTree(
+      place,
+      tree,
+      Option.none(),
+      "Luke: blobs only the index holds",
     );
+    return { commit: Option.some(commit), paths };
+  });
+
+/** Whether a path in the work names a harness's credential file or the `gh` sign-in's. */
+function credentialPath(path: string): boolean {
+  return CREDENTIAL_FILES.some((file) => path === file || path.endsWith(`/${file}`));
+}
+
+/**
+ * Refuses a bundle whose objects name a credential file at any path: what
+ * `git rev-list --objects` walks from the revisions given, which is what the
+ * bundle carries, and the paths the index gives the blobs only it holds.
+ */
+const refuseCredentials = (place: GitPlace, revisions: string, indexPaths: readonly string[]) =>
+  Effect.gen(function* () {
+    const walked = lines(
+      yield* git(place, ["rev-list", "--objects", "--stdin"], { input: revisions }),
+    );
+    const paths = [...walked.map((line) => line.slice(line.indexOf(" ") + 1)), ...indexPaths];
+    const found = paths.find(credentialPath);
+    if (found === undefined) return;
+    return yield* new StateFailed({
+      detail: `the work holds ${found}, a credential file no pack carries; take it out of the repository, and out of every commit no remote holds, for the state to be saved`,
+    });
   });
 
 /** Deletes every ref under the state's own prefix, left by a pack that ended before it could. */
@@ -425,7 +466,9 @@ const captureRepository = (repository: string, scratch: string) =>
     const staged = yield* stagedCommit(place, worktree, headCommit);
     const carried = [
       { name: `${STATE_REFS}worktree`, oid: worktree },
-      ...(Option.isSome(staged) ? [{ name: `${STATE_REFS}staged`, oid: staged.value }] : []),
+      ...(Option.isSome(staged.commit)
+        ? [{ name: `${STATE_REFS}staged`, oid: staged.commit.value }]
+        : []),
       ...(Option.isSome(headCommit) ? [{ name: `${STATE_REFS}head`, oid: headCommit.value }] : []),
       ...stashes.map((stash, at) => ({ name: `${STATE_REFS}stash/${at}`, oid: stash.oid })),
     ];
@@ -440,6 +483,7 @@ const captureRepository = (repository: string, scratch: string) =>
         ...carried.map(({ name }) => name),
         ...remotes.map(({ oid }) => `^${oid}`),
       ];
+      yield* refuseCredentials(place, `${wanted.join("\n")}\n`, staged.paths);
       yield* git(place, ["bundle", "create", "-q", bundle, "--stdin"], {
         input: `${wanted.join("\n")}\n`,
       });
@@ -455,7 +499,7 @@ const captureRepository = (repository: string, scratch: string) =>
       upstreams,
       stashes,
       worktree,
-      staged: Option.getOrNull(staged),
+      staged: Option.getOrNull(staged.commit),
     };
     const hasIndex = yield* fs.exists(index).pipe(Effect.orElseSucceed(() => false));
     return { work, files: { bundle, index: hasIndex ? index : undefined } satisfies WorkFiles };
@@ -469,6 +513,7 @@ const captureFolder = (folder: string, scratch: string) =>
     const worktree = yield* worktreeCommit(place, undefined, scratch, Option.none());
     const ref = `${STATE_REFS}worktree`;
     yield* git(place, ["update-ref", ref, worktree]);
+    yield* refuseCredentials(place, `${ref}\n`, []);
     const bundle = join(scratch, "state.bundle");
     yield* git(place, ["bundle", "create", "-q", bundle, ref]);
     const work: Work = {
@@ -485,15 +530,24 @@ const captureFolder = (folder: string, scratch: string) =>
     return { work, files: { bundle, index: undefined } satisfies WorkFiles };
   });
 
-/** The work in the folder given, a repository or not, its bundle written into `scratch`; none where the folder does not exist. */
-export const captureWork = (folder: string, scratch: string) =>
+/** The kind of work the folder given holds: a repository, a folder with none, or none where the folder does not exist. */
+export const workKindOf = (folder: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const exists = (path: string) => fs.exists(path).pipe(Effect.orElseSucceed(() => false));
-    if (!(yield* exists(folder))) return Option.none<{ work: Work; files: WorkFiles }>();
-    const captured = (yield* exists(join(folder, ".git")))
-      ? yield* captureRepository(folder, scratch)
-      : yield* captureFolder(folder, scratch);
+    if (!(yield* exists(folder))) return null;
+    return (yield* exists(join(folder, ".git"))) ? WORK_KIND.GIT : WORK_KIND.FILES;
+  });
+
+/** The work in the folder given, a repository or not, its bundle written into `scratch`; none where the folder does not exist. */
+export const captureWork = (folder: string, scratch: string) =>
+  Effect.gen(function* () {
+    const kind = yield* workKindOf(folder);
+    if (kind === null) return Option.none<{ work: Work; files: WorkFiles }>();
+    const captured =
+      kind === WORK_KIND.GIT
+        ? yield* captureRepository(folder, scratch)
+        : yield* captureFolder(folder, scratch);
     return Option.some(captured);
   });
 

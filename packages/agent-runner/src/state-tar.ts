@@ -68,7 +68,7 @@ export interface TarFile {
   readonly sha256: string;
 }
 
-/** An entry as it came out of the tar. */
+/** An entry as it came out of the tar: a file written with its mode, a folder made writable with its mode beside it. */
 export interface TarRead {
   readonly path: string;
   readonly type: TarEntryType;
@@ -342,8 +342,8 @@ export async function readTar(
         const mode = number(header, FIELD.MODE) & 0o777;
         const target = join(into, path);
         if (kind === TAR_ENTRY.DIRECTORY) {
+          // Note that a folder's mode is answered rather than set, so one its owner may not write still unpacks what it holds.
           await mkdir(target, { recursive: true });
-          await chmod(target, mode);
           read.push({ path, type: kind, mode });
           continue;
         }

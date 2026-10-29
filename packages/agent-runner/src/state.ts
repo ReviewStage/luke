@@ -51,6 +51,7 @@ import {
   WORK_KIND,
   type WorkFiles,
   WorkSchema,
+  workKindOf,
   workSnapshot,
 } from "./state-work.js";
 
@@ -358,13 +359,27 @@ const refuseOverCap = (parts: readonly { readonly path: string; readonly bytes: 
     });
   });
 
+/** Makes every folder under `path` its owner's to write, so a read-only folder a verify restored does not keep its scratch folder from going. */
+async function ownerWritable(path: string): Promise<void> {
+  const info = await lstat(path).catch(() => undefined);
+  if (info === undefined || !info.isDirectory()) return;
+  await chmod(path, (info.mode & 0o777) | 0o700);
+  for (const child of await readdir(path)) await ownerWritable(join(path, child));
+}
+
 /** A scratch folder under the agent's own `tmp/`, removed with everything in it as the scope closes. */
 const scratchFolder = (folder: string, prefix: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const temp = join(folder, AGENT_FOLDER.TEMP);
     yield* fs.makeDirectory(temp, { recursive: true, mode: 0o700 });
-    return yield* fs.makeTempDirectoryScoped({ directory: temp, prefix });
+    return yield* Effect.acquireRelease(fs.makeTempDirectory({ directory: temp, prefix }), (path) =>
+      Effect.ignore(
+        Effect.tryPromise(() => ownerWritable(path)).pipe(
+          Effect.andThen(fs.remove(path, { recursive: true })),
+        ),
+      ),
+    );
   }).pipe(
     Effect.mapError(
       () => new StateFailed({ detail: "no scratch folder could be made under the agent's tmp/" }),
@@ -566,6 +581,12 @@ export const verifyState = (folder: string, file: string) =>
       const restored = join(scratch, "agent");
       const { work } = unpacked.manifest;
       const repository = join(folder, AGENT_FOLDER.REPOSITORY);
+      const holds = yield* workKindOf(repository);
+      if (holds !== (work?.kind ?? null)) {
+        return yield* new StateFailed({
+          detail: `the pack does not restore the agent's repository: it holds ${work?.kind ?? "no work"} where the agent's folder holds ${holds ?? "none"}`,
+        });
+      }
       if (work !== null && work.kind === WORK_KIND.GIT) {
         yield* scratchRepository(repository, join(restored, AGENT_FOLDER.REPOSITORY), work);
       }
