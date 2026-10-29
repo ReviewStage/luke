@@ -931,3 +931,47 @@ test("an operator's instructions are the golden's, byte for byte: its own job an
   assert.ok(coder.includes("what you changed, what you ran, and what you published or why not"));
   assert.ok(!coder.includes("Luke's heartbeat"));
 });
+
+/** A pilot's instructions, recorded byte for byte: an agent of kind pilot, handed a prompt, on a task and a repository. */
+const PILOT_PATH = fileURLToPath(
+  new URL("../../../fixtures/coder-instructions/pilot.json", import.meta.url),
+);
+
+/** A pilot's instructions as its session composes them. */
+function pilotInstructions(): string {
+  return coderInstructions(
+    "Acme/Relay",
+    AGENT_BRIEF.PROMPT,
+    true,
+    TASK_LINK,
+    undefined,
+    null,
+    false,
+    CODER_HARNESS.EVE,
+    AGENT_KIND.PILOT,
+  );
+}
+
+// Note that the golden is written again only under LUKE_UPDATE_FIXTURES=1, and the diff explained in the PR.
+if (process.env.LUKE_UPDATE_FIXTURES === "1") {
+  writeFileSync(PILOT_PATH, `${JSON.stringify({ pilot: pilotInstructions() }, null, 2)}\n`);
+}
+
+const PILOT_GOLDEN = Schema.decodeUnknownSync(Schema.Struct({ pilot: Schema.String }))(
+  JSON.parse(readFileSync(PILOT_PATH, "utf8")),
+);
+
+test("a pilot's instructions are the golden's, byte for byte: its own job in place of a coder's, and none of a coder's publishing", () => {
+  const pilot = pilotInstructions();
+  assert.equal(pilot, PILOT_GOLDEN.pilot);
+  assert.ok(pilot.includes("You never change code and never open a pull request"));
+  for (const untold of [
+    `\`${CODER_TOOL.OPEN_PULL_REQUEST}\``,
+    "Work on a branch named",
+    "## Seeing what you built",
+    "name it in the pull request's description",
+    "makes a task of its own, for the developer",
+  ]) {
+    assert.ok(!pilot.includes(untold), untold);
+  }
+});
