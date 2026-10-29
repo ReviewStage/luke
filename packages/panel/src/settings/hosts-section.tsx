@@ -68,14 +68,14 @@ import {
  * hosts-section.tsx -- Settings › Hosts: the member's own machines that run their local agents, Linux servers and Macs alike, and Add hosts, which shows the install command once.
  *
  * A machine is any device of the member's enrolled with a secret of its own
- * (`@luke/features/host-wire`): a Linux server that ran the install command
- * as root, or a Mac its desktop enrolled. The list names each, what it is by
+ * (`@luke/features/host-wire`): a Linux server or a Mac that ran the install
+ * command, or a Mac its desktop enrolled. The list names each, what it is by
  * its platform (`DEVICE_PLATFORM_NAME`), whether it is online, held against
  * the window's own clock as a Mac's label is (`macOnline`), when it was last
  * seen otherwise, and, where its host program is below the service's floor,
  * Upgrade needed with how to upgrade it: a server's command, or a Mac's app
  * updated. Remove, behind the row's ⋯, refuses that machine at once, after
- * asking. Adding stays Linux-only and says so, since a Mac joins from its app.
+ * asking. Adding takes a Linux server and a Mac alike, through one command.
  *
  * In the desktop app this Mac stands first, with where its `luke-host`
  * stands under it (`this-mac-host-row.tsx`) and Retry where it failed: on

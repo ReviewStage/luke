@@ -5,8 +5,8 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
 /**
  * host-wire.ts -- how a host joins its member's devices, how it names itself on every call after, and the Hosts list Settings draws.
  *
- * A host is a device of kind host (`DEVICE_KIND`): a headless Linux box
- * with nobody signed in at it, which runs its member's local agents as the
+ * A host is a device of kind host (`DEVICE_KIND`): a Linux box or a Mac the
+ * install command set up, which runs its member's local agents as the
  * desktop runs them on This Mac. The member mints an install token in
  * Settings, good for any number of boxes until it expires or is revoked;
  * each box trades it once, with the id it minted for itself, for a device
@@ -245,29 +245,36 @@ export function hostInstallLoopCommand(installScriptUrl: string, installToken: s
 
 /**
  * The prompt that has a coding agent on the member's own computer install
- * every server it can reach, in parallel: plain text to paste into Claude
- * Code or Codex, with the install command and its token in it, and when the
- * token stops working. The token is shown in the prompt as in the commands,
- * once, and the prompt tells the agent to keep it to itself.
+ * that computer, the machines it can reach over SSH, or both, in parallel:
+ * plain text to paste into Claude Code or Codex, with the install command and
+ * its token in it, and when the token stops working. The token is shown in
+ * the prompt as in the commands, once, and the prompt tells the agent to keep
+ * it to itself.
+ *
+ * Note that the prompt names no platform the command runs on, because the
+ * install script checks each machine before it changes anything and refuses
+ * one it does not run on, saying why (`apps/web/install/install.sh`), so a
+ * platform the script adds needs no word here.
  */
 export function hostSetupPrompt(
   installScriptUrl: string,
   installToken: string,
   expiresAt: number,
 ): string {
-  return `Install Luke's host program on my Linux servers, so Luke can run its agents on them.
+  return `Install Luke's host program on my machines, so Luke can run its agents on them.
 
 Follow these steps in order.
 
-1. List the servers you can reach. If Tailscale is installed, use \`tailscale status\`; otherwise ask me for the hostnames. Show me the list and wait for me to confirm it before you go on.
-2. Over SSH, check each server. It must be Linux (\`uname -s\`), x64 or arm64 (\`uname -m\` prints x86_64, aarch64 or arm64), and have \`/dev/kvm\` (\`test -c /dev/kvm\`). Skip any server that fails, and say why.
-3. Run this command over SSH on every remaining server at the same time, as root or with sudo (drop \`sudo\` where you log in as root):
+1. Work out which machines to install on: this computer, others you can reach over SSH, or both. If Tailscale is installed, \`tailscale status\` lists the ones you can reach; otherwise ask me for their hostnames. Show me the list and wait for me to confirm it before you go on.
+2. Run this command on every machine on the list at the same time, in your own shell for this computer and over SSH for the others:
 
 ${hostInstallCommand(installScriptUrl, installToken)}
 
-   It prints a ✓ line for each step, and keeps going after the connection check, so read its whole output, not just its end. "✓ Connected to Luke" means the server is installed and connected. A line beginning "! Not connected to Luke yet" means it is installed but not connected yet, and you report it that way. A ✗ line means it failed, and the command exits non-zero. It can take several minutes, because it also fetches a 1.3 GB image at the end, so wait for it.
-4. When every server has finished, reply with a table: server, result (connected, installed but not connected, skipped or failed) and, for a skip or a failure, the reason. For a failure, give the last ✗ line the server printed, or its last line of output if there is none.
-5. The install token in the command is a secret, and stops working at ${new Date(expiresAt).toISOString()}. Pass the command straight to ssh. Never write the token to a file, a memory or a note, and never repeat it in your reply or summary.
+   Keep \`sudo\`, and drop it only on a Linux machine you log in to as root. A Mac refuses root, since it installs for the user who ran the command with sudo, so run it there as the user whose agents it should run. On Windows, run it inside WSL2. If sudo asks for a password, do not try to give it one: ask me to run the command from this prompt in a terminal on that machine and paste you its output.
+   You need not check a machine first: the command checks it before it changes anything, and refuses one Luke host does not run on, saying why.
+3. It prints a ✓ line for each step, and keeps going after the connection check, so read its whole output, not just its end. "✓ Connected to Luke" means the machine is installed and connected. A line beginning "! Not connected to Luke yet" means it is installed but not connected yet, and you report it that way. On a Mac, a line ending "starts at this account's next login" means it is installed and starts when that user logs in. A ✗ line means it failed, and the command exits non-zero. It can take several minutes, because it also fetches a 1.3 GB image, so wait for it.
+4. When every machine has finished, reply with a table: machine, result (connected, installed but not connected, starts at next login, or failed) and, for a failure, the reason. For a failure, give the last ✗ line the machine printed, or its last line of output if there is none.
+5. The install token in the command is a secret, and stops working at ${new Date(expiresAt).toISOString()}. Pass the command straight to your shell or to ssh. Never write the token to a file, a memory or a note, and never repeat it in your reply or summary.
 `;
 }
 
