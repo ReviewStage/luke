@@ -15,7 +15,14 @@
  * (`deviceAgentLayout`). `launchRunner` queues the launch line, its runner's
  * environment and first lines sealed together under the deployment's key
  * ring (`sealMacLaunchSecrets`) and opened again only by the Mac's claim,
- * which clears the row's copy. `writeLine`, `writeFiles`, and `kill` queue a
+ * which clears the row's copy. On a device that registered
+ * `DEVICE_CAPABILITY.AGENT_STATE`, an agent's launch restores its newest
+ * saved state: its secrets carry the generation, a short-lived read of its
+ * bundle from the store (`../agent-state-blobs.ts`), and the agent's state
+ * key, and its payload names the generation; a launch whose agent saved
+ * state it cannot hand over fails as unavailable rather than starting the
+ * agent without its work. A device without the capability, or an agent
+ * that saved none, is launched as before. `writeLine`, `writeFiles`, and `kill` queue a
  * message, files, or stop line; a runner whose launch line its Mac settled
  * has ended, and a write to it answers `NOT_FOUND_STATUS`, so a message
  * relaunches it. `runnerExit` reads the exit code the Mac settled the
@@ -53,6 +60,7 @@
 import { randomUUID } from "node:crypto";
 import { INPUT_LINE, InputLineSchema } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
+import { ensureAgentStateKey, newestAgentState } from "@luke/database/models/agent-state-store";
 import { hasRepository, readAgent } from "@luke/database/models/agent-store";
 import {
   type DeviceAgentPin,
@@ -67,15 +75,22 @@ import {
 } from "@luke/database/models/device-agent-store";
 import { deviceLayout, devicesSeenSince } from "@luke/database/models/device-store";
 import { hostRemoved } from "@luke/database/models/host-store";
-import { parseKeyRing, sealMacLaunchSecrets } from "@luke/database/models/provider-key-seal";
+import {
+  type KeyRing,
+  openAgentStateKey,
+  parseKeyRing,
+  sealMacLaunchSecrets,
+} from "@luke/database/models/provider-key-seal";
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import { AGENT_MACHINE, MAC_PRESENCE } from "@luke/features/agent-wire";
 import {
   DEVICE_AGENT_BOUNDS,
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
+  DEVICE_CAPABILITY,
   type DeviceAgentAnswer,
   type DeviceAgentLaunchPayload,
+  type DeviceAgentLaunchState,
   type DeviceAgentObject,
   deviceAgentFilesPayloadSchema,
   deviceAgentLaunchPayloadSchema,
@@ -96,6 +111,7 @@ import {
 } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import { heldUntil } from "../../http/held-read.js";
+import { AgentStateBlobs } from "../agent-state-blobs.js";
 import { agentCommitIdentity, type CheckoutServices } from "../coder-host/checkout.js";
 import {
   COMMAND_GONE,
@@ -199,6 +215,7 @@ function objectOf(value: object): DeviceAgentObject {
 function deviceMachineOver(
   context: Context.Context<DatabaseServices>,
   environment: Option.Option<typeof HostedEnvironment.Service>,
+  stateBlobs: Option.Option<typeof AgentStateBlobs.Service>,
 ): DeviceMachineService {
   /** One store call on the services given, a failure of it unavailable. */
   const stored = <A, E>(effect: Effect.Effect<A, E, DatabaseServices>) =>
@@ -348,6 +365,44 @@ function deviceMachineOver(
     return ring.success;
   });
 
+  /**
+   * The agent's newest saved state, as a launch on its device hands it over:
+   * none where the device did not register `DEVICE_CAPABILITY.AGENT_STATE`
+   * or the agent saved none, and unavailable where it saved state the
+   * deployment cannot read back, its store or its key.
+   */
+  const launchState = (pin: DeviceAgentPin, ring: KeyRing) =>
+    Effect.gen(function* () {
+      if (pin.deviceId === null) return undefined;
+      const device = yield* stored(deviceLayout(pin.userId, pin.deviceId));
+      const capable = Option.exists(device, (standing) =>
+        standing.capabilities.includes(DEVICE_CAPABILITY.AGENT_STATE),
+      );
+      if (!capable) return undefined;
+      const newest = yield* stored(newestAgentState(pin.userId, pin.agentId));
+      if (Option.isNone(newest)) return undefined;
+      const { userId, agentId } = pin;
+      const sealed = yield* stored(ensureAgentStateKey(ring, userId, agentId));
+      const key = Option.map(sealed, (held) => openAgentStateKey(ring, { userId, agentId }, held));
+      if (Option.isNone(key) || Result.isFailure(key.value) || Option.isNone(stateBlobs)) {
+        return yield* unavailable();
+      }
+      const read = yield* stateBlobs.value.mintRead(newest.value.path).pipe(
+        Effect.tapError((failure) => Effect.logWarning(failure.message)),
+        Effect.mapError(() => unavailable()),
+      );
+      const state: DeviceAgentLaunchState = {
+        generation: newest.value.generation,
+        url: read.url,
+        expiresAt: read.expiresAt.getTime(),
+        bytes: newest.value.bytes,
+        sha256: newest.value.sha256,
+        baseCommit: newest.value.baseCommit,
+        key: Redacted.value(key.value.success),
+      };
+      return state;
+    });
+
   return {
     owns: (session) => Effect.map(pinOfSession(session), Option.isSome),
 
@@ -481,10 +536,17 @@ function deviceMachineOver(
           const commitsBy = yield* identity;
           const layout = yield* layoutOf(pin.userId, pin.agentId, pin.deviceId);
           const { lines, mark } = yield* launch.firstLines(ready, handle);
+          const state = yield* launchState(pin, ring);
           const sealedSecrets = sealMacLaunchSecrets(
             ring,
             { userId: pin.userId, agentId: pin.agentId },
-            Redacted.make(encodeSecrets({ env: launch.env, stdin: lines })),
+            Redacted.make(
+              encodeSecrets({
+                env: launch.env,
+                stdin: lines,
+                ...(state === undefined ? {} : { state }),
+              }),
+            ),
           );
           const payload: DeviceAgentLaunchPayload = {
             checkoutPath: layout.checkoutPath,
@@ -494,6 +556,7 @@ function deviceMachineOver(
             ...(mark.fingerprint === undefined ? {} : { fingerprint: mark.fingerprint }),
             ...(mark.ownLogin === true ? { ownLogin: true } : {}),
             ...(commitsBy === undefined ? {} : { identity: commitsBy }),
+            ...(state === undefined ? {} : { stateGeneration: state.generation }),
           };
           yield* queued(pin, {
             id,
@@ -551,10 +614,11 @@ function deviceMachineOver(
   };
 }
 
-/** The machine over the account's Macs, on the calling fiber's store and, where it has one, the deployment's key ring. */
+/** The machine over the account's Macs, on the calling fiber's store and, where it has them, the deployment's key ring and its store of agents' saved state. */
 export const deviceMachine: Effect.Effect<DeviceMachineService, never, DatabaseServices> =
   Effect.gen(function* () {
     const context = yield* Effect.context<DatabaseServices>();
     const environment = yield* Effect.serviceOption(HostedEnvironment);
-    return deviceMachineOver(context, environment);
+    const stateBlobs = yield* Effect.serviceOption(AgentStateBlobs);
+    return deviceMachineOver(context, environment, stateBlobs);
   });

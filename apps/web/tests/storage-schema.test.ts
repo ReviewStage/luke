@@ -46,6 +46,7 @@ const DECLARED_TABLES = [
   "agent_section_entry",
   "agent_state_generation",
   "agent_state_key",
+  "agent_state_upload",
   "agent_wakeup",
   "attachment",
   "automation",

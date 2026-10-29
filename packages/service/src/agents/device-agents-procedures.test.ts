@@ -1,7 +1,8 @@
 /**
- * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: an account with the experiment off is answered nothing, a desktop's own sign-in is refused as needing an upgrade, a Mac enrolls on that sign-in, created where Luke never saw it and never under another account, and a host enrolls on its member's install token and calls on its own secret, for itself alone, its live agents' read included, at or past the version floor, until it is removed.
+ * device-agents-procedures.test.ts -- a local agent's device through its routes, over a real dialect: an account with the experiment off is answered nothing, a desktop's own sign-in is refused as needing an upgrade, a Mac enrolls on that sign-in, created where Luke never saw it and never under another account, and a host enrolls on its member's install token and calls on its own secret, for itself alone, its live agents' read included, at or past the version floor, until it is removed; and a host saves its own agents' state, from their newest generation alone, until the sweep deletes it seven days after its last save.
  *
- * Synthetic accounts, bearers, tokens, Macs, and hosts throughout.
+ * Synthetic accounts, bearers, tokens, Macs, hosts, keys, and digests
+ * throughout; the store of saved state is a double with no store behind it.
  */
 
 import assert from "node:assert/strict";
@@ -9,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
+import { newestAgentState } from "@luke/database/models/agent-state-store";
 import { createAgent, latestTurnsOfReached } from "@luke/database/models/agent-store";
 import { devicesSeenSince } from "@luke/database/models/device-store";
 import { mintHostInstallToken, revokeHostInstallToken } from "@luke/database/models/host-store";
@@ -22,13 +24,21 @@ import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@luke/features/turn-ru
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { EXPERIMENT } from "@luke/settings";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
-import { Clock, type Context, Effect, Layer, Option } from "effect";
+import { Clock, type Context, Effect, Layer, Option, Redacted } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HOST_VERSION, hostSecretHash, mintHostSecret } from "../auth/device-secret.js";
+import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { sweepAgentStates } from "../maintenance/agent-state-sweep.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
+import {
+  AGENT_STATE_GRANT,
+  agentStateBlobsFake,
+  agentStateBlobUrl,
+} from "../testing/agent-state-blobs-fake.js";
+import { AgentStateBlobs } from "./agent-state-blobs.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { deviceAgentsProcedures } from "./device-agents-procedures.js";
 import { hostsProcedures } from "./hosts-procedures.js";
@@ -44,10 +54,31 @@ const PATH = {
   ENROLL_OWN: "/api/device-agents/devices/enroll",
   HOSTS: "/api/hosts",
   HOST_REMOVE: "/api/hosts/remove",
+  STATE_SAVE: "/api/device-agents/state/save",
+  STATE_COMMIT: "/api/device-agents/state/commit",
 } as const;
 
 /** A daemon below the floor. */
 const OLD_VERSION = "0.0.9";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DIGEST = "b".repeat(64);
+
+/** The deployment's key ring, a throwaway of this file's, which every agent's state key is sealed under. */
+const ENVIRONMENT: HostedEnvironmentValues = {
+  posthogPersonalApiKey: undefined,
+  posthogProjectId: undefined,
+  posthogApiHost: undefined,
+  posthogProjectApiKey: undefined,
+  posthogIngestHost: undefined,
+  cronSecret: undefined,
+  eveDeploymentSecret: undefined,
+  githubWebhookSecret: undefined,
+  providerKeyEncryptionKeys: Redacted.make(`1:${Buffer.alloc(32, 9).toString("base64")}`),
+};
+
+/** The store of agents' saved state every case's routes and sweeps reach, and the paths it was asked to delete. */
+const stateStore = agentStateBlobsFake();
 
 /** One request of the device's, on the bearer given (an account's, or a host's secret), its body as JSON or its device in the query, and a daemon's version where one is given. */
 function request(
@@ -75,6 +106,8 @@ const answerOf = (incoming: Request) =>
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
+      Layer.succeed(HostedEnvironment, yield* HostedEnvironment),
+      Layer.succeed(AgentStateBlobs, yield* AgentStateBlobs),
     );
     const context = yield* Effect.context<SqlClient.SqlClient>().pipe(Effect.provide(services));
     const seams = {
@@ -89,7 +122,7 @@ const answerOf = (incoming: Request) =>
       deviceAgents: deviceAgentsProcedures(seams),
       hosts: hostsProcedures(seams),
     });
-    // SAFETY: the procedures yield the database and the clock alone, which is all a test provides of the web runtime's services.
+    // SAFETY: the procedures yield the database, the clock, the environment, and the store of saved state alone, which is all a test provides of the web runtime's services.
     const response = yield* Effect.promise(() =>
       handle(incoming, context as Context.Context<WebServices>),
     );
@@ -214,7 +247,81 @@ function hostBeat(secret: string, deviceId: string, version: string = HOST_VERSI
   return request(secret, PATH.PRESENCE, { version, body: { deviceId } });
 }
 
-it.layer(getTestDB())("a local agent's Mac", (it) => {
+/** An agent of the account's pinned to the host given; its id. */
+const agentOnHost = (userId: string, deviceId: string) =>
+  Effect.gen(function* () {
+    const task = yield* startTask(userId, { name: "Invitations" });
+    const started = yield* createAgent(userId, {
+      taskId: task.id,
+      idempotencyKey: randomUUID(),
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      planSnapshot: "# Invitations\n",
+      prompt: null,
+      repository: null,
+      machine: AGENT_MACHINE.DEVICE,
+      deviceId,
+    });
+    return Option.getOrThrow(started).agent.id;
+  });
+
+/** A host's ask to save the agent's state from the generation given, on its secret, naming the device given. */
+function saveState(
+  host: { readonly secret: string; readonly deviceId: string },
+  agentId: string,
+  fromGeneration: number | null,
+) {
+  return answerOf(
+    request(host.secret, PATH.STATE_SAVE, {
+      version: HOST_VERSION.FLOOR,
+      body: { deviceId: host.deviceId, agentId, fromGeneration },
+    }),
+  );
+}
+
+/** A host's commit of the save it uploaded to the path given, from the generation given. */
+function commitState(
+  host: { readonly secret: string; readonly deviceId: string },
+  agentId: string,
+  fromGeneration: number | null,
+  path: string,
+) {
+  return answerOf(
+    request(host.secret, PATH.STATE_COMMIT, {
+      version: HOST_VERSION.FLOOR,
+      body: {
+        deviceId: host.deviceId,
+        agentId,
+        fromGeneration,
+        path,
+        bytes: 749,
+        sha256: DIGEST,
+        baseCommit: null,
+      },
+    }),
+  );
+}
+
+/** A save asked and committed, as a host's turn's end does: the generation it was kept as, and its path. */
+const savedState = (
+  host: { readonly secret: string; readonly deviceId: string },
+  agentId: string,
+  fromGeneration: number | null,
+) =>
+  Effect.gen(function* () {
+    const granted = yield* saveState(host, agentId, fromGeneration);
+    assert.equal(granted.status, HOSTED_HTTP_STATUS.OK);
+    const path: string = granted.body.path;
+    const kept = yield* commitState(host, agentId, fromGeneration, path);
+    assert.equal(kept.status, HOSTED_HTTP_STATUS.OK);
+    return { generation: kept.body.generation, path };
+  });
+
+const STALE = { status: HOSTED_HTTP_STATUS.CONFLICT, body: { error: "agent-state-stale" } };
+
+it.layer(
+  Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMENT), stateStore.layer),
+)("a local agent's Mac", (it) => {
   it.effect("an account with the experiment off is answered nothing, and nothing is written", () =>
     Effect.gen(function* () {
       const off = yield* account(false);
@@ -498,6 +605,130 @@ it.layer(getTestDB())("a local agent's Mac", (it) => {
         );
         assert.equal(removed, HOSTED_HTTP_STATUS.OK);
         assert.equal(beatAfterRemove, HOSTED_HTTP_STATUS.UNAUTHORIZED, "Remove refuses its secret");
+      }),
+  );
+
+  it.effect(
+    "a host saves its agent's state: an upload to a fresh path of the agent's and the agent's one key, each commit kept as the next generation, and the blob of the one it replaced deleted",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* account(true);
+        const host = yield* enrolledHost(owner);
+        const agentId = yield* agentOnHost(owner, host.deviceId);
+
+        const first = yield* saveState(host, agentId, null);
+        const firstKept = yield* commitState(host, agentId, null, first.body.path);
+        const second = yield* saveState(host, agentId, 1);
+        const secondKept = yield* commitState(host, agentId, 1, second.body.path);
+
+        assert.equal(first.status, HOSTED_HTTP_STATUS.OK);
+        assert.ok(first.body.path.startsWith(`agent-state/${agentId}/`));
+        assert.notEqual(second.body.path, first.body.path, "every save goes to a fresh path");
+        assert.equal(
+          second.body.upload.url,
+          agentStateBlobUrl(AGENT_STATE_GRANT.UPLOAD, second.body.path),
+        );
+        assert.equal(Buffer.from(first.body.key, "base64").length, 32);
+        assert.equal(second.body.key, first.body.key, "the agent keeps one key");
+        assert.deepEqual(
+          [firstKept, secondKept],
+          [
+            { status: HOSTED_HTTP_STATUS.OK, body: { generation: 1 } },
+            { status: HOSTED_HTTP_STATUS.OK, body: { generation: 2 } },
+          ],
+        );
+        assert.ok(stateStore.removed.includes(first.body.path), "the replaced blob is deleted");
+        assert.ok(!stateStore.removed.includes(second.body.path));
+      }),
+  );
+
+  it.effect(
+    "a save from a generation no longer the agent's newest is refused, its ask and its commit alike, while a commit asked again after its answer was lost is answered its generation",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* account(true);
+        const host = yield* enrolledHost(owner);
+        const agentId = yield* agentOnHost(owner, host.deviceId);
+        const kept = yield* savedState(host, agentId, null);
+
+        const staleAsk = yield* saveState(host, agentId, null);
+        const staleCommit = yield* commitState(
+          host,
+          agentId,
+          null,
+          `agent-state/${agentId}/${randomUUID()}`,
+        );
+        const askedAgain = yield* commitState(host, agentId, null, kept.path);
+
+        assert.deepEqual(staleAsk, STALE);
+        assert.deepEqual(staleCommit, STALE);
+        assert.deepEqual(askedAgain, { status: HOSTED_HTTP_STATUS.OK, body: { generation: 1 } });
+        assert.equal(
+          Option.getOrUndefined(yield* newestAgentState(owner, agentId))?.path,
+          kept.path,
+          "nothing stale was kept",
+        );
+      }),
+  );
+
+  it.effect(
+    "a host saves only its own account's agents pinned to it, and commits only a path of the agent's",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* account(true);
+        const other = yield* account(true);
+        const host = yield* enrolledHost(owner);
+        const ownSecondHost = yield* enrolledHost(owner);
+        const otherHost = yield* enrolledHost(other);
+        const agentId = yield* agentOnHost(owner, host.deviceId);
+        const elsewhere = yield* agentOnHost(owner, host.deviceId);
+        const path = `agent-state/${agentId}/${randomUUID()}`;
+
+        const refused = [
+          yield* saveState(otherHost, agentId, null),
+          yield* commitState(otherHost, agentId, null, path),
+          yield* saveState(ownSecondHost, agentId, null),
+          yield* commitState(ownSecondHost, agentId, null, path),
+        ].map((answer) => answer.status);
+        const othersPath = yield* commitState(
+          host,
+          agentId,
+          null,
+          `agent-state/${elsewhere}/${randomUUID()}`,
+        );
+
+        assert.deepEqual(refused, [
+          HOSTED_HTTP_STATUS.NOT_FOUND,
+          HOSTED_HTTP_STATUS.NOT_FOUND,
+          HOSTED_HTTP_STATUS.NOT_FOUND,
+          HOSTED_HTTP_STATUS.NOT_FOUND,
+        ]);
+        assert.equal(othersPath.status, HOSTED_HTTP_STATUS.BAD_REQUEST);
+        assert.ok(Option.isNone(yield* newestAgentState(owner, agentId)), "nothing was kept");
+      }),
+  );
+
+  it.effect(
+    "the sweep deletes an upload no commit named a day on, and an agent's saved state, blob and row, seven days after its last save",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* account(true);
+        const host = yield* enrolledHost(owner);
+        const agentId = yield* agentOnHost(owner, host.deviceId);
+        const kept = yield* savedState(host, agentId, null);
+        const savedAt = yield* Clock.currentTimeMillis;
+        // A save whose upload never came to a commit, as when its host went away mid-save.
+        const abandoned: string = (yield* saveState(host, agentId, 1)).body.path;
+
+        yield* sweepAgentStates(new Date(savedAt + 6 * DAY_MS));
+        const afterSix = yield* newestAgentState(owner, agentId);
+        const removedAfterSix = stateStore.removed.includes(kept.path);
+        yield* sweepAgentStates(new Date(savedAt + 7 * DAY_MS));
+
+        assert.ok(stateStore.removed.includes(abandoned), "the abandoned upload is deleted");
+        assert.ok(Option.isSome(afterSix) && !removedAfterSix, "six days on, the state stands");
+        assert.ok(stateStore.removed.includes(kept.path), "its blob is deleted");
+        assert.ok(Option.isNone(yield* newestAgentState(owner, agentId)), "and then its row");
       }),
   );
 });

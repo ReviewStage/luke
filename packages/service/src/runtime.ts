@@ -9,6 +9,7 @@
 
 import { ConfigProvider, Effect, Layer, Logger } from "effect";
 import { FetchHttpClient } from "effect/http";
+import { agentStateBlobsLayer } from "./agents/agent-state-blobs.js";
 import { bearerCallersLayer } from "./auth/bearer-callers.js";
 import { webSqlClient } from "./db/sql-client.js";
 import { hostedEnvironment } from "./environment.js";
@@ -87,6 +88,10 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  * (`auth/bearer-callers.ts`), so a held read and the polls inside it ask the
  * auth service once a minute per bearer rather than on every request.
  *
+ * `AgentStateBlobs` is the one place the private store of device agents'
+ * saved state is named (`agents/agent-state-blobs.ts`), read here once per
+ * instance; a deployment without `BLOB_STORE_ID` builds it with no store.
+ *
  * `@effect/platform-node` has no entry: a Vercel function's platform is the
  * Web `fetch` its runtime already carries, and a Node-reaching companion
  * behind this door would have to be traced into every bundle. `@effect/sql-pg`
@@ -109,6 +114,7 @@ export const webServices = Layer.mergeAll(
   productAnalyticsFromEnvironment.pipe(
     Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment)),
   ),
+  agentStateBlobsLayer.pipe(Layer.provide(FetchHttpClient.layer)),
 ).pipe(Layer.provide(webConfigProvider));
 
 /** What an effect run on a runtime over these services may require. */
