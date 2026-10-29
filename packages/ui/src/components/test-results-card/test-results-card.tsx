@@ -39,7 +39,7 @@ export interface TestRun {
   readonly skipped: number;
   /** How long the run took, in milliseconds, where the runner said. */
   readonly durationMs?: number | undefined;
-  /** The failed tests the output named, in its order. */
+  /** The failed tests the output named, in its order, which may be fewer than `failed` where the card was read from an output's two ends. */
   readonly failures: readonly TestFailure[];
 }
 
@@ -115,7 +115,8 @@ function FailureLine({ failure }: { failure: TestFailure }): React.JSX.Element {
 /** A run's counts and duration, its strip, and the tests that failed. */
 export function TestResultsCard({ run }: { run: TestRun }): React.JSX.Element {
   const shown = run.failures.slice(0, FAILURES_SHOWN);
-  const more = run.failures.length - shown.length;
+  // Note that the count of the rest is the larger of the failed count and the names, since a run read from its ends names fewer than it counts.
+  const more = Math.max(run.failed, run.failures.length) - shown.length;
   return (
     <Card
       as={CARD_ELEMENT.SECTION}

@@ -53,7 +53,7 @@ import {
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import { INLINE_SPAN, readInline } from "../plan-editor/composer-markdown.js";
-import { type CommandCard, commandCard } from "./command-card-model.js";
+import { type CommandCard, commandCard, commandCardOfEnds } from "./command-card-model.js";
 import { fileRefText } from "./file-ref-model.js";
 import { shortCommit } from "./file-tab-model.js";
 import { askHeadWords } from "./inbox-ask-words.js";
@@ -176,6 +176,33 @@ function commandOutput(output: WireValue): ToolBlock {
   if (exitCode !== 0) lines.push(`exit ${exitCode}`);
   if (output.truncated === true) lines.push(TRUNCATED_NOTE);
   return textBlock(stripAnsi(lines.join("\n")));
+}
+
+/** A JSON string's escapes, which a cut end of an answer stored as a record still carries. */
+const JSON_ESCAPE = /\\(?:u([0-9a-fA-F]{4})|(["\\/bfnrt]))/gu;
+
+/** What each one-letter escape stands for. */
+const JSON_ESCAPED: Readonly<Record<string, string>> = {
+  '"': '"',
+  "\\": "\\",
+  "/": "/",
+  b: "\b",
+  f: "\f",
+  n: "\n",
+  r: "\r",
+  t: "\t",
+};
+
+/** One end of a cut answer as a terminal showed it: an answer stored as a record was cut from its JSON (`part-cut.ts`), so its escapes are read back first. */
+function cutEndWords(end: string, json: boolean): string {
+  const words = json
+    ? end.replace(JSON_ESCAPE, (_match: string, code: string | undefined, letter: string) =>
+        code === undefined
+          ? (JSON_ESCAPED[letter] ?? "")
+          : String.fromCharCode(Number.parseInt(code, 16)),
+      )
+    : end;
+  return stripAnsi(words);
 }
 
 /** What an answer cut short by its tool says at its end. */
@@ -1188,6 +1215,17 @@ export function toolCallView(input: {
       output: input.output === undefined ? undefined : jsonBlock(input.output),
     }
   );
+}
+
+/** For a command whose answer its page carried cut to its two ends, the card those ends read as (`commandCardOfEnds`), so its row wears one before its fold opens; none for any other call. */
+export function cutCallCard(
+  view: ToolCallView,
+  head: string,
+  tail: string,
+): CommandCard | undefined {
+  if (view.kind !== CALL_KIND.COMMAND) return undefined;
+  const json = head.startsWith("{");
+  return commandCardOfEnds(view.subject, cutEndWords(head, json), cutEndWords(tail, json));
 }
 
 /** What a call's row may open: something the window already draws in a tab of its own. */

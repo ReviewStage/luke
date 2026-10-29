@@ -189,6 +189,7 @@ import { useMentionDoors } from "./task-mentions.js";
 import {
   calledAgent,
   cardTitle,
+  cutCallCard,
   delegationView,
   isServerCallTool,
   loadedSkill,
@@ -560,6 +561,7 @@ function ToolCallView({
   cut?: CutBody | undefined;
 }): ReactNode {
   const view = toolCallView({ ...part, jobs });
+  const card = view.card ?? (cut === undefined ? undefined : cutCallCard(view, cut.head, cut.tail));
   const server = useServerName(view);
   const known = useKnownNames();
   // Note that the chip of the agent a call is about hangs the card its tab hangs, which the place hands over by the agent's id.
@@ -585,7 +587,7 @@ function ToolCallView({
         errorText={part.errorText}
         cut={cut}
       />
-      {view.card === undefined ? null : <CommandCardView card={view.card} />}
+      {card === undefined ? null : <CommandCardView card={card} />}
       <CallPictures tool={part.tool} input={part.input} output={part.output} />
     </>
   );

@@ -11,7 +11,10 @@ import type { CommitSummary, TestFailure, TestRun } from "@luke/ui";
  * and go's `--- PASS:` lines. A commit is read only where the command names
  * `git`, from git's `[branch hash] message` line and its count of files and
  * lines. Output that matches none is no card, and its row draws as it always
- * has; the output stays in the row's fold either way. Nothing here draws.
+ * has; the output stays in the row's fold either way. A long output, which a
+ * transcript page carries as its two ends until its fold opens, is read from
+ * those ends where its summary stands in them (`commandCardOfEnds`). Nothing
+ * here draws.
  */
 
 /** Which card a command's output reads as. */
@@ -150,7 +153,7 @@ function goError(lines: readonly string[], name: string, at: number): string | u
   return logged === undefined ? undefined : GO_LOG.exec(logged)?.[1];
 }
 
-function goRun(lines: readonly string[]): TestRun | undefined {
+function goRun(_output: string, lines: readonly string[]): TestRun | undefined {
   const results = lines.flatMap((line, at) => {
     const result = GO_RESULT.exec(line);
     return result?.[1] === undefined || result[2] === undefined
@@ -158,16 +161,20 @@ function goRun(lines: readonly string[]): TestRun | undefined {
       : [{ status: result[1], name: result[2], at }];
   });
   if (results.length === 0) return undefined;
-  // Note that a test with subtests is counted by its subtests alone, because go reports the parent too and a reader counts what ran.
-  const parents = new Set(
-    results.flatMap(({ name }) =>
-      name
-        .split("/")
-        .slice(0, -1)
-        .map((_, depth, parts) => parts.slice(0, depth + 1).join("/")),
-    ),
+  // Note that a test with subtests is counted by its subtests alone, because go reports the parent too and a reader counts what ran,
+  // unless it failed with none of them failing, as in its own body or cleanup, which no subtest's line says.
+  const ancestors = (name: string) =>
+    name
+      .split("/")
+      .slice(0, -1)
+      .map((_, depth, parts) => parts.slice(0, depth + 1).join("/"));
+  const parents = new Set(results.flatMap(({ name }) => ancestors(name)));
+  const failedParents = new Set(
+    results.flatMap(({ status, name }) => (status === "FAIL" ? ancestors(name) : [])),
   );
-  const leaves = results.filter(({ name }) => !parents.has(name));
+  const leaves = results.filter(
+    ({ status, name }) => !parents.has(name) || (status === "FAIL" && !failedParents.has(name)),
+  );
   const failures = leaves.flatMap(({ status, name, at }) => {
     if (status !== "FAIL") return [];
     const error = goError(lines, name, at);
@@ -207,12 +214,45 @@ function commitOf(command: string, output: string): CommitSummary | undefined {
   };
 }
 
-/** The card `command`'s `output` reads as, the output as a terminal showed it; none where it reads as neither a commit nor a test run. */
-export function commandCard(command: string, output: string): CommandCard | undefined {
+/** A runner's read of a command's output, by its words and their lines. */
+type RunRead = (output: string, lines: readonly string[]) => TestRun | undefined;
+
+/** The runners whose count stands in their summary at the output's end, and every runner, go's count being every line it printed. */
+const SUMMARY_RUNNERS: readonly RunRead[] = [vitestRun, jestRun, pytestRun];
+const EVERY_RUNNER: readonly RunRead[] = [...SUMMARY_RUNNERS, goRun];
+
+/** The card `output` reads as under `command`: a commit, else the first of `runners` to read a run, else none. */
+function cardOf(
+  command: string,
+  output: string,
+  runners: readonly RunRead[],
+): CommandCard | undefined {
   const commit = commitOf(command, output);
   if (commit !== undefined) return { kind: COMMAND_CARD.COMMIT, commit };
   const lines = output.split("\n").map((line) => line.trimEnd());
-  const run =
-    vitestRun(output, lines) ?? jestRun(output, lines) ?? pytestRun(output, lines) ?? goRun(lines);
-  return run === undefined ? undefined : { kind: COMMAND_CARD.TEST_RESULTS, run };
+  for (const read of runners) {
+    const run = read(output, lines);
+    if (run !== undefined) return { kind: COMMAND_CARD.TEST_RESULTS, run };
+  }
+  return undefined;
+}
+
+/** The card `command`'s `output` reads as, the output as a terminal showed it; none where it reads as neither a commit nor a test run. */
+export function commandCard(command: string, output: string): CommandCard | undefined {
+  return cardOf(command, output, EVERY_RUNNER);
+}
+
+/**
+ * The card a command's output reads as from its two ends alone, as a
+ * transcript page carries a long one until its fold opens: a commit, or a run
+ * whose runner counts it in the summary at its end, naming the failures the
+ * ends hold. Never go's, whose count is every line it printed, so its ends
+ * would miscount it.
+ */
+export function commandCardOfEnds(
+  command: string,
+  head: string,
+  tail: string,
+): CommandCard | undefined {
+  return cardOf(command, `${head}\n${tail}`, SUMMARY_RUNNERS);
 }

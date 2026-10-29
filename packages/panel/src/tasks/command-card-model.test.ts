@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { COMMAND_CARD, type CommandCard, commandCard } from "./command-card-model.js";
+import { cutCallCard, toolCallView } from "./tool-call-model.js";
 
 const VITEST = `
  ❯ src/parser.test.ts (8 tests | 1 failed) 12ms
@@ -73,6 +74,11 @@ const GO = `
 === RUN   TestLater
     parser_test.go:30: not yet
 --- SKIP: TestLater (0.00s)
+=== RUN   TestCleanup
+=== RUN   TestCleanup/child
+    cleanup_test.go:20: leaked a file
+--- FAIL: TestCleanup (0.00s)
+    --- PASS: TestCleanup/child (0.00s)
 FAIL
 FAIL	example.com/parser	0.25s
 FAIL`;
@@ -81,27 +87,24 @@ const COMMIT = `[luke/feat/agent-tool-cards-trial 3f9c2ab] feat(ui): rich tool c
  3 files changed, 120 insertions(+), 4 deletions(-)
  create mode 100644 packages/ui/src/components/commit-card/commit-card.tsx`;
 
-it.each<[string, string, string, CommandCard | undefined]>([
-  [
-    "vitest",
-    "pnpm exec vitest run src/parser.test.ts",
-    VITEST,
-    {
-      kind: COMMAND_CARD.TEST_RESULTS,
-      run: {
-        passed: 6,
-        failed: 1,
-        skipped: 1,
-        durationMs: 1810,
-        failures: [
-          {
-            name: "src/parser.test.ts > parser > reads jest",
-            error: "AssertionError: expected 1 to be 2 // Object.is equality",
-          },
-        ],
+const VITEST_CARD: CommandCard = {
+  kind: COMMAND_CARD.TEST_RESULTS,
+  run: {
+    passed: 6,
+    failed: 1,
+    skipped: 1,
+    durationMs: 1810,
+    failures: [
+      {
+        name: "src/parser.test.ts > parser > reads jest",
+        error: "AssertionError: expected 1 to be 2 // Object.is equality",
       },
-    },
-  ],
+    ],
+  },
+};
+
+it.each<[string, string, string, CommandCard | undefined]>([
+  ["vitest", "pnpm exec vitest run src/parser.test.ts", VITEST, VITEST_CARD],
   [
     "jest",
     "npm test",
@@ -138,17 +141,20 @@ it.each<[string, string, string, CommandCard | undefined]>([
     },
   ],
   [
-    "go test -v, counting subtests rather than their parent",
+    "go test -v, counting subtests rather than their parent unless it failed alone",
     "go test -v ./...",
     GO,
     {
       kind: COMMAND_CARD.TEST_RESULTS,
       run: {
-        passed: 3,
-        failed: 1,
+        passed: 4,
+        failed: 2,
         skipped: 1,
         durationMs: 250,
-        failures: [{ name: "TestReadsJest", error: "parser_test.go:12: expected 2, got 1" }],
+        failures: [
+          { name: "TestReadsJest", error: "parser_test.go:12: expected 2, got 1" },
+          { name: "TestCleanup", error: "cleanup_test.go:20: leaked a file" },
+        ],
       },
     },
   ],
@@ -177,4 +183,34 @@ it.each<[string, string, string, CommandCard | undefined]>([
   ],
 ])("reads %s", (_, command, output, card) => {
   expect(commandCard(command, output)).toEqual(card);
+});
+
+/** How many characters of a long output a transcript page carries at each end (`part-cut.ts`). */
+const END_CHARS = 2048;
+
+/** A run whose output is past a page's bound: two hundred lines before the runner's own words. */
+function long(line: (at: number) => string, words: string): string {
+  return `${Array.from({ length: 200 }, (_, at) => line(at)).join("\n")}${words}`;
+}
+
+it.each<[string, string, string, CommandCard | undefined]>([
+  [
+    "a long vitest run's two ends, cut from the record eve's shell stores, read as its card",
+    "pnpm test",
+    JSON.stringify({
+      stdout: long((at) => ` ✓ src/rows.test.ts > row ${at} 1ms`, VITEST),
+      stderr: "",
+      exitCode: 1,
+    }),
+    VITEST_CARD,
+  ],
+  [
+    "a long go run's two ends read as no card, since they would miscount it",
+    "go test -v ./...",
+    long((at) => `--- PASS: TestRow${at} (0.00s)`, GO),
+    undefined,
+  ],
+])("%s", (_, command, stored, card) => {
+  const view = toolCallView({ tool: "bash", input: { command }, output: undefined });
+  expect(cutCallCard(view, stored.slice(0, END_CHARS), stored.slice(-END_CHARS))).toEqual(card);
 });
