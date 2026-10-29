@@ -2,6 +2,7 @@ import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { GitHubTokenSummary } from "@luke/features/github-token-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { IRREVERSIBLE_WORDS, VERB } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
@@ -56,8 +57,13 @@ const SIGN_OUT_FAILED = "The account could not be signed out. Try again.";
 export async function signOutSayingFailure(onSignOut: () => Promise<void>): Promise<void> {
   try {
     await onSignOut();
-  } catch {
-    showToast({ words: SIGN_OUT_FAILED, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+  } catch (cause) {
+    showToast({
+      words: SIGN_OUT_FAILED,
+      tone: STATUS_TONE.DANGER,
+      hold: TOAST_HOLD.FAILED,
+      failure: { surface: FAILURE_SURFACE.ACCOUNT_SIGN_OUT, cause },
+    });
   }
 }
 

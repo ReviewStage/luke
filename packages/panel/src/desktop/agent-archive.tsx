@@ -1,5 +1,6 @@
 import { ARCHIVE_DRAWN, type ArchiveDrawn } from "@luke/features/agent-view";
 import type { AgentSummary } from "@luke/features/agent-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   ArchiveIcon,
   BUTTON_SIZE,
@@ -119,7 +120,12 @@ function useArchivePress(agents: AgentsControl) {
   return (agentId: string, archived: boolean, drawn?: ArchiveDrawn) =>
     agents.onArchive(agentId, archived, drawn).then((result: ActionResult) => {
       if (result.status === ACTION_RESULT_STATUS.ACCEPTED) return;
-      toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      toast({
+        words: result.reason,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: { surface: FAILURE_SURFACE.AGENT_ARCHIVE, cause: result, about: { agentId } },
+      });
     });
 }
 

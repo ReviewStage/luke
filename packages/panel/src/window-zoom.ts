@@ -13,6 +13,7 @@
  * that asked has no control left to show it on.
  */
 
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   HOST_CAPABILITY,
   ZOOM_ACTUAL_SIZE,
@@ -56,7 +57,12 @@ export function useWindowZoom(
       asked.current = target;
       void write(target).then((result) => {
         if (result.status === ACTION_RESULT_STATUS.ACCEPTED) return;
-        showToast({ words: ZOOM_REFUSED, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+        showToast({
+          words: ZOOM_REFUSED,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.WINDOW_ZOOM, cause: result },
+        });
         // Note that a refused size is forgotten, because no snapshot will
         // ever arrive saying it.
         if (asked.current === target) asked.current = undefined;

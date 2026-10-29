@@ -18,6 +18,7 @@ import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/
 import { threadLineWords } from "@luke/features/inbox-wire";
 import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/models-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskStatus } from "@luke/features/task-wire";
 import { CALL_KIND, CALL_WORDS, sameFieldsBy, sameShape } from "@luke/features/turn-rows";
 import { replyFromWords } from "@luke/features/words";
@@ -2931,7 +2932,18 @@ function AgentTabBody({
     settled: !agentStillWriting(agent.status),
     drawn: (messageId) => messages.some((message) => message.id === messageId),
     bringIn: (messageId, then) => bringIn.current?.(messageId, then) === true,
-    gone: () => toast({ words: MESSAGE_GONE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
+    gone: () =>
+      toast({
+        words: MESSAGE_GONE,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: {
+          surface: FAILURE_SURFACE.MESSAGE_REVEAL,
+          cause: FAILURE_CONDITION.GONE,
+          about: { agentId: agent.id },
+          refused: true,
+        },
+      }),
   });
   const openAgent =
     onOpenTarget === undefined

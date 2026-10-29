@@ -1,3 +1,4 @@
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { SettingsRow, type SettingsRowDensity, STATUS_TONE, Switch } from "@luke/ui";
 import { useOptimisticSettingWrite } from "@luke/ui/use-setting-write";
@@ -40,8 +41,13 @@ export function SwitchRow({
   // biome-ignore lint/suspicious/noConfusingVoidType: a draft's switch cannot be refused, so its change answers void
   onChange: (enabled: boolean) => void | Promise<ActionResult>;
 }): React.JSX.Element {
-  const { value, saves, run } = useOptimisticSettingWrite(checked, onChange, (words) =>
-    showToast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
+  const { value, saves, run } = useOptimisticSettingWrite(checked, onChange, (words, cause) =>
+    showToast({
+      words,
+      tone: STATUS_TONE.DANGER,
+      hold: TOAST_HOLD.FAILED,
+      failure: { surface: FAILURE_SURFACE.SETTING_WRITE, cause },
+    }),
   );
   return (
     <SettingsRow

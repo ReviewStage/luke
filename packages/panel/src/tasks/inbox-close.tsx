@@ -1,5 +1,6 @@
 import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { INBOX_STATUS, type InboxItem, type InboxStatus } from "@luke/features/inbox-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { countWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -105,9 +106,18 @@ export function useInboxCloser({
       const pressed = writer.heldAt(
         (place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id,
       );
-      const say = (words: string) => {
+      const say = (words: string, cause: unknown) => {
         if (saying?.quiet !== true) {
-          toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+          toast({
+            words,
+            tone: STATUS_TONE.DANGER,
+            hold: TOAST_HOLD.FAILED,
+            failure: {
+              surface: FAILURE_SURFACE.INBOX_CLOSE,
+              cause,
+              about: { inboxItemId: item.id, agentId: item.agentId, channelId: item.channelId },
+            },
+          });
         }
         return false;
       };
@@ -119,10 +129,10 @@ export function useInboxCloser({
         .catch(() => UNANSWERED)
         .then((answer) => {
           out.current.delete(item.id);
-          if ("failure" in answer) return say(messageFailureWords(answer.failure));
+          if ("failure" in answer) return say(messageFailureWords(answer.failure), answer);
           attempts.current.delete(item.id);
           if (!answer.taken) {
-            return say(NOT_TAKEN[answer.item.status]);
+            return say(NOT_TAKEN[answer.item.status], { failure: answer.item.status });
           }
           // Note that only the answer the box held as the close was pressed goes, since a message on the thread may have been begun while the close was out.
           if (pressed !== undefined) {

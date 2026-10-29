@@ -31,6 +31,7 @@ import {
   type PullRequestThreadView,
 } from "@luke/features/link-grammar";
 import { formatCount } from "@luke/features/number-format";
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { workingTime } from "@luke/features/time-format";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
@@ -2461,9 +2462,19 @@ function useThreadJumps(input: {
   const gone = jump !== undefined && conversation.kind === PART.LANDED && target === undefined;
   useEffect(() => {
     if (!gone) return;
-    toast({ words: THREAD_REVEAL_WORDS.GONE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+    toast({
+      words: THREAD_REVEAL_WORDS.GONE,
+      tone: STATUS_TONE.DANGER,
+      hold: TOAST_HOLD.FAILED,
+      failure: {
+        surface: FAILURE_SURFACE.PULL_REQUEST_THREAD,
+        cause: FAILURE_CONDITION.GONE,
+        about: { agentId, pullRequest: number },
+        refused: true,
+      },
+    });
     setJump(undefined);
-  }, [gone, toast]);
+  }, [gone, toast, agentId, number]);
   const letGo = useCallback((ask: number) => {
     setJump((was) => (was?.ask === ask ? undefined : was));
   }, []);
@@ -2490,6 +2501,12 @@ function useThreadJumps(input: {
               words: THREAD_REVEAL_WORDS.FILE_GONE,
               tone: STATUS_TONE.DANGER,
               hold: TOAST_HOLD.FAILED,
+              failure: {
+                surface: FAILURE_SURFACE.PULL_REQUEST_THREAD,
+                cause: FAILURE_CONDITION.GONE,
+                about: { agentId, pullRequest: number },
+                refused: true,
+              },
             });
             latestView.current(PULL_REQUEST_VIEW.CONVERSATION);
             start(target.id, PULL_REQUEST_THREAD_VIEW.CONVERSATION);

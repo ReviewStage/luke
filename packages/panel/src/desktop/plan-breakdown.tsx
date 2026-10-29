@@ -1,4 +1,5 @@
 import type { MentionPlace } from "@luke/features/mention-link";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
 import {
   BANNER_LOOK,
@@ -188,7 +189,16 @@ export function PlanBreakdown({
       .onMessage(pilot.id, text, clientKey, [])
       .finally(() => setSending(undefined));
     if ("failure" in reply) {
-      toast({ words: REFUSED_WORDS, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      toast({
+        words: REFUSED_WORDS,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: {
+          surface: FAILURE_SURFACE.PLAN_BREAKDOWN,
+          cause: reply,
+          about: { agentId: pilot.id, taskId: task.id },
+        },
+      });
       return false;
     }
     unsent.current = undefined;

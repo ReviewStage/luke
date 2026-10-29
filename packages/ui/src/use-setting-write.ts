@@ -59,7 +59,8 @@ export function useSettingWrite<Value>(
  * The round trip a switch waits on, answered before it comes. The switch
  * shows the value pressed at once, from a local one, rather than resting
  * until the store answers; a write the store refuses, or whose call
- * rejects, puts the value back and says why through `onRefused`, and the
+ * rejects, puts the value back and says why through `onRefused`, with the
+ * answer or the error that refused it, and the
  * switch is never disabled for it, so nothing locks it. The local value is
  * dropped once the stored one agrees, so the switch then follows the store
  * again, other windows' changes included.
@@ -73,7 +74,7 @@ export function useOptimisticSettingWrite<Value>(
   stored: Value,
   // biome-ignore lint/suspicious/noConfusingVoidType: a draft's switch cannot be refused, so its change answers void
   onChange: (value: Value) => void | Promise<ActionResult>,
-  onRefused: (reason: string) => void,
+  onRefused: (reason: string, cause: unknown) => void,
 ) {
   const [ahead, setAhead] = useState<{ readonly value: Value }>();
   const [saves, setSaves] = useState(0);
@@ -86,16 +87,16 @@ export function useOptimisticSettingWrite<Value>(
     if (!(reply instanceof Promise)) return;
     const write = ++newest.current;
     setAhead({ value });
-    const refused = (reason: string) => {
-      onRefused(reason);
+    const refused = (reason: string, cause: unknown) => {
+      onRefused(reason, cause);
       if (write === newest.current) setAhead(undefined);
     };
     void reply.then(
       (result) => {
         if (result.status === ACTION_RESULT_STATUS.ACCEPTED) setSaves((landed) => landed + 1);
-        else refused(result.reason);
+        else refused(result.reason, result);
       },
-      (error: unknown) => refused(failureWords(error)),
+      (error: unknown) => refused(failureWords(error), error),
     );
   };
   return { value: ahead === undefined ? stored : ahead.value, saves, run };

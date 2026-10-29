@@ -1,3 +1,4 @@
+import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { DownloadIcon, type PaneBarMenu, STATUS_TONE } from "@luke/ui";
 import { FolderTreeIcon, GLYPH } from "@luke/ui/icons";
 import { appPlatform } from "../app-platform.js";
@@ -53,11 +54,12 @@ export function useSaveText(): (name: string, text: string) => Promise<void> {
       .saveFile({ name, text })
       .then(
         () => undefined,
-        () =>
+        (cause: unknown) =>
           show({
             words: "The file could not be saved. Try again.",
             tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
+            failure: { surface: FAILURE_SURFACE.FILE_SAVE, cause },
           }),
       );
 }
@@ -83,8 +85,15 @@ export function useFileMenu({
     readText().then((whole) => {
       if (whole.kind === WHOLE_TEXT.READ) use(whole.text);
       else {
-        const words = whole.kind === WHOLE_TEXT.REFUSED ? REFUSED : UNREAD;
-        show({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+        const refused = whole.kind === WHOLE_TEXT.REFUSED;
+        show({
+          words: refused ? REFUSED : UNREAD,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: refused
+            ? { surface: FAILURE_SURFACE.FILE_READ, cause: FAILURE_CONDITION.REFUSED, refused }
+            : { surface: FAILURE_SURFACE.FILE_READ, cause: FAILURE_CONDITION.UNREAD },
+        });
       }
     });
 

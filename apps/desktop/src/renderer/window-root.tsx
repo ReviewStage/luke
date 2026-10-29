@@ -11,6 +11,7 @@ import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { ACT_PORT, type PreloadBridge } from "@luke/host/bridge";
 import { actPort, installActPort, installAppBridge, openPushStream } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
+import { installShownFailureReporter } from "@luke/panel/failure-report";
 import {
   endWindowSpanOnFirstDraw,
   installPanelSpanRecorder,
@@ -75,8 +76,10 @@ export function mountWindow(
   // the window has drawn (`desktop-sentry.ts`), so no window parses it on
   // its way to its first paint.
   const sentry = startDesktopSentry(sentryOptions);
-  // What the panel times, recorded through the same SDK once it stands.
+  // What the panel times, recorded through the same SDK once it stands, and
+  // every failure it shows, reported through it.
   installPanelSpanRecorder(sentry.recordSpan);
+  installShownFailureReporter(sentry.reportShownFailure);
 
   const rootElement = document.getElementById("root");
   if (!rootElement) throw new Error("Renderer root element is missing");

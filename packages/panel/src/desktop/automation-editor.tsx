@@ -62,6 +62,7 @@ import {
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { clockText, dateOfText, dayAndTimeText, timeZoneNames } from "@luke/features/time-format";
 import {
   SENTRY_LEVEL,
@@ -405,7 +406,16 @@ export function AutomationSwitch({
     write(enabled).then((answer) => {
       const reason = toggleRefusal(answer, enabled);
       if (reason !== undefined) {
-        toast({ words: reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+        toast({
+          words: reason,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: {
+            surface: FAILURE_SURFACE.AUTOMATION_TOGGLE,
+            cause: answer,
+            about: { automationId: automation.id },
+          },
+        });
       }
     });
   };

@@ -26,6 +26,7 @@
     "./sentry-early-reports": "./src/sentry-early-reports.js",
     "./sentry-reporting": "./src/sentry-reporting.js",
     "./sentry-tracing": "./src/sentry-tracing.js",
+    "./shown-failure": "./src/shown-failure.js",
     "./live-wire": "./src/live-wire.js",
     "./transcript-window": "./src/transcript-window.js",
     "./turn-record": "./src/turn-record.js",
