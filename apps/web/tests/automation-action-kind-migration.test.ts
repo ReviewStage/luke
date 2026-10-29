@@ -11,29 +11,32 @@ import { Path } from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 
 /**
- * automation-action-kind-migration.test.ts -- the migration that spells every stored automation's action kind `agent`.
+ * automation-action-kind-migration.test.ts -- the migrations that spell every stored automation's action kind `agent`.
  *
- * Over a database migrated up to it, holding an automation in each spelling
- * an earlier build wrote: once it runs, both say `agent` and keep the rest
- * of their action as it stood; a second run changes nothing. Synthetic
- * accounts throughout.
+ * Over a database migrated up to each, holding an automation in each
+ * spelling an earlier build wrote: once it runs, both say `agent` and keep
+ * the rest of their action as it stood; a second run changes nothing. The
+ * stragglers migration rewrites the rows a release still serving beside the
+ * first wrote as `coding-agent`, so that migration leaves none behind.
+ * Synthetic accounts throughout.
  */
 
 const MIGRATION = "20261029013202_automation_action_kind_agent";
+const STRAGGLERS = "20261029015642_automation_action_kind_agent_stragglers";
 
-/** A migrations folder holding every migration named before `MIGRATION`'s, and none after. */
-const foldersBefore = Effect.gen(function* () {
-  const fileSystem = yield* FileSystem;
-  const path = yield* Path;
-  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-action-kind-" });
-  const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
-    (name) => name.localeCompare(MIGRATION) < 0,
-  );
-  for (const name of names) {
-    yield* fileSystem.copy(path.join(MIGRATIONS_FOLDER, name), path.join(folder, name));
-  }
-  return folder;
-});
+/** A migrations folder holding the migrations whose names `keep` takes, and no other. */
+function foldersWhere(keep: (name: string) => boolean) {
+  return Effect.gen(function* () {
+    const fileSystem = yield* FileSystem;
+    const path = yield* Path;
+    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-action-kind-" });
+    const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(keep);
+    for (const name of names) {
+      yield* fileSystem.copy(path.join(MIGRATIONS_FOLDER, name), path.join(folder, name));
+    }
+    return folder;
+  });
+}
 
 /** Each action as an earlier build stored it, in order. */
 const BEFORE = [
@@ -41,13 +44,13 @@ const BEFORE = [
   { kind: "agent", prompt: "Sweep the flaky tests." },
 ] as const;
 
-it.effect(
-  "every automation's action kind is spelled `agent`, the rest of its action kept, and a second run changes nothing",
-  () =>
+it.effect.each([MIGRATION, STRAGGLERS])(
+  "%s spells every automation's action kind `agent`, the rest of its action kept, and a second run changes nothing",
+  (migration) =>
     Effect.scoped(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        yield* runWebMigrations(yield* foldersBefore);
+        yield* runWebMigrations(yield* foldersWhere((name) => name.localeCompare(migration) < 0));
         yield* Database.use((db) =>
           db.insert(user).values({ id: "dean", name: "dean", email: "dean@luke.test" }),
         );
@@ -60,7 +63,7 @@ it.effect(
           readonly action: unknown;
         }>`select action from automation where organization_id = ${workspaceId} order by name`;
 
-        yield* runWebMigrations();
+        yield* runWebMigrations(yield* foldersWhere((name) => name.localeCompare(migration) <= 0));
 
         const rows = yield* stored;
         assert.deepEqual(
@@ -76,7 +79,7 @@ it.effect(
         const path = yield* Path;
         yield* sql.unsafe(
           yield* fileSystem.readFileString(
-            path.join(MIGRATIONS_FOLDER, MIGRATION, "migration.sql"),
+            path.join(MIGRATIONS_FOLDER, migration, "migration.sql"),
           ),
         );
         assert.deepEqual(yield* stored, rows);
