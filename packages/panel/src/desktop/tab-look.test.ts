@@ -358,7 +358,7 @@ test("a Terminal tab wears its agent's glyph, says Terminal with the agent's nam
   assert.ok(card, "the agent's card is hung");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, WORKING.title);
   assert.equal(
-    [...card.querySelectorAll(".luke-hover-card-note")].at(-1)?.textContent,
+    card.querySelector(".luke-hover-card-row:last-child .luke-hover-card-row-label")?.textContent,
     "Terminal in this agent’s sandbox",
   );
 });

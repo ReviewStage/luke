@@ -27,7 +27,7 @@ import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref.js";
 
 /**
  * agent-automation.test.ts -- an agent an automation's run started says so
- * on its card, "Started by" the automation's clock and name, which hang the
+ * on its card, "Started by" the automation's tile and name, which hang the
  * automation's card and open its page. Synthetic throughout.
  */
 
@@ -157,9 +157,12 @@ async function agentCard(nested = false) {
 
 test("an agent an automation started says it was started by the automation, its clock and name, which a press opens the page of", async () => {
   const { card, opened } = await agentCard();
-  const starter = card.querySelector<HTMLElement>(".actor-words [data-actor-ref]");
+  const starter = card.querySelector<HTMLElement>(".luke-hover-card-row [data-actor-ref]");
   assert.ok(starter, "the card names who started the agent");
-  assert.equal(card.querySelector(".actor-words")?.firstChild?.textContent, "Started by ");
+  assert.match(
+    card.querySelector(".luke-hover-card-row-label")?.textContent ?? "",
+    /^Started by Morning Sentry triage · /u,
+  );
   assert.equal(starter.dataset.kind, "automation");
   assert.equal(starter.textContent, "Morning Sentry triage");
   assert.equal(starter.tagName, "BUTTON");
@@ -172,7 +175,8 @@ test("an agent an automation started says it was started by the automation, its 
 test("the automation's name hangs its card over the agent's: its schedule, whose it is, when it runs next, and how its last run went, with no Open automation, since the name is the way to its page", async () => {
   const { card, opened } = await agentCard();
   hover(
-    card.querySelector(".actor-words [data-actor-ref]") ?? assert.fail("the automation is named"),
+    card.querySelector(".luke-hover-card-row [data-actor-ref]") ??
+      assert.fail("the automation is named"),
   );
   const standing = cards();
   assert.equal(standing.length, 2, "the automation's card hangs over the agent's");
@@ -198,14 +202,14 @@ test("the automation's name hangs its card over the agent's: its schedule, whose
     undefined,
     "the card offers nothing to press",
   );
-  act(() => card.querySelector<HTMLElement>(".actor-words [data-actor-ref]")?.click());
+  act(() => card.querySelector<HTMLElement>(".luke-hover-card-row [data-actor-ref]")?.click());
   assert.deepEqual(opened, [TRIAGE.id]);
 });
 
 test("a place's directory inside the window's, of the same workspace, shares its read rather than asking for a second", async () => {
   const { card } = await agentCard(true);
   assert.equal(
-    card.querySelector(".actor-words [data-actor-ref]")?.textContent,
+    card.querySelector(".luke-hover-card-row [data-actor-ref]")?.textContent,
     "Morning Sentry triage",
   );
   assert.deepEqual(listed, [WORKSPACE.id]);
@@ -224,7 +228,8 @@ test("an automation a GitHub event fires says where on its card, as its row in t
   ];
   const { card } = await agentCard();
   hover(
-    card.querySelector(".actor-words [data-actor-ref]") ?? assert.fail("the automation is named"),
+    card.querySelector(".luke-hover-card-row [data-actor-ref]") ??
+      assert.fail("the automation is named"),
   );
   const automation = cards()[1]?.querySelector("[data-actor-card='automation']");
   assert.equal(

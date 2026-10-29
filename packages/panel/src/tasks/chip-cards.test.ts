@@ -610,7 +610,7 @@ test("a page's chip hangs its title, its version and who showed it, and when it 
 
   assert.equal(page.card, "data-page-card");
   assert.equal(page.name, "Unfurl matrix");
-  assert.equal(page.sub, "Version 3 · Shown by Luke");
+  assert.deepEqual([page.sub, page.detailWords], ["Version 3", ["Shown by Luke"]]);
   assert.ok(page.corner, "the corner says when the page last moved");
   assert.deepEqual([other.name, other.notes], ["Old draft", [PAGE_UNREAD]]);
   // A page id the open plan holds, named on another plan, is not the open plan's page.
@@ -618,7 +618,7 @@ test("a page's chip hangs its title, its version and who showed it, and when it 
   // A page of a plan not open hangs its tab's card all the same, as an Inbox item's bar names it.
   assert.equal(read.card, "data-page-card");
   assert.equal(read.name, "Rollout tracker");
-  assert.equal(read.sub, "Shown by Luke");
+  assert.deepEqual([read.sub, read.detailWords], [undefined, ["Shown by Luke"]]);
 });
 
 test("a page's chip of the open plan the window holds no pages for reads the plan's pages as it is hung, and says it can't be read once they lack it", async () => {
@@ -659,7 +659,7 @@ test("a chip of a page an agent on no task showed hangs the same card as a plan'
   const page = await cardOf(shown);
   assert.equal(page.card, "data-page-card");
   assert.equal(page.name, "Flake ledger");
-  assert.equal(page.sub, "Version 2 · Shown by Sweep the flaky tests");
+  assert.deepEqual([page.sub, page.detailWords], ["Version 2", ["Shown by Sweep the flaky tests"]]);
   assert.ok(page.corner, "the corner says when the page last moved");
   assert.equal(
     document.querySelector(".luke-tooltip-card .luke-page-thumb-frame")?.getAttribute("src"),
@@ -786,7 +786,7 @@ test("an automation's chip hangs its card, who made it and when at its foot, the
   assert.equal(card.name, "Nightly sweep");
   assert.match(card.sub ?? "", / · Acme$/u, "whose it is joins what fires it");
   assert.equal(card.corner, undefined);
-  assert.deepEqual(card.detailWords, ["Created by Sam Okafor · Oct 25"]);
+  assert.deepEqual(card.detailWords, ["Created by Sam Okafor · 1d ago"]);
   assert.equal(reads(), 1);
 });
 
@@ -802,7 +802,7 @@ test("a member's and an automation's chips under another workspace's link are re
 
   assert.deepEqual([member.name, member.sub], ["Sam Okafor", "sam@example.com · Member"]);
   assert.equal(audit.name, "Weekly audit");
-  assert.deepEqual(audit.detailWords, ["Created by Priya Nair · Oct 25"], "its maker is Beta's");
+  assert.deepEqual(audit.detailWords, ["Created by Priya Nair · 1d ago"], "its maker is Beta's");
 });
 
 test("a member's chip under a link naming its workspace by id, as one with no slug is written, is read as that workspace holds them", async () => {
@@ -829,7 +829,7 @@ test("a channel's chip hangs its card: its bare name, its kind and how many thre
     [standing.name, standing.sub, standing.corner, standing.notes],
     ["billing", "Channel · 42 threads", "3m", ["Invoices, plans, and the payment provider"]],
   );
-  assert.deepEqual(standing.detailWords, ["Created by Sam Okafor · Oct 25"]);
+  assert.deepEqual(standing.detailWords, ["Created by Sam Okafor · 1d ago"]);
   assert.equal(project.sub, "Project · 12 threads");
 });
 
