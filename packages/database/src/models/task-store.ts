@@ -916,7 +916,7 @@ const hasChildren = SqlSchema.findOneOption({
  * the repository it already holds, spelled as GitHub spells it, may be named.
  */
 const treeRepositoryHeld = Effect.fnUntraced(function* (
-  locked: TaskRow,
+  locked: Pick<TaskRow, "id" | "repository" | "parentTaskId">,
   asked: string | null,
 ): Effect.fn.Return<void, TaskStoreFailure | TaskTreeRepositoryLocked, DatabaseServices> {
   const held = locked.repository;
@@ -926,6 +926,31 @@ const treeRepositoryHeld = Effect.fnUntraced(function* (
     locked.parentTaskId !== null || Option.isSome(yield* hasChildren({ taskId: locked.id }));
   if (inTree) return yield* new TaskTreeRepositoryLocked();
 });
+
+/** The task row as it stands, unlocked: what a caller reads to refuse a change before it stops anything. */
+const readTaskRow = SqlSchema.findOneOption({
+  Request: TaskKeySchema,
+  Result: TaskRowSchema,
+  execute: ({ userId, taskId }) =>
+    Database.use((db) => db.select(TASK_COLUMNS).from(task).where(reachableTask(userId, taskId))),
+});
+
+/**
+ * Refuses, with `TaskTreeRepositoryLocked`, a repository another than the
+ * one a task in a tree holds, as `updateTaskCommitted` does under the task's
+ * lock; a caller that stops work before it writes asks first, so a refused
+ * change stops nothing. A task the account does not reach passes, for the
+ * write to answer as not found.
+ */
+export function checkTreeRepository(
+  userId: string,
+  taskId: string,
+  asked: string | null,
+): Effect.Effect<void, TaskStoreFailure | TaskTreeRepositoryLocked, DatabaseServices> {
+  return Effect.flatMap(readTaskRow({ userId, taskId }), (row) =>
+    Option.isNone(row) ? Effect.void : treeRepositoryHeld(row.value, asked),
+  );
+}
 
 /** The columns of the row a change writes: the pin is the reader's own and none of the row's. */
 const TaskColumnChangesSchema = Schema.Struct({
