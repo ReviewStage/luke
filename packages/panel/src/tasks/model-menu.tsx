@@ -62,8 +62,9 @@ import { useRepositoryRemedy } from "./repository-remedy.js";
  * the model has none or the service withholds it, saying which, which
  * leaves the menu open. A model whose provider no subscription or API key
  * of the account's pays for says "Connect Claude" or "Connect Codex" at its
- * row's end, and its pick closes the menu and lands on that harness's row
- * in Settings › Agents rather than choosing it. On an automation's
+ * row's end, and its pick, or Fast's press where it is the choice, closes
+ * the menu and lands on that harness's row in Settings › Agents rather
+ * than choosing it. On an automation's
  * menu, whose choice a new agent starts on and the reader's own
  * credentials pay for, a choice that is such a model, as a new account's
  * Claude default is on an OpenAI key alone, has a Connect row head the
@@ -235,6 +236,9 @@ export function ModelMenu(props: {
           on: read.fast,
           onToggle: () => {
             if (offered === undefined) return;
+            // A model nothing pays for is never chosen, fast or not: the press goes to connect it, as its pick does.
+            const missing = modelConnectFailure(offered.model);
+            if (missing !== undefined) return connect(missing);
             const next = choiceAt(choiceModelId(offered, !read.fast), chosen.effort);
             if (next !== undefined) onChoose(next);
           },
