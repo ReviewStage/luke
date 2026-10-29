@@ -10,22 +10,23 @@ import type {
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type { AppSettingsView } from "@luke/settings/wire";
 import { TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
-import { voiceAttentionNote } from "@luke/ui/microphone-access";
 import type { ActionResult } from "@luke/wire";
 import { AccountSection } from "./account-section.js";
+import { AgentsPage } from "./agents-page.js";
 import { AppearanceSection } from "./appearance-page.js";
-import { CodingAgentsPage } from "./coding-agents-page.js";
 import { ExperimentalPage } from "./experimental-page.js";
+import { HostsSection } from "./hosts-section.js";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page.js";
 import { LinksSection } from "./links-section.js";
 import { MacCommandsSection } from "./mac-commands-section.js";
 import { MemorySection } from "./memory-page.js";
+import { MicrophoneSection } from "./microphone-section.js";
 import { PrivacySection } from "./privacy-section.js";
 import { settingsRowsInput, shownWorkspace } from "./settings-rows.js";
 import { WindowShortcutSections } from "./shortcuts-page.js";
 import { SkillsPage } from "./skills-page.js";
+import { TasksSection } from "./tasks-section.js";
 import { UpdatesSection } from "./updates.js";
-import { VoiceSection } from "./voice-page.js";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page.js";
 import { useSettingsWrites } from "./writes.js";
 
@@ -44,7 +45,7 @@ export interface SettingsPanelProps {
   onDeleteAccount: () => Promise<ActionResult>;
   /**
    * Which settings page is showing. Held by the app rather than here because
-   * a shortcut, a voice request, or a button elsewhere in the window turns it.
+   * a shortcut or a button elsewhere in the window turns it.
    */
   view: SettingsView;
   onViewChange: (view: SettingsView) => void;
@@ -56,21 +57,6 @@ export interface SettingsPanelProps {
   capabilities: readonly HostCapability[];
   /** The workspaces the Workspace page shows, drawn while an account is signed in. */
   workspace?: WorkspaceSettingsControl;
-}
-
-/**
- * Why the Voice page's row in a list of pages wears its mark, or nothing while
- * voice is fully set up. Judged from the panel's props rather than on the Voice
- * page because the mark has to stand while that page is not drawn: it is the
- * list saying a page one press away still needs a hand. A voice that cannot
- * run yet is signing in's to fix, not this page's, so the row marks only a
- * microphone still ungranted for a voice that can run. The Settings sidebar
- * reads it, and the Voice page wears the same mark on the row it means.
- */
-export function voicePageAttention(microphone: MicrophoneControl): string | undefined {
-  return microphone.voiceAvailable
-    ? voiceAttentionNote({ voiceAvailable: true, status: microphone.status })
-    : undefined;
 }
 
 /**
@@ -95,7 +81,7 @@ export function SettingsPanel({
   integrationsFilter?: IntegrationsFilter | undefined;
 }): React.JSX.Element {
   const writes = useSettingsWrites();
-  const panelView = settingsRowsInput({ settings, microphone, account, capabilities });
+  const panelView = settingsRowsInput({ settings, account, capabilities });
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
   // The shared settings page frames these, spacing them as sections.
   return (
@@ -109,6 +95,7 @@ export function SettingsPanel({
               onDeleteAccount={onDeleteAccount}
             />
             {panelView ? <LinksSection view={panelView} writes={writes} /> : null}
+            {panelView ? <TasksSection view={panelView} writes={writes} /> : null}
             {panelView ? <PrivacySection view={panelView} writes={writes} /> : null}
           </>
         ) : (
@@ -136,9 +123,9 @@ export function SettingsPanel({
         />
       ) : null}
 
-      {view === SETTINGS_VIEW.CODING_AGENTS ? (
-        <CodingAgentsPage signedIn={signedIn} view={panelView} writes={writes} />
-      ) : null}
+      {view === SETTINGS_VIEW.AGENTS ? <AgentsPage signedIn={signedIn} /> : null}
+
+      {view === SETTINGS_VIEW.HOSTS ? <HostsSection signedIn={signedIn} /> : null}
 
       {view === SETTINGS_VIEW.INTEGRATIONS ? (
         <IntegrationsSection signedIn={signedIn} filter={integrationsFilter} />
@@ -152,21 +139,18 @@ export function SettingsPanel({
         </Text>
       )}
 
-      {view === SETTINGS_VIEW.VOICE && panelView ? (
-        <VoiceSection
-          view={panelView}
-          writes={writes}
-          microphone={microphone}
-          microphoneOffered={capabilities.includes(HOST_CAPABILITY.MICROPHONE)}
-        />
-      ) : null}
-
       {view === SETTINGS_VIEW.APPEARANCE && panelView ? (
         <AppearanceSection view={panelView} writes={writes} />
       ) : null}
 
       {view === SETTINGS_VIEW.THIS_MAC && panelView ? (
-        <MacCommandsSection view={panelView} writes={writes} notifications={notifications} />
+        <>
+          <MacCommandsSection view={panelView} writes={writes} notifications={notifications} />
+          {/* Dictation's microphone, on a platform whose microphone Luke asks for itself. */}
+          {capabilities.includes(HOST_CAPABILITY.MICROPHONE) ? (
+            <MicrophoneSection view={panelView} writes={writes} microphone={microphone} />
+          ) : null}
+        </>
       ) : null}
 
       {view === SETTINGS_VIEW.EXPERIMENTAL ? (

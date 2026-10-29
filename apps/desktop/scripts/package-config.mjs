@@ -7,13 +7,13 @@ export const NOTICE_RESOURCE_NAME = "LUKE-NOTICE.txt";
 // This is the sentence macOS shows when it asks for the microphone, so it is
 // what consent is given against. It has to say where the audio goes.
 export const MICROPHONE_USAGE_DESCRIPTION =
-  "Luke uses the microphone for spoken conversation. Audio from a turn you start is sent to OpenAI to answer it, and is never recorded or written to disk.";
-// The sentence macOS shows when it asks whether Luke may speak to Music or
-// Spotify, so it is what consent is given against. One short sentence saying
-// what is done to them; the helper raising the dialog only mid-conversation
-// over audibly playing music is what makes it land in context.
+  "Luke uses the microphone for dictation. What you dictate is sent to OpenAI to be transcribed.";
+// The sentence macOS shows when it asks whether Luke may control another app,
+// so it is what consent is given against. Note that only a command an agent
+// runs on this Mac (an `osascript` through luke-host, which inherits the
+// app's entitlements) can raise it.
 export const APPLE_EVENTS_USAGE_DESCRIPTION =
-  "Luke turns Music and Spotify down while you talk, and back up afterwards";
+  "Luke asks before a command an agent runs on this Mac controls another app.";
 // The bundle carries one icon for every mode, so the icns is cut from the dark
 // tile — space black reads on either desktop. The running app swaps the Dock
 // image between the light and dark tiles itself; see src/main/window/dock-icon.ts.

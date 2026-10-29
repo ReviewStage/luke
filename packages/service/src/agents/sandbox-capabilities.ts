@@ -11,9 +11,8 @@
  * command through it. This drop is the boundary instead: a Terminal tab's
  * shells (`terminal/tmux.ts`), the commands a coding agent and its workers
  * run (`coder-host/shell.ts`), the native runner, which root drops to the
- * `agent` user (`coder-host/runner-sessions.ts`), the agent's browser
- * (`browser/sandbox-browser.ts`), and `show_code`'s reads of the checkout
- * (`../tasks/show-code.ts`) start under `setpriv` with the
+ * `agent` user (`coder-host/runner-sessions.ts`), and the agent's browser
+ * (`browser/sandbox-browser.ts`) start under `setpriv` with the
  * inheritable, ambient, and bounding sets emptied: they run as the same user
  * on the same files, and can neither use a capability nor gain one back,
  * through sudo or any other setuid program: with the bounding set empty,

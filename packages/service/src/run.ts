@@ -10,10 +10,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import type { Effect } from "effect";
 import type { HttpClient } from "effect/http";
 import type { GitHubApp } from "./github/github-app.js";
-import type {
-  IntegrationConnect,
-  WorkspaceLinearConnect,
-} from "./integrations/integration-connect.js";
+import type { IntegrationConnect } from "./integrations/integration-connect.js";
 
 /**
  * The edge's own runner as a composition below it is handed one: a
@@ -30,8 +27,7 @@ export type WebAgentServices =
   | DatabaseServices
   | HttpClient.HttpClient
   | GitHubApp
-  | IntegrationConnect
-  | WorkspaceLinearConnect;
+  | IntegrationConnect;
 
 /**
  * The edge's own runner as an eve root's doors are handed one, on the same

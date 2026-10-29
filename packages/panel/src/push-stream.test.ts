@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { LIVE_SESSION_PHASE } from "@luke/gateway";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import {
   type ActSender,
   actPortHandlerOf,
@@ -7,7 +7,7 @@ import {
   WindowPushes,
 } from "@luke/host/act-port";
 import { PUSH } from "@luke/host/contract";
-import { VOICE_COMMAND } from "@luke/voice/voice-view";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/message-port";
 import { Context } from "effect";
@@ -25,8 +25,11 @@ import { stateWith } from "./testing/app-state.js";
  */
 
 const WINDOW = Symbol("window");
-const PANEL: ActSender = { sender: WINDOW, panel: true, voice: false, call: false };
-const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
+const PANEL: ActSender = { sender: WINDOW, panel: true };
+
+/** A Luke link to a task, and to another, as the system hands them the app. */
+const LINK = { workspace: "workspace-1", place: { kind: LINK_PLACE.TASK, planId: "task-1" } };
+const OTHER_LINK = { ...LINK, place: { kind: LINK_PLACE.TASK, planId: "task-2" } };
 
 const opened: MessagePort[] = [];
 
@@ -79,47 +82,37 @@ async function eventually(holds: () => boolean): Promise<void> {
 
 it("each push reaches the listeners on its own method, with the payload main pushed, and no other", async () => {
   const main = mainProcess();
-  const voice = main.page(VOICE);
-  await voice.opened;
-  const live = hearing<unknown>();
-  const talk = hearing<unknown>();
-  const command = hearing<unknown>();
-  voice.listeners.onVoiceLiveSessionChanged(live.hear);
-  voice.listeners.onTasksTalk(talk.hear);
-  voice.listeners.onVoiceCommand(command.hear);
+  const panel = main.page(PANEL);
+  await panel.opened;
+  const commands = hearing<unknown>();
+  const links = hearing<unknown>();
+  panel.listeners.onMenuCommand(commands.hear);
+  panel.listeners.onShowLink(links.hear);
 
-  main.pushes.push(WINDOW, PUSH.VOICE_LIVE_SESSION_CHANGED, {
-    phase: LIVE_SESSION_PHASE.STARTED,
-    sessionId: "s-1",
-  });
-  main.pushes.push(WINDOW, PUSH.TASKS_TALK, { taskId: "task-1", agentId: "agent-1" });
-  main.pushes.push(WINDOW, PUSH.VOICE_COMMAND, { command: VOICE_COMMAND.STOP_SPEAKING });
-  await Promise.all([live.until(1), talk.until(1), command.until(1)]);
+  main.pushes.push(WINDOW, PUSH.MENU_COMMAND, APP_COMMAND.SETTINGS);
+  main.pushes.push(WINDOW, PUSH.SHOW_LINK, LINK);
+  await Promise.all([commands.until(1), links.until(1)]);
 
-  assert.deepEqual(live.heard, [{ phase: LIVE_SESSION_PHASE.STARTED, sessionId: "s-1" }]);
-  assert.deepEqual(talk.heard, [{ taskId: "task-1", agentId: "agent-1" }]);
-  assert.deepEqual(command.heard, [{ command: VOICE_COMMAND.STOP_SPEAKING }]);
+  assert.deepEqual(commands.heard, [APP_COMMAND.SETTINGS]);
+  assert.deepEqual(links.heard, [LINK]);
 });
 
-it("a call's press is never overtaken by the command sent after it, even behind a burst of the call window's moves", async () => {
+it("a link is never overtaken by the command sent after it, even behind a burst of commands", async () => {
   const main = mainProcess();
   const panel = main.page(PANEL);
   await panel.opened;
-  const keys = hearing<string>();
-  const moves = hearing<unknown>();
-  panel.listeners.onCallWindowMoved(moves.hear);
-  panel.listeners.onTasksTalk(() => keys.hear("talk"));
-  panel.listeners.onVoiceCommand(() => keys.hear("command"));
+  const heard = hearing<unknown>();
+  panel.listeners.onMenuCommand(heard.hear);
+  panel.listeners.onShowLink(() => heard.hear("link"));
 
-  for (let move = 0; move < 200; move += 1) {
-    main.pushes.push(WINDOW, PUSH.CALL_WINDOW_MOVED, undefined);
+  for (let press = 0; press < 200; press += 1) {
+    main.pushes.push(WINDOW, PUSH.MENU_COMMAND, APP_COMMAND.TOGGLE_SIDEBAR);
   }
-  main.pushes.push(WINDOW, PUSH.TASKS_TALK, { taskId: "task-1", agentId: "agent-1" });
-  main.pushes.push(WINDOW, PUSH.VOICE_COMMAND, { command: VOICE_COMMAND.TOGGLE_MICROPHONE });
-  await keys.until(2);
+  main.pushes.push(WINDOW, PUSH.SHOW_LINK, LINK);
+  main.pushes.push(WINDOW, PUSH.MENU_COMMAND, APP_COMMAND.SETTINGS);
+  await heard.until(202);
 
-  assert.deepEqual(keys.heard, ["talk", "command"]);
-  assert.equal(moves.heard.length, 200);
+  assert.deepEqual(heard.heard.slice(-2), ["link", APP_COMMAND.SETTINGS]);
 });
 
 it("a document pushed the moment the stream opens is heard, and a burst of them is heard once, as the newest", async () => {
@@ -128,13 +121,13 @@ it("a document pushed the moment the stream opens is heard, and a burst of them 
   const versions = hearing<number>();
   const shown = hearing<unknown>();
   panel.listeners.onAppState((delivery) => versions.hear(delivery.version));
-  panel.listeners.onShowAgent(shown.hear);
+  panel.listeners.onShowLink(shown.hear);
   await panel.opened;
 
   for (const version of [1, 2, 3]) {
     main.pushes.pushState(WINDOW, stateWith({}, { version }));
   }
-  main.pushes.push(WINDOW, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
+  main.pushes.push(WINDOW, PUSH.SHOW_LINK, LINK);
   await shown.until(1);
 
   assert.deepEqual(versions.heard, [3]);
@@ -145,14 +138,14 @@ it("a payload its push's guard refuses is dropped, and the pushes after it still
   const panel = main.page(PANEL);
   await panel.opened;
   const shown = hearing<unknown>();
-  panel.listeners.onShowAgent(shown.hear);
+  panel.listeners.onShowLink(shown.hear);
 
   // SAFETY: a payload main's own types would refuse, standing for one a bug let through.
-  main.pushes.push(WINDOW, PUSH.SHOW_AGENT, { agent: "agent-1" } as never);
-  main.pushes.push(WINDOW, PUSH.SHOW_AGENT, { taskId: null, agentId: "agent-1" });
+  main.pushes.push(WINDOW, PUSH.SHOW_LINK, { workspace: "workspace-1" } as never);
+  main.pushes.push(WINDOW, PUSH.SHOW_LINK, LINK);
   await shown.until(1);
 
-  assert.deepEqual(shown.heard, [{ taskId: null, agentId: "agent-1" }]);
+  assert.deepEqual(shown.heard, [LINK]);
 });
 
 it("a listener that unsubscribed hears nothing more, and one that throws keeps no other from hearing", async () => {
@@ -161,21 +154,18 @@ it("a listener that unsubscribed hears nothing more, and one that throws keeps n
   await panel.opened;
   const kept = hearing<unknown>();
   const dropped = hearing<unknown>();
-  panel.listeners.onShowAgent(() => {
+  panel.listeners.onShowLink(() => {
     throw new Error("a listener's own failure");
   });
-  const stop = panel.listeners.onShowAgent(dropped.hear);
-  panel.listeners.onShowAgent(kept.hear);
+  const stop = panel.listeners.onShowLink(dropped.hear);
+  panel.listeners.onShowLink(kept.hear);
   stop();
 
-  main.pushes.push(WINDOW, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
-  main.pushes.push(WINDOW, PUSH.SHOW_AGENT, { taskId: "task-2", agentId: "agent-1" });
+  main.pushes.push(WINDOW, PUSH.SHOW_LINK, LINK);
+  main.pushes.push(WINDOW, PUSH.SHOW_LINK, OTHER_LINK);
   await kept.until(2);
 
-  assert.deepEqual(kept.heard, [
-    { taskId: "task-1", agentId: "agent-1" },
-    { taskId: "task-2", agentId: "agent-1" },
-  ]);
+  assert.deepEqual(kept.heard, [LINK, OTHER_LINK]);
   assert.deepEqual(dropped.heard, []);
 });
 
@@ -188,10 +178,7 @@ it("a window that closes leaves no listener in main, and a push to it is dropped
   panel.close();
   await eventually(() => !main.pushes.listening(WINDOW));
 
-  assert.equal(
-    main.pushes.push(WINDOW, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" }),
-    false,
-  );
+  assert.equal(main.pushes.push(WINDOW, PUSH.SHOW_LINK, LINK), false);
 });
 
 it("a reloaded window is heard on its new page, and leaves no listener once that page closes too", async () => {
@@ -201,12 +188,12 @@ it("a reloaded window is heard on its new page, and leaves no listener once that
   const after = main.page(PANEL);
   await after.opened;
   const shown = hearing<unknown>();
-  after.listeners.onShowAgent(shown.hear);
+  after.listeners.onShowLink(shown.hear);
 
   before.close();
-  main.pushes.push(WINDOW, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
+  main.pushes.push(WINDOW, PUSH.SHOW_LINK, LINK);
   await shown.until(1);
-  assert.deepEqual(shown.heard, [{ taskId: "task-1", agentId: "agent-1" }]);
+  assert.deepEqual(shown.heard, [LINK]);
 
   after.close();
   await eventually(() => !main.pushes.listening(WINDOW));

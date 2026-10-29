@@ -28,7 +28,6 @@ describe("the readiness script", () => {
     ["a skeleton", '<div data-box class="luke-skeleton"></div>'],
     ["a spinner", '<span data-box class="luke-spinner" role="status"></span>'],
     ["a busy region", '<section data-box aria-busy="true"></section>'],
-    ["Excalidraw's loading line", '<div data-box class="LoadingMessage">Loading scene…</div>'],
   ])("waits on %s", (_name, html) => {
     expect(readyWith(html)).toBe(false);
   });

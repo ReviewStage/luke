@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
   type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -14,14 +14,13 @@ import { act, createElement, Fragment, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
-import { type AgentActions, rowDoors, useAgentActions } from "./agent-actions.js";
+import { agentsControl } from "../testing/tasks-control.js";
+import { type AgentActions, agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
 import { SidebarAgent } from "./sidebar-agent.js";
-import { contentActionGroups } from "./strip-tabs.js";
 
 /**
  * sidebar-agent.test.ts -- an agent with no task, as a row among the sidebar's tasks, offers every action its tab and its page offer but those `NOT_ON_A_ROW` names, and is acted on as a task's row is: archived from its right-click at once while it rests, read again by its own id first, asked first while it works, and brought back by Unarchive once archived; renamed in place; deleted for good once asked, last and alone in its menu; and hanging its card while rested on.
@@ -39,7 +38,7 @@ const RUN: TasklessAgent = {
   effort: "high",
   title: "Remove the stale copy",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
   automationName: "Copy sweep",
   automationId: "7d6c5b4a-3f2e-4d1c-8b0a-9f8e7d6c5b4a",
@@ -79,12 +78,12 @@ beforeEach(() => {
   window.localStorage.clear();
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
+      if (request.kind === ACT_KIND.AGENTS_PAGE) {
         const { automationId, activityAt: _at, ...agent } = standing;
         const value = { agent: { ...agent, automationId } };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_SEEN) {
+      if (request.kind === ACT_KIND.AGENTS_SEEN) {
         seen.push(request.payload.agentId);
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
       }
@@ -102,10 +101,10 @@ afterEach(() => {
 /** The row of `agent`, drawn among the sidebar's tasks, whose archive is heard into `archives`. */
 function mount(
   agent: TasklessAgent,
-  pullRequests: CodingAgentsControl["pullRequests"] = new Map(),
+  pullRequests: AgentsControl["pullRequests"] = new Map(),
   unread = false,
 ): HTMLElement {
-  const agents = codingAgentsControl({
+  const agents = agentsControl({
     me: ME,
     pullRequests,
     onArchive: (agentId, archived) => {
@@ -164,11 +163,16 @@ function rightClick(row: HTMLElement): HTMLButtonElement[] {
   return [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
 }
 
+/** What a menu item says, its chord left out. */
+function wordsOf(item: Element | undefined): string | null | undefined {
+  return item?.querySelector(".luke-menu-item-label")?.textContent ?? item?.textContent;
+}
+
 /** The item under `label` among those offered, or a failure saying it is not offered. */
 function item(items: readonly HTMLButtonElement[], label: string): HTMLButtonElement {
   return (
-    items.find((each) => each.textContent === label) ??
-    assert.fail(`offers ${label}: ${JSON.stringify(items.map((each) => each.textContent))}`)
+    items.find((each) => wordsOf(each) === label) ??
+    assert.fail(`offers ${label}: ${JSON.stringify(items.map((each) => wordsOf(each)))}`)
   );
 }
 
@@ -183,8 +187,8 @@ test("an agent at rest is archived from its row's right-click at once, once its 
 });
 
 test("the reader's own working agent is archived at once from its row, asking nothing, since its toast's Undo brings it back", async () => {
-  standing = { ...RUN, status: CODING_AGENT_STATUS.RUNNING };
-  const row = mount({ ...RUN, status: CODING_AGENT_STATUS.RUNNING });
+  standing = { ...RUN, status: AGENT_STATUS.RUNNING };
+  const row = mount({ ...RUN, status: AGENT_STATUS.RUNNING });
   const archive = item(rightClick(row), "Archive");
   await act(async () => archive.click());
   await settle();
@@ -194,7 +198,7 @@ test("the reader's own working agent is archived at once from its row, asking no
 });
 
 test("a teammate's agent the list read at rest but whose page reads it working is asked about first, and archived only once asked", async () => {
-  standing = { ...RUN, startedBy: ADA, status: CODING_AGENT_STATUS.RUNNING };
+  standing = { ...RUN, startedBy: ADA, status: AGENT_STATUS.RUNNING };
   const row = mount({ ...RUN, startedBy: ADA });
   const archive = item(rightClick(row), "Archive");
   await act(async () => archive.click());
@@ -202,7 +206,7 @@ test("a teammate's agent the list read at rest but whose page reads it working i
 
   assert.deepEqual(archives, []);
   const stop = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
-    (each) => each.textContent === "Stop and archive",
+    (each) => wordsOf(each) === "Stop and archive",
   );
   assert.ok(stop, "the archive asks first");
   await act(async () => stop.click());
@@ -214,7 +218,7 @@ test("a teammate's agent the list read at rest but whose page reads it working i
 test("an archived agent's row offers Unarchive in Archive's place and no pin, and Unarchive brings it back", async () => {
   const row = mount({ ...RUN, archivedAt: 3 });
   const items = rightClick(row);
-  const labels = items.map((each) => each.textContent);
+  const labels = items.map((each) => wordsOf(each));
   assert.ok(!labels.includes("Archive"));
   assert.ok(!labels.includes("Pin"));
   await act(async () => item(items, "Unarchive").click());
@@ -284,7 +288,7 @@ test("a draft waiting in the agent's box marks its row with the Draft pencil whi
     const container = document.createElement("div");
     document.body.append(container);
     const held = createRoot(container);
-    const agents = codingAgentsControl({});
+    const agents = agentsControl({});
     act(() =>
       held.render(
         onRegistry(
@@ -338,11 +342,15 @@ test("the row's card says the agent last moved when its row does, the end of its
   restOn(press);
 
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
-  const corner = card?.querySelector(".luke-hover-card-corner")?.textContent ?? "";
   assert.equal(
-    corner,
-    "#42 · 2m",
-    "its pull request, and its run's end rather than its start three days ago",
+    card?.querySelector(".luke-hover-card-corner")?.textContent,
+    "2m",
+    "its run's end rather than its start three days ago",
+  );
+  assert.equal(
+    card?.querySelector("[data-pull-request-mark]")?.closest(".luke-hover-card-row")?.textContent,
+    "#42 Remove the stale copy",
+    "its pull request",
   );
 });
 
@@ -361,8 +369,8 @@ test("the row's card shows a pull request read since the list was, before the li
   const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
   restOn(press);
 
-  const corner = document.querySelector(".luke-tooltip-card .luke-hover-card-corner");
-  assert.match(corner?.textContent ?? "", /^#43/u);
+  const mark = document.querySelector(".luke-tooltip-card [data-pull-request-mark]");
+  assert.match(mark?.closest(".luke-hover-card-row")?.textContent ?? "", /^#43/u);
 });
 
 /** Presses `label` in the row's right-click menu. */
@@ -376,11 +384,11 @@ function heard(row: HTMLElement): string {
   return row.textContent ?? "";
 }
 
-test("an agent's row offers Mark as unread after Copy link and before Rename, and the mark by hand reads it unread, as a task's row does", async () => {
+test("an agent's row offers Mark as unread beside Rename, after Copy link, and the mark by hand reads it unread, as a task's row does", async () => {
   const row = mount(RUN);
-  const labels = rightClick(row).map((each) => each.textContent);
-  assert.ok(labels.indexOf("Mark as unread") > labels.indexOf("Copy link"));
-  assert.ok(labels.indexOf("Mark as unread") < labels.indexOf("Rename"));
+  const labels = rightClick(row).map((each) => wordsOf(each));
+  assert.ok(labels.indexOf("Rename") > labels.indexOf("Copy link"));
+  assert.equal(labels.indexOf("Mark as unread"), labels.indexOf("Rename") + 1);
   assert.ok(!heard(row).includes("(unread)"));
 
   await choose(row, "Mark as unread");
@@ -390,7 +398,7 @@ test("an agent's row offers Mark as unread after Copy link and before Rename, an
   assert.deepEqual(JSON.parse(window.localStorage.getItem("luke.taskLooks") ?? "null"), {
     [AGENT_ID]: { unread: true },
   });
-  assert.ok(rightClick(row).some((each) => each.textContent === "Mark as read"));
+  assert.ok(rightClick(row).some((each) => wordsOf(each) === "Mark as read"));
 });
 
 test("Mark as read on an agent marked unread by hand reads it again, in the store a task's marks are kept in", async () => {
@@ -404,7 +412,7 @@ test("Mark as read on an agent marked unread by hand reads it again, in the stor
   assert.deepEqual(JSON.parse(window.localStorage.getItem("luke.taskLooks") ?? "null"), {
     [AGENT_ID]: RUN.activityAt,
   });
-  assert.ok(rightClick(row).some((each) => each.textContent === "Mark as unread"));
+  assert.ok(rightClick(row).some((each) => wordsOf(each) === "Mark as unread"));
 });
 
 test("an agent whose turn ended unseen offers Mark as read, which clears main's unseen dot and moves the mark to its row's time", async () => {
@@ -422,7 +430,7 @@ test("an agent whose turn ended unseen offers Mark as read, which clears main's 
 
 test("an archived agent's row offers the read mark too, as a task's does", () => {
   const row = mount({ ...RUN, archivedAt: 3 });
-  assert.ok(rightClick(row).some((each) => each.textContent === "Mark as unread"));
+  assert.ok(rightClick(row).some((each) => wordsOf(each) === "Mark as unread"));
 });
 
 /** The open dialog's button with these words, or a failure saying it offers none. */
@@ -431,7 +439,7 @@ function dialogAnswer(words: string): HTMLButtonElement {
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("a dialog asks");
   return (
     [...question.querySelectorAll<HTMLButtonElement>("button")].find(
-      (each) => each.textContent === words,
+      (each) => wordsOf(each) === words,
     ) ?? assert.fail(`the dialog offers ${words}`)
   );
 }
@@ -439,7 +447,7 @@ function dialogAnswer(words: string): HTMLButtonElement {
 test("Permanently delete stands last and alone in the row's right-click, asks first naming the agent, and once answered deletes it and leaves its page", async () => {
   const row = mount(RUN);
   const items = rightClick(row);
-  assert.equal(items.at(-1)?.textContent, "Permanently delete");
+  assert.equal(wordsOf(items.at(-1)), "Permanently delete");
   act(() => item(items, "Permanently delete").click());
   await settle();
 
@@ -484,7 +492,7 @@ function OfferedActions({
   agent: TasklessAgent;
   onActions: (actions: AgentActions) => void;
 }): null {
-  const actions = useAgentActions(agent, codingAgentsControl({}), {
+  const actions = useAgentActions(agent, agentsControl({}), {
     label: agent.title ?? "",
     shown: true,
     terminals: { onOpenTerminal: () => undefined },
@@ -513,8 +521,7 @@ function sharedOnRow(agent: TasklessAgent): string[] {
   );
   act(() => held.unmount());
   const doors = (offered ?? assert.fail("the actions were offered")).doors;
-  const tab = { chosen: false, onClose: undefined, onCloseOthers: undefined, pin: undefined };
-  return contentActionGroups({ ...tab, ...rowDoors(doors) })
+  return agentMenuGroups(rowDoors(doors))
     .flat()
     .map((each) => each.label);
 }
@@ -523,7 +530,7 @@ test("every action an agent's tab and page offer stands in its row's right-click
   for (const agent of [RUN, { ...RUN, archivedAt: 3 }]) {
     const shared = sharedOnRow(agent);
     const row = mount(agent);
-    const labels = rightClick(row).map((each) => each.textContent);
+    const labels = rightClick(row).map((each) => wordsOf(each));
     act(() => root?.unmount());
     root = undefined;
     document.body.innerHTML = "";
@@ -538,13 +545,26 @@ test("every action an agent's tab and page offer stands in its row's right-click
   }
 });
 
+test("an agent's row draws the one agent menu in its order: Rename and the read mark, then Pin, then Archive, then Permanently delete alone, Show details where the row's menu puts it; Copy link stands nowhere under no workspace", () => {
+  const row = mount(RUN);
+  const labels = rightClick(row).map((each) => each.textContent);
+  assert.deepEqual(labels, [
+    "Rename",
+    "Mark as unreadU",
+    "PinP",
+    "Archive",
+    "Show details⌥↓",
+    "Permanently delete",
+  ]);
+});
+
 test("an agent row's ⋯ opens the menu its right-click does, the ⋯ a Tab stop after its press", () => {
   const row = mount(RUN);
   const more = row.querySelector<HTMLButtonElement>('button[aria-label="Agent actions"]');
   assert.ok(more, "the row draws a ⋯");
   assert.equal(more.tabIndex, 0);
   const labels = () =>
-    [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent);
+    [...document.querySelectorAll('[role="menuitem"]')].map((each) => wordsOf(each));
   act(() => more.click());
   const fromMore = labels();
   assert.ok(fromMore.includes("Archive"));
@@ -554,7 +574,7 @@ test("an agent row's ⋯ opens the menu its right-click does, the ⋯ a Tab stop
     );
   });
   assert.deepEqual(
-    rightClick(row).map((each) => each.textContent),
+    rightClick(row).map((each) => wordsOf(each)),
     fromMore,
   );
 });

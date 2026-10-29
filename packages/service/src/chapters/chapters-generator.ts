@@ -4,8 +4,8 @@ import {
   PULL_REQUEST_CHAPTERS_FAILURE,
   type PullRequestChaptersFailure,
 } from "@luke/database/pull-request-chapters-vocabulary";
+import type { AgentChangedFile } from "@luke/features/agent-wire";
 import { CHAPTERS_MODEL, type ChaptersModelId } from "@luke/features/chapters-model-choice";
-import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   CHAPTER_KIND,
@@ -124,7 +124,7 @@ export interface ChaptersModel {
 
 /** What a generation reads: the pull request's changed files, its title and body, and its commit messages where the caller has them. */
 export interface ChaptersInput {
-  readonly files: readonly CodingAgentChangedFile[];
+  readonly files: readonly AgentChangedFile[];
   readonly title: string;
   readonly body: string | null;
   readonly commitMessages?: readonly string[];
@@ -392,7 +392,7 @@ function estimatedTokens(text: string): number {
 }
 
 /** The status a file's hunks are headed with. */
-function statusesOf(files: readonly CodingAgentChangedFile[]): (path: string) => string {
+function statusesOf(files: readonly AgentChangedFile[]): (path: string) => string {
   const byPath = new Map(files.map((file) => [file.path, file.status]));
   return (path) => byPath.get(path) ?? "modified";
 }

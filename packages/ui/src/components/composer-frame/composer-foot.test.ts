@@ -7,10 +7,9 @@ import { ComposerFoot } from "./composer-foot.js";
 
 /**
  * composer-foot.test.ts -- a message box's foot takes no send while the box
- * is empty, says its one note, shows its counter from four fifths of the
- * limit, offers a remedy beside its note and a mend under it, stands Stop
- * in the send's place, and keeps a call's status beside the send and beside
- * a strip.
+ * is empty, or refuses it saying why where it can, says its one note,
+ * shows its counter from four fifths of the limit, offers a remedy beside
+ * its note and a mend under it, and stands Stop in the send's place.
  */
 
 declare global {
@@ -68,6 +67,29 @@ test("the send takes no press while the box is empty, and sends once it holds wo
   act(() => button(container, "Send").click());
   expect(unavailable(button(container, "Send"))).toBe(false);
   expect(sent).toEqual(["sent"]);
+});
+
+test("an empty send that can say why stays pressable but sends nothing, telling its owner, and is described by what the owner says", () => {
+  const heard: string[] = [];
+  const onSend = () => heard.push("sent");
+  const refuses = (words: string | undefined) => ({
+    onRefused: () => heard.push("refused"),
+    words,
+  });
+  const { container, redraw } = draw({
+    send: { label: "Send", empty: true, onSend, refuses: refuses(undefined) },
+  });
+  const send = button(container, "Send");
+  expect(send.disabled).toBe(false);
+  expect(unavailable(send)).toBe(true);
+  act(() => send.click());
+  expect(heard).toEqual(["refused"]);
+
+  redraw({ send: { label: "Send", empty: true, onSend, refuses: refuses("Pick an option.") } });
+  const line = document.getElementById(
+    button(container, "Send").getAttribute("aria-describedby") ?? "",
+  );
+  expect(line?.textContent).toBe("Pick an option.");
 });
 
 test("a send still out is named by its busy words and takes no second press", () => {
@@ -162,22 +184,4 @@ test("the counter shows once the words reach four fifths of the limit", () => {
 
   redraw({ send, counter: { length: 3200, limit: 4000 } });
   expect(container.textContent).toContain("3,200/4,000");
-});
-
-test("a call's status stands beside the send, and beside a strip in the bar's place", () => {
-  const call = createElement("span", null, "On a call · 2:14");
-  const { container, redraw } = draw({ send: { label: "Send", empty: false }, call });
-  expect(container.textContent).toContain("On a call · 2:14");
-  expect(button(container, "Send")).toBeDefined();
-
-  redraw({
-    send: { label: "Send", empty: false },
-    call,
-    tools: createElement("span", null, "Attach"),
-    strip: createElement("span", null, "Listening"),
-  });
-  expect(container.textContent).toContain("On a call · 2:14");
-  expect(container.textContent).toContain("Listening");
-  expect(container.textContent).not.toContain("Attach");
-  expect(() => button(container, "Send")).toThrow();
 });

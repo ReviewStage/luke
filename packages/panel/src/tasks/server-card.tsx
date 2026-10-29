@@ -1,13 +1,17 @@
-import type { IntegrationTool } from "@luke/features/integration-health";
-import { byName } from "@luke/features/integration-tool-model";
+import { type IntegrationTool, toolsCount } from "@luke/features/integration-health";
+import { byName, toolBadge, toolSummary, toolTitle } from "@luke/features/integration-tool-model";
 import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
 import {
+  HOVER_CARD_ROW_FOCUS,
   HoverCard,
+  HoverCardHead,
+  HoverCardList,
   HoverCardNote,
+  HoverCardRow,
   HoverCardRule,
-  HoverCardScroll,
   ProviderMark,
-  SwitchMark,
+  Tooltip,
+  VisuallyHidden,
 } from "@luke/ui";
 import {
   SERVER_HANDED,
@@ -18,28 +22,27 @@ import {
 } from "@luke/ui/agent-servers-model";
 import { createContext, type ReactNode, useContext } from "react";
 import { useIntegrationStatuses } from "../integration-statuses.js";
-import { IntegrationToolList } from "../integration-tool-list.js";
-import { SERVER_END_CLASS, ServerRowWords, useServerRows } from "./agent-servers.js";
+import { useServerRows } from "./agent-servers.js";
 
 /**
- * server-card.tsx -- the card a mention of an MCP server or of one of its tools hangs: the server's row as the MCP popover draws it, what the mention does for the agent the words go to, and the server's tools.
+ * server-card.tsx -- the card a mention of an MCP server or of one of its tools hangs: the server as the MCP popover reads it, what the mention does for the agent the words go to, and the server's tools.
  *
- * The card's head is the popover's own row for the server
- * (`agent-servers.tsx`): its mark, its name, how many tools it offers, and,
- * where the words are an agent's, that agent's switch for it, drawn as it
- * stands and pressed nowhere but the popover. Where the server or its
- * sign-in said words of their own behind its problem, a note under the row
- * quotes them, since the row's own line holds Luke's sentence alone. A note
- * under that says what
+ * The card's head is the server as the popover's row reads it
+ * (`agent-servers.tsx`): its mark, its name, and under it how many tools it
+ * offers and where its sign-in or its server stands, the server's own
+ * words behind a problem in a note of their own; where the words are an
+ * agent's, its corner says whether that agent has it on or off, a word
+ * rather than the popover's switch, which only the popover presses. A note under it says what
  * the mention does (`serverMentionNote`): an agent with the server on is
  * handed it anyway; one with it off is handed it by the developer's words
  * for one turn alone, the one they open, or, where they reached a turn
  * already under way, the next, and the switch stays off; a server not
  * connected is handed to no agent. Under a rule stand the server's tools
- * as the popover's page lists them, every one, scrolling past a few, and a
- * tool's mention its one tool's line, of those the server answered with. Where the words are no agent's, as a
- * plan's or Luke's are, the row has no switch and the note says nothing of
- * one.
+ * in the popover's order, each a row of its title and its badge's words
+ * that hangs what the tool does, every one, scrolling past a few, and a tool's mention its one tool's
+ * row, of those the server answered with. Where the words are no agent's,
+ * as a plan's or Luke's are, the corner is empty and the note says
+ * nothing of a switch.
  *
  * Where the words stand is told by the place drawing them
  * (`MentionedServers`): the agent's tab names the servers it has off and
@@ -123,6 +126,65 @@ function shownTools(row: ServerRow, tool: string | undefined): readonly Integrat
   return byName(tools);
 }
 
+/** On or off for the agent, as the card's corner says where the words are an agent's. */
+const SERVER_SWITCHED = {
+  ON: "On",
+  OFF: "Off",
+} as const;
+
+/** What the head says under the server's name: how many tools it offers, then why it offers none or where its sign-in stands. */
+function serverSub(row: ServerRow): React.JSX.Element | undefined {
+  const parts = [
+    row.tools === undefined ? undefined : toolsCount(row.tools.length),
+    row.problem,
+    row.note,
+  ].filter((part) => part !== undefined);
+  if (parts.length === 0) return undefined;
+  return <span>{parts.join(" · ")}</span>;
+}
+
+/**
+ * One tool's row: its title, and its badge's words at its end. Where the
+ * popover's list says more of it, its name in the code face beside a title
+ * that differs or the first sentence of what it does, the row hangs a card
+ * of its own saying so, and says it to a screen reader beside the title,
+ * so the card's one-line row loses none of what the list says.
+ */
+function ToolLine({ tool }: { tool: IntegrationTool }): React.JSX.Element {
+  const title = toolTitle(tool);
+  const name = title === tool.name ? undefined : tool.name;
+  const summary = tool.description === "" ? undefined : toolSummary(tool.description);
+  const more = [name, summary].filter((part) => part !== undefined).join(". ");
+  // Note that a row hanging a card is a stop the keyboard rests on, so Tab in the server's entered card opens it.
+  const row = (
+    <HoverCardRow
+      focus={more === "" ? HOVER_CARD_ROW_FOCUS.NONE : HOVER_CARD_ROW_FOCUS.STOP}
+      glyph={null}
+      label={
+        <>
+          {title}
+          {more === "" ? null : <VisuallyHidden>{`, ${more}`}</VisuallyHidden>}
+        </>
+      }
+      end={toolBadge(tool.annotations)}
+    />
+  );
+  if (more === "") return <li>{row}</li>;
+  const card = (
+    <HoverCard data-tool-card="">
+      <HoverCardHead name={title} sub={name} />
+      {summary === undefined ? null : <HoverCardNote>{summary}</HoverCardNote>}
+    </HoverCard>
+  );
+  return (
+    <li>
+      <Tooltip label={title} card={card}>
+        {row}
+      </Tooltip>
+    </li>
+  );
+}
+
 /** The card a mention of a server, or of one of its tools, hangs. */
 export function ServerCard({
   provider,
@@ -144,25 +206,28 @@ export function ServerCard({
   const tools = shownTools(row, tool);
   return (
     <HoverCard data-server-card="">
-      <div className="task-card-line agent-servers-row -mx-row-inset flex h-menu-row w-card-line min-w-0 items-center gap-icon-gap rounded-menu-row px-row-inset text-body-size text-foreground">
-        <span className="task-card-glyph inline-flex w-menu-glyph flex-none justify-center [&>svg]:size-menu-glyph">
-          <ProviderMark provider={row.provider} />
-        </span>
-        <ServerRowWords row={row} />
-        {place !== undefined && row.kind === SERVER_ROW.SWITCH ? (
-          <span className={SERVER_END_CLASS}>
-            <SwitchMark checked={row.on} />
-          </span>
-        ) : null}
-      </div>
-      {row.said === undefined ? null : <HoverCardNote>{row.said}</HoverCardNote>}
+      <HoverCardHead
+        glyph={<ProviderMark provider={row.provider} />}
+        name={row.name}
+        sub={serverSub(row)}
+        corner={
+          place !== undefined && row.kind === SERVER_ROW.SWITCH
+            ? row.on
+              ? SERVER_SWITCHED.ON
+              : SERVER_SWITCHED.OFF
+            : undefined
+        }
+      />
       {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
+      {row.said === undefined ? null : <HoverCardNote>{row.said}</HoverCardNote>}
       {tools.length === 0 ? null : (
         <>
           <HoverCardRule />
-          <HoverCardScroll>
-            <IntegrationToolList server={row.name} tools={tools} tokens={[]} current={undefined} />
-          </HoverCardScroll>
+          <HoverCardList label={`${row.name} tools`}>
+            {tools.map((each) => (
+              <ToolLine key={each.name} tool={each} />
+            ))}
+          </HoverCardList>
         </>
       )}
     </HoverCard>

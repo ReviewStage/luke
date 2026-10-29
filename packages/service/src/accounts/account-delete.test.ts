@@ -7,15 +7,8 @@ import {
   deleteAccount,
   readAccountPreferences,
   readAccountRole,
-  readPlanTemplate,
-  restorePlanTemplate,
   writeAccountPreferences,
-  writePlanTemplate,
 } from "@luke/database/models/account-store";
-import {
-  listTemplateRevisions,
-  readTemplateRevision,
-} from "@luke/database/models/plan-template-revisions";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
@@ -25,10 +18,10 @@ import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { HTTP_METHOD, type WireBoundaryInput } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option, Redacted, Stream } from "effect";
+import { Clock, Effect, Layer, Option, Redacted } from "effect";
 import { SqlClient } from "effect/sql";
-import { type AgentSessions, EVE_RESET_OUTCOME } from "../agents/brain-host/eve-sessions.js";
 import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
+import { type AgentSessions, EVE_RESET_OUTCOME } from "../agents/eve-host/eve-sessions.js";
 import { requestUserId, type SessionEndpoint, type UserInfoEndpoint } from "../auth/bearer.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -93,7 +86,6 @@ function retiringEve() {
         retired.push([caller, sessionId]);
         return { outcome: EVE_RESET_OUTCOME.RESET };
       }),
-    stream: () => Stream.empty,
   });
   return {
     retired,
@@ -153,11 +145,6 @@ const openAccounts = (eve: ReturnType<typeof retiringEve> | undefined) =>
       readRole: readAccountRole,
       accountFastOffer,
       writePreferences: writeAccountPreferences,
-      readPlanTemplate,
-      writePlanTemplate,
-      listPlanTemplateRevisions: listTemplateRevisions,
-      readPlanTemplateRevision: readTemplateRevision,
-      restorePlanTemplate,
     });
     const stands = (userId: string) =>
       Effect.map(

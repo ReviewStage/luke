@@ -23,18 +23,18 @@
  */
 
 import { Database, type DatabaseServices } from "@luke/database/core/query";
-import { listCodingAgentsOnPullRequest } from "@luke/database/models/coding-agent-store";
+import { listAgentsOnPullRequest } from "@luke/database/models/agent-store";
 import { account, member } from "@luke/database/schemas/auth";
 import type {
-  CodingAgentAuthor,
-  CodingAgentChangesPeople,
-  CodingAgentOverviewConversation,
-  CodingAgentOverviewPullRequest,
-  CodingAgentReviewOptions,
+  AgentAuthor,
+  AgentChangesPeople,
+  AgentOverviewConversation,
+  AgentOverviewPullRequest,
+  AgentReviewOptions,
   GitHubPerson,
   PullRequestStackEntry,
   ReactionGroup,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { and, eq, inArray } from "drizzle-orm";
 import { Effect, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -53,7 +53,7 @@ import {
 } from "./pull-requests.js";
 
 /** What an agent's changes say of who their pull request names; every key absent where the people could not be read. */
-type ChangesPeople = CodingAgentChangesPeople;
+type ChangesPeople = AgentChangesPeople;
 
 const findLinkedMembers = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -212,7 +212,7 @@ const stackOwnerOf = (
   agent: { readonly organizationId: string; readonly repository: string },
   number: number,
 ) =>
-  listCodingAgentsOnPullRequest(agent.repository, number, AGENTS_PER_STACK_ENTRY).pipe(
+  listAgentsOnPullRequest(agent.repository, number, AGENTS_PER_STACK_ENTRY).pipe(
     Effect.map((owned) => {
       const owner = owned.find(
         ({ agent: each }) =>
@@ -260,10 +260,10 @@ export const namedOverviewPullRequest = /* @__PURE__ */ Effect.fn("web/namedOver
     agent: {
       readonly organizationId: string;
       readonly repository: string;
-      readonly author: CodingAgentAuthor | null;
+      readonly author: AgentAuthor | null;
     },
     read: GitHubOverviewPullRequest,
-  ): Effect.fn.Return<CodingAgentOverviewPullRequest, never, DatabaseServices> {
+  ): Effect.fn.Return<AgentOverviewPullRequest, never, DatabaseServices> {
     const { pullRequest, author, requested, stack, ...rest } = read;
     const accounts = [...(author === undefined ? [] : [author]), ...requested];
     const [person, named] = yield* Effect.all(
@@ -334,7 +334,7 @@ export const namedOverviewConversation = /* @__PURE__ */ Effect.fn("web/namedOve
     agent: { readonly organizationId: string },
     number: number,
     read: GitHubOverviewConversation,
-  ): Effect.fn.Return<CodingAgentOverviewConversation, never, DatabaseServices> {
+  ): Effect.fn.Return<AgentOverviewConversation, never, DatabaseServices> {
     const person = yield* overviewNamer(
       agent.organizationId,
       accountsOfConversation(read),
@@ -383,7 +383,7 @@ export const namedOverviewConversation = /* @__PURE__ */ Effect.fn("web/namedOve
 );
 
 /** The member's own pending review as the conversation carries it beside its read. */
-type NamedPendingReview = NonNullable<CodingAgentOverviewConversation["pendingReview"]>;
+type NamedPendingReview = NonNullable<AgentOverviewConversation["pendingReview"]>;
 
 /**
  * The member's own pending review as the wire carries it: how many
@@ -420,11 +420,11 @@ export const namedPendingReview = /* @__PURE__ */ Effect.fn("web/namedPendingRev
 export const namedReviewOptions = /* @__PURE__ */ Effect.fn("web/namedReviewOptions")(function* (
   agent: { readonly organizationId: string },
   read: GitHubReviewOptions,
-): Effect.fn.Return<CodingAgentReviewOptions, never, DatabaseServices> {
+): Effect.fn.Return<AgentReviewOptions, never, DatabaseServices> {
   const person = yield* overviewNamer(
     agent.organizationId,
     read.users,
-    "the repository's collaborators",
+    "the repository's assignable users",
   );
   return { labels: read.labels, users: read.users.map(person), teams: read.teams };
 });

@@ -15,7 +15,7 @@
  *   handed to that harness's sessions acting for the agent's starter, whose
  *   plan pays for it, and a session it opens claims the conversation's
  *   record, which eve's own door claims for an eve session.
- * - `cancel`, `reset`, and `stream` name a session alone, so they are
+ * - `cancel` and `reset` name a session alone, so they are
  *   answered by the implementation that minted it (`native-runtime.ts`):
  *   eve's sessions go to eve exactly as before.
  *
@@ -30,18 +30,15 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import {
-  readCodingAgentHeaderOfConversation,
-  readCodingAgentRouting,
-} from "@luke/database/models/coding-agent-store";
+import { readAgentHeaderOfConversation, readAgentRouting } from "@luke/database/models/agent-store";
 import {
   claimRuntimeSession,
   recordedRuntimeSession,
 } from "@luke/database/models/recorded-session";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { LOCAL_AGENT_REFUSAL } from "@luke/features/coding-agent-wire";
+import { LOCAL_AGENT_REFUSAL } from "@luke/features/agent-wire";
 import { causeKind } from "@luke/runtime/effect";
-import { Clock, Context, Effect, Option, Stream } from "effect";
+import { Clock, Context, Effect, Option } from "effect";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -50,7 +47,7 @@ import {
   planLimitReached,
 } from "../../http/http-effect.js";
 import { IMAGE_PREPARING_STATUS } from "../agent-sandbox-image.js";
-import type { BrainHostTurn } from "../brain-host/bounds.js";
+import type { EveHostTurn } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
@@ -63,7 +60,7 @@ import {
   type PlanRefusal,
   RUNTIME_REFUSAL,
   type RuntimeRefusal,
-} from "../brain-host/eve-sessions.js";
+} from "../eve-host/eve-sessions.js";
 import { isNativeRuntime, type NativeRuntime, nativeRuntimeOfSession } from "./native-runtime.js";
 
 /** What a change of model or effort came to at a native agent's runner. */
@@ -78,11 +75,13 @@ export const RUNNER_CHOICE = {
 export type RunnerChoice = (typeof RUNNER_CHOICE)[keyof typeof RUNNER_CHOICE];
 
 /** A native harness's sessions: eve's interface, and the agent's model and effort as they stand handed to a running runner. */
-export interface NativeSessions<Turn extends BrainHostTurn = BrainHostTurn>
+export interface NativeSessions<Turn extends EveHostTurn = EveHostTurn>
   extends AgentSessions<Turn> {
   readonly retune: (sessionId: string, conversationId: string) => Effect.Effect<RunnerChoice>;
   /** The session's runner ended, keeping its sandbox and the harness's session, so the next message relaunches it; whether no runner runs now. */
   readonly halt: (sessionId: string, conversationId: string) => Effect.Effect<boolean>;
+  /** The message lines an ended launch never took handed to a runner launched for them, where none runs (`runner-sessions.ts`'s `LINES_WAITING`); whether one was launched. */
+  readonly deliverWaiting: (sessionId: string, conversationId: string) => Effect.Effect<boolean>;
 }
 
 export interface NativeAgentSessionsService {
@@ -94,7 +93,7 @@ export interface NativeAgentSessionsService {
   readonly sessions: (
     runtime: NativeRuntime,
     account: string,
-  ) => Option.Option<Effect.Effect<NativeSessions<BrainHostTurn>>>;
+  ) => Option.Option<Effect.Effect<NativeSessions<EveHostTurn>>>;
 }
 
 /** The native harnesses a function can launch and write to: the harnesses in the web functions that ship the runner, a relay to them in the eve app. */
@@ -126,7 +125,7 @@ function preparingNamed<Outcome extends { readonly outcome: string }>(answered: 
 }
 
 /** The message as eve is handed it, as it always was: Luke's own id for its line is a native runner's alone. */
-function forEve<Turn extends BrainHostTurn>(message: EveMessage<Turn>): EveMessage<Turn> {
+function forEve<Turn extends EveHostTurn>(message: EveMessage<Turn>): EveMessage<Turn> {
   if (message.lineId === undefined) return message;
   const { lineId: _native, ...rest } = message;
   return rest;
@@ -144,14 +143,14 @@ const TO_EVE: Route = { runtime: CONVERSATION_RUNTIME.EVE };
  * runtime its conversation runs on, as above. The caller reads the
  * conversation's agent as it reads it everywhere, through its workspace.
  */
-export const routedSessions = <Turn extends BrainHostTurn>(
+export const routedSessions = <Turn extends EveHostTurn>(
   eve: AgentSessions<Turn>,
   account: string,
 ): Effect.Effect<AgentSessions<Turn>, never, DatabaseServices> =>
   Effect.map(sessionsRouter, (route) => route(eve, account));
 
 /** Wraps eve's client for one caller as `routedSessions` does. */
-export type SessionsRouter = <Turn extends BrainHostTurn>(
+export type SessionsRouter = <Turn extends EveHostTurn>(
   eve: AgentSessions<Turn>,
   account: string,
 ) => AgentSessions<Turn>;
@@ -165,12 +164,12 @@ export const sessionsRouter: Effect.Effect<SessionsRouter, never, DatabaseServic
   function* () {
     const store = yield* Effect.context<DatabaseServices>();
     const native = yield* Effect.serviceOption(NativeAgentSessions);
-    return <Turn extends BrainHostTurn>(eve: AgentSessions<Turn>, account: string) =>
+    return <Turn extends EveHostTurn>(eve: AgentSessions<Turn>, account: string) =>
       routed(eve, account, store, native);
   },
 );
 
-function routed<Turn extends BrainHostTurn>(
+function routed<Turn extends EveHostTurn>(
   eve: AgentSessions<Turn>,
   account: string,
   store: Context.Context<DatabaseServices>,
@@ -179,9 +178,9 @@ function routed<Turn extends BrainHostTurn>(
   /** The route of the conversation's calls, read now. */
   const routeOf = (conversationId: string) =>
     Effect.gen(function* () {
-      const agent = yield* readCodingAgentHeaderOfConversation(account, conversationId);
+      const agent = yield* readAgentHeaderOfConversation(account, conversationId);
       if (Option.isNone(agent)) return TO_EVE;
-      const routing = yield* readCodingAgentRouting(account, agent.value.id);
+      const routing = yield* readAgentRouting(account, agent.value.id);
       const runtime = Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE;
       return isNativeRuntime(runtime) ? { runtime, starter: agent.value.userId } : TO_EVE;
     }).pipe(Effect.provideContext(store));
@@ -265,10 +264,6 @@ function routed<Turn extends BrainHostTurn>(
       }
       return Effect.flatMap(reached.value, (each) => each.reset(sessionId));
     },
-
-    // A native runner posts its events to Luke itself, so there is no stream of its session to follow.
-    stream: (sessionId) =>
-      nativeRuntimeOfSession(sessionId) === undefined ? eve.stream(sessionId) : Stream.empty,
   };
   return sessions;
 }
@@ -289,7 +284,7 @@ export const runnerChoiceApplied = (agent: {
   readonly conversationId: string;
 }): Effect.Effect<RunnerChoice, never, DatabaseServices> =>
   Effect.gen(function* () {
-    const routing = yield* readCodingAgentRouting(agent.userId, agent.id);
+    const routing = yield* readAgentRouting(agent.userId, agent.id);
     const runtime = Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE;
     if (!isNativeRuntime(runtime)) return RUNNER_CHOICE.NOT_LIVE;
     const native = yield* Effect.serviceOption(NativeAgentSessions);

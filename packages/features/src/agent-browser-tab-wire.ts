@@ -1,17 +1,19 @@
 /**
- * agent-browser-tab-wire.ts -- the Browser tabs open in a task's agents' browsers, as the service keeps them and a member's window reads them.
+ * agent-browser-tab-wire.ts -- the Browser tabs open in coding agents' browsers, as the service keeps them and a member's window reads them.
  *
- * Each agent (Luke, or a coding agent, whose workers share its sandbox)
- * runs one browser in its own sandbox, and the service keeps a line for each
- * tab open in it, so every window of a task's members lists them, on any
- * client and across a relaunch. A tab says whose browser it is in, who
- * opened it, and the member driving it, where one took it over: a takeover
- * is held until an instant the member's window keeps moving on, so one whose
- * window went away lapses on its own, and two members never drive one tab
- * at once. The address and title are cut where the Browser tab cuts them
- * (`browser-acts.ts`), since they are only drawn.
+ * Each coding agent, whose workers share its sandbox, runs one browser in
+ * its own sandbox, and the service keeps a line for each tab open in it, so
+ * every window of a member who sees the agent lists them, on any client and
+ * across a relaunch, whether the agent is on a task or on none. A tab says
+ * whose browser it is in, who opened it, and the member driving it, where
+ * one took it over: a takeover is held until an instant the member's window
+ * keeps moving on, so one whose window went away lapses on its own, and two
+ * members never drive one tab at once. The address and title are cut where
+ * the Browser tab cuts them (`browser-acts.ts`), since they are only drawn.
  *
- * `GET /api/plans/{id}/browser-tabs` lists the task's tabs; `POST
+ * `GET /api/agents/{id}/browser-tabs` lists one agent's tabs, and `GET
+ * /api/plans/{id}/browser-tabs` a task's, every one of its agents' tabs
+ * together; `POST` on either opens one. `POST
  * /api/plans/{id}/browser-tabs/{tab}/driver` takes one over or renews the
  * caller's own takeover, and `DELETE` on that path hands it back, each
  * answering the tab as it then stands, so a takeover another member holds
@@ -69,11 +71,11 @@ const agentBrowserTabCursorSchema = EffectSchema.Struct({
 
 export type AgentBrowserTabCursor = typeof agentBrowserTabCursorSchema.Type;
 
-/** One tab open in one of a task's agents' browsers. */
+/** One tab open in a coding agent's browser. */
 const agentBrowserTabSchema = EffectSchema.Struct({
   id: wireUuidSchema,
-  /** The coding agent whose browser holds the tab; null for the task's Luke. */
-  agentId: EffectSchema.NullOr(wireUuidSchema),
+  /** The coding agent whose browser holds the tab. */
+  agentId: wireUuidSchema,
   address: shownSchema,
   title: shownSchema,
   openedBy: agentBrowserTabOpenedBySchema,
@@ -160,7 +162,7 @@ export function agentBrowserTabOf(line: AgentBrowserTabLine, now: number): Agent
   };
 }
 
-/** A task's tabs, every agent's, the oldest first (GET). */
+/** A holder's tabs, the oldest first: one agent's, or a task's agents' together (GET). */
 export const agentBrowserTabsAnswerSchema = EffectSchema.Struct({
   tabs: EffectSchema.Array(agentBrowserTabSchema),
 });
@@ -171,7 +173,28 @@ export const agentBrowserTabOpenRequestSchema = EffectSchema.Struct({
   address: EffectSchema.String,
 });
 
-export type AgentBrowserTabOpenRequest = typeof agentBrowserTabOpenRequestSchema.Type;
+/** A tab a member opens in the browser of the agent the path names: the http or https address it opens at. */
+export const agentBrowserTabAddressRequestSchema = EffectSchema.Struct({
+  address: EffectSchema.String,
+});
+
+/**
+ * What a list of Browser tabs is read for, as a window names it: one coding
+ * agent's browser, or every browser of a task's agents together, by its id
+ * alone, the field naming which. An agent's tabs are its own wherever it
+ * works, so an agent on no task lists them as well as one on a task.
+ */
+export const browserTabsPlaceSchema = EffectSchema.Union([
+  EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString }),
+  EffectSchema.Struct({ agentId: EffectSchema.NonEmptyString }),
+]);
+
+export type BrowserTabsPlace = typeof browserTabsPlaceSchema.Type;
+
+/** The id a list of tabs is read for, a task's or an agent's, which never collide, as a key of what is held of it. */
+export function browserTabsPlaceId(place: BrowserTabsPlace): string {
+  return "taskId" in place ? place.taskId : place.agentId;
+}
 
 /** One tab as it stands after it opened, a takeover, a renewal, or a hand-back (POST, DELETE). */
 export const agentBrowserTabAnswerSchema = EffectSchema.Struct({ tab: agentBrowserTabSchema });

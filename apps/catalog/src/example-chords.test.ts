@@ -68,7 +68,7 @@ test("the menu example's Copy link shows the window's chord for it", () => {
     item.textContent?.includes("Copy link"),
   );
   assert.ok(copyLink, "the task menu offers Copy link");
-  assert.equal(copyLink.querySelector(".luke-shortcut")?.textContent, "⌥⌘C");
+  assert.equal(copyLink.querySelector(".luke-shortcut")?.textContent, "⇧⌘C");
 });
 
 test("every chord the settings-row example draws is one the window has", () => {

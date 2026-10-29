@@ -13,10 +13,10 @@ import type { PushMethod } from "../contract/pushes.js";
 import { type AppStateStore, publishAppStateChanges } from "./app-state-store.js";
 
 /**
- * The one-shot events a shell feeds the page: the call card's way back to
- * its agent, or a Luke link. Each is said once and never bootstrapped from.
+ * The one-shot events a shell feeds the page: a Luke link. Each is said once
+ * and never bootstrapped from.
  */
-type InProcessEventMethod = Extract<PushMethod, "onShowAgent" | "onShowLink">;
+type InProcessEventMethod = Extract<PushMethod, "onShowLink">;
 
 /** Where the shell says each one-shot event, to every subscription standing in the page. */
 type InProcessEvents = {
@@ -41,9 +41,8 @@ interface InProcessBridge {
 
 /** An unsubscribe with nothing to end. */
 const unsubscribe = (): void => {};
-/** What has no listener in a page that runs no voice, call window, Browser tab, menu bar, or global key. */
+/** What has no listener in a page that runs no Browser tab, menu bar, or global key. */
 const neverDelivered = (): (() => void) => unsubscribe;
-const dropped = (): void => {};
 
 /** One subscription set: what a page subscribed, the one door that tells them all, and its close. */
 interface Listeners<Payload> {
@@ -97,11 +96,11 @@ function listeners<Payload>(report: (message: string) => void): Listeners<Payloa
 
 /**
  * The bridge for a page that runs the host in its own process. The page is
- * always a panel, and no voice or call window stands beside it. The document
+ * always a panel, and no other window stands beside it. The document
  * is the store's, read whole on request and pushed as what moved on every
  * change; the one-shot events are what the shell says through `events`; every
- * subscription ends with the scope; and everything the voice, the call window, a
- * Browser tab, the menu bar, or a global key would say is never said, its
+ * subscription ends with the scope; and everything a Browser tab, the menu
+ * bar, or a global key would say is never said, its
  * subscription ending cleanly.
  */
 export function createInProcessBridge(
@@ -127,7 +126,6 @@ export function createInProcessBridge(
       report,
     );
     const said: EventListeners = {
-      onShowAgent: listeners(report),
       onShowLink: listeners(report),
     };
     // A page whose bridge is closed hears nothing more, whoever still holds `events`.
@@ -142,18 +140,10 @@ export function createInProcessBridge(
       onAppState: appState.subscribe,
       notifyReady: reports.notifyReady,
       recordSurfaceEvent: reports.recordSurfaceEvent,
-      onShowAgent: said.onShowAgent.subscribe,
       onShowLink: said.onShowLink.subscribe,
-      reportVoiceView: dropped,
-      recordAgentTrace: dropped,
       onMenuCommand: neverDelivered,
-      onVoiceLiveSessionChanged: neverDelivered,
-      onTasksTalk: neverDelivered,
-      onVoiceCommand: neverDelivered,
-      onCallWindowMoved: neverDelivered,
     };
     const events: InProcessEvents = {
-      onShowAgent: said.onShowAgent.emit,
       onShowLink: said.onShowLink.emit,
     };
     return { bridge, events };

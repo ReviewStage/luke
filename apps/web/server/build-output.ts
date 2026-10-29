@@ -17,12 +17,12 @@ import { basename, dirname, join, posix } from "node:path";
  * `.vc-config.json` names it as `handler` under the Node launcher, the same
  * fields Vercel's own Node builder writes for a function it built
  * (`packages/node/src/build.ts`, the `NodejsLambda` it returns), so the
- * launcher that adapts a `{ fetch }` route object and the voice functions'
+ * launcher that adapts a `{ fetch }` route object and the WebSocket functions'
  * exported `http.Server` is the platform's, unchanged.
  *
  * Vercel's zero-config pass served every `api/` function at two URLs, its
  * file name and the same path without the extension, and the clients use
- * the second: the voice sessions open at `/api/voice/sessions`, the desktop
+ * the second: the terminal relay opens at `/api/terminal/sessions`, the desktop
  * posts feedback at `/api/feedback`. A `.func` answers only at its own name,
  * so each function is emitted twice, the bundle under its file name (the
  * destination the `/api/` rewrites carry) and an extensionless `.func` that

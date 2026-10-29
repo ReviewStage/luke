@@ -1,4 +1,4 @@
-import { recordTurnFastRefused } from "@luke/database/models/coding-agent-store";
+import { recordTurnFastRefused } from "@luke/database/models/agent-store";
 import type { TaskStoreEffect } from "@luke/database/models/task-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -11,9 +11,9 @@ import { unparsedWire, type WireBoundaryInput } from "../../core.js";
 import { HostedEnvironment } from "../../environment.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import type { WebStoreRun } from "../../run.js";
-import { conversationReachableBy, runtimeSessionReachableBy } from "../brain-host/conversation.js";
-import type { SessionOwnership } from "../brain-host/door.js";
-import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
+import { conversationReachableBy, runtimeSessionReachableBy } from "../eve-host/conversation.js";
+import type { SessionOwnership } from "../eve-host/door.js";
+import { deploymentEveOrigin } from "../eve-host/eve-origin.js";
 import { accountProviderKeys, ownKeyOf } from "./account-keys.js";
 import { CODER_ENVIRONMENT, CODER_MODEL_FIXTURE } from "./bounds.js";
 import { type ProviderKeys, titleModel } from "./model.js";

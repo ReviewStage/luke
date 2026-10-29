@@ -15,8 +15,8 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import type { CodingAgentMachine } from "@luke/features/coding-agent-wire";
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import type { AgentMachineKind } from "@luke/features/agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { Effect, Layer } from "effect";
 import type { HttpClient } from "effect/http";
 import {
@@ -30,8 +30,8 @@ import { type VercelMachineOptions, vercelLifecycle, vercelMachine } from "./ver
 
 /** The lifecycle of whichever machine answers for the session, or for the place or runner named. */
 function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): MachineLifecycle {
-  const of = (machine: CodingAgentMachine): MachineLifecycle =>
-    machine === CODING_AGENT_MACHINE.DEVICE ? mac : cloud;
+  const of = (machine: AgentMachineKind): MachineLifecycle =>
+    machine === AGENT_MACHINE.DEVICE ? mac : cloud;
   const bySession = <A>(
     session: string,
     call: (machine: MachineLifecycle) => Effect.Effect<A, SandboxUnavailable>,
@@ -49,15 +49,13 @@ function routedLifecycle(cloud: MachineLifecycle, mac: DeviceMachineService): Ma
     kill: (handle) => of(handle.machine).kill(handle),
     readFile: (session, path, bound) =>
       bySession(session, (machine) => machine.readFile(session, path, bound)),
-    runRepositoryCommand: (session, command) =>
-      bySession(session, (machine) => machine.runRepositoryCommand(session, command)),
   };
 }
 
 /** Both machines behind one, as above. */
 function routedMachine(cloud: AgentMachineService, mac: DeviceMachineService): AgentMachineService {
-  const of = (machine: CodingAgentMachine | undefined): AgentMachineService =>
-    machine === CODING_AGENT_MACHINE.DEVICE ? mac : cloud;
+  const of = (machine: AgentMachineKind | undefined): AgentMachineService =>
+    machine === AGENT_MACHINE.DEVICE ? mac : cloud;
   return {
     ...routedLifecycle(cloud, mac),
     layout: (agent) => of(agent.machine).layout(agent),

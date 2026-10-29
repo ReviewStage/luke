@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -102,11 +102,11 @@ test("the pull request's row opens its Pull request tab where a panel takes it, 
   assert.deepEqual(asked, ["tab", `github ${URL}`, "copy luke/expiry-job (Branch name copied)"]);
 });
 
-test("the pull request's right-click offers Copy link, copying its address where a panel takes the tab and where none does", () => {
+test("the pull request's right-click offers Copy GitHub link, copying its address where a panel takes the tab and where none does", () => {
   for (const withPanel of [true, false]) {
     const { row, asked } = drawRow(withPanel);
     rightClick(row);
-    act(() => menuItem("Copy link").click());
+    act(() => menuItem("Copy GitHub link").click());
     assert.deepEqual(asked, [`copy ${URL} (Link copied)`]);
     act(() => root?.unmount());
     document.body.innerHTML = "";

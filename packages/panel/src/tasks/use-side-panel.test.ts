@@ -99,7 +99,7 @@ test("an agent's Changes tab opens on its plan, stands chosen across a launch, a
 test("a record kept before tasks had their name holds each task's choices under plans and its pins' task under plan, and a launch still opens on both", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));
-  act(() => first.control().onPin({ changes: AGENT }, "Changes: Invite flow"));
+  act(() => first.control().onPin({ task: TASK }, { changes: AGENT }, "Changes: Invite flow"));
   first.quit();
   const { tasks, pins, ...kept } = JSON.parse(
     window.localStorage.getItem("luke.sidePanel") ?? "{}",
@@ -117,7 +117,7 @@ test("a record kept before tasks had their name holds each task's choices under 
   const second = launch({ task: TASK, taskAgents: [AGENT] });
   assert.deepEqual(second.control().tab, { changes: AGENT });
   assert.deepEqual(
-    second.control().pins.map(({ task, tab, label }) => ({ task, tab, label })),
+    second.control().pins.map(({ tab, label, at: _at, ...holder }) => ({ ...holder, tab, label })),
     [{ task: TASK, tab: { changes: AGENT }, label: "Changes: Invite flow" }],
   );
 });
@@ -165,25 +165,24 @@ test("an agent's Terminal tab opens once at the strip's end and chosen, stands o
   assert.equal(second.control().tab, SIDE_PANEL_TAB.PLAN);
 });
 
-test("a Changes tab pins to the sidebar, keeps its pin across a launch, and takes its pull request's name, never its agent's", () => {
+test("a Changes tab pins to the sidebar, keeps its pin across a launch, and takes its pull request's name", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));
-  act(() => first.control().onPin({ changes: AGENT }, "Pull request"));
+  act(() => first.control().onPin({ task: TASK }, { changes: AGENT }, "Pull request"));
   first.quit();
 
   const second = launch({ task: TASK, taskAgents: [AGENT] });
   assert.deepEqual(
-    second.control().pins.map(({ task, tab, label }) => ({ task, tab, label })),
+    second.control().pins.map(({ tab, label, at: _at, ...holder }) => ({ ...holder, tab, label })),
     [{ task: TASK, tab: { changes: AGENT }, label: "Pull request" }],
   );
   // The panel's other choices read too, rather than the whole record being dropped.
   assert.deepEqual(second.control().tab, { changes: AGENT });
 
-  const agents = new Map([[AGENT, "Expiring invites"]]);
-  act(() => second.control().onRenamePins(TASK, { agents, pullRequests: new Map() }));
+  act(() => second.control().onRenamePins(TASK, { pullRequests: new Map() }));
   assert.equal(second.control().pins[0]?.label, "Pull request", "its pull request unread");
   const pullRequests = new Map([[AGENT, "#42 Expire invitations"]]);
-  act(() => second.control().onRenamePins(TASK, { agents, pullRequests }));
+  act(() => second.control().onRenamePins(TASK, { pullRequests }));
   assert.equal(second.control().pins[0]?.label, "#42 Expire invitations");
 
   // Shown from its pin on another task, it opens there, at the end of that task's strip.
@@ -194,11 +193,35 @@ test("a Changes tab pins to the sidebar, keeps its pin across a launch, and take
   assert.deepEqual(second.control().changes, [{ changes: AGENT }]);
 });
 
+test("a tab pinned on an agent's own page keeps its pin across a launch, under a key of its own an earlier version's record leaves alone", () => {
+  const first = launch({ task: AGENT, taskAgents: [AGENT] });
+  act(() => first.control().onPin({ agent: AGENT }, { changes: AGENT }, "#88 Quarantine"));
+  act(() => first.control().onPin({ task: TASK }, { changes: OTHER_AGENT }, "#42 Invites"));
+  first.quit();
+  const { pins, agentPins } = JSON.parse(window.localStorage.getItem("luke.sidePanel") ?? "{}");
+  assert.deepEqual(
+    [
+      pins.map((pin: { task?: string }) => pin.task),
+      agentPins.map((pin: { agent?: string }) => pin.agent),
+    ],
+    [[TASK], [AGENT]],
+  );
+
+  const second = launch({ task: TASK, taskAgents: [OTHER_AGENT] });
+  assert.deepEqual(
+    second.control().pins.map(({ tab, label, at: _at, ...holder }) => ({ ...holder, tab, label })),
+    [
+      { task: TASK, tab: { changes: OTHER_AGENT }, label: "#42 Invites" },
+      { agent: AGENT, tab: { changes: AGENT }, label: "#88 Quarantine" },
+    ],
+  );
+});
+
 test("a file's pin opens its tab on the pin's task after a launch, which keeps no file's tab", () => {
   const file = "src/invites/accept.ts";
   const first = launch({ task: TASK, taskAgents: [] });
   act(() => first.control().onOpenFile({ path: file }));
-  act(() => first.control().onPin({ file }, "accept.ts"));
+  act(() => first.control().onPin({ task: TASK }, { file }, "accept.ts"));
   first.quit();
 
   const second = launch({ task: TASK, taskAgents: [] });
@@ -210,7 +233,7 @@ test("a file's pin opens its tab on the pin's task after a launch, which keeps n
 test("a tab pinned to the sidebar keeps the place a drag gave it across a launch, on this Mac", () => {
   const first = launch({ task: TASK, taskAgents: [AGENT] });
   act(() => first.control().onChoose({ changes: AGENT }));
-  act(() => first.control().onPin({ changes: AGENT }, "Changes: Invite flow"));
+  act(() => first.control().onPin({ task: TASK }, { changes: AGENT }, "Changes: Invite flow"));
   const at = first.control().pins[0]?.at ?? assert.fail("the tab is pinned");
   act(() => first.control().onPlacePins(new Map([[at, "a3"]])));
   first.quit();
@@ -342,7 +365,6 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
 
   render(false);
   act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
   act(() => panel().onChoose({ changes: AGENT }));
 
   render(true);
@@ -354,7 +376,6 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
   render(false);
   assert.deepEqual(panel().strip, [
     SIDE_PANEL_TAB.PLAN,
-    SIDE_PANEL_TAB.BOARD,
     { changes: AGENT },
     { file: "src/invites.ts" },
   ]);
@@ -450,8 +471,8 @@ test("a record kept while the Call and Code stood in the panel reads with their 
   const panel = launch({ task: TASK, taskAgents: [] });
   assert.deepEqual(
     panel.control().strip,
-    [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.COMMENTS],
-    "neither the Call nor Code stands in the strip, and the plan leads it",
+    [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.COMMENTS],
+    "neither the Call, Code, nor the Board stands in the strip, and the plan leads it",
   );
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN);
   assert.deepEqual(panel.control().pins, [], "a pin of the Call, which is gone, is let go");

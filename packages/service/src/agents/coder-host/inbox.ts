@@ -105,7 +105,7 @@ import {
  * on the thread, since replying never answers: a member's message on the
  * thread reaches the agent as one of the developer's messages, and so does
  * an answer it waits on. No call holds the turn, since a coder session
- * takes no input mid-turn (`brain-host/eve-sessions.ts`'s `requestInput`).
+ * takes no input mid-turn (`eve-host/eve-sessions.ts`'s `requestInput`).
  * Every call answers with the agent's whole inbox as it stands, each
  * thread's messages in order with their asks and answers, so the model
  * holds its threads whatever its context has lost to compaction. A worker
@@ -379,7 +379,11 @@ export const INBOX_REFUSAL = {
   NO_MEMBER:
     "Not posted: to names no member; write a member of your workspace by their mention link, [@Name](link), as a person's chip is written.",
   NO_ADDRESSEE: "Not posted: the member you addressed is not in your workspace.",
-  NO_AGENT: "Not done: this conversation is no coding agent's.",
+  NOT_ITS_MEMBER:
+    "Not posted: your threads are the developer's alone, which no teammate sees; name the developer in to, or leave to out.",
+  ADDRESSEE_CANNOT_SEE:
+    "Not posted: the member you addressed cannot see your task, so they would never see the thread; address someone who can, or leave to out.",
+  NO_AGENT: "Not done: this conversation is no agent's.",
   UNAVAILABLE: "Not done: the service could not reach its store.",
 } as const;
 
@@ -560,12 +564,9 @@ function inboxOwner(agent: InboxAgent): PageOwner {
     : { kind: PAGE_OWNER.TASK, taskId: agent.taskId };
 }
 
-/** An item's mention under the workspace step given, by its link under its task, or under its agent where that works on no task. */
+/** An item's mention under the workspace step given, by its link under its agent, whichever task that works on. */
 function itemMention(agent: InboxAgent, step: string, item: InboxItem): string {
-  const place =
-    agent.taskId === null
-      ? { kind: LINK_PLACE.INBOX_ITEM, agentId: agent.agentId, itemId: item.id }
-      : { kind: LINK_PLACE.INBOX_ITEM, planId: agent.taskId, itemId: item.id };
+  const place = { kind: LINK_PLACE.INBOX_ITEM, agentId: agent.agentId, itemId: item.id } as const;
   return mentionMarkdownLink(item.title, linkOf(place, step));
 }
 
@@ -651,6 +652,10 @@ function storeRefusal(refusal: InboxPostRefusal): string {
       return INBOX_REFUSAL.NO_CHANNEL;
     case INBOX_POST_REFUSAL.NO_ADDRESSEE:
       return INBOX_REFUSAL.NO_ADDRESSEE;
+    case INBOX_POST_REFUSAL.NOT_ITS_MEMBER:
+      return INBOX_REFUSAL.NOT_ITS_MEMBER;
+    case INBOX_POST_REFUSAL.ADDRESSEE_CANNOT_SEE:
+      return INBOX_REFUSAL.ADDRESSEE_CANNOT_SEE;
   }
 }
 
@@ -1048,7 +1053,12 @@ export function moveAgentThread(
       }
       const itemId = yield* movedThreadId(agent, read.success.thread);
       if (Option.isNone(itemId)) return channelRejected(CHANNEL_REFUSAL.NO_THREAD);
-      const moved = yield* moveChannelThread(agent.userId, itemId.value, channel.success.id);
+      const moved = yield* moveChannelThread(
+        agent.userId,
+        itemId.value,
+        channel.success.id,
+        agent.agentId,
+      );
       if (Result.isFailure(moved)) {
         // Note that the channel was found open in the agent's workspace, so one the move refuses is not the thread's.
         return channelRejected(

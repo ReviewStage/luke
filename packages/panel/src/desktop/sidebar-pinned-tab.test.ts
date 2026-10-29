@@ -3,23 +3,23 @@
 import assert from "node:assert/strict";
 import { MOTION_DELAY_MS } from "@luke/brand";
 import {
+  AGENT_STATUS,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
-import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
+import { SIDE_PANEL_TAB, type SidebarPin } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl } from "../testing/tasks-control.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
 
 /**
@@ -44,7 +44,13 @@ const TASK: TaskSummary = {
 
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
-const PIN: PinnedTab = { task: TASK.id, tab: { agent: AGENT }, label: "Expiry job", at: 1 };
+const PIN: SidebarPin = {
+  task: TASK.id,
+  tab: { agent: AGENT },
+  label: "Expiry job",
+  at: 1,
+  model: "anthropic/claude-opus-5.5",
+};
 
 /** Each pull request read the service was asked, by agent. */
 let reads: string[] = [];
@@ -57,7 +63,7 @@ beforeEach(() => {
   refusing = 0;
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST) {
+      if (request.kind === ACT_KIND.AGENTS_PULL_REQUEST) {
         reads.push(request.payload.agentId);
         if (refusing > 0) {
           refusing -= 1;
@@ -90,7 +96,7 @@ afterEach(() => {
 
 /** The pin's row drawn in the sidebar's list, answering its press. */
 function drawPin(
-  pin: PinnedTab = PIN,
+  pin: SidebarPin = PIN,
   task: TaskSummary = TASK,
   control: TasksControl = tasksControl({ tasks: [task] }),
 ): HTMLElement {
@@ -103,11 +109,12 @@ function drawPin(
         createElement(SidebarPinnedTab, {
           tasks: control,
           pin,
-          task,
+          on: { task },
           current: false,
           inSight: true,
           onOpen: () => undefined,
-          onOpenTask: () => undefined,
+          onOpenHolder: () => undefined,
+          onUnpin: () => undefined,
         }),
       ),
     ),
@@ -190,17 +197,8 @@ test("a pinned agent's card hung again after its read failed asks again, and sho
   assert.match(card()?.textContent ?? "", /Expire invitations/u);
 });
 
-test("a pinned Plan tab hangs its task's own card, an agent's pin its own", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
-  restOn(drawPin({ task: TASK.id, tab: SIDE_PANEL_TAB.PLAN, label: "Plan", at: 1 }));
-  await settled();
-  const taskCard = document.querySelector(".luke-tooltip-card [data-task-card]");
-  assert.match(taskCard?.textContent ?? "", /Teammate invitations/u);
-  assert.equal(card(), null, "no pin card stands beside it");
-});
-
 test("a pinned Changes tab wears its pull request's mark and current label where its task's row holds the pull request, and the grey icon and pinned label where it holds none", () => {
-  const pin: PinnedTab = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
+  const pin: SidebarPin = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
   const held: TaskSummary = {
     ...TASK,
     agents: {
@@ -247,7 +245,7 @@ test("a pinned agent's tab of a task not open says its agent's name as the task'
           title: "Expire stale invitations",
           model: "anthropic/claude-opus-5.5",
           effort: "high",
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
         },
       ],
       pullRequestTotal: 0,
@@ -264,7 +262,7 @@ test("a pinned agent's tab of a task not open says its agent's name as the task'
 });
 
 test("a pinned Changes tab of an agent that shares its pull request with a newer one wears the open task's read of its own", () => {
-  const pin: PinnedTab = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
+  const pin: SidebarPin = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
   const newer = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
   const held: TaskSummary = {
     ...TASK,
@@ -319,7 +317,7 @@ test("a pinned Changes tab of an agent that shares its pull request with a newer
 });
 
 test("a pinned Changes tab naming a pull request by number keeps its pinned label where the task's pull requests stand in more than one repository, since a number names one only within its repository", () => {
-  const pin: PinnedTab = {
+  const pin: SidebarPin = {
     task: TASK.id,
     tab: { changes: AGENT, number: 42 },
     label: "#42 Old title",
@@ -350,15 +348,15 @@ test("a pinned Changes tab naming a pull request by number keeps its pinned labe
 });
 
 describe("a pinned Changes tab's card", () => {
-  const pin: PinnedTab = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
-  const summary: CodingAgentSummary = {
+  const pin: SidebarPin = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
+  const summary: AgentSummary = {
     id: AGENT,
     planId: TASK.id,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title: "Expiry job",
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
   const read = {
@@ -372,12 +370,12 @@ describe("a pinned Changes tab's card", () => {
     changedFiles: 3,
   };
   /** The open task, which has read its agent's pull request. */
-  const openTask = (agents: readonly CodingAgentSummary[]): TasksControl => {
+  const openTask = (agents: readonly AgentSummary[]): TasksControl => {
     const base = tasksControl({ tasks: [TASK] });
     return {
       ...base,
       activeTaskId: TASK.id,
-      agents: codingAgentsControl({ agents, pullRequests: new Map([[AGENT, read]]) }),
+      agents: agentsControl({ agents, pullRequests: new Map([[AGENT, read]]) }),
     };
   };
 
@@ -385,7 +383,7 @@ describe("a pinned Changes tab's card", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
     restOn(drawPin(pin, TASK, openTask([summary])));
     await settled();
-    const tabCard = document.querySelector(".luke-tooltip-card [data-tab-card]");
+    const tabCard = document.querySelector(".luke-tooltip-card [data-pull-request-card]");
     assert.match(tabCard?.textContent ?? "", /Newer title/u);
     assert.match(tabCard?.textContent ?? "", /3 files/u);
     assert.match(tabCard?.textContent ?? "", /Expiry job/u);
@@ -398,7 +396,7 @@ describe("a pinned Changes tab's card", () => {
     restOn(drawPin(pin));
     await settled();
     assert.ok(card() !== null, "the pin's card stands");
-    assert.equal(document.querySelector(".luke-tooltip-card [data-tab-card]"), null);
+    assert.equal(document.querySelector(".luke-tooltip-card [data-pull-request-card]"), null);
     assert.deepEqual(reads, [AGENT]);
   });
 
@@ -407,12 +405,12 @@ describe("a pinned Changes tab's card", () => {
     restOn(drawPin(pin, TASK, openTask([])));
     await settled();
     assert.match(card()?.textContent ?? "", /No longer on this task/u);
-    assert.equal(document.querySelector(".luke-tooltip-card [data-tab-card]"), null);
+    assert.equal(document.querySelector(".luke-tooltip-card [data-pull-request-card]"), null);
   });
 });
 
 test("a pinned tab's ⋯ and its right-click open the same menu, the ⋯ a Tab stop after its press", () => {
-  const press = drawPin({ task: TASK.id, tab: SIDE_PANEL_TAB.PLAN, label: "Plan", at: 1 });
+  const press = drawPin({ task: TASK.id, tab: SIDE_PANEL_TAB.INBOX, label: "Inbox", at: 1 });
   const more = document.querySelector<HTMLButtonElement>('button[aria-label="Pinned tab actions"]');
   assert.ok(more, "the row draws a ⋯");
   assert.equal(more.tabIndex, 0);

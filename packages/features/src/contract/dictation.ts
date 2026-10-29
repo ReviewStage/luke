@@ -5,7 +5,7 @@
 import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
-import { base64Chars } from "../coding-agent-wire.js";
+import { base64Chars } from "../agent-wire.js";
 import {
   DICTATION_BOUNDS,
   dictationAnswerSchema,

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_TODO_STATUS, type CodingAgentTodos } from "@luke/features/coding-agent-wire";
+import { AGENT_TODO_STATUS, type AgentTodos } from "@luke/features/agent-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -22,7 +22,7 @@ declare global {
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-type Todos = CodingAgentTodos["todos"];
+type Todos = AgentTodos["todos"];
 
 const roots: Root[] = [];
 
@@ -39,10 +39,10 @@ function steps(done: number): Todos {
     content,
     status:
       index < done
-        ? CODING_AGENT_TODO_STATUS.DONE
+        ? AGENT_TODO_STATUS.DONE
         : index === done
-          ? CODING_AGENT_TODO_STATUS.IN_PROGRESS
-          : CODING_AGENT_TODO_STATUS.PENDING,
+          ? AGENT_TODO_STATUS.IN_PROGRESS
+          : AGENT_TODO_STATUS.PENDING,
   }));
 }
 

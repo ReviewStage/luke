@@ -12,7 +12,7 @@ import { runWeb } from "../runtime.js";
 /**
  * function.ts -- the sandbox relays' one runtime edge: the terminal relay stood on the server the `api/terminal/sessions` function exports, and the Browser tab's live view on the one `api/browser/live` exports, each once per instance of its own function.
  *
- * Each scope is held open by `Effect.never`, as the voice service's is, so
+ * Each scope is held open by `Effect.never`, so
  * the `ws` server and every connection's fiber belong to one scope nothing
  * but a disposed runtime closes, which is what a Vercel function gets. An
  * instance whose runtime cannot be built stands none, and its server keeps

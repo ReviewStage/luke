@@ -153,10 +153,12 @@ export const PRODUCT_SETTINGS_VIEW = {
   SHORTCUTS: "shortcuts",
   CONNECTIONS: "connections",
   MEMORY: "memory",
-  CODING_AGENTS: "coding_agents",
+  AGENTS: "agents",
+  HOSTS: "hosts",
   INTEGRATIONS: "integrations",
   SKILLS: "skills",
   API_KEYS: "api_keys",
+  /** No page since Settings › Plan template was removed; an older build still counts a visit to it. */
   PLAN_TEMPLATE: "plan_template",
   WORKSPACE: "workspace",
   ACCOUNT: "account",
@@ -237,6 +239,7 @@ export const ProductSettingValueSchema = Schema.Literals(Object.values(PRODUCT_S
  * bridge, so a new experiment does not build until this set answers for it.
  */
 export const PRODUCT_EXPERIMENT = {
+  /** Graduated, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   BROWSER: "browser",
   /** Removed with Chat, so no build sends it now; kept because an older Mac's batch still may, and one unread value refuses the batch. */
   CHAT: "chat",

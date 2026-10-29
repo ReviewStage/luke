@@ -3,10 +3,10 @@
  *
  * What waits on the developer across the account, as the address to
  * subscribe at and one sealed statement per part of the account inbox's
- * answer; the task list, as its tasks and every agent of them and with no
- * task; and one task's whiteboard, named by `?id=`, as the statement that
- * marks where it stands, and its pages and calls the same way, and its
- * Browser tabs, the agent's pointer on each among them; and one
+ * answer; every inbox item the account reaches, as where each stands and
+ * those changed since `?since=` whole; the task list, as its tasks and every agent of them and with no
+ * task; and one task's record, pages, and calls, named by `?id=`, as the
+ * statements that mark where each stands, and its Browser tabs, the agent's pointer on each among them; and one
  * coding agent's transcript, or one of its workers' under `&call=`, as the
  * statements its pages are read from; and the
  * commands of the kinds `?kinds=` names that no Mac of the account has
@@ -29,6 +29,7 @@
 import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
+import { ACCOUNT_INBOX_REPOSITORYLESS } from "../account-inbox-wire.js";
 import {
   automationRunsLiveAnswerSchema,
   automationsLiveAnswerSchema,
@@ -36,13 +37,14 @@ import {
 } from "../automation-live.js";
 import { channelsLiveAnswerSchema } from "../channel-live.js";
 import {
+  ACCOUNT_INBOX_ITEMS,
+  accountInboxItemsLiveAnswerSchema,
   accountInboxLiveAnswerSchema,
   agentTranscriptLiveAnswerSchema,
   LIVE_POLL,
   LIVE_USER_QUERY,
   macCommandsLiveAnswerSchema,
   scopeInboxLiveAnswerSchema,
-  taskBoardLiveAnswerSchema,
   taskBrowserTabsLiveAnswerSchema,
   taskHistoryLiveAnswerSchema,
   taskPagesLiveAnswerSchema,
@@ -74,6 +76,24 @@ const liveReadSchema = EffectSchema.Struct({
   [LIVE_USER_QUERY]: userField,
 });
 
+/** The account's inbox as a live read follows it: whether it is carried the items of agents with no repository (`ACCOUNT_INBOX_REPOSITORYLESS`), which a build from before it never asks for. */
+const liveAccountInboxSchema = EffectSchema.Struct({
+  [ACCOUNT_INBOX_REPOSITORYLESS.QUERY]: EffectSchema.optionalKey(
+    EffectSchema.Literal(ACCOUNT_INBOX_REPOSITORYLESS.INCLUDE),
+  ),
+  [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
+});
+
+/** The account's inbox items as a live read follows them: the instant the reader holds every item changed since, in epoch milliseconds, as text; none for every item. */
+const liveAccountInboxItemsSchema = EffectSchema.Struct({
+  [ACCOUNT_INBOX_ITEMS.SINCE]: EffectSchema.optionalKey(EffectSchema.String),
+  [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
+});
+
 /** The task a live read is followed for; one that is no UUID is answered as not found, so it is read as text here. */
 const liveTaskSchema = EffectSchema.Struct({
   id: EffectSchema.String,
@@ -90,12 +110,19 @@ const liveScopeSchema = EffectSchema.Struct({
   [LIVE_USER_QUERY]: userField,
 });
 
-/** The agent a transcript is followed for, and the delegation call of the worker where it is a worker's; each read as text, an id or call of no shape answered as not found. */
+/**
+ * The agent a transcript is followed for, and the delegation call of the
+ * worker where it is a worker's; each read as text, an id or call of no
+ * shape answered as not found. A reader that names where it holds the
+ * newest messages (`LIVE_POLL.CURSOR`) is answered them past it; one of no
+ * shape is refused.
+ */
 const liveTranscriptSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   call: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
+  [LIVE_POLL.CURSOR]: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_USER_QUERY]: userField,
 });
 
@@ -122,12 +149,12 @@ export const liveContract = {
     .output(EffectSchema.flip(channelsLiveAnswerSchema)),
   inbox: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }))
-    .input(liveReadSchema)
+    .input(liveAccountInboxSchema)
     .output(EffectSchema.flip(accountInboxLiveAnswerSchema)),
-  taskBoard: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_BOARD }))
-    .input(liveTaskSchema)
-    .output(EffectSchema.flip(taskBoardLiveAnswerSchema)),
+  inboxItems: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX_ITEMS }))
+    .input(liveAccountInboxItemsSchema)
+    .output(EffectSchema.flip(accountInboxItemsLiveAnswerSchema)),
   taskRecord: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_RECORD }))
     .input(liveTaskSchema)
@@ -146,6 +173,10 @@ export const liveContract = {
     .output(EffectSchema.flip(taskHistoryLiveAnswerSchema)),
   taskBrowserTabs: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_BROWSER_TABS }))
+    .input(liveTaskSchema)
+    .output(EffectSchema.flip(taskBrowserTabsLiveAnswerSchema)),
+  agentBrowserTabs: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_BROWSER_TABS }))
     .input(liveTaskSchema)
     .output(EffectSchema.flip(taskBrowserTabsLiveAnswerSchema)),
   tasks: hostedProcedure

@@ -141,12 +141,7 @@ function ellipsizedLabels(update?: Parameters<typeof appMenuTemplate>[1]): strin
   return choosableLabels(appMenuTemplate("Luke", update)).filter((label) => label.endsWith("…"));
 }
 
-const ASKING_ITEMS = [
-  "Permanently Delete Task…",
-  "Send Feedback…",
-  "Settings…",
-  "Suggest a Feature…",
-];
+const ASKING_ITEMS = ["Permanently Delete…", "Send Feedback…", "Settings…", "Suggest a Feature…"];
 
 describe("the menu bar's names", () => {
   test("an item ends with an ellipsis where it opens a window or asks, and nowhere else", () => {
@@ -192,31 +187,24 @@ function everyItem(items: readonly MenuItemConstructorOptions[]): MenuItemConstr
   ]);
 }
 
-const developerTools = { onOpenVoiceWindow: () => undefined, onOpenCallWindow: () => undefined };
-
 /** The menu bar a build draws once the windows have told it of their developer tools. */
 function drawnFor(packaged: boolean): MenuItemConstructorOptions[] {
   let last: MenuItemConstructorOptions[] = [];
   const show = menuBarDrawer({ appName: "Luke", packaged }, (template) => {
     last = template;
   });
-  show({ developerTools });
+  show({ developerTools: true });
   return last;
 }
 
 describe("the developer tools", () => {
-  test("a development build offers them under View, for the window chosen over and the two it cannot reach", () => {
+  test("a development build offers them under View, for the window chosen over", () => {
     const view = drawnFor(false).find((item) => item.label === "View");
     const developer = Array.isArray(view?.submenu)
       ? view.submenu.find((item) => item.label === "Developer")
       : undefined;
     assert.ok(developer, "View has a Developer submenu");
-    assert.deepEqual(labelsOf([developer], "Developer"), [
-      "Developer Tools",
-      "-",
-      "Voice Window Developer Tools",
-      "Call Window Developer Tools",
-    ]);
+    assert.deepEqual(labelsOf([developer], "Developer"), ["Developer Tools"]);
   });
 
   test("a packaged build offers none, though the windows tell it of them", () => {

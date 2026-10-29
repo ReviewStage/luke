@@ -5,10 +5,9 @@
  * the eve session it runs in, where one has been recorded, and the
  * forward-only claim of a session for it. They stand apart from the
  * admission in `conversation.ts` on purpose. The admission reads the caller
- * through the door's authenticators, which import the eve package, and the
- * ask's bundle is the voice function, which talks to eve over HTTP and must
- * load nothing of eve's own code; a leaf with no path to the door is what
- * keeps that bundle free of it.
+ * through the door's authenticators, which import the eve package, and a
+ * caller that talks to eve over HTTP must load nothing of eve's own code; a
+ * leaf with no path to the door is what keeps such a bundle free of it.
  *
  * Who reaches a conversation is decided here too, for the same bundle: the
  * account that opened it, and every member of the workspace of the coding
@@ -35,7 +34,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { agentTable } from "../schemas/agent.js";
 import { conversations } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 import { agentReachableBy } from "./workspace-store.js";
@@ -77,9 +76,9 @@ const parentConversation = alias(conversations, "parent_conversation");
 function namedByWork(conversationId: SQLWrapper): SQL {
   return exists(
     queryBuilder
-      .select({ one: codingAgent.id })
-      .from(codingAgent)
-      .where(eq(codingAgent.conversationId, conversationId)),
+      .select({ one: agentTable.id })
+      .from(agentTable)
+      .where(eq(agentTable.conversationId, conversationId)),
   );
 }
 
@@ -102,9 +101,9 @@ function parentStands(): SQL {
 function namedByReachableWork(userId: string, conversationId: SQLWrapper): SQL {
   return exists(
     queryBuilder
-      .select({ one: codingAgent.id })
-      .from(codingAgent)
-      .where(and(eq(codingAgent.conversationId, conversationId), agentReachableBy(userId))),
+      .select({ one: agentTable.id })
+      .from(agentTable)
+      .where(and(eq(agentTable.conversationId, conversationId), agentReachableBy(userId))),
   );
 }
 

@@ -1053,14 +1053,14 @@ export function Tooltip({
 /**
  * What a `ListRow`'s hint hangs beyond its words: whether it raises them at
  * all (`shown`, as a title only cut short is hinted), the shortcut it names,
- * and the card in the pill's place, beside the row, the row its control.
+ * and the card in the pill's place. Note that where a row's card hangs is no
+ * option: every list row hangs it beside the row, the whole row its control,
+ * as chips in running words hang theirs below, so no row can drift from it.
  */
 interface RowHintOptions {
   shown?: boolean | undefined;
   command?: KeyedCommand | undefined;
   card?: ReactNode;
-  cardBeside?: boolean | undefined;
-  cardRegion?: RefObject<HTMLElement | null> | undefined;
 }
 
 const RowHintContext = createContext<RowHintOptions>({});
@@ -1074,27 +1074,23 @@ export function RowHintOptions({
   shown,
   command,
   card,
-  cardBeside,
-  cardRegion,
   children,
 }: RowHintOptions & { children: ReactNode }): React.JSX.Element {
-  const options = useMemo(
-    (): RowHintOptions => ({ shown, command, card, cardBeside, cardRegion }),
-    [shown, command, card, cardBeside, cardRegion],
-  );
+  const options = useMemo((): RowHintOptions => ({ shown, command, card }), [shown, command, card]);
   return <RowHintContext.Provider value={options}>{children}</RowHintContext.Provider>;
 }
 
 /**
  * A `ListRow`'s hint: this window's tooltip over the row's press, hanging
- * what `RowHintOptions` hands it. Note that the options come by context,
- * because the row takes its hint as a component, which must stay one
- * component across renders for the press it wraps to stay one press.
+ * what `RowHintOptions` hands it, its card beside the row the row hands it,
+ * that row its control. Note that the options come by context, because the
+ * row takes its hint as a component, which must stay one component across
+ * renders for the press it wraps to stay one press.
  */
-export const RowHint: ListRowHint = ({ label, children }) => {
+export const RowHint: ListRowHint = ({ label, row, children }) => {
   const { shown = true, ...options } = useContext(RowHintContext);
   return (
-    <Tooltip label={shown ? label : undefined} {...options}>
+    <Tooltip label={shown ? label : undefined} {...options} cardBeside cardRegion={row}>
       {children}
     </Tooltip>
   );

@@ -10,12 +10,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import {
-  EXCALIDRAW_SCRIPT,
-  EXCALIDRAW_STYLESHEET,
-  EXCALIDRAW_UNUSED_MODULE,
-  excalidrawFontsLocal,
-  excalidrawLeftOut,
-  excalidrawWithoutFontFallback,
   HIGHLIGHT_WORKER_BUILD,
   LUCIDE_WHOLE,
   lucideWholeModule,
@@ -27,16 +21,11 @@ import { build } from "esbuild";
 import type { Plugin } from "vite";
 import { PANEL_ASSET_BASE } from "../src/app/web-address";
 
-// Rollup's names for the modules this answers itself, `\0`-led so no other plugin loads them.
-const EXCALIDRAW_UNUSED_ID = "\0excalidraw-unused";
+// Rollup's name for the module this answers itself, `\0`-led so no other plugin loads it.
 const LUCIDE_WHOLE_ID = "\0lucide-whole";
 
 // What each kind of static file is served as in development.
-const CONTENT_TYPES = new Map([
-  [".woff2", "font/woff2"],
-  [".png", "image/png"],
-  [".m4a", "audio/mp4"],
-]);
+const CONTENT_TYPES = new Map([[".png", "image/png"]]);
 
 // A dynamic `import("lucide-react")`, as the icon picker spells it. Note that
 // Rollup's resolver is never told whether an import is dynamic, so the call
@@ -53,45 +42,22 @@ async function filesUnder(directory: string): Promise<readonly string[]> {
 
 /**
  * The panel's imports as its build table answers them: Streamdown's HTML
- * parser and Pierre's diff writer redirected to the panel's own modules, the
- * parts of Excalidraw the board never uses left out, its fonts named at
- * their copies under `/app/` alone, and the icon picker's
- * whole Lucide read from one file. Vitest runs this alone, so a test draws
- * what the build ships.
+ * parser and Pierre's diff writer redirected to the panel's own modules, and
+ * the icon picker's whole Lucide read from one file. Vitest runs this alone,
+ * so a test draws what the build ships.
  */
 export function panelResolve(): Plugin {
   return {
     name: "panel-resolve",
     enforce: "pre",
-    // Note that the stylesheet is an alias rather than a resolution here,
-    // because Tailwind resolves a stylesheet's imports through Vite's
-    // aliases and never through a plugin.
-    // Note too that development serves Excalidraw prebundled by esbuild,
-    // which no Vite transform reaches, so the prebundle takes the fonts'
-    // fix in esbuild's shape.
-    config: () => ({
-      resolve: {
-        alias: [
-          { find: /^@excalidraw\/excalidraw\/index\.css$/, replacement: EXCALIDRAW_STYLESHEET },
-        ],
-      },
-      optimizeDeps: { esbuildOptions: { plugins: [excalidrawFontsLocal] } },
-    }),
     resolveId(source, importer) {
       if (source === LUCIDE_WHOLE_ID) return LUCIDE_WHOLE_ID;
-      const redirect = redirectOf(source, importer);
-      if (redirect !== undefined) return redirect;
-      return excalidrawLeftOut(source, importer) ? EXCALIDRAW_UNUSED_ID : undefined;
+      return redirectOf(source, importer);
     },
     load(id) {
-      if (id === EXCALIDRAW_UNUSED_ID) return EXCALIDRAW_UNUSED_MODULE;
       return id === LUCIDE_WHOLE_ID ? lucideWholeModule(LUCIDE_WHOLE) : undefined;
     },
     transform(code, id) {
-      if (EXCALIDRAW_SCRIPT.test(id.split("?")[0] ?? id)) {
-        const local = excalidrawWithoutFontFallback(code);
-        return local === undefined ? undefined : { code: local, map: null };
-      }
       if (id.includes("/node_modules/") || !LUCIDE_DYNAMIC_IMPORT.test(code)) return undefined;
       const whole = new RegExp(LUCIDE_DYNAMIC_IMPORT.source, "g");
       return { code: code.replace(whole, `import("${LUCIDE_WHOLE_ID}")`), map: null };

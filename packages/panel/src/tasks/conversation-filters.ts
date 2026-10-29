@@ -24,7 +24,7 @@
  * fold for every task in it.
  */
 
-import type { ConversationEntry, ReviewThread } from "@luke/features/coding-agent-wire";
+import type { ConversationEntry, ReviewThread } from "@luke/features/agent-wire";
 import { Effect, Option, Schema } from "effect";
 import { useCallback } from "react";
 import { keptKey, useKept } from "../use-kept.js";

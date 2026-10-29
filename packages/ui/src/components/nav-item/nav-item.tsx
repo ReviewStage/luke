@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, KeyboardEvent, MouseEvent, ReactNode, Ref } from "react";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
-import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
+import { STATUS_TONE } from "../../status-tone.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 import { rovingItem } from "../roving-keys/roving-keys.js";
@@ -24,8 +24,10 @@ import { Skeleton } from "../skeleton/skeleton.js";
  *
  * Its end holds, at rest, a `mark` (a failed run's glyph, a pin) and a
  * `count`, read with its noun ("3 waiting on you") and left out at none,
- * muted, or in the needs-you tone (`STATUS_TONE.ATTENTION`) where it counts
- * what waits on the reader. Its `shortcut`, the chord the app draws, stands there while it is
+ * muted, in the needs-you tone (`STATUS_TONE.ATTENTION`) where it counts
+ * what waits on the reader, or in the unread dot's blue
+ * (`NAV_COUNT_TONE.UNREAD`) where it counts what they have yet to look at
+ * or finish. Its `shortcut`, the chord the app draws, stands there while it is
  * hovered or has the keyboard and takes the count's and the mark's place
  * then, so showing it moves nothing. A row's `detail`, the words after its name, steps back and
  * gives way first, so the name stays whole. An `unread` row reads in the
@@ -38,7 +40,11 @@ import { Skeleton } from "../skeleton/skeleton.js";
  * reaches nothing of this one.
  *
  * A row that drops a menu takes the props `useMenu().trigger()` hands out
- * (`menu`), and is lit while its menu stands. It takes an app's hint's
+ * (`menu`), and is lit while its menu stands. A row whose place has acts of
+ * its own takes their ⋯ as `actions`, which stands beside the press rather
+ * than inside it, over the row's end: hidden at rest, it comes in while the
+ * row is hovered, holds the keyboard, or the menu it dropped stands, and
+ * takes the count's and the mark's place then, as a task row's ⋯ does. It takes an app's hint's
  * handlers and chord as a Button does, and keeps the focus where it is
  * under a pointer's press (`keepFocus`) as a Button does too. It takes no
  * class or style; its outer spacing is its column's.
@@ -93,14 +99,22 @@ export const NAV_COUNT_SHOWN = {
 
 export type NavCountShown = (typeof NAV_COUNT_SHOWN)[keyof typeof NAV_COUNT_SHOWN];
 
+/** A count's ink: a status tone, or the unread dot's blue (`UnreadMark`) for a count of what the reader has yet to look at or finish. */
+export const NAV_COUNT_TONE = {
+  ...STATUS_TONE,
+  UNREAD: "unread",
+} as const;
+
+export type NavCountTone = (typeof NAV_COUNT_TONE)[keyof typeof NAV_COUNT_TONE];
+
 /** A count at the item's end: its figure, what it counts as a reader hears it, when it stands, and its ink. */
 export interface NavCount {
   readonly value: number;
   /** Said after the figure to a reader, "waiting on you", "tasks"; the figure alone where absent. */
   readonly noun?: string | undefined;
   readonly shown?: NavCountShown | undefined;
-  /** Its status tone: neutral, a tally in the muted ink, where absent; attention for what needs the reader. */
-  readonly tone?: StatusTone | undefined;
+  /** Its ink: neutral, a tally in the muted ink, where absent; attention for what needs the reader; unread for what the reader has yet to look at or finish. */
+  readonly tone?: NavCountTone | undefined;
 }
 
 /** What `useMenu().trigger()` hands the button its menu drops from. */
@@ -139,6 +153,8 @@ export type NavItemProps = HintProps & {
   onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
   /** The menu a right-click or a long press opens on it (`useMenu`'s `contextMenu`). */
   contextMenu?: ContextMenuProps | undefined;
+  /** Its place's own acts, a `MoreButton`, standing over its end while it is hovered or reached for. */
+  actions?: ReactNode;
   onKeyDown?: ((event: KeyboardEvent<HTMLButtonElement>) => void) | undefined;
   disabled?: boolean | undefined;
   /** Whether a pointer's press leaves the focus where it is. */
@@ -295,9 +311,10 @@ export function NavItem({
   onClick,
   keepFocus,
   roving,
+  actions,
   ...props
 }: NavItemProps): React.JSX.Element {
-  return (
+  const press = (
     <button
       type="button"
       className={ROW}
@@ -329,5 +346,14 @@ export function NavItem({
       <AtRest mark={mark} count={count} />
       {said(shortcut) ? <span className="luke-nav-item-shortcut ml-auto">{shortcut}</span> : null}
     </button>
+  );
+  if (!said(actions)) return press;
+  return (
+    <div className="luke-nav-item-frame relative flex min-w-0">
+      {press}
+      <span className="luke-nav-item-actions absolute inset-y-0 end-luke-4 flex items-center">
+        {actions}
+      </span>
+    </div>
   );
 }

@@ -1,5 +1,5 @@
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
-import { choiceWords } from "./coding-agent-model.js";
+import { choiceWords } from "./agent-model.js";
 
 /**
  * model-label.tsx -- a model and its effort as every place draws the pair: "Opus 5.5 High", the effort dimmed after the name.

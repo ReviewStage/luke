@@ -2,19 +2,19 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
+  type AgentPullRequest,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { test } from "vitest";
 import { agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
-import { ChangesCard } from "../tasks/changes-card.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import { PullRequestCard } from "../tasks/pull-request-card.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import { PULL_REQUEST_VIEW, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -30,7 +30,7 @@ import {
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 /** An agent at rest on the task, named by its title. */
-function agent(id: string, title: string, createdAt: number): CodingAgentSummary {
+function agent(id: string, title: string, createdAt: number): AgentSummary {
   return {
     id,
     planId: TASK,
@@ -38,13 +38,13 @@ function agent(id: string, title: string, createdAt: number): CodingAgentSummary
     effort: "high",
     title,
     createdAt,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
 }
 
 /** An open pull request, numbered. */
-function pullRequest(number: number, title: string): CodingAgentPullRequest {
+function pullRequest(number: number, title: string): AgentPullRequest {
   return {
     number,
     title,
@@ -62,7 +62,7 @@ const SECOND = agent("9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32", "Invite fixes", 2);
 const THIRD = agent("1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c", "Expiry job", 3);
 
 /** The task's agents, the first two on one pull request and the third on its own. */
-function agents(): CodingAgentsControl {
+function agents(): AgentsControl {
   const shared = pullRequest(41, "Teammate invitations");
   return {
     ...tasksControl().agents,
@@ -177,34 +177,37 @@ test("a shared pull request whose later agent's tab opened before the earlier ag
   );
 });
 
-test("a Changes card names the coding agent whose pull request it is by its tile and name, which hang the agent's card and open its tab", async () => {
+test("a pull request's card names the coding agent whose it is on a row by its tile and name, which hang the agent's card and open its tab", async () => {
   const opened: string[] = [];
   const control = agents();
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+  const published = pullRequest(42, "Expire invitations");
   act(() =>
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(ChangesCard, {
-          subject: agentSubject(control, THIRD.id, NOTHING_HELD, false),
-          models: [],
-          pullRequest: pullRequest(42, "Expire invitations"),
-          people: undefined,
-          onOpenAgent: () => opened.push(THIRD.id),
+        createElement(PullRequestCard, {
+          pullRequest: published,
+          lines: published,
+          files: published.changedFiles,
+          agent: {
+            subject: agentSubject(control, THIRD.id, NOTHING_HELD, false),
+            models: [],
+            onOpen: () => opened.push(THIRD.id),
+          },
         }),
       ),
     ),
   );
   assert.equal(container.querySelector(".luke-hover-card-name")?.textContent, "Expire invitations");
-  assert.equal(container.querySelector(".luke-hover-card-corner")?.textContent, "#42");
-  assert.match(
-    container.querySelector(".luke-hover-card-note")?.textContent ?? "",
-    /^6 files changed/,
+  assert.equal(
+    container.querySelector(".luke-hover-card-note")?.textContent,
+    "+210 −14 in 6 files · Checks passing",
   );
   const named = container.querySelector<HTMLButtonElement>(
-    '.luke-hover-card-sub button[data-actor-ref][data-kind="agent"]',
+    '.luke-hover-card-row button[data-actor-ref][data-kind="agent"]',
   );
   assert.ok(named, "the agent is named as an actor");
   assert.equal(named.textContent, "Expiry job");

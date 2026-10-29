@@ -2,8 +2,9 @@
  * agent-inbox.ts -- the Inbox's asks of the host, as procedures.
  *
  * What a task's coding agents need of the developer: a task's or an agent's
- * inbox followed, one item answered, closed, messaged, or marked, a thread
- * started, every item marked read, and an item's image and an agent's picture.
+ * inbox followed, and every item the account reaches; one item answered,
+ * closed, messaged, or marked, a thread started, every item marked read, and
+ * an item's image and an agent's picture.
  *
  * Each output is its view schema's type side (`EffectSchema.toType`) rather
  * than the view flipped, as the agents' acts' are. The only difference
@@ -17,71 +18,77 @@
  */
 
 import {
-  type CodingAgentInboxChanged,
-  codingAgentInboxAnsweredViewSchema,
-  codingAgentInboxAnswerParamsSchema,
-  codingAgentInboxAttachmentParamsSchema,
-  codingAgentInboxAttachmentViewSchema,
-  codingAgentInboxCloseParamsSchema,
-  codingAgentInboxMessagedViewSchema,
-  codingAgentInboxMessageParamsSchema,
-  codingAgentInboxReadAllViewSchema,
-  codingAgentInboxReadStateParamsSchema,
-  codingAgentInboxReadStateViewSchema,
-  codingAgentInboxScopeSchema,
-  codingAgentInboxStartParamsSchema,
-  codingAgentPictureParamsSchema,
-} from "@luke/features/coding-agent-view";
-import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
+  type AgentAccountItems,
+  type AgentInboxChanged,
+  agentInboxAnsweredViewSchema,
+  agentInboxAnswerParamsSchema,
+  agentInboxAttachmentParamsSchema,
+  agentInboxAttachmentViewSchema,
+  agentInboxCloseParamsSchema,
+  agentInboxMessagedViewSchema,
+  agentInboxMessageParamsSchema,
+  agentInboxReadAllParamsSchema,
+  agentInboxReadAllViewSchema,
+  agentInboxReadStateParamsSchema,
+  agentInboxReadStateViewSchema,
+  agentInboxScopeSchema,
+  agentInboxStartParamsSchema,
+  agentPictureParamsSchema,
+} from "@luke/features/agent-view";
 import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { AGENT_INBOX_ACT_KIND } from "./kinds.js";
 
 export const agentInboxActsContract = {
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: actProcedure(
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: actProcedure(
     "Could not follow the inbox on this system.",
   )
-    .input(exactInput(codingAgentInboxScopeSchema))
-    .output(eventIterator(type<CodingAgentInboxChanged["inbox"]>())),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: actProcedure(
+    .input(exactInput(agentInboxScopeSchema))
+    .output(eventIterator(type<AgentInboxChanged["inbox"]>())),
+  [AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW]: actProcedure(
+    "Could not follow the inbox on this system.",
+  )
+    .input(exactInput(EffectSchema.Undefined))
+    .output(eventIterator(type<AgentAccountItems>())),
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ANSWER]: actProcedure(
     "Could not acknowledge the inbox item on this system.",
   )
-    .input(exactInput(codingAgentInboxAnswerParamsSchema))
-    .output(EffectSchema.toType(codingAgentInboxAnsweredViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_CLOSE]: actProcedure(
+    .input(exactInput(agentInboxAnswerParamsSchema))
+    .output(EffectSchema.toType(agentInboxAnsweredViewSchema)),
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_CLOSE]: actProcedure(
     "Could not close the inbox item on this system.",
   )
-    .input(exactInput(codingAgentInboxCloseParamsSchema))
-    .output(EffectSchema.toType(codingAgentInboxAnsweredViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_MESSAGE]: actProcedure(
+    .input(exactInput(agentInboxCloseParamsSchema))
+    .output(EffectSchema.toType(agentInboxAnsweredViewSchema)),
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_MESSAGE]: actProcedure(
     "Could not send the message on this system.",
   )
-    .input(exactInput(codingAgentInboxMessageParamsSchema))
-    .output(EffectSchema.toType(codingAgentInboxMessagedViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_START]: actProcedure(
+    .input(exactInput(agentInboxMessageParamsSchema))
+    .output(EffectSchema.toType(agentInboxMessagedViewSchema)),
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_START]: actProcedure(
     "Could not start the thread on this system.",
   )
-    .input(exactInput(codingAgentInboxStartParamsSchema))
-    .output(EffectSchema.toType(codingAgentInboxMessagedViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: actProcedure(
+    .input(exactInput(agentInboxStartParamsSchema))
+    .output(EffectSchema.toType(agentInboxMessagedViewSchema)),
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_STATE]: actProcedure(
     "Could not mark the inbox item on this system.",
   )
-    .input(exactInput(codingAgentInboxReadStateParamsSchema))
-    .output(EffectSchema.toType(codingAgentInboxReadStateViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]: actProcedure(
+    .input(exactInput(agentInboxReadStateParamsSchema))
+    .output(EffectSchema.toType(agentInboxReadStateViewSchema)),
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_READ_ALL]: actProcedure(
     "Could not mark the inbox read on this system.",
   )
-    .input(exactInput(inboxReadAllRequestSchema))
-    .output(EffectSchema.toType(codingAgentInboxReadAllViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: actProcedure(
+    .input(exactInput(agentInboxReadAllParamsSchema))
+    .output(EffectSchema.toType(agentInboxReadAllViewSchema)),
+  [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_ATTACHMENT]: actProcedure(
     "Could not read the inbox item's image on this system.",
   )
-    .input(exactInput(codingAgentInboxAttachmentParamsSchema))
-    .output(EffectSchema.toType(codingAgentInboxAttachmentViewSchema)),
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_PICTURE]: actProcedure(
+    .input(exactInput(agentInboxAttachmentParamsSchema))
+    .output(EffectSchema.toType(agentInboxAttachmentViewSchema)),
+  [AGENT_INBOX_ACT_KIND.AGENTS_PICTURE]: actProcedure(
     "Could not read the agent's picture on this system.",
   )
-    .input(exactInput(codingAgentPictureParamsSchema))
-    .output(EffectSchema.toType(codingAgentInboxAttachmentViewSchema)),
+    .input(exactInput(agentPictureParamsSchema))
+    .output(EffectSchema.toType(agentInboxAttachmentViewSchema)),
 };

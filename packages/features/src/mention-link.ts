@@ -335,10 +335,9 @@ const mentionSchema = EffectSchema.Union([
     agentId: thingIdSchema,
     pageId: thingIdSchema,
   }),
+  // An agent is named by itself, whichever task it works on, which its reader finds by the agent.
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.AGENT),
-    /** The task the agent works on; absent for an agent on none. */
-    taskId: EffectSchema.optionalKey(taskIdSchema),
     agentId: thingIdSchema,
   }),
   EffectSchema.Struct({
@@ -493,10 +492,9 @@ function placeFields(place: LinkPlace, hash: string) {
       return "planId" in place
         ? { kind: MENTION_KIND.PAGE, taskId: place.planId, pageId: place.pageId }
         : { kind: MENTION_KIND.PAGE, agentId: place.agentId, pageId: place.pageId };
+    // Note that an older link naming the agent under its task names the agent alone, as every link to one is written now.
     case LINK_PLACE.AGENT:
-      return place.planId === undefined
-        ? { kind: MENTION_KIND.AGENT, agentId: place.agentId }
-        : { kind: MENTION_KIND.AGENT, taskId: place.planId, agentId: place.agentId };
+      return { kind: MENTION_KIND.AGENT, agentId: place.agentId };
     case LINK_PLACE.PERSON:
       return { kind: MENTION_KIND.PERSON, userId: place.userId };
     case LINK_PLACE.CHANNEL:
@@ -799,11 +797,9 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
             { kind: LINK_PLACE.PAGE, planId: mention.taskId, pageId: mention.pageId },
             workspace,
           );
-    case MENTION_KIND.AGENT: {
-      // An agent on no task stands under its workspace, as its own Luke link does.
-      const task = mention.taskId === undefined ? {} : { planId: mention.taskId };
-      return linkOf({ kind: LINK_PLACE.AGENT, ...task, agentId: mention.agentId }, workspace);
-    }
+    // An agent stands under its workspace, whichever task it works on, as its own Luke link does.
+    case MENTION_KIND.AGENT:
+      return linkOf({ kind: LINK_PLACE.AGENT, agentId: mention.agentId }, workspace);
     case MENTION_KIND.PERSON:
       return linkOf({ kind: LINK_PLACE.PERSON, userId: mention.userId }, workspace);
     case MENTION_KIND.CHANNEL:

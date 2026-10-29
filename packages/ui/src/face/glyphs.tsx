@@ -211,18 +211,6 @@ export function SpeakerIcon(): React.JSX.Element {
   );
 }
 
-/** The speaker struck through, on a call whose voice is silenced on this Mac. */
-export function SpeakerOffIcon(): React.JSX.Element {
-  return (
-    <Glyph>
-      <path d="M4 9.4h2.9L11.6 5v14L6.9 14.6H4Z" />
-      <path d="M14.8 9.3a4.1 4.1 0 0 1 0 5.4" />
-      <path d="M17.6 6.9a7.6 7.6 0 0 1 0 10.2" />
-      <path d="M4 3.4 20 19.4" />
-    </Glyph>
-  );
-}
-
 /** The display Luke stands on: everything about where and how he is drawn. */
 export function DisplayIcon(): React.JSX.Element {
   return (
@@ -284,16 +272,6 @@ export function ExternalIcon(): React.JSX.Element {
       <path d="M9.4 4.6H5.2A1.6 1.6 0 0 0 3.6 6.2v12.6a1.6 1.6 0 0 0 1.6 1.6h12.6a1.6 1.6 0 0 0 1.6-1.6v-4.2" />
       <path d="M14 3.6h6.4V10" />
       <path d="M10.4 13.6 20.1 3.9" />
-    </Glyph>
-  );
-}
-
-/** An arrow back up and to the left: the way back to the task a call is about. */
-export function ReturnIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M17.5 17.5 6.5 6.5" />
-      <path d="M6.5 15.5v-9h9" />
     </Glyph>
   );
 }
@@ -577,7 +555,7 @@ export function StopIcon(): React.JSX.Element {
   );
 }
 
-/** A board on its stand with a line drawn across it: the task's whiteboard. */
+/** A board on its stand with a line drawn across it: a plan's diagram. */
 export function BoardIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">

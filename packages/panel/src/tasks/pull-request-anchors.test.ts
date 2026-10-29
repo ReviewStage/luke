@@ -11,7 +11,7 @@ import {
   DIFF_SIDE,
   REVIEW_STATE,
   type ReviewThread,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { test } from "vitest";
 import { ANCHOR_KIND, anchorIn } from "./pull-request-anchors.js";
 

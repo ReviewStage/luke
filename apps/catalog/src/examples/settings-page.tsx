@@ -59,7 +59,7 @@ function Page({ title, look }: { title: string; look?: ToolbarLook }): React.JSX
           description="Words the call hears stand under its video."
         />
       </SettingsSection>
-      <SettingsSection title="Coding agents">
+      <SettingsSection title="Agents">
         <SwitchRow
           label="Archive a run once its pull request merges"
           description="Runs whose branch merged stop showing in the sidebar."
@@ -91,7 +91,7 @@ function SettingsPages(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="settings-page-narrow" title="Narrower than 480px, a long title">
         <div className="catalog-settings-frame catalog-settings-frame-narrow">
-          <Page title="Coding agents and their pull requests" />
+          <Page title="Agents and their pull requests" />
         </div>
       </CatalogSection>
       <CatalogSection id="settings-page-phone" title="On a phone, its actions ending the bar">

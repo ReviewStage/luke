@@ -7,6 +7,7 @@ import { SyncListener, type SyncListenerShape } from "@luke/database/sync/listen
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import { defineSyncTable } from "@luke/database/sync/sync-table";
 import { getTestDB, installSyncTables } from "@luke/database/testing";
+import { noDatabase } from "@luke/database/testing/no-database";
 import { sql } from "drizzle-orm";
 import { pgTable, text, uuid } from "drizzle-orm/pg-core";
 import {
@@ -40,7 +41,10 @@ import { NO_TOPICS, Sync, type SyncWatch } from "./watch.js";
  * database is still delivering is never outrun. The listener is the test
  * database's, behind a probe that counts its connections and can end one,
  * as a closed socket does, or deafen it, as a connection that died without
- * a word is.
+ * a word is. The hub is handed a pool that refuses every statement, since
+ * what it sends goes over its listener's own connection: a heartbeat that
+ * went through the pool would leave the listener's session idle, and
+ * Postgres reaps an idle listener's session (`LISTENER.REAPED`).
  */
 
 /** A wait nothing in these tests reaches, so a watch that wakes was woken. */
@@ -133,14 +137,17 @@ const probedListener = Effect.gen(function* () {
   const listener: SyncListenerShape = {
     listen: Effect.gen(function* () {
       yield* acknowledging.await;
-      const payloads = yield* underlying.listen;
+      const listening = yield* underlying.listen;
       const connection = { ended: Deferred.makeUnsafe<never, SqlError>(), deaf: false };
       standing = connection;
       yield* Ref.update(opened, (count) => count + 1);
-      return Stream.merge(
-        Stream.filter(payloads, () => !connection.deaf),
-        Stream.fromEffect(Deferred.await(connection.ended)),
-      );
+      return {
+        payloads: Stream.merge(
+          Stream.filter(listening.payloads, () => !connection.deaf),
+          Stream.fromEffect(Deferred.await(connection.ended)),
+        ),
+        notify: listening.notify,
+      };
     }),
   };
   return {
@@ -163,7 +170,12 @@ const onHub = <A, E, R>(test: (probe: Probe) => Effect.Effect<A, E, R>) =>
     const { clock, asleep } = yield* announcingClock;
     const { listener, ...probe } = yield* probedListener;
     return yield* test({ ...probe, asleep }).pipe(
-      Effect.provide(syncHub.pipe(Layer.provide(Layer.succeed(SyncListener, listener)))),
+      Effect.provide(
+        syncHub.pipe(
+          Layer.provide(Layer.succeed(SyncListener, listener)),
+          Layer.provide(noDatabase),
+        ),
+      ),
       Effect.provideService(Clock.Clock, clock),
     );
   });
@@ -205,7 +217,7 @@ it.layer(probeDB)("Luke Sync's hub", (it) => {
   );
 
   it.effect(
-    "a write that commits while the first read runs wakes the look after it, which carries its txid",
+    "a write that commits while the first read runs wakes the look after it, which carries its txid and when it was heard",
     () =>
       onHub(({ asleep }) =>
         Effect.gen(function* () {
@@ -222,6 +234,7 @@ it.layer(probeDB)("Luke Sync's hub", (it) => {
             return false;
           });
 
+          const writtenAt = yield* Clock.currentTimeMillis;
           const held = yield* Effect.forkChild(
             heldUntil(read, (moved) => moved, [task], NEVER_REACHED, Duration.hours(2)),
             { startImmediately: true },
@@ -229,7 +242,7 @@ it.layer(probeDB)("Luke Sync's hub", (it) => {
 
           assert.deepEqual(
             yield* driven({ fiber: held, asleep }, STEP),
-            Option.some({ read: true, txids: [txid] }),
+            Option.some({ read: true, txids: [txid], heardAt: Option.some(writtenAt) }),
           );
         }),
       ),
@@ -250,7 +263,7 @@ it.layer(probeDB)("Luke Sync's hub", (it) => {
     ),
   );
 
-  it.effect("a watch on an idle listener that still hears keeps it", () =>
+  it.effect("a watch on an idle listener that still hears itself keeps it", () =>
     onHub(({ opened }) =>
       Effect.gen(function* () {
         const sync = yield* Sync;

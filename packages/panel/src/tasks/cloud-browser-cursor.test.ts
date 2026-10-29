@@ -22,7 +22,7 @@ import { CloudBrowserPane } from "./cloud-browser-pane.js";
  * its size.
  */
 
-const TASK = "2e4a6c8e-0b1d-4f3a-8c5e-7a9b1c3d5e7f";
+const AGENT = "2e4a6c8e-0b1d-4f3a-8c5e-7a9b1c3d5e7f";
 const TAB = "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b";
 
 /** Now, by the pinned clock, in epoch milliseconds. */
@@ -31,7 +31,7 @@ const NOW = 1_800_000_000_000;
 /** A tab the agent clicked on a moment ago, at (640, 300) of its 1280 by 800 page. */
 const CLICKED: AgentBrowserTab = {
   id: TAB,
-  agentId: null,
+  agentId: AGENT,
   address: "https://example.com/sign-in",
   title: "Sign in",
   openedBy: { kind: "agent" },
@@ -92,7 +92,6 @@ async function paneOf(tab: AgentBrowserTab): Promise<{
     onRegistry(
       registry,
       createElement(CloudBrowserPane, {
-        taskId: TASK,
         tab: shown,
         owner: { name: "Luke", icon: createElement("span") },
         shown: true,

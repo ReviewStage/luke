@@ -71,7 +71,6 @@ import {
   TEXT_VARIANT,
   Text,
   TextButton,
-  TrashIcon,
   useConfirmDialog,
 } from "@luke/ui";
 import {
@@ -664,7 +663,7 @@ function IntegrationRow({
   };
   const leave = {
     label: "Disconnect",
-    icon: <TrashIcon />,
+    icon: <GLYPH.DISCONNECT />,
     danger: true,
     onSelect: disconnect.ask,
   };
@@ -683,10 +682,9 @@ function IntegrationRow({
         ]
       : [];
   const actions = connected
-    ? [
-        [...naming, ...adding],
-        [...(broken ? [] : [reconnect]), leave],
-      ].filter((group) => group.length > 0)
+    ? [[...naming, ...adding], broken ? [] : [reconnect], [leave]].filter(
+        (group) => group.length > 0,
+      )
     : [];
   return (
     // Note that a row is followed by its connection, because one that connects or disconnects leaves one section for the other and glides across rather than leaving one and arriving in the other.
@@ -767,7 +765,7 @@ function IntegrationRow({
         question={{
           title: `Disconnect ${name}?`,
           ...(bySignIn
-            ? { body: "Coding agents lose GitHub until you connect it again." }
+            ? { body: "Agents lose GitHub until you connect it again." }
             : several
               ? {
                   body: `Agents lose this account. Your other ${INTEGRATION_NAME[provider]} accounts stay connected.`,

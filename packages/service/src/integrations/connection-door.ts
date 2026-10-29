@@ -62,11 +62,11 @@ import { DateTime, Duration, Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { CONNECTION_POLICY } from "../agents/agent-runtime/role.js";
 import { turnServers } from "../agents/agent-runtime/servers.js";
-import type { AdmittedConversation } from "../agents/brain-host/conversation.js";
+import type { AdmittedConversation } from "../agents/eve-host/conversation.js";
 import { heldProjection, turnServersOf } from "../agents/native-events/native-projection.js";
 import { ACTION_RESULT_STATUS } from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";
-import type { IntegrationConnect, WorkspaceLinearConnect } from "./integration-connect.js";
+import type { IntegrationConnect } from "./integration-connect.js";
 import {
   evictGrantToken,
   grantAccessToken,
@@ -89,7 +89,6 @@ import {
 export type ConnectionDoorServices =
   | DatabaseServices
   | IntegrationConnect
-  | WorkspaceLinearConnect
   | GitHubApp
   | HttpClient.HttpClient;
 
@@ -195,9 +194,7 @@ function handedConnection(
 /** Whether a token read's sentence is one the member answers by connecting the integration again in settings. */
 function asksSignIn(provider: IntegrationProvider, sentence: string): boolean {
   const sentences = integrationUnavailable(provider);
-  return [sentences.NOT_CONNECTED, sentences.EXPIRED, sentences.WORKSPACE_EXPIRED].includes(
-    sentence,
-  );
+  return [sentences.NOT_CONNECTED, sentences.EXPIRED].includes(sentence);
 }
 
 /** A refusal of the connection for a grant or token read's sentence, saying the member must connect it where the sentence asks that. */
@@ -206,6 +203,16 @@ function refusedFor(connection: HandedConnection, sentence: string): ConnectionR
     connection: connection.connectionName,
     ...(asksSignIn(connection.provider, sentence) ? { requiresSignIn: true as const } : {}),
   });
+}
+
+/**
+ * The line a listing refused its grant or token logs: a warning, but where
+ * the member must only connect the integration (again), which is their
+ * account's state and would be repeated by every launch, at debug.
+ */
+function noToolsLogged(name: string, refusal: ConnectionRefusal): Effect.Effect<void> {
+  const line = `integration server ${name} lists no tools: ${refusal.error}`;
+  return refusal.requiresSignIn ? Effect.logDebug(line) : Effect.logWarning(line);
 }
 
 /** The account the connection names, as the token reads take it. */
@@ -228,23 +235,16 @@ function connectionGrant(
   );
 }
 
-/** A bearer, and the grant it was read on. */
-interface GrantBearer {
-  readonly token: string;
-  readonly grant: IntegrationGrantRef;
-}
-
-/** The bearer on the grant, or on the one it fell back to (`grantAccessToken`), or why there is none, read within its bound. */
+/** The bearer on the grant (`grantAccessToken`), or why there is none, read within its bound. */
 function grantToken(
-  admitted: AdmittedConversation,
   connection: HandedConnection,
   grant: IntegrationGrantRef,
-): Effect.Effect<Result.Result<GrantBearer, ConnectionRefusal>, never, ConnectionDoorServices> {
+): Effect.Effect<Result.Result<string, ConnectionRefusal>, never, ConnectionDoorServices> {
   const { connectionName } = connection;
-  return grantAccessToken(accountOf(connection), admissionOf(admitted), grant).pipe(
-    Effect.map(({ answer, grant: read }) =>
+  return grantAccessToken(grant).pipe(
+    Effect.map((answer) =>
       Result.isSuccess(answer)
-        ? Result.succeed({ token: answer.success.token, grant: read })
+        ? Result.succeed(answer.success.token)
         : Result.fail(refusedFor(connection, answer.failure)),
     ),
     Effect.timeoutOrElse({
@@ -261,39 +261,34 @@ function grantToken(
   );
 }
 
-/** What one session's work answered, and the grant whose token it ran on. */
-interface GrantWork<A> {
-  readonly done: Result.Result<A, McpToolsFailure>;
-  readonly grant: IntegrationGrantRef;
-}
-
 /**
  * One session's work with the provider on the grant's token: where the
  * provider refuses the token, it is dropped from Connect's cache and the
  * work runs once more on the token read next, as Connect's docs say, and a
  * second refusal is the answer. Answers why no token could be read, or the
- * work's own answer and the grant it ran on.
+ * work's own answer.
  */
 function onGrantToken<A>(
-  admitted: AdmittedConversation,
   connection: HandedConnection,
   grant: IntegrationGrantRef,
   work: (token: string) => Effect.Effect<A, McpToolsFailure, ConnectionDoorServices>,
-): Effect.Effect<Result.Result<GrantWork<A>, ConnectionRefusal>, never, ConnectionDoorServices> {
-  const attempt = (on: IntegrationGrantRef) =>
-    Effect.gen(function* () {
-      const bearer = yield* grantToken(admitted, connection, on);
-      if (Result.isFailure(bearer)) return Result.fail(bearer.failure);
-      const done = yield* Effect.result(work(bearer.success.token));
-      return Result.succeed({ done, grant: bearer.success.grant });
-    });
-  return Effect.flatMap(attempt(grant), (first) => {
+): Effect.Effect<
+  Result.Result<Result.Result<A, McpToolsFailure>, ConnectionRefusal>,
+  never,
+  ConnectionDoorServices
+> {
+  const attempt = Effect.gen(function* () {
+    const bearer = yield* grantToken(connection, grant);
+    if (Result.isFailure(bearer)) return Result.fail(bearer.failure);
+    return Result.succeed(yield* Effect.result(work(bearer.success)));
+  });
+  return Effect.flatMap(attempt, (first) => {
     if (Result.isFailure(first)) return Effect.succeed(first);
-    const { done, grant: used } = first.success;
+    const done = first.success;
     const refusedByProvider =
       Result.isFailure(done) && done.failure.reason === MCP_TOOLS_FAILURE.REFUSED;
     return refusedByProvider
-      ? Effect.andThen(evictGrantToken(used), attempt(used))
+      ? Effect.andThen(evictGrantToken(grant), attempt)
       : Effect.succeed(first);
   });
 }
@@ -360,7 +355,8 @@ export function nativeAgentConnections(
  * token, and otherwise the provider's own list on the grant's token, kept
  * for the next listing. A connection the agent is not handed lists none,
  * and so does one whose grant or list failed, with one log line naming the
- * connection and why in words that carry no credential.
+ * connection and why in words that carry no credential, a warning but for
+ * a connection the member must connect (`noToolsLogged`).
  */
 export function listConnectionTools(
   admitted: AdmittedConversation,
@@ -371,7 +367,7 @@ export function listConnectionTools(
     if (Option.isNone(connection)) return [];
     const grant = yield* connectionGrant(admitted, connection.value);
     if (Result.isFailure(grant)) {
-      yield* Effect.logWarning(`integration server ${name} lists no tools: ${grant.failure.error}`);
+      yield* noToolsLogged(name, grant.failure);
       return [];
     }
     const from = yield* DateTime.nowAsDate;
@@ -383,16 +379,16 @@ export function listConnectionTools(
       return kept.tools;
     }
     const url = INTEGRATION[connection.value.provider].MCP_URL;
-    const read = yield* onGrantToken(admitted, connection.value, grant.success, (token) =>
+    const read = yield* onGrantToken(connection.value, grant.success, (token) =>
       listMcpToolSchemas(url, token),
     );
     if (Result.isFailure(read)) {
-      yield* Effect.logWarning(`integration server ${name} lists no tools: ${read.failure.error}`);
+      yield* noToolsLogged(name, read.failure);
       return [];
     }
-    const tools = read.success.done;
+    const tools = read.success;
     if (Result.isSuccess(tools)) {
-      yield* keepTools(name, read.success.grant, tools.success, from);
+      yield* keepTools(name, grant.success, tools.success, from);
       return tools.success;
     }
     yield* Effect.logWarning(
@@ -438,13 +434,13 @@ export function callConnectionTool(
     if (Result.isFailure(grant)) return Result.fail(grant.failure);
     const from = yield* DateTime.nowAsDate;
     const url = INTEGRATION[connection.value.provider].MCP_URL;
-    const read = yield* onGrantToken(admitted, connection.value, grant.success, (token) =>
+    const read = yield* onGrantToken(connection.value, grant.success, (token) =>
       callMcpTool(url, token, tool, input),
     );
     if (Result.isFailure(read)) return Result.fail(read.failure);
-    const call = read.success.done;
+    const call = read.success;
     const listed = Result.isSuccess(call) ? call.success.tools : call.failure.listed;
-    if (listed !== undefined) yield* keepTools(name, read.success.grant, listed, from);
+    if (listed !== undefined) yield* keepTools(name, grant.success, listed, from);
     if (Result.isFailure(call)) {
       return Result.fail(refused(sessionFailed(name, "call a tool of", call.failure)));
     }

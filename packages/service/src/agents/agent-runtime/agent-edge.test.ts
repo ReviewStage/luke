@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createAgent } from "@luke/database/models/agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
 import { Deferred, Effect, Exit, Layer, Option, Result, Scope } from "effect";
@@ -18,10 +18,10 @@ import {
   integrationConnectOf,
 } from "../../testing/integration-connect.js";
 import { recordingSentry, sentOfType } from "../../testing/sentry-transport.js";
-import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_PRINCIPAL_TYPE } from "../brain-host/bounds.js";
-import { memoryRelayState } from "../brain-host/relay.js";
 import { type CoderHost, coderHost } from "../coder-host/host.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
+import { EVE_HOST_ATTRIBUTE, EVE_HOST_PRINCIPAL_TYPE } from "../eve-host/bounds.js";
+import { memoryRelayState } from "../eve-host/relay.js";
 import { type EdgeKit, edgeKit } from "./edge.js";
 import { AGENT_ROLE, type AgentRole } from "./role.js";
 
@@ -55,9 +55,9 @@ function mintSession(): string {
 function typedSeat(userId: string, conversationId: string): SessionAuth {
   const principal = {
     principalId: userId,
-    principalType: BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT,
+    principalType: EVE_HOST_PRINCIPAL_TYPE.ACCOUNT,
     authenticator: "test",
-    attributes: { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: conversationId },
+    attributes: { [EVE_HOST_ATTRIBUTE.CONVERSATION]: conversationId },
   };
   return { current: principal, initiator: principal };
 }
@@ -89,7 +89,7 @@ async function openAgent(host: CoderHost) {
     Effect.gen(function* () {
       const userId = yield* openGithubUser();
       const task = yield* startTask(userId, { name: "Invitations", repository: "acme/relay" });
-      const started = yield* createCodingAgent(userId, {
+      const started = yield* createAgent(userId, {
         taskId: task.id,
         idempotencyKey: `start-${mintSession()}`,
         model: "anthropic/claude-opus-5.5",

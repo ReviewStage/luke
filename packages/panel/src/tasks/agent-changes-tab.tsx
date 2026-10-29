@@ -1,13 +1,10 @@
+import { AGENT_CALL_FAILURE, type AgentChangesAnswerView } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentChangesAnswerView,
-} from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_STATUS,
-  type CodingAgentChangedFile,
+  AGENT_STATUS,
+  type AgentChangedFile,
   DIFF_SIDE,
   type ReviewThread,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { imageTypeOfPath } from "@luke/features/github-image";
 import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wire";
 import { REFRESH_FAILED_WORDS } from "@luke/features/words";
@@ -48,7 +45,6 @@ import {
   FoldVerticalIcon,
   GLYPH,
   ImageIcon,
-  RotateCwIcon,
   UnfoldVerticalIcon,
 } from "@luke/ui/icons";
 import {
@@ -75,6 +71,7 @@ import {
   FILE_NOTE_LINE,
 } from "../diff-view/contract.js";
 import { usePhoneRoom } from "../stage-room.js";
+import { agentStillWriting } from "./agent-model.js";
 import {
   type ChangesList,
   FileHead,
@@ -108,7 +105,6 @@ import {
   wholeable,
 } from "./changes-model.js";
 import { ChangesStrip } from "./changes-strip.js";
-import { agentStillWriting } from "./coding-agent-model.js";
 import {
   type CommentDraft,
   type CommentDrafts,
@@ -146,7 +142,7 @@ import { useOpenFileTab } from "./open-file-tab.js";
 import { usePullRequestNumber } from "./pull-request-number.js";
 import { PullRequestWriteNote } from "./pull-request-writes.js";
 import { landable, type ThreadLanding, ThreadLandingProvider } from "./thread-reveal.js";
-import type { CodingAgentsControl } from "./use-coding-agents.js";
+import type { AgentsControl } from "./use-agents.js";
 import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
 
@@ -158,7 +154,7 @@ import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
  * files and the member's viewed marks with them (`useChangesReads`), so its
  * own Files changed tab counts the lines left to review by the marks drawn
  * here; it asks as the view first comes on screen,
- * when the developer presses Retry or Refresh changes, and the moment the
+ * when the developer presses Retry or the tab's Refresh, and the moment the
  * agent ends, since that is when what it published has settled. A refresh
  * leaves the files drawn standing until its answer lands; a read that
  * failed says so with a retry, as a File tab's does; an agent with no pull
@@ -214,7 +210,7 @@ import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
  */
 
 /** A read that threw rather than answered, drawn as any other failed read. */
-const UNANSWERED: CodingAgentChangesAnswerView = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+const UNANSWERED: AgentChangesAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
 
 /**
  * One agent's read as last answered, none before the first read lands;
@@ -278,7 +274,7 @@ function ViewedCount({
   viewed,
   truncated,
 }: {
-  files: readonly CodingAgentChangedFile[];
+  files: readonly AgentChangedFile[];
   /** Whether a file is marked viewed; none while the marks are not read. */
   viewed: ((path: string) => boolean) | undefined;
   /** Whether the read stopped short of every file of the pull request. */
@@ -307,7 +303,7 @@ function ViewedCount({
 
 /** How many of the files are viewed, in the bar's words (`ViewedCount`), and whether every one is. */
 function viewedOf(
-  files: readonly CodingAgentChangedFile[],
+  files: readonly AgentChangedFile[],
   viewed: ((path: string) => boolean) | undefined,
   truncated: boolean,
 ): { readonly words: string; readonly complete: boolean } {
@@ -335,27 +331,25 @@ const CHANGES_MENU_WORDS = {
 } as const;
 
 /**
- * The bar's ⋯ over the diffs, which acts on the whole pull request since the
- * bar names no file: its patch copied or saved, every file the read holds
- * in the list's order (`pullRequestPatch`), and the changes read again. The
- * patch is not offered, and says why, where the read stopped short of every
- * file, since it would not be the pull request's. A file's own path is
- * copied from its header (`FileHead`). `PaneBar` draws it as its ⋯.
+ * The bar's ⋯ over the diffs, named Files changed, which acts on the whole
+ * pull request since the bar names no file: its patch copied or saved, every
+ * file the read holds in the list's order (`pullRequestPatch`). The patch is
+ * not offered, and says why, where the read stopped short of every file,
+ * since it would not be the pull request's. A file's own path is copied from
+ * its header (`FileHead`). `PaneBar` draws it as its ⋯. Note that it offers
+ * no Refresh, because the Pull request tab the view stands in hands its own
+ * to the same screen's ⋯, which reads these changes again too, and one
+ * screen offers one Refresh.
  */
 function useChangesMenu({
   pullRequest,
-  reading,
-  onRefresh,
 }: {
   /** The pull request read; none, while there is none to act on, draws no ⋯. */
   pullRequest: {
     readonly url: string;
     readonly truncated: boolean;
-    readonly files: readonly CodingAgentChangedFile[];
+    readonly files: readonly AgentChangedFile[];
   } | null;
-  /** Whether a read is out, which a refresh would only repeat. */
-  reading: boolean;
-  onRefresh: () => void;
 }): PaneBarMenu | undefined {
   const copyWithToast = useCopyToast();
   const saveText = useSaveText();
@@ -367,7 +361,7 @@ function useChangesMenu({
       ? CHANGES_MENU_WORDS.NO_PATCH
       : undefined;
   return {
-    thing: "Changes",
+    thing: "Files changed",
     groups: [
       [
         {
@@ -389,12 +383,6 @@ function useChangesMenu({
               saveText(pullRequestPatchName(pullRequest.url), patch).catch(() => undefined);
             }
           },
-        },
-        {
-          label: "Refresh changes",
-          icon: <RotateCwIcon aria-hidden="true" />,
-          disabled: reading,
-          onSelect: onRefresh,
         },
       ],
     ],
@@ -423,7 +411,7 @@ export interface ChangesThreads {
   readonly list: readonly ReviewThread[];
   /** Draws one, under its line or above the diff, where it names the lines it is on. */
   readonly draw: (thread: ReviewThread, place: ThreadPlace) => ReactNode;
-  /** Reads the threads again, as Refresh changes reads the files again, so the two describe the same push. */
+  /** Reads the threads again, as Retry reads the files again, so the two describe the same push. */
   readonly refresh?: (() => void) | undefined;
 }
 
@@ -561,7 +549,7 @@ interface FileMinimized {
  * stands among them.
  */
 function minimizedNotes(
-  file: CodingAgentChangedFile,
+  file: AgentChangedFile,
   placed: ReturnType<typeof threadsOn>["placed"],
   draw: ChangesThreads["draw"] | undefined,
   minimized: FileMinimized,
@@ -635,7 +623,7 @@ function minimizedNotes(
  * rests on it.
  */
 function entryOf(
-  file: CodingAgentChangedFile,
+  file: AgentChangedFile,
   list: ChangesList,
   /** The review threads on this file, and the door that draws one. */
   threads: readonly ReviewThread[],
@@ -790,7 +778,7 @@ function entryOf(
 
 /** What a file's entry is drawn from, in a fixed order: the entry stands while each is the same. */
 function entryInputs(
-  file: CodingAgentChangedFile,
+  file: AgentChangedFile,
   list: ChangesList,
   threads: readonly ReviewThread[],
   draw: ChangesThreads["draw"] | undefined,
@@ -838,7 +826,7 @@ function useEntries(
   texts: FileTexts,
   minimizedOf: (path: string) => FileMinimized | undefined,
   hover: ThreadHover | undefined,
-  wholeOf: (file: CodingAgentChangedFile) => FileWhole,
+  wholeOf: (file: AgentChangedFile) => FileWhole,
   openedOf: (path: string) => ReadonlySet<number> | undefined,
 ): readonly DiffListEntry[] {
   const kept = useRef(new Map<string, { inputs: readonly unknown[]; entry: DiffListEntry }>());
@@ -908,7 +896,7 @@ const NONE_WHOLE: ReadonlyMap<string, DiffFileTexts> = new Map();
  * gaps never open is never offered, and one whose read is refused stays as
  * it is, its refusal said as a gap's is.
  */
-function useWholeFiles(texts: FileTexts): (file: CodingAgentChangedFile) => FileWhole {
+function useWholeFiles(texts: FileTexts): (file: AgentChangedFile) => FileWhole {
   const { read, refused, whole } = texts;
   const [held, setHeld] = useState<{
     readonly of: unknown;
@@ -1049,7 +1037,7 @@ const COMMENT_SIDE = {
  */
 function threadLines(
   threads: readonly ReviewThread[],
-  file: CodingAgentChangedFile,
+  file: AgentChangedFile,
 ): DiffListSelection | undefined {
   const ranges = threads.flatMap((thread) => {
     if (thread.line === null) return [];
@@ -1118,7 +1106,7 @@ function DraftedLineComment({
  */
 function useListCommenting(
   agentId: string,
-  files: readonly CodingAgentChangedFile[],
+  files: readonly AgentChangedFile[],
   headSha: string | undefined,
   comments: LineComments | undefined,
   onRefresh: () => void,
@@ -1223,7 +1211,7 @@ interface RevealedPlace {
 /** Where `thread` stands in `file`'s entry, drawn as `lead` (its threads above all), whole (`whole`), or with gaps opened over lines (`opened`), as `entryOf` places it. */
 function revealedPlace(
   thread: ReviewThread,
-  file: CodingAgentChangedFile,
+  file: AgentChangedFile,
   lead: boolean,
   whole: DiffFileTexts | undefined,
   opened: ReadonlySet<number> | undefined,
@@ -1241,14 +1229,14 @@ function revealedPlace(
 }
 
 /** A reveal as the list takes it: the ask, and the file its thread is on, which the changes hold. */
-type ListReveal = ChangesReveal & { readonly file: CodingAgentChangedFile };
+type ListReveal = ChangesReveal & { readonly file: AgentChangedFile };
 
 /** A thread being landed on in the list: the ask, the thread by its id, and its file, whose entry places it once the list holds it. */
 interface ListLanding {
   readonly ask: number;
   readonly threadId: string;
   readonly thread: ReviewThread;
-  readonly file: CodingAgentChangedFile;
+  readonly file: AgentChangedFile;
 }
 
 /** The thread being landed on in the list, and what its cards are handed to land on it. */
@@ -1283,7 +1271,7 @@ function useListLanding(
   list: ChangesList,
   entries: readonly DiffListEntry[],
   minimizedOf: (path: string) => FileMinimized | undefined,
-  wholeOf: (file: CodingAgentChangedFile) => FileWhole,
+  wholeOf: (file: AgentChangedFile) => FileWhole,
   openedOf: (path: string) => ReadonlySet<number> | undefined,
   box: React.RefObject<HTMLElement | null>,
 ): ListLandingControl {
@@ -1453,9 +1441,9 @@ function expansionRefusalOf(refusal: TaskFileRefusal): ExpansionRefusal {
 
 /** How Files changed opens the lines between a file's hunks: whether a file's may be, the door that reads one whole, and why any could not be. */
 interface FileTexts {
-  readonly expandable: (file: CodingAgentChangedFile) => boolean;
+  readonly expandable: (file: AgentChangedFile) => boolean;
   /** Whether a file is the answer's own, every hunk of it drawn, rather than one a chapter cut down, which is never read whole. */
-  readonly whole: (file: CodingAgentChangedFile) => boolean;
+  readonly whole: (file: AgentChangedFile) => boolean;
   readonly read: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
   readonly refused: ReadonlyMap<string, ExpansionRefusal>;
 }
@@ -1480,9 +1468,9 @@ function useFileTexts(
   pullRequest: {
     readonly url: string;
     readonly headSha?: string;
-    readonly files: readonly CodingAgentChangedFile[];
+    readonly files: readonly AgentChangedFile[];
   } | null,
-  files: readonly CodingAgentChangedFile[],
+  files: readonly AgentChangedFile[],
 ): FileTexts {
   const { act } = useAct();
   const [refusals, setRefusals] = useState<{
@@ -1540,9 +1528,9 @@ function useFileTexts(
   }, [act, taskId, repository, pullRequest, files]);
   // Note that a file a chapter cut down to some of its hunks is not the answer's own, and offers no gap, because its text before cannot be turned back from the hunks it kept.
   const own = useMemo(() => new Set(pullRequest?.files), [pullRequest]);
-  const whole = useCallback((file: CodingAgentChangedFile) => own.has(file), [own]);
+  const whole = useCallback((file: AgentChangedFile) => own.has(file), [own]);
   const offered = useCallback(
-    (file: CodingAgentChangedFile) =>
+    (file: AgentChangedFile) =>
       read !== undefined && whole(file) && expandable(file) && !refused.has(file.path),
     [read, whole, refused],
   );
@@ -1557,7 +1545,7 @@ function useFileTexts(
  * lines between them do not; and its hunks at their places (`textsOf`).
  */
 async function checkedTextsOf(
-  file: CodingAgentChangedFile,
+  file: AgentChangedFile,
   after: string,
 ): Promise<DiffFileTexts | undefined> {
   if (file.blobSha !== undefined && (await blobShaOf(after)) !== file.blobSha) return undefined;
@@ -1590,9 +1578,9 @@ function FoldAllButton({ list }: { list: ChangesList }): React.JSX.Element {
 
 /** The file the list stands on, or its first where it stands on none. */
 function shownFileOf(
-  files: readonly CodingAgentChangedFile[],
+  files: readonly AgentChangedFile[],
   current: string | undefined,
-): CodingAgentChangedFile | undefined {
+): AgentChangedFile | undefined {
   return files.find((file) => file.path === current) ?? files[0];
 }
 
@@ -1696,10 +1684,7 @@ function FilesList({
 }
 
 /** The pull request a changes answer names, with its files; none where it names none. */
-type ChangesPullRequest = Extract<
-  CodingAgentChangesAnswerView,
-  { pullRequest: unknown }
->["pullRequest"];
+type ChangesPullRequest = Extract<AgentChangesAnswerView, { pullRequest: unknown }>["pullRequest"];
 
 /**
  * The Files changed view's reads, held by the Pull request tab rather than
@@ -1710,7 +1695,7 @@ type ChangesPullRequest = Extract<
  */
 export interface ChangesReads {
   /** The changes as last answered, a good answer standing over any failure after it; a failure only where none has landed. */
-  readonly answer: CodingAgentChangesAnswerView | undefined;
+  readonly answer: AgentChangesAnswerView | undefined;
   /** Whether the latest read failed after a good one landed, which leaves the good one drawn. */
   readonly refreshFailed: boolean;
   readonly out: boolean;
@@ -1730,11 +1715,11 @@ export interface ChangesReads {
  */
 export function useChangesReads(
   agentId: string,
-  control: CodingAgentsControl,
+  control: AgentsControl,
   shown: boolean,
 ): ChangesReads {
   const status = control.agents?.find((each) => each.id === agentId)?.status;
-  const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
+  const ended = !agentStillWriting(status ?? AGENT_STATUS.RUNNING);
   // The pull request the tab names by its number, where it names one other than the agent's own (`pull-request-number.ts`).
   const number = usePullRequestNumber();
   const {
@@ -1751,7 +1736,7 @@ export function useChangesReads(
   // Note that a good answer stands over a failure after it, because a read that fails
   // again must not take the files drawn away; the count follows what is drawn.
   const good = useRef<
-    { readonly agentId: string; readonly answer: CodingAgentChangesAnswerView } | undefined
+    { readonly agentId: string; readonly answer: AgentChangesAnswerView } | undefined
   >(undefined);
   if (latest !== undefined && !("failure" in latest)) good.current = { agentId, answer: latest };
   const standing = good.current?.agentId === agentId ? good.current.answer : undefined;
@@ -1798,7 +1783,7 @@ export function AgentChangesTab({
   overscroll,
 }: {
   agentId: string;
-  control: CodingAgentsControl;
+  control: AgentsControl;
   /** Whether the panel is on screen, which is when the tab reads. */
   shown: boolean;
   /** The task's repository, which the agent works in, and whose files a gap between hunks is read from; none opens no gap. */
@@ -1814,7 +1799,7 @@ export function AgentChangesTab({
   /** The changes and the viewed marks, read by the Pull request tab as the view first comes on screen (`useChangesReads`). */
   reads: ChangesReads;
   /** The files drawn in the place of every file the read answered, as a chapter draws its own (`chapterPatches`); none draws them all. */
-  files?: readonly CodingAgentChangedFile[] | undefined;
+  files?: readonly AgentChangedFile[] | undefined;
   /** A file to bring into view, once, among those drawn. */
   fileReveal?: FileReveal | undefined;
   /** Whether a swipe past the list's end is handed on to the box the tab stands in, as a chapter's is to the Pull request tab; it stops at the end where none is named. */
@@ -1885,7 +1870,7 @@ export function AgentChangesTab({
     ask();
     threads?.refresh?.();
   };
-  const changesMenu = useChangesMenu({ pullRequest, reading: out, onRefresh: refresh });
+  const changesMenu = useChangesMenu({ pullRequest });
   const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy });
   // A phone draws no bar over the diffs: the task's header's ⋯ offers every control of it while the view is shown, the count of files viewed said under Show files.
   const phone = usePhoneRoom();

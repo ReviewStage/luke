@@ -1,4 +1,4 @@
-import type { CodingAgentOverviewPullRequest } from "@luke/features/coding-agent-wire";
+import type { AgentOverviewPullRequest } from "@luke/features/agent-wire";
 import { PULL_REQUEST_ACTION, PULL_REQUEST_REFUSAL } from "@luke/features/pull-request-write-wire";
 import { IRREVERSIBLE_WORDS } from "@luke/features/words";
 import {
@@ -17,7 +17,7 @@ import { usePrefetchEditorBundle } from "../bundle-loader.js";
 import { PLACEMENT_END, type PlanEditorPlacement } from "../plan-editor/contract.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { EDITOR_NOTE_CLASS, MarkdownEditor } from "./markdown-editor.js";
-import { documentWordsUnder, editsOnClick } from "./plan-document-editor.js";
+import { clickPlacement, documentWordsAt } from "./plan-document-editor.js";
 import {
   PullRequestWriteNote,
   usePullRequestWrites,
@@ -88,12 +88,12 @@ type Editing =
       /** Each opening's own, so a reload opens a new editor rather than keeping the old one's words. */
       readonly generation: number;
       /** The read standing when the last write went out, which a newer read closes the editor after. */
-      readonly written?: CodingAgentOverviewPullRequest | undefined;
+      readonly written?: AgentOverviewPullRequest | undefined;
     }
   | {
       readonly kind: typeof EDITING.RELOADING;
       /** The read standing when Reload was chosen, which a newer read opens the editor after. */
-      readonly read: CodingAgentOverviewPullRequest;
+      readonly read: AgentOverviewPullRequest;
       readonly generation: number;
     };
 
@@ -186,7 +186,7 @@ export function PullRequestDescription({
   onRead,
 }: {
   agentId: string;
-  pullRequest: CodingAgentOverviewPullRequest;
+  pullRequest: AgentOverviewPullRequest;
   /** The description as written, Markdown, empty where it has none. */
   body: string;
   /** GitHub's rendering of it; none where it has none. */
@@ -344,9 +344,12 @@ export function PullRequestDescription({
         onPointerEnter={prefetchEditorBundle}
         onFocus={prefetchEditorBundle}
         onPress={({ target, x, y, block: pressed }) => {
-          if (editing.kind !== EDITING.CLOSED || !editsOnClick(target)) return;
+          if (editing.kind !== EDITING.CLOSED) return;
           // Note that the caret is placed by the words the click landed on, since the editor may draw what stands above them at another height, an alert say.
-          open({ x, y, words: documentWordsUnder(pressed, x, y) });
+          const placement = clickPlacement(target, x, y, (range) =>
+            documentWordsAt(pressed, range),
+          );
+          if (placement !== undefined) open(placement);
         }}
         onOpen={() => {
           if (editing.kind === EDITING.CLOSED) open(PLACEMENT_END);

@@ -4,14 +4,14 @@ import { Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { HostedEnvironment } from "../environment.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../http/http-effect.js";
-import type { BrainHostTurn } from "./brain-host/bounds.js";
+import { sessionsRouter } from "./coder-host/runtime-sessions.js";
+import type { EveHostTurn } from "./eve-host/bounds.js";
 import {
   type AgentSessions,
   EVE_MOUNT,
   type EveMount,
   eveSessionsComposer,
-} from "./brain-host/eve-sessions.js";
-import { sessionsRouter } from "./coder-host/runtime-sessions.js";
+} from "./eve-host/eve-sessions.js";
 
 /**
  * The web functions that reach eve, over the web runtime's own
@@ -23,15 +23,9 @@ import { sessionsRouter } from "./coder-host/runtime-sessions.js";
  * unset where it is blank or the cron's own value, `environment.ts`),
  * beside the account; the door's deployment actor admits it only for what
  * its table allows and only on what that account reaches
- * (`brain-host/auth.ts`). So none of them reaches for another secret, and a
+ * (`eve-host/auth.ts`). So none of them reaches for another secret, and a
  * deployment holding none, or no environment at all, or no origin for eve,
  * reaches eve for nobody.
- *
- * The voice function is the one caller that composes its own: its exchange
- * stands for a function instance's life outside any request, over an
- * `HttpClient` of its own, so it reads the same secret by the same rule
- * from its environment (`eveDeploymentSecretIn`) and composes eve's client
- * in `voice/deployment-exchange.ts`.
  */
 
 /**
@@ -41,7 +35,7 @@ import { sessionsRouter } from "./coder-host/runtime-sessions.js";
  * that the environment is read once, here, so a composer handed on to a
  * fiber whose context holds none still carries the secret it was made with.
  */
-export function deploymentEve<Turn extends BrainHostTurn = never>(
+export function deploymentEve<Turn extends EveHostTurn = never>(
   origin: string | undefined,
   mount: EveMount,
 ): Effect.Effect<
@@ -71,7 +65,7 @@ export function deploymentEve<Turn extends BrainHostTurn = never>(
  * its own eve, or the refusal on its own, so a deployment that cannot reach
  * eve as itself fails each account it acts for rather than the whole pass.
  */
-export function deploymentEveForAccounts<Turn extends BrainHostTurn = never>(
+export function deploymentEveForAccounts<Turn extends EveHostTurn = never>(
   origin: string | undefined,
   mount: EveMount,
 ): Effect.Effect<

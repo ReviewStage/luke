@@ -1,4 +1,4 @@
-import { base64Bytes } from "./coding-agent-wire.js";
+import { base64Bytes } from "./agent-wire.js";
 import { formatBytes } from "./number-format.js";
 
 /**
@@ -16,10 +16,11 @@ export interface FileChip {
   readonly url: string;
 }
 
-/** How the viewer shows a file: as a picture, played as a video, as its lines, or by its icon and name with a way to save it. */
+/** How the viewer shows a file: as a picture, played as a video, drawn as its Mermaid diagram, as its lines, or by its icon and name with a way to save it. */
 export const ATTACHMENT_VIEW = {
   IMAGE: "image",
   VIDEO: "video",
+  DIAGRAM: "diagram",
   TEXT: "text",
   OTHER: "other",
 } as const;
@@ -29,6 +30,9 @@ export type AttachmentView = (typeof ATTACHMENT_VIEW)[keyof typeof ATTACHMENT_VI
 /** The videos the viewer plays, the ones Chromium plays everywhere; any other video is shown by its icon. */
 const PLAYED_VIDEO_TYPE = { WEBM: "video/webm", MP4: "video/mp4" } as const;
 const PLAYED_VIDEO_TYPES: ReadonlySet<string> = new Set(Object.values(PLAYED_VIDEO_TYPE));
+
+/** The extensions a Mermaid diagram's source is saved under, which the viewer draws as its diagram. */
+const DIAGRAM_EXTENSION = /\.(?:mmd|mermaid)$/iu;
 
 /** A file's bytes in base64, read off its `data:` URL; empty where it carries none. */
 export function chipBase64(file: FileChip): string {
@@ -44,8 +48,8 @@ export function sizeLabel(base64: string): string {
 export function attachmentView(file: FileChip): AttachmentView {
   if (file.mediaType.startsWith("image/")) return ATTACHMENT_VIEW.IMAGE;
   if (PLAYED_VIDEO_TYPES.has(file.mediaType)) return ATTACHMENT_VIEW.VIDEO;
-  if (file.mediaType.startsWith("text/")) return ATTACHMENT_VIEW.TEXT;
-  return ATTACHMENT_VIEW.OTHER;
+  if (!file.mediaType.startsWith("text/")) return ATTACHMENT_VIEW.OTHER;
+  return DIAGRAM_EXTENSION.test(file.name) ? ATTACHMENT_VIEW.DIAGRAM : ATTACHMENT_VIEW.TEXT;
 }
 
 /** A text file's words, read from its base64 as UTF-8, which is all a text attachment may spell. */

@@ -25,7 +25,7 @@ export function RetentionNote({ basis }: { basis: RetentionBasis }): React.JSX.E
     <SectionNote>
       Each cell is the share of one UTC week's signups that{" "}
       {basis === RETENTION_BASIS.MEANINGFUL
-        ? "created a task, wrote a plan revision, or started a coding agent"
+        ? "created a task, wrote a plan revision, or started an agent"
         : "made a hosted-tier call"}{" "}
       that many weeks after signup. Wk 0 is the signup week, and dashed cells are still accruing.
       {basis === RETENTION_BASIS.MEANINGFUL
@@ -39,8 +39,8 @@ export function TopAccountsNote(): React.JSX.Element {
   return (
     <SectionNote>
       An active day is a UTC day the account created a task, wrote a plan revision, or started a
-      coding agent. PRs merged count its agents' pull requests merged in the window. Last seen is
-      the account's latest sign-in session.
+      agent. PRs merged count its agents' pull requests merged in the window. Last seen is the
+      account's latest sign-in session.
     </SectionNote>
   );
 }
@@ -49,10 +49,10 @@ export function TopAccountsNote(): React.JSX.Element {
 export function ActivityNote(): React.JSX.Element {
   return (
     <SectionNote>
-      An active developer created a task, wrote a plan revision, or started a coding agent in the
-      last 7 UTC days. Plan revisions count the developer's own and Luke's notes; automation runs
-      leave out the ones a guard held back. A deleted task leaves no row, and takes its agents and
-      revisions with it, so past counts can shrink.
+      An active developer created a task, wrote a plan revision, or started an agent in the last 7
+      UTC days. Plan revisions count the developer's own and Luke's notes; automation runs leave out
+      the ones a guard held back. A deleted task leaves no row, and takes its agents and revisions
+      with it, so past counts can shrink.
     </SectionNote>
   );
 }

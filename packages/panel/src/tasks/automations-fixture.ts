@@ -11,6 +11,7 @@
  * here is invented; nothing is read from an account.
  */
 
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
@@ -32,7 +33,6 @@ import {
   type AutomationWorkspaceRun,
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@luke/host/contract";
@@ -73,7 +73,7 @@ function run(
     agent: {
       id: uuid("8c1a6a4f-3d2e-4d8b-8b66", n),
       title: null,
-      status: CODING_AGENT_STATUS.COMPLETED,
+      status: AGENT_STATUS.COMPLETED,
     },
     firedAt,
     settledAt: firedAt + 4 * MINUTE,
@@ -92,7 +92,7 @@ const SWEEP_RUNS: readonly AutomationRunSummary[] = [
     agent: {
       id: uuid("8c1a6a4f-3d2e-4d8b-8b66", 1),
       title: "Fix the flaky invite expiry test",
-      status: CODING_AGENT_STATUS.RUNNING,
+      status: AGENT_STATUS.RUNNING,
     },
     settledAt: NOW - 7 * HOUR + MINUTE,
   }),
@@ -100,7 +100,7 @@ const SWEEP_RUNS: readonly AutomationRunSummary[] = [
     agent: {
       id: uuid("8c1a6a4f-3d2e-4d8b-8b66", 2),
       title: "Quarantine the billing export timeout",
-      status: CODING_AGENT_STATUS.COMPLETED,
+      status: AGENT_STATUS.COMPLETED,
     },
   }),
   run(3, 55, SCHEDULED(55), {
@@ -112,7 +112,7 @@ const SWEEP_RUNS: readonly AutomationRunSummary[] = [
     agent: {
       id: uuid("8c1a6a4f-3d2e-4d8b-8b66", 4),
       title: "Retry the usage alert webhook once",
-      status: CODING_AGENT_STATUS.COMPLETED,
+      status: AGENT_STATUS.COMPLETED,
     },
   }),
 ];
@@ -133,7 +133,7 @@ const REVIEW_RUNS: readonly AutomationRunSummary[] = [
       agent: {
         id: uuid("8c1a6a4f-3d2e-4d8b-8b66", 5),
         title: "Review #118",
-        status: CODING_AGENT_STATUS.COMPLETED,
+        status: AGENT_STATUS.COMPLETED,
       },
     },
   ),
@@ -151,7 +151,7 @@ const REVIEW_RUNS: readonly AutomationRunSummary[] = [
       agent: {
         id: uuid("8c1a6a4f-3d2e-4d8b-8b66", 6),
         title: "Review #64",
-        status: CODING_AGENT_STATUS.COMPLETED,
+        status: AGENT_STATUS.COMPLETED,
       },
     },
   ),
@@ -179,7 +179,7 @@ const DEPLOY_RUNS: readonly AutomationRunSummary[] = [
       agent: {
         id: uuid("8c1a6a4f-3d2e-4d8b-8b66", 8),
         title: "Check the 2.14.0 deploy",
-        status: CODING_AGENT_STATUS.COMPLETED,
+        status: AGENT_STATUS.COMPLETED,
       },
     },
   ),
@@ -191,7 +191,7 @@ const DEPLOY_RUNS: readonly AutomationRunSummary[] = [
       agent: {
         id: uuid("8c1a6a4f-3d2e-4d8b-8b66", 9),
         title: "Check the 2.13.2 deploy",
-        status: CODING_AGENT_STATUS.COMPLETED,
+        status: AGENT_STATUS.COMPLETED,
       },
     },
   ),

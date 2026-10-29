@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import {
   INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
@@ -106,6 +106,7 @@ function item(id: string, agentId: string, words: string): InboxItem {
 function waitingSweep(waiting: InboxItem, workspaceId: string | undefined): AppInboxTasklessItem {
   return {
     ...waitingOf(waiting),
+    updatedAt: waiting.updatedAt,
     agentTitle: "Sweep the flaky tests",
     agentModel: "anthropic/claude-opus-5.5",
     automationId: null,
@@ -129,7 +130,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The window's Inbox listing `listed`, holding the plan's items and the agent's given, and every pull request read it asked. */
+/** The window's Inbox listing `listed`, holding the plan's items and the agent's given, the first of them chosen, and every pull request read it asked. */
 async function inbox(options: {
   listed: Workspace | undefined;
   taskItems: readonly InboxItem[];
@@ -164,7 +165,7 @@ async function inbox(options: {
                 : { ...pullRequest, state: PULL_REQUEST_STATE.MERGED },
           });
         }
-        case ACT_KIND.CODING_AGENTS_LIST:
+        case ACT_KIND.AGENTS_LIST:
           return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: [] } });
         default:
           return Promise.resolve({
@@ -178,9 +179,14 @@ async function inbox(options: {
   const sweep = options.sweep;
   // The Inbox's own choice is held as the plans tab holds it, so the item it stands chosen is drawn.
   function Page() {
-    const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
-    // Whether the list was asked for, which the window keeps as the Tasks tab does.
-    const [listed, setListed] = useState(false);
+    // Note that the first item stands chosen, as a press on its row chooses it.
+    const [chosen, setChosen] = useState<InboxChoice | undefined>(() => {
+      const [first] = options.taskItems;
+      if (first !== undefined) return { taskId: TASK.id, itemId: first.id };
+      return sweep === undefined
+        ? undefined
+        : { agentId: sweep.item.agentId, itemId: sweep.item.id };
+    });
     return createElement(DesktopInbox, {
       tasks: tasksControl({
         workspace: options.listed,
@@ -202,8 +208,7 @@ async function inbox(options: {
           onChoose: setChosen,
           onOpenItem: () => undefined,
           onOpenChannel: () => undefined,
-          listed,
-          onListed: setListed,
+          onClear: () => setChosen(undefined),
           pages: undefined,
           onTaskAgents: () => undefined,
         },

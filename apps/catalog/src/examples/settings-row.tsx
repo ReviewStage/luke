@@ -88,7 +88,7 @@ function Rows(): React.JSX.Element {
         {(control) => <HeldSwitch label="Show captions" control={control} />}
       </SettingsRow>
       <SettingsRow
-        label="Archive a coding agent's run once its pull request merges into the default branch"
+        label="Archive an agent's run once its pull request merges into the default branch"
         description="Runs whose branch acme/a-repository-whose-name-runs-long-and-longer merged stop showing in the sidebar."
       >
         {(control) => (
@@ -280,7 +280,7 @@ function ListRows(): React.JSX.Element {
   const commands = [
     APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE],
     APP_SHORTCUTS[APP_COMMAND.FIND_PREVIOUS],
-    APP_SHORTCUTS[APP_COMMAND.DELETE_TASK],
+    APP_SHORTCUTS[APP_COMMAND.DELETE],
   ];
   return (
     <SettingsSection title="General">

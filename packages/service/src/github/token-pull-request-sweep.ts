@@ -28,11 +28,11 @@
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import {
-  type CodingAgent,
+  type Agent,
   hasRepository,
-  readCodingAgent,
+  readAgent,
   type WithRepository,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
 import {
   type ClaimedTokenPullRequest,
   claimTokenPullRequestPolls,
@@ -43,7 +43,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { agentPublished } from "../agents/coder-host/published.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
-import { AGENT_WAKE, type AgentWake, wakeAgents } from "./agent-wakes.js";
+import { AGENT_WAKE, type AgentWake, githubIdOf, wakeAgents } from "./agent-wakes.js";
 import {
   GITHUB_HTTP_STATUS,
   type GitHubApp,
@@ -113,7 +113,9 @@ type PollFailure = GitHubUnavailable | TokenRefused | QueryError | Schema.Schema
 
 type PollServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
-const AuthorSchema = Schema.NullOr(Schema.Struct({ login: Schema.String }));
+const AuthorSchema = Schema.NullOr(
+  Schema.Struct({ login: Schema.String, id: Schema.optionalKey(Schema.Number) }),
+);
 
 const PullSchema = Schema.Struct({ head: Schema.Struct({ sha: Schema.String }) });
 
@@ -165,7 +167,7 @@ type Changed<A> = Option.Option<{ readonly body: A; readonly etag: string | unde
 
 /** One pull request's poll: the agent, its owner's token, its number, and what the last poll read. */
 interface Poll {
-  readonly agent: WithRepository<CodingAgent>;
+  readonly agent: WithRepository<Agent>;
   readonly member: MemberGitHubToken;
   readonly number: number;
   readonly claimed: ClaimedTokenPullRequest;
@@ -400,6 +402,7 @@ const pollPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
               kind: AGENT_WAKE.REVIEW,
               url: review.html_url,
               by: review.user?.login ?? GHOST,
+              ...githubIdOf(review.user ?? {}),
               at: instantOf(poll, review.submitted_at),
               verdict: review.state.toLowerCase(),
               words: review.body ?? "",
@@ -421,6 +424,7 @@ const pollPullRequest = /* @__PURE__ */ Effect.fnUntraced(function* (
         kind: AGENT_WAKE.COMMENT,
         url: comment.html_url,
         by: comment.user?.login ?? GHOST,
+        ...githubIdOf(comment.user ?? {}),
         at: instantOf(poll, comment.created_at),
         words: comment.body ?? "",
       },
@@ -473,7 +477,7 @@ const pollClaimed = /* @__PURE__ */ Effect.fnUntraced(function* (
   now: number,
 ): Effect.fn.Return<number, never, PollServices> {
   return yield* Effect.gen(function* () {
-    const agent = yield* readCodingAgent(claimed.userId, claimed.agentId);
+    const agent = yield* readAgent(claimed.userId, claimed.agentId);
     // An agent with no repository has no pull request to poll.
     if (Option.isNone(agent) || !hasRepository(agent.value)) return 0;
     const held = yield* openMemberGitHubToken(ring, claimed.userId);

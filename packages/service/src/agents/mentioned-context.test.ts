@@ -434,14 +434,8 @@ const person = (name: string, userId = PERSON_ID) =>
 const page = (name: string, pageId = PAGE_ID) =>
   mentionMarkdown({ kind: MENTION_KIND.PAGE, taskId: TASK.id, pageId }, name, PLACE);
 
-const agent = (name: string, agentId = OTHER_AGENT_ID, taskId: string | undefined = TASK.id) =>
-  mentionMarkdown(
-    taskId === undefined
-      ? { kind: MENTION_KIND.AGENT, agentId }
-      : { kind: MENTION_KIND.AGENT, taskId: taskId, agentId },
-    name,
-    PLACE,
-  );
+const agent = (name: string, agentId = OTHER_AGENT_ID) =>
+  mentionMarkdown({ kind: MENTION_KIND.AGENT, agentId }, name, PLACE);
 
 const OTHER_AGENT: MentionedAgent = {
   id: OTHER_AGENT_ID,
@@ -475,7 +469,7 @@ test("another agent of the plan the words mention is handed by its id, where its
 
   assert.match(
     part,
-    /another coding agent of your workspace on this task, "Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\) working in `acme\/relay` on the branch `luke\/store-invitations`, whose pull request is #42 \(https:\/\/github\.com\/acme\/relay\/pull\/42\)\./u,
+    /another agent of your workspace on this task, "Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\) working in `acme\/relay` on the branch `luke\/store-invitations`, whose pull request is \[@#42\]\(https:\/\/github\.com\/acme\/relay\/pull\/42\)\./u,
   );
   assert.match(part, /`gh pr diff 42`/u);
   assert.match(part, /To message it, call `message_agent` with its id\./u);
@@ -494,26 +488,17 @@ test("an agent of the workspace on another task or on none is handed with its ta
     people: new Map(),
   });
 
-  const another = mentionedContext(
-    `See ${agent("Store", OTHER_AGENT_ID, onAnother.task.id)}.`,
-    TASK,
-    reads(onAnother),
-  );
-  const none =
-    mentionedContext(
-      `See ${agent("Store", OTHER_AGENT_ID, undefined)}.`,
-      undefined,
-      reads(onNone),
-    ) ?? "";
+  const another = mentionedContext(`See ${agent("Store")}.`, TASK, reads(onAnother));
+  const none = mentionedContext(`See ${agent("Store")}.`, undefined, reads(onNone)) ?? "";
 
   assert.match(
     another ?? "",
-    /another coding agent of your workspace on the task "Billing", "Store the invitations"/u,
+    /another agent of your workspace on the task "Billing", "Store the invitations"/u,
   );
   assert.match(another ?? "", /To message it, call `message_agent`/u);
   assert.match(
     none,
-    /another coding agent of your workspace on no task, "Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\), archived, working in `acme\/relay`/u,
+    /another agent of your workspace on no task, "Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\), archived, working in `acme\/relay`/u,
   );
   assert.match(none, /`gh pr diff 42 --repo acme\/relay`/u);
   assert.doesNotMatch(none, /To message it/u);
@@ -550,9 +535,25 @@ test("a page the send did not find on the plan is named as gone, an agent it did
 
   assert.equal(
     gone,
-    `${MENTIONED_HEADING}\n\nThe page "Old chart": no longer on this task.\n\nThe coding agent "Old": not found in your workspace.`,
+    `${MENTIONED_HEADING}\n\nThe page "Old chart": no longer on this task.\n\nThe agent "Old": not found in your workspace.`,
   );
   assert.equal(elsewhere, undefined);
+});
+
+test("an agent on no task is handed a page it showed itself, and nothing of another agent's", () => {
+  const SELF_ID = "7a7a7a7a-0000-4000-8000-000000000000";
+  const pageOf = (agentId: string) =>
+    mentionMarkdown({ kind: MENTION_KIND.PAGE, agentId, pageId: PAGE_ID }, "Chart", PLACE);
+  const ids = mentionedIds(`See ${pageOf(SELF_ID)}.`, undefined, SELF_ID);
+  const own = mentionedContext(`See ${pageOf(SELF_ID)}.`, undefined, READS, SELF_ID);
+  const theirs = mentionedContext(`See ${pageOf(OTHER_AGENT_ID)}.`, undefined, READS, SELF_ID);
+
+  assert.deepEqual(ids.pages, [PAGE_ID]);
+  assert.match(
+    own ?? "",
+    /the page "Invites by week" \(id `[^`]+`, version 3\) that you showed\./u,
+  );
+  assert.equal(theirs, undefined);
 });
 
 test("an agent mentioned in upper case is found as the store holds it", () => {
@@ -618,10 +619,7 @@ test("a gone section's bare address is named by its anchor, and a page's, an age
     { kind: MENTION_KIND.PAGE, taskId: TASK.id, pageId: PAGE_ID },
     PLACE,
   );
-  const agentAddress = encodeMention(
-    { kind: MENTION_KIND.AGENT, taskId: TASK.id, agentId: OTHER_AGENT_ID },
-    PLACE,
-  );
+  const agentAddress = encodeMention({ kind: MENTION_KIND.AGENT, agentId: OTHER_AGENT_ID }, PLACE);
   const personAddress = encodeMention({ kind: MENTION_KIND.PERSON, userId: PERSON_ID }, PLACE);
   const words = `See ${bareSection("Old flow")}, ${pageAddress}, ${agentAddress} and ${personAddress}.`;
 

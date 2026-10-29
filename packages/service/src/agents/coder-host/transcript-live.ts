@@ -6,15 +6,28 @@ import {
   liveStatementOf,
 } from "@luke/database/core/live-statement";
 import { queryBuilder } from "@luke/database/core/query";
-import { agentReachableBy } from "@luke/database/models/workspace-store";
+import type { MessageCursor } from "@luke/database/models/message-reads";
+import { agentVisibleTo } from "@luke/database/models/workspace-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { agentDelegationTable, agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
-import { codingAgent, codingAgentDelegation } from "@luke/database/schemas/coding-agent";
-import { asks, conversations, messages, turns } from "@luke/database/schemas/storage";
-import { CODING_AGENT_BOUNDS, PART_CUT_FIELD } from "@luke/features/coding-agent-wire";
+import { conversations, messages, standingLine, turns } from "@luke/database/schemas/storage";
+import { AGENT_BOUNDS, PART_CUT_FIELD } from "@luke/features/agent-wire";
 import { TRANSCRIPT_WINDOW } from "@luke/features/transcript-window";
-import { and, desc, eq, exists, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import {
+  and,
+  desc,
+  eq,
+  exists,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
+import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
 import { CUT_END_CHARS, CUT_TOOLS, REASONING_PART_TYPE } from "./part-cut.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -78,10 +91,22 @@ const TURN_CHANGED = sql`greatest(
 /** The journal of the turn that took a developer's line in, which shares the turn's id as its client id. */
 const takingJournal = alias(messages, "taking_journal");
 /** The coding agent that sent a line, apart from the agent the statement's membership reads. */
-const sendingAgent = alias(codingAgent, "sending_agent");
+const sendingAgent = alias(agentTable, "sending_agent");
 
 /** The newest messages' own rows, by id, which the parts statement reads the parts of. */
 const windowMessage = alias(messages, "window_message");
+
+/**
+ * Whether the message row is past the cursor, where one is named: numbered
+ * after its sequence, or amended in place after its revision, as a page past
+ * a cursor reads (`listMessagesPast`). A row moved to a fresh sequence is
+ * past it by that sequence.
+ */
+const pastCursor = (
+  row: { readonly seq: AnyPgColumn; readonly revision: AnyPgColumn },
+  past: MessageCursor | undefined,
+): SQL | undefined =>
+  past === undefined ? undefined : or(gt(row.seq, past.seq), gt(row.revision, past.revision));
 
 /** The part types whose heavy field a page may cut: reasoning's words, and the outputs of the tools that answer as words (`part-cut.ts`). */
 const CUT_TOOL_TYPES = sql.join(
@@ -113,7 +138,7 @@ const retired = (element: SQL) => sql`(${element}->>'type' like 'tool-%'
  * the very bound may be cut on one and not the other; only the ends drawn
  * differ.
  */
-function windowPartsOf(target: ConversationTarget, reached: SQL) {
+function windowPartsOf(target: ConversationTarget, reached: SQL, past: MessageCursor | undefined) {
   const element = queryBuilder
     .select({
       value: sql`element.value`.as("value"),
@@ -138,7 +163,7 @@ function windowPartsOf(target: ConversationTarget, reached: SQL) {
     )
     .where(sql`not ${retired(sql`element.value`)}`)
     .as("part");
-  const cut = sql`coalesce(length(${element.words}) > ${CODING_AGENT_BOUNDS.MAX_PART_CHARS}, false)`;
+  const cut = sql`coalesce(length(${element.words}) > ${AGENT_BOUNDS.MAX_PART_CHARS}, false)`;
   const newest = queryBuilder
     .select({ id: windowMessage.id })
     .from(windowMessage)
@@ -146,6 +171,8 @@ function windowPartsOf(target: ConversationTarget, reached: SQL) {
       and(
         eq(windowMessage.conversationId, target.conversationId),
         eq(windowMessage.userId, target.userId),
+        standingLine(windowMessage),
+        pastCursor(windowMessage, past),
       ),
     )
     .orderBy(desc(windowMessage.seq))
@@ -186,16 +213,19 @@ function windowPartsOf(target: ConversationTarget, reached: SQL) {
 
 /**
  * The newest `TRANSCRIPT_WINDOW` messages of `target`'s conversation, each
- * with what sent it, where a turn under way took it in, the turn the ask a
- * spoken line followed ran in, and the turn it was written in, each join
+ * with what sent it, where a turn under way took it in, and the turn it
+ * was written in, each join
  * naming one row at most, so a message is one row keyed by its id, with how
  * many parts it holds, which `windowParts` carries one row each; read
- * only while `reached` holds, as the other statements are. None where it
- * names a value Realtime cannot carry.
+ * only while `reached` holds, as the other statements are. Past a cursor,
+ * where one is named, only the newest of the messages written or amended
+ * past it, and their parts. None where it names a value Realtime cannot
+ * carry.
  */
 export function transcriptWindowLiveStatements(
   target: ConversationTarget,
   reached: SQL,
+  past?: MessageCursor,
 ): Option.Option<TranscriptWindowStatements> {
   const window = queryBuilder
     .select({
@@ -215,8 +245,9 @@ export function transcriptWindowLiveStatements(
           agentTaskId: sendingAgent.taskId,
           journalId: takingJournal.id,
           afterStep: messages.takenAfterStep,
-          askTurnId: asks.turnId,
-          askAfterStep: asks.joinedAfterStep,
+          // No line the voice said is folded under a turn any more; a released desktop still decodes the keys.
+          askTurnId: sql<string | null>`null::text`,
+          askAfterStep: sql<number | null>`null::integer`,
           turnStatus: turns.status,
           turnModel: turns.model,
           turnEffort: turns.reasoningEffort,
@@ -251,20 +282,14 @@ export function transcriptWindowLiveStatements(
         eq(takingJournal.clientId, sql`${messages.turnId}::text`),
       ),
     )
-    .leftJoin(
-      asks,
-      and(
-        eq(asks.userId, messages.userId),
-        eq(asks.conversationId, messages.conversationId),
-        eq(asks.clientId, sql`${messages.metadata}->>'delegation_id'`),
-        isNotNull(asks.turnId),
-      ),
-    )
     .leftJoin(turns, and(eq(turns.id, messages.turnId), eq(turns.userId, messages.userId)))
     .where(
       and(
         eq(messages.conversationId, target.conversationId),
         eq(messages.userId, target.userId),
+        // A line its hand-over withdrew reads nowhere until a turn takes it (`message-reads.ts`).
+        standingLine(messages),
+        pastCursor(messages, past),
         reached,
       ),
     )
@@ -272,7 +297,7 @@ export function transcriptWindowLiveStatements(
     .limit(TRANSCRIPT_WINDOW);
   return Option.all({
     window: liveStatementOf(window),
-    windowParts: liveStatementOf(windowPartsOf(target, reached)),
+    windowParts: liveStatementOf(windowPartsOf(target, reached, past)),
   });
 }
 
@@ -289,13 +314,13 @@ export function agentFollowedBy(
 ): SQL {
   return exists(
     queryBuilder
-      .select({ one: codingAgent.id })
-      .from(codingAgent)
+      .select({ one: agentTable.id })
+      .from(agentTable)
       .where(
         and(
-          eq(codingAgent.conversationId, parentConversationId),
-          eq(codingAgent.userId, ownerId),
-          agentReachableBy(readerId),
+          eq(agentTable.conversationId, parentConversationId),
+          eq(agentTable.userId, ownerId),
+          agentVisibleTo(readerId),
         ),
       ),
   );
@@ -306,13 +331,15 @@ export function agentFollowedBy(
  * under the conversation `parentConversationId`: an agent's own, where the
  * two are the same, or one of its workers', while `reached` holds, the
  * reader's membership of the workspace the transcript belongs to
- * (`agentFollowedBy`). None where a statement names a value Realtime cannot
- * carry.
+ * (`agentFollowedBy`); its newest messages past `past`, where a cursor is
+ * named (`transcriptWindowLiveStatements`). None where a statement names a
+ * value Realtime cannot carry.
  */
 export function transcriptLiveStatements(
   target: ConversationTarget,
   parentConversationId: string,
   reached: SQL,
+  past?: MessageCursor,
 ): Option.Option<TranscriptLiveStatements> {
   const { userId, conversationId } = target;
   const written = queryBuilder
@@ -321,7 +348,14 @@ export function transcriptLiveStatements(
       seq: asNumber(sql`coalesce(max(${messages.seq}), 0)`).as("seq"),
     })
     .from(messages)
-    .where(and(eq(messages.conversationId, conversationId), eq(messages.userId, userId), reached));
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(messages.userId, userId),
+        standingLine(messages),
+        reached,
+      ),
+    );
   const run = queryBuilder
     .select({
       ...liveSelection({ status: turns.status }),
@@ -347,12 +381,12 @@ export function transcriptLiveStatements(
       ),
     );
   const agent = queryBuilder
-    .select(liveSelection({ id: codingAgent.id, title: codingAgent.title }))
-    .from(codingAgent)
+    .select(liveSelection({ id: agentTable.id, title: agentTable.title }))
+    .from(agentTable)
     .where(
       and(
-        eq(codingAgent.conversationId, parentConversationId),
-        eq(codingAgent.userId, userId),
+        eq(agentTable.conversationId, parentConversationId),
+        eq(agentTable.userId, userId),
         reached,
       ),
     );
@@ -361,14 +395,11 @@ export function transcriptLiveStatements(
       liveSelection({
         id: conversations.id,
         title: conversations.title,
-        callId: codingAgentDelegation.callId,
+        callId: agentDelegationTable.callId,
       }),
     )
     .from(conversations)
-    .leftJoin(
-      codingAgentDelegation,
-      eq(codingAgentDelegation.childConversationId, conversations.id),
-    )
+    .leftJoin(agentDelegationTable, eq(agentDelegationTable.childConversationId, conversations.id))
     .where(
       and(
         eq(conversations.parentConversationId, parentConversationId),
@@ -385,7 +416,7 @@ export function transcriptLiveStatements(
     workers: liveStatementOf(workers),
   }).pipe(
     Option.flatMap((statements) =>
-      Option.map(transcriptWindowLiveStatements(target, reached), (window) => ({
+      Option.map(transcriptWindowLiveStatements(target, reached, past), (window) => ({
         ...statements,
         ...window,
       })),

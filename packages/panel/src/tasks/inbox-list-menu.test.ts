@@ -15,7 +15,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { INBOX_COLUMNS, useInboxRowPresses } from "./inbox-columns.js";
+import { INBOX_COLUMNS, type InboxColumnsShown, useInboxRowPresses } from "./inbox-columns.js";
 import { InboxList } from "./inbox-list.js";
 import { INBOX_GROUPING, INBOX_HOLDER, type InboxListView } from "./inbox-model.js";
 
@@ -25,7 +25,8 @@ import { INBOX_GROUPING, INBOX_HOLDER, type InboxListView } from "./inbox-model.
  * "Inbox item actions", which the keyboard reaches and a reader hears
  * described by the item's title, and the menu key all open the same menu,
  * its items worded as ⌘K words them, and none opens the item. The list alone
- * over two unread items of one task, the first of which the list marks.
+ * over two unread items of one task, the first of which the list marks; a
+ * finger's list standing alone draws no row open.
  */
 
 declare global {
@@ -90,8 +91,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The list drawn over `VIEW`, with what it was asked to open, `chosen` the item it has chosen. */
-function mount(chosen?: string): { opened: string[]; marked: string[] } {
+/** The list drawn over `VIEW`, with what it was asked to open, `chosen` the item it has chosen and `columns` which of the Inbox's columns stand. */
+function mount(
+  chosen?: string,
+  columns: InboxColumnsShown = INBOX_COLUMNS.BOTH,
+): { opened: string[]; marked: string[] } {
   fakeAppPlatform(QUIET_PANEL);
   vi.stubGlobal(
     "ResizeObserver",
@@ -114,7 +118,7 @@ function mount(chosen?: string): { opened: string[]; marked: string[] } {
         view: undefined,
       },
       note: null,
-      columns: INBOX_COLUMNS.BOTH,
+      columns,
       rows: useInboxRowPresses(),
       onChoose: (listed) => opened.push(listed.item.id),
       onMark: async (listed) => {
@@ -217,4 +221,22 @@ test("a row's mail button names U only on the chosen item, the one U acts on", (
   expect(rows.length).toBe(2);
   expect(mail(rows[0])).toBeNull();
   expect(mail(rows[1])).toBeTruthy();
+});
+
+test("a finger's list standing alone draws no row open at rest, its chosen row still the one U acts on", () => {
+  vi.spyOn(window, "matchMedia").mockImplementation(
+    (query) =>
+      ({
+        matches: query === "(pointer: coarse)",
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }) as unknown as MediaQueryList,
+  );
+  mount(VIEW.items[0]?.item.id, INBOX_COLUMNS.LIST);
+
+  expect(document.querySelector('[aria-current="page"]')).toBeNull();
+  expect(
+    firstRow().querySelector("button[aria-label^='Mark as']")?.getAttribute("aria-keyshortcuts"),
+  ).toBeTruthy();
 });

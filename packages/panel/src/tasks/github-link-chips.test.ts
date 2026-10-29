@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
@@ -34,7 +34,8 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * installation, and one the App answers nothing for stays as its address
  * says. A card names who opened it by their face, a pull request's by
  * its avatar, with how long ago it moved, its size, branches, labels, and
- * counts. A pull request's link standing alone in words drawn as a document
+ * counts, a pull request's being the one card every pull request hangs
+ * (`pull-request-card.tsx`). A pull request's link standing alone in words drawn as a document
  * is a row that hangs the same card, as is an agent's own pull request's
  * row pinned over its box. Synthetic workspace, plan, pull
  * requests, and issues.
@@ -176,14 +177,14 @@ function stateWith(workspace: Workspace): AppStateSnapshot {
 
 /** The plan's page, as its words' chips stand on it. */
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: TASK.name,
   workspace: "acme",
   workspaceId: "workspace-acme",
   repository: "acme/relay",
   text: () => "",
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: { workspace: "acme", repository: "acme/relay" },
     anchors: new Set(),
     onOpenTask: () => undefined,
@@ -204,8 +205,18 @@ function drawn(text: string, workspace: Workspace, asDocument = false, page = PA
   return drawnOnPage(createElement(TranscriptWords, { text, asDocument }), workspace, page);
 }
 
-/** `children` drawn on the plan's page in a window holding `workspace`, and every act the window asked. */
-async function drawnOnPage(children: ReactNode, workspace: Workspace, page = PAGE) {
+/** How GitHub answers a window's reads of pull requests: as it holds them, never, or that none is there. */
+const PULL_READS = { ANSWERED: "answered", UNANSWERED: "unanswered", GONE: "gone" } as const;
+
+type PullReads = (typeof PULL_READS)[keyof typeof PULL_READS];
+
+/** `children` drawn on the plan's page in a window holding `workspace`, its pull requests read as `pulls` says, and every act the window asked. */
+async function drawnOnPage(
+  children: ReactNode,
+  workspace: Workspace,
+  page = PAGE,
+  pulls: PullReads = PULL_READS.ANSWERED,
+) {
   const asked: AnyAct[] = [];
   const state = stateWith(workspace);
   fakeActs({
@@ -213,6 +224,11 @@ async function drawnOnPage(children: ReactNode, workspace: Workspace, page = PAG
     requestAppState: () => Promise.resolve(state),
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       asked.push(request);
+      if (pulls !== PULL_READS.ANSWERED && request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
+        return pulls === PULL_READS.GONE
+          ? Promise.resolve({ status: FAKE_ANSWER.DONE, value: null })
+          : new Promise(() => undefined);
+      }
       if (request.kind === ACT_KIND.TASKS_ISSUE) {
         const { repository, number } = request.payload;
         const issue = repository === "acme/relay" ? RELAY_ISSUES.get(number) : undefined;
@@ -295,6 +311,40 @@ test("a pull request's link says its number, live title, and state, wearing its 
       { workspaceId: "workspace-acme", repository: "acme/secret", number: 7 },
     ],
   );
+});
+
+test("a pull request's chip drawn again, as a plan's section opening in its editor draws it, says its number and title at once rather than its address while GitHub is asked again", async () => {
+  await drawn(`Lands after ${MERGED}.`, ACME_WITH_GITHUB);
+  act(() => root?.unmount());
+  root = undefined;
+  document.body.innerHTML = "";
+
+  const { container } = await drawnOnPage(
+    createElement(TranscriptWords, { text: `Lands after ${MERGED}.`, asDocument: false }),
+    ACME_WITH_GITHUB,
+    PAGE,
+    PULL_READS.UNANSWERED,
+  );
+
+  assert.deepEqual(chips(container), [
+    ["#42 Expire old invitations", "Merged", PULL_REQUEST_STATE.MERGED],
+  ]);
+});
+
+test("a pull request's chip drawn again once GitHub answers it is gone says its address, not the title it answered before", async () => {
+  await drawn(`Lands after ${MERGED}.`, ACME_WITH_GITHUB);
+  act(() => root?.unmount());
+  root = undefined;
+  document.body.innerHTML = "";
+
+  const { container } = await drawnOnPage(
+    createElement(TranscriptWords, { text: `Lands after ${MERGED}.`, asDocument: false }),
+    ACME_WITH_GITHUB,
+    PAGE,
+    PULL_READS.GONE,
+  );
+
+  assert.deepEqual(chips(container), [["#42", null, undefined]]);
 });
 
 test("an open pull request GitHub's merge queue holds says Queued and wears the queued mark, as a chip and as a row standing alone", async () => {
@@ -432,22 +482,44 @@ test("where the workspace has no GitHub App installed, an issue's link asks noth
   );
 });
 
-/** The notes of the card a chip hangs: its key and state, with a pull request's lines, who it is with, and its address where GitHub answered nothing. */
+/** The card a chip hangs: a pull request's own, or the mention's. */
+const CHIP_CARD = ".luke-tooltip-card :is([data-mention-card], [data-pull-request-card])";
+
+/** The card a chip hangs, once the pointer rests on the chip. */
+function cardOf(chip: Element): Element | undefined {
+  restOn(chip);
+  return [...document.querySelectorAll(CHIP_CARD)].at(-1);
+}
+
+/** The line under the name of the card a chip hangs, and its corner: a pull request's key and state, and how long ago it moved. */
+function cardHead(chip: Element | undefined): [string | undefined, string | undefined] {
+  assert.ok(chip, "the link is drawn as its chip");
+  const card = cardOf(chip);
+  const head: [string | undefined, string | undefined] = [
+    card?.querySelector(".luke-hover-card-sub")?.textContent ?? undefined,
+    card?.querySelector(".luke-hover-card-corner")?.textContent ?? undefined,
+  ];
+  act(() => {
+    chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+  });
+  return head;
+}
+
+/** The lines under the head of the card a chip hangs, notes and rows alike: a pull request's size, branches, and who opened it, an issue's key and state, and an address where GitHub answered nothing. */
 function cardNotes(chip: Element | undefined): (string | null)[] {
   assert.ok(chip, "the link is drawn as its chip");
-  restOn(chip);
-  const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
-  const notes = [...(card?.querySelectorAll(".luke-hover-card-note") ?? [])].map(readable);
+  const card = cardOf(chip);
+  const notes = [
+    ...(card?.querySelectorAll(".luke-hover-card-note, .luke-hover-card-row") ?? []),
+  ].map(readable);
   act(() => {
     chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
   });
   return notes;
 }
 
-/** A card's note as a reader hears it: its words without what is hidden from them, a face's letter and a glyph, and each count apart. */
+/** A card's line as a reader hears it: its words without what is hidden from them, a face's letter and a glyph. */
 function readable(note: Element): string | null {
-  const counts = [...note.querySelectorAll(".card-count")];
-  if (counts.length > 0) return counts.map((count) => count.textContent).join(" · ");
   const words = note.cloneNode(true);
   if (!(words instanceof Element)) return note.textContent;
   for (const hidden of words.querySelectorAll('[aria-hidden="true"]')) hidden.remove();
@@ -457,9 +529,8 @@ function readable(note: Element): string | null {
 /** The face each card's opener wears: the kind of actor it is, and the avatar it is drawn with where one is. */
 function openerFace(chip: Element | undefined): [string | undefined, string | null | undefined] {
   assert.ok(chip, "the link is drawn as its chip");
-  restOn(chip);
-  const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
-  const mark = card?.querySelector<HTMLElement>(".luke-hover-card-note .actor-mark");
+  const card = cardOf(chip);
+  const mark = card?.querySelector<HTMLElement>(".luke-hover-card-row .actor-mark");
   const face: [string | undefined, string | null | undefined] = [
     mark?.dataset.kind,
     mark?.querySelector("img")?.getAttribute("src"),
@@ -478,18 +549,22 @@ test("a pull request's and an issue's cards say who opened them, as the workspac
   const [pullRequest, opened, shelved, unreached] =
     container.querySelectorAll("[data-mention-ref]");
 
+  assert.deepEqual(
+    cardHead(pullRequest),
+    ["acme/relay#42 · Merged", "2h"],
+    "the head keys it by its repository and says at its corner how long ago it merged",
+  );
   assert.deepEqual(cardNotes(pullRequest), [
-    "relay#42 · Merged · +120 −30 in 4 files",
-    "Opened by octo-dev · merged 2h ago",
+    "+120 −30 in 4 files · 7 comments · 1 commit",
     "main ← invite-expiry",
-    "7 comments · 1 commit",
+    "Opened by octo-dev",
   ]);
   assert.deepEqual(cardNotes(opened), ["relay#7 · Open", "Opened by octo-dev"]);
   assert.deepEqual(cardNotes(shelved), ["relay#9 · Not planned"]);
   assert.deepEqual(cardNotes(unreached), [UNREACHED]);
   assert.deepEqual(
     openerFace(pullRequest),
-    ["github", `${AVATAR}&s=32`],
+    ["github", `${AVATAR}&s=28`],
     "the pull request's opener wears their GitHub avatar",
   );
   assert.deepEqual(
@@ -502,8 +577,7 @@ test("a pull request's and an issue's cards say who opened them, as the workspac
 /** Each label a chip's card names, by its name. */
 function cardLabels(chip: Element | undefined): (string | null)[] {
   assert.ok(chip, "the link is drawn as its chip");
-  restOn(chip);
-  const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
+  const card = cardOf(chip);
   const labels = [
     ...(card?.querySelectorAll<HTMLElement>('ul[aria-label="Labels"] > li') ?? []),
   ].map((label) => label.textContent);
@@ -513,7 +587,7 @@ function cardLabels(chip: Element | undefined): (string | null)[] {
   return labels;
 }
 
-test("a pull request's card names its labels, and one read from an older service says its key and state alone", async () => {
+test("a pull request's card names its labels, and one read from an older service draws its head alone", async () => {
   const { container } = await drawn(
     `Lands after ${MERGED} and ${OLDER_SERVICE}.`,
     ACME_WITH_GITHUB,
@@ -521,7 +595,8 @@ test("a pull request's card names its labels, and one read from an older service
   const [whole, older] = container.querySelectorAll("[data-mention-ref]");
 
   assert.deepEqual(cardLabels(whole), ["service", "not a colour"]);
-  assert.deepEqual(cardNotes(older), ["relay#44 · Open"]);
+  assert.deepEqual(cardHead(older), ["acme/relay#44 · Open", undefined]);
+  assert.deepEqual(cardNotes(older), []);
   assert.deepEqual(cardLabels(older), []);
 });
 
@@ -553,10 +628,9 @@ test("a pull request's link standing alone in words drawn as a document is a row
   assert.equal(container.querySelectorAll("[data-mention-ref]").length, 0, "the link is its row");
   assert.deepEqual(cardNotes(row), chipNotes);
   assert.deepEqual(cardNotes(row), [
-    "relay#42 · Merged · +120 −30 in 4 files",
-    "Opened by octo-dev · merged 2h ago",
+    "+120 −30 in 4 files · 7 comments · 1 commit",
     "main ← invite-expiry",
-    "7 comments · 1 commit",
+    "Opened by octo-dev",
   ]);
 });
 

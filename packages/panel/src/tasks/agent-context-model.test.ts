@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_BRIEF, type CodingAgentContext } from "@luke/features/coding-agent-wire";
+import { AGENT_BRIEF, type AgentContext } from "@luke/features/agent-wire";
 import { test } from "vitest";
 import {
   contextFullLine,
@@ -23,7 +23,7 @@ import {
 const NOW = 1_800_000_600_000;
 
 /** A step that read 620k of a 1M window whose compaction is at 900k, on an agent handed the plan. */
-const CONTEXT: CodingAgentContext = {
+const CONTEXT: AgentContext = {
   windowTokens: 1_000_000,
   compactionThresholdTokens: 900_000,
   inputTokens: 620_000,
@@ -35,7 +35,7 @@ const CONTEXT: CodingAgentContext = {
 };
 
 /** The context with the last step reading this many tokens. */
-function reading(inputTokens: number): CodingAgentContext {
+function reading(inputTokens: number): AgentContext {
   return { ...CONTEXT, inputTokens };
 }
 
@@ -83,16 +83,16 @@ test("the popover divides the read into the instructions, the tools, the plan, a
 
 test("an agent handed a prompt names its brief so; once eve compacted, the brief is folded into the conversation; estimates that outrun the read are scaled down to it", () => {
   assert.deepEqual(
-    contextRows(CONTEXT, CODING_AGENT_BRIEF.PROMPT).map((row) => row.label),
+    contextRows(CONTEXT, AGENT_BRIEF.PROMPT).map((row) => row.label),
     ["System prompt", "Tool definitions", "Prompt", "Conversation"],
   );
-  const compacted: CodingAgentContext = {
+  const compacted: AgentContext = {
     ...CONTEXT,
     estimated: { systemPromptTokens: 1_200, toolDefinitionTokens: 2_800 },
     compactedAt: NOW - 120_000,
   };
   assert.deepEqual(
-    contextRows(compacted, CODING_AGENT_BRIEF.PLAN).map((row) => [row.label, rowCount(row)]),
+    contextRows(compacted, AGENT_BRIEF.PLAN).map((row) => [row.label, rowCount(row)]),
     [
       ["System prompt", "~1.2K"],
       ["Tool definitions", "~2.8K"],

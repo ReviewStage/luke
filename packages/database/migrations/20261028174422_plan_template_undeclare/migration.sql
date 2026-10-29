@@ -1,0 +1,4 @@
+-- account_preference.plan_template and account_plan_template_revision are declared no longer, and this
+-- release reads and writes neither, but the release before it still names them while this one migrates;
+-- a later release's migration drops both (apps/web/server/README.md, "Dropping a column
+-- ... takes two deployments").

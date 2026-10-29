@@ -5,8 +5,8 @@ import {
   readAutomation,
 } from "@luke/database/models/automation-store";
 import { Effect, Option } from "effect";
-import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
+import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -64,19 +64,19 @@ export interface AutomationsProcedureSeams extends EveReach {
 export function automationsProcedures(seams: AutomationsProcedureSeams) {
   const automations = hosted.automations.use(accountMiddleware(seams.resolveUserId));
   return {
-    /** The account's automations, or one task's, or one workspace's. */
+    /** The account's automations, or one workspace's; none for a task, on which no automation stands. */
     list: automations.list.effect(function* ({ input, context }) {
-      const listed = yield* hostedStoreOrUnavailable(
-        listAutomations(context.userId, {
-          taskId: input.planId,
-          organizationId: input.workspaceId,
-        }),
-      );
+      const listed =
+        input.planId === undefined
+          ? yield* hostedStoreOrUnavailable(
+              listAutomations(context.userId, { organizationId: input.workspaceId }),
+            )
+          : [];
       const summaries = yield* Effect.forEach(listed, (each) => summaryOf(context.userId, each));
       return { automations: summaries };
     }),
 
-    /** An automation made on one of the account's tasks with a repository, or on a workspace of the account's with the repositories its runs work in. */
+    /** An automation made on a workspace of the account's with the repositories its runs work in. */
     create: automations.create.effect(function* ({ input: made, context: { userId } }) {
       const created = yield* createAutomationAs(userId, made);
       return {

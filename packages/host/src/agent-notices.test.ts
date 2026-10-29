@@ -5,18 +5,15 @@ import type {
   AccountInboxEntry,
   AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
-import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
+import { AGENT_CALL_FAILURE, type AgentAccountInboxAnswerView } from "@luke/features/agent-view";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAccountInboxAnswerView,
-} from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_KIND,
-  CODING_AGENT_STATUS,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
+  AGENT_KIND,
+  AGENT_STATUS,
+  type AgentStatus,
+  type AgentSummary,
   type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
+import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
 import { Effect, Layer, Queue, Stream } from "effect";
 import { type AgentNotice, AgentNoticeDoors, createAgentNotices } from "./agent-notices.js";
 import type { AppInboxSlice, AppInboxTask, AppInboxTaskHolding } from "./app-state.js";
@@ -28,10 +25,7 @@ const TURN_ID = "3f1c2b7a-9d4e-4a6b-8c1d-2e5f6a7b8c9d";
 const ACCOUNT = "dean@example.com";
 const OTHER_ACCOUNT = "sam@example.com";
 
-function agent(
-  status: CodingAgentStatus,
-  patch: Partial<CodingAgentSummary> = {},
-): CodingAgentSummary {
+function agent(status: AgentStatus, patch: Partial<AgentSummary> = {}): AgentSummary {
   return {
     id: AGENT_ID,
     planId: TASK_ID,
@@ -47,12 +41,9 @@ function agent(
 
 /** An inbox read's answer as a test gives it: its tasks holding items left out where none does. */
 type InboxAnswerGiven =
-  | Exclude<CodingAgentAccountInboxAnswerView, { readonly plans: unknown }>
-  | (Omit<Extract<CodingAgentAccountInboxAnswerView, { readonly plans: unknown }>, "plans"> & {
-      readonly plans?: Extract<
-        CodingAgentAccountInboxAnswerView,
-        { readonly plans: unknown }
-      >["plans"];
+  | Exclude<AgentAccountInboxAnswerView, { readonly plans: unknown }>
+  | (Omit<Extract<AgentAccountInboxAnswerView, { readonly plans: unknown }>, "plans"> & {
+      readonly plans?: Extract<AgentAccountInboxAnswerView, { readonly plans: unknown }>["plans"];
     });
 
 /**
@@ -80,8 +71,9 @@ function fixture() {
   const waiting: (readonly AppInboxTask[])[] = [];
   const holding: (readonly AppInboxTaskHolding[])[] = [];
   const taskless: AppInboxSlice["taskless"][] = [];
+  const agents: AppInboxSlice["agents"][] = [];
   const failedRuns: AppInboxSlice["failedRuns"][] = [];
-  let inboxAnswers: Queue.Queue<CodingAgentAccountInboxAnswerView> | undefined;
+  let inboxAnswers: Queue.Queue<AgentAccountInboxAnswerView> | undefined;
   let accounts: Queue.Queue<string | undefined> | undefined;
   const unseen: (readonly string[])[] = [];
   let focus: ((focused: boolean) => void) | undefined;
@@ -89,7 +81,7 @@ function fixture() {
   let signedInAs: string | undefined = ACCOUNT;
   let accountId: string | undefined = ACCOUNT_ID;
   const notices = Effect.gen(function* () {
-    inboxAnswers = yield* Queue.unbounded<CodingAgentAccountInboxAnswerView>();
+    inboxAnswers = yield* Queue.unbounded<AgentAccountInboxAnswerView>();
     accounts = yield* Queue.unbounded<string | undefined>();
     Queue.offerUnsafe(accounts, signedInAs);
     return yield* createAgentNotices({
@@ -119,6 +111,7 @@ function fixture() {
         waiting.push(next.waiting);
         holding.push(next.tasks);
         taskless.push(next.taskless);
+        agents.push(next.agents);
         failedRuns.push(next.failedRuns);
       },
       report: () => undefined,
@@ -149,6 +142,7 @@ function fixture() {
     waiting,
     holding,
     taskless,
+    agents,
     badges,
     failedRuns,
     /** The signed-in account's id as its identity now holds it: none for one stored without it. */
@@ -168,9 +162,9 @@ it.effect(
       const f = fixture();
       const notices = yield* f.notices;
       f.focus(false);
-      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
-      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
-      const other = agent(CODING_AGENT_STATUS.RUNNING, {
+      notices.observeAgents([agent(AGENT_STATUS.RUNNING)]);
+      notices.observeAgents([agent(AGENT_STATUS.COMPLETED)]);
+      const other = agent(AGENT_STATUS.RUNNING, {
         id: "a1b2c3d4-0000-4000-8000-000000000002",
       });
       notices.observeAgents([other]);
@@ -178,7 +172,7 @@ it.effect(
       f.changeAccount(OTHER_ACCOUNT);
       assert.deepEqual(f.unseen.at(-1), []);
       // The answer that was on its way lands as a first sighting.
-      notices.observeAgents([{ ...other, status: CODING_AGENT_STATUS.COMPLETED }]);
+      notices.observeAgents([{ ...other, status: AGENT_STATUS.COMPLETED }]);
       yield* settled;
       assert.deepEqual(f.unseen.at(-1), []);
     }),
@@ -191,9 +185,9 @@ it.effect(
       const notices = yield* f.notices;
       f.focus(false);
 
-      notices.observeFollowed([agent(CODING_AGENT_STATUS.RUNNING, { turnId: null })], [TASK_ID]);
-      notices.observeFollowed([agent(CODING_AGENT_STATUS.RUNNING)], [TASK_ID]);
-      notices.observeFollowed([agent(CODING_AGENT_STATUS.COMPLETED)], [TASK_ID]);
+      notices.observeFollowed([agent(AGENT_STATUS.RUNNING, { turnId: null })], [TASK_ID]);
+      notices.observeFollowed([agent(AGENT_STATUS.RUNNING)], [TASK_ID]);
+      notices.observeFollowed([agent(AGENT_STATUS.COMPLETED)], [TASK_ID]);
       yield* settled;
 
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
@@ -212,8 +206,8 @@ it.effect(
       f.focus(true);
       notices.shown(null);
 
-      notices.observeFollowed([agent(CODING_AGENT_STATUS.RUNNING)], [TASK_ID]);
-      notices.observeFollowed([agent(CODING_AGENT_STATUS.COMPLETED)], [TASK_ID]);
+      notices.observeFollowed([agent(AGENT_STATUS.RUNNING)], [TASK_ID]);
+      notices.observeFollowed([agent(AGENT_STATUS.COMPLETED)], [TASK_ID]);
       yield* settled;
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
 
@@ -233,8 +227,8 @@ it.effect(
       const notices = yield* f.notices;
       f.focus(false);
 
-      notices.observeFollowed([agent(CODING_AGENT_STATUS.RUNNING)], [TASK_ID]);
-      notices.observeFollowed([agent(CODING_AGENT_STATUS.COMPLETED)], [TASK_ID]);
+      notices.observeFollowed([agent(AGENT_STATUS.RUNNING)], [TASK_ID]);
+      notices.observeFollowed([agent(AGENT_STATUS.COMPLETED)], [TASK_ID]);
       yield* settled;
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
 
@@ -251,9 +245,9 @@ it.effect(
       const notices = yield* f.notices;
       f.focus(false);
 
-      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeAgents([agent(AGENT_STATUS.RUNNING)]);
       notices.observeFollowed([], [TASK_ID]);
-      notices.observeFollowed([agent(CODING_AGENT_STATUS.COMPLETED)], [TASK_ID]);
+      notices.observeFollowed([agent(AGENT_STATUS.COMPLETED)], [TASK_ID]);
       yield* settled;
 
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
@@ -268,8 +262,8 @@ it.effect(
       const notices = yield* f.notices;
       f.focus(false);
 
-      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
-      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
+      notices.observeAgents([agent(AGENT_STATUS.RUNNING)]);
+      notices.observeAgents([agent(AGENT_STATUS.COMPLETED)]);
       yield* settled;
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
 
@@ -360,7 +354,7 @@ it.effect(
       yield* settled;
       assert.equal(f.badges.at(-1), 1);
 
-      f.answerInbox({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      f.answerInbox({ failure: AGENT_CALL_FAILURE.UNANSWERED });
       yield* settled;
       assert.equal(f.badges.at(-1), 1);
 
@@ -436,10 +430,7 @@ it.effect(
 const AUTOMATION_NAME = "Morning Sentry triage";
 
 /** An agent an automation started with no plan, as the plan list carries it, started by the signed-in account unless a test says. */
-function tasklessAgent(
-  status: CodingAgentStatus,
-  patch: Partial<TasklessAgent> = {},
-): TasklessAgent {
+function tasklessAgent(status: AgentStatus, patch: Partial<TasklessAgent> = {}): TasklessAgent {
   return {
     ...agent(status, { title: "Triage overnight issues" }),
     planId: null,
@@ -461,8 +452,8 @@ it.effect(
       const notices = yield* f.notices;
       f.focus(false);
 
-      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.RUNNING)]);
-      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.COMPLETED)]);
+      notices.observeAgents([tasklessAgent(AGENT_STATUS.RUNNING)]);
+      notices.observeAgents([tasklessAgent(AGENT_STATUS.COMPLETED)]);
       yield* settled;
 
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
@@ -475,9 +466,9 @@ it.effect(
       const f = fixture();
       const notices = yield* f.notices;
       f.focus(false);
-      const luke = (status: CodingAgentStatus, patch: Partial<TasklessAgent> = {}) =>
+      const luke = (status: AgentStatus, patch: Partial<TasklessAgent> = {}) =>
         tasklessAgent(status, {
-          kind: CODING_AGENT_KIND.OPERATOR,
+          kind: AGENT_KIND.OPERATOR,
           automationId: null,
           repository: null,
           title: null,
@@ -485,14 +476,14 @@ it.effect(
         });
       const said = "9a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 
-      notices.observeTaskless([luke(CODING_AGENT_STATUS.RUNNING)]);
-      notices.observeTaskless([luke(CODING_AGENT_STATUS.RUNNING, { quietTurn: true })]);
-      notices.observeTaskless([luke(CODING_AGENT_STATUS.COMPLETED, { quietTurn: true })]);
+      notices.observeAgents([luke(AGENT_STATUS.RUNNING)]);
+      notices.observeAgents([luke(AGENT_STATUS.RUNNING, { quietTurn: true })]);
+      notices.observeAgents([luke(AGENT_STATUS.COMPLETED, { quietTurn: true })]);
       yield* settled;
       assert.deepEqual(f.unseen, [], "a quiet end dots nothing");
 
-      notices.observeTaskless([luke(CODING_AGENT_STATUS.RUNNING, { turnId: said })]);
-      notices.observeTaskless([luke(CODING_AGENT_STATUS.COMPLETED, { turnId: said })]);
+      notices.observeAgents([luke(AGENT_STATUS.RUNNING, { turnId: said })]);
+      notices.observeAgents([luke(AGENT_STATUS.COMPLETED, { turnId: said })]);
       yield* settled;
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
     }),
@@ -504,57 +495,43 @@ it.effect(
       const f = fixture();
       const notices = yield* f.notices;
       f.focus(false);
-      const luke = (status: CodingAgentStatus, patch: Partial<TasklessAgent> = {}) =>
-        tasklessAgent(status, { kind: CODING_AGENT_KIND.OPERATOR, ...patch });
+      const luke = (status: AgentStatus, patch: Partial<TasklessAgent> = {}) =>
+        tasklessAgent(status, { kind: AGENT_KIND.OPERATOR, ...patch });
 
       // A quiet mark read mid-turn is not the end's: the page ends the turn, which reads as news.
-      notices.observeTaskless([luke(CODING_AGENT_STATUS.RUNNING, { quietTurn: true })]);
-      notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.COMPLETED);
+      notices.observeAgents([luke(AGENT_STATUS.RUNNING, { quietTurn: true })]);
+      notices.observeStatus(AGENT_ID, AGENT_STATUS.COMPLETED);
       assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
-      notices.observeTaskless([luke(CODING_AGENT_STATUS.COMPLETED, { quietTurn: true })]);
+      notices.observeAgents([luke(AGENT_STATUS.COMPLETED, { quietTurn: true })]);
       yield* settled;
 
       assert.deepEqual(f.unseen.at(-1), []);
     }),
 );
-it.effect(
-  "a teammate's agent with no plan on the plan list is not held, so its end is dotted for its starter alone",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const notices = yield* f.notices;
-      f.focus(false);
-      const theirs = { startedBy: { userId: "user-sam", name: "Sam" } };
+it.effect.each([
+  { held: "on a plan", planId: TASK_ID },
+  { held: "with no plan", planId: null },
+])("a teammate's agent $held is dotted as its turn ends, as the account's own is", ({ planId }) =>
+  Effect.gen(function* () {
+    const f = fixture();
+    const notices = yield* f.notices;
+    f.focus(false);
+    const theirs = agent(AGENT_STATUS.RUNNING, {
+      planId,
+      startedBy: { userId: "user-sam", name: "Sam" },
+    });
 
-      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.RUNNING, theirs)]);
-      notices.observeTaskless([tasklessAgent(CODING_AGENT_STATUS.COMPLETED, theirs)]);
-      yield* Effect.yieldNow;
+    notices.observeAgents([theirs]);
+    notices.observeAgents([{ ...theirs, status: AGENT_STATUS.COMPLETED }]);
+    yield* settled;
 
-      assert.deepEqual(f.unseen, []);
-    }),
-);
-it.effect(
-  "a teammate's agent with no plan named by an act's answer, a rename or a message on its page, is not held",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const notices = yield* f.notices;
-      f.focus(false);
-      const theirs = {
-        ...agent(CODING_AGENT_STATUS.RUNNING),
-        planId: null,
-        startedBy: { userId: "user-sam", name: "Sam" },
-      };
-
-      notices.observeAgents([theirs]);
-      notices.observeMessaged(theirs);
-      notices.observeAgents([{ ...theirs, status: CODING_AGENT_STATUS.COMPLETED }]);
-      yield* settled;
-
-      assert.deepEqual(f.unseen, []);
-    }),
+    assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
+  }),
 );
 /** An item of an agent with no task waiting on the developer, as the account's inbox read carries it. */
+/** An agent with no task a teammate started. */
+const TEAMMATES_AGENT = "a1b2c3d4-0000-4000-8000-0000000000aa";
+
 function tasklessItem(id: string, patch: Partial<AccountTasklessEntry> = {}): AccountTasklessEntry {
   return {
     id,
@@ -583,11 +560,19 @@ it.effect(
 
       f.answerInbox({
         items: [waitingItem(ITEM_A)],
-        planless: [tasklessItem(ITEM_B, { updatedAt: READ_AT + 1, workspaceId: "workspace-acme" })],
+        planless: [
+          tasklessItem(ITEM_B, { updatedAt: READ_AT + 1, workspaceId: "workspace-acme" }),
+          // A teammate's agent's question, which waits on the teammate.
+          tasklessItem(ITEM_C, {
+            agentId: TEAMMATES_AGENT,
+            startedBy: "user-sam",
+            workspaceId: "workspace-acme",
+          }),
+        ],
         automations: [
           {
             automationId: "5a0c4d2e-8f1b-4c3a-9e7d-2b6f1a8c9d04",
-            items: 1,
+            items: 2,
             updatedAt: READ_AT + 1,
           },
         ],
@@ -603,8 +588,16 @@ it.effect(
       );
       assert.deepEqual(
         f.taskless.at(-1)?.map((item) => item.workspaceId),
-        ["workspace-acme"],
-        "the window is told whose workspace's list the item stands in",
+        ["workspace-acme", "workspace-acme"],
+        "the window is told whose workspace's list each item stands in",
+      );
+      assert.deepEqual(
+        f.agents.at(-1)?.map((held) => [held.agentId, held.items, held.toDo, held.updatedAt]),
+        [
+          [AGENT_ID, 1, 1, READ_AT + 1],
+          [TEAMMATES_AGENT, 1, 0, READ_AT],
+        ],
+        "a service before the agents holding items leaves the window to list each agent its open items name, counting only the questions that wait on the reader",
       );
     }),
 );
@@ -908,8 +901,8 @@ it.effect(
       for (const focused of [false, true]) {
         f.focus(focused);
         const agentId = focused ? AGENT_ID : "a1b2c3d4-0000-4000-8000-000000000004";
-        notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING, { id: agentId })]);
-        notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED, { id: agentId })]);
+        notices.observeAgents([agent(AGENT_STATUS.RUNNING, { id: agentId })]);
+        notices.observeAgents([agent(AGENT_STATUS.COMPLETED, { id: agentId })]);
       }
       f.focus(false);
       f.answerInbox({

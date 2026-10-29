@@ -1,12 +1,7 @@
 import {
   AttachmentChip,
-  BUTTON_SHAPE,
   BUTTON_VARIANT,
   Button,
-  CALL_DEVICE,
-  CALL_STAGE,
-  CallLive,
-  CallMute,
   COMPOSER_ELEMENT,
   COMPOSER_LOOK,
   ComposerBody,
@@ -14,7 +9,6 @@ import {
   ComposerFootSkeleton,
   ComposerFrame,
   type ComposerLook,
-  EndCallButton,
   GAP,
   IconButton,
   SKELETON_SHAPE,
@@ -32,11 +26,11 @@ import { CatalogSection } from "../section";
 
 /**
  * composer-foots.tsx -- a message box's foot in each state: empty, with its
- * Send unavailable; holding files, which stand over its words; near its limit, the counter showing;
+ * Send unavailable; an unfinished answer's, its Send refusing a press and
+ * saying what is missing; holding files, which stand over its words; near its limit, the counter showing;
  * sending; Stop in the send's place, and stopping; with a cut paste's note,
- * a refused send's Retry, and a closed box's mend under its note; in a call,
- * and dictating in a call; then at a field's and a bare frame's inset, and
- * still loading.
+ * a refused send's Retry, and a closed box's mend under its note; dictating;
+ * then at a field's and a bare frame's inset, and still loading.
  */
 
 const ignore = () => undefined;
@@ -56,32 +50,6 @@ function Tools(): React.JSX.Element {
       <IconButton label="Attach files" icon={<GLYPH.ADD />} onClick={ignore} />
       <IconButton label="Mention" icon={<AtSign />} onClick={ignore} />
       <IconButton label="Use a skill" icon={<GLYPH.SKILL />} onClick={ignore} />
-    </>
-  );
-}
-
-/** When the catalog's call started, and the moment its count stands still at: 2m 14s in. */
-const CALL_STARTED_AT = Date.UTC(2026, 9, 24, 15, 0, 0);
-const CALL_NOW = CALL_STARTED_AT + 134_000;
-
-/** A call's status and its controls, as an agent's box shows them while a call into it stands. */
-function CallStatus(): React.JSX.Element {
-  return (
-    <>
-      <CallLive stage={CALL_STAGE.LIVE} startedAt={CALL_STARTED_AT} muted={false} now={CALL_NOW} />
-      <CallMute
-        device={CALL_DEVICE.SPEAKER}
-        shape={BUTTON_SHAPE.SQUARE}
-        muted={false}
-        onPress={ignore}
-      />
-      <CallMute
-        device={CALL_DEVICE.MICROPHONE}
-        shape={BUTTON_SHAPE.SQUARE}
-        muted={false}
-        onPress={ignore}
-      />
-      <EndCallButton onPress={ignore} />
     </>
   );
 }
@@ -137,6 +105,14 @@ function ComposerFoots(): React.JSX.Element {
         <div className="catalog-column">
           <Stack gap={GAP.FIELD}>
             <Box words="Ask Luke to change something…" send={{ label: "Send", empty: true }} />
+            <Box
+              words="Add a note"
+              send={{
+                label: "Send",
+                empty: true,
+                refuses: { onRefused: ignore, words: "Fill in Invites a member may send a day." },
+              }}
+            />
             <Box
               words="Here are the two screens."
               files={
@@ -199,13 +175,11 @@ function ComposerFoots(): React.JSX.Element {
           </Stack>
         </div>
       </CatalogSection>
-      <CatalogSection id="composer-foot-call" title="In a call">
+      <CatalogSection id="composer-foot-dictating" title="Dictating">
         <div className="catalog-column">
           <Stack gap={GAP.FIELD}>
-            <Box words="Ask Luke while you talk…" call={<CallStatus />} />
             <Box
               words="Dictating…"
-              call={<CallStatus />}
               strip={
                 <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
                   Listening · 0:04

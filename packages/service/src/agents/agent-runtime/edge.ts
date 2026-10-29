@@ -22,8 +22,8 @@ import {
   integrationAccessToken,
 } from "../../integrations/integration-token.js";
 import type { WebAgentRun, WebAgentServices } from "../../run.js";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
-import type { RelayStateStore } from "../brain-host/relay.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
+import type { RelayStateStore } from "../eve-host/relay.js";
 import { integrationConnections } from "./connections.js";
 import { type AgentRole, ROLE_PROFILE } from "./role.js";
 import { turnServers } from "./servers.js";

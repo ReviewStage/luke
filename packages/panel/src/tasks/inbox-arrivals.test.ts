@@ -81,7 +81,7 @@ test("one item landing is said by its title", () => {
   assert.equal(announcedPolitely(), "New in your inbox: Push to the release branch?");
 });
 
-test("a thread the reader opened with New thread lands read, and says nothing", () => {
+test("a thread the reader started from an item's box lands read, and says nothing", () => {
   const push = inbox("plan-c", []);
   push([item("44444444-4444-4444-8444-444444444444", "Draft the changelog", false)]);
   assert.equal(announcedPolitely(), "");

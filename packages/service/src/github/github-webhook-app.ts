@@ -4,7 +4,7 @@ import {
   GITHUB_INSTALLATION_STATUS,
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
-import { listCodingAgentsOnBranches } from "@luke/database/models/coding-agent-store";
+import { listAgentsOnBranches } from "@luke/database/models/agent-store";
 import { EXCESS_KEYS, HTTP_METHOD, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Layer, Redacted, Result, Schema } from "effect";
@@ -14,10 +14,10 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/http";
-import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
-import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { agentPublished } from "../agents/coder-host/published.js";
 import { deploymentEveForAccounts } from "../agents/deployment-eve.js";
+import { deploymentEveOrigin } from "../agents/eve-host/eve-origin.js";
+import { EVE_MOUNT, type EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { queueGithubRuns } from "../automations/automation-github.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
 import { HostedEnvironment } from "../environment.js";
@@ -297,7 +297,7 @@ const readAgainOnBranches = /* @__PURE__ */ Effect.fn("web/githubWebhookReadAgai
   target: DeliveryTarget,
 ): Effect.fn.Return<number, HostedRefusal, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
   const agents = yield* hostedStoreOrUnavailable(
-    listCodingAgentsOnBranches(target.repository, target.branches, MAXIMUM_AGENTS_PER_DELIVERY),
+    listAgentsOnBranches(target.repository, target.branches, MAXIMUM_AGENTS_PER_DELIVERY),
   );
   const landed = yield* Effect.forEach(
     agents,

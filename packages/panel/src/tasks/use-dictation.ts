@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@luke/features/dictation-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
@@ -19,8 +19,8 @@ import { openPreferredMicrophone } from "./microphone-choice.js";
 /**
  * use-dictation.ts -- a message box's dictation: the microphone recorded in this panel, heard as words by Luke's service, and the words put at the caret.
  *
- * The press opens the microphone the voice window would (the Mac's own
- * over a Bluetooth headset's, `./microphone-choice.ts`), after
+ * The press opens the preferred microphone (the Mac's own over a
+ * Bluetooth headset's, `./microphone-choice.ts`), after
  * asking macOS where it has not been asked, and records it as Opus in
  * WebM at the wire's bitrate, measured by an analyser the strip draws.
  * Finishing hands the clip to main in one act, and main to Luke's service,
@@ -185,7 +185,7 @@ export function useDictation(input: {
     if (
       answer !== undefined &&
       "failure" in answer &&
-      answer.failure === CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING
+      answer.failure === AGENT_CALL_FAILURE.OPENAI_KEY_MISSING
     ) {
       return settle(DICTATION_NOTE.OPENAI_KEY_MISSING);
     }

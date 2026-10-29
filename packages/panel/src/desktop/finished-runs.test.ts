@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
   type PullRequestState,
   type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { describe, it } from "vitest";
 import { type RunsHeld, withoutFinishedRuns } from "./finished-runs.js";
 
@@ -26,13 +26,18 @@ const RUN: TasklessAgent = {
   effort: "high",
   title: "Remove the stale copy",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
   automationId: "7d6c5b4a-3f2e-4d1c-8b0a-9f8e7d6c5b4a",
+  automationName: "Copy sweep",
   workspaceId: "workspace-1",
   repository: "acme/relay",
   activityAt: 2,
 };
+
+/** The same agent started by hand, which names no automation. */
+const { automationName: _automationName, ...UNNAMED } = RUN;
+const BY_HAND: TasklessAgent = { ...UNNAMED, automationId: null };
 
 /** Nothing holding any agent. */
 const NOTHING_HELD: RunsHeld = { unseen: () => false, inbox: [], me: ME, shown: undefined };
@@ -66,13 +71,13 @@ describe("an automation's finished runs under Tasks", () => {
   });
 
   it("leaves a finished run of an automation since deleted, which names it still", () => {
-    const orphaned = { ...RUN, automationId: null, automationName: "Copy sweep" };
+    const orphaned = { ...RUN, automationId: null };
     assert.deepEqual(standing(orphaned, NOTHING_HELD), []);
   });
 
   it.each<[string, TasklessAgent, RunsHeld]>([
-    ["still working", { ...RUN, status: CODING_AGENT_STATUS.RUNNING }, NOTHING_HELD],
-    ["started by hand", { ...RUN, automationId: null }, NOTHING_HELD],
+    ["still working", { ...RUN, status: AGENT_STATUS.RUNNING }, NOTHING_HELD],
+    ["started by hand", BY_HAND, NOTHING_HELD],
     ["ended unseen", RUN, { ...NOTHING_HELD, unseen: (id) => id === RUN.id }],
     [
       "waiting on the reader in the Inbox",

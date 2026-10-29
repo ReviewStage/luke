@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { test } from "vitest";
@@ -20,7 +20,7 @@ const THREAD_LINE = {
 };
 
 /** The agents a place holds read, and nothing else of them. */
-function holding(agents: readonly CodingAgentSummary[] | undefined) {
+function holding(agents: readonly AgentSummary[] | undefined) {
   return { agents, archived: undefined, models: undefined, me: undefined, pullRequests: new Map() };
 }
 
@@ -37,14 +37,14 @@ test("an agent no read of its task holds is named and marked as its thread was r
 });
 
 test("an agent its task's read holds is named as that read names it, over the line its thread was read with", () => {
-  const held: CodingAgentSummary = {
+  const held: AgentSummary = {
     id: AGENT_ID,
     planId: "5d0c3f0e-7b8a-4d2b-9c61-2f4e8a1b6c73",
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title: "Renamed since the channel was read",
     createdAt: 3,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
   };
 

@@ -4,9 +4,9 @@
  * Connecting the account's GitHub (`github-connection-wire.ts`): the Mac's
  * connect intent, the page's claim of it, whether GitHub is connected, and
  * the disconnect. And the repositories of a workspace's GitHub installation
- * (`github-repositories-wire.ts`), and one of them's tree, skills, pull
- * request, and issue, and the issues New task's picker offers of it; and
- * the repositories members added to a workspace on their own tokens.
+ * (`github-repositories-wire.ts`), and one of them's file, tree, skills,
+ * pull request, and issue; and the repositories members added to a workspace on
+ * their own tokens.
  *
  * Every read of a repository is a GET whose input is its query, so each
  * field is declared by what the query carries, text, and decodes to the
@@ -29,19 +29,18 @@ import {
   githubConnectionAnswerSchema,
 } from "../github-connection-wire.js";
 import {
-  GITHUB_ISSUES_BOUNDS,
   GITHUB_REPOSITORIES_QUERY,
   githubPullRequestNumberSchema,
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
   githubRepositoryIssueAnswerSchema,
-  githubRepositoryIssuesAnswerSchema,
   githubRepositoryPullRequestAnswerSchema,
   workspaceTokenRepositoriesAnswerSchema,
 } from "../github-repositories-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import {
   CODE_PATH_MAX_CHARS,
+  taskFileAnswerSchema,
   taskSkillsAnswerSchema,
   taskSkillsQueryFields,
   taskTreeAnswerSchema,
@@ -49,6 +48,7 @@ import {
 } from "../task-wire.js";
 import { workspaceTokenRepositoryRequestSchema } from "../workspace-wire.js";
 import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+import { taskFileQueryFields } from "./task-files.js";
 
 /** An intent's id is 43 base64url characters, so a claim past this carries no intent. */
 const CLAIM_BODY_BYTES = 1_024;
@@ -113,6 +113,10 @@ export const githubContract = {
     .meta(openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.GITHUB_TOKEN_REPOSITORIES }))
     .input(exactInput(workspaceTokenRepositoryRequestSchema))
     .output(EffectSchema.flip(workspaceTokenRepositoriesAnswerSchema)),
+  repositoryFile: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_FILE }))
+    .input(EffectSchema.Struct({ ...repositoryPlaceQuery, ...taskFileQueryFields }))
+    .output(EffectSchema.flip(taskFileAnswerSchema)),
   repositoryTree: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE }))
     .input(
@@ -153,17 +157,4 @@ export const githubContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUE }))
     .input(numberedQuerySchema)
     .output(EffectSchema.flip(githubRepositoryIssueAnswerSchema)),
-  /** A repository's issues: the one `number` names, else those `query`'s words find, else its open issues. */
-  repositoryIssues: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUES }))
-    .input(
-      EffectSchema.Struct({
-        ...repositoryPlaceQuery,
-        [GITHUB_REPOSITORIES_QUERY.QUERY]: EffectSchema.optionalKey(
-          EffectSchema.String.check(EffectSchema.isMaxLength(GITHUB_ISSUES_BOUNDS.MAX_QUERY_CHARS)),
-        ),
-        [GITHUB_REPOSITORIES_QUERY.NUMBER]: EffectSchema.optionalKey(numberQuerySchema),
-      }),
-    )
-    .output(EffectSchema.flip(githubRepositoryIssuesAnswerSchema)),
 };

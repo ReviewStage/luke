@@ -21,13 +21,13 @@
  * predates the kind fails its whole held read on one.
  *
  * Every line queued for one agent is queued under that agent's runner
- * lease (`./coding-agent-runner-lease.ts`), as every write to a cloud
+ * lease (`./agent-runner-lease.ts`), as every write to a cloud
  * runner is. That is what keeps an agent's lines committed in the order of
  * their `seq`: the sequence is shared by every agent and holds no lock, so
  * two lines queued at once outside the lease could commit out of order.
  */
 
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import {
   DEVICE_AGENT_LINE_CAPABILITY,
   DEVICE_AGENT_LINE_KIND,
@@ -40,12 +40,25 @@ import {
   deviceAgentAnswerSchema,
   deviceAgentObjectSchema,
 } from "@luke/features/device-agent-wire";
-import { and, arrayContains, asc, desc, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  arrayContains,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { agentTable } from "../schemas/agent.js";
 import { device } from "../schemas/device.js";
 import { deviceAgentLine, deviceAgentRequest } from "../schemas/device-agent.js";
 import { conversations } from "../schemas/storage.js";
@@ -102,9 +115,6 @@ export type DeviceAgentWaitingRequest = typeof WaitingRequestSchema.Type;
 const AnswerRowSchema = Schema.Struct({
   kind: RequestKindSchema,
   bytes: Schema.NullOr(Schema.Uint8Array),
-  exitCode: Schema.NullOr(Schema.Number),
-  stdout: Schema.NullOr(Schema.String),
-  stderr: Schema.NullOr(Schema.String),
 });
 
 const decodeAnswer = Schema.decodeUnknownEffect(deviceAgentAnswerSchema);
@@ -119,9 +129,9 @@ const lineBefore = alias(deviceAgentLine, "line_before");
  */
 function pinnedAgent(userId: string, agentId: string) {
   return and(
-    eq(codingAgent.id, agentId),
-    eq(codingAgent.userId, userId),
-    eq(codingAgent.machine, CODING_AGENT_MACHINE.DEVICE),
+    eq(agentTable.id, agentId),
+    eq(agentTable.userId, userId),
+    eq(agentTable.machine, AGENT_MACHINE.DEVICE),
     eq(device.userId, userId),
   );
 }
@@ -166,9 +176,9 @@ export type DeviceAgentLineStanding = typeof DeviceAgentLineStandingSchema.Type;
 
 /** The columns a pin reads off an agent. */
 const PIN_COLUMNS = {
-  userId: codingAgent.userId,
-  agentId: codingAgent.id,
-  deviceId: codingAgent.deviceId,
+  userId: agentTable.userId,
+  agentId: agentTable.id,
+  deviceId: agentTable.deviceId,
 };
 
 const findPinOfSession = SqlSchema.findOneOption({
@@ -179,11 +189,11 @@ const findPinOfSession = SqlSchema.findOneOption({
       db
         .select(PIN_COLUMNS)
         .from(conversations)
-        .innerJoin(codingAgent, eq(codingAgent.conversationId, conversations.id))
+        .innerJoin(agentTable, eq(agentTable.conversationId, conversations.id))
         .where(
           and(
             eq(conversations.runtimeSessionId, runtimeSessionId),
-            eq(codingAgent.machine, CODING_AGENT_MACHINE.DEVICE),
+            eq(agentTable.machine, AGENT_MACHINE.DEVICE),
           ),
         )
         .limit(1),
@@ -197,10 +207,8 @@ const findPin = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .select(PIN_COLUMNS)
-        .from(codingAgent)
-        .where(
-          and(eq(codingAgent.id, agentId), eq(codingAgent.machine, CODING_AGENT_MACHINE.DEVICE)),
-        ),
+        .from(agentTable)
+        .where(and(eq(agentTable.id, agentId), eq(agentTable.machine, AGENT_MACHINE.DEVICE))),
     ),
 });
 
@@ -281,16 +289,16 @@ const insertLine = SqlSchema.findAll({
           qb
             .select({
               id: sql<string>`coalesce(${id ?? null}::uuid, gen_random_uuid())`.as("id"),
-              agentId: sql<string>`${codingAgent.id}`.as("agent_id"),
-              userId: sql<string>`${codingAgent.userId}`.as("user_id"),
+              agentId: sql<string>`${agentTable.id}`.as("agent_id"),
+              userId: sql<string>`${agentTable.userId}`.as("user_id"),
               deviceId: sql<string>`${device.id}`.as("device_id"),
               kind: sql<DeviceAgentLineKind>`${kind}`.as("kind"),
               payload: sql<DeviceAgentObject>`${JSON.stringify(payload)}::jsonb`.as("payload"),
               sealedSecrets: sql<string | null>`${sealedSecrets}::text`.as("sealed_secrets"),
               createdAt: sql<Date>`${now}::timestamptz`.as("created_at"),
             })
-            .from(codingAgent)
-            .innerJoin(device, eq(device.id, codingAgent.deviceId))
+            .from(agentTable)
+            .innerJoin(device, eq(device.id, agentTable.deviceId))
             .where(
               capability === undefined
                 ? pinnedAgent(userId, agentId)
@@ -453,27 +461,33 @@ const insertRequest = SqlSchema.findAll({
           qb
             .select({
               id: sql<string>`${id}::uuid`.as("id"),
-              agentId: sql<string>`${codingAgent.id}`.as("agent_id"),
-              userId: sql<string>`${codingAgent.userId}`.as("user_id"),
+              agentId: sql<string>`${agentTable.id}`.as("agent_id"),
+              userId: sql<string>`${agentTable.userId}`.as("user_id"),
               deviceId: sql<string>`${device.id}`.as("device_id"),
               kind: sql<DeviceAgentRequestKind>`${kind}`.as("kind"),
               args: sql<DeviceAgentObject>`${JSON.stringify(args)}::jsonb`.as("args"),
               createdAt: sql<Date>`${now}::timestamptz`.as("created_at"),
             })
-            .from(codingAgent)
-            .innerJoin(device, eq(device.id, codingAgent.deviceId))
+            .from(agentTable)
+            .innerJoin(device, eq(device.id, agentTable.deviceId))
             .where(pinnedAgent(userId, agentId)),
         )
         .returning({ id: deviceAgentRequest.id }),
     ),
 });
 
-/** A request waiting for the account's Mac given. */
+/**
+ * A request waiting for the account's Mac given, of a kind this build
+ * knows. Note that a row of a kind an earlier build queued and never
+ * withdrew is passed over rather than read, because one row the decode
+ * refuses would fail the Mac's whole read until the expiry took it.
+ */
 function requestWaiting(userId: string, deviceId: string) {
   return and(
     eq(deviceAgentRequest.userId, userId),
     eq(deviceAgentRequest.deviceId, deviceId),
     isNull(deviceAgentRequest.claimedAt),
+    inArray(deviceAgentRequest.kind, Object.values(DEVICE_AGENT_REQUEST_KIND)),
   );
 }
 
@@ -524,23 +538,12 @@ const writeAnswer = SqlSchema.findAll({
     Database.use((db) =>
       db
         .update(deviceAgentRequest)
-        .set(
-          answer.kind === DEVICE_AGENT_REQUEST_KIND.READ_FILE
-            ? { settledAt: now, bytes: answer.bytes }
-            : {
-                settledAt: now,
-                exitCode: answer.exitCode,
-                stdout: answer.stdout,
-                stderr: answer.stderr,
-              },
-        )
+        .set({ settledAt: now, bytes: answer.bytes })
         .where(
           and(
             eq(deviceAgentRequest.id, id),
             eq(deviceAgentRequest.userId, userId),
             eq(deviceAgentRequest.deviceId, deviceId),
-            // An answer of one kind never settles a request of the other.
-            eq(deviceAgentRequest.kind, answer.kind),
             isNotNull(deviceAgentRequest.claimedAt),
             isNull(deviceAgentRequest.settledAt),
           ),
@@ -558,9 +561,6 @@ const findAnswer = SqlSchema.findOneOption({
         .select({
           kind: deviceAgentRequest.kind,
           bytes: deviceAgentRequest.bytes,
-          exitCode: deviceAgentRequest.exitCode,
-          stdout: deviceAgentRequest.stdout,
-          stderr: deviceAgentRequest.stderr,
         })
         .from(deviceAgentRequest)
         .where(
@@ -595,6 +595,36 @@ const deleteExpiredLines = SqlSchema.void({
           or(isNull(deviceAgentLine.claimedAt), isNotNull(deviceAgentLine.settledAt)),
         ),
       ),
+    ),
+});
+
+const findOpenLaunches = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, deviceId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, deviceId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: deviceAgentLine.id })
+        .from(deviceAgentLine)
+        .where(
+          and(
+            eq(deviceAgentLine.userId, userId),
+            eq(deviceAgentLine.deviceId, deviceId),
+            eq(deviceAgentLine.kind, DEVICE_AGENT_LINE_KIND.LAUNCH),
+            isNull(deviceAgentLine.settledAt),
+            sql`not exists (${db
+              .select({ one: sql`1` })
+              .from(stopLine)
+              .where(
+                and(
+                  eq(stopLine.agentId, deviceAgentLine.agentId),
+                  eq(stopLine.kind, DEVICE_AGENT_LINE_KIND.STOP),
+                  gt(stopLine.seq, deviceAgentLine.seq),
+                ),
+              )})`,
+          ),
+        )
+        .orderBy(asc(deviceAgentLine.seq)),
     ),
 });
 
@@ -820,6 +850,19 @@ export function deviceAgentLineSettlement(
 }
 
 /**
+ * The ids of the account's launch lines to the device given that are still
+ * open, claimed or not, with no stop queued after them, oldest first: the
+ * runs the service holds the device to, which its beat answers so it stops
+ * what it holds no longer and settles what it runs nothing for.
+ */
+export function openDeviceAgentLaunches(
+  userId: string,
+  deviceId: string,
+): DeviceAgentEffect<readonly string[]> {
+  return Effect.map(findOpenLaunches({ userId, deviceId }), (rows) => rows.map((row) => row.id));
+}
+
+/**
  * The launch lines still open, claimed or not, of every account's devices
  * that last beat before `seenBefore`, oldest first, at most `limit`: the runs
  * whose device's lease lapsed (`DEVICE_LEASE`). Read with no account in hand,
@@ -889,9 +932,8 @@ export function claimDeviceAgentRequest(
 
 /**
  * Keeps the answer to a request the account's Mac claimed; false where that
- * Mac holds no such request claimed and unanswered, or the answer is of
- * the other kind. An answer past the bound fails its decode and writes
- * nothing.
+ * Mac holds no such request claimed and unanswered. An answer past the
+ * bound fails its decode and writes nothing.
  */
 export function answerDeviceAgentRequest(
   userId: string,
@@ -913,19 +955,7 @@ export function deviceAgentRequestAnswer(
     Option.match(row, {
       onNone: () => Effect.succeed(Option.none()),
       onSome: (answer) =>
-        Effect.map(
-          decodeAnswer(
-            answer.kind === DEVICE_AGENT_REQUEST_KIND.READ_FILE
-              ? { kind: answer.kind, bytes: answer.bytes }
-              : {
-                  kind: answer.kind,
-                  exitCode: answer.exitCode,
-                  stdout: answer.stdout,
-                  stderr: answer.stderr,
-                },
-          ),
-          Option.some,
-        ),
+        Effect.map(decodeAnswer({ kind: answer.kind, bytes: answer.bytes }), Option.some),
     }),
   );
 }

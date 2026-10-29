@@ -5,7 +5,6 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { test } from "vitest";
 import { Shimmer } from "../shimmer/shimmer.js";
-import { ThinkingDots } from "../thinking-dots/thinking-dots.js";
 import { WorkingMark } from "./working-mark.js";
 
 /**
@@ -38,11 +37,6 @@ test("a still working mark lights at least three cells, not one stacked dot", ()
   // A capture that drops the animation leaves each dot on its resting transform.
   const cells = new Set([...dots].map((dot) => dot.style.transform));
   assert.ok(cells.size >= 3, `the still mark lights ${cells.size} cells`);
-});
-
-test("the thinking dots are hidden from a reader", () => {
-  const dots = render(createElement(ThinkingDots)).querySelector(".luke-thinking-dots");
-  assert.equal(dots?.getAttribute("aria-hidden"), "true");
 });
 
 test("the shimmer says its words and passes props on", () => {

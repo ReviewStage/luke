@@ -4,15 +4,13 @@ import {
   type DeviceAgentAnswer,
   type DeviceAgentLayout,
   type DeviceAgentRequest,
-  deviceAgentCommandArgsSchema,
   deviceAgentReadArgsSchema,
 } from "@luke/features/device-agent-wire";
-import { Duration, Effect, Fiber, Option, Ref, Schema, type Scope, Stream } from "effect";
+import { Effect, Option, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
-import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 
 /**
- * local-agent-requests.ts -- what a local agent's tools ask of this Mac, answered only inside the agent's own folder: a file read, or a command run in its worktree as `show_code` runs one.
+ * local-agent-requests.ts -- what a local agent's tools ask of this Mac, answered only inside the agent's own folder: a file read.
  *
  * The service asks for a path it built under the agent's folder
  * (`deviceAgentLayout`), but a path is only words: a `..`, or a symlink the
@@ -21,70 +19,18 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/process";
  * followed, and answered only where that real path stands inside the real
  * path of the agent's folder, whose temp folder, worktree, attachments, and
  * installed skills all stand beneath it. Anything else is refused as a path
- * that names no file the agent may read: a read answers no bytes, and a
- * command does not run. A path that does not exist resolves to nothing,
- * and is refused the same way. A read inside the agent's own `gh` sign-in
- * (`layout.githubConfig`), where a host keeps the agent's GitHub token, is
- * refused too, however it is reached, so no token reaches a tool's answer.
+ * that names no file the agent may read, and a read answers no bytes. A
+ * path that does not exist resolves to nothing, and is refused the same
+ * way. A read inside the agent's own `gh` sign-in (`layout.githubConfig`),
+ * where a host keeps the agent's GitHub token, is refused too, however it
+ * is reached, so no token reaches a tool's answer.
  *
  * A read answers at most the bytes asked for, and never more than one past
  * `DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES`, so the caller still sees a file
- * larger than its bound. A command runs in bash in the worktree, as the
- * leader of a process group of its own, under the developer's own variables
- * the caller hands on and the ones the request names, never the rest of the
- * app's environment, with nothing on its stdin, and is ended with
- * its group at `LOCAL_AGENT_COMMAND.TIMEOUT`, inside the service's own wait
- * for the answer; each of its outputs keeps its first bytes up to the bound.
- * On a sandboxed device the command runs inside the agent's VM instead
- * (`LocalAgentVm`), started first where it stands stopped, since its
- * worktree is the agent's to rig and a Git run over it on the device could
- * be made to run anything there.
+ * larger than its bound.
  */
-
-const LOCAL_AGENT_COMMAND = {
-  /** How long a command runs before its group is ended: inside the service's thirty-second wait for an answer. */
-  TIMEOUT: Duration.seconds(25),
-  /** How long the group has to end after SIGTERM before it is sent SIGKILL. */
-  KILL_GRACE: Duration.seconds(2),
-  /** How long the streams are read once the command exited or timed out. */
-  DRAIN_GRACE: Duration.seconds(1),
-  /** The exit code a command answers where it was not run, as a shell's own for a command it cannot execute. */
-  NOT_RUN: 126,
-} as const;
-
-/** What a command answers where its worktree does not stand inside the agent's folder. */
-const OUTSIDE = "Not run: the agent's worktree is not inside its folder on this Mac.";
-/** What a command answers where the agent's VM was never made, so there is nowhere to run it. */
-const NO_VM = "Not run: the agent's VM has not been made yet.";
-
-/**
- * The agent's VM a sandboxed device runs its commands in: started first
- * where it was made already (`woken`), and the process a command is there.
- */
-export interface LocalAgentVm {
-  /** The VM started where it was made already, and held for as long as the scope it is run in stands; whether it stands. */
-  readonly woken: Effect.Effect<
-    boolean,
-    never,
-    ChildProcessSpawner.ChildProcessSpawner | Scope.Scope
-  >;
-  readonly exec: (command: {
-    readonly cwd: string;
-    readonly command: string;
-    readonly args: readonly string[];
-    readonly env: Readonly<Record<string, string>>;
-  }) => {
-    readonly command: string;
-    readonly args: readonly string[];
-    readonly env: Readonly<Record<string, string>>;
-  };
-}
-
-/** The most bytes an output keeps, short of the bound by the widest character a cut could leave half of, which decodes as a three-byte replacement. */
-const KEPT_OUTPUT_BYTES = DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES - 4;
 
 const decodeReadArgs = Schema.decodeUnknownOption(deviceAgentReadArgsSchema);
-const decodeCommandArgs = Schema.decodeUnknownOption(deviceAgentCommandArgsSchema);
 
 /** Whether `path`, already real, stands at or under `root`, already real. */
 function within(root: string, path: string): boolean {
@@ -144,114 +90,9 @@ const answeredRead = (layout: DeviceAgentLayout, args: unknown) =>
     return answer(yield* readBounded(path.value, bound));
   });
 
-interface Kept {
-  readonly chunks: readonly Uint8Array[];
-  readonly bytes: number;
-}
-
-const NOTHING_KEPT: Kept = { chunks: [], bytes: 0 };
-
-/** A chunk kept while the stream is under its bound, and the rest drained. */
-function keep(kept: Kept, chunk: Uint8Array): Kept {
-  const room = KEPT_OUTPUT_BYTES - kept.bytes;
-  if (room <= 0) return kept;
-  const taken = chunk.length <= room ? chunk : chunk.subarray(0, room);
-  return { chunks: [...kept.chunks, taken], bytes: kept.bytes + taken.length };
-}
-
-function textOf(kept: Kept): string {
-  // Note that the chunks are decoded as one stream, so a character split across two is read whole.
-  const decoder = new TextDecoder();
-  return (
-    kept.chunks.map((chunk) => decoder.decode(chunk, { stream: true })).join("") + decoder.decode()
-  );
-}
-
-/** A command run whole in the worktree under its timeout, its group ended as its scope closes; in the agent's VM where it has one. */
-const ranCommand = (
-  checkout: string,
-  command: string,
-  env: Readonly<Record<string, string>>,
-  inVm: LocalAgentVm | undefined,
-) =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const asked = {
-        cwd: checkout,
-        command: "/bin/bash",
-        args: ["-l", "-c", command],
-        env: { ...env, PAGER: "cat", GIT_PAGER: "cat", GIT_TERMINAL_PROMPT: "0" },
-      };
-      const run = inVm === undefined ? asked : inVm.exec(asked);
-      const handle = yield* ChildProcess.make(run.command, [...run.args], {
-        cwd: checkout,
-        env: run.env,
-        extendEnv: false,
-        stdin: "ignore",
-        forceKillAfter: LOCAL_AGENT_COMMAND.KILL_GRACE,
-      });
-      const stdout = yield* Ref.make(NOTHING_KEPT);
-      const stderr = yield* Ref.make(NOTHING_KEPT);
-      const drain = (stream: Stream.Stream<Uint8Array, unknown>, into: Ref.Ref<Kept>) =>
-        Stream.runForEach(stream, (chunk) => Ref.update(into, (held) => keep(held, chunk)));
-      const drains = yield* Effect.forkScoped(
-        Effect.all([drain(handle.stdout, stdout), drain(handle.stderr, stderr)], {
-          concurrency: 2,
-        }),
-      );
-      const exited = yield* Effect.timeoutOption(handle.exitCode, LOCAL_AGENT_COMMAND.TIMEOUT);
-      yield* Effect.ignore(
-        Effect.timeoutOption(Fiber.join(drains), LOCAL_AGENT_COMMAND.DRAIN_GRACE),
-      );
-      const answer: DeviceAgentAnswer = {
-        kind: DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND,
-        exitCode: Option.match(exited, {
-          onNone: () => LOCAL_AGENT_COMMAND.NOT_RUN,
-          onSome: (code) => Number(code),
-        }),
-        stdout: textOf(yield* Ref.get(stdout)),
-        stderr: textOf(yield* Ref.get(stderr)),
-      };
-      return answer;
-    }),
-  );
-
-/** A command asked: run in the agent's worktree where it stands inside the agent's folder; refused otherwise. */
-const answeredCommand = (
-  layout: DeviceAgentLayout,
-  args: unknown,
-  base: Readonly<Record<string, string>>,
-  inVm: LocalAgentVm | undefined,
-) =>
-  Effect.gen(function* () {
-    const refused = (why: string): DeviceAgentAnswer => ({
-      kind: DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND,
-      exitCode: LOCAL_AGENT_COMMAND.NOT_RUN,
-      stdout: "",
-      stderr: why,
-    });
-    const asked = decodeCommandArgs(args);
-    if (Option.isNone(asked)) return refused("Not run: the request named no command.");
-    const checkout = yield* confinedPath(layout, layout.checkoutPath);
-    if (Option.isNone(checkout)) return refused(OUTSIDE);
-    if (inVm !== undefined && !(yield* inVm.woken)) return refused(NO_VM);
-    const env = { ...base, ...asked.value.env };
-    return yield* ranCommand(checkout.value, asked.value.command, env, inVm).pipe(
-      Effect.catch(() => Effect.succeed(refused("Not run: the command could not be started."))),
-    );
-  });
-
-/** What one request of a local agent's tools answers, inside the agent's folder given, a command under the variables `env` hands on, in the agent's VM where `inVm` names one. */
+/** What one request of a local agent's tools answers, inside the agent's folder given. */
 export const answeredLocalAgentRequest = (
   layout: DeviceAgentLayout,
   request: Pick<DeviceAgentRequest, "kind" | "args">,
-  env: Readonly<Record<string, string>>,
-  inVm?: LocalAgentVm | undefined,
-): Effect.Effect<
-  DeviceAgentAnswer,
-  never,
-  FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
-> =>
-  request.kind === DEVICE_AGENT_REQUEST_KIND.READ_FILE
-    ? answeredRead(layout, request.args)
-    : Effect.scoped(answeredCommand(layout, request.args, env, inVm));
+): Effect.Effect<DeviceAgentAnswer, never, FileSystem.FileSystem> =>
+  answeredRead(layout, request.args);

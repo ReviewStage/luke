@@ -7,6 +7,18 @@
       "maxLength": 36,
       "description": "The task to start the agent on, by the id list_tasks answered; leave it out for the task you work on."
     },
+    "repository": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 140
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Where you work on no task and name none, the GitHub repository the agent works in, as owner/name, which the workspace's GitHub installation must reach; null for none. Leave it out for the repository you work in, if any. A task's agent works in the task's own."
+    },
     "prompt": {
       "type": "string",
       "minLength": 1,
@@ -73,7 +85,7 @@
         "agentId"
       ],
       "additionalProperties": false,
-      "description": "Another coding agent of your workspace to take over from, on its own task, or on no task where it has none: the new agent is handed its brief and its transcript (with Luke's summary of the steps that do not fit) and a copy of its work, runs on its model unless you name one, and hears the note after them; it takes no prompt and no branch. Without messageId it continues the agent, which is stopped; with one it forks the agent at that message, which goes on."
+      "description": "Another agent of your workspace to take over from, on its own task, or on no task where it has none: the new agent is handed its brief and its transcript (with Luke's summary of the steps that do not fit) and a copy of its work, runs on its model unless you name one, and hears the note after them; it takes no prompt and no branch. Without messageId it continues the agent, which is stopped; with one it forks the agent at that message, which goes on."
     }
   },
   "required": [],

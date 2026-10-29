@@ -271,7 +271,8 @@ const GITHUB_LINE_COMMENT = EffectSchema.Struct({
  * with its words, a failed check, or every check finished on a commit; the
  * repository, the pull request where GitHub named it, the page, and who
  * caused it, by their login. The words are the reviewer's, never the
- * developer's.
+ * developer's, and whether anyone but the agent's owner wrote them, which
+ * `run_on_mac` reads; absent from a line kept before it was said.
  */
 const GITHUB_LINE_METADATA = EffectSchema.Struct({
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.GITHUB),
@@ -288,6 +289,7 @@ const GITHUB_LINE_METADATA = EffectSchema.Struct({
     ),
   ),
   sha: EffectSchema.optional(githubName(GITHUB_LINE_BOUNDS.NAME_CHARS)),
+  outside_words: EffectSchema.optional(EffectSchema.Boolean),
 });
 
 export type GitHubLineMetadata = EffectSchema.Schema.Type<typeof GITHUB_LINE_METADATA>;
@@ -299,9 +301,15 @@ const LUKE_LINE_METADATA = EffectSchema.Struct({
 
 export type LukeLineMetadata = EffectSchema.Schema.Type<typeof LUKE_LINE_METADATA>;
 
-/** An automation line is an automation's run's prompt, the agent's first line or a later one. */
+/**
+ * An automation line is an automation's run's prompt, the agent's first line
+ * or a later one, and whether what fired the run put words its owner did not
+ * write beside that prompt, such as a webhook's body, which `run_on_mac`
+ * reads; absent from a line kept before it was said.
+ */
 const AUTOMATION_LINE_METADATA = EffectSchema.Struct({
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.AUTOMATION),
+  outside_words: EffectSchema.optional(EffectSchema.Boolean),
 });
 
 export type AutomationLineMetadata = EffectSchema.Schema.Type<typeof AUTOMATION_LINE_METADATA>;
@@ -348,22 +356,6 @@ export function isDeveloperLine(metadata: UserMessageMetadata): boolean {
   if ("source" in metadata) return false;
   if (metadata.channel === MESSAGE_CHANNEL.AGENT_MESSAGE) return false;
   return metadata.channel !== MESSAGE_CHANNEL.VOICE || metadata.author === MESSAGE_AUTHOR.DEVELOPER;
-}
-
-/** The channels a line of a call arrives on: said, either speaker's, or typed into the composer while the call stood. */
-const CALL_CHANNELS: ReadonlySet<unknown> = new Set([MESSAGE_CHANNEL.VOICE, MESSAGE_CHANNEL.TYPED]);
-
-/**
- * The store's id for the call a line of an agent's transcript was said on,
- * read off the line's own metadata; none for a line said on no call. A line
- * typed while the call stood names its call too, so it stands inside it.
- */
-export function callOfLine(message: { readonly metadata?: unknown }): string | undefined {
-  const { metadata } = message;
-  if (typeof metadata !== "object" || metadata === null) return undefined;
-  const channel: unknown = Reflect.get(metadata, "channel");
-  const session: unknown = Reflect.get(metadata, "voice_session_id");
-  return CALL_CHANNELS.has(channel) && typeof session === "string" ? session : undefined;
 }
 
 /**

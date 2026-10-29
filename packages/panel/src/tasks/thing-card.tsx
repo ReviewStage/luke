@@ -1,12 +1,12 @@
 import type { MentionLines } from "@luke/features/mention-link";
 import { THING_KIND, type Thing, type ThingKind, type ThingOf } from "@luke/features/thing-kind";
+import { HoverCardSkeleton } from "@luke/ui";
 import type { ReactNode } from "react";
 import { LukeCard } from "../actor-ref.js";
 import { tabCard } from "../desktop/tab-card.js";
 import { ChannelChipCard } from "./channel-card.js";
 import {
   AutomationChipCard,
-  ChipCardSkeleton,
   PageChipCard,
   PersonChipCard,
   SectionChipCard,
@@ -35,7 +35,7 @@ import { TAB_KIND } from "./tab-look.js";
  * chip's own, its glyph and name, and says so by name, `OWN_CARD`. A plan,
  * an agent, and a pull request hang the card their own tab hangs
  * (`tabCard`), wherever the chip stands. A card that reads what it shows
- * as it is hung waits in one way whatever its kind (`ChipCardSkeleton`),
+ * as it is hung waits in one way whatever its kind (`HoverCardSkeleton`),
  * and stands in with the chip's own only where the read answers nothing.
  */
 
@@ -81,7 +81,7 @@ function linesNote(lines: MentionLines | undefined): string | undefined {
 
 /** A card's one waiting state while what it shows is read: the chip's glyph and name over a line standing in for the rest. */
 function reading(at: ThingCardAt): ReactNode {
-  return <ChipCardSkeleton glyph={at.glyph} name={at.name} />;
+  return <HoverCardSkeleton glyph={at.glyph} name={at.name} />;
 }
 
 /** An MCP server's card, or one of its tools': its server's row as the MCP popover draws it. */
@@ -125,7 +125,6 @@ export const THING_CARD: ThingCards = {
     <VersionChipCard taskId={version.planId} revision={version.revision} fallback={at.own} />
   ),
   [THING_KIND.COMMENT]: OWN_CARD,
-  [THING_KIND.TURN]: OWN_CARD,
   [THING_KIND.PAGE]: (page, at) => (
     <PageChipCard
       place={"taskId" in page ? { taskId: page.taskId } : { agentId: page.agentId }}
@@ -137,7 +136,7 @@ export const THING_CARD: ThingCards = {
   [THING_KIND.AGENT]: (agent, at) => (
     <MentionedAgentCard
       agentId={agent.agentId}
-      taskId={agent.taskId}
+      taskId={undefined}
       name={at.name}
       workspaceId={at.wordsWorkspaceId}
       reading={reading(at)}

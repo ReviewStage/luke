@@ -1,22 +1,22 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  type CodingAgent,
+  type Agent,
   hasRepository,
   type KeptPublished,
-  readCodingAgent,
-  readCodingAgentKeptPublished,
-  readCodingAgentPublished,
-  recordCodingAgentPublished,
+  readAgent,
+  readAgentKeptPublished,
+  readAgentPublished,
+  recordAgentPublished,
   type WithRepository,
-} from "@luke/database/models/coding-agent-store";
-import type { StoredPullRequest } from "@luke/database/schemas/coding-agent";
+} from "@luke/database/models/agent-store";
+import type { StoredPullRequest } from "@luke/database/schemas/agent";
 import { OPERATOR_NOTICE_KIND, type OperatorNoticeKind } from "@luke/database/storage-vocabulary";
 import {
-  type CodingAgentPullRequest,
-  type CodingAgentPullRequestAnswer,
+  type AgentPullRequest,
+  type AgentPullRequestAnswer,
   PULL_REQUEST_STATE,
   pullRequestAuthorOf,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { Cache, Clock, Data, Duration, Effect, Exit, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
@@ -104,7 +104,7 @@ type PullRequestEnd = typeof PULL_REQUEST_STATE.MERGED | typeof PULL_REQUEST_STA
 
 /** What one read found: the answer the wire carries, the pull request as the agent's row keeps it, null where none was found, and how it ended where the read is the first to find it so. */
 interface Published {
-  readonly answer: CodingAgentPullRequestAnswer;
+  readonly answer: AgentPullRequestAnswer;
   readonly stored: StoredPullRequest | null;
   readonly ended: PullRequestEnd | undefined;
 }
@@ -112,9 +112,9 @@ interface Published {
 /** The wire's pull request from GitHub's, with its head's checks as read and whether the merge queue holds it. */
 function wirePullRequestOf(
   found: GitHubPullRequest,
-  checks: CodingAgentPullRequest["checks"],
+  checks: AgentPullRequest["checks"],
   queued: boolean,
-): CodingAgentPullRequest {
+): AgentPullRequest {
   return {
     number: found.number,
     title: found.title,
@@ -138,7 +138,7 @@ function wirePullRequestOf(
  */
 function queuedOf(
   token: Redacted.Redacted,
-  agent: WithRepository<CodingAgent>,
+  agent: WithRepository<Agent>,
   found: GitHubPullRequest,
   kept: StoredPullRequest | null,
 ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
@@ -152,7 +152,7 @@ function queuedOf(
 /** The wire's pull request from GitHub's, with its head's checks read beside it, and the row's with its head and when it merged beside that. */
 function withChecks(
   token: Redacted.Redacted,
-  agent: WithRepository<CodingAgent>,
+  agent: WithRepository<Agent>,
   found: GitHubPullRequest,
   kept: StoredPullRequest | null,
 ): Effect.Effect<Published, PullRequestReadFailure, HttpClient.HttpClient> {
@@ -194,7 +194,7 @@ const END_NOTICE = {
 } as const satisfies Record<PullRequestEnd, OperatorNoticeKind>;
 
 /** Nothing published: neither a branch GitHub holds nor a pull request. */
-function nothing(agent: CodingAgent): Published {
+function nothing(agent: Agent): Published {
   return {
     answer: { repository: agent.repository, branch: null, pullRequest: null },
     stored: null,
@@ -204,13 +204,13 @@ function nothing(agent: CodingAgent): Published {
 
 /**
  * A token that reads the agent's pull requests, minted for its one
- * repository on the installation of its task's workspace, as the account
- * asking reaches the task; refused as out of reach where either no longer
+ * repository on the installation of its workspace, as the account asking
+ * is a member of it; refused as out of reach where either no longer
  * stands.
  */
 export const agentPullRequestReach = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  agent: WithRepository<CodingAgent>,
+  agent: WithRepository<Agent>,
 ): Effect.fn.Return<GitHubRepositoryToken, PublishedReadFailure, PublishedServices> {
   const workspace = yield* agentWorkspace(userId, agent);
   const app = yield* GitHubApp;
@@ -230,7 +230,7 @@ export const agentPullRequestReach = /* @__PURE__ */ Effect.fnUntraced(function*
  */
 const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  agent: CodingAgent,
+  agent: Agent,
 ): Effect.fn.Return<Published, PublishedReadFailure, PublishedServices> {
   // No branch on the row, no publication: no turn has ended in the sandbox, or its checkout stood detached.
   if (agent.branch === null) return nothing(agent);
@@ -242,7 +242,7 @@ const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
   const { token } = reached;
   const ofBranch = yield* pullRequestOfBranch(token, agent.repository, agent.branch);
   if (Option.isSome(ofBranch)) {
-    const kept = yield* readCodingAgentPublished(userId, agent.id);
+    const kept = yield* readAgentPublished(userId, agent.id);
     return yield* withChecks(token, agent, ofBranch.value, kept);
   }
   const pushed = yield* branchStands(token, agent.repository, agent.branch);
@@ -258,17 +258,17 @@ const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * What the agent published as GitHub holds it now, written on its row as
  * read. The routes read it through the cache below; the voice brain's read
- * of one agent (`agents/coding-agent-tools.ts`) reads it afresh, once per
+ * of one agent (`agents/agent-tools.ts`) reads it afresh, once per
  * ask.
  */
 export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(function* (
   userId: string,
-  agent: CodingAgent,
-): Effect.fn.Return<CodingAgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
+  agent: Agent,
+): Effect.fn.Return<AgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
   const { answer, stored, ended } = yield* publishedOnGitHub(userId, agent);
   const at = yield* Clock.currentTimeMillis;
   const read = { at, branch: agent.branch, pushed: answer.branch !== null };
-  yield* recordCodingAgentPublished(userId, agent.id, stored, read);
+  yield* recordAgentPublished(userId, agent.id, stored, read);
   // A merge first seen may have finished the task's work; the task is asked once the row says merged.
   const merged = ended === PULL_REQUEST_STATE.MERGED;
   if (merged && agent.taskId !== null) yield* settleTaskIfFinished(userId, agent.taskId);
@@ -288,9 +288,9 @@ export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(fu
 export const agentPullRequestOfNumber = /* @__PURE__ */ Effect.fn("web/agentPullRequestOfNumber")(
   function* (
     userId: string,
-    agent: CodingAgent,
+    agent: Agent,
     number: number,
-  ): Effect.fn.Return<CodingAgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
+  ): Effect.fn.Return<AgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
     if (!hasRepository(agent)) return nothing(agent).answer;
     const { token } = yield* agentPullRequestReach(userId, agent);
     const found = yield* pullRequestByNumber(token, agent.repository, number);
@@ -315,7 +315,7 @@ export class PublishedKey extends Data.Class<{
 /** The kept answers of one function instance: an agent's answer for the TTL, a failure for no time. */
 export type PublishedCache = Cache.Cache<
   PublishedKey,
-  CodingAgentPullRequestAnswer,
+  AgentPullRequestAnswer,
   PublishedReadFailure | NoSuchAgent,
   PublishedServices
 >;
@@ -327,7 +327,7 @@ class NoSuchAgent extends Data.TaggedError("NoSuchAgent")<{ readonly agentId: st
 const KEPT_AGENTS = 1_024;
 
 /** The answer the row keeps, as the read that wrote it answered: its pull request as the wire carries it, else the branch where GitHub held it. */
-function keptAnswer(agent: CodingAgent, kept: KeptPublished): CodingAgentPullRequestAnswer {
+function keptAnswer(agent: Agent, kept: KeptPublished): AgentPullRequestAnswer {
   if (kept.published === null) {
     const branch = kept.read.pushed ? kept.read.branch : null;
     return { repository: agent.repository, branch, pullRequest: null };
@@ -337,7 +337,7 @@ function keptAnswer(agent: CodingAgent, kept: KeptPublished): CodingAgentPullReq
 }
 
 /** Whether the row answers in GitHub's place: the agent archived, or ended on a pull request that merged or closed a while ago at most, or the row read a moment ago. */
-function keptStands(agent: CodingAgent, ended: boolean, kept: KeptPublished, now: number): boolean {
+function keptStands(agent: Agent, ended: boolean, kept: KeptPublished, now: number): boolean {
   if (agent.archivedAt !== null) return true;
   const state = kept.published?.state;
   const age = now - kept.read.at;
@@ -365,16 +365,12 @@ function rateLimited(failure: PublishedReadFailure): boolean {
  */
 const lookupPublished = (
   key: PublishedKey,
-): Effect.Effect<
-  CodingAgentPullRequestAnswer,
-  PublishedReadFailure | NoSuchAgent,
-  PublishedServices
-> =>
+): Effect.Effect<AgentPullRequestAnswer, PublishedReadFailure | NoSuchAgent, PublishedServices> =>
   Effect.gen(function* () {
-    const found = yield* readCodingAgent(key.userId, key.agentId);
+    const found = yield* readAgent(key.userId, key.agentId);
     if (Option.isNone(found)) return yield* new NoSuchAgent({ agentId: key.agentId });
     const agent = found.value;
-    const row = yield* readCodingAgentKeptPublished(key.userId, agent.id);
+    const row = yield* readAgentKeptPublished(key.userId, agent.id);
     const kept = row !== null && row.read.branch === agent.branch ? row : null;
     const now = yield* Clock.currentTimeMillis;
     if (kept !== null && keptStands(agent, key.ended, kept, now)) return keptAnswer(agent, kept);

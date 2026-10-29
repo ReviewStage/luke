@@ -1,5 +1,4 @@
 import base from "@luke/panel/styles/base.css?raw";
-import call from "@luke/panel/styles/call.css?raw";
 import desktop from "@luke/panel/styles/desktop.css?raw";
 import entry from "@luke/panel/styles/index.css?raw";
 import settings from "@luke/panel/styles/settings.css?raw";
@@ -56,7 +55,6 @@ const SHEET_BY_IMPORT = {
   "./tasks.css": tasks,
   "./shell.css": shell,
   "./desktop.css": desktop,
-  "./call.css": call,
 } as const;
 
 /** The stylesheets in the order the panel's `index.css` imports them, which is the order every app lays them in, each by the specifier it is imported by, and the app's utilities after them. */

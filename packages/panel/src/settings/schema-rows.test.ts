@@ -16,7 +16,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { rendererRegistry } from "../renderer-runtime.js";
 import { fakeActPort, refusedOnPort } from "../testing/app-bridge.js";
-import { fakeAppPlatform } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { newestToastSays } from "../testing/toast.js";
@@ -28,12 +27,8 @@ import { type SettingsWrites, useSettingsWrites } from "./writes.js";
  * schema-rows.test.ts -- a schema row as the reader meets it: a toggle is a
  * switch named by its row, a short choice a pop-up naming the stored value,
  * each writing what it is moved to, and a refused write said under the row
- * that asked, its control pressable again. A choice whose values are heard
- * opens a dialog that plays each as it is picked and keeps only what Done does.
+ * that asked, its control pressable again.
  */
-
-/** Where the test's shell serves the panel's static files from. */
-const ASSET_BASE = "https://luke.example/app/";
 
 const REFUSED = "The setting could not be saved. Try again.";
 
@@ -64,16 +59,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A page these tests draw: Appearance's own rows, Voice's controls, or This Mac's Startup, whose one row is a switch. */
-type DrawnPage =
-  | typeof SETTINGS_PAGE.APPEARANCE
-  | typeof SETTINGS_PAGE.VOICE
-  | typeof SETTINGS_PAGE.THIS_MAC;
+/** A page these tests draw: Appearance's own rows, or This Mac's Startup, whose one row is a switch. */
+type DrawnPage = typeof SETTINGS_PAGE.APPEARANCE | typeof SETTINGS_PAGE.THIS_MAC;
 
 /** The section of `page` these tests draw. */
 const DRAWN_SECTION = {
   [SETTINGS_PAGE.APPEARANCE]: SETTING_SECTION.MAIN,
-  [SETTINGS_PAGE.VOICE]: SETTING_SECTION.CONTROLS,
   [SETTINGS_PAGE.THIS_MAC]: SETTING_SECTION.STARTUP,
 } as const satisfies Record<DrawnPage, SettingSection>;
 
@@ -85,7 +76,6 @@ function rows(
 ) {
   const view = {
     settings,
-    voiceControlsDrawn: page === SETTINGS_PAGE.VOICE,
     accountDrawn: true,
     capabilities: DESKTOP_CAPABILITIES,
   };
@@ -104,7 +94,7 @@ function mount(page: DrawnPage = SETTINGS_PAGE.APPEARANCE): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(rows(page, settingsView({ voiceAvailable: true }), writes)));
+  act(() => root.render(rows(page, settingsView(), writes)));
   return container;
 }
 
@@ -279,136 +269,4 @@ test("a choice the store refuses says why under its own row and marks its pop-up
     ["zoom", 125],
     ["zoom", 90],
   ]);
-});
-
-/**
- * The window's audio, faked at the media element: each clip a row starts is
- * pushed onto the list by its address, and each it stops is marked so.
- */
-function listenToClips() {
-  const played: string[] = [];
-  const paused: string[] = [];
-  const heard = { played, paused };
-  vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function (
-    this: HTMLMediaElement,
-  ) {
-    heard.played.push(this.src);
-    return Promise.resolve();
-  });
-  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(function (
-    this: HTMLMediaElement,
-  ) {
-    heard.paused.push(this.src);
-  });
-  return heard;
-}
-
-/** The voice the dialog offers by `name`, as a radio row naming it. */
-function voiceRow(name: string): HTMLButtonElement {
-  return (
-    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] [role="radio"]')].find(
-      (row) => row.textContent?.startsWith(name),
-    ) ?? assert.fail(`the dialog offers ${name}`)
-  );
-}
-
-/** The dialog's own button named `name`. */
-function dialogButton(name: string): HTMLButtonElement {
-  return (
-    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
-      (button) => button.textContent === name || button.getAttribute("aria-label") === name,
-    ) ?? assert.fail(`the dialog has ${name}`)
-  );
-}
-
-test("the Voice row opens every voice under its heading, plays each as it is picked or pressed again, and Done keeps the last", async () => {
-  fakeAppPlatform({ assetBase: () => ASSET_BASE });
-  const heard = listenToClips();
-  const page = mount(SETTINGS_PAGE.VOICE);
-
-  act(() => control(page, "Voice: Cedar").click());
-  const headings = [...document.querySelectorAll('[role="dialog"] h3')].map((h) => h.textContent);
-  assert.deepEqual(headings.slice(0, 3), [
-    "English",
-    "North American English",
-    "Southern U.S. English",
-  ]);
-  assert.ok(headings.includes("Brazilian Portuguese"));
-  assert.ok(headings.includes("Japanese"));
-  assert.equal(voiceRow("Cedar").getAttribute("aria-checked"), "true");
-  assert.equal(voiceRow("Willow").textContent?.includes("Feminine"), true);
-
-  act(() => voiceRow("Willow").click());
-  act(() => voiceRow("Willow").click());
-  act(() => voiceRow("Shida").click());
-  await settle();
-  assert.deepEqual(written, []);
-  assert.deepEqual(heard.played, [
-    `${ASSET_BASE}voices/willow.m4a`,
-    `${ASSET_BASE}voices/willow.m4a`,
-    `${ASSET_BASE}voices/shida.m4a`,
-  ]);
-
-  act(() => dialogButton("Done").click());
-  await settle();
-  assert.deepEqual(written, [["voice", "shida"]]);
-  assert.equal(document.querySelector('[role="dialog"]'), null);
-  assert.equal(heard.paused.at(-1), `${ASSET_BASE}voices/shida.m4a`);
-});
-
-test("Cancel keeps the voice as it stood and stops the clip, and Done on the voice already chosen writes nothing", async () => {
-  fakeAppPlatform({ assetBase: () => ASSET_BASE });
-  const heard = listenToClips();
-  const page = mount(SETTINGS_PAGE.VOICE);
-
-  act(() => control(page, "Voice: Cedar").click());
-  act(() => voiceRow("Marin (default)").click());
-  act(() => dialogButton("Cancel").click());
-  await settle();
-  assert.deepEqual(written, []);
-  assert.deepEqual(heard.paused, [`${ASSET_BASE}voices/marin.m4a`]);
-
-  act(() => control(page, "Voice: Cedar").click());
-  assert.equal(voiceRow("Cedar").getAttribute("aria-checked"), "true");
-  act(() => dialogButton("Play sample").click());
-  act(() => dialogButton("Done").click());
-  await settle();
-  assert.deepEqual(written, []);
-  assert.equal(heard.played.at(-1), `${ASSET_BASE}voices/cedar.m4a`);
-});
-
-test("the arrows walk every voice across the headings, playing each, and the picked voice is scrolled into view as the dialog opens", async () => {
-  fakeAppPlatform({ assetBase: () => ASSET_BASE });
-  const heard = listenToClips();
-  const scrolled: string[] = [];
-  // Note that jsdom draws no layout and so has no `scrollIntoView` of its own to spy on.
-  Object.defineProperty(Element.prototype, "scrollIntoView", {
-    configurable: true,
-    value(this: Element) {
-      scrolled.push(this.textContent ?? "");
-    },
-  });
-  const page = mount(SETTINGS_PAGE.VOICE);
-
-  act(() => control(page, "Voice: Cedar").click());
-  assert.deepEqual(scrolled, ["Cedar"]);
-
-  const arrow = (row: HTMLButtonElement, key: string) =>
-    act(() => {
-      row.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
-    });
-  arrow(voiceRow("Verse"), "ArrowDown");
-  assert.equal(voiceRow("Gleam").getAttribute("aria-checked"), "true");
-  assert.equal(document.activeElement, voiceRow("Gleam"));
-  arrow(voiceRow("Alloy"), "ArrowUp");
-  assert.equal(voiceRow("Noeul").getAttribute("aria-checked"), "true");
-  await settle();
-  assert.deepEqual(heard.played, [
-    `${ASSET_BASE}voices/gleam.m4a`,
-    `${ASSET_BASE}voices/noeul.m4a`,
-  ]);
-  Object.defineProperty(Element.prototype, "scrollIntoView", {
-    configurable: true,
-    value: undefined,
-  });
 });

@@ -3,13 +3,13 @@
 The hosted service's logic: what the web deployment's functions and its eve
 service (`apps/dev`) compose and run. The deployment
 keeps only its shell in `apps/web/server` — the Vercel function entries under
-`routes/`, the runtime edge `runtime.ts`, the function layout and bundling, and
-the voice function's edge — and reaches everything else here.
+`routes/`, the runtime edge `runtime.ts`, and the function layout and
+bundling — and reaches everything else here.
 
 The package has no barrel. Each module is its own subpath, as
 `@luke/database`'s are (`@luke/service/http/http-effect`), and test builders
 stand at `@luke/service/testing/<name>`. A module lives in the folder of the
-domain it belongs to (`auth/`, `github/`, `tasks/`, `agents/`, `voice/`, …),
+domain it belongs to (`auth/`, `github/`, `tasks/`, `agents/`, …),
 named by the group of this README that describes it.
 
 `src/core.ts` is the package's own door to the workspace packages it builds on,
@@ -134,7 +134,7 @@ beside it. `repositoryPullRequestToken` adds `pull_requests: read` and
 `repositoryWriteToken` cuts contents and pull requests write, each with CI
 read beside it where the installation grants it; `appBot(token)` reads the
 App's bot user (`GET /users/<slug>[bot]`) on a token already minted, which
-is who a coding agent's commits are by. A task's repository is reached
+is who an agent's commits are by. A task's repository is reached
 through its task's workspace, read afresh at each use, so an installation
 suspended, removed, or reinstalled decides the very next read.
 
@@ -228,7 +228,7 @@ reading the workspace's repositories again when the window next takes focus
 (`packages/panel/src/tasks/repository-chip.tsx`).
 
 The App's webhook is `POST /api/github/webhook` (`src/github/github-webhook-app.ts`),
-which keeps what a coding agent published current on the agent's row
+which keeps what an agent published current on the agent's row
 (`coding_agent.published`) for the task list while nobody has the agent's tab
 open. GitHub signs every delivery with the App's webhook secret,
 `GITHUB_APP_WEBHOOK_SECRET`, and the route compares `X-Hub-Signature-256`
@@ -357,8 +357,7 @@ it, so a missing header, an expired token, and a refusing auth service are
 the same 401 they always were, and no route repeats the recovery.
 
 Every caller yields it. `resolveHostedUserId`, which the account and tasks
-groups are handed as their `resolveUserId`, and the voice function's own
-resolver are Effect-shaped, so each reads the bearer on its own fiber instead
+groups are handed as their `resolveUserId`, is Effect-shaped, so each reads the bearer on its own fiber instead
 of wrapping a promise in `Effect.promise`. One caller is a
 promise of somebody else's: eve's `AuthFn`, which
 `apps/dev/channels/eve.ts` satisfies by running the resolution once at
@@ -390,12 +389,12 @@ and is refused where it cannot (`src/agents/retire-sessions.ts`'s
 `retiringReach`), while a bearer's goes on with its retires a courtesy, as
 it always has. The channel's
 door holds the deployment to what its actor admits
-(`src/agents/brain-host/auth.ts`, over the coder channel's table,
+(`src/agents/eve-host/auth.ts`, over the coder channel's table,
 `CODER_DEPLOYMENT_TURNS` in `src/agents/coder-host/channel.ts`): a typed
 opening and line, which are an agent's Start, a message, an inbox answer, a
 manual automation run, a comment's hand-over to an agent it mentions
-(`src/tasks/comment-ask.ts`), a coding agent's own `start_agent`, and
-another agent's `message_agent` (`src/agents/coder-host/agent-message.ts`); a spoken ask, which a call hands the agent it speaks into;
+(`src/tasks/comment-ask.ts`), an agent's own `start_agent`, and
+another agent's `message_agent` (`src/agents/coder-host/agent-message.ts`);
 a cancel, which is an agent's Stop, its Archive, and a task's archive; and a
 reset, which is how the two deletes, a task's and the account's, retire the
 eve sessions of what they delete (`src/agents/retire-sessions.ts`); each only
@@ -406,8 +405,8 @@ deployment named only in its `luke:carrier` attribute, because eve steers a
 running turn, and folds the messages that waited into one turn, only by that
 identity, so a teammate's runs as the teammate, never as the plan's owner. What acts for one device rather than the account
 takes the bearer alone: the Mac's commands (`resolveHostedBearerUserId`), and
-eve's channels, which resolve with `hostedUserId`, as the voice and terminal
-relays resolve with `userIdForAuthorization`. Because a tab opened on a byte route now
+eve's channels, which resolve with `hostedUserId`, as the terminal relay
+resolves with `userIdForAuthorization`. Because a tab opened on a byte route now
 carries the cookie, every byte a member, an agent, or GitHub wrote is served
 under `HOSTED_BYTES_HEADERS` (`src/http/http-effect.ts`), whose sandboxed
 policy keeps an SVG's script from running as this origin.
@@ -439,7 +438,7 @@ answers the route over a scripted OpenAI at its HTTP door.
 ## The models group
 
 `src/accounts/models-procedures.ts` answers `GET /api/models`, the first
-procedure of the hosted oRPC router (`src/orpc/`): the models a coding agent
+procedure of the hosted oRPC router (`src/orpc/`): the models an agent
 may run on, as `{ models: [{ id, name, provider, efforts, contextWindows? }] }`. The list is
 `src/providers/model-catalog.ts`'s read of AI Gateway's public catalog
 (`https://ai-gateway.vercel.sh/v1/models`, no key), Schema-decoded at the
@@ -464,7 +463,7 @@ gateway is retried on the next request rather than answered for the hour.
 The bearer is resolved before the read, as every hosted endpoint resolves
 it, though the catalog is public and the same for every account.
 
-The same module holds the functions the coding-agent routes and the coder
+The same module holds the functions the agent routes and the coder
 host stand on: `acceptedModelChoice`, which reads the instance's catalog and,
 through `validateModelChoice`, accepts a `(model, effort)` only for an
 offered model at an effort it lists, keeping the standard window only for a
@@ -483,7 +482,7 @@ hosted oRPC router (`src/orpc/`), the
 account's own Anthropic and OpenAI API keys, at most one per provider:
 `GET` answers what each is, `PUT` saves one, `DELETE
 ?provider=<provider>` removes one, and `PATCH` turns a connected plan's
-default for the account's coding agents on or off, each answered with the keys as they then
+default for the account's agents on or off, each answered with the keys as they then
 stand (`@luke/features/provider-key-wire`). No answer carries a key: what
 the account is shown is the provider, a hint of the key's prefix and last
 four characters (`sk-ant-…abcd`), when it was added, and its status —
@@ -558,7 +557,7 @@ whose ring it would need.
 
 ## Integrations
 
-Every agent Luke runs — the coding agent and its declared worker —
+Every agent Luke runs — the agent and its declared worker —
 can use the signed-in account's integrations, each
 through the provider's own hosted MCP server with every tool it lists, the
 ones that write and the ones that answer a credential among them (`AGENTS.md`'s
@@ -628,8 +627,7 @@ the one name the account goes by everywhere (`connection_name`): the
 provider's own for the first (`notion`), the provider and its place for
 another (`notion-2`), minted once (`mintIntegrationConnectionName` in
 `@luke/features/integration-wire`) and read back from the row after. That
-name is the eve connection an agent reaches the account through, a coding
-agent's switch and mention, and the routes' `connection` query, so every
+name is the eve connection an agent reaches the account through, an agent's switch and mention, and the routes' `connection` query, so every
 name stored before a second account was possible keeps naming the first.
 A row also keeps a `label`, the account's name at the provider where
 Connect's grant carries one shaped like no credential, or the developer's
@@ -762,13 +760,12 @@ naming which account it is and the others, by their labels alone, each
 quoted as a string, asking the agent to ask which account before a write
 the developer has not pointed at one, and to say which it used; a
 developer with one account per provider is told the same bytes as before.
-A conversation whose workspace connected Linear for every member is handed
-Linear once, bare, on the workspace's grant. A coding agent and its worker
+An agent and its worker
 are handed every integration the developer has not switched off for that
 agent, the switches naming connections. The
 definition's auth is eve's plain `getToken` form, credentialed as the app,
 and the account is the admitted conversation's owner, never the session's
-principal. That matters because a spoken turn runs as the
+principal. That matters because a turn the service hands in runs as the
 deployment acting for the account, and eve's user-scoped auth (`connect()`
 from `@vercel/connect/eve`) would refuse it before reading any token. That
 form has no interactive half either, so eve never pauses a run for a
@@ -967,21 +964,6 @@ runs every agent without that provider, and neither Settings nor the
 composer's MCP servers popover draws a row for it. Every token request is
 billed by Connect and rate-limited per team.
 
-**The workspace Linear connector.** A workspace's own Linear grant, which
-the New plan picker lists issues through and a plan started from an issue
-reads it through, is held on a connector of its own, named by
-`LINEAR_WORKSPACE_CONNECTOR_UID`, set as the others are. The accounts'
-Linear connector (`LINEAR_CONNECTOR_UID`) signs in through Linear's MCP
-server (`mcp.linear.app`), whose tokens Linear's GraphQL API refuses with a
-401. So the workspace's must be Connect's own Linear connector
-(`vercel connect create linear`), whose Linear API OAuth tokens the GraphQL
-API takes, and Linear's MCP server takes too, for the agents a workspace's
-grant is handed to. Give it the `read` scope at least, and user subjects.
-Without the variable, no workspace can connect Linear. Since Linear's MCP
-server takes those tokens too, `LINEAR_CONNECTOR_UID` may name the same
-connector, which keeps Luke one app in Linear; its Linear app must be public
-for a workspace of any other Linear organization to sign in.
-
 **Slack's connector.** Slack's MCP server serves user tokens alone, and only
 ones issued by its own authorization server
 (`https://mcp.slack.com/.well-known/oauth-authorization-server`: Slack's
@@ -1087,7 +1069,7 @@ sign-in it began earlier on `unavailable`, and no agent of its is handed
 the provider's server (`src/agents/agent-runtime/servers.ts`); the desktop draws no row
 for it. Disconnect and deleting the account still revoke its grant.
 
-## The coding-agent service
+## The agent service
 
 `apps/dev/` is the standalone eve app built and deployed as the `dev`
 service beside `web` (the root `vercel.json`): its own
@@ -1099,7 +1081,7 @@ carries into the service, whose own one `routes` entry turns it back into
 `/eve/v1/*` with a `request.path` transform before eve's router reads it,
 and whose build exports `EVE_PUBLIC_ROUTE_PREFIX=/eve/coder` so the callback
 URLs eve mints resolve to the public path. The web functions reach it through
-`src/agents/brain-host/eve-sessions.ts` with `mount: EVE_MOUNT.CODER`.
+`src/agents/eve-host/eve-sessions.ts` with `mount: EVE_MOUNT.CODER`.
 The package's name, unscoped, is the agent's name to eve, which names the
 Workflow queue every deployment of the service consumes after it: a session
 stays owned by the deployment it started on until a newer one's message wakes
@@ -1109,11 +1091,11 @@ directory or service is called.
 `apps/web/tests/vercel-services.test.ts` holds the two services, that routing,
 and those names.
 
-A coding agent is one eve session over a `coding_agent` conversation
-(`packages/database/src/models/coding-agent-store.ts`), and the host behind the authored
+An agent is one eve session over a `coding_agent` conversation
+(`packages/database/src/models/agent-store.ts`), and the host behind the authored
 files is `src/agents/coder-host/`: the shared door and conversation
-admission (`src/agents/brain-host/door.ts`,
-`src/agents/brain-host/conversation.ts`), with the developer's own bearer the caller
+admission (`src/agents/eve-host/door.ts`,
+`src/agents/eve-host/conversation.ts`), with the developer's own bearer the caller
 the channel walks in for the desktop's routes (`src/agents/coder-host/channel.ts`): a
 Start and a Stop come from a route holding it, and a follow-up
 steers; the deployment acting for the account is admitted for what it does
@@ -1136,7 +1118,7 @@ question the agent met with the assumption it goes on under, a fact it
 corrected in the code, a decision it made. The save is journaled on the task's
 row (`task.agent_edits`, the last fifty, the agent's id and its notes as
 taken) and named from the agent's row at read time, so the window's "Updated
-by" line and the "recent edits by coding agents" every agent on the task
+by" line and the "recent edits by agents" every agent on the task
 is handed say what the row says now, and a turn may take only so many
 notes. `edit_plan` and
 `show_page` resolve at each turn's start (`tool-set.ts`'s `taskToolsOf`):
@@ -1144,7 +1126,7 @@ an agent on no plan, as an automation's run starts one, is offered
 neither, and one handed a prompt on a plan only `show_page`, so no agent is
 offered a tool its every call would refuse.
 Beside them stand
-the agent tools (`src/agents/coding-agent-tools.ts`): `list_agents`, every other agent on
+the agent tools (`src/agents/agent-tools.ts`): `list_agents`, every other agent on
 any task and by any member, each with its task, narrowed to one task or its
 own where asked, archived ones marked; `read_agent`, one agent of the
 workspace by its id, with what its branch published and a tail of its
@@ -1206,7 +1188,7 @@ choice it lists is one `start_agent` takes. A list, a read, or a start of an age
 the workspace's slug (`src/agents/written-mentions.ts`), and the agent's
 instructions show it the mention of every kind it names, under its own
 task's link, so its replies, Inbox items, and plan notes draw them as chips.
-A line from another coding agent hands the agent it reaches no MCP server it
+A line from another agent hands the agent it reaches no MCP server it
 mentions, since an agent's servers are its developer's to switch. The
 extension itself is not mounted, since its `worker` subagent runs on an AI
 Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
@@ -1231,10 +1213,7 @@ the tool's words have it call `task_wait` right after, which is a foreground
 delegation in eve's terms, and a developer's message during the wait reaches
 the agent at once without stopping the worker. Several calls in one step run
 at once, and a call with the subagent task's id sends the worker more, into the same
-session. A call into the agent follows its delegations under either name,
-`delegate` or eve's `worker` in earlier transcripts (`DELEGATION_TOOLS` in
-`src/voice/live-agent.ts`), to follow it under the bound a parked turn
-takes. A worker's row in an agent's tab
+session. A worker's row in an agent's tab
 says where the worker's own session stands (the page's `subagents`), since
 the call settles at the receipt.
 Its step fills the pair in from the agent's own row, holds it to the same
@@ -1309,7 +1288,7 @@ granted fails whole, so they are asked only where granted), and the token is
 then set at the firewall for the session's own `gh` and `git` through eve's
 `authenticateGitHub`; it never enters the sandbox's filesystem or
 environment. Who the agent writes as is settled once, as its first session
-starts, and kept on its row (`coder-host/checkout.ts`, `CODING_AGENT_AUTHOR`):
+starts, and kept on its row (`coder-host/checkout.ts`, `AGENT_AUTHOR`):
 an agent a developer started writes as them where their GitHub sign-in may
 push to the repository, its commits authored as their GitHub account and
 ending on a `Co-authored-by` trailer naming the App's bot; an automation's
@@ -1329,8 +1308,8 @@ not watched. A token lasts an hour, so the store hook renews it at the
 firewall on the first step past `CODER.GITHUB_TOKEN_REFRESH`.
 
 The store hook (`apps/dev/hooks/store.ts`) relays every event into the store
-through the shared relay (`src/agents/brain-host/relay.ts`), composed
-with no ask record, so an agent's turns land as `turns` rows naming its
+through the shared relay (`src/agents/eve-host/relay.ts`), so an
+agent's turns land as `turns` rows naming its
 model and effort and its `messages` rows as `UIMessage`s; it also stops the
 sandbox the moment a turn ends, completed, failed, or cancelled, where a
 sandbox tool ran in the session. The instructions (`src/agents/coder-host/instructions.ts`)
@@ -1348,18 +1327,6 @@ selects the scripted model for `apps/dev/evals/coder.eval.ts`, which
 runs a turn under the scripted model with no tool call, so no sandbox opens,
 and a second turn that delegates to the worker, whose only call is the
 delegation, so no sandbox opens there either.
-
-## The turn event projection
-
-`src/agents/turn-events.ts`'s `projectTurnEvents` is what the voice's live
-agent hears of a turn while it runs, in process (above). Nothing is stored for
-it: the four events — a slow step began, every action settled, one
-sentence of the reply, the turn ended — are a
-projection over the turn row and the turn's journal, the assistant message the
-store writer opens under the turn's id and amends as each call is written
-ahead of its run, read again on every poll, and the projection only grows
-while the turn runs, so each event keeps the number it was first told under
-and a reader that has heard some hears the rest and the end exactly once.
 
 ## The account group
 
@@ -1385,30 +1352,30 @@ carries one — a test provides its own fake `HttpClient` layer instead.
 
 The preferences snapshot carries three parts. `preferences` is the settings
 snapshot the desktop syncs, replaced whole by a write that names it.
-`codingAgent` is the account's default model and effort for a coding agent —
+`codingAgent` is the account's default model and effort for an agent —
 what a click on Start runs on — as `{ model, effort }` in AI Gateway's catalog
 spelling, `anthropic/claude-opus-5.5` at `high` until the account chooses,
 with `contextWindow: "standard"` beside them where the smaller context window
 of a model offering two was chosen (absent is the model's whole window).
-Settings › Coding agents and the Start menu's chevron both write it, as one
+Settings › Agents and the Start menu's chevron both write it, as one
 value rather than two that could disagree. A PUT carries either part or both;
 a part left out stands as it was, so the desktop's settings sync never
-resets the chosen model and the Start menu never touches the voice. A
+resets the chosen model and the Start menu never touches the settings. A
 `codingAgent` write is accepted only as the instance's model catalog accepts
 it (below): a model it does not offer or an effort that model does not list
 is `invalid-request`, and a catalog the instance cannot read is `unavailable`.
-The store keeps the columns beside `voice` on `account_preference`, and
+The store keeps the columns on `account_preference`, and
 reads a half-written pair as the default; `coding_agent_context_window` is
 null for the model's whole window (migration 0077). `updated_at` is the preferences
 part's own instant, nullable since migration 0062 and left null by a write
 that carries only `codingAgent`: the desktop reads the answer's `updatedAt`
 as a snapshot to apply over its own settings, so a row a choice alone opened
 must answer none, or a Mac that never synced would take an empty snapshot
-over the voice it holds.
+over the settings it holds.
 
 `experiments` is the third part: each experiment the account turned on or
 back off in Settings › Experimental, keyed by `@luke/settings`'s
-`EXPERIMENT`, as `{ "browser": true }`, and `{}` until it chooses one. It is
+`EXPERIMENT`, as `{ "memory": true }`, and `{}` until it chooses one. It is
 the server's to hold rather than the desktop's to sync: a write is a patch
 whose keys are merged over what stood (`jsonb ||` on the `experiments`
 column), so a Mac that knows fewer experiments never erases another's
@@ -1417,18 +1384,6 @@ tolerantly (`experimentChoicesFrom`): a key this deployment does not list
 is passed over rather than refused, because it is an older or newer build's
 experiment, and only a value that is not a record at all is
 `invalid-request`.
-
-The plan template is the group's third path, `/api/account/plan-template`:
-`GET` answers `{ template, custom }`, the account's own Markdown or
-`DEFAULT_PLAN_TEMPLATE` with `custom: false`, and `PUT { template }` keeps a
-string verbatim (untrimmed, empty allowed, at most 20,000 characters) or goes
-back to the default on null (`@luke/features/plan-document-template`). It is
-a path of its own rather than a third part of the snapshot, because the
-desktop syncs the snapshot over its own settings and a long text does not
-belong in that loop. It lives in `account_preference.plan_template`
-(migration 0087), and a write sets that column alone: `updated_at` stays
-the preferences part's own, so a row a template opened answers no snapshot.
-`src/accounts/account-plan-template.test.ts` answers the path over a real dialect.
 
 ### Workspace memory
 
@@ -1439,7 +1394,7 @@ memory, and the tools' door refuses a call a harness offering every tool
 still makes; Settings › Memory stands nowhere in the panel.
 
 The `memory` table (`packages/database/src/schemas/memory.ts`) holds the facts
-and conventions a workspace's coding agents kept, one short statement a row,
+and conventions a workspace's agents kept, one short statement a row,
 keyed by `organization_id` and leaving with the workspace. It is the
 workspace's, shared by every member, rather than a task's, a repository's, or
 one member's, so every agent in the workspace may recall it and no agent of
@@ -1463,7 +1418,7 @@ visibility, and a correction keeps the visibility of the memory it corrects.
 The operator is told to keep the member's own preferences and what they are
 juggling private (`coder-host/instructions.ts`'s `PRIVATE_MEMORY_WORDS`).
 
-The coding agent keeps and searches it through `remember` and `recall`
+The agent keeps and searches it through `remember` and `recall`
 (`src/agents/memory-tools.ts`), offered to the `coder` role alone and never a
 worker, on both the eve tool files and Luke's MCP server through the shared
 agent door (`coder-host/agent-doors.ts`). The workspace and the starter are
@@ -1506,16 +1461,16 @@ ReviewStage's rules in one pass, and the diff laid out as stage-cli's `prep`
 lays it out are `src/chapters/chapters-prompt.ts`.
 `src/chapters/chapters-generator.test.ts` answers it over a scripted model.
 
-## The coding-agent routes
+## The agent routes
 
-`src/agents/coding-agents-app.ts` is the group the desktop starts, lists,
+`src/agents/agents-app.ts` is the group the desktop starts, lists,
 reads, messages, re-models, and stops a task's agents through. An agent
 belongs to its task's workspace: every route reads it through the task's
-membership gate (`coding-agent-store.ts`), so any member lists, reads,
+membership gate (`agent-store.ts`), so any member lists, reads,
 messages, renames, re-models, and stops an agent a teammate started, while
 its conversation stays its starter's, the row's `userId`, under which its
 turns and lines are read and written, and its Start's retry key stays the
-starter's own; `packages/features/src/coding-agent-wire.ts`
+starter's own; `packages/features/src/agent-wire.ts`
 declares every request and answer, and `service-paths.ts` the addresses.
 `POST /api/plans/{id}/agents` takes `{ idempotencyKey, model?, effort?, task? }`:
 both of the choice or neither, the account's default (`/api/account/preferences`)
@@ -1528,13 +1483,13 @@ the task named it (`repository-not-reachable`, 403;
 task's plan as the Markdown Copy puts on the clipboard
 (`@luke/features/plan-markdown`); then
 makes the agent and its conversation
-(`createCodingAgent`), and opens the eve session under the developer's own
+(`createAgent`), and opens the eve session under the developer's own
 bearer with the snapshot as the first message of a typed turn. A Start
 naming a prompt (`task`), the developer's own words bounded as a message is, opens the
 session with the prompt as that first message instead: the agent is never
 handed the plan, its row keeps the prompt and no snapshot, and it still works
 in the task's repository under the same checks; an eve that
-did not take it discards the agent again (`discardCodingAgent`) and answers
+did not take it discards the agent again (`discardAgent`) and answers
 `unavailable`, so a retry starts afresh. A retry under the same key answers
 the agent the first Start made, 200 rather than 201, and opens nothing. A
 model a Start names runs that agent alone: only Settings' write
@@ -1557,7 +1512,7 @@ conversation's rows past the cursor as `UIMessage`s, the cursor to read on
 from, the agent's status as the page was read, and, where that status is
 `failed`, `failureReason` as one of the wire's fixed words (`model`,
 `sandbox`, `github`, `abandoned`, `other`), mapped by
-`src/agents/coder-host/status.ts`'s `codingAgentFailureOf` from the turn row's failure
+`src/agents/coder-host/status.ts`'s `agentFailureOf` from the turn row's failure
 word and the host's own refusal sentences in its detail, so nothing eve or
 a provider said reaches the desktop
 (`src/agents/coder-host/transcript.ts`): a row is new past a cursor when its sequence
@@ -1569,7 +1524,7 @@ held reads ends on the page whose status says the agent ended and a tab on
 a starting agent costs one held read per hold; an agent that has ended
 answers at once.
 `POST /api/agents/{id}/messages` takes `{ text, clientKey }`, the words
-trimmed and at most `CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS` long
+trimmed and at most `AGENT_BOUNDS.MAX_MESSAGE_CHARS` long
 (`message-too-long`, 400, past that) and the client's own key for the send,
 at most `MAX_KEY_CHARS` long. The message steers the turn under way, which
 is the coder channel's own policy (`src/agents/coder-host/channel.ts`): the model sees
@@ -1616,17 +1571,21 @@ of a workspace the account is not in, or a call that made no delegation, is
 `not-found`.
 `PATCH /api/agents/{id}` takes `{ model, effort }`, checked against the
 catalog exactly as a Start checks its own, and writes the choice on the
-agent's row (`updateCodingAgentChoice`), answering the agent's summary with
+agent's row (`updateAgentChoice`), answering the agent's summary with
 it; the coder agent reads the row at every step (`apps/dev/agent.ts`'s
 `defineDynamic`, through `src/agents/coder-host/host.ts`'s `model`), so a change
 mid-turn is the next step's and an idle agent's next turn takes it. It
 refuses an agent of a workspace the account is not in as not found and a model or effort the
 catalog does not offer as `invalid-request`, and leaves the account's
-default as it was. The same PATCH taking `{ pinned }` pins the agent for the
-asking member alone, or unpins it (`pinCodingAgent`): a pin is the account's
-own row of `agent_pin`, as a task's is of `plan_pin`, kept from the first
-pin's instant and gone with the agent or the account, and the plan list's
-`planlessAgents` answer it as `pinnedAt` only where the reader holds one.
+default as it was. The same PATCH taking `{ pinned }` pins the agent, on a
+task or on none, for the asking member alone, or unpins it (`pinAgent`),
+gated as the member's read of the agent is (`agentVisibleTo`), its task's
+reach among it, so an agent they cannot see is neither pinned nor unpinned:
+a pin is the account's own row of `agent_pin`, as a task's is of
+`plan_pin`, kept from the first pin's instant and gone with the agent or the
+account; the plan list's `planlessAgents` answer it as `pinnedAt` only where
+the reader holds one, and its live follow carries the reader's pins of
+agents on a task as `taskAgentPins`.
 `POST /api/agents/{id}/stop` is eve's cancel of the turn under way, named by
 eve's own id on the row, then the row's stamp; the service's hook stops the
 sandbox as the cancelled turn ends, and anything the agent pushed stays.
@@ -1675,7 +1634,7 @@ reading as unchanged, a file only moved carries an empty patch, and a
 list cut at the bound says so. An agent with no pull request yet answers
 a null one. The agent's sandbox is no source: nothing outside its session
 reaches it and its diff is not kept in the store.
-`src/agents/coding-agents-app.test.ts` answers the routes over a fake eve, a
+`src/agents/agents-app.test.ts` answers the routes over a fake eve, a
 scripted GitHub, a fixed catalog, and PGlite; `src/agents/coder-host/coder-host.test.ts`
 drives the host, the shared relay, the branch recorded at a turn's end
 over the sandbox double, and the held read on the test clock;
@@ -1684,7 +1643,7 @@ double, reading every run for the token and never finding it.
 
 ## Automations
 
-An automation is an account's saved coding-agent Start on one of its tasks,
+An automation is an account's saved agent Start on one of its tasks,
 fired by a trigger. The account, the task, the trigger, the
 action, and the guards are an `automation` row
 (`packages/database/src/schemas/automation.ts`), the trigger, the action,
@@ -1724,7 +1683,7 @@ through the App, and the model are checked as for the developer's own
 Start, the agent runs as the owner on the owner's keys, and eve is reached
 as the deployment acting for the owner under `EVE_DEPLOYMENT_SECRET`, never
 the bearer the cron called with, the opening the coder channel admits for a
-coding agent's own `start_agent`. The prompt is the
+agent's own `start_agent`. The prompt is the
 automation's own prompt with a closing line naming the automation and why it
 fired. The run's id is the Start's key, so a run two sweeps both act on
 starts one agent, and a named model does not become the account's default.
@@ -1840,7 +1799,7 @@ among them (`senders`, `moments`, `drafts`, `forks` in
 no draft or fork where it names none. An automation cannot fire itself
 whatever its settings say: a push by Luke's agents, to a branch or to a pull
 request, fires nothing, and neither does a failed check on a `luke/` branch,
-where a coding agent works and already watches its checks.
+where an agent works and already watches its checks.
 The agent is handed the event by number, address, and branch, its title
 fenced as the event's own text to read as data, its angle brackets spelled
 as entities so it cannot close the fence, and reads the rest with `gh`. The App must subscribe to the Issues and Push events beside the pull
@@ -1869,12 +1828,12 @@ a move
 (`workspaceId`) is the task's owner's alone (`not-permitted` for a
 teammate), into a workspace they are a member of (`not-found` otherwise)
 whose installation reaches the task's repository, refused as a repository
-change would be otherwise, and its coding agents go with it, and
-`DELETE /api/plans/{id}` deletes it, its coding agents' rows going with it
+change would be otherwise, and its agents go with it, and
+`DELETE /api/plans/{id}` deletes it, its agents' rows going with it
 and their conversations stamped deleted, with the one the task's own Luke
 kept where the row still names it (`deleteTask`),
 the id read from the path by the hosted oRPC router.
-Each row of the list carries `agents` where the task has a coding agent
+Each row of the list carries `agents` where the task has an agent
 (`src/agents/task-agents.ts`): how many it has and how many are starting
 or running, the three it names (those at work first, then the newest), each
 with its title, model, effort, status, since when, and the member who
@@ -1947,14 +1906,6 @@ installation, its status, and an account standing for another workspace is
 refused and stays there. `src/accounts/workspaces-app.test.ts` holds
 all of it over the plugin on PGlite and a scripted GitHub.
 
-`GET /api/plans/{id}/code` reads back every code the task's agents showed
-(`src/tasks/task-work-store.ts`'s `readTaskCode`): each answered
-`show_code` call of each agent on the task, oldest first, read from that
-agent's own conversation, picked by its parts in the statement and read
-through `shownCodeOf`, so what the call refused and a secret file are never
-read back. `packages/features/src/tasks-view.ts` declares the answer
-(`taskCodeAnswerSchema`).
-
 `GET /api/plans/{id}/file?path=&first=&last=` reads a window of one file of
 the task's repository for the Mac's File tab (`src/tasks/task-file.ts`),
 at most 500 lines a window. It reads GitHub's contents API at the head of
@@ -1963,7 +1914,7 @@ lowercase SHA and nothing a branch or a path could spell, as an inbox item's
 code block pins its lines, on a token `repositoryReadToken` mints for that one
 repository with contents read, after the same reach check an agent's
 checkout makes. The token is used for the one read and enters no answer, log line,
-or trace. What is shown is decided by the rule `show_code` is held to
+or trace. What is shown is decided by one rule
 (`src/tasks/shown-file.ts`): a secret file is refused before GitHub is
 asked, and so is a path with an empty, `.`, or `..` segment; a link, a
 directory, a missing file, a file past a megabyte, or one with a NUL among
@@ -2033,7 +1984,7 @@ whole text against the base it was made on (`saveDeveloperEdit`), saved
 where the text still holds that base, laid over what others wrote meanwhile
 where it can be, and answered as a conflict with the text as it stands and
 the plan's last edit, naming who wrote it, with nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
-restore above is the second. A coding agent's
+restore above is the second. An agent's
 `edit_plan` (`src/agents/coder-host/plan-edit.ts`), the third, answers with notes
 (`packages/features/src/plan-template.ts`): a point added under a heading, a
 phrase corrected, or a line struck. `saveNotes` takes them in order over the
@@ -2047,8 +1998,8 @@ each leaving the prior document in place.`src/tasks/tasks.test.ts` and `apps/web
 against a real dialect.
 **One tool registry** (`src/agents/agent-runtime/tools.ts`). Every tool
 Luke offers either of its two agents is named once there, with the roles it
-serves: the coding agent and its worker.
-What each is offered is derived from it: the coding agent's files under
+serves: the agent and its worker.
+What each is offered is derived from it: the agent's files under
 `apps/dev/tools/` name its set; each role's
 stored set names every tool the role is offered. A tool's
 module takes its name from the registry, so the registry imports none and
@@ -2056,7 +2007,7 @@ every module may import it. eve's own injected tools (`task_wait`,
 `task_cancel`, `connection_search`, `connection_execute`) are eve's, not
 listed.
 
-A coding agent's session is offered the skills its repository keeps
+An agent's session is offered the skills its repository keeps
 (`apps/dev/skills/repository.ts`, `src/agents/agent-runtime/skills.ts`),
 read from GitHub on a read token for that repository as the session starts,
 and loaded with `load_skill`; each body says where the skill stands in the
@@ -2074,41 +2025,11 @@ ahead of the request, so a DNS answer that changes between the two is the case
 it does not cover. A turn gets at most 6 page reads, and 20,000 characters of
 a page from at most 1 MB read (`PUBLIC_RESEARCH_BOUNDS`).
 `src/agents/public-research.test.ts` holds it against scripted HTTP and DNS.
-The developer talks to an agent through the ordinary voice
-session. Every call is a `/api/voice/sessions` session whose
-`session.create` names the task (`planId`) and the agent of it the call
-speaks into (`agentId`), which the service checks the account holds, the
-agent on that task and not archived, before anything is spent; a create
-naming no agent is refused. It is created under
-the call's instructions (`sessionInstructions()` in
-`@luke/live`), whose delegation policy hands the developer's words to the backend and says back the
-finding and its one next question. A call just created speaks first: it is
-created with `callOpeningHistory()` as the last developer message of its
-startup history, the Live conversations guide's way to greet before the
-caller speaks, so Luke opens the conversation with nothing appended,
-acknowledged, or cued after `session.started`, and a re-attach, which creates
-nothing, opens nothing again. The plan seed's first line says whether the
-plan is new (the untouched template and no assumption) or under way, which
-is what the opening picks its first question from. The startup history also
-carries the lines said on earlier calls into the agent and the agent's own
-recent work (`src/voice/agent-history.ts`). The exchange lands every spoken
-ask and the session's record in the agent's conversation, under the member
-who started the agent (`src/voice/exchange-attachment.ts`), so the
-delegation reaches the agent with its tools and the conversation so far.
-The recent words ride the delegation as context, and whether an answer
-agrees to anything is the agent's to judge. The binding is the session's for life. It is written on
-the `voice_sessions` row as a plain `task_id` and the agent's id,
-and a re-attach reads it from there, so a later connection cannot move a
-session onto another agent, and one whose row names no task or no agent is
-refused. The Mac holds one call at a time, which outlives
-the task on screen and moves only when another task's Talk press hangs it up
-and opens one about that task, so only one task is ever spoken about. `src/voice/voice-service-exchange.test.ts` drives both
-tasks and the re-attach over the real store.
 ## Hosted conversation store
 
-The `conversations`, `messages`, `turns`, and `asks` tables hold the agents'
-conversations per account: a coding agent's conversation and its workers',
-their messages, the turns that ran over them, and the asks handed to them.
+The `conversations`, `messages`, and `turns` tables hold the agents'
+conversations per account: an agent's conversation and its workers',
+their messages, and the turns that ran over them.
 Every row is keyed by
 `user_id` and cascades with the user row, so
 the account `delete` procedure (`src/accounts/account-procedures.ts`)
@@ -2116,7 +2037,7 @@ erases them with the account.
 `packages/database/src/models/` is the store the coder host composes against; every
 module there is an `Effect<A, SqlError | Schema.SchemaError, SqlClient>`
 whose rows a `Schema` decodes and whose path rule is that schema too, which
-`HostedStore`, the store writer, the voice writer, and the ask record all
+`HostedStore`, the store writer, and the ask record all
 answer as it came, and which a route handler composes into the one effect
 `runWeb` answers for the request.
 
@@ -2128,8 +2049,7 @@ the BYOK keys, which are `account_provider_key`), `roster_snapshot`,
 `introduction_usage`, `account_preference.default_workspace_provider`, and
 the conversation row's observed-session, event-sequence, completion-sweep,
 and memory-flush columns. A child's `parent_conversation_id`, `label`,
-`title`, and `expects_completion` are live: a subagent's and a coding
-agent's worker's child conversation writes them.
+`title`, and `expects_completion` are live: a subagent's and an agent's worker's child conversation writes them.
 
 The conversation tables are the shape the LUKE-95 storage plan settled on,
 less the `prompts` table it drew and less the `tool_sets` table
@@ -2137,7 +2057,7 @@ less the `prompts` table it drew and less the `tool_sets` table
 tool set's and nothing else of either, because nothing replays them, and the
 tool set is the build's own and read from the build that offered it. A
 conversation row names its kind (`coding_agent`, which
-`packages/database/src/models/coding-agent-store.ts` opens, is the one any
+`packages/database/src/models/agent-store.ts` opens, is the one any
 code still opens; `plan`, a task's own Luke's, is opened no more), the
 runtime's own session id, its soft-delete instant, and the counter that
 numbers its messages. A message is one AI SDK `UIMessage`, its parts and
@@ -2159,7 +2079,7 @@ The store writer, `packages/database/src/models/writer.ts`, is the one path by w
 with an insert, an update, or a delete over `messages` or `turns`, whether as a
 Drizzle table imported from the schema or in the text of a statement, and the
 modules that name one at all are the writer and the two readers. It
-consumes the brain's run event stream (`BrainRunEvent`, every kind of turn)
+consumes the turn run event stream (`RunEvent`, every kind of turn)
 for a conversation the caller names by its row id and account. A turn row
 goes from queued (written ahead of the stream by `enqueueTurn`, or at the
 turn's start where nothing queued it) through running to settled, cancelled,
@@ -2200,45 +2120,9 @@ sequence comes from the row's counter, each allocation landing on the first
 position no row holds, so the unique `(conversation_id, seq)` constraint is
 the backstop for a writer outside the lock and nothing the writer retries.
 
-Voice is stored beside them the way a call platform stores a call, in
-`voice_sessions` and `voice_transcript_segments`.
-A session row is one live session — the Live API's own session id, unique so
-a re-attach on a fresh function instance finds the row it had rather than
-forking it, and indexed with the user so an ownership check is one lookup —
-with its delegation mode, when it started and
-closed, the API's own close reason, and a `usage` payload of billed seconds
-with a flag saying whether the API confirmed them or a lost connection left
-them estimated. A segment is one span of what was actually said, by whom, in
-milliseconds on the session's clock. What is spoken becomes a message as each
-utterance settles: the developer's line and every utterance of Luke's are each
-cut from these segments into a finished row of the conversation, so the
-record keeps the words the developer actually heard. A delegated
-exchange's reply is also the assistant message the agent wrote, and Luke's
-reading of it stands beside that message as its own row, whose metadata names
-the voice session and span it was cut from, the delegation it followed, and,
-where the store could tell, `read_from`: the message the words were read
-aloud from — the delegation's turn's journal where that turn had settled
-within two minutes of the write, in which case the row joins the turn. No
-audio is ever stored.
-
-Two writers share those tables and never a column. The voice service's own
-`packages/database/src/models/voice-session-record.ts` owns the session row's whole life: it is
-inserted when the session is created, found again by `(user_id,
-live_session_id)` when a fresh function instance re-attaches to the same
-live session, overwritten with each unconfirmed usage snapshot while open,
-and closed once with the confirmed seconds, the instant, and the reason. The
-voice writer in `packages/database/src/models/voice-writer.ts` only reads that row
-for its id and hangs everything else off it: a segment per transcript delta
-at the next position of the session's own sequence, and the developer's spoken ask as a
-user message on the voice channel, cut from the stored user segments between
-the previous ask's end and the delegation's offset or the end of the
-utterance the service's ledger grouped the ask as, whichever is later, and
-named with the session, the delegation, and the span. A row whose `closed_at` is still
-null may keep gaining segments, because an instance that dies at its
-duration bound never sends `session.closed`, its relay detaches rather than
-closing, and the re-attach lands on the same row; the writer reads nothing from the row's state but its id
-and reads everything else back from the record, so a
-fresh instance continues a session where the last one stopped.
+Calls an earlier version took left their spoken lines as rows of the
+conversation on the voice channel, which a transcript still reads as ordinary
+lines.
 
 The store tests run the generated migrations on PGlite in process, so
 `check.sh` and CI's test jobs need no service. The `postgres` CI job
@@ -2267,520 +2151,44 @@ DATABASE_URL_UNPOOLED=postgresql://... pnpm --filter @luke/web db:migrate
 LUKE_STORE_TEST_DATABASE_URL=postgresql://... pnpm exec vitest run <file>
 ```
 
-## Hosted voice service
+## Reaching eve as the deployment
 
-`apps/web/server/routes/voice/sessions.ts` is the hosted voice service: one Vercel
-Function serving WebSockets on Fluid compute, the part of this deployment
-that holds the GPT Live project key and owns each hosted voice session
-(`live-contract.ts` in `@luke/features` is the Mac's contract with it). The
-file exports the `http.Server` that `src/voice/service.ts`'s
-`voiceServer()` builds, with `ws` handling the upgrade on it, exactly as
-Vercel's WebSocket guide has it; the Mac opens `wss://` on this deployment's own origin,
-`HOSTED_VOICE_SERVICE_ORIGIN` in `@luke/features`, at `VOICE_SERVICE_PATH`.
-A plain request to the path answers 426, since the path is a socket's.
-
-On `/api/voice/sessions` a signed-in Mac's handshake carries its account
-bearer, resolved through the same in-process `/oauth2/userinfo` seam every
-hosted route uses, and one session is counted against it by the same
-`hosted_usage` meter before any session exists. The
-socket's first frame is `session.create` (the SDP offer, a voice, the seed,
-and the ids of the task the call is about and of its agent the call speaks
-into); the opener
-(`src/voice/opening.ts`, which is where the first frame becomes a session
-or a refusal) checks the account holds that task and that agent, on the
-task and not archived, and
-the function creates the session at OpenAI on the deployment's key, writes
-down the session's `voice_sessions` row (the account, the live session id,
-client delegation, the task and the agent the call is bound to, and the model it was
-created on), attaches the trusted sideband, stands the hosted
-exchange on it (below), and answers `session.created` with the id, the SDP
-answer, and the store's own id for the `voice_sessions` row
-(`voiceSessionId`), which is what a stored spoken row names as its
-`voice_session_id`. From then on the relay is a pipe: OpenAI frames to the
-device untouched except `session.input_audio.append` and
-`session.output_audio.delta`, dropped by type so the developer's voice and
-Luke's never transit the service; and from the device nothing forwarded at
-all (`frames.ts`): the hang-up (`SESSIONS_HANG_UP_FRAMES`), the Mac's
-`session.hangup` or an older build's own `session.close`, is read as an ask
-for the close the exchange sends itself (below), and three frames in the
-service's own vocabulary (`SESSIONS_REPORT_FRAMES`) are read here and handed
-to the exchange rather than forwarded: `session.activity`, the peer's idle
-report; `session.typed`, a line the developer typed into the agent's
-composer while the call is up on that agent, which the host, never the
-voice window, hands the call; and `session.stop`, the stop key, which the exchange answers with the
-one instruction it appends itself (`STOP_SPEAKING_INSTRUCTION`, which stands
-on the service alone) and by blocking every exchange of the session: no reply
-delegated before the press is spoken, and each run still under way is
-cancelled through `stopAsk`, the voice told silently (`STOPPED_RUN_NOTE`)
-only once the cancel was taken. A typed line is no append of the device's
-either: GPT-Live takes no user text item under client delegation, so the
-exchange (`LiveSessionService.typeLine`) writes the line once as the
-developer's typed row, under the id a steer of the same send would write
-(`sentLineId` of the composer's key, so a Retry is the same line by either
-path), naming the call and the instant it was typed at, takes the
-developer's words since the last ask as its context and its rows, as a
-delegation does,
-hands it to the agent as an ask of the session's next revision whose reply
-it speaks session-wide (`delegation_id: null`), and tells the voice of it in
-a `session.thinking.append` with its mentions as their labels, so the voice
-neither answers nor delegates it itself. So no device appends anything to a
-session, and no instruction of a device's composing reaches one through
-this route. Any other device frame — an older build's own append, the
-microphone switch that never crosses this socket, an unreadable frame —
-closes that device's socket with a policy violation (`UNPERMITTED_FRAME_REASON`)
-rather than dropping it, so a device still running an exchange of its own is
-refused where it can be seen and never doubles the one standing here; the
-session then ends as a hang-up does, seconds recorded. The relay keeps no
-conversation, reads no frame past its `type` but those reports, and logs
-status codes, outcome names, and counts.
-
-The service itself is a scope. `VoiceService.make(options)` answers
-`Effect<VoiceService, never, Scope>`, and that scope owns the `ws` server, the
-`FiberSet` each session's fiber joins, and the claim on the server the function
-exported; closing it gives up the claim, closes every device socket so each
-relay detaches, leaving the WebRTC session for the device to
-re-attach to on another instance, drains those fibers under their own timeouts, and only then closes the `ws` server. Nothing calls a `close` beside
-it, because a Vercel function is frozen between invocations and discarded with
-no shutdown hook: `voice/function.ts` stands the service on `runWeb` in a scope
-held open by `Effect.never` and a test is the only caller that ever ends one.
-Until a service stands, and again once its scope closes, the server refuses
-every upgrade with the same 503 a deployment missing the project key answers
-with.
-
-One upgrade is one `Scope` and one effect run on the `WebStoreRun` the
-function hands the service. Both sockets are the platform's:
-`src/voice/socket.ts` reads a `ws` socket through
-`effect/socket`'s `Socket`, a fiber of that scope filling a mailbox with
-every frame in arrival order, so the opening frame is taken from the same
-reader the relay then streams the rest from and nothing between the two lands
-nowhere. `src/voice/relay.ts` pipes the two streams, settles on a
-`Deferred`, and arms its graceful-close and opening waits as `Effect.sleep`
-forked into that scope; `src/voice/openai.ts` answers effects for the
-session create and the sideband attach, each socket acquired with `Effect.acquireRelease` so a session
-that ends, however it ends, leaves no socket standing. A socket handed over by
-`ws` is paused until its reader stands, because `ws` emits a frame to whoever
-listens at that instant and the reader is a fiber away.
-
-A device's socket is bounded to `SOCKET_BYTE_BUDGET`, eight mebibytes the
-caller may send before the service closes the socket, since its account is
-spent per session and answers for what it sends. The socket's own reader
-counts it, from its first frame rather than from whenever the pipe stood, so
-what a caller sends while its session is being stood up is spent as much as
-what the pipe later carries, and a frame past the budget is not read at all —
-what the relay sees is the peer going, which is a hangup it already knows how
-to end. The voice never travels here: it is WebRTC's.
-
-### The live session service, attached to the sessions route
-
-The machinery that owns a session's exchange — the delegation adapter that
-hands each ask to the agent and speaks the reply as commentary once the run's
-actions settle, the append channel, idle, and the
-graceful close — is `@luke/voice`'s `LiveSessionService`, behind that
-package's `./live-session` door, which names no socket library so a function
-bundle takes it without `ws`. This service composes it for every signed-in
-session (`src/voice/live-exchange.ts`, adopted over the same socket the
-relay pipes by `exchange-attachment.ts`, composed over the deployment's seams
-by `deployment-exchange.ts`, and passed by `function.ts`): the exchange stands
-before the desktop is answered, and a deployment missing the deployment
-secret or eve's origin composes none and refuses every
-session as `unavailable`, since a session with no exchange behind it has no
-one to answer its asks. The desktop composes no exchange of its own since
-E5-3; what it holds is `LiveSessionHolder`, which seeds the session at
-creation, ends it, and reports its idle and its stop. What stops the
-model's output from becoming an action is not the attachment and not the
-sideband but the agent's own gauntlet: `acceptAsk` on every spoken ask, and
-the host's admission of the conversation again on every tool call a turn
-makes.
-
-What stands: `src/voice/live-record.ts` is the `LiveRecord` door over the
-voice writer (`packages/database/src/models/voice-writer.ts`). Every server event is
-handed to `observe` in arrival order and the writer takes what it keeps —
-each transcript delta a segment, and, through the one row door the service
-calls behind each fragment (`upsertSpokenRow`, debounced 300 ms a row and
-flushed at once on a delegation and on the session's close), each speaker's
-utterance as a row under the id the service's ledger minted when it opened,
-inserted on first sight and grown in place after, its words cut from those
-segments over the span the ledger holds it at: the developer's line, and
-every utterance of Luke's as an assistant row authored by the voice model,
-whatever prompted it — an answer it gave itself, what it said around an ask
-handed to the agent, the agent's reply read aloud, the opening — so the
-record shows what the developer actually heard, and a reading stands beside the message it was read
-from rather than in place of it. A delegation cuts nothing and re-keys
-nothing: the stream's `session.delegation.created` is consumed like any other
-event and leaves nothing, and what puts an ask on record is the service's
-attach: every developer row of its ledger since the previous ask's end that
-starts at or before the delegation's offset, the row containing the offset
-among them, each handed over as the ledger holds it then, so a last fragment
-the API delivered after the delegation is on the row, and each written and
-then given the delegation in one turn at the writer (`attachSpokenAsk`), its
-`client_id` the ledger's still and `metadata.delegation_id` naming the ask,
-which is where the received-message attach and Luke's rows already look for
-it. The ask's rows keep growing under their own ids after the handover, and
-the store keeps the delegation on a row through every later write of it.
-That order is a queue's:
-one fiber of the socket's scope makes every write, taking them from a queue
-each arrival puts one on, so where an event lands in the sequence is decided
-where it arrives rather than by whichever fiber reached the store first. The write answers true
-only when the ask is on record, which is what keeps the service's own rule —
-the record precedes the speech — over Postgres. `src/voice/live-sideband.ts`
-reads the upstream socket as the `LiveSideband` the service consumes — the
-`ws` listeners it registers are the acquire of the session's own scope and are
-taken off at its close — and `observedSideband` hands each event to the record
-once, on its way past the one reader that runs the sideband's arrivals, replay
-included.
-
-### The agent answered in process
-
-`src/voice/live-agent.ts` is the `LiveAgent` the hosted composition hands
-the live session service, and it reaches the agent the call speaks into in
-process and never over HTTP. The voice function resolved the account at its handshake and
-dropped the bearer there, so it holds nothing eve's door or this deployment's
-routes would take; what it holds is the ask door itself, `acceptAsk` in
-`src/agents/brain-host/brain-ask.ts`, called with the resolved account, the spoken origin, and the
-service's submission id as the client id, under the eve client the
-composition built for the account as the deployment acting for it
-(admitted for spoken turns by `CODER_DEPLOYMENT_TURNS`, below).
-The run the service keys an exchange by is the ask's id, since eve names a
-turn only once it starts; the agent follows the ask through `askStanding` on
-a schedule, projects its turn's events with `projectTurnEvents`
-(`src/agents/turn-events.ts`), and translates each back to the ask's id. There is no HTTP hop
-and so no second function ceiling to re-attach across. Each follow is a fiber of the socket's own scope, so
-the socket detaching interrupts it and nothing is emitted after. What the
-detach cut short is not lost with it: a spoken ask's row carries the voice
-session it was delegated in and its revision there, how far its turn was told
-(`told_seq`, short of the end), and when its end was told (`end_told_at`), each
-written before the voice hears it. A connection that re-attaches to the session
-adopts it as started and asks the agent to recover it (`recoverRuns`): every
-ask of that session whose end was not told comes back as its exchange, under
-its own delegation and revision, and is followed again from the event after
-the last one told. The session's revisions go on from the newest recorded, so
-an older run stays superseded; a run whose turn carries a Stop comes back
-silenced; and so does one whose turn settled more than `VOICE_DETACH_GRACE_MS`
-before the re-attach, past which the reply is no longer news. Written before it
-is told, a telling the detach cut between the write and the voice is lost and
-never said twice. A turn that
-does not end inside the follow bound, or an ask the record no longer holds,
-is told as a failed end so the exchange settles rather than waiting forever.
-The bound is `LIVE_AGENT_FOLLOW_BOUNDS` in `src/voice/live-agent.ts`: the
-plain `FOLLOW`, ten minutes, past eve's own turn deadline with room for one
-queued turn ahead, until the journal shows the turn handed work to the
-`worker`, which eve runs as a subagent task the turn parks on (`turn.waiting`)
-and resumes from in the same turn once the findings land, minutes or longer
-later. From that call on the follow runs under `PARKED_FOLLOW` instead: the
-plain bound plus the sweep's `TURN_ABANDON.AFTER_MS`, an hour, at which a turn
-still running is settled as failed on the record and the follow hears that end,
-so following longer could hear nothing more. The record does not say when the
-subagent task settles — the relay tells nothing for the park and the findings reach the
-journal as the steps after them — so the parked bound covers the turn from its
-delegation, and the follow still stops the moment the turn completes, fails, or
-is cancelled, or the socket's scope closes. On the eve
-path the reply arrives whole at the turn's end; what the follow carries
-mid-turn is the slow step, the actions settling, and, as the live agent's own and no event of the stream,
-each look's count of the turn's settled calls with the kind of the latest
-(`STEP_SETTLED`), never a call's input or output, which the service words as
-a build-fixed quiet progress note no sooner than `PROGRESS_NOTE_BOUNDS.GAP_MS`
-after the exchange's last and at most `PER_EXCHANGE` times. A reply's
-commentary the voice session refused is sent once more under a fresh id and,
-refused again, reported; one left unanswered is reported and never resent,
-since a pending append may still reach the timeline. eve folds asks that waited together into one turn, so
-several follows can project one turn: the newest ask tells it, since the
-service speaks only the newest request's reply, and the rest tell only its
-end, so a reply is never said once per folded ask. Each delegation is an
-exchange of its own in the service, a revision of the request: a newer one
-silences the older exchange's reply, slow-step note, and end note, and leaves
-its run to finish rather than cancelling it, because a call
-delegates every answer while the exploration it began still runs. A refusal at the door is
-spoken as the build's own note for it, never composed with the ask. One
-spoken ask leaves one developer line: the transcript's row, cut at the
-delegation by the voice writer under the delegation's id. Eve's received
-message for a spoken turn is the question the service composed around those
-words, which is not written as a user row, where a typed ask's is;
-`BRAIN_HOST_TURN_KIND` says for each kind whose row the received message is,
-so the relay consults the table rather than a branch. The line and the ask
-share one id, the delegation's, which the service submits the ask under, so
-the line is tied to the turn the ask ran whichever write lands second: the
-voice writer reads the ask's turn under the conversation's lock as it writes
-the row, and the relay, at a spoken turn's received message, takes into the
-turn any row of the turn's asks still standing without one, and behind it
-any row of Luke's about that ask — his "checking now", said the moment the
-voice handed the question over and written while the dispatch was still under
-way — under the same lock, in the order said. The race is removed rather than
-won, and no line of his is left as a group of its own to be placed by its
-instant after the whole turn it belongs to. The store owns the order inside
-the group as it owns the order of the conversation, so the writer places the
-developer's line ahead of the turn's work by sequence rather than leaving a
-reader to sort it. A line the turn takes at its received message moves to a
-fresh position, ahead of the journal the first step is about to open; a line
-that lands after the first step, the voice writer's cut racing eve, is placed
-at a fresh position and the journal moved behind it to another; and a line
-the turn takes with a journal already open — a received message eve told
-again after the step — moves the journal behind it the same way, so the
-developer's line precedes the turn's work on every path a line enters a turn
-by. The turn's answer closes the journal behind whatever landed after
-it while the turn ran — Luke's words said around the ask as the agent worked,
-an aside, a second line of the developer's — by moving it to a fresh position
-where any row stands past it, and leaves it where it opened where none does,
-so the thread reads as it was heard: what was said while the agent worked,
-then what it did and thought, then what was said of it.
-
-`src/voice/live-exchange.ts` composes the whole for one account's one
-live session — the agent answered in process, the record over the voice
-writer with the sideband observed once ahead of the service — over one
-store context, with the eve client handed in as the caller composed it. The
-asks are pinned to the conversation the record writes, the agent's,
-so an ask and the lines it leaves cannot name two conversations: once the
-task's deletion has stamped it, the ask is refused at the door and eve is
-not reached, rather than eve taking a turn the record cannot write. The
-composition is a scope's:
-`hostedLiveExchange` answers an effect built in the `Scope` its caller opened
-for the socket, and every fiber the session runs is forked into that scope —
-the one that reports what the record made of each live event, the one that
-makes every record write in arrival order, the agent's follow of each
-accepted ask — so closing the scope
-interrupts each of them. The session's graceful close (its release with
-nothing said, `LiveSessionService.release`, where the relay settled detached)
-and the wait on every record write already started are finalizers of the same
-scope, added so their
-reverse order is the order the exchange's old `stop` ran them. No composition
-below the exchange holds a runner, and none of them runs an effect at all:
-`LiveRecord`'s two utterance writes and `LiveAgent`'s submission answer
-effects themselves, the record's on the fiber that makes every write in
-arrival order and the agent's with the `SqlClient` the scope was built on
-provided to it, as `runTool` provides it to the agent's seams.
-
-### The exchange on the sessions route
-
-`src/voice/service.ts` takes one more seam, `VoiceServiceOptions.exchange`:
-the composition's exchange for a signed-in session, offered once the session
-stands and before the desktop is answered, and adopted over the same sideband
-the relay pipes. The service hands the attachment the socket and reaches
-nothing of the exchange or the live-session door itself; the attachment
-builds the sideband over that socket and adopts. One
-socket, one scope: the attachment is an effect the service runs in a scope
-forked from the session's own, building the agent's conversation, the
-exchange, and its adoption of the sideband in it, and the
-service's stop is that scope's close; a standing that could not be reached
-has the scope closed by the service before the session is refused, so nothing
-an attempt acquired outlives it. The
-socket admits many listeners, so the relay keeps piping raw frames to the
-desktop unchanged while the exchange reads parsed events through its
-record-observing sideband. The upstream hands the sideband over paused,
-inside its own open handler, because the bytes after the handshake response
-are re-queued and flushed on the next tick, before any fiber continuation;
-the service resumes it once both consumers listen, so what the session spoke
-while the exchange stood is read then, by both, in order, and a desktop that
-went meanwhile is answered nothing, its exchange stopped and its sideband
-left to the session's scope rather than standing for the invocation. The exchange adopts rather than
-creates (`LiveSessionService.adoptSession`): the desktop's create frame
-seeded the session, and a second seed would put the recent lines into the
-conversation twice. A fresh connection re-attached to a running session
-adopts it as started, since the session spoke its start to an earlier
-connection and speaks it to no later one. An exchange offered that cannot stand refuses the session
-as unavailable rather than running it with no one to answer its asks. When
-the relay settles, the exchange ends its follows, closes the
-session it holds (already gone, which its sideband reports as the close it
-held), and waits for every record write already started, so no line begun
-before the settle is cut; an append not yet sent is dropped with the session
-and never re-sent, and a write that fails after the socket closed is
-reported. `src/voice/exchange-attachment.ts` is what the function passes:
-the conversation of the agent the call names, resolved at the session's
-start under the member who started that agent, the function's writer, eve
-reached as the deployment for the calling account under the coding agents'
-mount. No notetaker stands beside the call: the agent keeps the plan itself
-with its `edit_plan`.
-
-eve is reached as the deployment acting for the one account the session
-resolved at its handshake, since the function holds no bearer of the
-account's by the time a delegation arrives. It calls the coding-agent
-service's session routes under the deployment's `EVE_DEPLOYMENT_SECRET` as
-its bearer with the account in `x-luke-account`, and the eve door's first
-authenticator admits that pair for a spoken message, which its table,
-`CODER_DEPLOYMENT_TURNS` in `src/agents/coder-host/channel.ts`, admits,
-minted as the account's own principal with the deployment named only as its
-carrier (`CODER_DEPLOYMENT_PRESENCE`), so a spoken line joins the agent's
-turn under way; for a cancel of a turn in a session, which is how the stop
-key's `stopAsk` and the hook's carried Stop reach eve; and for a GET of a
-session's event stream (`CODER_DEPLOYMENT_STREAMS`), which the live agent
-listens to from its tail so it reads a spoken ask's turn the moment eve
-tells an event rather than only on its 250 ms poll (the poll stays, for a
-stream refused or dropped); and nothing else: any other route or kind of
-turn carrying the secret is refused outright rather than passed to the
-account authenticator behind it. The table admits a typed message too,
-which a coding agent's own `start_agent` and `message_agent` send, and which
-a hosted route a browser reached on its session cookie alone carries for
-the member, a comment's hand-over to an agent it mentions among them
-(`src/tasks/comment-ask.ts`), minted the same way. The door admits that
-typed message from anything that holds the secret, since one secret proves
-no more than that something holding it acted, so what keeps the
-deployment's typed messages to those is the code. The voice function's eve
-client is typed to send a spoken ask and nothing else
-(`src/voice/deployment-exchange.ts`), and the hook's carried Stop and a
-delete's retire are typed to cancel and to reset alone. Which account a request acts
-for is one accessor over both principal types, and the door's ownership
-checks and the host's admission read that answer, so the deployment can open
-a turn only on a conversation the named account reaches, and cancel one or
-read a stream only in a session a conversation that account reaches recorded. Where eve answers is an
-origin of this deployment's own, whose rewrites carry `/eve/coder/v1/*` into
-the eve service (`deploymentEveOrigin` in `src/agents/brain-host/eve-origin.ts`):
+A hosted route that holds no bearer of the account's reaches the agent
+service's eve as the deployment acting for one account: it calls eve's session
+routes under the deployment's `EVE_DEPLOYMENT_SECRET` as its bearer with the
+account in `x-luke-account`. The eve door's first authenticator admits that
+pair for a typed message, which its table, `CODER_DEPLOYMENT_TURNS` in
+`src/agents/coder-host/channel.ts`, admits, minted as the account's own
+principal with the deployment named only as its carrier
+(`CODER_DEPLOYMENT_PRESENCE`), so the message joins the agent's turn under
+way; and for a cancel or a reset of a session; and nothing else: any other
+route or kind of turn carrying the secret is refused outright rather than
+passed to the account authenticator behind it. An agent's own
+`start_agent` and `message_agent` send such a typed message, and so does a
+hosted route a browser reached on its session cookie alone, a comment's
+hand-over to an agent it mentions among them (`src/tasks/comment-ask.ts`).
+The door admits that typed message from anything that holds the secret,
+since one secret proves no more than that something holding it acted, so
+what keeps the deployment's typed messages to those is the code. The hook's
+carried Stop and a delete's retire are typed to cancel and to reset alone.
+Which account a request acts for is one accessor over both principal types,
+and the door's ownership checks and the host's admission read that answer,
+so the deployment can open a turn only on a conversation the named account
+reaches, and cancel one only in a session a conversation that account
+reaches recorded. Where eve answers is an origin of this deployment's own,
+whose rewrites carry `/eve/coder/v1/*` into the eve service
+(`deploymentEveOrigin` in `src/agents/eve-host/eve-origin.ts`):
 `LUKE_EVE_ORIGIN` where it is set, otherwise the project's production domain
 in production and the deployment's own host on any other deployment.
 Production names the custom domain rather than the generated `*.vercel.app`
 host because that host carries the project's Vercel Authentication, which
 answers a server-to-server POST at the edge and never reaches eve (LUKE-250).
-Since a Preview's functions dial the Preview's own eve, both ends of a
-delegation read one environment's `EVE_DEPLOYMENT_SECRET`, so Production and
-Preview each hold a value of their own, and neither is `CRON_SECRET`'s.
-One set to the cron's value is read as unset (`environment.ts`), as a blank
-one is: the build logs that once, by the two names, and the admin
-dashboard's Reliability screen shows it as not configured.
-
-### One connection is one invocation
-
-A WebSocket connection to a Vercel Function closes when the function reaches
-its maximum duration — `apps/web/server/function-durations.ts` gives the function
-800 seconds, the longest generally available — while the WebRTC session between the device
-and OpenAI stands on. A device socket that closes without the
-device's own `session.close` is therefore a detach and not a hang-up: the
-relay sends nothing upstream, settles `detached` at once, closes only its
-sideband, records no close, and the exchange lets go of the session with
-nothing said to it. The row is stamped `detached_at` (migration 0052) where it
-is still open, and a re-attach clears the stamp, so a session no device came
-back for is visible as an open row stamped longer ago than the grace, which
-the scheduled sweep ends (below). Each connection names itself on the row
-with an `attach_id` (migration 0058), written at creation and at every
-re-attach, and a stamp lands only where the row still names the connection
-writing it: the Mac re-attaches within seconds, so the connection it replaced
-can write its detach after the new one attached, and that late stamp would
-otherwise hand a live call to the sweep. A device that goes while its session
-is being created or re-attached leaves the session stamped the same way, since
-no connection is left to end it. So a socket may also open with `session.attach` naming
-a session id. The function resolves the bearer, checks that this account is
-the one the session was created for (the `voice_sessions` row written at
-creation, indexed over the owner and the live session id for this lookup),
-reads the task and the agent the call was bound to off the same row,
-refusing a row that names no task or no agent, attaches a fresh
-sideband to OpenAI's `/v1/live/sessions/{id}/attach`, answers
-`session.attached`, and pipes as before. Nothing the session said between the
-two connections is replayed. The desktop's `HostedLiveSessionSource` in
-`@luke/voice` does the reconnecting: three tries over about ten seconds,
-sends made in the gap held for the next connection, and only after the last
-failure does the host see the loss it already handles as `connection_lost`.
-
-### How a session ends
-
-While a signed-in session runs, every `session.usage.updated` overwrites the
-row's `usage` with `{ seconds, confirmed: false }`, a snapshot and never a
-sum. `session.closed` is finalization. Whichever connection sees it forwards
-it, writes the row's `closed_at`, `close_reason`, and
-`usage { seconds, confirmed: true }`, records `usage.seconds` through
-`recordVoiceSeconds` in `packages/database/src/models/quota.ts`
-— the session row is the idempotency ledger: the seconds land only where none
-stand yet, so a report seen by two connections adds nothing — and closes both
-ends. The session's one `session.close` is the exchange's, as the
-server-controls guide asks one owner per action ("Assign one owner for each
-action"): a device hangs up by asking for it, and the relay hands the ask to
-the exchange's graceful close, the same one its idle decision runs, which
-registers for `session.closed` before it sends and holds the sideband for it
-for 15 seconds, the docs' close sequence. Neither the Mac's voice window, nor
-its host, nor the relay sends a close of its own; the window stops its
-microphone at the hang-up and keeps its peer up for `session.closed` under
-the same bound, then closes the peer, which OpenAI ends as `remote_hangup`
-where no close reached it. A device socket that goes after a hang-up, or
-after a refused frame, asks the same owner once more, which sends nothing
-twice. A socket that goes with neither is a
-detach (above): nothing is sent, nothing is recorded, and the unconfirmed
-snapshot stands until a re-attached connection reads `session.closed`. A
-detached session is bounded all the same, since a caller can drop the socket
-and keep its WebRTC up with nothing left to send `session.close`: once a
-minute the maintenance sweep (`src/voice/orphan-sweep.ts`) takes up to 20
-open rows stamped detached more than `VOICE_DETACH_GRACE_MS` (60 seconds)
-ago, oldest first and ten at a time, attaches a fresh sideband to each through
-the same upstream, sends `session.close` through the same graceful close the
-exchange runs, and on `session.closed` writes the close and records the
-seconds through the same ledger; each attach and each wait for the final event
-is bounded at five seconds. A session OpenAI refuses the attach for as gone
-(404 or 410) is closed as `connection_lost` with the last unconfirmed snapshot
-standing, so no row is swept twice. Anything less conclusive — an attach that
-timed out, was throttled, or failed at OpenAI, or a close never confirmed —
-says nothing of whether the call still runs, so the row is left stamped for
-the next sweep, unless the session started more than
-`VOICE_SESSION_LIMIT_MS` (60 minutes, OpenAI's own duration limit) ago, when it
-is closed as `expired`. The sweep answers how many it `closed`, how many were
-`lost`, how many stand `pending` for the next sweep, and how many `failed` a
-write. A deployment without the voice key sweeps nothing. Every connection
-that ends without `session.closed` stamps the row the way a detach does, so
-the sweep closes the session and records its seconds unless a device comes
-back: a hang-up whose close OpenAI never confirmed within the 15 seconds, a
-sideband that ended first (which also closes the device's socket with code
-1001 and reason `upstream-closed`), and a session refused after it was
-created — its sideband not attached, or its exchange unable to stand. A close
-writes only an open row, so a second `session.closed` changes nothing. Only the voice
-function and the maintenance sweep write `voice_sessions`; the seconds ledger and it both cascade with
-the user row. The seconds ledger meters nothing on its own: a session still
-counts one call when it opens.
-
-### Luke's avatar
-
-A call can show Luke on video: a Keyframe Labs avatar, lip-synced to his
-voice, in the called agent's tab in the Mac's panel, while the
-developer has the Video calls experiment on in Settings › Experimental.
-The voice itself is untouched: GPT Live still runs over the Mac's WebRTC and this service's
-sideband, and the panel sends Keyframe Luke's synthesized audio straight from the Mac. What
-crosses this service is the session alone, as four frames in the service's
-own vocabulary on the device socket (`live-contract.ts`), read here and never
-forwarded to OpenAI (`frames.ts`): the device's `avatar.start` and
-`avatar.stop {reason}`, each naming the request id the Mac's host minted, and
-the service's answer to a start, `avatar.started {serverUrl,
-participantToken, agentIdentity}` or `avatar.unavailable {reason}`, the id
-echoed. `src/voice/avatar.ts` answers them in turn on one fiber of the
-session's scope, so a stop right behind its start closes what that start
-opened. A start mints a session through `src/voice/keyframe.ts`, one
-`POST /v1/sessions` on Keyframe's API under `KEYFRAME_API_KEY` naming the
-persona the start asked for: a start names the avatar the Mac chose by its key
-(`@luke/features/video-avatar`), never a persona id, and `keyframe.ts` maps
-each key to Keyframe's stock persona for it, while a start naming none or the
-default mints `LUKE_KEYFRAME_PERSONA_ID` (a stock persona). It hands its grant to
-the device socket and nowhere else: a grant joins once, so each start mints
-its own and none is kept, and the log keeps only the room's host. The key is
-the bearer of that one request. A failure is a fixed kind and Keyframe's
-status, never its body: 429 and 503 answer `no_capacity` (every session the
-plan allows is standing, and the call goes on as voice), anything else
-`error`, and a deployment missing either variable answers `not_configured`
-to every start and leaves the voice as it was.
-
-Each session minted is a `voice_avatar_sessions` row (the call's
-`voice_sessions` row, the account, the persona, when it started and ended,
-whole seconds rounded up, and why it ended), opened only on a voice row the
-account owns that is still open, and cascading with either. Keyframe answers
-no session id, so the seconds are this side's estimate from start to close,
-not Keyframe's meter. A row closes once, whichever close comes first: the
-device's stop (`user`, `server_closed`, or `error`, as the Mac reports
-it), the next start on the call, since a call holds one avatar, and the
-call's end (`call_ended`), at the hang-up or when the voice row closes,
-which is written first so a start racing it opens nothing. A close that
-missed is the maintenance sweep's to repair: when `orphan-sweep.ts` closes an
-orphaned voice row, the avatar rows open on it close behind it as
-`orphaned`, and every sweep then closes any avatar row still open on a call
-already closed, as of that call's own close.
-
-### How a refusal looks
-
-Before any socket stands, an HTTP status on the upgrade: `401` for
-`/api/voice/sessions` without a bearer, `403` for a handshake carrying a
-browser `Origin` header (the caller is no page: the desktop connects from
-its main process). Once a socket stands, one frame `{ "error": <reason> }`
-in `hostedErrorSchema`'s vocabulary, then a close with code 1008 and the same
-reason: `invalid-request` for a first frame that is not a valid `session.create`
-or `session.attach`, a create naming no task or no agent, or an attach to a
-session bound to no task or no agent; `invalid-token` for a
-bearer no account stands behind, and for an attach to a session this account
-did not create; `not-found` for a call naming a task the account
-does not hold, or an agent that is not that task's, the account's to reach,
-or standing unarchived, refused before the session is counted; `openai-key-missing`
-for a caller who saved no OpenAI API key, which every call runs on, refused
-before the session is counted or created; `upstream-error` when OpenAI refused the
-creation or the sideband could not attach; `upstream-throttled` when OpenAI
-answered 429.
+Since a Preview's functions dial the Preview's own eve, both ends read one
+environment's `EVE_DEPLOYMENT_SECRET`, so Production and Preview each hold a
+value of their own, and neither is `CRON_SECRET`'s. One set to the cron's
+value is read as unset (`environment.ts`), as a blank one is: the build logs
+that once, by the two names, and the admin dashboard's Reliability screen
+shows it as not configured.
 
 ## Luke Sync
 
@@ -2823,21 +2231,16 @@ a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
 only on production deployments.
 
 The sweep ends what no request will, and it reads no word of any account.
-It runs three things in turn and answers what each did: the purge of
+It runs two things in turn and answers what each did: the purge of
 conversations stamped deleted more than seven days ago, which is what a
 deleted task's agents' conversations come to, counted as `purged`; the
 sweep over turns still running past their kind's bound, an hour for a turn
-of any other conversation and a day and an hour for a coding agent's
+of any other conversation and a day and an hour for an agent's
 (`packages/database/src/models/abandoned-turns.ts`, `TURN_ABANDON.AFTER_MS` and
 `TURN_ABANDON.CODING_AGENT_AFTER_MS`), whose end
 the relay never heard and which are settled as failed for `abandoned`
 through the same write the relay's own end takes, at most fifty a sweep and
-counted as `abandoned`; and the bound on a detached voice session described
-under "How a session ends", which ends every open session whose device went
-without a hang-up more than a minute ago on its owner's own OpenAI key, at
-most 20 a sweep and each inside ten seconds, counted as `voice`; one whose
-owner holds no OpenAI key now is stamped for a later sweep, until OpenAI's
-own hour limit closes it as expired.
+counted as `abandoned`.
 
 It then fires the automations whose schedule is due ("Automations" below),
 at most twenty-five a sweep, counted as `automations.fired`, and acts on
@@ -2846,10 +2249,10 @@ at once, counted as `automations.started`, `skipped`, and `failed`.
 
 The sweep needs `CRON_SECRET`, which Vercel sends as the bearer on every
 scheduled call once it is set in the project. It guards the maintenance
-routes alone, this one and the provider-key rewrap asked by hand: the voice
-function, every other web function, and the eve service act for an account
-at eve's door under `EVE_DEPLOYMENT_SECRET` instead ("The exchange on the
-sessions route"), and neither door admits the cron's bearer, so the
+routes alone, this one and the provider-key rewrap asked by hand: every
+other web function and the eve service act for an account at eve's door
+under `EVE_DEPLOYMENT_SECRET` instead ("Reaching eve as the deployment"),
+and neither door admits the cron's bearer, so the
 scheduler's secret opens no session. Without it the route answers 503 and the schedule is
 simply off, the same kill switch every other hosted endpoint keeps; a wrong
 bearer is 401, compared in constant time, and any method but GET is 405.

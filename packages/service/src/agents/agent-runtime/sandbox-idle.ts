@@ -15,7 +15,7 @@ import type { RepositorySandbox } from "../repository-shell.js";
  * `setpriv` with its capability bounding set emptied
  * (`../sandbox-capabilities.ts`): the agent's and its workers' commands
  * (`coder-host/shell.ts`), a Terminal tab's shells, the agent's browser,
- * the native runner, and `show_code`'s reads of the checkout. The
+ * and the native runner. The
  * bounding set is inherited across `fork` and kept across `execve`, and a
  * process can only drop from it, never add back
  * (https://man7.org/linux/man-pages/man7/capabilities.7.html), so every

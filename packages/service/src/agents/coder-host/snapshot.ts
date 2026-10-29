@@ -33,11 +33,7 @@
 
 import { createHash } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
-import {
-  type CodingAgent,
-  hasRepository,
-  readCodingAgentByKey,
-} from "@luke/database/models/coding-agent-store";
+import { type Agent, hasRepository, readAgentByKey } from "@luke/database/models/agent-store";
 import { latestTurnsOfReached } from "@luke/database/models/message-reads";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { holdSandbox, sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
@@ -336,7 +332,7 @@ export const agentTurnUnderWay = (conversationId: string) =>
  * short name for this one Start, read from its key so a retry names the
  * same branch.
  */
-function snapshotBranch(source: CodingAgent, forked: boolean, idempotencyKey: string): string {
+function snapshotBranch(source: Agent, forked: boolean, idempotencyKey: string): string {
   const base = source.branch ?? `${CODER.BRANCH_PREFIX}agent-${source.id.slice(0, 8)}`;
   const start = createHash("sha256").update(idempotencyKey).digest("hex").slice(0, 8);
   return `${base}-${forked ? TAKEN_UP.FORKED : TAKEN_UP.CONTINUED}-${start}`;
@@ -357,14 +353,14 @@ export type SourceCopyServices = DatabaseServices | HttpClient.HttpClient | GitH
  */
 export const copySourceWork = /* @__PURE__ */ Effect.fn("web/copySourceWork")(function* (
   userId: string,
-  source: CodingAgent,
+  source: Agent,
   repository: string | null,
   forked: boolean,
   idempotencyKey: string,
 ): Effect.fn.Return<SnapshotOutcome, never, SourceCopyServices> {
   const missed = (miss: SnapshotMiss): SnapshotOutcome => ({ copied: false, miss });
   return yield* Effect.gen(function* () {
-    if (Option.isSome(yield* readCodingAgentByKey(userId, idempotencyKey))) {
+    if (Option.isSome(yield* readAgentByKey(userId, idempotencyKey))) {
       return missed(SNAPSHOT_MISS.STARTED);
     }
     // Note that the new agent clones the task's repository as it stands now, so a branch pushed to the

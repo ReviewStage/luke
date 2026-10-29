@@ -24,14 +24,11 @@ import {
 } from "../core.js";
 import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import { calledId } from "./called-id.js";
-import { agentMadeRunsOn } from "./coder-host/agent-runtime-choice.js";
 import {
-  AGENT_CALLER,
+  AGENT_TOOL_REFUSAL,
+  type AgentCall,
+  type AgentToolServices,
   agentToolRejected,
-  CODING_AGENT_TOOL_REFUSAL,
-  type CodingAgentCall,
-  type CodingAgentToolServices,
   callerTask,
   callerUserId,
   callerWorkspace,
@@ -41,15 +38,17 @@ import {
   TASK_PRIORITY_WORDS,
   taskStandingOf,
   workedRepository,
-} from "./coding-agent-tools.js";
+} from "./agent-tools.js";
+import { calledId } from "./called-id.js";
+import { agentMadeRunsOn } from "./coder-host/agent-runtime-choice.js";
 import { assigneeIdOf, TASK_ASSIGNEE_INPUT } from "./task-assignee.js";
 import { workspaceNamingOf, writtenMention } from "./written-mentions.js";
 
 /**
  * task-tools.ts -- the tools every agent reads and makes the workspace's tasks by: read one task's plan and where it stands, and make one.
  *
- * Luke on a call and every coding agent are offered the same `read_task`,
- * one implementation, beside `list_tasks` (`coding-agent-tools.ts`), which
+ * Every coding agent is offered the same `read_task`,
+ * one implementation, beside `list_tasks` (`agent-tools.ts`), which
  * names the tasks it reads by id. It reads any task of the caller's
  * workspace, a teammate's included, as the member the
  * caller acts for could open it in the sidebar, read on that member's
@@ -106,7 +105,7 @@ export const READ_TASK_TOOL = {
 
 /** One call of `read_task`: a task of the caller's workspace, its plan cut to the bound, or why there is none. */
 export function runReadTask(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   const asked = readTaskAsked(input);
@@ -118,7 +117,7 @@ export function runReadTask(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
       if (Option.isNone(workspace)) {
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       }
       const userId = callerUserId(call.caller);
       const stored = yield* readTask(userId, taskId);
@@ -227,18 +226,14 @@ function planTextOf(plan: string): string {
   return plan.replace(TITLE_HEADING, "").trim();
 }
 
-/** Who a task's first plan is written by, as its history names them: Luke on a call, or the calling coding agent. */
-function revisionWriterOf(call: CodingAgentCall): RevisionWriter {
-  return call.caller.kind === AGENT_CALLER.AGENT
-    ? { actor: PLAN_ACTOR.AGENT, agentId: call.caller.agent.id }
-    : { actor: PLAN_ACTOR.NOTETAKER };
+/** Who a task's first plan is written by, as its history names them: the calling coding agent. */
+function revisionWriterOf(call: AgentCall): RevisionWriter {
+  return { actor: PLAN_ACTOR.AGENT, agentId: call.caller.agent.id };
 }
 
-/** Who made a task for the caller's member: the coding agent by its id, or Luke on their call. */
-function originOf(call: CodingAgentCall): TaskOrigin {
-  return call.caller.kind === AGENT_CALLER.AGENT
-    ? { actor: PLAN_ACTOR.AGENT, agentId: call.caller.agent.id }
-    : { actor: PLAN_ACTOR.NOTETAKER };
+/** Who made a task for the caller's member: the coding agent by its id. */
+function originOf(call: AgentCall): TaskOrigin {
+  return { actor: PLAN_ACTOR.AGENT, agentId: call.caller.agent.id };
 }
 
 /** Who a revision is written by, as the history keeps it. */
@@ -246,9 +241,9 @@ type RevisionWriter = Parameters<typeof recordRevision>[0]["writer"];
 
 /** One call of `create_task`: a task made in the caller's workspace for its member, once under the call's key. */
 export function runCreateTask(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+): Effect.Effect<WireRecord, never, AgentToolServices> {
   const asked = readCreateAsked(input);
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.UNREADABLE));
@@ -263,7 +258,7 @@ export function runCreateTask(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
       if (Option.isNone(workspace)) {
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       }
       const userId = callerUserId(call.caller);
       const id = calledId(userId, call.clientKey);
@@ -338,12 +333,11 @@ export function runCreateTask(
       if (Option.isNone(made)) {
         // A run of the same call made it meanwhile, which this one answers.
         const raced = yield* readTask(userId, id);
-        if (Option.isNone(raced)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.STORE);
+        if (Option.isNone(raced)) return agentToolRejected(AGENT_TOOL_REFUSAL.STORE);
         return answer(raced.value.task);
       }
       yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
         source: SERVER_TASK_SOURCE.AGENT,
-        has_issue: false,
       });
       return answer(made.value);
     }),

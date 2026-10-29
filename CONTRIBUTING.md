@@ -1,7 +1,7 @@
 # Contributing to Luke
 
-Luke is a macOS Electron app for working through a task out loud with a voice
-agent that reads your code.
+Luke is a macOS Electron app for working through a task with coding agents
+that read your code, write the task's plan, and open its pull requests.
 
 This page covers setup and points at the documents that own the rest.
 
@@ -10,7 +10,7 @@ This page covers setup and points at the documents that own the rest.
 [AGENTS.md](AGENTS.md) is the guide for coding agents and holds the rules
 reviewers hold a pull request to; read it to know what review will check, not as
 a setup guide. Its Never section matters most: no credential or account secret
-reaches an answer, an event, the voice window, a trace, or a fixture, and
+reaches an answer, an event, a trace, or a fixture, and
 session replay leaves the machine as layout, never text. A change that widens
 what Luke may read or write, or what leaves the developer's machine, is a
 product decision, so open an issue first rather than a pull request.
@@ -54,9 +54,8 @@ looks up, `preview-<host>` for an address given by hand, so each Preview keeps a
 sign-in of its own and never touches the plain instance's.
 
 Each instance has its own profile under `~/Library/Application Support/Luke Dev
-<name>/` (sign-in, settings, window place, single-instance lock), its own
-`Luke Dev <name> Safe Storage` Keychain entry, and its own trace folder,
-`.build/traces/<name>/`. Its windows' titles end in `(<name>)`, and its app menu
+<name>/` (sign-in, settings, window place, single-instance lock) and its own
+`Luke Dev <name> Safe Storage` Keychain entry. Its windows' titles end in `(<name>)`, and its app menu
 says "Quit Luke Dev <name>". No development run claims the
 `tryluke:` links, named or not.
 Agents' commands for this Mac go to whichever signed-in instance of the account
@@ -86,23 +85,19 @@ packages/
   brand/          the design sources, the generators, and the generated art, motion tokens, and geometry
   credentials/    account sign-in: PKCE, loopback consent, the account session manager
   database/       the hosted store's Drizzle schema, queries, migrations, and test databases
-  features/       the hosted service's contract and clients: paths, wire, tasks and boards, product events, feedback
-  gateway/        the one protocol between the renderer and the host, and the trace record of what crosses it
+  features/       the hosted service's contract and clients: paths, wire, tasks, product events, feedback
+  gateway/        the one protocol between the renderer and the host
   host/           the desktop's Node kernel, reached only through the Gateway
-  live/           the GPT Live protocol as Luke reads it
   panel/          shared React for the panel every client mounts: the desktop window and the web tab
   runtime/        Effect infrastructure: storage, timers, queues, single-flight, test support
   service/        the hosted backend's logic: agents, maintenance sweep, observability
   settings/       the app settings schema
   ui/             the design system: every component, control, and page pattern the apps draw with
-  voice/          the live voice orchestrator
   wire/           the vocabulary every side speaks and the Schema tooling it is declared with
 tools/
   anti-slop/      the repository's oxlint rules
   claude-code-probe/  proves Claude Code runs inside a Luke sandbox
   codex-probe/    proves Codex runs inside a Luke sandbox
-  trace-export/   turns a recorded development trace into a document for a trace viewer
-  voice-samples/  records the clip Settings plays for each Live voice, by hand on a Mac
 scripts/          bootstrap, check, run, evidence, and release; repository-checks.sh holds the contract checks
 docs/             design, tasks, style, and workflow; a plan lives on its task, never in a document here
 ```

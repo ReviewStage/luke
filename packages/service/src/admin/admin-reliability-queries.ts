@@ -15,9 +15,9 @@ import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import { utcDayKey } from "@luke/database/models/quota";
 import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
+import { agentTable } from "@luke/database/schemas/agent";
 import { member, user } from "@luke/database/schemas/auth";
 import { automationRun } from "@luke/database/schemas/automation";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { integrationConnection } from "@luke/database/schemas/integration";
 import { conversations, turns } from "@luke/database/schemas/storage";
@@ -36,12 +36,12 @@ import {
   type AdminMetricsScope,
   type AdminMetricsWindow,
 } from "@luke/features/admin-wire";
+import { AGENT_STATUS, type AgentFailure } from "@luke/features/agent-wire";
 import {
   AUTOMATION_RUN_REASON,
   AUTOMATION_RUN_STATUS,
   type AutomationRunReason,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_STATUS, type CodingAgentFailure } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -53,8 +53,8 @@ import { alias, type PgColumn } from "drizzle-orm/pg-core";
 import { Duration, Effect, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { CODER } from "../agents/coder-host/bounds.js";
-import { codingAgentFailureOf, codingAgentStatusOf } from "../agents/coder-host/status.js";
-import { BRAIN_REQUEST_FAILURE, DAY_MS, TURN_STATUS } from "../core.js";
+import { agentFailureOf, agentStatusOf } from "../agents/coder-host/status.js";
+import { DAY_MS, TURN_FAILURE, TURN_STATUS } from "../core.js";
 import { isAdminRole } from "./admin-access.js";
 import { dayStart, lastNDayKeys } from "./admin-metrics.js";
 import {
@@ -216,17 +216,17 @@ const findTurnlessAgents = SqlSchema.findAll({
   execute: (request) =>
     Database.use((db) =>
       db
-        .select({ createdAt: codingAgent.createdAt })
-        .from(codingAgent)
-        .innerJoin(user, eq(user.id, codingAgent.userId))
+        .select({ createdAt: agentTable.createdAt })
+        .from(agentTable)
+        .innerJoin(user, eq(user.id, agentTable.userId))
         .where(
           and(
-            gte(codingAgent.createdAt, request.createdSince),
+            gte(agentTable.createdAt, request.createdSince),
             notExists(
               db
                 .select({ id: turns.id })
                 .from(turns)
-                .where(eq(turns.conversationId, codingAgent.conversationId)),
+                .where(eq(turns.conversationId, agentTable.conversationId)),
             ),
             keptByScope(request.scope),
           ),
@@ -361,17 +361,17 @@ const findFailedAgentCounts = SqlSchema.findAll({
   execute: (request) =>
     Database.use((db) =>
       db
-        .select({ userId: codingAgent.userId, value: countDistinct(codingAgent.id) })
-        .from(codingAgent)
-        .innerJoin(turns, eq(turns.conversationId, codingAgent.conversationId))
+        .select({ userId: agentTable.userId, value: countDistinct(agentTable.id) })
+        .from(agentTable)
+        .innerJoin(turns, eq(turns.conversationId, agentTable.conversationId))
         .where(
           and(
-            inArray(codingAgent.userId, [...request.ids]),
+            inArray(agentTable.userId, [...request.ids]),
             eq(turns.status, TURN_STATUS.FAILED),
             gte(turns.settledAt, request.since),
           ),
         )
-        .groupBy(codingAgent.userId),
+        .groupBy(agentTable.userId),
     ),
 });
 
@@ -432,7 +432,7 @@ const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(fun
   const abandonedTurns = new Map<string, number>();
   for (const row of outcomes) {
     const failed = row.status === TURN_STATUS.FAILED ? row.value : 0;
-    if (row.failure === BRAIN_REQUEST_FAILURE.ABANDONED) {
+    if (row.failure === TURN_FAILURE.ABANDONED) {
       bump(abandonedTurns, row.day, 0, (counted) => counted + row.value);
     }
     const work = turnWorkOf(row.kind, row.parentKind);
@@ -443,9 +443,9 @@ const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(fun
     }));
   }
 
-  const agentFailures = new Map<CodingAgentFailure, number>();
+  const agentFailures = new Map<AgentFailure, number>();
   for (const row of failures) {
-    const failure = codingAgentFailureOf({
+    const failure = agentFailureOf({
       status: TURN_STATUS.FAILED,
       failure: row.failure,
       failureDetail: row.failureDetail,
@@ -459,10 +459,10 @@ const readTurnSeries = /* @__PURE__ */ Effect.fn("web/readReliabilityTurns")(fun
   // moment the grace ran out, which is the day it counts on and what keeps
   // it inside the window or out.
   for (const agent of turnless) {
-    const status = codingAgentStatusOf(undefined, { createdAt: agent.createdAt, now });
-    const failure = codingAgentFailureOf(undefined);
+    const status = agentStatusOf(undefined, { createdAt: agent.createdAt, now });
+    const failure = agentFailureOf(undefined);
     const failedAt = agent.createdAt.getTime() + STARTING_GRACE_MS;
-    if (status !== CODING_AGENT_STATUS.FAILED || failure === undefined) continue;
+    if (status !== AGENT_STATUS.FAILED || failure === undefined) continue;
     if (failedAt < request.windowStart.getTime()) continue;
     bump(agentRuns, utcDayKey(failedAt), NO_FAILURES, (counted) => ({
       failed: counted.failed + 1,

@@ -3,16 +3,16 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import {
-  createCodingAgent,
-  recordCodingAgentPublished,
-  updateCodingAgentBranch,
-} from "@luke/database/models/coding-agent-store";
+  createAgent,
+  recordAgentPublished,
+  updateAgentBranch,
+} from "@luke/database/models/agent-store";
 import { account, user } from "@luke/database/schemas/auth";
 import { getTestDB, openWorkspace, startTask } from "@luke/database/testing";
 import {
+  AGENT_AUTHOR,
   CHECK_STATE,
   CHECK_SUMMARY,
-  CODING_AGENT_AUTHOR,
   CONVERSATION_ENTRY,
   DEPLOYMENT_STATE,
   DIFF_SIDE,
@@ -20,7 +20,7 @@ import {
   OVERVIEW_BOUNDS,
   PULL_REQUEST_STATE,
   REVIEW_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { REACTION } from "@luke/features/pull-request-write-wire";
 import { Duration, Effect, Fiber, Option, Redacted } from "effect";
 import { TestClock } from "effect/testing";
@@ -244,7 +244,7 @@ function openPull(number: number, head: string, base: string) {
 const agentPublishing = (userId: string, branch: string, number: number) =>
   Effect.gen(function* () {
     const task = yield* startTask(userId, { name: "Invites", repository: REPOSITORY });
-    const started = yield* createCodingAgent(userId, {
+    const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: `start-${randomUUID()}`,
       model: "anthropic/claude-opus-5.5",
@@ -255,8 +255,8 @@ const agentPublishing = (userId: string, branch: string, number: number) =>
     });
     assert.ok(Option.isSome(started));
     const { agent } = started.value;
-    yield* updateCodingAgentBranch(userId, agent.id, branch);
-    yield* recordCodingAgentPublished(userId, agent.id, {
+    yield* updateAgentBranch(userId, agent.id, branch);
+    yield* recordAgentPublished(userId, agent.id, {
       number,
       title: `Pull request ${number}`,
       url: `https://github.com/acme/relay/pull/${number}`,
@@ -291,7 +291,7 @@ const pullRequestPartOf = (organizationId: string, stacked = true) =>
     Option.isNone(read)
       ? Effect.succeed(undefined)
       : namedOverviewPullRequest(
-          { organizationId, repository: REPOSITORY, author: CODING_AGENT_AUTHOR.DEVELOPER },
+          { organizationId, repository: REPOSITORY, author: AGENT_AUTHOR.DEVELOPER },
           read.value,
         ),
   );
@@ -415,7 +415,7 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
           bot: true,
           avatarUrl: LUKE.avatar_url,
         });
-        assert.equal(overview.writtenAs, CODING_AGENT_AUTHOR.DEVELOPER);
+        assert.equal(overview.writtenAs, AGENT_AUTHOR.DEVELOPER);
         assert.deepEqual(
           overview.checks.map(({ name, app, state }) => ({ name, app, state })),
           [

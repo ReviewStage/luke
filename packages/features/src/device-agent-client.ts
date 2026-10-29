@@ -3,7 +3,6 @@ import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { type AccountCallEffects, accountCall, type CallCredential } from "./account-call.js";
 import {
-  DEVICE_AGENT_REQUEST_KIND,
   DEVICE_ISOLATION,
   type DeviceAgentAnswer,
   type DeviceAgentLaunchSecrets,
@@ -41,7 +40,8 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
  * which the caller asks again after a pause; a claim refused is
  * `DEVICE_AGENT_NOT_CLAIMED` (another claim took it, its caller withdrew it,
  * or the account's experiment is off) and one unanswered nothing; a
- * register, a beat, a settle, or an answer not taken is false. A host also
+ * register, a settle, or an answer not taken is false, and a beat not taken
+ * is nothing. A host also
  * asks the runner token route for a GitHub token for one of its agents
  * (`githubToken`), on the same credential, its device secret.
  */
@@ -57,6 +57,11 @@ export interface DeviceAgentClaimedLine {
   readonly line: DeviceAgentLine;
   readonly secrets?: DeviceAgentLaunchSecrets | undefined;
   readonly secretsGone?: true | undefined;
+}
+
+/** A beat the service took: the ids of the launches it holds the device to, none from a service before the field (`deviceAgentBeatAnswerSchema`). */
+export interface DeviceAgentBeat {
+  readonly openLaunches?: readonly string[] | undefined;
 }
 
 /** What a Mac registers as: its name, its platform and architecture, its home folder, the Claude Code CLI it bundles, the Codex it checked where it has one, which harnesses it is signed in to, the lines beyond the first it takes, and where its setup stands until it is ready. */
@@ -277,14 +282,14 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /** That this Mac is here now, and which harnesses it is signed in to; whether the service took it. */
+  /** That this Mac is here now, and which harnesses it is signed in to; the launches the service holds it to where it took the beat, and nothing where it did not. */
   beat(
     deviceId: string,
     signedIn: DeviceSignedIn,
-  ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+  ): Effect.Effect<DeviceAgentBeat | undefined, never, HttpClient.HttpClient> {
     return askHosted(this.#hosted.deviceAgents.beat, { deviceId, signedIn }).pipe(
-      Effect.as(true),
-      Effect.orElseSucceed(() => false),
+      Effect.map((answer): DeviceAgentBeat => ({ openLaunches: answer.openLaunches })),
+      Effect.orElseSucceed(() => undefined),
     );
   }
 
@@ -398,10 +403,7 @@ export class HostedDeviceAgentClient {
     id: string,
     answer: DeviceAgentAnswer,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    const wire =
-      answer.kind === DEVICE_AGENT_REQUEST_KIND.READ_FILE
-        ? { ...answer, bytes: answer.bytes === null ? null : encodeBytes(answer.bytes) }
-        : answer;
+    const wire = { ...answer, bytes: answer.bytes === null ? null : encodeBytes(answer.bytes) };
     return askHosted(this.#hosted.deviceAgents.answerRequest, { deviceId, id, answer: wire }).pipe(
       Effect.as(true),
       Effect.orElseSucceed(() => false),

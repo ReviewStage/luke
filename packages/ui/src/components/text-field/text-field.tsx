@@ -65,8 +65,8 @@ export type TextFieldSize = (typeof TEXT_FIELD_SIZE)[keyof typeof TEXT_FIELD_SIZ
 
 /**
  * The ground a field's well is filled with: the input's own, or a card's,
- * where it stands in one head with a card composer, as New thread's
- * Subject over its message box does, so the head reads as one ground.
+ * where it stands in one head with a card composer, so the head reads as
+ * one ground.
  */
 export const TEXT_FIELD_GROUND = {
   INPUT: "input",
@@ -243,6 +243,7 @@ function entryAttributes(props: TextEntryProps) {
           ? true
           : undefined
         : props.field["aria-invalid"],
+    "aria-required": props.field?.["aria-required"],
     placeholder: props.placeholder,
     disabled: props.disabled,
     readOnly: props.readOnly,

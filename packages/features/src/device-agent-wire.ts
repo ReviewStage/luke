@@ -5,7 +5,7 @@ import { wireUuidSchema } from "./service-wire.js";
 /**
  * device-agent-wire.ts -- the work the service hands a local agent's Mac, as rows the Mac follows, and what the Mac answers.
  *
- * A coding agent whose machine is the starter's Mac (`CODING_AGENT_MACHINE`)
+ * A coding agent whose machine is the starter's Mac (`AGENT_MACHINE`)
  * runs its runner there rather than in a Vercel Sandbox. The service writes
  * the runner's lines (`DEVICE_AGENT_LINE_KIND`) and its tools' requests
  * (`DEVICE_AGENT_REQUEST_KIND`) as rows under the account and the Mac the agent
@@ -36,9 +36,8 @@ import { wireUuidSchema } from "./service-wire.js";
 
 export const DEVICE_AGENT_BOUNDS = {
   /**
-   * The most bytes of one file a read answers, and of each of a command's
-   * outputs: a sandbox door's own bound (`SANDBOX_DOOR_MAX_BYTES`), past
-   * every bound a tool holds a file to.
+   * The most bytes of one file a read answers: a sandbox door's own bound
+   * (`SANDBOX_DOOR_MAX_BYTES`), past every bound a tool holds a file to.
    */
   MAX_ANSWER_BYTES: 8 * 1024 * 1024,
 } as const;
@@ -66,8 +65,6 @@ export type DeviceAgentLineKind =
 export const DEVICE_AGENT_REQUEST_KIND = {
   /** Read one file, confined to the agent's worktree and temp folder. */
   READ_FILE: "read_file",
-  /** Run one command in the agent's checkout and wait on it, as `show_code` does. */
-  RUN_COMMAND: "run_command",
 } as const;
 
 export type DeviceAgentRequestKind =
@@ -164,37 +161,19 @@ export const deviceAgentObjectSchema = EffectSchema.Record(
 
 export type DeviceAgentObject = typeof deviceAgentObjectSchema.Type;
 
-/** A command's output, held to the bound in UTF-8 bytes rather than characters, since a character may take up to four. */
-const commandOutput = EffectSchema.String.check(
-  EffectSchema.makeFilter(
-    (value: string) =>
-      Buffer.byteLength(value, "utf8") <= DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES ||
-      `at most ${DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES} bytes`,
-  ),
-);
-
 /**
- * What the Mac answered a request. A read answers the file's bytes, read
- * one byte past the bound so the caller still sees a file larger than it,
- * or null where the path names no regular file the agent may read; a
- * command answers its exit code and its two outputs, each cut to the bound.
+ * What the Mac answered a request: a read's file bytes, read one byte past
+ * the bound so the caller still sees a file larger than it, or null where
+ * the path names no regular file the agent may read.
  */
-export const deviceAgentAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({
-    kind: EffectSchema.Literal(DEVICE_AGENT_REQUEST_KIND.READ_FILE),
-    bytes: EffectSchema.NullOr(
-      EffectSchema.Uint8Array.check(
-        EffectSchema.isMaxLength(DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES + 1),
-      ),
+export const deviceAgentAnswerSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(DEVICE_AGENT_REQUEST_KIND.READ_FILE),
+  bytes: EffectSchema.NullOr(
+    EffectSchema.Uint8Array.check(
+      EffectSchema.isMaxLength(DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES + 1),
     ),
-  }),
-  EffectSchema.Struct({
-    kind: EffectSchema.Literal(DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND),
-    exitCode: EffectSchema.Int,
-    stdout: commandOutput,
-    stderr: commandOutput,
-  }),
-]);
+  ),
+});
 
 export type DeviceAgentAnswer = typeof deviceAgentAnswerSchema.Type;
 
@@ -328,7 +307,7 @@ const deviceAgentLineSchema = EffectSchema.Struct({
 
 export type DeviceAgentLine = typeof deviceAgentLineSchema.Type;
 
-/** One request as the Mac lists and claims it: its id, its agent, its kind, and its arguments (`deviceAgentReadArgsSchema`, `deviceAgentCommandArgsSchema`). */
+/** One request as the Mac lists and claims it: its id, its agent, its kind, and its arguments (`deviceAgentReadArgsSchema`). */
 const deviceAgentRequestSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   agentId: wireUuidSchema,
@@ -342,12 +321,6 @@ export type DeviceAgentRequest = typeof deviceAgentRequestSchema.Type;
 export const deviceAgentReadArgsSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   maxBytes: EffectSchema.Int,
-});
-
-/** A command request's arguments: the shell script, run by bash in the agent's worktree, and its environment beside the Mac's own. */
-export const deviceAgentCommandArgsSchema = EffectSchema.Struct({
-  command: EffectSchema.String,
-  env: EffectSchema.optionalKey(EffectSchema.Record(EffectSchema.String, EffectSchema.String)),
 });
 
 /**
@@ -466,27 +439,32 @@ export const deviceAgentSettleRequestSchema = EffectSchema.Struct({
 export const deviceAgentAnswerRequestSchema = EffectSchema.Struct({
   ...deviceField,
   id: wireUuidSchema,
-  answer: EffectSchema.Union([
-    EffectSchema.Struct({
-      kind: EffectSchema.Literal(DEVICE_AGENT_REQUEST_KIND.READ_FILE),
-      bytes: EffectSchema.NullOr(
-        EffectSchema.Uint8ArrayFromBase64.check(
-          EffectSchema.isMaxLength(DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES + 1),
-        ),
+  answer: EffectSchema.Struct({
+    kind: EffectSchema.Literal(DEVICE_AGENT_REQUEST_KIND.READ_FILE),
+    bytes: EffectSchema.NullOr(
+      EffectSchema.Uint8ArrayFromBase64.check(
+        EffectSchema.isMaxLength(DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES + 1),
       ),
-    }),
-    EffectSchema.Struct({
-      kind: EffectSchema.Literal(DEVICE_AGENT_REQUEST_KIND.RUN_COMMAND),
-      exitCode: EffectSchema.Int,
-      stdout: commandOutput,
-      stderr: commandOutput,
-    }),
-  ]),
+    ),
+  }),
 });
 
 /** That the service kept what the Mac said. */
 export const deviceAgentDoneAnswerSchema = EffectSchema.Struct({
   done: EffectSchema.Literal(true),
+});
+
+/**
+ * That the service took a beat, and the launches it holds the device to:
+ * the ids of its launch lines still unsettled with no stop queued after
+ * them, claimed or not, read after the beat was written. The device stops a
+ * runner whose launch it does not name and settles a named launch it runs
+ * nothing for; a service from before the field names none, and a build from
+ * before it ignores it.
+ */
+export const deviceAgentBeatAnswerSchema = EffectSchema.Struct({
+  done: EffectSchema.Literal(true),
+  openLaunches: EffectSchema.optionalKey(EffectSchema.Array(wireUuidSchema)),
 });
 
 /** The lines waiting for this Mac, in their order, none where none came while the read was held; nothing claimed. */

@@ -55,9 +55,9 @@ test("a request with no route key, the oRPC key, or a key the function does not 
     ]),
   );
   for (const query of [
-    `${DISPATCH_QUERY.ROUTE}=${ORPC_ROUTE_KEY}&${DISPATCH_QUERY.PATH}=plans/p1/board&wait=1`,
-    `${DISPATCH_QUERY.ROUTE}=plans/board&${DISPATCH_QUERY.PATH}=plans/p1/board&wait=1`,
-    `${DISPATCH_QUERY.PATH}=plans/p1/board&wait=1`,
+    `${DISPATCH_QUERY.ROUTE}=${ORPC_ROUTE_KEY}&${DISPATCH_QUERY.PATH}=plans/p1/revisions&wait=1`,
+    `${DISPATCH_QUERY.ROUTE}=plans/revisions&${DISPATCH_QUERY.PATH}=plans/p1/revisions&wait=1`,
+    `${DISPATCH_QUERY.PATH}=plans/p1/revisions&wait=1`,
   ]) {
     await dispatcher.fetch(new Request(`https://luke.test/api/default.js?${query}`));
   }
@@ -65,9 +65,9 @@ test("a request with no route key, the oRPC key, or a key the function does not 
   assert.deepEqual(
     orpc.requests.map((request) => request.url),
     [
-      "https://luke.test/api/plans/p1/board?wait=1",
-      "https://luke.test/api/plans/p1/board?wait=1",
-      "https://luke.test/api/plans/p1/board?wait=1",
+      "https://luke.test/api/plans/p1/revisions?wait=1",
+      "https://luke.test/api/plans/p1/revisions?wait=1",
+      "https://luke.test/api/plans/p1/revisions?wait=1",
       "https://luke.test/api/default.js?wait=1",
     ],
   );
@@ -156,12 +156,6 @@ test("every route that stays off the oRPC router is reached at its public URL by
       [],
     ],
     [
-      "/api/workspaces/linear/connected",
-      "workspaces/linear/connected",
-      "/api/workspaces/linear/connected",
-      [],
-    ],
-    [
       "/api/plans/p1/attachments/f1",
       "plans/attachment",
       "/api/plans/attachment",
@@ -221,8 +215,6 @@ test("every route that stays off the oRPC router is reached at its public URL by
   });
   // The functions that answer by their own name are rewritten onto themselves, which the filesystem then serves as before.
   for (const path of [
-    "/api/voice/sessions",
-    "/api/voice/sessions.js",
     "/api/terminal/sessions",
     "/api/terminal/sessions.js",
     "/api/browser/live",
@@ -232,7 +224,7 @@ test("every route that stays off the oRPC router is reached at its public URL by
   ]) {
     assert.equal(firstRule(path)?.dest, path, path);
   }
-  assert.equal(firstRule("/api/voice/sessionsXjs")?.src, ORPC_FALLBACK_SRC);
+  assert.equal(firstRule("/api/terminal/sessionsXjs")?.src, ORPC_FALLBACK_SRC);
 });
 
 test("a path of every hosted resource is landed on the oRPC route at its own public path, segments and query kept", async () => {

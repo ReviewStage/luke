@@ -1,19 +1,13 @@
 import { AGENT_TOOL, CLAUDE_CODE_TOOL } from "@luke/features/agent-tools";
 import {
-  CODING_AGENT_TODO_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentTodoStatus,
-  type CodingAgentTodos,
-} from "@luke/features/coding-agent-wire";
+  AGENT_TODO_STATUS,
+  type AgentTodoStatus,
+  type AgentTodos,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import { isRecord, isWireString, type WireValue } from "@luke/wire";
 import { TOOL_STATE } from "../ai-elements/tool.js";
-import {
-  AGENT_PART,
-  type AgentPart,
-  agentParts,
-  isTaskCall,
-  isTodos,
-} from "./coding-agent-model.js";
+import { AGENT_PART, type AgentPart, agentParts, isTaskCall, isTodos } from "./agent-model.js";
 import type { DrawnCall } from "./native-tool-calls.js";
 import { todosView } from "./tool-call-model.js";
 
@@ -45,13 +39,13 @@ import { todosView } from "./tool-call-model.js";
  * as they were drawn while a running turn's page touches its end alone.
  */
 
-type Todos = CodingAgentTodos["todos"];
+type Todos = AgentTodos["todos"];
 
 /** One task of Claude Code's list as the fold holds it: its id once the CLI answered the call that created it, its words, and where it stands. */
 interface FoldedTask {
   readonly id: string | undefined;
   readonly content: string;
-  readonly status: CodingAgentTodoStatus;
+  readonly status: AgentTodoStatus;
 }
 
 /** The task list as it stood at some point, in creation order. */
@@ -87,13 +81,13 @@ const GOT_STATUS = /^Status: (\w+)$/m;
 const DELETED = "deleted";
 
 /** A task's status as the wire spells a to-do's: the CLI's `completed` is done, and the rest are spelled alike; nothing for a word that is none of them. */
-const TASK_STATUS: Readonly<Record<string, CodingAgentTodoStatus>> = {
-  pending: CODING_AGENT_TODO_STATUS.PENDING,
-  in_progress: CODING_AGENT_TODO_STATUS.IN_PROGRESS,
-  completed: CODING_AGENT_TODO_STATUS.DONE,
+const TASK_STATUS: Readonly<Record<string, AgentTodoStatus>> = {
+  pending: AGENT_TODO_STATUS.PENDING,
+  in_progress: AGENT_TODO_STATUS.IN_PROGRESS,
+  completed: AGENT_TODO_STATUS.DONE,
 };
 
-function taskStatus(status: WireValue | undefined): CodingAgentTodoStatus | undefined {
+function taskStatus(status: WireValue | undefined): AgentTodoStatus | undefined {
   return isWireString(status) ? TASK_STATUS[status] : undefined;
 }
 
@@ -142,7 +136,7 @@ function created(
   if (answered === null) return fold;
   const content = (answered?.[2] ?? inputString(input, "subject") ?? "").trim();
   if (content === "") return fold;
-  return [...fold, { id: answered?.[1], content, status: CODING_AGENT_TODO_STATUS.PENDING }];
+  return [...fold, { id: answered?.[1], content, status: AGENT_TODO_STATUS.PENDING }];
 }
 
 /**
@@ -171,7 +165,7 @@ function updated(
     return inserted(fold, {
       id,
       content: subject === undefined || subject === "" ? unnamedTask(id) : subject,
-      status: moved ?? CODING_AGENT_TODO_STATUS.PENDING,
+      status: moved ?? AGENT_TODO_STATUS.PENDING,
     });
   }
   return replaced(fold, at, {
@@ -225,7 +219,7 @@ function got(fold: TaskFold, words: string | undefined): TaskFold {
   if (was === undefined) {
     return content === ""
       ? fold
-      : inserted(fold, { id, content, status: status ?? CODING_AGENT_TODO_STATUS.PENDING });
+      : inserted(fold, { id, content, status: status ?? AGENT_TODO_STATUS.PENDING });
   }
   return replaced(fold, at, {
     id,
@@ -288,7 +282,7 @@ function taskCallOf(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>):
 
 /** One message's task calls folded: the list it began from, the one it ended on, and the list as it stood after each call, by the call. */
 interface MessageFold {
-  readonly message: CodingAgentMessage;
+  readonly message: AgentTranscriptMessage;
   readonly from: TaskFold;
   readonly to: TaskFold;
   readonly lists: ReadonlyMap<string, Todos>;
@@ -300,7 +294,7 @@ interface MessageFold {
  * that folds the same as before keeps the value it was.
  */
 function foldMessage(
-  message: CodingAgentMessage,
+  message: AgentTranscriptMessage,
   from: TaskFold,
   previous: MessageFold | undefined,
 ): MessageFold {
@@ -334,7 +328,7 @@ function sameEntries<V>(a: ReadonlyMap<string, V>, b: ReadonlyMap<string, V>): b
 }
 
 /** Each transcript's fold as last read, by its first message, which every page of the transcript keeps as it was. */
-const transcriptFolds = new WeakMap<CodingAgentMessage, TranscriptFold>();
+const transcriptFolds = new WeakMap<AgentTranscriptMessage, TranscriptFold>();
 
 /**
  * The to-do list as it stood after each of Claude Code's task calls in the
@@ -343,7 +337,7 @@ const transcriptFolds = new WeakMap<CodingAgentMessage, TranscriptFold>();
  * the one read before while every call's list is the one it was, so a page
  * that moves no list leaves the rows drawn from it standing.
  */
-export function taskTodos(messages: readonly CodingAgentMessage[]): ReadonlyMap<string, Todos> {
+export function taskTodos(messages: readonly AgentTranscriptMessage[]): ReadonlyMap<string, Todos> {
   const first = messages[0];
   if (first === undefined) return NO_LISTS;
   const held = transcriptFolds.get(first);
@@ -384,7 +378,7 @@ export interface StandingTodos {
  * streams the list before it is still the one standing.
  */
 export function newestTodos(
-  messages: readonly CodingAgentMessage[],
+  messages: readonly AgentTranscriptMessage[],
   lists: ReadonlyMap<string, Todos>,
 ): StandingTodos | undefined {
   // Note that the messages are read from the newest back, so a page is read only as far as its newest list.
@@ -412,6 +406,6 @@ export function dockedTodos(
   working: boolean,
 ): StandingTodos | undefined {
   if (!working || standing === undefined) return undefined;
-  const open = standing.todos.some((todo) => todo.status !== CODING_AGENT_TODO_STATUS.DONE);
+  const open = standing.todos.some((todo) => todo.status !== AGENT_TODO_STATUS.DONE);
   return open ? standing : undefined;
 }

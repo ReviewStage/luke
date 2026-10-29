@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { act, createElement, memo, type ReactNode } from "react";
@@ -20,8 +20,9 @@ import {
 /**
  * use-open-link.test.ts -- a pull request one of a listed task's agents
  * opened opens in that agent's Pull request tab on its task wherever the
- * window draws it, outside any task as much as on another; one no listed
- * task names, and any inside a pull request's own tab, open on GitHub.
+ * window draws it, outside any task as much as on another, and one a
+ * listed agent on no task opened in its tab on its page; one no listed
+ * task or agent names, and any inside a pull request's own tab, open on GitHub.
  * A new list draws no part opening links again, which reads the list as
  * the link opens. Synthetic ids, a task card's pull request row standing
  * for every press.
@@ -67,6 +68,12 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
+/** An agent on no task the window lists, which opened the pull request numbered 43. */
+const TASKLESS = {
+  id: "5e2c8d1b-6a3f-4b9e-8d7c-2f1a0b9c8d7e",
+  pullRequest: { url: "https://github.com/acme/relay/pull/43" },
+};
+
 /** Presses the pull request's row drawn as `wrap` holds it under the window's opener, answering where it went. */
 function press(url: string, wrap: (row: ReactNode) => ReactNode = (row) => row) {
   const links: ReadLink[] = [];
@@ -84,7 +91,11 @@ function press(url: string, wrap: (row: ReactNode) => ReactNode = (row) => row) 
       createElement(
         OpenLinkProvider,
         { value: (link: ReadLink) => links.push(link) },
-        createElement(ListedPullRequests, { tasks: LISTED, children: wrap(row) }),
+        createElement(ListedPullRequests, {
+          tasks: LISTED,
+          agents: [TASKLESS],
+          children: wrap(row),
+        }),
       ),
     ),
   );
@@ -98,6 +109,13 @@ function press(url: string, wrap: (row: ReactNode) => ReactNode = (row) => row) 
 test("a listed task's agent's pull request opens in that agent's Pull request tab on its task, however its address is spelled", () => {
   assert.deepEqual(press(`${URL}#issuecomment-1`), {
     places: [{ kind: LINK_PLACE.CHANGES, planId: TASK, agentId: AGENT }],
+    github: [],
+  });
+});
+
+test("a listed agent on no task's pull request opens in its Pull request tab, on its own page", () => {
+  assert.deepEqual(press(TASKLESS.pullRequest.url), {
+    places: [{ kind: LINK_PLACE.CHANGES, agentId: TASKLESS.id }],
     github: [],
   });
 });

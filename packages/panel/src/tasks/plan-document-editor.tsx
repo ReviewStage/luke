@@ -46,7 +46,9 @@ import {
  *
  * The text is drawn as its sections, and nothing on them marks them
  * editable. A click into a section's words opens the whole text in place,
- * the caret where the click landed, and so does a press on the empty room
+ * the caret where the click landed, or the words its press selected selected
+ * again, the format toolbar over them as over words selected in the editor
+ * (`clickPlacement`), and so does a press on the empty room
  * around the text (`useTextRoom`); the editor is TipTap, from the editor
  * bundle the panel starts loading as it first paints, and again the first
  * time a section is hovered or selected (`../bundle-loader.ts`), and draws the words exactly as the
@@ -90,10 +92,8 @@ const titlePauseAtom = rendererRuntime.fn((stamp: number) =>
   Effect.as(Effect.sleep(DRAFT_PAUSE), stamp),
 );
 
-/** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button bar a picture's, a video's player, a task's checkbox or the label around it, or the section's byline. */
-export function editsOnClick(target: EventTarget): boolean {
-  const selection = window.getSelection();
-  if (selection !== null && !selection.isCollapsed) return false;
+/** Whether a click lands on words to edit: not on a link, a button bar a picture's, a video's player, a task's checkbox or the label around it, or the section's byline. */
+function pressesWords(target: EventTarget): boolean {
   // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item, and the label around it, whose press a finger takes beside the box and hands to it; a comment's marked words open its thread and the editor at them alike. A picture's press is a button that hands on only the press it does not take, a diagram's under a mouse in a wide room, which is the words' as the bare picture's was. A video's player is its own whole, its frame and every control in it, whatever they are drawn as, since a press there plays, seeks, or enlarges it; its caption is the words'.
   return !(
     target instanceof Element &&
@@ -103,16 +103,20 @@ export function editsOnClick(target: EventTarget): boolean {
   );
 }
 
+/** A range standing at one point in the page's words. */
+function pointAt(node: Node, offset: number): Range {
+  const range = document.createRange();
+  range.setStart(node, offset);
+  return range;
+}
+
 /** Where in the page's words a point stands, by whichever of the two ways the browser offers: WebKit's and Blink's, or Firefox's. */
 function rangeAt(x: number, y: number): Range | null {
   // Note that each is read as possibly missing, since a browser offers one of the two and the DOM's types claim both.
   const page: Partial<Pick<Document, "caretRangeFromPoint" | "caretPositionFromPoint">> = document;
   if (page.caretRangeFromPoint !== undefined) return page.caretRangeFromPoint(x, y);
   const position = page.caretPositionFromPoint?.(x, y) ?? null;
-  if (position === null) return null;
-  const range = document.createRange();
-  range.setStart(position.offsetNode, position.offset);
-  return range;
+  return position === null ? null : pointAt(position.offsetNode, position.offset);
 }
 
 /** Where the top of a range's line stands in the window, or its words' element's where the browser draws no box for it. */
@@ -129,18 +133,16 @@ function inCode(text: Node): boolean {
 }
 
 /**
- * The words a click at a point landed on in a section's drawn block, as the
- * editor finds them again (`PlacedWords`); none where it landed on no words.
+ * The words a range starts in, in a section's drawn block, as the editor
+ * finds them again (`PlacedWords`); none where it starts on no words there.
  */
-function wordsUnder(
+function sectionWordsAt(
   block: HTMLElement,
   section: number,
-  x: number,
-  y: number,
+  range: Range,
 ): PlacedWords | undefined {
-  const range = rangeAt(x, y);
-  const words = range?.startContainer;
-  if (range == null || !(words instanceof Text) || !block.contains(words)) return undefined;
+  const words = range.startContainer;
+  if (!(words instanceof Text) || !block.contains(words)) return undefined;
   const text = words.data;
   const code = inCode(words);
   let occurrence = 0;
@@ -159,20 +161,14 @@ function opensSection(element: Element | null | undefined): element is HTMLHeadi
 }
 
 /**
- * The words a click at a point landed on in a document drawn whole rather
- * than as its sections, as a pull request's description is: the section
- * counted by the headings that open one before the words, as the editor
- * counts them, so it finds them again (`PlacedWords`); none where it landed
- * on no words.
+ * The words a range starts in, in a document drawn whole rather than as its
+ * sections, as a pull request's description is: the section counted by the
+ * headings that open one before the words, as the editor counts them, so it
+ * finds them again (`PlacedWords`); none where it starts on no words there.
  */
-export function documentWordsUnder(
-  root: HTMLElement,
-  x: number,
-  y: number,
-): PlacedWords | undefined {
-  const range = rangeAt(x, y);
-  const words = range?.startContainer;
-  if (range == null || !(words instanceof Text) || !root.contains(words)) return undefined;
+export function documentWordsAt(root: HTMLElement, range: Range): PlacedWords | undefined {
+  const words = range.startContainer;
+  if (!(words instanceof Text) || !root.contains(words)) return undefined;
   const code = inCode(words);
   let section = 0;
   let occurrence = 0;
@@ -199,6 +195,34 @@ export function documentWordsUnder(
     code,
     top: lineTop(range, words),
   };
+}
+
+/**
+ * Where a click on drawn words opens their editor, each of its words found
+ * by `place`: on the words the click landed on, or, where its press selected
+ * words, selecting them again from where the selection started to where it
+ * ended, so the editor's format toolbar stands over them as over words
+ * selected in the editor. None where it landed on no words to edit, or
+ * selected words `place` does not find, a selection reaching past the block
+ * say, which stay selected in the drawn text.
+ */
+export function clickPlacement(
+  target: EventTarget,
+  x: number,
+  y: number,
+  place: (range: Range) => PlacedWords | undefined,
+): PlanEditorPlacement | undefined {
+  if (!pressesWords(target)) return undefined;
+  const selection = window.getSelection();
+  if (selection === null || selection.isCollapsed) {
+    const range = rangeAt(x, y);
+    const words = range === null ? undefined : place(range);
+    return words === undefined ? { x, y } : { x, y, words };
+  }
+  const { anchorNode, anchorOffset, focusNode, focusOffset } = selection;
+  const from = anchorNode === null ? undefined : place(pointAt(anchorNode, anchorOffset));
+  const words = focusNode === null ? undefined : place(pointAt(focusNode, focusOffset));
+  return from === undefined || words === undefined ? undefined : { x, y, words, from };
 }
 
 /** Where the words a closing editor's caret stood on stand in the drawn text now; none where the drawn text holds no such words. */
@@ -416,9 +440,10 @@ export function DocumentBlock({
         editing.select(host);
       }}
       onPress={({ target, x, y, block: pressed }) => {
-        if (!editsOnClick(target)) return;
-        const words = wordsUnder(pressed, section, x, y);
-        editing.open(words === undefined ? { x, y } : { x, y, words });
+        const placement = clickPlacement(target, x, y, (range) =>
+          sectionWordsAt(pressed, section, range),
+        );
+        if (placement !== undefined) editing.open(placement);
       }}
       onOpen={() => editing.open({ section })}
     >
@@ -971,7 +996,7 @@ export function PlanDocumentEditor({
           : {
               doors: mentions,
               source: {
-                taskId: task.id,
+                holder: { taskId: task.id },
                 taskName: task.name,
                 workspace: mentions.place.workspace,
                 repository: task.repository,

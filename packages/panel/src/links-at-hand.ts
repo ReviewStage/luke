@@ -5,6 +5,7 @@ import {
   linkOf,
   type ReadLink,
 } from "@luke/features/link-grammar";
+import type { PagePlace } from "@luke/features/page-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import type { SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -14,6 +15,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { adminLinkFields } from "./admin/routing.js";
 import { useAppCommand } from "./app-commands.js";
 import { LINK_COPY, useCopyToast } from "./copy-feedback.js";
+import { useHoldChordLinks } from "./copy-link-item.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { type ShownChannel, useShownChannel } from "./tasks/use-channels.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
@@ -22,7 +24,7 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/u
 /**
  * links-at-hand.ts -- the links the window can copy right now: what is open or focused, the most specific first.
  *
- * ⌥⌘C copies the first, as Linear's chord copies the open issue's, and the
+ * ⇧⌘C copies the first, as Linear's chord copies the open issue's, and the
  * command palette offers each as "Copy link to <thing>". Most specific
  * first: the tab of the side panel where the keyboard is in it or the panel
  * fills the window, else the
@@ -128,20 +130,39 @@ function slugOf(workspaces: readonly Workspace[], workspaceId: string | undefine
   return home?.slug ?? workspaceId ?? "";
 }
 
-/** The place a tab of the side panel shows, on its task; none for a tab whose thing has no link of its own: a file's, the board, the code, the Inbox, a terminal. */
+/**
+ * The place a tab of the side panel shows, on the task or the agent's page
+ * that holds the panel; none for a tab whose thing has no link of its own:
+ * a file's, the board, the code, the Inbox, a terminal, a pull request
+ * the agent did not open, and a worker of Luke's own, which is drawn
+ * nowhere a link opens. Note that a Changes or a
+ * worker's tab is the agent's, so it is linked by the agent alone, on a
+ * task's panel as on the agent's page.
+ */
 export function panelTabPlace(
-  taskId: string,
+  holder: PagePlace,
   tab: SidePanelTab | undefined,
 ): LinkPlace | undefined {
   if (tab === undefined) return undefined;
-  if (tab === SIDE_PANEL_TAB.PLAN) return { kind: LINK_PLACE.TASK, planId: taskId };
-  if (isPageTab(tab)) return { kind: LINK_PLACE.PAGE, planId: taskId, pageId: tab.page };
-  if (isChangesTab(tab)) return { kind: LINK_PLACE.CHANGES, planId: taskId, agentId: tab.changes };
+  if (tab === SIDE_PANEL_TAB.PLAN) {
+    return "taskId" in holder ? { kind: LINK_PLACE.TASK, planId: holder.taskId } : undefined;
+  }
+  if (isPageTab(tab)) {
+    return "taskId" in holder
+      ? { kind: LINK_PLACE.PAGE, planId: holder.taskId, pageId: tab.page }
+      : { kind: LINK_PLACE.PAGE, agentId: holder.agentId, pageId: tab.page };
+  }
+  // A Changes tab on another pull request of the agent's repository, by its number, is no place a link names.
+  if (isChangesTab(tab)) {
+    return tab.number === undefined
+      ? { kind: LINK_PLACE.CHANGES, agentId: tab.changes }
+      : undefined;
+  }
   if (!isSubagentTab(tab)) return undefined;
-  const agent = tab.delegation?.agent;
+  const agent = tab.delegation?.agent ?? ("agentId" in holder ? holder.agentId : undefined);
   return agent === undefined
-    ? { kind: LINK_PLACE.WORKER, planId: taskId, callId: tab.subagent }
-    : { kind: LINK_PLACE.WORKER, planId: taskId, agentId: agent, callId: tab.subagent };
+    ? undefined
+    : { kind: LINK_PLACE.WORKER, agentId: agent, callId: tab.subagent };
 }
 
 /** What a side panel tab's link is called, by the kind of place it names; none for a kind no tab of the panel shows. */
@@ -158,11 +179,15 @@ function panelThing(place: LinkPlace): LinkThing | undefined {
   }
 }
 
-/** An Inbox item's place, under the task or the agent with no task that holds it. */
+/** An Inbox item's place, under its agent; under its task only while an older link opened it naming no agent. */
 function inboxItemPlace(chosen: InboxChoice): LinkPlace {
-  return "taskId" in chosen
-    ? { kind: LINK_PLACE.INBOX_ITEM, planId: chosen.taskId, itemId: chosen.itemId }
-    : { kind: LINK_PLACE.INBOX_ITEM, agentId: chosen.agentId, itemId: chosen.itemId };
+  if (!("taskId" in chosen)) {
+    return { kind: LINK_PLACE.INBOX_ITEM, agentId: chosen.agentId, itemId: chosen.itemId };
+  }
+  const { taskId, itemAgentId, itemId } = chosen;
+  return itemAgentId === undefined
+    ? { kind: LINK_PLACE.INBOX_ITEM, planId: taskId, itemId }
+    : { kind: LINK_PLACE.INBOX_ITEM, agentId: itemAgentId, itemId };
 }
 
 /** The links of an Inbox narrowed to a channel: its chosen thread's, a step of its own where it stands alone, and the channel's. */
@@ -176,7 +201,7 @@ function channelLinks(
   const { chosen } = tasks.inboxView;
   if (chosen === undefined) return [at(channel, LINK_THING.CHANNEL, true)];
   const item = inboxItemPlace(chosen);
-  if (alone && !tasks.inboxView.listed) {
+  if (alone) {
     return [at(item, LINK_THING.THREAD, true), at(channel, LINK_THING.CHANNEL, false)];
   }
   return [at(item, LINK_THING.THREAD, false), at(channel, LINK_THING.CHANNEL, true)];
@@ -214,11 +239,13 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
     agentId === undefined
       ? undefined
       : {
-          link: { workspace, place: { kind: LINK_PLACE.AGENT, planId: drawn.id, agentId } },
+          link: { workspace, place: { kind: LINK_PLACE.AGENT, agentId } },
           thing: LINK_THING.AGENT,
           name: tasks.agents.agents?.find((each) => each.id === agentId)?.title ?? undefined,
         };
-  const held = tasks.sidePanel.open ? panelTabPlace(drawn.id, tasks.sidePanel.tab) : undefined;
+  const held = tasks.sidePanel.open
+    ? panelTabPlace({ taskId: drawn.id }, tasks.sidePanel.tab)
+    : undefined;
   const thing = held === undefined ? undefined : panelThing(held);
   const panel: LinkAtHand | undefined =
     held === undefined || thing === undefined
@@ -270,13 +297,11 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     const page = at.pageWorkspace;
     const home = page?.agentId === agentId ? slugOf(tasks.workspaces, page.workspaceId) : listed;
     const own = at_({ kind: LINK_PLACE.AGENT, agentId }, LINK_THING.AGENT, home);
-    // A page the agent showed on itself, open in the panel beside it, is at hand under the agent's link, first where the panel holds the keys.
-    const tab = tasks.sidePanel.open ? tasks.sidePanel.tab : undefined;
-    if (tab === undefined || !isPageTab(tab)) return [own];
-    const shown: LinkAtHand = {
-      link: { workspace: home, place: { kind: LINK_PLACE.PAGE, agentId, pageId: tab.page } },
-      thing: LINK_THING.PAGE,
-    };
+    // A tab of the panel beside it with a link of its own, a page the agent showed, its Changes, or a worker's, is at hand under the agent's link, first where the panel holds the keys.
+    const held = tasks.sidePanel.open ? panelTabPlace({ agentId }, tasks.sidePanel.tab) : undefined;
+    const thing = held === undefined ? undefined : panelThing(held);
+    if (held === undefined || thing === undefined) return [own];
+    const shown: LinkAtHand = { link: { workspace: home, place: held }, thing };
     return at.sidePanelFocused || tasks.sidePanel.fullScreen ? [shown, own] : [own, shown];
   }
   // A person's page is theirs in the workspace it opened in, which their link names.
@@ -297,7 +322,7 @@ function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] 
     if (chosen === undefined) return [inbox];
     const item = inboxItemPlace(chosen);
     // An item standing alone, in a narrow room or an Inbox showing one column by its own width, is a step of its own.
-    if ((at.narrow === true || tasks.inboxView.single === true) && !tasks.inboxView.listed) {
+    if (at.narrow === true || tasks.inboxView.single === true) {
       return [
         at_(item, LINK_THING.INBOX_ITEM),
         within({ kind: LINK_PLACE.INBOX }, LINK_THING.INBOX),
@@ -363,10 +388,12 @@ export function usePageWorkspace(agentId: string, workspaceId: string | undefine
 }
 
 /**
- * The window's Copy link: ⌥⌘C, offered while anything has a link and the
+ * The window's Copy link: ⇧⌘C, offered while anything has a link and the
  * window is `enabled`, copying the first link at hand as the keyboard
  * stands at the press, and saying "Link copied"; and the links at hand,
- * with their copy, for the command palette to offer each.
+ * with their copy, for the command palette to offer each. The first link
+ * as the keyboard stands outside the side panel and in it is held for the
+ * menus, whose Copy link prints the chord where it copies the same.
  */
 export function useCopyLink(
   tasks: TasksControl,
@@ -396,6 +423,11 @@ export function useCopyLink(
         }
       : undefined,
   );
+  const firstLink = (sidePanelFocused: boolean): string | undefined => {
+    const first = enabled ? linksAt(sidePanelFocused)[0] : undefined;
+    return first === undefined ? undefined : linkOf(first.link.place, first.link.workspace);
+  };
+  useHoldChordLinks(firstLink(false), firstLink(true));
   const standing = linksAt(false).find((each) => each.step === true)?.link;
   return { linksAt, standing, copy, onPageWorkspace };
 }

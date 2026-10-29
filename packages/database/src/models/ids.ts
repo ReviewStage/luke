@@ -1,4 +1,4 @@
-import { brainHostId } from "@luke/wire/host-ids";
+import { hostMintedId } from "@luke/wire/host-ids";
 
 /**
  * The ids the host mints for what eve's stream names only relatively. A turn
@@ -26,19 +26,19 @@ const ID_KIND = {
  * its subagent's record.
  */
 export function childConversationId(parentConversationId: string, callId: string): string {
-  return brainHostId([ID_KIND.CHILD, parentConversationId, callId]);
+  return hostMintedId([ID_KIND.CHILD, parentConversationId, callId]);
 }
 
 /** The store's id for one turn of one eve session. */
 export function hostTurnId(sessionId: string, eveTurnId: string): string {
-  return brainHostId([ID_KIND.TURN, sessionId, eveTurnId]);
+  return hostMintedId([ID_KIND.TURN, sessionId, eveTurnId]);
 }
 
 /** The developer's line a turn opened with and, under its ordinal from one, each line that joined the turn under way; the first keeps the coordinate it always had. */
 export function receivedMessageId(sessionId: string, eveTurnId: string, ordinal = 0): string {
   const parts = [ID_KIND.RECEIVED, sessionId, eveTurnId];
   if (ordinal > 0) parts.push(String(ordinal));
-  return brainHostId(parts);
+  return hostMintedId(parts);
 }
 
 /**
@@ -47,12 +47,12 @@ export function receivedMessageId(sessionId: string, eveTurnId: string, ordinal 
  * conversation shares, so a batch posted again opens the same turn.
  */
 export function nativeTurnId(conversationId: string, openingSequence: number): string {
-  return brainHostId([ID_KIND.NATIVE_TURN, conversationId, String(openingSequence)]);
+  return hostMintedId([ID_KIND.NATIVE_TURN, conversationId, String(openingSequence)]);
 }
 
 /** The client id of the assistant message a turn completes; the turn's id is its journal's client id already, so this is another. */
 export function answerMessageId(sessionId: string, eveTurnId: string): string {
-  return brainHostId([ID_KIND.ANSWER, sessionId, eveTurnId]);
+  return hostMintedId([ID_KIND.ANSWER, sessionId, eveTurnId]);
 }
 
 /** The id a reasoning item stands under, since eve's stream carries none of the provider's. */
@@ -62,5 +62,11 @@ export function reasoningItemId(
   stepIndex: number,
   ordinal: number,
 ): string {
-  return brainHostId([ID_KIND.REASONING, sessionId, eveTurnId, String(stepIndex), String(ordinal)]);
+  return hostMintedId([
+    ID_KIND.REASONING,
+    sessionId,
+    eveTurnId,
+    String(stepIndex),
+    String(ordinal),
+  ]);
 }

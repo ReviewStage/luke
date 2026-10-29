@@ -3,7 +3,7 @@
  */
 
 import type { CodeRef } from "@luke/features/task-wire";
-import type { TaskCode } from "@luke/features/tasks-view";
+import type { SnippetLines } from "./code-snippet-model.js";
 
 /** A reference as a place names it, read from a call's input or a stored note, its lines absent for a whole file. */
 export interface NamedLines {
@@ -37,7 +37,7 @@ function isPointed(ref: CodeRef, line: number): boolean {
 }
 
 /** What a card's copy carries: the lines pointed at as plain text, or every line the card draws for a whole file. */
-export function copiedLines(code: Pick<TaskCode, "ref" | "firstLine" | "lines">): string {
+export function copiedLines(code: SnippetLines): string {
   const kept = code.lines.filter(
     (_line, at) => code.ref.startLine === undefined || isPointed(code.ref, code.firstLine + at),
   );

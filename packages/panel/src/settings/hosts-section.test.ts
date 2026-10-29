@@ -6,6 +6,7 @@ import { it } from "@effect/vitest";
 import { DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import type { Host } from "@luke/features/host-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { THIS_MAC_HOST_STANDING, type ThisMacHostStanding } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import { timeRuntime } from "@luke/ui";
@@ -82,9 +83,9 @@ test("Add hosts shows the token in its command and sends the service only the to
   await settle();
 
   const add = [...document.querySelectorAll("button")].find(
-    (each) => each.textContent === "Add Linux servers",
+    (each) => each.textContent === "Add hosts",
   );
-  assert.ok(add !== undefined, "Add Linux servers is drawn");
+  assert.ok(add !== undefined, "Add hosts is drawn");
   await act(async () => add.click());
   await settle();
 
@@ -154,3 +155,80 @@ it.effect(
       registry.dispose();
     }),
 );
+
+/** Hosts drawn in the desktop over the hosts given, with This Mac standing as given; how often Retry or Turn on again was asked. */
+async function machinesWithThisMac(
+  hosts: readonly Host[],
+  standing: ThisMacHostStanding,
+): Promise<{ turnOns: () => number }> {
+  handState(experimentsOn(EXPERIMENT.LOCAL_AGENTS));
+  let turnOns = 0;
+  fakeActPort({
+    [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
+    [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }),
+    [ACT_KIND.THIS_MAC_HOST_READ]: () => Promise.resolve(standing),
+    [ACT_KIND.THIS_MAC_HOST_TURN_ON]: () => {
+      turnOns += 1;
+      return Promise.resolve(standing);
+    },
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(HostsSection, { signedIn: true })));
+  await settle();
+  return { turnOns: () => turnOns };
+}
+
+/** The button whose words are these, pressed. */
+async function press(words: string): Promise<void> {
+  const button = [...document.querySelectorAll("button")].find(
+    (each) => each.textContent === words,
+  );
+  assert.ok(button !== undefined, `${words} is drawn`);
+  await act(async () => button.click());
+  await settle();
+}
+
+test("this Mac stands first on its own machine's row, with why its setup failed and Retry", async () => {
+  const mac = "7a1c9e3b-2f4d-4c6a-8b0e-5d7f9a1c3e52";
+  const { turnOns } = await machinesWithThisMac(
+    [
+      {
+        id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14",
+        name: "fra-03",
+        seenAt: 0,
+        version: "0.1.0",
+        upgradeNeeded: false,
+      },
+      {
+        id: mac,
+        name: "Studio",
+        platform: DEVICE_PLATFORM.DARWIN,
+        seenAt: 0,
+        version: "0.1.0",
+        upgradeNeeded: false,
+      },
+    ],
+    {
+      standing: THIS_MAC_HOST_STANDING.SETUP_FAILED,
+      reason: "the image pull timed out",
+      deviceId: mac,
+    },
+  );
+  const text = document.body.textContent ?? "";
+
+  assert.ok(text.indexOf("Studio (this Mac)") < text.indexOf("fra-03"), "this Mac stands first");
+  assert.ok(text.includes("the image pull timed out"));
+  await press("Retry");
+  assert.equal(turnOns(), 1);
+});
+
+test("a Mac the service no longer lists keeps a This Mac row with Turn on again", async () => {
+  const { turnOns } = await machinesWithThisMac([], { standing: THIS_MAC_HOST_STANDING.REMOVED });
+
+  assert.ok(document.body.textContent?.includes("Removed from Luke."));
+  await press("Turn on again");
+  assert.equal(turnOns(), 1);
+});

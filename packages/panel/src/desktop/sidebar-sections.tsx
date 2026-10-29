@@ -6,6 +6,12 @@ import {
   type TaskSections,
   type TaskSectionWrite,
 } from "@luke/features/task-section-wire";
+import {
+  applySectionWrite,
+  memberOf,
+  type SectionEntry,
+  type SectionMember,
+} from "@luke/features/task-section-writes";
 import type { TaskSummary } from "@luke/features/task-wire";
 import {
   BUTTON_SIZE,
@@ -18,13 +24,11 @@ import {
   GROUP_HEADING,
   GroupHeader,
   LAYOUT_ELEMENT,
-  MarkDoneIcon,
   MoreButton,
   motionKey,
   NOTE_LINE_LOOK,
   NoteLine,
   nextRowOrHead,
-  PencilIcon,
   Stack,
   TextField,
   TrashIcon,
@@ -35,22 +39,17 @@ import {
 import { FolderOutputIcon, GLYPH, MailOpenIcon } from "@luke/ui/icons";
 import { TASK_ROW, type TaskRow, taskRowKey } from "@luke/ui/task-list-model";
 import {
-  applySectionWrite,
-  memberOf,
   memberSection,
   placeAllWrites,
   placeWrites,
-  type SectionEntry,
-  type SectionMember,
   sectionMoveWrites,
   sectionOrder,
   unplaceAllWrites,
   workspaceSections,
 } from "@luke/ui/task-sections-model";
-import { SETTLED_STATUS, settleOffered } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
-import { commandHead, PANEL_COMMAND } from "../command-items.js";
+import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { undoToast, useToast } from "../toast.js";
@@ -58,6 +57,7 @@ import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { type RowPlace, RowPlaced, useRowMoveKeys, withRowMoves } from "./row-moves.js";
 import { SectionIconPicker, sectionGlyph } from "./section-icon-picker.js";
 import { foldedCount, SIDEBAR_SECTION_SLOT, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
+import { sharedStatus, statusSubmenu } from "./standing-submenus.js";
 import { useFormDialog } from "./use-form-dialog.js";
 import { useRowDrag } from "./use-row-drag.js";
 
@@ -68,12 +68,12 @@ import { useRowDrag } from "./use-row-drag.js";
  * is a teammate's. Each stands under a header like a repository's, its icon
  * where a repository's picture stands, or its title alone where it has none,
  * folded and kept as a repository's
- * fold is, with Edit section and Delete section on its ⋯ and a right-click,
- * and between them, while it holds rows, what acts on all of them at once:
- * Mark all as read while any task is unread, Move all to section, to another section
- * or a new one and Remove all from section, which take its agents with
- * its tasks, and Mark all done, which sets its tasks all Done and asks
- * nothing, as a repository's does. An agent with no task stands among its
+ * fold is, with Rename, which edits its title and icon, and Delete section on
+ * its ⋯ and a right-click, and between them, while it holds rows, what acts
+ * on all of them at once: Mark all as read while any task is unread, Status,
+ * which sets its tasks all at one and asks nothing, as a repository's does,
+ * and Move all to section, to another section or a new one, and Remove all
+ * from section, which take its agents with its tasks. An agent with no task stands among its
  * tasks as a task does, in the one order, and is dragged as one.
  * Its rows stand in the order dragged, and a row is dragged within its
  * section, into another, onto Tasks, which takes it out of every section,
@@ -379,8 +379,6 @@ interface SectionDoors {
   /** The section's ⋯, which its menu opens from and hands focus back to. */
   readonly opener: React.RefObject<HTMLElement | null>;
   readonly onMarkRead: () => void;
-  /** Sets every task Done. */
-  readonly onMarkDone: () => void;
 }
 
 /**
@@ -415,11 +413,12 @@ function moveTasksEntry(drawn: DrawnSection, context: SectionContext): MenuEntry
 }
 
 /**
- * A section's menu: Edit section, then what acts on every row it draws
- * while it draws any, then Delete section. Only the rows drawn are acted
- * on, so one kept in it but pinned or archived, which it draws not, is
- * left where it stands; what only a task takes, a read mark or Done, acts
- * on its tasks alone.
+ * A section's menu: Rename, which edits its title and icon, and Mark all as
+ * read; then Status for its tasks; then Move all to section and Remove all
+ * from section; then Delete section. Only the rows drawn are acted on, so
+ * one kept in it but pinned or archived, which it draws not, is left where
+ * it stands; what only a task takes, a read mark or a status, acts on its
+ * tasks alone.
  */
 function sectionActionGroups(
   drawn: DrawnSection,
@@ -429,7 +428,7 @@ function sectionActionGroups(
   const { section } = drawn;
   const { tasks, dialogs } = context;
   const edit: MenuEntry[] = [
-    { label: "Edit section", icon: <PencilIcon />, onSelect: () => dialogs.askEdit(section) },
+    commandAction(PANEL_COMMAND.RENAME, () => dialogs.askEdit(section), false),
   ];
   const remove: MenuEntry[] = [
     {
@@ -444,19 +443,25 @@ function sectionActionGroups(
   const read: MenuEntry[] = held.some(context.unread)
     ? [{ label: "Mark all as read", icon: <MailOpenIcon />, onSelect: doors.onMarkRead }]
     : [];
-  const bulk: MenuEntry[] = [
-    ...read,
+  const status: MenuEntry[] =
+    held.length === 0
+      ? []
+      : [
+          statusSubmenu(
+            tasks,
+            held.map(({ id }) => id),
+            sharedStatus(held),
+          ),
+        ];
+  const organize: MenuEntry[] = [
     moveTasksEntry(drawn, context),
     {
       label: "Remove all from section",
       icon: <FolderOutputIcon />,
       onSelect: () => tasks.onWriteSections(unplaceAllWrites(drawn.entries.map(memberOf))),
     },
-    ...(held.some((task) => settleOffered(task, SETTLED_STATUS.DONE))
-      ? [{ label: "Mark all done", icon: <MarkDoneIcon />, onSelect: doors.onMarkDone }]
-      : []),
   ];
-  return [edit, bulk, remove];
+  return [[...edit, ...read], status, organize, remove].filter((group) => group.length > 0);
 }
 
 /**
@@ -539,11 +544,6 @@ function SidebarSection({
     onMarkRead: () => {
       for (const task of held.filter(context.unread)) reads.mark(task, false);
     },
-    onMarkDone: () =>
-      tasks.onSettleTasks(
-        held.map(({ id }) => id),
-        SETTLED_STATUS.DONE,
-      ),
   });
   const glyph = sectionGlyph(section.icon);
   return (

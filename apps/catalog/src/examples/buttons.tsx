@@ -6,19 +6,15 @@ import {
   BUTTON_VARIANT,
   Button,
   ButtonLink,
-  CloseIcon,
   GAP,
   IconButton,
   IconButtonLink,
   Inline,
-  MicrophoneIcon,
-  MicrophoneOffIcon,
   MoreButton,
   PinIcon,
   PlusIcon,
   RetryIcon,
   SidebarIcon,
-  SpeakerIcon,
   Stack,
   SUBMIT_STATE,
   TEXT_TONE,
@@ -35,9 +31,9 @@ import { CatalogSection } from "../section";
  * unavailable but focusable, and busy; a busy Save and Upload that land on a
  * check when Succeed ends them and just stop when Fail does; a Retry and a
  * Reload whose arrows turn once at each press; the IconButton's looks and toggle;
- * ButtonLink's looks and an IconButtonLink; the round shape a call's
- * controls take, a danger toggle off and on; the compact marks a row reveals
- * at its end, and a compact labelled button among words; a message's submit in each of its states, and unavailable; and
+ * ButtonLink's looks and an IconButtonLink; the compact marks a row reveals
+ * at its end, and a compact labelled button among words; a yes or no whose
+ * recommended press wears its badge, offered and recorded; a message's submit in each of its states, and unavailable; and
  * a long label in a narrow column.
  */
 
@@ -150,37 +146,6 @@ function Buttons(): React.JSX.Element {
           <IconButtonLink href="#buttons-link" icon={<PlusIcon />} label="New plan" />
         </Inline>
       </CatalogSection>
-      <CatalogSection id="buttons-round" title="Round, as a call's controls">
-        <Inline>
-          <Button
-            variant={BUTTON_VARIANT.PRIMARY}
-            shape={BUTTON_SHAPE.ROUND}
-            icon={<MicrophoneIcon />}
-          >
-            Talk about this task
-          </Button>
-          <IconButton
-            icon={<SpeakerIcon />}
-            label="Mute speaker"
-            variant={BUTTON_VARIANT.DANGER}
-            shape={BUTTON_SHAPE.ROUND}
-            pressed={false}
-          />
-          <IconButton
-            icon={<MicrophoneOffIcon />}
-            label="Unmute microphone"
-            variant={BUTTON_VARIANT.DANGER}
-            shape={BUTTON_SHAPE.ROUND}
-            pressed
-          />
-          <IconButton
-            icon={<CloseIcon />}
-            label="End call"
-            variant={BUTTON_VARIANT.INK}
-            shape={BUTTON_SHAPE.ROUND}
-          />
-        </Inline>
-      </CatalogSection>
       <CatalogSection id="buttons-compact" title="Compact, a row's marks">
         <Inline gap={GAP.TIGHT}>
           <IconButton icon={<PinIcon />} label="Pin" size={BUTTON_SIZE.COMPACT} />
@@ -206,6 +171,32 @@ function Buttons(): React.JSX.Element {
             Unavailable
           </Button>
         </Inline>
+      </CatalogSection>
+      <CatalogSection id="buttons-badge" title="With a badge, offered and recorded">
+        <Stack gap={GAP.TIGHT}>
+          <Inline gap={GAP.TIGHT}>
+            <Button size={BUTTON_SIZE.COMPACT} variant={BUTTON_VARIANT.OUTLINE} badge="Recommended">
+              Approve
+            </Button>
+            <Button size={BUTTON_SIZE.COMPACT} variant={BUTTON_VARIANT.OUTLINE}>
+              Decline
+            </Button>
+          </Inline>
+          <Inline gap={GAP.TIGHT}>
+            <Button
+              size={BUTTON_SIZE.COMPACT}
+              variant={BUTTON_VARIANT.OUTLINE}
+              badge="Recommended"
+              pressed
+              readOnly
+            >
+              Approve
+            </Button>
+            <Button size={BUTTON_SIZE.COMPACT} variant={BUTTON_VARIANT.OUTLINE} readOnly>
+              Decline
+            </Button>
+          </Inline>
+        </Stack>
       </CatalogSection>
       <CatalogSection id="buttons-submit" title="A message's submit">
         <Inline>

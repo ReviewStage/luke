@@ -10,6 +10,7 @@ import {
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCallFailure,
+  type AutomationRunView,
   type AutomationView,
 } from "@luke/features/automation-view";
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
@@ -59,10 +60,9 @@ import {
   VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, actorName } from "@luke/ui/actor-model";
-import { GLYPH } from "@luke/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { BotIcon, PlusIcon, ZapIcon } from "lucide-react";
-import { Fragment, useCallback, useRef, useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
@@ -72,11 +72,15 @@ import { useSentryRead } from "../settings/use-sentry-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { type MenuAction, rowMenu } from "./action-menu.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
+import { rowMenu } from "./action-menu.js";
 import {
   AutomationEditor,
   AutomationPageSkeleton,
   AutomationSwitch,
+  automationActionGroups,
+  RUN_REFUSAL_WORDS,
+  runNowAction,
   type SentryOffer,
 } from "./automation-editor.js";
 import {
@@ -239,6 +243,33 @@ function MakerCell({
 }
 
 /**
+ * Run now from a row of the list, dimmed while one is out: the run it makes
+ * is pushed to the row as it lands, and a refusal is said in a toast, since
+ * the row has no line of its own to say it in, as the editor does.
+ */
+function useRunNow(automationId: string): { readonly running: boolean; readonly run: () => void } {
+  const { act } = useAct();
+  const toast = useToast();
+  const [running, setRunning] = useState(false);
+  const run = () => {
+    setRunning(true);
+    act(ACT_KIND.AUTOMATIONS_RUN, { automationId, idempotencyKey: crypto.randomUUID() })
+      .catch((): AutomationRunView => ({ failure: AUTOMATION_CALL_FAILURE.UNANSWERED }))
+      .then((answer) => {
+        setRunning(false);
+        if ("failure" in answer) {
+          toast({
+            words: RUN_REFUSAL_WORDS[answer.failure],
+            tone: STATUS_TONE.DANGER,
+            hold: TOAST_HOLD.FAILED,
+          });
+        }
+      });
+  };
+  return { running, run };
+}
+
+/**
  * One automation's row: its tile, the glyph of what fires it wearing where its newest run
  * stands, its name over what fires it, who made it, when it runs next with a
  * failure's mark before it, and its switch, hanging the automation's card. The maker and the next run each keep a column of their
@@ -269,21 +300,11 @@ function AutomationRow({
   /** Asks whether to delete it. */
   onDelete: () => void;
 }): React.JSX.Element {
+  const runNow = useRunNow(automation.id);
   const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
   const next = automationNext(automation);
   const nextWords = automationNextText(automation, now);
-  // Note that the row's item is its press's parent, which its card counts as its control, as a sidebar task's row does.
-  const item = useRef<HTMLElement | null>(null);
-  const hold = useCallback((node: HTMLElement | null) => {
-    item.current = node?.parentElement ?? null;
-  }, []);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
-  const remove: MenuAction = {
-    label: "Delete",
-    icon: <GLYPH.DELETE />,
-    onSelect: onDelete,
-    danger: true,
-  };
   // Note that the glyph is the row's decoration, so its working word is said in the row's words instead.
   const working = state === GLYPH_STATE.WORKING ? glyphStateWords(state, false) : undefined;
   const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
@@ -291,11 +312,8 @@ function AutomationRow({
   return (
     <RowHintOptions
       card={<AutomationCard automation={automation} workspaceName={workspace?.name} />}
-      cardBeside
-      cardRegion={item}
     >
       <ListRow
-        ref={hold}
         leading={<ActorMark actor={automationActor(automation)} size={ACTOR_SIZE.ROW} />}
         title={
           <span
@@ -346,7 +364,14 @@ function AutomationRow({
         actions={<AutomationSwitch automation={automation} write={onToggle} />}
         hint={{ Hint: RowHint, label: automation.name }}
         onPress={onOpen}
-        menu={rowMenu(ROW_THING, copyLink === undefined ? [[remove]] : [[copyLink], [remove]])}
+        menu={rowMenu(
+          ROW_THING,
+          automationActionGroups({
+            copyLink,
+            runNow: runNowAction(runNow.running, runNow.run),
+            onDelete,
+          }),
+        )}
         motionKey={automation.id}
       />
     </RowHintOptions>

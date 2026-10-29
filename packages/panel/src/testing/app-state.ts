@@ -31,7 +31,6 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
       captureMode: false,
       fixtureMode: false,
       accountRequired: false,
-      agentTraceEnabled: false,
     },
     settings: appSettingsWire(settingsView({ experiments })),
     account: {
@@ -48,10 +47,9 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
       upToDate: false,
     },
     audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
-    voice: {},
     tasks: IDLE_TASKS_VIEW,
-    codingAgents: { unseen: [] },
-    inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [] },
+    agents: { unseen: [] },
+    inbox: { waiting: [], tasks: [], taskless: [], automations: [], agents: [], failedRuns: [] },
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
@@ -60,28 +58,13 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
   };
 }
 
-/**
- * A document as main's push delivers it to a window that holds none of it
- * yet: every entry, and the call transcript as the change from no lines.
- */
+/** A document as main's push delivers it to a window that holds none of it yet: every entry. */
 export function deliveryOf(snapshot: AppStateSnapshot): AppStateDelivery {
-  const { version, callTranscript, ...entries } = snapshot;
-  return {
-    version,
-    entries,
-    ...(callTranscript === undefined
-      ? undefined
-      : {
-          callTranscript: {
-            voiceSessionId: callTranscript.voiceSessionId,
-            from: 0,
-            lines: callTranscript.lines,
-          },
-        }),
-  };
+  const { version, ...entries } = snapshot;
+  return { version, entries };
 }
 
-/** Main's document with the account's experiments as given and the slices patched: a call standing, the window's facts. */
+/** Main's document with the account's experiments as given and the slices patched, the window's facts among them. */
 export function stateWith(
   experiments: ExperimentChoices,
   patch: Partial<AppStateSnapshot>,

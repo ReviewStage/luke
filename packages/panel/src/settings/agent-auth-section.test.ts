@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -27,7 +27,7 @@ import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-plat
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { CodingAgentsPage } from "./coding-agents-page.js";
+import { AgentsPage } from "./agents-page.js";
 
 /**
  * Settings › Agents' harnesses over a bridge answering as the service would:
@@ -90,10 +90,10 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
   sent.push(request);
   const subscriptions = held.subscriptions ?? [];
   switch (request.kind) {
-    case ACT_KIND.CODING_AGENTS_MODELS:
+    case ACT_KIND.AGENTS_MODELS:
       return Promise.resolve(done({ models: [] }));
-    case ACT_KIND.CODING_AGENTS_DEFAULT_READ:
-      return Promise.resolve(done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+    case ACT_KIND.AGENTS_DEFAULT_READ:
+      return Promise.resolve(done({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
     case ACT_KIND.CHAPTERS_MODEL_READ:
       return Promise.resolve(done({ model: CHAPTERS_MODEL.HAIKU }));
     case ACT_KIND.WEB_OPEN:
@@ -171,9 +171,7 @@ async function mount(
   const root = createRoot(container);
   roots.push(root);
   act(() =>
-    root.render(
-      onRegistry(AtomRegistry.make(), createElement(CodingAgentsPage, { signedIn: true })),
-    ),
+    root.render(onRegistry(AtomRegistry.make(), createElement(AgentsPage, { signedIn: true }))),
   );
   await settle();
   return container;
@@ -367,7 +365,7 @@ test("the dialog's radios pick the plan or the key as the default, sent as the p
   assert.deepEqual(rowState(both, "Claude"), connectedWith("Connected with a subscription"));
 });
 
-test("an API key is pasted into a masked field with an eye, sent once, drawn as its hint with a check, and removed from its ⋯ after asking", async () => {
+test("an API key is pasted into a masked field with an eye, sent once, drawn as its hint with a check, and removed with its Remove key button after asking", async () => {
   const logged = [vi.spyOn(console, "log"), vi.spyOn(console, "error"), vi.spyOn(console, "warn")];
   const page = await mount();
   const dialog = await open(page, "Claude");
@@ -406,12 +404,7 @@ test("an API key is pasted into a masked field with an eye, sent once, drawn as 
   }
   assert.ok(dialog.querySelector(".ph-no-capture input"), "the dialog's fields are not recorded");
 
-  await press(card(dialog, "API key"), "Anthropic key actions");
-  const remove =
-    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-      (item) => item.textContent === "Remove key",
-    ) ?? assert.fail("no Remove key");
-  act(() => remove.click());
+  await press(card(dialog, "API key"), "Remove key");
   await settle();
   assert.equal(
     sent.some((each) => each.kind === ACT_KIND.PROVIDER_KEYS_REMOVE),
@@ -551,10 +544,7 @@ test("a ChatGPT sign-in OpenAI no longer honors says its sign-in expired, and ho
   const page = await mount();
   assert.deepEqual(rowState(page, "Codex"), needsHand("Sign-in expired"));
   const dialog = await open(page, "Codex");
-  assert.match(
-    card(dialog, "Subscription").textContent ?? "",
-    /Sign-in expired\.(?! Sign in)/u,
-  );
+  assert.match(card(dialog, "Subscription").textContent ?? "", /Sign-in expired\.(?! Sign in)/u);
 });
 
 test("Codex's subscription signs in with ChatGPT on the desktop, meets the first sign-in with OpenAI's notice once, and disconnects after asking", async () => {

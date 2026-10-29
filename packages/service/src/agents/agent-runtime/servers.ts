@@ -9,7 +9,7 @@
  * account, is handed to none of its agents. The brain agents are handed
  * every one offered. A coding agent is handed every one but those the
  * developer switched off for it from its composer, which writes
- * the agent's `disabled_servers` (`coding-agent-store.ts`); its worker's
+ * the agent's `disabled_servers` (`agent-store.ts`); its worker's
  * session is admitted for its parent's conversation, so it follows its
  * parent agent's switches. A server the developer mentioned in a message to
  * a coding agent (`@Linear`) is handed to the next turn the agent starts
@@ -32,9 +32,6 @@
  * A provider with more than one account handed tells the model which each
  * is by its label alone, quoted as a string the label cannot step out of,
  * and to ask which one where the developer has not said, before it writes.
- * A conversation whose workspace connected Linear for every member is
- * handed Linear once, bare, because every Linear call of its turns runs on
- * the workspace's grant.
  *
  * The read fails closed: a turn whose admission or row could not be read is
  * handed no server, so one the developer switched off never comes back on
@@ -47,15 +44,14 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import {
-  readCodingAgentOfConversation,
-  takeCodingAgentMentionedServers,
-} from "@luke/database/models/coding-agent-store";
+  readAgentOfConversation,
+  takeAgentMentionedServers,
+} from "@luke/database/models/agent-store";
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
   INTEGRATION_LABEL_MAX,
   INTEGRATION_NAME,
-  INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
   integrationAccountNames,
@@ -75,11 +71,7 @@ import {
   type IntegrationConnectionRow,
   readIntegrationConnections,
 } from "../../integrations/integration-store.js";
-import {
-  readConversationWorkspace,
-  readWorkspaceIntegration,
-} from "../../integrations/workspace-integration-store.js";
-import type { ConversationAdmission } from "../brain-host/conversation.js";
+import type { ConversationAdmission } from "../eve-host/conversation.js";
 import { CONNECTION_POLICY, type ConnectionPolicy } from "./role.js";
 
 /** One connection a turn is handed: one account at a provider, by the name it goes by. */
@@ -127,7 +119,7 @@ function takenMentions(
   conversationId: string,
 ): Effect.Effect<readonly string[], never, DatabaseServices> {
   if (policy !== CONNECTION_POLICY.AGENT_SWITCHES_AND_MENTIONS) return Effect.succeed([]);
-  return takeCodingAgentMentionedServers(userId, conversationId).pipe(
+  return takeAgentMentionedServers(userId, conversationId).pipe(
     Effect.catchCause((cause) =>
       Effect.as(
         Effect.logWarning(
@@ -203,22 +195,6 @@ function providerConnections(
 }
 
 /**
- * Whether the conversation's workspace connected Linear for every member,
- * standing connected or expired, so every member's Linear runs on its grant
- * (`../../integrations/integration-token.ts`).
- */
-const workspaceHoldsLinear = (conversationId: string) =>
-  Effect.gen(function* () {
-    const organizationId = yield* readConversationWorkspace(conversationId);
-    if (organizationId === undefined) return false;
-    const row = yield* readWorkspaceIntegration(organizationId, INTEGRATION_PROVIDER.LINEAR);
-    return (
-      row?.status === INTEGRATION_ROW_STATUS.CONNECTED ||
-      row?.status === INTEGRATION_ROW_STATUS.EXPIRED
-    );
-  });
-
-/**
  * The servers the turn starting is handed under the policy, among those
  * offered to the account: every one for a session admitted at all, and for
  * a coding agent every one its row does not list, and every one mentioned
@@ -246,17 +222,11 @@ export function turnServers(
         : connect[provider].configured,
     );
     const rows = yield* readIntegrationConnections(caller);
-    // Note that a workspace's own Linear is handed once, bare, because every Linear call of the turn runs on its grant, whatever account a label would name.
-    const workspaceLinear = yield* workspaceHoldsLinear(conversationId);
-    const handed = offered.flatMap((provider) =>
-      provider === INTEGRATION_PROVIDER.LINEAR && workspaceLinear
-        ? [{ provider, connectionName: provider, instanceKey: caller }]
-        : providerConnections(provider, rows, caller),
-    );
+    const handed = offered.flatMap((provider) => providerConnections(provider, rows, caller));
     if (policy === CONNECTION_POLICY.ALWAYS_ON) {
       return { on: true, account: userId, connections: handed } as const;
     }
-    const agent = yield* readCodingAgentOfConversation(userId, conversationId);
+    const agent = yield* readAgentOfConversation(userId, conversationId);
     if (Option.isNone(agent)) return SERVERS_OFF;
     const { disabledServers } = agent.value;
     // A native turn took its mentions as it started and names them here (`turnMentions`); an eve turn takes them now.

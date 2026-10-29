@@ -264,9 +264,12 @@ export function AttachmentChip({
     ((ready || uploading) && image !== undefined) ||
     state === ATTACHMENT_CHIP_STATE.LOADING ||
     (state === ATTACHMENT_CHIP_STATE.FAILED && failure === undefined && detail === undefined);
+  // The card wears what the chip does: the thumbnail of a picture, else the file's glyph.
+  const glyph =
+    image === undefined ? icon : <img className="rounded-luke-6 object-cover" src={image} alt="" />;
   const card = ready ? (
     <HoverCard data-attachment-card="">
-      <HoverCardHead glyph={icon} name={name} sub={detail} />
+      <HoverCardHead glyph={glyph} name={name} sub={detail} />
     </HoverCard>
   ) : undefined;
   return (

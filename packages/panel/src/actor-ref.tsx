@@ -8,7 +8,6 @@ import {
   automationTriggerText,
 } from "@luke/features/automation-list-model";
 import type { AutomationRunSummary, AutomationSummary } from "@luke/features/automation-wire";
-import { dateOfText } from "@luke/features/time-format";
 import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
@@ -17,18 +16,15 @@ import {
   type CommentAuthor,
   cn,
   FiringGlyph,
-  GAP,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
+  HoverCardList,
   HoverCardNote,
   HoverCardRow,
   HoverCardRule,
-  HoverCardScroll,
   INLINE_REF_LOOK,
   InlineRef,
-  LAYOUT_ELEMENT,
-  Stack,
   TEXT_BUTTON_LINES,
   TextButton,
   TIME_LOOK,
@@ -296,7 +292,7 @@ function Face({
           name={actorName(actor)}
           glyph={
             <StateGlyph
-              glyph={<AgentMark provider={actor.provider} />}
+              glyph={<AgentMark provider={actor.provider} operator={actor.operator} />}
               state={GLYPH_OF_STATE[actor.state]}
             />
           }
@@ -373,7 +369,7 @@ export function commentAuthor(actor: Actor): CommentAuthor {
         shape: AVATAR_SHAPE.SQUARE,
         glyph: (
           <StateGlyph
-            glyph={<AgentMark provider={actor.provider} />}
+            glyph={<AgentMark provider={actor.provider} operator={actor.operator} />}
             state={GLYPH_OF_STATE[actor.state]}
           />
         ),
@@ -599,16 +595,14 @@ export function BotBadge({ actor }: { actor: Actor }): React.JSX.Element | null 
   return githubBot(actor) ? <span className={`actor-bot ${QUIET_BADGE}`}>bot</span> : null;
 }
 
-/** An actor's card head: its mark at a card's size, its name, which `onOpen` makes the press that opens its page, the line under it, and its corner. */
+/** An actor's card head: its mark at a card's size, its name, which `onOpen` makes the press that opens its page, and the line under it. */
 function ActorHead({
   actor,
   sub,
-  corner,
   onOpen,
 }: {
   actor: Actor;
   sub?: ReactNode;
-  corner?: ReactNode;
   onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   const you = actor.kind === ACTOR_KIND.PERSON && actor.you;
@@ -632,12 +626,28 @@ function ActorHead({
         )
       }
       sub={sub}
-      corner={corner}
     />
   );
 }
 
-/** A person's card: their face, name, email, and role, then what they last did here where the place knows. A press on their name, not the card, opens their page. */
+/** A card's line under a name from the parts it has, one dot between each; none where it has none. */
+function subLine(...parts: readonly (string | undefined)[]): string | undefined {
+  const said = parts.filter((part): part is string => part !== undefined && part !== "");
+  return said.length === 0 ? undefined : said.join(" · ");
+}
+
+/** What someone last did in this plan, as a quieter row under their card's head. */
+function LatestRow({ latest }: { latest: ReactNode }): React.JSX.Element {
+  return (
+    <HoverCardRow
+      look={HOVER_CARD_ROW_LOOK.DETAIL}
+      glyph={<GLYPH.VERSION_CHANGES />}
+      label={latest}
+    />
+  );
+}
+
+/** A person's card: their face, name, and their email and role under it, then what they last did here where the place knows. A press on their name, not the card, opens their page. */
 export function PersonCard({
   actor,
   latest,
@@ -652,15 +662,9 @@ export function PersonCard({
     <HoverCard data-actor-card={actor.kind}>
       <ActorHead
         actor={actor}
-        sub={actor.email}
-        corner={actor.role === undefined ? undefined : ROLE_WORDS[actor.role]}
+        sub={subLine(actor.email, actor.role === undefined ? undefined : ROLE_WORDS[actor.role])}
       />
-      {latest === undefined ? null : (
-        <>
-          <HoverCardRule />
-          <HoverCardNote>{latest}</HoverCardNote>
-        </>
-      )}
+      {latest === undefined ? null : <LatestRow latest={latest} />}
     </HoverCard>
   );
 }
@@ -678,21 +682,16 @@ export function LukeCard({
   return (
     <HoverCard data-actor-card={ACTOR_KIND.LUKE}>
       <ActorHead actor={LUKE_ACTOR} sub={sub} />
-      {latest === undefined ? null : (
-        <>
-          <HoverCardRule />
-          <HoverCardNote>{latest}</HoverCardNote>
-        </>
-      )}
+      {latest === undefined ? null : <LatestRow latest={latest} />}
     </HoverCard>
   );
 }
 
 /** What a card says of someone the window cannot name, by why. */
 const SOMEONE_NOTES = {
-  [SOMEONE_REASON.FORMER]: "No longer in this workspace.",
+  [SOMEONE_REASON.FORMER]: "No longer in this workspace",
   [SOMEONE_REASON.UNNAMED]: "Luke can't say who made this change.",
-  [SOMEONE_REASON.EARLIER]: "The plan before its history began.",
+  [SOMEONE_REASON.EARLIER]: "The plan before its history began",
 } as const;
 
 /** Someone's card: the name the service still holds for a member who left, and why the window says no more. */
@@ -738,8 +737,7 @@ function GitHubCard({ actor }: { actor: GitHubActor }): React.JSX.Element {
             `@${actor.login}`
           )
         }
-        sub={actor.bot ? GITHUB_WORDS.APP : GITHUB_WORDS.USER}
-        corner={actor.bot ? undefined : GITHUB_WORDS.OUTSIDE}
+        sub={actor.bot ? GITHUB_WORDS.APP : subLine(GITHUB_WORDS.USER, GITHUB_WORDS.OUTSIDE)}
       />
     </HoverCard>
   );
@@ -774,8 +772,8 @@ export function automationRunActor(run: AutomationRunSummary, name: string): Act
 }
 
 /**
- * An automation's card: the glyph of what fires it, its name over those words, whose it
- * is at the corner, when it runs next, and how its last run went, and at
+ * An automation's card: the glyph of what fires it, its name over those words
+ * and whose it is, when it runs next, and how its last run went, and at
  * its foot, under a rule, who made it and when, as a channel's card says
  * it; one whose maker the members around it do not name has no foot. Note
  * that it offers no way to the automation's page under a rule, because
@@ -789,7 +787,7 @@ export function AutomationCard({
   onOpen,
 }: {
   automation: AutomationSummary;
-  /** The workspace's name, which a workspace automation's corner says. */
+  /** The workspace's name, which a workspace automation's line under its name says. */
   workspaceName: string | undefined;
   /** Opens the automation's page from the card's name, where the control hanging the card opens nothing of its own. */
   onOpen?: (() => void) | undefined;
@@ -802,11 +800,9 @@ export function AutomationCard({
     <HoverCard data-actor-card={actor.kind}>
       <ActorHead
         actor={actor}
-        sub={automationTriggerText(automation.trigger, automation.repositories ?? [])}
-        corner={automationOwnerName(
-          automationOwner(automation),
-          workspaceName,
-          automation.mine === true,
+        sub={subLine(
+          automationTriggerText(automation.trigger, automation.repositories ?? []),
+          automationOwnerName(automationOwner(automation), workspaceName, automation.mine === true),
         )}
         onOpen={onOpen}
       />
@@ -838,7 +834,12 @@ function AutomationMaker({
   return (
     <>
       <HoverCardRule />
-      <CreatedByRow actor={maker} at={automation.createdAt} now={now} />
+      <ProvenanceRow
+        verb={PROVENANCE_VERB.CREATED}
+        actor={maker}
+        at={automation.createdAt}
+        now={now}
+      />
     </>
   );
 }
@@ -997,50 +998,55 @@ function CardedFace({
   );
 }
 
-/** What a row of the count's card says of an actor: their name, a bot's badge after it, then what their face would say, wrapping within the card. */
-function MoreFaceWords({ actor, face }: { actor: Actor; face: StackFace }): React.JSX.Element {
+/** An actor's name as a row of the count's card says it, a bot's badge after it held to its line. */
+function MoreFaceName({ actor }: { actor: Actor }): React.JSX.Element {
   return (
-    <span className="actor-more-words min-w-0 wrap-anywhere [&_.actor-bot]:inline [&_.actor-bot]:whitespace-nowrap">
+    <>
       {faceName(actor, {})}
-      {/* Note that a no-break space holds the badge to its name's line however the row wraps. */}
+      {/* Note that a no-break space holds the badge to its name's line. */}
       {githubBot(actor) ? "\u00a0" : null}
       <BotBadge actor={actor} />
-      {face.says === undefined ? null : ` · ${face.says}`}
-    </span>
+    </>
   );
 }
 
 /**
  * The count past a pile's last face, which hangs a card naming each actor
  * it counts by their mark and what their face would say, so nobody the pile
- * leaves out is left unnamed, and is read to a screen reader as that list.
+ * leaves out is left unnamed, each a row of the card's list: their face,
+ * their name, and what their face says at its end. A screen reader hears
+ * the count as that list.
  */
 function MoreFaces({
   actors,
   faces,
   more,
+  label,
   spacing,
 }: {
   actors: readonly Actor[];
   faces: readonly StackFace[];
   more: string;
+  /** What the pile is, which names the card's list: "Reviewers". */
+  label: string;
   /** How far it stands from the face before it (`pileSpacing`). */
   spacing: string;
 }): React.JSX.Element {
   const names = actors.map((actor, index) => faceName(actor, faces[index] ?? {}));
   const card = (
     <HoverCard data-actor-card="more">
-      <HoverCardScroll>
-        <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM} className="actor-more-list">
-          {actors.map((actor, index) => (
-            // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
-            <li key={index} className="actor-more-row flex items-center gap-control-gap">
-              <ActorMark actor={actor} size={ACTOR_SIZE.STACK} />
-              <MoreFaceWords actor={actor} face={faces[index] ?? {}} />
-            </li>
-          ))}
-        </Stack>
-      </HoverCardScroll>
+      <HoverCardList label={label}>
+        {actors.map((actor, index) => (
+          // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
+          <li key={index} data-actor-more="">
+            <HoverCardRow
+              glyph={<ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />}
+              label={<MoreFaceName actor={actor} />}
+              end={faces[index]?.says}
+            />
+          </li>
+        ))}
+      </HoverCardList>
     </HoverCard>
   );
   return (
@@ -1051,6 +1057,9 @@ function MoreFaces({
     </Tooltip>
   );
 }
+
+/** What the count's card names its list where the pile names itself nothing. */
+const MORE_FACES_LABEL = "Everyone else";
 
 /**
  * How many more a pile holds, in a pill of a face's height on the tile,
@@ -1146,6 +1155,7 @@ export function ActorStack({
           actors={actors.slice(drawn)}
           faces={faces.slice(drawn)}
           more={`+${rest}`}
+          label={label ?? MORE_FACES_LABEL}
           spacing={pileSpacing(shown.length, apart)}
         />
       ) : null}
@@ -1153,15 +1163,36 @@ export function ActorStack({
   );
 }
 
-/** Who made a thing and when, as a card's foot says it: their face, then "Created by" and their name, which hangs their card, and the day. */
-export function CreatedByRow({
+/** What a provenance row says its actor did. */
+export const PROVENANCE_VERB = {
+  CREATED: "Created",
+  STARTED: "Started",
+  SHOWN: "Shown",
+  OPENED: "Opened",
+} as const;
+
+export type ProvenanceVerb = (typeof PROVENANCE_VERB)[keyof typeof PROVENANCE_VERB];
+
+/**
+ * Who made, started, showed, or opened a thing, and when, as every card's
+ * provenance row says it: their face or tile, then "Created by" and their
+ * name, which hangs `card` (or their own) and opens `onOpen`, then when, in
+ * the one provenance time ("3d ago", then "Oct 12"), where it is known.
+ */
+export function ProvenanceRow({
+  verb,
   actor,
   at,
   now,
+  card,
+  onOpen,
 }: {
+  verb: ProvenanceVerb;
   actor: Actor;
-  at: number;
+  at?: number | undefined;
   now: number;
+  card?: ReactNode;
+  onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   return (
     <HoverCardRow
@@ -1169,9 +1200,14 @@ export function CreatedByRow({
       glyph={<ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
       label={
         <>
-          {"Created by "}
-          <ActorRef actor={actor} sentence nameOnly />
-          {` · ${dateOfText(at, now)}`}
+          {`${verb} by `}
+          <ActorRef actor={actor} card={card} onOpen={onOpen} sentence nameOnly />
+          {at === undefined ? null : (
+            <>
+              {" · "}
+              <Time at={at} now={now} hint={false} look={TIME_LOOK.PROVENANCE} />
+            </>
+          )}
         </>
       }
     />

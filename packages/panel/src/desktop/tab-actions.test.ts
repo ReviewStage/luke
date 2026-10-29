@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_STATUS,
+  type AgentPullRequest,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentPullRequest,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { Task } from "@luke/features/task-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -15,7 +15,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
@@ -24,7 +24,7 @@ import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js"
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { onSideBundles, unlandedBundles } from "../testing/side-bundles.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 // Note that a Pull request tab is loaded as the side panel loads it, on first use
 // (`pages-on-demand.ts`), so the module is read here first and its load settles
 // within the test's own ticks.
@@ -33,12 +33,15 @@ import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
  * tab-actions.test.ts -- a column's bar holds a ⋯ for its chosen tab's
- * content actions: the task's own menu on the task's tab, and on an agent's
- * or a subagent's tab the actions its right-click offers on what it shows,
- * without the tab's own keeping (Close, Close others, Pin), which stays
- * on the right-click alone. A tab with no content action shows no ⋯, and no
- * tab wears one of its own. A Pull request tab's ⋯ also offers what its body
- * hands up, Open on GitHub and Refresh, which no other tab's offers.
+ * content actions: on an agent's or a subagent's tab the actions its
+ * right-click offers on what it shows, the one agent menu, without the
+ * tab's own keeping (Close, Close others, Pin), which stays on the
+ * right-click alone; the task's column draws no ⋯ of the task's, whose own
+ * document menu the Plan tab's ⋯ and right-click offer instead, pinning
+ * the task rather than the tab. A tab with no content action shows no ⋯,
+ * and no tab wears one of its own. A Pull request tab's ⋯ also offers what
+ * its body hands up, Open on GitHub and Refresh, which no other tab's offers
+ * but the Plan tab's, the task's own.
  */
 
 const TASK: Task = {
@@ -51,14 +54,14 @@ const TASK: Task = {
   document: { body: "", assumptions: [] },
 };
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Invite expiry job",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 
@@ -99,7 +102,7 @@ async function settle(): Promise<void> {
  */
 async function mountEveryTab(
   chosen: { main: MainTab; side: SidePanelTab },
-  pullRequests: CodingAgentsControl["pullRequests"] = new Map(),
+  pullRequests: AgentsControl["pullRequests"] = new Map(),
 ): Promise<HTMLElement> {
   const control = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
@@ -122,7 +125,7 @@ async function mountEveryTab(
       tab: chosen.side,
     },
     pages: [{ id: PAGE_ID, title: "Invite flow", version: 1, at: 1 }],
-    agents: codingAgentsControl({
+    agents: agentsControl({
       agents: [AGENT],
       agentIds: [AGENT.id],
       pullRequests,
@@ -222,7 +225,7 @@ function pressBarMore(bar: HTMLElement): string[] {
   return items;
 }
 
-test("a subagent's tab puts its right-click's content actions, and none of the tab's keeping, behind its bar's ⋯, while an agent's tab keeps every action on its right-click and the column's toolbar draws no ⋯ of its own", async () => {
+test("a subagent's tab puts its right-click's content actions, and none of the tab's keeping, behind its bar's ⋯, and so does an agent's tab in the column's toolbar, whose right-click leads with the tab's keeping and then the agent's one menu", async () => {
   const container = await mountEveryTab({ main: { agent: AGENT.id }, side: SUBAGENT });
   const { main, side } = bars(container);
   const fromRightClick = rightClickChosen(side);
@@ -237,45 +240,81 @@ test("a subagent's tab puts its right-click's content actions, and none of the t
     fromRightClick.includes("Close others") || fromRightClick.includes("Close others (off)"),
   );
 
-  assert.equal(
-    main.querySelector(".toolbar-tab-actions"),
-    null,
-    "the column keeps no tab's ⋯ slot",
-  );
   const agentItems = rightClickChosen(main);
-  for (const item of [
-    "Rename",
-    "Show terminal",
+  assert.deepEqual(agentItems, [
+    "Move right",
+    "Close",
+    "Close others",
+    "Pin",
     "Copy link",
     "Copy concise transcript",
     "Copy full transcript",
+    "Rename",
+    "Show terminal",
     "Archive",
     "Permanently delete",
-  ]) {
-    assert.ok(agentItems.includes(item), `the agent's right-click offers ${item}`);
-  }
-  assert.equal(agentItems.at(-1), "Permanently delete", "the delete stands last");
+  ]);
+  const agentMore = pressBarMore(main);
+  assert.deepEqual(
+    agentMore,
+    agentItems.filter((item) => !TAB_KEEPING.has(item.replace(" (off)", ""))),
+    "the column's ⋯ offers the agent's items, not the task's",
+  );
+  assert.ok(!agentMore.includes("Mark done"), "none of the task's");
 });
 
-test("the column's toolbar draws one ⋯, the task's own, on every tab", async () => {
-  for (const main of [{ agent: AGENT.id }, { draft: "draft-1" }] as const) {
-    const container = await mountEveryTab({ main, side: SIDE_PANEL_TAB.BOARD });
+test("the column's toolbar draws the chosen agent's ⋯ alone, no ⋯ of the task's beside it, and none on the draft's tab", async () => {
+  const cases = [
+    [{ agent: AGENT.id }, [`${AGENT.title} actions`]],
+    [{ draft: "draft-1" }, []],
+  ] as const;
+  for (const [main, labels] of cases) {
+    const container = await mountEveryTab({ main, side: SIDE_PANEL_TAB.INBOX });
     const toolbar = bars(container).main;
     assert.deepEqual(
       [...toolbar.querySelectorAll('button[aria-label$="actions"]')].map((button) =>
         button.getAttribute("aria-label"),
       ),
-      ["Task actions"],
-      `one ⋯ beside ${JSON.stringify(main)}, the task's`,
+      labels,
+      `the ⋯ beside ${JSON.stringify(main)}`,
     );
     act(() => roots.pop()?.unmount());
     container.remove();
   }
 });
 
+test("the Plan tab's ⋯ and its right-click offer the task's own document menu, which pins the task rather than the tab and leaves out Mark done, Cancel task, and Change repository, while the column's ⋯ stays the agent's", async () => {
+  const container = await mountEveryTab({ main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.PLAN });
+  const { main, side } = bars(container);
+  const fromMore = pressBarMore(side);
+  assert.deepEqual(fromMore, [
+    "Copy plan",
+    "Copy link",
+    "Rename",
+    "Version history",
+    "Mark as unread",
+    "Pin",
+    "Move to section",
+    "Open on GitHub",
+    "Permanently delete",
+  ]);
+  // The right-click leads with the tab's keeping, which holds no Pin tab: the one Pin is the task's, among its own.
+  const fromRightClick = rightClickChosen(side);
+  const keeping = fromRightClick.slice(0, fromRightClick.indexOf("Copy plan"));
+  assert.ok(
+    keeping.includes("Close") && !keeping.includes("Pin"),
+    `keeping: ${keeping.join(", ")}`,
+  );
+  assert.deepEqual(fromRightClick.slice(keeping.length), fromMore);
+  const agentMore = pressBarMore(main);
+  assert.ok(
+    !agentMore.includes("Copy plan") && !agentMore.includes("Version history"),
+    "the column's ⋯ offers none of the task's items",
+  );
+});
+
 test("a tab with no content action shows no ⋯ in its bar, though its right-click still answers, and no tab wears a ⋯ of its own", async () => {
   const without: { main: MainTab; side: SidePanelTab }[] = [
-    { main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.BOARD },
     { main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.INBOX },
     { main: { draft: "draft-1" }, side: { file: "src/invite.ts" } },
     { main: { draft: "draft-1" }, side: { terminal: AGENT.id } },
@@ -283,10 +322,9 @@ test("a tab with no content action shows no ⋯ in its bar, though its right-cli
   for (const chosen of without) {
     const container = await mountEveryTab(chosen);
     const { main, side } = bars(container);
-    assert.equal(main.querySelector(".toolbar-tab-actions"), null, "the column keeps no tab's ⋯");
     for (const bar of [main, side]) {
       const label = bar.querySelector('[role="tab"][aria-selected="true"]')?.textContent;
-      if (bar === side) assert.deepEqual(slotButtons(bar), [], `the ${label} tab shows no ⋯`);
+      assert.deepEqual(slotButtons(bar), [], `the ${label} tab shows no ⋯`);
       assert.ok(rightClickChosen(bar).length > 0, `the ${label} tab answers a right-click`);
     }
     assert.equal(container.querySelector(".luke-tab [aria-haspopup]"), null, "no tab wears a ⋯");
@@ -296,7 +334,7 @@ test("a tab with no content action shows no ⋯ in its bar, though its right-cli
 });
 
 /** The agent's pull request, as what it published names it. */
-const PULL_REQUEST: CodingAgentPullRequest = {
+const PULL_REQUEST: AgentPullRequest = {
   number: 42,
   title: "Expire invitations",
   url: "https://github.com/acme/web/pull/42",
@@ -307,7 +345,7 @@ const PULL_REQUEST: CodingAgentPullRequest = {
   changedFiles: 6,
 };
 
-test("the Pull request tab's bar ⋯ offers Open on GitHub and Refresh before Copy link, which no other tab's offers, and opens the pull request on GitHub", async () => {
+test("the Pull request tab's bar ⋯ offers Copy link first, then Open on GitHub and Refresh, which no other tab's offers but the Plan tab's, the task's own, and opens the pull request on GitHub", async () => {
   const opened: string[] = [];
   fakeAppPlatform({
     ...QUIET_PANEL,
@@ -322,7 +360,7 @@ test("the Pull request tab's bar ⋯ offers Open on GitHub and Refresh before Co
     published,
   );
   const { side } = bars(container);
-  assert.deepEqual(pressBarMore(side), ["Open on GitHub", "Refresh", "Copy link"]);
+  assert.deepEqual(pressBarMore(side), ["Copy link", "Open on GitHub", "Refresh"]);
   assert.ok(
     !rightClickChosen(side).some((item) => item === "Open on GitHub" || item === "Refresh"),
     "a right-click keeps to the tab's own and its link",
@@ -331,7 +369,7 @@ test("the Pull request tab's bar ⋯ offers Open on GitHub and Refresh before Co
   act(() => more?.click());
   const github = [
     ...(openMenu()?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []),
-  ].find((each) => each.textContent === "Open on GitHub");
+  ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === "Open on GitHub");
   assert.ok(github, "the ⋯ offers Open on GitHub");
   await act(async () => github.click());
   assert.deepEqual(opened, [PULL_REQUEST.url]);
@@ -341,9 +379,11 @@ test("the Pull request tab's bar ⋯ offers Open on GitHub and Refresh before Co
   for (const other of [SUBAGENT, { page: PAGE_ID }, SIDE_PANEL_TAB.PLAN] as const) {
     const each = await mountEveryTab({ main: { draft: "draft-1" }, side: other }, published);
     const items = pressBarMore(bars(each).side);
+    // The Plan tab's Open on GitHub is the task's repository's, not the pull request's.
     assert.ok(
-      !items.includes("Open on GitHub") && !items.includes("Refresh"),
-      `the ${JSON.stringify(other)} tab offers neither`,
+      (other === SIDE_PANEL_TAB.PLAN || !items.includes("Open on GitHub")) &&
+        !items.includes("Refresh"),
+      `the ${JSON.stringify(other)} tab offers no Refresh`,
     );
     act(() => roots.pop()?.unmount());
     each.remove();
@@ -360,22 +400,11 @@ function installClipboard(): string[] {
 test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the agent's, its worker's, its Changes', a page's, or the Plan tab's, the task's own", async () => {
   const copied = installClipboard();
   const task = `https://tryluke.dev/workspace-personal/plan/${TASK.id}`;
+  const agent = `https://tryluke.dev/workspace-personal/agent/${AGENT.id}`;
   const cases: [{ main: MainTab; side: SidePanelTab }, "main" | "side", string][] = [
-    [
-      { main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.BOARD },
-      "main",
-      `${task}/agent/${AGENT.id}`,
-    ],
-    [
-      { main: { draft: "draft-1" }, side: SUBAGENT },
-      "side",
-      `${task}/agent/${AGENT.id}/worker/call-1`,
-    ],
-    [
-      { main: { draft: "draft-1" }, side: { changes: AGENT.id } },
-      "side",
-      `${task}/agent/${AGENT.id}/changes`,
-    ],
+    [{ main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.INBOX }, "main", agent],
+    [{ main: { draft: "draft-1" }, side: SUBAGENT }, "side", `${agent}/worker/call-1`],
+    [{ main: { draft: "draft-1" }, side: { changes: AGENT.id } }, "side", `${agent}/changes`],
     [{ main: { draft: "draft-1" }, side: { page: PAGE_ID } }, "side", `${task}/page/${PAGE_ID}`],
     [{ main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.PLAN }, "side", task],
   ];

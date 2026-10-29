@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
+import { readAgent, readVisibleAgent } from "@luke/database/models/agent-store";
 import {
   AUTOMATION_ACCESS,
   type Automation,
@@ -13,11 +14,11 @@ import {
   recordAutomationRun,
   updateAutomationCommitted,
 } from "@luke/database/models/automation-store";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
-import { readTaskHeader } from "@luke/database/models/task-store";
 import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/workspace-store";
+import { AGENT_KIND, AGENT_STATUS } from "@luke/features/agent-wire";
 import { nextScheduledRun, readSchedule } from "@luke/features/automation-schedule";
 import {
+  AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
   AUTOMATION_SCOPE,
@@ -32,14 +33,13 @@ import {
   type automationChangeRequestSchema,
   type automationCreateRequestSchema,
 } from "@luke/features/automation-wire";
-import { CODING_AGENT_KIND, CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { Clock, DateTime, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { acceptedAgentChoice } from "../agents/coder-host/start.js";
 import {
   type AgentTurnStanding,
-  codingAgentFailureOf,
-  codingAgentStatusOf,
+  agentFailureOf,
+  agentStatusOf,
 } from "../agents/coder-host/status.js";
 import { standingsOf } from "../agents/coder-host/stop.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
@@ -97,11 +97,18 @@ const firstDue = /* @__PURE__ */ Effect.fnUntraced(function* (
   return nextScheduledRun(trigger, new Date(now)) ?? null;
 });
 
-/** The action as the catalog takes it: a named model must be one offered the account, refused as an invalid request otherwise. */
+/**
+ * The action as the catalog takes it and the store keeps it: a named model
+ * must be one offered the account, refused as an invalid request otherwise.
+ * Note that the kind is stored as `coding-agent` whichever spelling the
+ * request sent, because the release still serving through a deploy reads
+ * that one alone until the rename's migration has run.
+ */
 const checkedAction = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  action: AutomationAction,
+  asked: AutomationAction,
 ): Effect.fn.Return<AutomationAction, HostedRefusal, DatabaseServices | ModelCatalog> {
+  const action = { ...asked, kind: AUTOMATION_ACTION.CODING_AGENT };
   if (action.choice === undefined) return action;
   yield* acceptedAgentChoice(userId, action.choice).pipe(
     Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
@@ -118,13 +125,12 @@ function agentOf(
   standing: AgentTurnStanding,
   now: number,
 ): NonNullable<AutomationRunSummary["agent"]> {
-  const status = codingAgentStatusOf(standing.turn, {
+  const status = agentStatusOf(standing.turn, {
     createdAt,
     now,
     awaitingLineAt: standing.awaitingLineAt,
   });
-  const failureReason =
-    status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(standing.turn) : undefined;
+  const failureReason = status === AGENT_STATUS.FAILED ? agentFailureOf(standing.turn) : undefined;
   return {
     id,
     title,
@@ -185,11 +191,10 @@ export const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const [lastRun] = yield* runSummaries(userId, newest);
   return {
     id: automation.id,
-    planId: automation.taskId,
-    planName: automation.taskName,
-    ...(automation.organizationId === null
-      ? undefined
-      : { workspaceId: automation.organizationId }),
+    // Note that no automation stands on a task, and the wire still names one because a released desktop reads it.
+    planId: null,
+    planName: null,
+    workspaceId: automation.organizationId,
     name: automation.name,
     enabled: automation.enabled,
     pausedReason: null,
@@ -219,8 +224,9 @@ interface TargetColumns {
 
 /**
  * A target the account may aim runs at: a new agent each run, or an agent
- * the account reads; an agent it cannot read is refused as no request at
- * all, the same as a malformed one.
+ * the account may read (`readVisibleAgent`), its task included; an
+ * agent it cannot read is refused as no request at all, the same as a
+ * malformed one.
  */
 const checkedTarget = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -229,7 +235,7 @@ const checkedTarget = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (target.kind === AUTOMATION_TARGET.NEW_AGENT) {
     return { targetKind: AUTOMATION_TARGET.NEW_AGENT, targetAgentId: null };
   }
-  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, target.agentId));
+  const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(userId, target.agentId));
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return { targetKind: AUTOMATION_TARGET.SAME_AGENT, targetAgentId: agent.value.id };
 });
@@ -237,13 +243,12 @@ const checkedTarget = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** Refuses a workspace scope in the account's personal workspace, where everything is the account's own. */
 const checkedScope = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  organizationId: string | null,
+  organizationId: string,
   scope: AutomationScope,
 ): Effect.fn.Return<AutomationScope, HostedRefusal, DatabaseServices> {
   if (scope === AUTOMATION_SCOPE.PERSONAL) return scope;
   const personal = yield* hostedStoreOrUnavailable(personalWorkspaceOf(userId));
-  const inPersonal = Option.isSome(personal) && personal.value === organizationId;
-  if (organizationId === null || inPersonal) {
+  if (Option.isSome(personal) && personal.value === organizationId) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   return scope;
@@ -277,69 +282,52 @@ const reachedRepositories = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 const aimedAtOwnOperator = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  organizationId: string | null,
+  organizationId: string,
   target: AutomationTarget | undefined,
 ): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices> {
-  if (target?.kind !== AUTOMATION_TARGET.SAME_AGENT || organizationId === null) return false;
-  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, target.agentId));
+  if (target?.kind !== AUTOMATION_TARGET.SAME_AGENT) return false;
+  const agent = yield* hostedStoreOrUnavailable(readAgent(userId, target.agentId));
   return (
     Option.isSome(agent) &&
-    agent.value.kind === CODING_AGENT_KIND.OPERATOR &&
+    agent.value.kind === AGENT_KIND.OPERATOR &&
     agent.value.userId === userId &&
     agent.value.organizationId === organizationId
   );
 });
 
-/** Where a new automation stands: its task, as the task names its workspace and repository, or a workspace and the repositories named, each reached through it. */
+/** Where a new automation stands: a workspace and the repositories named, each reached through it. */
 interface Standing {
-  readonly taskId: string | null;
   readonly organizationId: string;
-  readonly repositories: readonly string[] | undefined;
+  readonly repositories: readonly string[];
 }
 
 /**
- * Where the request puts a new automation, read as the account: on a task
- * that names a repository, or on a workspace the account is a member of with
- * repositories its installation reaches; a request naming both, or neither,
- * or a workspace with no repositories, is refused as no request at all. The
- * one automation that needs no repository is one aimed at the account's own
- * operator (`aimedAtOwnOperator`), its heartbeat or one like it, which may
- * stand on a task with none or a workspace naming none.
+ * Where the request puts a new automation, read as the account: on a
+ * workspace the account is a member of with repositories its installation
+ * reaches; a request naming a task, or no workspace, or a workspace with no
+ * repositories, is refused as no request at all. The one automation that
+ * needs no repository is one aimed at the account's own operator
+ * (`aimedAtOwnOperator`), its heartbeat or one like it.
  */
 const standingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   made: typeof automationCreateRequestSchema.Type,
 ): Effect.fn.Return<Standing, HostedRefusal, DatabaseServices | GitHubApp | HttpClient.HttpClient> {
-  if (made.planId !== undefined) {
-    if (made.workspaceId !== undefined || made.repositories !== undefined) {
-      return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-    }
-    const task = yield* hostedStoreOrUnavailable(readTaskHeader(userId, made.planId));
-    if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    if (
-      task.value.repository === null &&
-      !(yield* aimedAtOwnOperator(userId, task.value.workspaceId, made.target))
-    ) {
-      return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
-    }
-    return {
-      taskId: made.planId,
-      organizationId: task.value.workspaceId,
-      repositories: undefined,
-    };
+  // Note that a released desktop may still name a task, on which no automation stands any more.
+  if (made.planId !== undefined || made.workspaceId === undefined) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-  if (made.workspaceId === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const member = yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, made.workspaceId));
   if (made.repositories === undefined) {
     // Note that only a run handed to the account's own operator works in no repository.
     if (!member || !(yield* aimedAtOwnOperator(userId, made.workspaceId, made.target))) {
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
     }
-    return { taskId: null, organizationId: made.workspaceId, repositories: [] };
+    return { organizationId: made.workspaceId, repositories: [] };
   }
   if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const repositories = yield* reachedRepositories(made.workspaceId, made.repositories);
-  return { taskId: null, organizationId: made.workspaceId, repositories };
+  return { organizationId: made.workspaceId, repositories };
 });
 
 /**
@@ -406,13 +394,9 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   ) {
     return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
   }
-  // Note that new repositories are read through the automation's own workspace, as its runs will
-  // reach them, and that one standing on a task takes its task's repository and no other.
-  if (asked.repositories !== undefined && standing.taskId !== null) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
+  // Note that new repositories are read through the automation's own workspace, as its runs will reach them.
   const repositories =
-    asked.repositories === undefined || standing.organizationId === null
+    asked.repositories === undefined
       ? undefined
       : yield* reachedRepositories(standing.organizationId, asked.repositories);
   // Note that only a resume or a pause moves the due instant, so a form that sends `enabled` as it stands skips no firing.
@@ -444,9 +428,9 @@ export interface AutomationWritten {
 }
 
 /**
- * An automation made for the account as the request asks, on a task of
- * its with a repository or on a workspace of its with the repositories its
- * runs work in, under the id given where the caller names one.
+ * An automation made for the account as the request asks, on a workspace
+ * of its with the repositories its runs work in, under the id given where
+ * the caller names one.
  */
 export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -472,7 +456,6 @@ export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   const created = yield* hostedStoreOrUnavailable(
     createAutomationCommitted(userId, {
       ...(id === undefined ? undefined : { id }),
-      taskId: standing.taskId,
       organizationId: standing.organizationId,
       repositories: standing.repositories,
       name: made.name,

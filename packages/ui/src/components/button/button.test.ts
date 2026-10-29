@@ -22,7 +22,8 @@ import {
  * yet takes the focus a roving group hands it and is pressed as any other;
  * an ordinary button stays a Tab stop. A button that keeps focus leaves it
  * on the field that held it when a pointer presses it. A labelled button
- * given a label is named by it, which holds its words. An IconButtonLink is
+ * given a label is named by it, which holds its words, and one wearing a
+ * badge says the badge's words after its own. An IconButtonLink is
  * a link named by its label, and one in a new tab opens there. A compact row
  * mark is a button named by its label like any other, its right-click heard
  * so it can offer its row's menu, and an unavailable one is pressed to no
@@ -191,7 +192,7 @@ test("a toggle is announced pressed while it is on, in any look, and a plain but
   ).toBe(false);
 });
 
-test("a read-only labelled button records a press: it takes none and no Tab stop, and is announced pressed where it was the one given", () => {
+test("a read-only labelled button records a press: it takes none and no Tab stop, is announced pressed where it was the one given, and a drag over its words selects them", () => {
   const heard: string[] = [];
   const container = mount(
     createElement(
@@ -219,8 +220,27 @@ test("a read-only labelled button records a press: it takes none and no Tab stop
     other?.click();
   });
   expect(heard).toEqual([]);
-  expect([given?.disabled, given?.getAttribute("aria-pressed")]).toEqual([true, "true"]);
+  expect([given?.tabIndex, given?.getAttribute("aria-pressed")]).toEqual([-1, "true"]);
   expect(other?.getAttribute("aria-pressed")).toBe("false");
+  const down = new MouseEvent("pointerdown", { bubbles: true, cancelable: true });
+  given?.querySelector(".luke-button-words")?.dispatchEvent(down);
+  expect(down.defaultPrevented).toBe(false);
+});
+
+test("a labelled button wearing a badge says the badge's words after its own, offered or recorded", () => {
+  const container = mount(
+    createElement(
+      "div",
+      null,
+      createElement(Button, { badge: "Recommended", children: "Approve" }),
+      createElement(Button, { badge: "Recommended", readOnly: true, children: "Approve" }),
+    ),
+  );
+
+  expect(Array.from(container.querySelectorAll("button"), (button) => button.textContent)).toEqual([
+    "ApproveRecommended",
+    "ApproveRecommended",
+  ]);
 });
 
 test("a labelled button given a label is named by it, its words within it, and by its busy words while busy", () => {
@@ -228,9 +248,9 @@ test("a labelled button given a label is named by it, its words within it, and b
     createElement(
       "div",
       null,
-      createElement(Button, { label: "Start a coding agent", children: "Start" }),
+      createElement(Button, { label: "Start an agent", children: "Start" }),
       createElement(Button, {
-        label: "Start a coding agent",
+        label: "Start an agent",
         busy: true,
         busyLabel: "Starting",
         children: "Start",
@@ -243,7 +263,7 @@ test("a labelled button given a label is named by it, its words within it, and b
   ]);
 
   expect(said).toEqual([
-    ["Start a coding agent", "Start"],
+    ["Start an agent", "Start"],
     ["Starting", "Start"],
   ]);
   expect(said[0]?.[0]).toContain(said[0]?.[1]);

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import type { AgentTranscriptMessage } from "@luke/features/agent-wire";
 import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import { INBOX_IMAGE_TYPE } from "@luke/features/inbox-wire";
 import { PICTURE_KEEP_FAILURE, type TasksPictureKeepAnswer } from "@luke/features/tasks-view";
@@ -83,13 +83,13 @@ afterEach(() => {
 });
 
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: "Invitations",
   workspace: "acme",
   repository: null,
   text: () => PAGE_TEXT,
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: { workspace: "acme", repository: null },
     anchors: new Set(["approach"]),
     onOpenTask: () => undefined,
@@ -102,7 +102,7 @@ const DOOR: AgentPictureDoor = {
   read: () => Promise.resolve({ contentType: INBOX_IMAGE_TYPE.PNG, base64: PNG_BASE64 }),
 };
 
-const SHOWN: CodingAgentMessage = {
+const SHOWN: AgentTranscriptMessage = {
   id: "turn",
   role: MESSAGE_ROLE.ASSISTANT,
   parts: [
@@ -128,12 +128,12 @@ const SHOWN: CodingAgentMessage = {
 };
 
 /** A recording the agent showed, which its door answers as the bytes given. */
-function recorded(base64: string): { shown: CodingAgentMessage; door: AgentPictureDoor } {
+function recorded(base64: string): { shown: AgentTranscriptMessage; door: AgentPictureDoor } {
   const door: AgentPictureDoor = {
     owner: `agent-add-video-${String(base64.length)}`,
     read: () => Promise.resolve({ contentType: CONVERSATION_MEDIA_TYPE.WEBM, base64 }),
   };
-  const shown: CodingAgentMessage = {
+  const shown: AgentTranscriptMessage = {
     id: "turn-video",
     role: MESSAGE_ROLE.ASSISTANT,
     parts: [
@@ -163,7 +163,7 @@ function recorded(base64: string): { shown: CodingAgentMessage; door: AgentPictu
 /** The agent's turn drawn with its pictures' door, on the plan's page where `page` is given. */
 async function drawn(
   page: TaskMentionsValue | undefined,
-  { shown, door }: { shown: CodingAgentMessage; door: AgentPictureDoor } = {
+  { shown, door }: { shown: AgentTranscriptMessage; door: AgentPictureDoor } = {
     shown: SHOWN,
     door: DOOR,
   },
@@ -272,7 +272,8 @@ test("a transcript off a plan's page offers no Add to plan", async () => {
 });
 
 test("a planless agent's transcript, whose page names a workspace and no plan, offers no Add to plan", async () => {
-  await opened(await drawn({ ...PAGE, taskId: "", doors: { ...PAGE.doors, taskId: "" } }));
+  const AGENT = { agentId: "agent-1" };
+  await opened(await drawn({ ...PAGE, holder: AGENT, doors: { ...PAGE.doors, holder: AGENT } }));
 
   assert.ok(document.querySelector(".attachment-viewer"), "the viewer opened");
   assert.equal(viewerButton("Add to plan"), undefined);

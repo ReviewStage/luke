@@ -1,8 +1,8 @@
 import {
-  CODING_AGENT_SENDER,
-  type CodingAgentAttachment,
-  type CodingAgentMessage,
-} from "@luke/features/coding-agent-wire";
+  AGENT_SENDER,
+  type AgentAttachment,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import { andList, countWords, type Noun } from "@luke/features/words";
 import { CONFIRM_LOSS, ConfirmDialog, type DialogQuestion, useConfirmDialog } from "@luke/ui";
 import { GLYPH } from "@luke/ui/icons";
@@ -70,7 +70,7 @@ interface RewindDoors {
   readonly onSendEdit: (
     messageId: string,
     words: string,
-    attachments: readonly CodingAgentAttachment[],
+    attachments: readonly AgentAttachment[],
   ) => void;
   /** What the line's box is drawn with beside the tab's own box, read as it opens, so the doors stand as they were while the tab's props change. */
   readonly editor: () => Omit<EditComposerDoors, "cuts" | "onCancel" | "onSend">;
@@ -91,10 +91,7 @@ interface RewindDoors {
 const RewindContext = createContext<RewindDoors | undefined>(undefined);
 
 /** The kinds of sender whose lines are a person's: a member, and a member who has since left. */
-const PERSON_SENDERS: ReadonlySet<string> = new Set([
-  CODING_AGENT_SENDER.MEMBER,
-  CODING_AGENT_SENDER.FORMER,
-]);
+const PERSON_SENDERS: ReadonlySet<string> = new Set([AGENT_SENDER.MEMBER, AGENT_SENDER.FORMER]);
 
 /**
  * Whether a person wrote the line, the reader or a teammate, which Edit
@@ -102,7 +99,7 @@ const PERSON_SENDERS: ReadonlySet<string> = new Set([
  * member's. Luke from a call, an automation, GitHub, and another agent write
  * lines no person said, which Revert to here still drops.
  */
-function writtenByPerson(message: CodingAgentMessage): boolean {
+function writtenByPerson(message: AgentTranscriptMessage): boolean {
   const sender = message.sentBy;
   if (sender === undefined) return true;
   return sender.agent !== true && (sender.kind === undefined || PERSON_SENDERS.has(sender.kind));
@@ -116,14 +113,14 @@ type Takes = { userId: string | undefined; name: string; count: number }[];
  * the reader's own account left out as `lineSender` leaves it out. A member
  * with no account id still stands by their name.
  */
-function writtenByOther(message: CodingAgentMessage, readerId: string | undefined): boolean {
+function writtenByOther(message: AgentTranscriptMessage, readerId: string | undefined): boolean {
   const sender = message.sentBy;
   if (sender === undefined || !writtenByPerson(message)) return false;
   return sender.userId === undefined || (readerId !== undefined && sender.userId !== readerId);
 }
 
 /** Counts one more of a member's messages in `takes`, a sender met later standing first because the transcript is read from its end. */
-function tally(takes: Takes, sender: NonNullable<CodingAgentMessage["sentBy"]>): void {
+function tally(takes: Takes, sender: NonNullable<AgentTranscriptMessage["sentBy"]>): void {
   const found = takes.find((each) => each.userId === sender.userId && each.name === sender.name);
   if (found === undefined) takes.unshift({ userId: sender.userId, name: sender.name, count: 1 });
   else found.count += 1;
@@ -144,13 +141,18 @@ function takesWords(takes: Takes): string | undefined {
  * written again. Every message but the last is followed by one, which a
  * rewind to just before it drops, and so is the last while lines sent and not
  * yet read back (`pending`) stand after it, since the rewind drops those too.
- * Where a rewind drops messages another member than the reader (`readerId`)
- * wrote, the points say whose and how many, for the confirm to name.
+ * A line whose send has not answered yet (`going`, by the id it was written
+ * under) is neither written again nor reverted to, because the service may
+ * still withdraw its row, and a rewind waiting behind that send would then
+ * find no line. Where a rewind drops messages another member than the reader
+ * (`readerId`) wrote, the points say whose and how many, for the confirm to
+ * name.
  */
 export function rewindPoints(
-  messages: readonly CodingAgentMessage[],
+  messages: readonly AgentTranscriptMessage[],
   pending: boolean,
   readerId: string | undefined,
+  going: ReadonlySet<string> = new Set(),
 ): {
   readonly editable: ReadonlySet<string>;
   readonly revertsAt: ReadonlyMap<string, string>;
@@ -181,8 +183,9 @@ export function rewindPoints(
       continue;
     }
     const opens = message.arrivedIn === undefined;
+    const answered = message.clientId === undefined || !going.has(message.clientId);
     // Note that an edit drops what follows the line, so its words are read before the line itself is counted.
-    if (opens && writtenByPerson(message)) {
+    if (opens && answered && writtenByPerson(message)) {
       editable.add(message.id);
       const after = takesWords(takes);
       if (after !== undefined) editTakes.set(message.id, after);
@@ -193,7 +196,7 @@ export function rewindPoints(
     if (!opens) continue;
     const from = takesWords(takes);
     if (from !== undefined) takenFrom.set(message.id, from);
-    next = message.id;
+    next = answered ? message.id : undefined;
   }
   return { editable, revertsAt, followed, revertTakes, editTakes };
 }

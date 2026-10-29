@@ -71,15 +71,13 @@ function draw(props: Parameters<typeof ExperimentalPage>[0]): HTMLElement {
 test("each experiment is a switch, on as the account chose, that writes the choice it is pressed to", async () => {
   const page = draw({
     entries: EXPERIMENTS,
-    experiments: experimentsOn(EXPERIMENT.BROWSER),
+    experiments: experimentsOn(EXPERIMENT.MEMORY),
     signedIn: true,
   });
 
-  const browser = page.querySelector<HTMLButtonElement>(
-    '[role="switch"][aria-label="Browser tab"]',
-  );
-  assert.ok(browser, "the Browser tab has a switch");
-  assert.equal(browser.getAttribute("aria-checked"), "true");
+  const memory = page.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Memory"]');
+  assert.ok(memory, "Memory has a switch");
+  assert.equal(memory.getAttribute("aria-checked"), "true");
   // The row's one line says what turning it on brings; the page says nothing above the rows, the newest experiment's first.
   assert.ok(page.textContent?.startsWith("Local agents"));
   assert.deepEqual(
@@ -90,8 +88,8 @@ test("each experiment is a switch, on as the account chose, that writes the choi
     "Channels stands second, after the newest",
   );
 
-  await act(async () => browser.click());
-  assert.deepEqual(sent, [{ experiment: EXPERIMENT.BROWSER, on: false }]);
+  await act(async () => memory.click());
+  assert.deepEqual(sent, [{ experiment: EXPERIMENT.MEMORY, on: false }]);
 });
 
 test("an experiment's Send feedback opens the dialog about that experiment", () => {
@@ -108,7 +106,6 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     EXPERIMENT.CHANNELS,
     EXPERIMENT.MEMORY,
     EXPERIMENT.OPERATOR,
-    EXPERIMENT.BROWSER,
   ]);
 });
 

@@ -57,13 +57,13 @@ afterEach(() => {
 
 /** What a task's page hands its places. */
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: "Invitations",
   workspace: "acme",
   repository: REPOSITORY,
   text: () => TASK.document.body,
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: { workspace: "acme", repository: REPOSITORY },
     anchors: new Set(["rollout"]),
     onOpenTask: () => undefined,
@@ -107,7 +107,6 @@ test("the plan read on its page draws a plan's link, a file's lines, and a Linea
   const container = drawn(
     createElement(PlanBody, {
       task: TASK,
-      live: false,
       sectionLinks: {
         workspace: "acme",
         onOpen: () => undefined,
@@ -176,7 +175,7 @@ test("the plan's version history, off the plan's page, reads a version's mention
       viewing: {
         line: {
           seq: 2,
-          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: true },
+          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 0, duringCall: false },
           startedAt: 0,
           changes: 1,
         },

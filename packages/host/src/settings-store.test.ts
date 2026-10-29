@@ -6,7 +6,6 @@ import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { LINK_OPEN } from "@luke/features/link-open";
 import type { MacRepository } from "@luke/features/mac-terminal-wire";
-import { LIVE_VOICE } from "@luke/live";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import {
   type AccountPreferenceField,
@@ -39,16 +38,11 @@ import {
 } from "@luke/settings/wire";
 import { isRecord, unparsedWire } from "@luke/wire";
 import { temporaryDirectory } from "@luke/wire/testing";
-import { ConfigProvider, Context, Effect, Layer } from "effect";
+import { Context, Effect } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { systemError } from "effect/PlatformError";
 import { test } from "vitest";
-import { Environment } from "./effect/seams.js";
-import {
-  type SettingsEnvironmentOverrides,
-  settingsOverrides,
-} from "./effect/settings-overrides.js";
 import {
   type KeptProductEventDay,
   type SecretCipher,
@@ -176,30 +170,15 @@ function awaitedStoreOf(
   };
 }
 
-function overridesFor(environment: NodeJS.ProcessEnv): SettingsEnvironmentOverrides {
-  return Effect.runSync(
-    Effect.provide(
-      settingsOverrides,
-      Layer.succeed(Environment, ConfigProvider.fromEnvRecord(environment)),
-    ),
-  );
-}
-
 function storeIn(
   directory: string,
   options: {
     cipher?: SecretCipher;
-    environment?: NodeJS.ProcessEnv;
-    credentialsUsable?: boolean;
   } = {},
 ): PromisedSettingsStore {
   const config: SettingsStoreOptions = {
     directory: () => directory,
     cipher: options.cipher ?? testCipher(),
-    overrides: overridesFor(options.environment ?? {}),
-    ...(options.credentialsUsable === undefined
-      ? undefined
-      : { credentialsUsable: options.credentialsUsable }),
     fileSystem: FILE_SYSTEM,
     path: PATH,
   };
@@ -222,12 +201,9 @@ const SAMPLE_VALUE = {
   theme: THEME.DARK,
   zoom: 150,
   openAtLogin: false,
-  voice: LIVE_VOICE.MARIN,
-  duckOtherMedia: false,
   preferBuiltInMicrophone: false,
   // Ask is the default, so Never is the choice that has to survive a reopen.
   macCommands: MAC_COMMAND_MODE.NEVER,
-  localAgents: true,
   // Each diff setting away from its default, the look a review tool's reader picked.
   lineNumbers: false,
   wordWrap: false,
@@ -243,17 +219,10 @@ const SAMPLE_VALUE = {
   diffLigatures: true,
   diffMinimizeComments: true,
   linkOpen: LINK_OPEN.MAC_APP,
+  openNewTask: false,
   // A packaged build shares usage data unless told not to, so Off is the choice.
   usageData: false,
 } satisfies { [Field in AppSettingField]: NonNullable<AppSettingValue<Field>> };
-
-/**
- * The settings a snapshot resolves rather than reports: what the panel draws
- * for them comes from the environment, or from what this run could actually
- * do, so only their own tests below can state it. What the file holds for them
- * is still the table's business.
- */
-const RESOLVED_FIELDS = new Set<AppSettingField>([APP_SETTING_SCHEMA.voice.field]);
 
 test("every setting starts at its default, survives a reopen, and can be cleared", async (t) => {
   for (const field of APP_SETTING_FIELDS) {
@@ -272,13 +241,11 @@ test("every setting starts at its default, survives a reopen, and can be cleared
       sample,
       `${field} did not survive a reopen`,
     );
-    if (!RESOLVED_FIELDS.has(field)) {
-      assert.deepEqual(
-        appSettingsView(written.settings)[field],
-        sample,
-        `${field} was not drawn as it was stored`,
-      );
-    }
+    assert.deepEqual(
+      appSettingsView(written.settings)[field],
+      sample,
+      `${field} was not drawn as it was stored`,
+    );
 
     // Clearing is the absence of a choice, not a stored empty value, so a
     // setting that can be unset reads as unset again from a reopened file.
@@ -302,7 +269,6 @@ it.effect(
         new SettingsStore({
           directory: () => directory,
           cipher: testCipher(),
-          overrides: overridesFor({}),
           fileSystem: FILE_SYSTEM,
           path: PATH,
         });
@@ -329,7 +295,6 @@ it.effect(
         new SettingsStore({
           directory: () => directory,
           cipher: testCipher(),
-          overrides: overridesFor({}),
           fileSystem: FILE_SYSTEM,
           path: PATH,
         });
@@ -354,7 +319,6 @@ it.effect(
         new SettingsStore({
           directory: () => directory,
           cipher: testCipher(),
-          overrides: overridesFor({}),
           packaged,
           fileSystem: FILE_SYSTEM,
           path: PATH,
@@ -386,17 +350,23 @@ test("the Mac commands switch an earlier build stored reads as a mode: on as Ask
   assert.equal(await storeIn(directory).get("macCommands"), MAC_COMMAND_MODE.NEVER);
 });
 
-test("the notifications switch an earlier build stored is let go unread, and the choices beside it stay", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await storeIn(directory).set("theme", THEME.DARK);
-  const file = path.join(directory, SETTINGS_FILE_NAME);
-  const stored = JSON.parse(await readSettingsFile(directory));
-  await fs.writeFile(file, JSON.stringify({ ...stored, agentNotifications: false }));
+test.for([
+  { setting: "the notifications switch", field: "agentNotifications" },
+  { setting: "Run agents on this Mac", field: "localAgents" },
+])(
+  "$setting, which an earlier build stored, is let go unread, and the choices beside it stay",
+  async ({ field }, t) => {
+    const directory = await temporaryDirectory(t, "luke-settings-");
+    await storeIn(directory).set("theme", THEME.DARK);
+    const file = path.join(directory, SETTINGS_FILE_NAME);
+    const stored = JSON.parse(await readSettingsFile(directory));
+    await fs.writeFile(file, JSON.stringify({ ...stored, [field]: false }));
 
-  const reopened = storeIn(directory);
-  assert.equal(await reopened.get("theme"), THEME.DARK);
-  assert.equal("agentNotifications" in appSettingsView(await reopened.snapshot()), false);
-});
+    const reopened = storeIn(directory);
+    assert.equal(await reopened.get("theme"), THEME.DARK);
+    assert.equal(field in appSettingsView(await reopened.snapshot()), false);
+  },
+);
 
 test("every provider key an earlier build stored is dropped, and the choices beside it stay", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
@@ -572,7 +542,6 @@ it.effect(
       const store = new SettingsStore({
         directory: () => directory,
         cipher: testCipher(false),
-        overrides: overridesFor({}),
         fileSystem: FILE_SYSTEM,
         path: PATH,
       });
@@ -591,10 +560,9 @@ function throughSnapshot(preferences: AccountPreferences): AccountPreferences | 
   return isRecord(wire) ? accountPreferencesFromParts(wire) : undefined;
 }
 
-test("a link choice made on one Mac reaches another through the snapshot, beside the voice", async (t) => {
+test("a link choice made on one Mac reaches another through the snapshot", async (t) => {
   const chooser = storeIn(await temporaryDirectory(t, "luke-settings-"));
   await chooser.setAccount(TEST_ACCOUNT);
-  await chooser.set("voice", LIVE_VOICE.MARIN);
   await chooser.set("linkOpen", LINK_OPEN.MAC_APP);
 
   const other = storeIn(await temporaryDirectory(t, "luke-settings-"));
@@ -611,26 +579,7 @@ test("a link choice made on one Mac reaches another through the snapshot, beside
 
   assert.ok(applied.changed.includes("linkOpen"));
   assert.equal(await other.get("linkOpen"), LINK_OPEN.MAC_APP);
-  assert.equal(await other.get("voice"), LIVE_VOICE.MARIN);
   assert.equal(appSettingsView(await other.snapshot()).linkOpen, LINK_OPEN.MAC_APP);
-});
-
-test("a link choice made on the web, before any voice was synced, reaches a Mac without costing it its voice", async (t) => {
-  const mac = storeIn(await temporaryDirectory(t, "luke-settings-"));
-  await mac.setAccount(TEST_ACCOUNT);
-  await mac.set("voice", LIVE_VOICE.CEDAR);
-  const baseline = await mac.accountPreferences();
-  await mac.setAccountPreferencesSyncBaseline(TEST_ACCOUNT.email, baseline);
-
-  // The service's answer holds the link part alone, and no shared part was ever written.
-  const remote = { linkOpen: LINK_OPEN.MAC_APP };
-  await mac.applyAccountPreferences(
-    snapshotAccountPreferences(remote, false, await mac.accountPreferences()),
-    { accountEmail: TEST_ACCOUNT.email, preferences: baseline },
-  );
-
-  assert.equal(await mac.get("linkOpen"), LINK_OPEN.MAC_APP);
-  assert.equal(await mac.get("voice"), LIVE_VOICE.CEDAR);
 });
 
 test("a Mac takes the web's newer link choice over the one it last synced, and keeps one it made since", async (t) => {
@@ -656,7 +605,7 @@ test("a Mac takes the web's newer link choice over the one it last synced, and k
   assert.equal(await changed.get("linkOpen"), LINK_OPEN.BROWSER);
 });
 
-test("a first link choice made before the first sync is kept to be written, whether or not a voice was synced", async (t) => {
+test("a first link choice made before the first sync is kept to be written, whether or not a shared part was written", async (t) => {
   for (const sharedWritten of [false, true]) {
     const mac = storeIn(await temporaryDirectory(t, "luke-settings-"));
     await mac.setAccount(TEST_ACCOUNT);
@@ -664,9 +613,8 @@ test("a first link choice made before the first sync is kept to be written, whet
     // Note that a first hydration takes the Mac's preferences as they stand for its baseline.
     const baseline = await mac.accountPreferences();
 
-    const remote = sharedWritten ? { voice: LIVE_VOICE.CEDAR } : {};
     await mac.applyAccountPreferences(
-      snapshotAccountPreferences(remote, sharedWritten, await mac.accountPreferences()),
+      snapshotAccountPreferences({}, sharedWritten, await mac.accountPreferences()),
       { accountEmail: TEST_ACCOUNT.email, preferences: baseline },
     );
 
@@ -686,26 +634,26 @@ test("the experiments the service answered stand for the account signed in, acro
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.setAccount(TEST_ACCOUNT);
-  const browserOn = { [EXPERIMENT.BROWSER]: true };
+  const memoryOn = { [EXPERIMENT.MEMORY]: true };
 
   assert.deepEqual((await store.snapshot()).experiments, {});
-  assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, browserOn), true);
-  assert.deepEqual((await store.snapshot()).experiments, browserOn);
-  assert.deepEqual((await storeIn(directory).snapshot()).experiments, browserOn);
+  assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, memoryOn), true);
+  assert.deepEqual((await store.snapshot()).experiments, memoryOn);
+  assert.deepEqual((await storeIn(directory).snapshot()).experiments, memoryOn);
 
   // The same answer again changes nothing, and an answer for an account not signed in is no choice of this one's.
-  assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, browserOn), false);
+  assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, memoryOn), false);
   assert.equal(await store.cacheExperiments("someone-else@example.com", {}), false);
-  assert.deepEqual((await store.snapshot()).experiments, browserOn);
+  assert.deepEqual((await store.snapshot()).experiments, memoryOn);
 });
 
 test("a sign-out, or another account's sign-in, leaves no experiment of the last account on", async (t) => {
-  const browserOn = { [EXPERIMENT.BROWSER]: true };
+  const memoryOn = { [EXPERIMENT.MEMORY]: true };
 
   const signedOut = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(signedOut);
   await store.setAccount(TEST_ACCOUNT);
-  await store.cacheExperiments(TEST_ACCOUNT.email, browserOn);
+  await store.cacheExperiments(TEST_ACCOUNT.email, memoryOn);
   await store.clearAccount();
   assert.deepEqual((await store.snapshot()).experiments, {});
   await store.setAccount(TEST_ACCOUNT);
@@ -714,7 +662,7 @@ test("a sign-out, or another account's sign-in, leaves no experiment of the last
   const switched = await temporaryDirectory(t, "luke-settings-");
   const other = storeIn(switched);
   await other.setAccount(TEST_ACCOUNT);
-  await other.cacheExperiments(TEST_ACCOUNT.email, browserOn);
+  await other.cacheExperiments(TEST_ACCOUNT.email, memoryOn);
   await other.setAccount({ ...TEST_ACCOUNT, email: "teammate@example.com" });
   assert.deepEqual((await storeIn(switched).snapshot()).experiments, {});
 });
@@ -727,7 +675,6 @@ it.effect("two stores on one file, as two browser tabs are, each keep the other'
       new SettingsStore({
         directory: () => directory,
         cipher: undefined,
-        overrides: overridesFor({}),
         fileSystem: FILE_SYSTEM,
         path: PATH,
       });
@@ -775,7 +722,6 @@ it.effect(
         new SettingsStore({
           directory: () => directory,
           cipher: undefined,
-          overrides: overridesFor({}),
           fileSystem: flakyReads(failing),
           path: PATH,
           ...(writer === undefined ? undefined : { writer }),

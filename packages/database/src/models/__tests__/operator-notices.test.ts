@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import {
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
-  type BrainRequestStatus,
-} from "@luke/features/brain";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+  RUN_EVENT,
+  RUN_STATUS,
+  RUN_TURN_ORIGIN,
+  type RunStatus,
+  TURN_TRIGGER,
+} from "@luke/features/turn-run";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { sql } from "drizzle-orm";
@@ -18,11 +18,7 @@ import { user } from "../../schemas/auth.js";
 import { OPERATOR_NOTICE_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, openWorkspace, plansOf } from "../../testing/index.js";
 import { sweepAbandonedTurns, TURN_ABANDON } from "../abandoned-turns.js";
-import {
-  type CodingAgent,
-  createCodingAgent,
-  latestTurnsOfReached,
-} from "../coding-agent-store.js";
+import { type Agent, createAgent, latestTurnsOfReached } from "../agent-store.js";
 import {
   dueOperatorWakes,
   markOperatorNoticesRead,
@@ -56,7 +52,7 @@ const openAccount = Effect.gen(function* () {
 
 const started = (userId: string, organizationId: string, operator: boolean) =>
   Effect.map(
-    createCodingAgent(
+    createAgent(
       userId,
       operator
         ? {
@@ -64,7 +60,7 @@ const started = (userId: string, organizationId: string, operator: boolean) =>
             organizationId,
             planSnapshot: null,
             prompt: null,
-            kind: CODING_AGENT_KIND.OPERATOR,
+            kind: AGENT_KIND.OPERATOR,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
             effort: "high",
@@ -100,12 +96,7 @@ const openMember = Effect.gen(function* () {
 });
 
 /** One turn of the agent's, begun and ended at `at` as the status given; answers what the end's write came to. */
-const turnEnding = (
-  writer: StoreWriter,
-  agent: CodingAgent,
-  status: BrainRequestStatus,
-  at: number,
-) =>
+const turnEnding = (writer: StoreWriter, agent: Agent, status: RunStatus, at: number) =>
   Effect.gen(function* () {
     const target = { userId: agent.userId, conversationId: agent.conversationId };
     const turnId = randomUUID();
@@ -113,15 +104,15 @@ const turnEnding = (
     yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
     yield* writer.consume(target, {
       ...turn,
-      kind: BRAIN_RUN_EVENT.TURN_STARTED,
+      kind: RUN_EVENT.TURN_STARTED,
       sequence: 1,
-      origin: BRAIN_TURN_ORIGIN.TYPED,
-      trigger: BRAIN_TURN_TRIGGER.ASK,
+      origin: RUN_TURN_ORIGIN.TYPED,
+      trigger: TURN_TRIGGER.ASK,
       at: at - 1,
     });
     return yield* writer.consume(target, {
       ...turn,
-      kind: BRAIN_RUN_EVENT.TURN_ENDED,
+      kind: RUN_EVENT.TURN_ENDED,
       sequence: 2,
       status,
       responseIds: [],
@@ -130,7 +121,7 @@ const turnEnding = (
   });
 
 /** The operator's unread notices as kind, agent, and when, newest first. */
-const unreadOf = (operator: CodingAgent) =>
+const unreadOf = (operator: Agent) =>
   Effect.map(unreadOperatorNotices(operator.id, EVERY), (notices) =>
     notices.map(({ kind, agentId, at }) => ({ kind, agentId, at: at.getTime() })),
   );
@@ -142,8 +133,8 @@ it.layer(getTestDB())("the notices an operator reads of its member's agents", (i
       const { member, workspace, operator } = yield* openMember;
       const agent = yield* coderOf(member, workspace);
 
-      yield* turnEnding(writer, agent, BRAIN_REQUEST_STATUS.SUCCEEDED, T0);
-      yield* turnEnding(writer, agent, BRAIN_REQUEST_STATUS.SUCCEEDED, T0 + 1_000);
+      yield* turnEnding(writer, agent, RUN_STATUS.SUCCEEDED, T0);
+      yield* turnEnding(writer, agent, RUN_STATUS.SUCCEEDED, T0 + 1_000);
 
       assert.deepEqual(yield* unreadOf(operator), [
         { kind: OPERATOR_NOTICE_KIND.TURN_SETTLED, agentId: agent.id, at: T0 + 1_000 },
@@ -160,8 +151,8 @@ it.layer(getTestDB())("the notices an operator reads of its member's agents", (i
         const failing = yield* coderOf(member, workspace);
         const lost = yield* coderOf(member, workspace);
 
-        yield* turnEnding(writer, failing, BRAIN_REQUEST_STATUS.FAILED, T0);
-        yield* turnEnding(writer, standing, BRAIN_REQUEST_STATUS.FAILED, T0 + 1);
+        yield* turnEnding(writer, failing, RUN_STATUS.FAILED, T0);
+        yield* turnEnding(writer, standing, RUN_STATUS.FAILED, T0 + 1);
         // A turn eve began and never ended, settled by the sweep past its bound.
         const target = { userId: member, conversationId: lost.conversationId };
         const turnId = randomUUID();
@@ -169,13 +160,13 @@ it.layer(getTestDB())("the notices an operator reads of its member's agents", (i
         yield* writer.consume(target, {
           conversationId: sessionKey(lost.conversationId),
           turnId,
-          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          kind: RUN_EVENT.TURN_STARTED,
           sequence: 1,
-          origin: BRAIN_TURN_ORIGIN.TYPED,
-          trigger: BRAIN_TURN_TRIGGER.ASK,
+          origin: RUN_TURN_ORIGIN.TYPED,
+          trigger: TURN_TRIGGER.ASK,
           at: T0,
         });
-        const swept = T0 + TURN_ABANDON.CODING_AGENT_AFTER_MS + 1;
+        const swept = T0 + TURN_ABANDON.AGENT_AFTER_MS + 1;
         yield* sweepAbandonedTurns({ writer }, { now: swept });
 
         assert.deepEqual(yield* unreadOf(standing), [
@@ -195,7 +186,7 @@ it.layer(getTestDB())("the notices an operator reads of its member's agents", (i
         yield* joinWorkspace(workspace, teammate);
         const theirs = yield* coderOf(teammate, workspace);
 
-        yield* turnEnding(writer, theirs, BRAIN_REQUEST_STATUS.SUCCEEDED, T0);
+        yield* turnEnding(writer, theirs, RUN_STATUS.SUCCEEDED, T0);
         assert.deepEqual(yield* unreadOf(operator), []);
         // An operator made after the turn finds nothing written while there was none.
         const late = yield* operatorOf(teammate, workspace);
@@ -263,13 +254,13 @@ it.layer(getTestDB())("the notices an operator reads of its member's agents", (i
         due.filter((wake) => wake.agentId === agent.id).map((wake) => wake.at.getTime()),
       );
 
-      yield* turnEnding(writer, agent, BRAIN_REQUEST_STATUS.FAILED, T0);
+      yield* turnEnding(writer, agent, RUN_STATUS.FAILED, T0);
       assert.deepEqual(yield* dueFor, [T0]);
       yield* recordOperatorWake(standing.id, agent.id, new Date(T0 + 10));
       assert.deepEqual(yield* dueFor, [], "answered");
-      yield* turnEnding(writer, agent, BRAIN_REQUEST_STATUS.FAILED, T0 + HOUR_MS / 2);
+      yield* turnEnding(writer, agent, RUN_STATUS.FAILED, T0 + HOUR_MS / 2);
       assert.deepEqual(yield* dueFor, [], "within the hour of the wake");
-      yield* turnEnding(writer, agent, BRAIN_REQUEST_STATUS.FAILED, T0 + HOUR_MS + 10);
+      yield* turnEnding(writer, agent, RUN_STATUS.FAILED, T0 + HOUR_MS + 10);
       assert.deepEqual(yield* dueFor, [T0 + HOUR_MS + 10]);
       assert.equal(
         (yield* dueOperatorWakes(new Date(0), HOUR_MS, EVERY)).find((w) => w.agentId === agent.id)
@@ -290,7 +281,7 @@ it.layer(getTestDB())("a notice that cannot be written", (it) => {
       // This database alone loses the table, so every notice write fails.
       yield* db.execute(sql`drop table operator_notice`);
 
-      const ended = yield* turnEnding(writer, agent, BRAIN_REQUEST_STATUS.SUCCEEDED, T0);
+      const ended = yield* turnEnding(writer, agent, RUN_STATUS.SUCCEEDED, T0);
 
       assert.ok(Result.isSuccess(ended) && ended.success === STORE_WRITE_EFFECT.WRITTEN);
       const turns = yield* latestTurnsOfReached([agent.conversationId]);

@@ -12,7 +12,7 @@
  * `EVE_DEPLOYMENT_SECRET`, compared in constant time, never the cron's; a
  * deployment that names none answers unavailable and runs nothing. The
  * call acts for the account it names, as eve's door acts for the account a
- * deployment call names (`../brain-host/auth.ts`'s `deploymentActor`), and
+ * deployment call names (`../eve-host/auth.ts`'s `deploymentActor`), and
  * the harness reaches only what that account reaches. A message is also
  * held to the conversation's own agent: one the account reaches, on the
  * harness named, and one it may write to (`admitsPlanWriter`, under
@@ -22,10 +22,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import {
-  readCodingAgentHeaderOfConversation,
-  readCodingAgentRouting,
-} from "@luke/database/models/coding-agent-store";
+import { readAgentHeaderOfConversation, readAgentRouting } from "@luke/database/models/agent-store";
 import { HTTP_METHOD } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
@@ -44,7 +41,7 @@ import {
 } from "../../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { admitsPlanWriter } from "../agent-reach.js";
-import type { EveUnreachable } from "../brain-host/eve-sessions.js";
+import type { EveUnreachable } from "../eve-host/eve-sessions.js";
 import {
   NATIVE_RELAY_CALL,
   NATIVE_RELAY_PATH,
@@ -66,12 +63,10 @@ const admittedConversation = /* @__PURE__ */ Effect.fnUntraced(function* (
   conversationId: string,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices> {
   const agent = yield* hostedStoreOrUnavailable(
-    readCodingAgentHeaderOfConversation(call.account, conversationId),
+    readAgentHeaderOfConversation(call.account, conversationId),
   );
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const routing = yield* hostedStoreOrUnavailable(
-    readCodingAgentRouting(call.account, agent.value.id),
-  );
+  const routing = yield* hostedStoreOrUnavailable(readAgentRouting(call.account, agent.value.id));
   if (Option.isNone(routing) || routing.value.runtime !== call.runtime) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }

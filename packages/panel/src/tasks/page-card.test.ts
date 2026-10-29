@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -10,6 +11,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { PageCard } from "./page-card.js";
+import { OpenLinkProvider } from "./use-open-link.js";
 
 /**
  * page-card.test.ts -- a page's card shows its preview once the version it
@@ -68,7 +70,7 @@ test("a version written while the card stands is hidden until it loads, never th
   assert.equal(preview()?.dataset.loaded, "true");
 });
 
-test("the head says who showed the version beside it, wherever the card hangs: Luke, an agent by the name the window holds, or a coding agent it holds none of, and nothing for a version from before", () => {
+test("a provenance row says who showed the version, wherever the card hangs: Luke, an agent by the name the window holds, or an agent it holds none of, and nothing for a version from before", () => {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -78,7 +80,7 @@ test("the head says who showed the version beside it, wherever the card hangs: L
         onRegistry(AtomRegistry.make(), createElement(PageCard, { place: { taskId: TASK }, page })),
       ),
     );
-    return container.querySelector(".luke-hover-card-sub")?.textContent;
+    return container.querySelector(".luke-hover-card-row")?.textContent;
   };
 
   assert.deepEqual(
@@ -91,11 +93,32 @@ test("the head says who showed the version beside it, wherever the card hangs: L
       }),
       subOf(FUNNEL),
     ],
-    [
-      "Version 2 · Shown by Luke",
-      "Shown by Luke",
-      "Version 2 · Shown by a coding agent",
-      "Version 2",
-    ],
+    ["Shown by Luke", "Shown by Luke", "Shown by Agent", undefined],
   );
+});
+
+test("a press on the agent that showed the version opens its tab, on the page's task", () => {
+  const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  const opened: unknown[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(OpenLinkProvider, {
+          value: (link) => opened.push(link.place),
+          children: createElement(PageCard, {
+            place: { taskId: TASK },
+            page: { ...FUNNEL, shownBy: { kind: PAGE_SHOWER.AGENT, agentId } },
+          }),
+        }),
+      ),
+    ),
+  );
+  const shower = container.querySelector<HTMLElement>(".luke-hover-card-row [data-actor-ref]");
+  assert.equal(shower?.tagName, "BUTTON", "the agent's name is a press");
+  act(() => shower?.click());
+  assert.deepEqual(opened, [{ kind: LINK_PLACE.AGENT, planId: TASK, agentId }]);
 });

@@ -4,7 +4,7 @@ import { defineDynamic } from "eve/tools";
 import { agentToolFor, offeredKindTools } from "../host.js";
 
 /**
- * list_open_asks.ts -- the operator lists every thread waiting on its member in their inbox, across all their own agents.
+ * list_open_asks.ts -- the operator lists every thread waiting on its member in their inbox, whichever agent posted it.
  *
  * It only reads (`packages/service/src/agents/operator-desk.ts`). The call
  * reaches the store through the host's door (`../host.ts`), under the agent

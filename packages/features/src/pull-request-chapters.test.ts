@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { Schema as EffectSchema } from "effect";
 import { test } from "vitest";
 import {
+  type AgentChangedFile,
   CHANGED_FILE_STATUS,
-  type CodingAgentChangedFile,
   DIFF_SIDE,
   PATCH_OMITTED,
   type ReviewThread,
-} from "./coding-agent-wire.js";
+} from "./agent-wire.js";
 import {
   CHAPTER_KIND,
   CHAPTER_RISK,
@@ -45,8 +45,8 @@ const SEATS_SECOND = ["@@ -10,2 +11,2 @@", " ten", "-eleven", "+ELEVEN"];
 function changed(
   path: string,
   patch: string | null,
-  rest: Partial<CodingAgentChangedFile> = {},
-): CodingAgentChangedFile {
+  rest: Partial<AgentChangedFile> = {},
+): AgentChangedFile {
   return {
     path,
     previousPath: null,

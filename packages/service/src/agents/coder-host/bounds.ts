@@ -1,4 +1,4 @@
-import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/coding-agent-status";
+import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/agent-status";
 import { GITHUB_TOKEN_REFRESH } from "@luke/features/host-wire";
 import { Duration } from "effect";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
@@ -215,10 +215,21 @@ export const CODER = {
    * snapshot. Note that the runner is still launched warm and retired rather
    * than launched to end on its own, because a runner ending by itself stops
    * reading its stdin while its END is still posted, and a message written
-   * then would be taken as delivered and never run. A window is one line
+   * then would be taken as delivered and never run; a runner that reads its
+   * lines from Luke leaves such a message waiting instead, and its END hands
+   * it on (`runner-sessions.ts`'s `LINES_WAITING`). A window is one line
    * here: raise it, and the sweep retires runners past it again.
    */
   RUNNER_WARM: Duration.zero,
+  /**
+   * How long a message to a runner that reads its lines waits on that
+   * runner's exit, its liveness in place of the 404 a write to an exited
+   * command's stdin answers: a command that exited answers within one round
+   * trip, and one that runs answers nothing, so the wait is all it costs,
+   * run beside the message's own reads. A runner read as running that has
+   * in fact gone leaves its line waiting for the next message's read.
+   */
+  RUNNER_EXIT_READ: Duration.seconds(1),
   /**
    * How long renewing a running runner's credential may take once its
    * message is written. The send answers only after it, inside the store's
@@ -235,6 +246,17 @@ export const CODER = {
    * to write to the session the rewind cuts.
    */
   RUNNER_HALT: Duration.seconds(15),
+  /**
+   * How long a native agent's turn has to end on its Stop once the stop line
+   * is written (`runner-sessions.ts`'s `forcedStop`) before its runner is
+   * ended and the turn settled cancelled. A turn interrupted mid-step ends in
+   * a second or two, and the runner ends an interrupt its CLI never answers
+   * within `RUNNER_CONTROL.ANSWER_MS`, so one still running past this has a
+   * runner that will not end it: ask, wait briefly, then force, rather than
+   * leaving it running for the sweep's five minutes
+   * (`TURN_ABANDON.CANCEL_AFTER_MS`).
+   */
+  STOP_CONFIRM: Duration.seconds(10),
 } as const;
 
 /** The environment the coding-agent host reads beside the names every hosted route already honours. */
@@ -251,7 +273,7 @@ export const CODER_MODEL_FIXTURE = {
 
 /** Why the host refused a session's standing or a step, in words a log or a failed turn can carry. */
 export const CODER_REFUSAL = {
-  NO_AGENT: "Not run: this conversation is no coding agent's.",
+  NO_AGENT: "Not run: this conversation is no agent's.",
   NO_REPOSITORY: "Not run: the agent works in no repository.",
   UNKNOWN_PROVIDER: "Not run: the agent's model is outside the providers Luke runs agents on.",
   NO_PROVIDER_KEY: "Not run: the account saved no API key for the agent's model provider.",
@@ -272,8 +294,8 @@ export const CODER_REFUSAL = {
   NOT_REACHABLE:
     "Not run: the agent's repository is not reachable through the GitHub installation connected to its task's workspace.",
   GITHUB_UNAVAILABLE: "Not run: GitHub could not be asked for the repository's credential.",
-  NO_DELEGATION: "Not run: this session is no worker of a coding agent's.",
-  NO_DELEGATION_PINNED: "Not run: the worker's session was started by no call of a coding agent's.",
+  NO_DELEGATION: "Not run: this session is no worker of an agent's.",
+  NO_DELEGATION_PINNED: "Not run: the worker's session was started by no call of an agent's.",
   CATALOG_UNAVAILABLE: "Not run: the model catalog could not be read; delegate again in a moment.",
 } as const;
 

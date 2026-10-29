@@ -11,11 +11,11 @@
 
 import { createHash } from "node:crypto";
 import {
-  type CodingAgentStoreEffect,
+  type AgentStoreEffect,
   readRunnerTokenConversation,
-} from "@luke/database/models/coding-agent-store";
+} from "@luke/database/models/agent-store";
 import { Effect, Option } from "effect";
-import type { AdmittedConversation } from "../brain-host/conversation.js";
+import type { AdmittedConversation } from "../eve-host/conversation.js";
 
 /** What a bearer header leads with before the bearer. */
 const BEARER_PREFIX = "Bearer ";
@@ -41,7 +41,7 @@ export function presentedBearer(request: Request): string | undefined {
  */
 export function admitRunnerBearer(
   bearer: string,
-): CodingAgentStoreEffect<Option.Option<AdmittedConversation>> {
+): AgentStoreEffect<Option.Option<AdmittedConversation>> {
   return Effect.map(
     readRunnerTokenConversation(runnerTokenDigest(bearer)),
     Option.map(

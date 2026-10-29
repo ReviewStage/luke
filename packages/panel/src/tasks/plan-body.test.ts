@@ -1,11 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_BRIEF, AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
 import {
   WORKSPACE_ROLE,
@@ -25,7 +21,7 @@ import { handState, signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { agentsControl } from "../testing/tasks-control.js";
 import type { EditAgents } from "./edit-ref.js";
 import { PlanBody } from "./plan-body.js";
 import type { TaskLooks } from "./use-task-looks.js";
@@ -62,16 +58,16 @@ const MEMBERS: readonly WorkspaceMember[] = [
   { ...CHARLES, email: "charles@example.com", role: WORKSPACE_ROLE.MEMBER },
 ];
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Fix auth flow",
   createdAt: 1_000,
-  status: CODING_AGENT_STATUS.RUNNING,
+  status: AGENT_STATUS.RUNNING,
   turnId: null,
-  brief: CODING_AGENT_BRIEF.PROMPT,
+  brief: AGENT_BRIEF.PROMPT,
 };
 
 let root: Root | undefined;
@@ -114,7 +110,6 @@ async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   const { readerId, account: _account, ...rest } = drawn;
   const body = createElement(PlanBody, {
     task,
-    live: false,
     reader: { readerId },
     ...rest,
   });
@@ -164,7 +159,7 @@ function cardOf(
 }
 
 test("the saved body is drawn as Markdown", () => {
-  const markup = renderToStaticMarkup(createElement(PlanBody, { task: TASK, live: false }));
+  const markup = renderToStaticMarkup(createElement(PlanBody, { task: TASK }));
 
   assert.match(markup, /<p class="luke-markdown-heading" data-level="2">Goal<\/p>/u);
   assert.match(markup, /Invite a teammate by email\./u);
@@ -226,29 +221,6 @@ test("two members each see the other's edits under the other's name on their fac
   ]);
 });
 
-test("Luke's notes on a teammate's call name whose call it was, the teammate on their face, and the reader's own as words", async () => {
-  const onCharlesCall = { actor: PLAN_ACTOR.NOTETAKER, duringCall: true, by: CHARLES };
-
-  const dean = await draw(editedAs(onCharlesCall), { readerId: DEAN.userId });
-  assert.deepEqual(editedLines(dean), [
-    "Last edited by Luke during Charles Pan’s call · now",
-    "Luke during Charles Pan’s call now",
-  ]);
-  assert.deepEqual(
-    [...dean.querySelectorAll(".plan-byline-edited .actor-mark")].map((mark) =>
-      mark.getAttribute("data-kind"),
-    ),
-    ["luke", "person"],
-  );
-
-  const charles = await draw(editedAs(onCharlesCall), { readerId: CHARLES.userId });
-  assert.deepEqual(editedLines(charles), [
-    "Last edited by Luke during your call · now",
-    "Luke during your call now",
-  ]);
-  assert.equal(charles.querySelectorAll(".plan-byline-edited .actor-mark").length, 1);
-});
-
 test("an edit the service names no member for, or read without an account id, is never yours, and a member who left keeps their face and is heard as having left", async () => {
   const unnamed = { actor: PLAN_ACTOR.DEVELOPER, duringCall: false };
 
@@ -290,9 +262,9 @@ test("the time opens the version history, on the plan as it stands or on the sec
 });
 
 test("a section's byline shows only the writer's face and a few letters of time, so it keeps to its heading's end, and its card says the rest", async () => {
-  const onCharlesCall = { actor: PLAN_ACTOR.NOTETAKER, duringCall: true, by: CHARLES };
+  const byLuke = { actor: PLAN_ACTOR.NOTETAKER, duringCall: false, by: CHARLES };
   const lastYear = new Date(new Date().getFullYear() - 1, 9, 1).getTime();
-  const old = await draw(editedAs({ ...onCharlesCall, duringCall: false }, lastYear));
+  const old = await draw(editedAs(byLuke, lastYear));
   assert.equal(
     shownWords(old.querySelector(".plan-unit-byline")),
     " Oct 1",
@@ -300,13 +272,13 @@ test("a section's byline shows only the writer's face and a few letters of time,
   );
   act(() => root?.unmount());
 
-  const view = await draw(editedAs(onCharlesCall), { readerId: DEAN.userId });
+  const view = await draw(editedAs(byLuke), { readerId: DEAN.userId });
   const byline = view.querySelector(".plan-unit-byline");
   assert.equal(shownWords(byline), " now");
-  assert.equal(byline?.querySelectorAll(".actor-mark").length, 1, "the call's owner is not faced");
+  assert.equal(byline?.querySelectorAll(".actor-mark").length, 1);
   assert.match(
     cardOf(view, "[data-actor-ref]", ".plan-unit-byline").textContent ?? "",
-    /^LukeDuring Charles Pan’s call · now/u,
+    /^Lukenow/u,
   );
 });
 
@@ -317,35 +289,32 @@ test("a teammate's card says who they are and what they last changed in the plan
     lastEdit: { actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at, duringCall: false },
     sectionEdits: [
       { section: "Goal", actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at, duringCall: false },
-      { section: "Rollout", actor: PLAN_ACTOR.NOTETAKER, by: DEAN, at, duringCall: true },
+      { section: "Rollout", actor: PLAN_ACTOR.NOTETAKER, by: DEAN, at, duringCall: false },
       { section: "Risks", actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at, duringCall: false },
     ],
   };
   const card = cardOf(await draw(task, { readerId: DEAN.userId }));
 
   assert.ok(card.querySelector('[data-actor-card="person"]'), "a person's card hangs");
-  assert.match(card.textContent ?? "", /Charles Pancharles@example\.comMember/u);
+  assert.match(card.textContent ?? "", /Charles Pancharles@example\.com · Member/u);
   assert.match(card.textContent ?? "", /Edited Goal and Risks · now$/u);
 });
 
-test("Luke's card says whose call he wrote on, and what he wrote", async () => {
+test("Luke's card says when he wrote, and what he wrote", async () => {
   const at = Date.now();
-  const onCharlesCall = { actor: PLAN_ACTOR.NOTETAKER, by: CHARLES, at, duringCall: true };
+  const byLuke = { actor: PLAN_ACTOR.NOTETAKER, by: CHARLES, at, duringCall: false };
   const task: Task = {
     ...TASK,
-    lastEdit: onCharlesCall,
+    lastEdit: byLuke,
     sectionEdits: [
-      { section: "Goal", ...onCharlesCall },
-      { section: "Risks", ...onCharlesCall },
+      { section: "Goal", ...byLuke },
+      { section: "Risks", ...byLuke },
     ],
   };
   const card = cardOf(await draw(task, { readerId: DEAN.userId }));
 
   assert.ok(card.querySelector('[data-actor-card="luke"]'), "Luke's card hangs");
-  assert.match(
-    card.textContent ?? "",
-    /^LukeDuring Charles Pan’s call · nowEdited Goal and Risks$/u,
-  );
+  assert.match(card.textContent ?? "", /^LukenowEdited Goal and Risks$/u);
 });
 
 test("an agent the plan's list holds wears its harness, hangs its tab's card, and opens its tab; one it does not hold is named alone", async () => {
@@ -357,7 +326,7 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
     duringCall: false,
   });
   const agents: EditAgents = {
-    control: codingAgentsControl({ agents: [AGENT] }),
+    control: agentsControl({ agents: [AGENT] }),
     onOpen: (agentId) => opened.push(agentId),
   };
   const view = await draw(byAgent, { readerId: DEAN.userId, agents });
@@ -372,7 +341,7 @@ test("an agent the plan's list holds wears its harness, hangs its tab's card, an
 
   const unlisted = await draw(byAgent, {
     readerId: DEAN.userId,
-    agents: { ...agents, control: codingAgentsControl() },
+    agents: { ...agents, control: agentsControl() },
   });
   assert.equal(unlisted.querySelector(".plan-byline-edited [data-actor-ref]")?.tagName, "SPAN");
 });
@@ -383,7 +352,7 @@ test("the sections changed since the last look are counted beside a face for eac
     ...TASK,
     sectionEdits: [
       { section: "Goal", actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at, duringCall: false },
-      { section: "Rollout", actor: PLAN_ACTOR.NOTETAKER, by: CHARLES, at, duringCall: true },
+      { section: "Rollout", actor: PLAN_ACTOR.NOTETAKER, by: CHARLES, at, duringCall: false },
       { section: "Risks", actor: PLAN_ACTOR.DEVELOPER, by: CHARLES, at, duringCall: false },
     ],
   };
@@ -407,7 +376,7 @@ test("the sections changed since the last look are counted beside a face for eac
   assert.equal(dismissed, 1);
 });
 
-test("a plan read and not edited names itself by one h1, its title, with the title's ⋯ at the end of its line", async () => {
+test("a plan read and not edited names itself by one h1, its title, with its Copy link button at the end of its line", async () => {
   const view = await draw(TASK, {
     sectionLinks: {
       workspace: "acme",
@@ -418,13 +387,13 @@ test("a plan read and not edited names itself by one h1, its title, with the tit
   });
 
   const headings = view.querySelectorAll("h1");
-  const more = view.querySelector('[aria-label="Title actions"]');
+  const more = view.querySelector('.luke-page-header-actions [aria-label="Copy link"]');
 
   assert.equal(headings.length, 1, "the plan page names itself once");
   assert.equal(headings[0]?.textContent, TASK.name);
   assert.ok(
     more?.closest(".luke-page-header-actions"),
-    "the title carries its ⋯ in the header's acts",
+    "the title carries its Copy link button in the header's acts",
   );
   assert.equal(more?.closest("header")?.contains(headings[0] ?? null), true);
 });

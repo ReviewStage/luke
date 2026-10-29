@@ -146,11 +146,8 @@ it moves every task standing into its starter's first workspace, and
 statement joins into its own where clause. A task is read and written by
 every member of its workspace, whichever of them started it:
 `taskReachableBy` and `reachableTask` gate every task statement in
-`task-store.ts`, `board-store.ts`, `plan-pages.ts`, `transcript-store.ts`,
-and `plan-revisions.ts`, and the voice door's `heldTask`, on the caller's
-membership of the task's workspace rather than on the task's starter. Past
-that gate a shared task's transcript and a new call's earlier calls are
-every member's calls about it.
+`task-store.ts`, `plan-pages.ts`, and `plan-revisions.ts`, on the caller's
+membership of the task's workspace rather than on the task's starter.
 
 A plan's pictures are its own rows, `plan_attachment`, with their bytes in a
 `bytea` column held to `PICTURE_BOUNDS.MAX_BYTES` (`@luke/features/picture-wire`)
@@ -165,22 +162,21 @@ picture by its address (`@luke/features/plan-attachment-link`), which
 `savePlanText` reads to stamp the picture `saved_at`, and the scheduled sweep
 deletes, a day on, a picture no save stamped.
 
-A coding agent's conversation keeps the member who started it as its
+An agent's conversation keeps the member who started it as its
 `user_id`, the address its messages, turns, and asks are written under, and
 is reached by every member of the agent's workspace: `conversationReachableBy`
 in `packages/database/src/models/recorded-session.ts` admits a member of the
-workspace of the coding agent naming the conversation, or naming its standing
+workspace of the agent naming the conversation, or naming its standing
 parent one hop up (a subagent's session), and the opener alone for a
 conversation no agent names, so a member who leaves the workspace leaves its
-conversations with it. The eve door (`brain-host/door.ts`), the host's
-admission (`brain-host/conversation.ts`, which answers the caller beside the
+conversations with it. The eve door (`eve-host/door.ts`), the host's
+admission (`eve-host/conversation.ts`, which answers the caller beside the
 conversation's owner), and the ask door all read it, so a member speaks into
 the session a teammate opened. From there the caller and the owner are two
-ids: the task, the board, every tool binding, an integration's grant, and a
+ids: the task, every tool binding, an integration's grant, and a
 worker's title are read, written, and metered as the caller, while the
 writer, the seed, and the relay address the owner's rows.
-A voice call is the caller's `voice_sessions` row and meter, landing in the
-conversation of the agent it speaks into. A coding agent still runs on its starter's provider keys and GitHub
+An agent still runs on its starter's provider keys and GitHub
 token, and its steps are its starter's spend, whichever member messages it.
 
 A workspace's members are read, removed, and left, and a workspace renamed or given a photo, through
@@ -347,8 +343,8 @@ which is how the platform mounts it. The routes are unchanged byte for byte:
 a `.func` named `api/default.js.func` answers at `/api/default.js`, the path
 the rewrites already carry. Each function is also emitted at its extensionless
 path, as a `.func` that is a symlink onto the first, because Vercel's own pass
-served both spellings and the clients use the second: the voice sessions open
-at the `VOICE_SERVICE_PATH` path and the desktop posts feedback to
+served both spellings and the clients use the second: the terminal relay opens
+at `/api/terminal/sessions` and the desktop posts feedback to
 `/api/feedback`. Reverting the PR that introduced the tree is one
 commit with no migration and no dashboard state, and the deploy shape returns
 to Vercel's own pass.
@@ -359,11 +355,11 @@ Root Directory (the repository root, so each service's `root` is relative to
 it) and only while the project's Framework Preset is Services. `web` is this
 app, rooted at `apps/web`, and carries the migrate-and-seed
 build, the install filter, the ignore rule, and the `routes` above unchanged.
-`dev` is the coding-agent service, the standalone eve app at `apps/dev`,
+`dev` is the agent service, the standalone eve app at `apps/dev`,
 built by a plain `pnpm exec eve build` in that root, which writes the Build
 Output static-build reads back from it, so nothing relocates it and no
 variable of eve's own is set by hand (`packages/service/README.md`'s "The
-coding-agent service").
+agent service").
 Public routing is the top-level `rewrites`:
 `/eve/coder/v1/*` enters the dev service, and everything else the web
 service, and a
@@ -511,29 +507,19 @@ Every module under `server/` that reads or writes this database reads the
 client out of the fiber it runs on rather than holding one of its own, the
 Drizzle `Database` of "The data layer" above included, so the edge serving a
 request is the one place the client behind it is provided. The hosted store's
-query modules are on it, the store writer and the voice writer among them.
+query modules are on it, the store writer among them.
 Outside `packages/database/src/models/`, `packages/database/src/models/task-store.ts` is on the same
-client, and `packages/database/src/models/voice-session-record.ts` is on it whole, each of its five methods
-answering an effect over the live session row rather than running one.
-`VoiceService` yields those five
-directly: one upgrade is one `Scope` and one effect run on the `WebStoreRun`
-`voice/function.ts` hands it, so the registration, the usage snapshot, and the
-close are steps of that effect rather than promises a callback awaited. The
-two meters of `packages/service/src/voice/accounts.ts` — the account's spend and a closed
-session's seconds — are on it on the same terms,
-so the session yields each on its own fiber and a statement any of them was
-refused on ends that session the way its own row failing does, rather than
-becoming a rejected promise the service had to catch.
+client.
 `hostedStore()` takes no argument, and answers an
 `Effect<A, SqlError | Schema.SchemaError, SqlClient>` from every method, so
 the caller composes a store read into whatever it already runs. A route
 group's own seams are effects
 over that same ambient client — the account group's reads and writes and the
-meter every brain operation spends — so the group yields the seam on the
+meter every hosted operation spends — so the group yields the seam on the
 request's own fiber and the edge that serves the request is the one place the
 client behind it is provided. What still holds a runner is everything a route
 composes apart from the store and that still hands a promise up — the
-writers, the ask record, and the brain host's two seams
+writers and the eve host's two seams
 the eve project reaches through a promise of its own — each handed its
 edge's own, `runWeb` in a
 function and the store tests'
@@ -569,8 +555,8 @@ requirements a route's own handler has travel as request markers the handler
 provides per request from the context `runWeb` read. The routes the hosted
 oRPC route does not answer are converted this way: auth, the two webhooks,
 the maintenance sweep and key rewrap, the GitHub and integration redirects,
-and the byte routes; the voice route alone exports something else, the
-`http.Server` described under "Hosted voice service".
+and the byte routes; the WebSocket routes alone export something else, the
+`http.Server` described under "WebSocket functions".
 
 `packages/service/src/http/http-effect.ts` is the response vocabulary that conversion
 speaks: one schema per refusal, each annotated with the status it answers, and
@@ -762,7 +748,7 @@ no address resolves to the data centre's own location and the privacy claim in
 discard as well, so the guarantee does not rest on one property in one file.
 
 The service counts its own half under the same key: the core loop the desktop
-cannot see (a task, workspace, issue, or automation made, a coding agent
+cannot see (a task, workspace, issue, or automation made, an agent
 started, an agent's pull request opened, an Inbox answer,
 an integration connected or disconnected), recorded where each is committed
 through `recordServerEvent` in `packages/service/src/events/server-events.ts`.
@@ -781,8 +767,7 @@ loads the library at all.
 Use is counted per user per UTC day in the Luke-owned `hosted_usage` table:
 one atomic upsert before each upstream call (`packages/database/src/models/quota.ts`).
 A dictated clip is counted once it is transcribed instead, as one call and its
-seconds of audio in the row's `dictation_seconds`, beside the voice seconds
-`voice_session_usage` keeps. Nothing is refused on the count, which the admin pages read; a spend limit on
+seconds of audio in the row's `dictation_seconds`. Nothing is refused on the count, which the admin pages read; a spend limit on
 the OpenAI project behind the key is the backstop and should be configured
 with it.
 
@@ -816,25 +801,20 @@ client's, the functions', and the eve root's maps cost every production build
 Sentry, not here: a Slack `#alerts` message on more than ten events in five
 minutes, and an email to the issue's owners on a high-priority issue.
 
-## Hosted voice service
+## WebSocket functions
 
 ### Deploying
 
-Enable the WebSockets feature on the Vercel team, make sure Fluid compute is
-on for the project, and set `PROVIDER_KEY_ENCRYPTION_KEYS`, under which each
-caller's own OpenAI API key is sealed: every call runs on its caller's key,
-and a caller who saved none is refused `openai-key-missing`. `LUKE_LIVE_MODEL` optionally pins
-the model. The exchange also needs `EVE_DEPLOYMENT_SECRET`, the deployment's
-own secret at eve's door and never the cron's `CRON_SECRET`, and without it
-every session is refused as unavailable; eve's
-origin is the deployment's own unless `LUKE_EVE_ORIGIN` names another. Luke's
-avatar needs `KEYFRAME_API_KEY` and `LUKE_KEYFRAME_PERSONA_ID` as well; without
-either, a call asking for video goes on as voice. No
-separate service is deployed. Tests run against a fake OpenAI on loopback and an in-memory account side
-(`packages/service/src/voice/service.test.ts`, `packages/service/src/testing/voice-fakes.ts`).
+The terminal relay and the Browser tab's live view are WebSocket functions,
+each exporting the `http.Server` Vercel upgrades into, so enable the
+WebSockets feature on the Vercel team and make sure Fluid compute is on for
+the project. `PROVIDER_KEY_ENCRYPTION_KEYS` seals each account's own provider
+keys, and `EVE_DEPLOYMENT_SECRET` is the deployment's own secret at eve's door
+and never the cron's `CRON_SECRET`; eve's origin is the deployment's own
+unless `LUKE_EVE_ORIGIN` names another. No separate service is deployed.
 
 ## The agents
 
-Every agent is a coding agent, served by its own eve app, `apps/dev`; its
+Every agent is an agent, served by its own eve app, `apps/dev`; its
 layout, deployment, and evals are in `packages/service/README.md`'s "The
-coding-agent service".
+agent service".

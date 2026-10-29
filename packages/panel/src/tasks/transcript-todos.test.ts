@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_TODO_STATUS, type CodingAgentTodos } from "@luke/features/coding-agent-wire";
+import { AGENT_TODO_STATUS, type AgentTodos } from "@luke/features/agent-wire";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
@@ -15,14 +15,14 @@ import { TranscriptTodos } from "./transcript-blocks.js";
  * items.
  */
 
-const TODOS: CodingAgentTodos["todos"] = [
-  { content: "Read the record-write path", status: CODING_AGENT_TODO_STATUS.DONE },
+const TODOS: AgentTodos["todos"] = [
+  { content: "Read the record-write path", status: AGENT_TODO_STATUS.DONE },
   {
     content:
       "Append channel: send without waiting for the record write to land, and keep the order the turns were said in",
-    status: CODING_AGENT_TODO_STATUS.IN_PROGRESS,
+    status: AGENT_TODO_STATUS.IN_PROGRESS,
   },
-  { content: "Run the store tests", status: CODING_AGENT_TODO_STATUS.PENDING },
+  { content: "Run the store tests", status: AGENT_TODO_STATUS.PENDING },
 ];
 
 /** The node drawn as `node` is, in a box of its own. */
@@ -58,13 +58,13 @@ function items(surface: HTMLElement): { seat: Element; words: Element; status: s
 test("each to-do says its status", () => {
   for (const item of items(transcriptList())) {
     switch (item.status) {
-      case CODING_AGENT_TODO_STATUS.DONE:
+      case AGENT_TODO_STATUS.DONE:
         assert.equal(item.seat.getAttribute("aria-label"), "Done");
         break;
-      case CODING_AGENT_TODO_STATUS.IN_PROGRESS:
+      case AGENT_TODO_STATUS.IN_PROGRESS:
         assert.equal(item.seat.getAttribute("aria-label"), "In progress");
         break;
-      case CODING_AGENT_TODO_STATUS.PENDING:
+      case AGENT_TODO_STATUS.PENDING:
         assert.equal(item.seat.getAttribute("aria-label"), "Pending");
         break;
       default:
@@ -94,8 +94,6 @@ test("only the list the agent is at wears the working mark on its item in progre
     items(surface)
       .filter((item) => item.seat.querySelector(".luke-working-mark") !== null)
       .map((item) => item.status);
-  assert.deepEqual(working(transcriptList(undefined, true)), [
-    CODING_AGENT_TODO_STATUS.IN_PROGRESS,
-  ]);
+  assert.deepEqual(working(transcriptList(undefined, true)), [AGENT_TODO_STATUS.IN_PROGRESS]);
   assert.deepEqual(working(transcriptList()), []);
 });

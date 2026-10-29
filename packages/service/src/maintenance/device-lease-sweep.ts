@@ -16,19 +16,18 @@
  * launch and ends the runner it no longer holds with; a follower holding no
  * runner for the agent settles it and does nothing.
  *
- * An agent whose runner lease another call holds is passed by until the
- * next minute rather than waited on, and a launch whose writes failed is
- * logged and the rest still run. Note that the line is settled before the
- * turn, because its guarded write is what decides the device lost the run;
- * a turn write that fails after it is left to `TURN_ABANDON`.
+ * An older launch a newer one replaced is only settled: its runner ended
+ * as the newer launch was taken. An agent whose runner lease another call
+ * holds is passed by until the next minute rather than waited on, and a
+ * launch whose writes failed is logged and the rest still run. Each launch's
+ * writes are one transaction, the line's guarded settle first, since it is
+ * what decides the device lost the run, so a write that fails leaves the
+ * line open for the next sweep to take up again.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
-import {
-  readCodingAgent,
-  recordCodingAgentRunnerToken,
-} from "@luke/database/models/coding-agent-store";
+import { readAgent, recordAgentRunnerToken } from "@luke/database/models/agent-store";
 import {
   type DeviceAgentLapsedLaunch,
   lapsedDeviceAgentLaunches,
@@ -37,9 +36,10 @@ import {
   settleLapsedDeviceAgentLine,
 } from "@luke/database/models/device-agent-store";
 import type { StoreWriter } from "@luke/database/models/writer";
-import { DEVICE_LEASE } from "@luke/features/coding-agent-wire";
+import { DEVICE_LEASE } from "@luke/features/agent-wire";
 import { DEVICE_AGENT_LINE_KIND } from "@luke/features/device-agent-wire";
 import { Effect, Option } from "effect";
+import * as SqlClient from "effect/sql/SqlClient";
 import { holdingRunnerIfFree } from "../agents/coder-host/runner-lease.js";
 
 const DEVICE_LEASE_SWEEP = {
@@ -59,39 +59,49 @@ function deviceAwayDetail(deviceName: string): string {
   return `${deviceName} went away during this turn. Send a message to carry on once it's back.`;
 }
 
-/** One lapsed launch taken from its device, its agent's runner lease held: whether this sweep settled it. */
+/**
+ * One lapsed launch taken from its device, its agent's runner lease held,
+ * in one transaction, so a write that fails leaves the line open for the
+ * next sweep rather than settled with its turn still running: whether this
+ * sweep settled it.
+ */
 const lapsedOne = (
   writer: Pick<StoreWriter, "consume">,
   launch: DeviceAgentLapsedLaunch,
   seenBefore: Date,
   now: number,
 ) =>
-  Effect.gen(function* () {
-    const { userId, agentId } = launch;
-    const settled = yield* settleLapsedDeviceAgentLine(userId, launch.id, seenBefore);
-    if (Option.isNone(settled)) return false;
-    const newest = yield* latestDeviceAgentLaunch(userId, agentId);
-    // An older launch a newer one replaced holds neither the bearer nor the turn under way.
-    if (Option.isSome(newest) && newest.value.id === launch.id) {
-      yield* recordCodingAgentRunnerToken(userId, agentId, null);
-      const agent = yield* readCodingAgent(userId, agentId);
-      if (Option.isSome(agent)) {
-        yield* settleRunnerLostTurns(
-          writer,
-          agent.value.conversationId,
-          now,
-          deviceAwayDetail(launch.deviceName),
-        );
-      }
-      if (newest.value.stopped) return true;
-    }
-    yield* queueDeviceAgentLine(userId, {
-      agentId,
-      kind: DEVICE_AGENT_LINE_KIND.STOP,
-      payload: {},
-    });
-    return true;
-  });
+  Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const { userId, agentId } = launch;
+        const settled = yield* settleLapsedDeviceAgentLine(userId, launch.id, seenBefore);
+        if (Option.isNone(settled)) return false;
+        const newest = yield* latestDeviceAgentLaunch(userId, agentId);
+        // Note that an older launch a newer one replaced is only settled, because its runner was
+        // ended as the newer launch was taken, and a stop queued for it would end the newer one.
+        if (Option.isNone(newest) || newest.value.id !== launch.id) return true;
+        yield* recordAgentRunnerToken(userId, agentId, null);
+        const agent = yield* readAgent(userId, agentId);
+        if (Option.isSome(agent)) {
+          yield* settleRunnerLostTurns(
+            writer,
+            agent.value.conversationId,
+            now,
+            deviceAwayDetail(launch.deviceName),
+          );
+        }
+        if (!newest.value.stopped) {
+          yield* queueDeviceAgentLine(userId, {
+            agentId,
+            kind: DEVICE_AGENT_LINE_KIND.STOP,
+            payload: {},
+          });
+        }
+        return true;
+      }),
+    ),
+  );
 
 /**
  * Takes every launch still open of the devices that have not beaten within

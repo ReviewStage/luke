@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { TERMINAL_STATE, type TerminalState } from "@luke/features/terminal-model";
 import { sandboxRead } from "@luke/features/terminal-store";
@@ -37,6 +37,7 @@ import {
 import { GLYPH } from "@luke/ui/icons";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import type { ReactNode, RefObject } from "react";
+import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { rowMenu } from "../desktop/action-menu.js";
 import { AgentRef, type AgentSubject } from "./agent-ref.js";
 import type { PaneOver } from "./file-view.js";
@@ -66,6 +67,9 @@ const CARD_FOOT = "Terminal in this agent’s sandbox";
 
 /** What a shell's row is, which names its ⋯ and its menu. */
 const SHELL_THING = "Shell";
+
+/** What ends a shell, as its row's hover × and its menu both say it. */
+const END_SHELL = "End shell";
 
 /** The most characters of a shell's name, as the service holds it. */
 const TITLE_MAX = 60;
@@ -205,7 +209,7 @@ function ShellRow({
   shown: boolean;
   /** Whether the tab the list stands in is on screen, which the end's question goes with. */
   surfaceOpen: boolean;
-  session: Pick<TerminalSession, "onChoose" | "onCreate" | "onRename" | "onKill">;
+  session: Pick<TerminalSession, "onChoose" | "onRename" | "onKill">;
 }): React.JSX.Element {
   const rename = useInlineRename(shell.id, session.onRename);
   const renaming = rename.editing;
@@ -250,8 +254,8 @@ function ShellRow({
         actionsAt={LIST_ROW_ACTIONS.HOVER}
         actions={
           renaming ? null : (
-            <Tooltip label={kill}>
-              <IconButton icon={<GLYPH.CLOSE />} label={kill} onClick={ending.ask} />
+            <Tooltip label={END_SHELL}>
+              <IconButton icon={<GLYPH.CLOSE />} label={END_SHELL} onClick={ending.ask} />
             </Tooltip>
           )
         }
@@ -259,21 +263,10 @@ function ShellRow({
           renaming
             ? undefined
             : rowMenu(SHELL_THING, [
+                [commandAction(PANEL_COMMAND.RENAME, rename.begin, false)],
                 [
                   {
-                    label: "Rename",
-                    icon: <GLYPH.RENAME />,
-                    onSelect: rename.begin,
-                  },
-                  {
-                    label: "New shell",
-                    icon: <GLYPH.ADD />,
-                    onSelect: session.onCreate,
-                  },
-                ],
-                [
-                  {
-                    label: "End shell",
+                    label: END_SHELL,
                     icon: <GLYPH.DELETE />,
                     danger: true,
                     onSelect: ending.ask,
@@ -288,7 +281,7 @@ function ShellRow({
         question={{
           title: `${kill}?`,
           body: `Whatever is running in it stops, and its output goes. ${IRREVERSIBLE_WORDS}`,
-          verb: "End shell",
+          verb: END_SHELL,
           running: "Ending the shell",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
@@ -408,7 +401,7 @@ export function TerminalCardFoot({ agentId }: { agentId: string }): React.JSX.El
  * sandbox stopped or not yet up; nothing before the first read. Whether the
  * agent works is the row's glyph's to say.
  */
-export function TerminalStanding({ agent }: { agent: CodingAgentSummary }): React.JSX.Element {
+export function TerminalStanding({ agent }: { agent: AgentSummary }): React.JSX.Element {
   const listed = useAtomValue(sandboxRead(agent.id));
   const sandbox =
     listed === undefined

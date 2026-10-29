@@ -74,6 +74,16 @@ export const NOT_FOUND_STATUS = 404;
  */
 export const SNAPSHOT_GONE_STATUS = 410;
 
+/**
+ * Vercel's answer for a call to a session that is stopping, or being
+ * snapshotted, under it, and the codes its body names: what a resume of the
+ * sandbox mends, as the SDK's own `withResume` reads it.
+ */
+const SESSION_ENDING = {
+  STATUS: 422,
+  CODES: new Set(["sandbox_stopping", "sandbox_snapshotting"]),
+} as const;
+
 const OK_STATUS = { FIRST: 200, LAST: 299 } as const;
 
 const SANDBOX_API = {
@@ -130,13 +140,15 @@ export type SandboxCall = (typeof SANDBOX_CALL)[keyof typeof SANDBOX_CALL];
 
 /**
  * Vercel could not be asked, or did not confirm what was asked: the call
- * that failed, the status where Vercel answered one, and what went wrong in
- * a line, Vercel's own error code and message or the cause's where it never
- * answered. None of it is anything Luke sent.
+ * that failed, the status where Vercel answered one, its error code where it
+ * named one, and what went wrong in a line, Vercel's own error code and
+ * message or the cause's where it never answered. None of it is anything
+ * Luke sent.
  */
 export class SandboxUnavailable extends Data.TaggedError("SandboxUnavailable")<{
   readonly call?: SandboxCall;
   readonly status?: number;
+  readonly code?: string;
   readonly detail?: string;
 }> {
   override get message(): string {
@@ -145,6 +157,16 @@ export class SandboxUnavailable extends Data.TaggedError("SandboxUnavailable")<{
       this.status === undefined ? `${asked} was unavailable` : `${asked} answered ${this.status}`;
     return this.detail === undefined ? answer : `${answer}: ${this.detail}`;
   }
+}
+
+/** Whether a call failed because the session it named was stopping, or being snapshotted, under it: one a resume of its sandbox mends. */
+export function sessionEnding(failure: { readonly _tag: string }): boolean {
+  return (
+    failure instanceof SandboxUnavailable &&
+    failure.status === SESSION_ENDING.STATUS &&
+    failure.code !== undefined &&
+    SESSION_ENDING.CODES.has(failure.code)
+  );
 }
 
 /** A sandbox as a list or a lookup names it: its name, where it stands, the session it runs while up, and its tags. */
@@ -686,16 +708,26 @@ function errorDetail(text: string): string | undefined {
   return rest === undefined ? named : clipped(`${named}: ${rest}`);
 }
 
-/** An answer as the failure it is: the call, its status, and Vercel's own words, or that a 2xx could not be read. */
+/** Vercel's error code in an answer's body, where it names one shaped as Vercel's are. */
+function errorCode(text: string): string | undefined {
+  const read = readErrorAnswer(jsonOf(text));
+  if (Result.isFailure(read)) return undefined;
+  const { code } = read.success.error;
+  return code !== undefined && ERROR_CODE.test(code) ? code : undefined;
+}
+
+/** An answer as the failure it is: the call, its status and code, and Vercel's own words, or that a 2xx could not be read. */
 function refused(
   call: SandboxCall,
   answered: { readonly status: number; readonly text: string },
 ): SandboxUnavailable {
   const detail =
     errorDetail(answered.text) ?? (succeeded(answered.status) ? UNREADABLE_DETAIL : undefined);
+  const code = errorCode(answered.text);
   return new SandboxUnavailable({
     call,
     status: answered.status,
+    ...(code === undefined ? undefined : { code }),
     ...(detail === undefined ? undefined : { detail }),
   });
 }

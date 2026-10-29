@@ -9,8 +9,7 @@
  * terminal. What the desktop's seams read from the machine the tab answers
  * instead: the settings file in the browser's storage, ids from `crypto`,
  * the service at the origin that served the page, and the account from the
- * session cookie that origin set, which no code here reads or keeps. The
- * voice socket refuses, since the web client runs no voice yet.
+ * session cookie that origin set, which no code here reads or keeps.
  *
  * The panel's acts reach the host's own procedures on the act port in this
  * process; the few a platform answers itself (a copy, a download, focus, the
@@ -73,13 +72,11 @@ import {
   ShutdownSignal,
   StateRoot,
   TerminalSocket,
-  VoiceSocket,
 } from "@luke/host/effect";
 import { effectServiceLayer } from "@luke/host/service-layer";
 import { highlightSnippet } from "@luke/host/task-code";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import { SETTING_SIDE_EFFECT } from "@luke/settings";
-import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice/live-socket";
 import { Cause, ConfigProvider, Context, Effect, Layer, Path, Stream } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { version as appVersion } from "../../package.json";
@@ -141,9 +138,6 @@ const report = (message: string): void => {
   console.warn(message);
 };
 
-/** The voice sideband, which the web client does not open yet: every attempt is answered unreachable. */
-const refusedVoiceSocket: OpenSocket = () => Effect.succeed({ fault: SOCKET_OPEN_FAULT.NETWORK });
-
 /**
  * What the cookie session needs of the tab: where it stands, a way to leave
  * for the provider, asking first while a page holds unsaved work, and each
@@ -188,7 +182,6 @@ function seamLayers(storage: Storage, fixture: RunProfile | undefined) {
     reporterLayer(report),
     Layer.succeed(ShutdownSignal, { notify: undefined }),
     Layer.succeed(ServiceOrigin, location.origin),
-    Layer.succeed(VoiceSocket, refusedVoiceSocket),
     Layer.succeed(TerminalSocket, openTerminalSocketFromPage),
     Layer.succeed(SettingsChangedElsewhere, filesChangedElsewhere(storage)),
   );
@@ -231,8 +224,7 @@ interface PlatformHost {
  * picture, a download, focus, the contact mail, feedback, and an agent's Terminal tab, its shells' ports posted to the
  * page. Every other platform kind is refused in its own words, since a page
  * cannot carry it yet: the updater, the microphone, the system's
- * notification settings, the Mac's own terminal, the voice, and the call
- * window.
+ * notification settings, and the Mac's own terminal.
  */
 function platformProcedures(
   http: HttpClient.HttpClient,
@@ -302,7 +294,6 @@ function portDependencies(
     // through the in-process bridge's own listeners, so its push stream is
     // never opened and this table stays empty.
     pushes: new WindowPushes(),
-    taskIssues: { host },
     thisMacHost: { host },
     settings: {
       host,
@@ -311,18 +302,14 @@ function portDependencies(
       sideEffects: {
         [SETTING_SIDE_EFFECT.NONE]: nothing,
         [SETTING_SIDE_EFFECT.LOGIN_ITEM]: nothing,
-        [SETTING_SIDE_EFFECT.VOICE]: nothing,
-        [SETTING_SIDE_EFFECT.MEDIA_DUCK]: nothing,
         [SETTING_SIDE_EFFECT.USAGE_DATA]: nothing,
       },
     },
-    // No voice stands in a tab, so an agent's Call press reaches none.
     tasks: {
       host,
       colourCode: highlightSnippet,
       openExternal: async (url) => tabs.open(url),
       serviceBaseUrl: location.origin,
-      talkTo: nothing,
     },
     workspaces: { host, openExternal: async (url) => tabs.open(url) },
   };
@@ -346,7 +333,7 @@ const servedActPort = (
       const channel = new MessageChannel();
       createActPortHandler(dependencies, procedures).upgrade(channel.port2, {
         context: () => ({
-          actor: { sender: window, panel: true, voice: false, call: false },
+          actor: { sender: window, panel: true },
           trusted: true,
           "effect/context": services,
         }),
@@ -402,8 +389,6 @@ const composedWeb = (
         node: { openExternal: async (url) => tabs.open(url) },
         state,
       });
-      // No voice window stands beside the panel.
-      operator.link({ sendToVoice: () => undefined });
       yield* linkNetworkWatch({
         state,
         isOnline: () => navigator.onLine,

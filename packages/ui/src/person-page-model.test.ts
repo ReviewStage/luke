@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS } from "@luke/features/agent-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import { test } from "vitest";
 import { agentStarter, personPage, personPageEmpty, personRef } from "./person-page-model.js";
@@ -55,7 +55,7 @@ function task(
     ...summary,
     agents: {
       total: agents.length,
-      working: agents.filter((each) => each.status === CODING_AGENT_STATUS.RUNNING).length,
+      working: agents.filter((each) => each.status === AGENT_STATUS.RUNNING).length,
       agents,
       pullRequestTotal: 0,
       pullRequests: [],
@@ -63,11 +63,11 @@ function task(
   };
 }
 
-const RUNNING = agent(1, CHARLES, CODING_AGENT_STATUS.RUNNING, 900);
-const STARTING = agent(2, CHARLES, CODING_AGENT_STATUS.STARTING, 950);
-const DONE = agent(3, CHARLES, CODING_AGENT_STATUS.COMPLETED, 400);
-const DANAS = agent(4, DANA, CODING_AGENT_STATUS.RUNNING, 990);
-const UNNAMED = agent(5, undefined, CODING_AGENT_STATUS.RUNNING, 999);
+const RUNNING = agent(1, CHARLES, AGENT_STATUS.RUNNING, 900);
+const STARTING = agent(2, CHARLES, AGENT_STATUS.STARTING, 950);
+const DONE = agent(3, CHARLES, AGENT_STATUS.COMPLETED, 400);
+const DANAS = agent(4, DANA, AGENT_STATUS.RUNNING, 990);
+const UNNAMED = agent(5, undefined, AGENT_STATUS.RUNNING, 999);
 
 const RETRIES = task(1, "Relay retries", 500, CHARLES, [RUNNING, DANAS]);
 const CACHE = task(2, "Cache keys", 800, DANA, [STARTING, DONE, UNNAMED]);

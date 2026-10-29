@@ -42,13 +42,13 @@ const TASK: Task = {
 };
 
 const PAGE: TaskMentionsValue = {
-  taskId: TASK_ID,
+  holder: { taskId: TASK_ID },
   taskName: "Invitations",
   workspace: "acme",
   repository: null,
   text: () => TASK.document.body,
   doors: {
-    taskId: TASK_ID,
+    holder: { taskId: TASK_ID },
     place: { workspace: "acme", repository: null },
     anchors: new Set(["approach"]),
     onOpenTask: () => undefined,
@@ -114,7 +114,6 @@ async function editing(): Promise<HTMLElement> {
   const container = drawn(
     createElement(PlanBody, {
       task: TASK,
-      live: false,
       onEdit: (request) => {
         saved.push(request.document.value);
         return Promise.resolve({ saved: true });
@@ -252,9 +251,7 @@ test("a video of another plan pasted in is kept on this plan as it is, waiting a
 });
 
 test("Insert image is offered while the plan's text is edited, and lays in the files chosen", async () => {
-  const reading = drawn(
-    createElement(PlanBody, { task: TASK, live: false, sectionLinks: SECTION_LINKS }),
-  );
+  const reading = drawn(createElement(PlanBody, { task: TASK, sectionLinks: SECTION_LINKS }));
   assert.equal(appCommandOffered(APP_COMMAND.INSERT_PICTURE), false);
   act(() => roots.pop()?.unmount());
   reading.remove();

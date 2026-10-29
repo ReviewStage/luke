@@ -1,5 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readAgent } from "@luke/database/models/agent-store";
 import { beginTaskWork, finishTaskWork } from "@luke/database/models/task-store";
 import { failureKind } from "@luke/runtime/effect";
 import { Effect, Option } from "effect";
@@ -69,7 +69,7 @@ export function settleAgentTaskIfFinished(
 ): Effect.Effect<void, never, DatabaseServices> {
   return logged(
     "a task's finish",
-    Effect.flatMap(readCodingAgent(userId, agentId), (agent) =>
+    Effect.flatMap(readAgent(userId, agentId), (agent) =>
       Option.isSome(agent) && agent.value.taskId !== null
         ? finishTaskWork(userId, agent.value.taskId, standsStopped)
         : Effect.succeed(false),

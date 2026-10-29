@@ -227,7 +227,7 @@ test("a link to any place in Luke, a plan's, a section's and a picture's among t
     "/acme/plan/p1/inbox/i1/",
     "/acme/automations",
     "/acme/automation/x1/run/r1",
-    "/acme/settings/coding-agents",
+    "/acme/settings/agents",
     "/acme/person/user_9Fq2-x",
     "/acme/admin",
     "/acme/admin/cost",
@@ -245,7 +245,7 @@ test("a link to any place in Luke, a plan's, a section's and a picture's among t
   assert.equal(servedFile("/admin"), "/admin.html");
   // An API path still reaches the oRPC route with the whole path it names, and an exception its own route with the id.
   for (const path of [
-    "/api/plans/x/board",
+    "/api/plans/x/revisions",
     "/api/inbox/i1",
     "/api/automations/x1/runs",
     "/api/agents/a1",
@@ -269,7 +269,7 @@ test("a link to any place in Luke, a plan's, a section's and a picture's among t
     "/",
     "/sign-in.html",
     "/favicon.svg",
-    "/app/fonts/x.woff2",
+    "/app/marks/codex-16.png",
     "/acme/plans/x",
     "/acme/issue/i1",
     "/acme",
@@ -289,7 +289,7 @@ test("every path the web app is served at sends its own Content Security Policy 
     "/App",
     "/acme/plan/p1",
     "/acme/inbox",
-    "/acme/settings/coding-agents",
+    "/acme/settings/agents",
   ]) {
     const answer = answeredHeaders(path);
     const { headers } = answer;
@@ -331,7 +331,11 @@ test("every path the web app is served at sends its own Content Security Policy 
     );
   }
   // An API answer's headers are its handler's own; no page's route reaches it.
-  for (const path of ["/api/plans/x/board", "/api/workspaces/w1/photo", "/api/auth/get-session"]) {
+  for (const path of [
+    "/api/plans/x/revisions",
+    "/api/workspaces/w1/photo",
+    "/api/auth/get-session",
+  ]) {
     assert.equal(answeredHeaders(path).headers.size, 0, path);
   }
 });

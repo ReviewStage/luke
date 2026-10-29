@@ -2,17 +2,17 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxAnswerParams,
-  type CodingAgentInboxAnswerView,
+  AGENT_CALL_FAILURE,
+  type AgentInboxAnswerParams,
+  type AgentInboxAnswerView,
   INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
+} from "@luke/features/agent-view";
 import {
+  AGENT_STATUS,
+  type AgentSummary,
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  type CodingAgentSummary,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -58,7 +58,7 @@ import { relayout } from "../testing/resize-observer.js";
 import { ToastHost } from "../toast.js";
 import "../file-tree/index.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
 const TASK: Task = {
@@ -121,9 +121,9 @@ test("a task the service will not hand the reader, as a link to another workspac
   container.remove();
 });
 
-test("a task with no agent tab draws a new agent's draft, its composer offering Call where the window takes calls, and no pane of start buttons", () => {
+test("a task with no agent tab draws a new agent's draft and no pane of start buttons", () => {
   const DRAFT_ID = "draft-1";
-  const drawn = (calls: TasksControl["calls"]) => {
+  const drawn = () => {
     const page = document.createElement("div");
     page.innerHTML = renderToStaticMarkup(
       createElement(DesktopTasks, {
@@ -138,8 +138,7 @@ test("a task with no agent tab draws a new agent's draft, its composer offering 
             tabs: [{ draft: DRAFT_ID }],
             tab: { draft: DRAFT_ID },
           },
-          calls,
-          agents: codingAgentsControl({
+          agents: agentsControl({
             agentIds: [],
             draft: {
               id: DRAFT_ID,
@@ -148,27 +147,15 @@ test("a task with no agent tab draws a new agent's draft, its composer offering 
               choice: undefined,
               disabledServers: [],
             },
-            startCall: () => Promise.resolve({ agentId: "agent-1" }),
           }),
         }),
       }),
     );
     return page;
   };
-  const voiced = drawn({ onPress: () => undefined });
-  assert.ok(
-    voiced.querySelector(".desktop-agent .agent-composer"),
-    "the draft's composer is drawn",
-  );
-  assert.equal(voiced.querySelector(".desktop-no-agent"), null);
-  assert.equal(
-    [...voiced.querySelectorAll("button")].some((each) =>
-      /voice chat/u.test(each.textContent ?? ""),
-    ),
-    false,
-  );
-  assert.ok(voiced.querySelector(".agent-call-button button"), "and Call in it");
-  assert.equal(drawn(undefined).querySelector(".agent-call-button"), null, "the web's offers none");
+  const page = drawn();
+  assert.ok(page.querySelector(".desktop-agent .agent-composer"), "the draft's composer is drawn");
+  assert.equal(page.querySelector(".desktop-no-agent"), null);
 });
 
 /** The task's page with the side panel open on `tab`, as markup. */
@@ -231,7 +218,7 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
               strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
               tab: SIDE_PANEL_TAB.INBOX,
             },
-            agents: codingAgentsControl({
+            agents: agentsControl({
               agentIds: [agentId],
               inboxFollower: followedInboxes(() => ({ items: [] })).follower,
             }),
@@ -313,9 +300,9 @@ async function narrowTaskInbox(
   items: readonly InboxItem[],
   width = 700,
   /** What is pushed after the first push, where a test settles it; else nothing is. */
-  later: Promise<CodingAgentInboxAnswerView> = new Promise(() => undefined),
+  later: Promise<AgentInboxAnswerView> = new Promise(() => undefined),
   /** What the first push says, where a test holds it back until it settles; else the items given, once followed. */
-  first?: Promise<CodingAgentInboxAnswerView>,
+  first?: Promise<AgentInboxAnswerView>,
   /** The account reading, none where a test does not say, and where its answers go. */
   reader: Pick<TasksControl, "me"> & Partial<Pick<TasksControl["agents"], "answerInbox">> = {
     me: undefined,
@@ -332,7 +319,7 @@ async function narrowTaskInbox(
   // The inbox is pushed as `items` once followed, or as `first` says once it settles, and
   // again as `later` says once it settles.
   const main = followedInboxes(() => (first === undefined ? { items } : undefined));
-  const pushed = (answer: CodingAgentInboxAnswerView) =>
+  const pushed = (answer: AgentInboxAnswerView) =>
     main.push(
       { kind: INBOX_SCOPE_KIND.PLAN, id: TASK.id },
       "failure" in answer ? { failure: answer.failure } : { items: answer.items },
@@ -360,7 +347,7 @@ async function narrowTaskInbox(
               tab: SIDE_PANEL_TAB.INBOX,
             },
             me: reader.me,
-            agents: codingAgentsControl({
+            agents: agentsControl({
               agentIds: ["8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"],
               ...(reader.answerInbox === undefined
                 ? undefined
@@ -622,14 +609,14 @@ test("one column wide, a task's Inbox filtered down to one item still offers its
 
 /** A read the test settles by hand: the promise the Inbox awaits, and what settles it. */
 interface HeldAnswer {
-  readonly promise: Promise<CodingAgentInboxAnswerView>;
-  readonly settle: (answer: CodingAgentInboxAnswerView) => Promise<void>;
+  readonly promise: Promise<AgentInboxAnswerView>;
+  readonly settle: (answer: AgentInboxAnswerView) => Promise<void>;
 }
 
 /** A read held open until the test settles it. */
 function heldAnswer(): HeldAnswer {
-  let settle: (answer: CodingAgentInboxAnswerView) => void = () => undefined;
-  const promise = new Promise<CodingAgentInboxAnswerView>((resolve) => {
+  let settle: (answer: AgentInboxAnswerView) => void = () => undefined;
+  const promise = new Promise<AgentInboxAnswerView>((resolve) => {
     settle = resolve;
   });
   return {
@@ -663,11 +650,12 @@ test("while a task's Inbox is first read, its list stands placeholder rows under
   inbox.unmount();
 });
 
-test("on To do, the item a task's Inbox chose for itself stays shown once it is answered, and its row stays where it stood, gray, so the list says nothing of there being nothing to do while it is chosen", async () => {
+test("on To do, the item opened in a task's Inbox stays shown once it is answered, and its row stays where it stood, gray, so the list says nothing of there being nothing to do while it is chosen", async () => {
   window.localStorage.clear();
   const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
   const read = heldAnswer();
   const inbox = await narrowTaskInbox([asked], 1_200, read.promise);
+  await act(async () => inbox.row("Expire after 7 days?")?.click());
   await inbox.pressScope("For you");
   assert.equal(inbox.title(), "Expire after 7 days?");
   await read.settle({ items: [approvedItem(asked.id, asked.title, 1_000)], cursor: "2" });
@@ -687,6 +675,7 @@ test("a task's Inbox holding only settled items, read, on To do lists no row and
   ];
   const wide = await narrowTaskInbox(items, 1_200);
   assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
+  await act(async () => wide.row("Resend on bounce?")?.click());
   await wide.pressScope("For you");
   assert.deepEqual(await wide.head(), ["Inbox", "[For you]", "All"]);
   assert.deepEqual(wide.rows(), [], "the item read is not listed under a filter leaving it out");
@@ -726,7 +715,7 @@ test("a task's Inbox whose read failed offers Retry though To do lists nothing i
   const read = heldAnswer();
   const inbox = await narrowTaskInbox(settled, 1_200, read.promise);
   assert.deepEqual(inbox.rows(), [], "For you, kept from before, lists nothing");
-  await read.settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await read.settle({ failure: AGENT_CALL_FAILURE.UNANSWERED });
   assert.deepEqual(inbox.failure(), [true, true]);
   window.localStorage.clear();
   inbox.unmount();
@@ -742,7 +731,7 @@ test("a task's Inbox whose refresh failed keeps the rows it holds and says Could
   const refresh = heldAnswer();
   const inbox = await narrowTaskInbox(items, 1_200, refresh.promise);
   assert.deepEqual(inbox.refreshFailure(), [null, false], "nothing is said while the read stands");
-  await refresh.settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  await refresh.settle({ failure: AGENT_CALL_FAILURE.UNANSWERED });
   assert.deepEqual(inbox.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
   assert.deepEqual(inbox.refreshFailure(), ["Could not refresh", true]);
   window.localStorage.clear();
@@ -805,31 +794,35 @@ test("a plan's document opens on its title, with who created it and last edited 
   );
   const body = container.querySelector(".desktop-document .plan-document-body .plan-body");
   const first = body?.firstElementChild;
-  const byline = first?.nextElementSibling;
+  // A task from before statuses draws no standing chip, and still its repository's, under the title.
+  const chips = first?.nextElementSibling;
+  const byline = chips?.nextElementSibling;
 
   assert.equal(container.querySelector('nav[aria-label="Where this task is"]'), null);
   assert.equal(body?.previousElementSibling, null, "nothing stands over the document's title");
   assert.equal(first?.querySelector("h1")?.textContent, task.name, "the title leads the document");
-  assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the title");
+  assert.ok(chips?.classList.contains("plan-task-standing"), "the repository chip stands under it");
+  assert.match(chips?.textContent ?? "", /acme\/web/u);
+  assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the chips");
   assert.match(byline?.textContent ?? "", /^Created by .*Last edited by .*Lee Park/u);
   act(() => root.unmount());
   container.remove();
 });
 
 test("a chip in the plan naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation as the panel's preview, another of the task's repository, an archived agent's among them, opens by its number, and another repository's opens on GitHub", () => {
-  const agent: CodingAgentSummary = {
+  const agent: AgentSummary = {
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     planId: TASK.id,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     title: "Batch the invitations",
     createdAt: 3,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   };
   const url = "https://github.com/acme/relay/pull/42";
   const other = "https://github.com/acme/relay/pull/7";
-  const archived: CodingAgentSummary = {
+  const archived: AgentSummary = {
     ...agent,
     id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
     title: "An earlier try",
@@ -873,7 +866,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
               onPullRequestView: (tab, view) => opened.push({ agentId: tab.changes, view }),
               onPreview: (tab) => opened.push(tab),
             },
-            agents: codingAgentsControl({
+            agents: agentsControl({
               agents: [agent],
               archived: [archived],
               agentIds: [agent.id],
@@ -948,7 +941,7 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
   const marked: string[] = [];
   fakeAppBridge({});
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => {
+    [ACT_KIND.AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => {
       marked.push(`${unread ? "unread" : "read"}:${itemId}`);
       return Promise.resolve({ id: itemId, unread });
     },
@@ -965,11 +958,10 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
+  assert.deepEqual(marked, [], "nothing is read before it is opened");
+  await act(async () => inbox.row("Ship it?")?.click());
   assert.equal(inbox.title(), "Ship it?");
   assert.deepEqual(marked, [`read:${SHIP.id}`]);
-  const dot = (title: string) =>
-    inbox.row(title)?.querySelector(".luke-unread-gutter .luke-unread-dot") !== null;
-  assert.deepEqual([dot("Ship it?"), dot("Roll back?")], [false, true]);
   const mark = inbox
     .row("Roll back?")
     ?.closest("li")
@@ -977,7 +969,6 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
   assert.ok(mark, "an unread row offers Mark as read over its time");
   await act(async () => mark.click());
   assert.deepEqual(marked, [`read:${SHIP.id}`, `read:${ROLL.id}`]);
-  assert.equal(dot("Roll back?"), false);
   inbox.unmount();
 });
 
@@ -987,7 +978,7 @@ test("a plan's own Inbox acknowledges the reader's own notice as it opens it, an
   showEverything();
   fakeAppBridge({});
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) =>
+    [ACT_KIND.AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) =>
       Promise.resolve({ id: itemId, unread }),
   });
   const notice = (id: string, title: string, at: number): InboxItem => ({
@@ -1001,7 +992,7 @@ test("a plan's own Inbox acknowledges the reader's own notice as it opens it, an
     ...notice("a1b2c3d4-0000-4000-8000-0000000000b2", "The migration ran", 1),
     startedBy: { userId: "user-teammate", name: "Charles Pan" },
   };
-  const answered: CodingAgentInboxAnswerParams[] = [];
+  const answered: AgentInboxAnswerParams[] = [];
   const inbox = await narrowTaskInbox([OWN, THEIRS], 1400, undefined, undefined, {
     me: "user-reader",
     answerInbox: (params) => {
@@ -1012,6 +1003,8 @@ test("a plan's own Inbox acknowledges the reader's own notice as it opens it, an
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
+  assert.equal(answered.length, 0, "nothing is acknowledged before it is opened");
+  await act(async () => inbox.row("The preview is up")?.click());
   assert.equal(inbox.title(), "The preview is up");
   // Note that a nod carries its item, the revision shown, and the nod alone, under a key of the window's own.
   const sent = () => answered.map(({ clientKey: _key, ...nod }) => nod);

@@ -1,4 +1,4 @@
-import { DEVICE_STANDING } from "@luke/features/coding-agent-wire";
+import { DEVICE_STANDING } from "@luke/features/agent-wire";
 import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
 import {
   HOST_WIRE,
@@ -12,7 +12,9 @@ import { agoText, momentText } from "@luke/features/time-format";
 import { readingWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
+import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
+  ANNOUNCE,
   Badge,
   BUTTON_VARIANT,
   Button,
@@ -23,11 +25,12 @@ import {
   DIALOG_SIZE,
   Dialog,
   DialogActions,
+  ErrorLine,
   ErrorState,
   GAP,
+  PlusIcon,
   SETTINGS_SKELETON_CONTROL,
   SettingsLine,
-  SettingsRow,
   type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
@@ -53,9 +56,16 @@ import {
 } from "../device-presence.js";
 import { useExperiment } from "../use-app-state.js";
 import { MenuRow } from "./menu-row.js";
+import {
+  ThisMacAct,
+  type ThisMacHost,
+  ThisMacHostRow,
+  ThisMacStateLine,
+  useThisMacHost,
+} from "./this-mac-host-row.js";
 
 /**
- * hosts-section.tsx -- Settings › Agents › Machines: the member's own machines that run their local agents, Linux servers and Macs alike, and Add Linux servers, which shows the install command once.
+ * hosts-section.tsx -- Settings › Hosts: the member's own machines that run their local agents, Linux servers and Macs alike, and Add hosts, which shows the install command once.
  *
  * A machine is any device of the member's enrolled with a secret of its own
  * (`@luke/features/host-wire`): a Linux server that ran the install command
@@ -67,6 +77,14 @@ import { MenuRow } from "./menu-row.js";
  * updated. Remove, behind the row's ⋯, refuses that machine at once, after
  * asking. Adding stays Linux-only and says so, since a Mac joins from its app.
  *
+ * In the desktop app this Mac stands first, with where its `luke-host`
+ * stands under it (`this-mac-host-row.tsx`) and Retry where it failed: on
+ * its own machine's row, matched by the device it is enrolled as, or, where
+ * the service lists no machine for it (removed, never enrolled, a turn-on
+ * that failed, or another account's), on a This Mac row of its own with
+ * Turn on again or Retry, so there is always a way back. A browser tab has
+ * no This Mac, so it draws neither.
+ *
  * Add hosts mints an install token here, in the window, and hands the
  * service its SHA-256 alone, so the token never leaves the window that
  * shows it: it stands in this section's state while the dialog is open,
@@ -74,7 +92,8 @@ import { MenuRow } from "./menu-row.js";
  * a coding agent follows to install them, and is gone once the dialog closes.
  * Revoke this command stops new servers enrolling with it, and none it
  * already enrolled. The section stands nowhere while the local agents
- * experiment is off, which hosts sit behind as This Mac does.
+ * experiment is off, which hosts sit behind as This Mac does, and neither
+ * does its page (`settings-rows.ts`'s `PAGE_EXPERIMENT`).
  */
 
 /** The bytes of randomness behind an install token, as many as a device secret's. */
@@ -92,30 +111,31 @@ const MINUTE_MS = 60_000;
 const COMMANDS = "ph-no-capture contain-inline-size";
 
 const WORDS = {
-  TITLE: "Machines",
-  ADD: "Add Linux servers",
+  ADD: "Add hosts",
   ADDING: "Making a command",
   ADD_FAILED: "Could not make an install command. Try again.",
-  READ_FAILED: "Could not read your machines.",
-  SIGNED_OUT: "Sign in to see your machines.",
+  READ_FAILED: "Could not read your hosts.",
+  SIGNED_OUT: "Sign in to see your hosts.",
   ONLINE: "Online",
   UNKNOWN: "Can't check status",
   CHECKING: "Checking",
   UPGRADE_NEEDED: "Upgrade needed",
-  UPGRADE_TITLE: "Run this on the server to upgrade it",
+  UPGRADE_TITLE: "Run this on the host to upgrade it",
   MAC_UPGRADE: "Update the Luke app on this Mac to upgrade it.",
-  INSTALL_TITLE: "Run this as root on each server",
+  INSTALL_TITLE: "Run this as root on each host",
   LOOP_TITLE: "Or on many servers at once",
   COPY_PROMPT: "Copy agent prompt",
   PROMPT_COPIED: "Agent prompt copied",
   REVOKE: "Revoke this command",
 } as const;
 
-/** The rows that stand while the machines are read: Add Linux servers, and a machine with its ⋯. */
+/** The row that stands while the machines are read: a machine with its ⋯. */
 const HOSTS_SKELETON: readonly SettingsRowSkeletonShape[] = [
-  { described: true, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] },
   { described: true, controls: [SETTINGS_SKELETON_CONTROL.MORE] },
 ];
+
+/** Add hosts' own line under the list, the button stretched to the rows' width and its failure under it. */
+const ADD_LINE = "grid";
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 /** A remove or a revoke the service did not take, said in the dialog that asked. */
@@ -157,31 +177,36 @@ const REMOVE_BODY = {
   [DEVICE_PLATFORM.LINUX]:
     "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke. To clean the server itself, run sudo luke-host uninstall on it.",
   [DEVICE_PLATFORM.DARWIN]:
-    "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke. To use it again, turn local agents on in the Luke app on it.",
+    "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke. To use it again, choose Turn on again under This Mac in the Luke app on it.",
 } as const satisfies Record<DevicePlatform, string>;
 
-/** One machine's row: its name, what it is and whether it is online, Upgrade needed with how to upgrade it, and Remove behind its ⋯. */
+/** One machine's row: its name, what it is and whether it is online, Upgrade needed with how to upgrade it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
 function HostRow({
   host,
   book,
   now,
   installScriptUrl,
   onRemove,
+  thisMac,
 }: {
   host: Host;
   book: PresenceBook;
   now: number;
   installScriptUrl: string;
   onRemove: (id: string) => Promise<ActionResult>;
+  /** Where this Mac stands, on the row of the machine it is enrolled as alone. */
+  thisMac?: ThisMacHost | undefined;
 }): React.JSX.Element {
   const removing = useConfirmDialog({ subject: true, surfaceOpen: true }, () => onRemove(host.id));
   // Note that a service older than platforms listed only Linux servers.
   const platform = host.platform ?? DEVICE_PLATFORM.LINUX;
   const seen = `${DEVICE_PLATFORM_NAME[platform]} · ${seenWords(host, book, now)}`;
+  const line = thisMac?.line ?? null;
   return (
     <>
       <MenuRow
-        thing="Machine"
+        thing="Host"
+        alone
         actions={[
           {
             label: "Remove",
@@ -192,12 +217,19 @@ function HostRow({
           },
         ]}
         row={{
-          label: host.name,
+          label: thisMac === undefined ? host.name : `${host.name} (this Mac)`,
           adornment: host.upgradeNeeded ? (
             <Badge tone={STATUS_TONE.ATTENTION}>{WORDS.UPGRADE_NEEDED}</Badge>
           ) : undefined,
-          description:
-            host.upgradeNeeded && host.version !== null ? `${seen} · runs ${host.version}` : seen,
+          description: (
+            <>
+              {host.upgradeNeeded && host.version !== null
+                ? `${seen} · runs ${host.version}`
+                : seen}
+              {line === null ? null : <ThisMacStateLine line={line} />}
+            </>
+          ),
+          control: thisMac === undefined ? undefined : <ThisMacAct thisMac={thisMac} />,
           below: !host.upgradeNeeded ? undefined : platform === DEVICE_PLATFORM.DARWIN ? (
             <Text>{WORDS.MAC_UPGRADE}</Text>
           ) : (
@@ -225,7 +257,7 @@ function HostRow({
   );
 }
 
-/** The dialog Add Linux servers opens: the install command and its loop, each with the token in it, shown this once, and Revoke. */
+/** The dialog Add hosts opens: the install command and its loop, each with the token in it, shown this once, and Revoke. */
 function AddHostsDialog({
   shown,
   onRevoke,
@@ -293,7 +325,7 @@ function AddHostsDialog({
   );
 }
 
-/** The Machines group: Add Linux servers and the member's machines, read when the page opens, or why they cannot be drawn. */
+/** The Hosts page's one group, untitled under the page's own title: the member's machines, read when the page opens, or why they cannot be drawn, and Add hosts under them. */
 export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Element | null {
   const on = useExperiment(EXPERIMENT.LOCAL_AGENTS);
   const { act } = useAct();
@@ -308,6 +340,7 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   const [adding, setAdding] = useState(false);
   const [addFailed, setAddFailed] = useState(false);
   const [shown, setShown] = useState<ShownToken | undefined>(undefined);
+  const thisMac = useThisMacHost(on && signedIn);
 
   // The page opening reads the hosts the service holds now, which a server may just have joined.
   useEffect(() => {
@@ -399,58 +432,75 @@ export function HostsSection({ signedIn }: { signedIn: boolean }): React.JSX.Ele
   }, [act, shown]);
 
   if (!on) return null;
+  const thisMacId = thisMac.standing?.deviceId;
+  const listedMac =
+    thisMacId === undefined ? undefined : hosts?.find((host) => host.id === thisMacId);
+  const loaded = signedIn && hosts !== undefined && installScriptUrl !== undefined;
+  const ordered =
+    hosts === undefined || listedMac === undefined
+      ? (hosts ?? [])
+      : [listedMac, ...hosts.filter((host) => host !== listedMac)];
+  const thisMacAlone = listedMac === undefined && thisMac.line !== null;
   return (
-    <SettingsSection title={WORDS.TITLE}>
-      {!signedIn ? (
-        <SettingsLine>{WORDS.SIGNED_OUT}</SettingsLine>
-      ) : hosts !== undefined && installScriptUrl !== undefined ? (
-        <>
-          <SettingsRow
-            label={WORDS.ADD}
-            error={addFailed ? WORDS.ADD_FAILED : undefined}
-          >
-            {() => (
-              <Button
-                variant={BUTTON_VARIANT.OUTLINE}
-                busy={adding}
-                busyLabel={WORDS.ADDING}
-                onClick={add}
-              >
-                {WORDS.ADD}
-              </Button>
-            )}
-          </SettingsRow>
-          {hosts.map((host) => (
-              <HostRow
-                key={host.id}
-                host={host}
-                book={book}
-                now={now}
-                installScriptUrl={installScriptUrl}
-                onRemove={remove}
-              />
-            ))}
-          {shown === undefined ? null : (
-            <AddHostsDialog
-              shown={shown}
-              onRevoke={revoke}
-              onClose={() => {
-                setShown(undefined);
-                // The list is read again, so a server that joined while the dialog stood is drawn.
-                setAttempt((count) => count + 1);
-              }}
-            />
+    <>
+      {loaded && ordered.length === 0 && !thisMacAlone ? null : (
+        // Note that signed out the section holds the search anchor, since Add hosts is drawn only for a signed-in member.
+        <SettingsSection anchor={signedIn ? undefined : SETTINGS_SEARCH_ROW.ADD_HOSTS}>
+          {!signedIn ? (
+            <SettingsLine>{WORDS.SIGNED_OUT}</SettingsLine>
+          ) : loaded ? (
+            <>
+              {thisMacAlone && thisMac.line !== null ? (
+                <ThisMacHostRow thisMac={thisMac} line={thisMac.line} />
+              ) : null}
+              {ordered.map((host) => (
+                <HostRow
+                  key={host.id}
+                  host={host}
+                  book={book}
+                  now={now}
+                  installScriptUrl={installScriptUrl}
+                  onRemove={remove}
+                  thisMac={host === listedMac ? thisMac : undefined}
+                />
+              ))}
+            </>
+          ) : readFailed ? (
+            <SettingsLine>
+              <ErrorState onRetry={() => setAttempt((count) => count + 1)}>
+                {WORDS.READ_FAILED}
+              </ErrorState>
+            </SettingsLine>
+          ) : (
+            <SettingsRowsSkeleton label={readingWords("your hosts")} rows={HOSTS_SKELETON} />
           )}
-        </>
-      ) : readFailed ? (
-        <SettingsLine>
-          <ErrorState onRetry={() => setAttempt((count) => count + 1)}>
-            {WORDS.READ_FAILED}
-          </ErrorState>
-        </SettingsLine>
-      ) : (
-        <SettingsRowsSkeleton label={readingWords("your machines")} rows={HOSTS_SKELETON} />
+        </SettingsSection>
       )}
-    </SettingsSection>
+      {signedIn ? (
+        <div className={ADD_LINE} {...searchAnchorProps(SETTINGS_SEARCH_ROW.ADD_HOSTS)}>
+          <Button
+            variant={BUTTON_VARIANT.OUTLINE}
+            icon={<PlusIcon />}
+            busy={adding}
+            busyLabel={WORDS.ADDING}
+            onClick={add}
+          >
+            {WORDS.ADD}
+          </Button>
+          <ErrorLine level={ANNOUNCE.ALERT}>{addFailed ? WORDS.ADD_FAILED : null}</ErrorLine>
+        </div>
+      ) : null}
+      {shown === undefined ? null : (
+        <AddHostsDialog
+          shown={shown}
+          onRevoke={revoke}
+          onClose={() => {
+            setShown(undefined);
+            // The list is read again, so a server that joined while the dialog stood is drawn.
+            setAttempt((count) => count + 1);
+          }}
+        />
+      )}
+    </>
   );
 }

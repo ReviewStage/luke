@@ -2,10 +2,10 @@ import {
   type GitHubPerson,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import type { GitHubPullRequestSummary, IssueState } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { issueAddressOf, pullRequestAddressOf, readLinearIssue } from "@luke/features/link-grammar";
+import { issueAddressOf, pullRequestAddressOf } from "@luke/features/link-grammar";
 import { MENTION_KIND, type Mention } from "@luke/features/mention-link";
 import type { TasksView } from "@luke/features/tasks-view";
 import type { Workspace } from "@luke/features/workspace-wire";
@@ -14,10 +14,10 @@ import * as Atom from "effect/reactivity/Atom";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./coding-agent-model.js";
+import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./agent-model.js";
 
 /**
- * use-link-standing.ts -- a Linear issue, or a GitHub pull request or issue, a link in Luke's words names, as its chip says it: its key, its title, where it stands, who it is with, and a pull request's lines added and removed, read through the workspace's own connection.
+ * use-link-standing.ts -- a GitHub pull request or issue a link in Luke's words names, as its chip says it: its key, its title, where it stands, who opened it, and a pull request's lines added and removed, read through the workspace's own GitHub App.
  *
  * The workspace is the one the words are of: the plan's, where they are a
  * plan's, else the one the place drawing them names, as the window's Inbox
@@ -25,20 +25,24 @@ import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./coding-agent-model.js"
  * one their mentions are written under.
  * Words that name neither, as an Inbox item whose workspace the service did
  * not name, read nothing, since a page read through another workspace's
- * connection would be drawn in the wrong one. A Linear issue is
- * read by its identifier through the workspace's Linear grant, and a pull
- * request or a GitHub issue by its repository and number through the
- * workspace's GitHub App, each on the service, once per chip, and only where that workspace has the
- * connection, so a chip in a workspace without it asks nothing. Until it
- * answers, or where it never does, a repository the App does not reach
- * among them, the chip says what the address says, as it always has, and an
- * answer is held to the workspace it was read through and the connection it
- * was read over, so a workspace that disconnects stops drawing it.
+ * connection would be drawn in the wrong one. A pull request or a GitHub
+ * issue is read by its repository and number through the workspace's
+ * GitHub App, on the service, once per chip, and only where that workspace
+ * has the App, so a chip in a workspace without it asks nothing. Until it
+ * first answers, or where it never does, a repository the App does not reach
+ * among them, the chip says what the address says, as it always has. The
+ * window keeps the last answer for each page by the workspace it was read
+ * through, so a chip drawn again, as a plan's text is when a section opens
+ * in its editor and when it closes, says it at once while it is read again,
+ * rather than its address until the read lands; and a kept answer is drawn
+ * only while that workspace still has the App, so a workspace that
+ * disconnects stops drawing it. A Linear issue's chip asks nothing and says
+ * what its address says.
  */
 
-/** Where the words a chip stands in are: the plan's id, or none off a plan, and the workspace's slug its mentions are written under. */
+/** Where the words a chip stands in are: the plan's id, none off a plan, and the workspace's slug its mentions are written under. */
 export interface ChipWhere {
-  readonly taskId: string;
+  readonly taskId: string | undefined;
   readonly workspace: string;
 }
 
@@ -54,15 +58,13 @@ const WordsWorkspaceContext = createContext<string | undefined>(undefined);
 /** Hands the words under it the workspace they are of, by its id. */
 export const WordsWorkspace = WordsWorkspaceContext.Provider;
 
-/** A provider's page as its provider answered for it: its key, `ENG-123` or `relay#42`, its title, the state it stands in, and a pull request's or a GitHub issue's own state for its mark. */
+/** A GitHub page as GitHub answered for it: its key, `relay#42`, its title, the state it stands in, and a pull request's or an issue's own state for its mark. */
 export interface LinkStanding {
   readonly key: string;
   readonly title: string;
   readonly state: string | undefined;
   readonly pullRequest: StandingPullRequest | undefined;
   readonly issue: { readonly number: number; readonly state: IssueState } | undefined;
-  /** Who a Linear issue is with, as its card says it: who it is assigned to; none where Linear named no one, and none for a pull request or a GitHub issue, whose card names `opener`. */
-  readonly byline: string | undefined;
   /** Who opened a pull request or a GitHub issue, as its card draws them by their face; none where GitHub named no one. */
   readonly opener: GitHubPerson | undefined;
 }
@@ -80,11 +82,6 @@ export function openerOf(summary: {
   if (author === undefined) return undefined;
   const person = { login: author, bot: authorBot ?? author.endsWith(BOT_LOGIN_SUFFIX) };
   return authorAvatarUrl === undefined ? person : { ...person, avatarUrl: authorAvatarUrl };
-}
-
-/** What a card says of who a Linear issue is assigned to. */
-function assignedTo(name: string | undefined): string | undefined {
-  return name === undefined ? undefined : `Assigned to ${name}`;
 }
 
 /** A pull request as its chip draws it: its number and state for its mark, and for its card what the service answered of it, each none, or no labels, where an older service answered none. */
@@ -165,91 +162,84 @@ const GITHUB_PAGE = { PULL_REQUEST: "pull-request", ISSUE: "issue" } as const;
 
 type GitHubPage = (typeof GITHUB_PAGE)[keyof typeof GITHUB_PAGE];
 
-/** What a link mention asks its provider: a Linear issue by identifier, a pull request or a GitHub issue by repository and number; nothing for any other mention. */
-type Asked =
-  | { readonly provider: typeof INTEGRATION_PROVIDER.LINEAR; readonly identifier: string }
-  | {
-      readonly provider: typeof INTEGRATION_PROVIDER.GITHUB;
-      readonly page: GitHubPage;
-      readonly repository: string;
-      readonly number: number;
-    };
-
-/** What a GitHub link asks for: the pull request or the issue its address names, if either. */
-function githubAskedOf(url: string): Asked | undefined {
-  const pullRequest = pullRequestAddressOf(url);
-  if (pullRequest !== undefined) {
-    return {
-      provider: INTEGRATION_PROVIDER.GITHUB,
-      page: GITHUB_PAGE.PULL_REQUEST,
-      ...pullRequest,
-    };
-  }
-  const issue = issueAddressOf(url);
-  return issue === undefined
-    ? undefined
-    : { provider: INTEGRATION_PROVIDER.GITHUB, page: GITHUB_PAGE.ISSUE, ...issue };
+/** What a link mention asks GitHub: a pull request or an issue by repository and number. */
+interface Asked {
+  readonly page: GitHubPage;
+  readonly repository: string;
+  readonly number: number;
 }
 
-/** What a mention asks its provider for, where it is a link to a Linear issue, a pull request, or a GitHub issue. */
+/** What a mention asks GitHub for, where it is a link to a pull request or a GitHub issue. */
 function askedOf(mention: Mention): Asked | undefined {
   // Note that a well-known site's page names no provider to ask.
   if (mention.kind !== MENTION_KIND.LINK || !("provider" in mention)) return undefined;
-  if (mention.provider === INTEGRATION_PROVIDER.LINEAR) {
-    const identifier = readLinearIssue(mention.url);
-    return identifier === undefined ? undefined : { provider: mention.provider, identifier };
-  }
-  if (mention.provider === INTEGRATION_PROVIDER.GITHUB) return githubAskedOf(mention.url);
-  return undefined;
+  if (mention.provider !== INTEGRATION_PROVIDER.GITHUB) return undefined;
+  const pullRequest = pullRequestAddressOf(mention.url);
+  if (pullRequest !== undefined) return { page: GITHUB_PAGE.PULL_REQUEST, ...pullRequest };
+  const issue = issueAddressOf(mention.url);
+  return issue === undefined ? undefined : { page: GITHUB_PAGE.ISSUE, ...issue };
 }
 
-/** The key a chip names an asked page by: the Linear issue's identifier, or the repository's name and the pull request's or the issue's number. */
+/** The key a chip names an asked page by: the repository's name and the pull request's or the issue's number. */
 function keyOf(asked: Asked): string {
-  return asked.provider === INTEGRATION_PROVIDER.LINEAR
-    ? asked.identifier
-    : `${asked.repository.split("/")[1] ?? asked.repository}#${asked.number}`;
+  return `${asked.repository.split("/")[1] ?? asked.repository}#${asked.number}`;
 }
 
-/** Whether two asks ask for the same page. */
-function sameAsked(first: Asked, second: Asked): boolean {
-  if (first.provider === INTEGRATION_PROVIDER.LINEAR) {
-    return (
-      second.provider === INTEGRATION_PROVIDER.LINEAR && first.identifier === second.identifier
-    );
-  }
-  return (
-    second.provider === INTEGRATION_PROVIDER.GITHUB &&
-    first.page === second.page &&
-    first.repository === second.repository &&
-    first.number === second.number
-  );
+/** A page's last answer as the window keeps it: the order its read was asked in, and what it answered, none where GitHub holds no such page. */
+interface HeldStanding {
+  readonly order: number;
+  readonly standing: LinkStanding | undefined;
 }
 
-/** The provider's answer for an ask, through the workspace's connection: a Linear issue by identifier, a pull request or a GitHub issue by repository and number; none where it holds none. */
+/**
+ * The last answer this window read for each page, by the workspace it was
+ * read through and then by the page's kind, repository, and number, let go
+ * as the account signed in changes (`forgetStandings`), since what a page
+ * answers may be the account's. Note that each is small and replaced by the
+ * next read of the same page, so the window keeps every one it read rather
+ * than bound them.
+ */
+const heldStandings = new Map<string, Map<GitHubPage, Map<string, Map<number, HeldStanding>>>>();
+
+/** How many reads the window has asked, which orders their answers. */
+let asks = 0;
+
+/** What the window keeps for an ask through a workspace; nothing before any read landed. */
+function heldOf(workspaceId: string, asked: Asked): HeldStanding | undefined {
+  return heldStandings.get(workspaceId)?.get(asked.page)?.get(asked.repository)?.get(asked.number);
+}
+
+/**
+ * An answer kept as the last for its ask through a workspace, an answer
+ * that the page is gone included, so a chip stops saying a title GitHub no
+ * longer answers. Note that an answer to a read asked before the one kept
+ * is dropped, so reads landing out of order never put back what a later
+ * one replaced.
+ */
+function keepStanding(workspaceId: string, asked: Asked, answer: HeldStanding): void {
+  if ((heldOf(workspaceId, asked)?.order ?? -1) > answer.order) return;
+  const pages =
+    heldStandings.get(workspaceId) ?? new Map<GitHubPage, Map<string, Map<number, HeldStanding>>>();
+  heldStandings.set(workspaceId, pages);
+  const repositories = pages.get(asked.page) ?? new Map<string, Map<number, HeldStanding>>();
+  pages.set(asked.page, repositories);
+  const numbers = repositories.get(asked.repository) ?? new Map<number, HeldStanding>();
+  repositories.set(asked.repository, numbers);
+  numbers.set(asked.number, answer);
+}
+
+/** Lets go of every answer the window kept, as the account signed in changes. */
+export function forgetStandings(): void {
+  heldStandings.clear();
+}
+
+/** GitHub's answer for an ask, through the workspace's App: a pull request or an issue by repository and number; none where it holds none. */
 function readStanding(
   act: ReturnType<typeof useAct>["act"],
   workspaceId: string,
   asked: Asked,
 ): Promise<LinkStanding | undefined> {
   const key = keyOf(asked);
-  if (asked.provider === INTEGRATION_PROVIDER.LINEAR) {
-    return act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, {
-      workspaceId,
-      identifier: asked.identifier,
-    }).then(([issue]) =>
-      issue === undefined
-        ? undefined
-        : {
-            key,
-            title: issue.title,
-            state: issue.state,
-            pullRequest: undefined,
-            issue: undefined,
-            byline: assignedTo(issue.assignee),
-            opener: undefined,
-          },
-    );
-  }
   const numbered = { workspaceId, repository: asked.repository, number: asked.number };
   if (asked.page === GITHUB_PAGE.ISSUE) {
     return act(ACT_KIND.TASKS_ISSUE, numbered).then((issue) =>
@@ -261,7 +251,6 @@ function readStanding(
             state: ISSUE_WORDS[issue.state],
             pullRequest: undefined,
             issue: { number: issue.number, state: issue.state },
-            byline: undefined,
             opener: openerOf(issue),
           },
     );
@@ -279,18 +268,14 @@ function readStanding(
           state: queuedOf(pullRequest) ? QUEUED_LABEL : PULL_REQUEST_STATE_LABEL[pullRequest.state],
           pullRequest: standingPullRequestOf(pullRequest),
           issue: undefined,
-          byline: undefined,
           opener: openerOf(pullRequest),
         },
   );
 }
 
-/** Whether the workspace has the connection an ask is read through: Linear connected, or an active GitHub installation. */
-function connectedFor(asked: Asked, workspace: Workspace | undefined): boolean {
-  if (workspace === undefined) return false;
-  return asked.provider === INTEGRATION_PROVIDER.LINEAR
-    ? workspace.linear?.active === true
-    : workspace.github?.active === true;
+/** Whether the workspace has the connection an ask is read through: an active GitHub installation. */
+function connectedFor(workspace: Workspace | undefined): boolean {
+  return workspace?.github?.active === true;
 }
 
 /** What of the tasks a chip's workspace is found by: the workspaces, and the tasks that name theirs. */
@@ -315,7 +300,11 @@ function wordsWorkspace(
   namedId: string | undefined,
 ): Workspace | undefined {
   const workspaces = planning?.workspaces ?? [];
-  const taskWorkspaceId = planning?.tasks.find((task) => task.id === where.taskId)?.workspaceId;
+  const { taskId } = where;
+  const taskWorkspaceId =
+    taskId === undefined
+      ? undefined
+      : planning?.tasks.find((task) => task.id === taskId)?.workspaceId;
   return (
     workspaces.find((each) => each.id === taskWorkspaceId) ??
     workspaces.find((each) => each.id === namedId) ??
@@ -339,29 +328,27 @@ export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStandin
     useContext(WordsWorkspaceContext),
   );
   const workspaceId = workspace?.id;
-  const connected = asked !== undefined && connectedFor(asked, workspace);
-  const [read, setRead] = useState<{
-    workspaceId: string;
-    asked: Asked;
-    standing: LinkStanding;
-  }>();
+  const connected = asked !== undefined && connectedFor(workspace);
+  // Note that the answer itself is kept by the window, so this only draws the chip again as it lands.
+  const [, setAnswered] = useState<HeldStanding>();
   // Note that the read stands on what it asks, field by field, so a chip redrawn asks no more.
-  const identifier = asked?.provider === INTEGRATION_PROVIDER.LINEAR ? asked.identifier : undefined;
-  const page = asked?.provider === INTEGRATION_PROVIDER.GITHUB ? asked.page : undefined;
-  const repository = asked?.provider === INTEGRATION_PROVIDER.GITHUB ? asked.repository : undefined;
-  const number = asked?.provider === INTEGRATION_PROVIDER.GITHUB ? asked.number : undefined;
+  const page = asked?.page;
+  const repository = asked?.repository;
+  const number = asked?.number;
   useEffect(() => {
     const ask: Asked | undefined =
-      identifier !== undefined
-        ? { provider: INTEGRATION_PROVIDER.LINEAR, identifier }
-        : page !== undefined && repository !== undefined && number !== undefined
-          ? { provider: INTEGRATION_PROVIDER.GITHUB, page, repository, number }
-          : undefined;
+      page !== undefined && repository !== undefined && number !== undefined
+        ? { page, repository, number }
+        : undefined;
     if (ask === undefined || workspaceId === undefined || !connected) return;
     let live = true;
+    asks += 1;
+    const order = asks;
     readStanding(act, workspaceId, ask).then(
       (standing) => {
-        if (live && standing !== undefined) setRead({ workspaceId, asked: ask, standing });
+        const answer = { order, standing };
+        keepStanding(workspaceId, ask, answer);
+        if (live) setAnswered(answer);
       },
       // Note that a refused read leaves the chip as the address says it, which is how it always stood.
       () => undefined,
@@ -369,13 +356,7 @@ export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStandin
     return () => {
       live = false;
     };
-  }, [act, identifier, page, repository, number, workspaceId, connected]);
+  }, [act, page, repository, number, workspaceId, connected]);
   // Note that an answer stands only for the workspace and the connection it was read through, so a disconnect or another workspace drops it at once.
-  const current =
-    connected &&
-    read !== undefined &&
-    asked !== undefined &&
-    read.workspaceId === workspaceId &&
-    sameAsked(read.asked, asked);
-  return current ? read.standing : undefined;
+  return connected && workspaceId !== undefined ? heldOf(workspaceId, asked)?.standing : undefined;
 }

@@ -8,10 +8,10 @@ import {
   RETIRED_TOOL,
 } from "@luke/features/agent-tools";
 import {
-  CODING_AGENT_TODO_STATUS,
-  type CodingAgentTodos,
-  codingAgentTodosInputSchema,
-} from "@luke/features/coding-agent-wire";
+  AGENT_TODO_STATUS,
+  type AgentTodos,
+  agentTodosInputSchema,
+} from "@luke/features/agent-wire";
 import {
   INBOX_ASK,
   INBOX_BLOCK,
@@ -73,7 +73,7 @@ import { askHeadWords } from "./inbox-ask-words.js";
  * is read through the wire's own schema, since its input is the list the
  * row draws item by item, and an item posted to the developer's inbox
  * through it too, its row naming the item the Inbox tab draws. A call
- * about something the window opens elsewhere, a page, the board, an agent,
+ * about something the window opens elsewhere, a page, an agent,
  * code shown, names it as its target (`toolTarget`), which its row opens.
  * A call of an integration's own MCP tool, stored under its provider's
  * remote name, is drawn as the tool it ran: the provider's mark, the
@@ -305,47 +305,47 @@ function planEditSummary(input: WireValue | undefined): string {
     .join(", ");
 }
 
-const readTodos = Schema.decodeUnknownOption(codingAgentTodosInputSchema);
+const readTodos = Schema.decodeUnknownOption(agentTodosInputSchema);
 
 /** The list a to-do write carries, or nothing where its input does not read as one, as while it streams. */
-export function todosView(input: WireValue | undefined): CodingAgentTodos["todos"] | undefined {
+export function todosView(input: WireValue | undefined): AgentTodos["todos"] | undefined {
   return Option.getOrUndefined(readTodos(input))?.todos;
 }
 
 /** How many of a list's items are done, and how many it holds. */
-export function todosCount(todos: CodingAgentTodos["todos"]): { done: number; total: number } {
-  const done = todos.filter((todo) => todo.status === CODING_AGENT_TODO_STATUS.DONE).length;
+export function todosCount(todos: AgentTodos["todos"]): { done: number; total: number } {
+  const done = todos.filter((todo) => todo.status === AGENT_TODO_STATUS.DONE).length;
   return { done, total: todos.length };
 }
 
 /** How far a list has got: "2 of 5 done". */
-export function todosSummary(todos: CodingAgentTodos["todos"]): string {
+export function todosSummary(todos: AgentTodos["todos"]): string {
   const { done, total } = todosCount(todos);
   return `${done} of ${total} done`;
 }
 
 /** The item a list is at: the one in progress, else the first still pending; nothing once every item is done. */
-export function todoFocus(todos: CodingAgentTodos["todos"]): string | undefined {
+export function todoFocus(todos: AgentTodos["todos"]): string | undefined {
   const current =
-    todos.find((todo) => todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS) ??
-    todos.find((todo) => todo.status === CODING_AGENT_TODO_STATUS.PENDING);
+    todos.find((todo) => todo.status === AGENT_TODO_STATUS.IN_PROGRESS) ??
+    todos.find((todo) => todo.status === AGENT_TODO_STATUS.PENDING);
   return current?.content;
 }
 
 /** One item of a list as words, where the list is copied or drawn as a call's input: a markdown checkbox, the item in progress saying so. */
-function todoLine(todo: CodingAgentTodos["todos"][number]): string {
+function todoLine(todo: AgentTodos["todos"][number]): string {
   switch (todo.status) {
-    case CODING_AGENT_TODO_STATUS.PENDING:
+    case AGENT_TODO_STATUS.PENDING:
       return `- [ ] ${todo.content}`;
-    case CODING_AGENT_TODO_STATUS.IN_PROGRESS:
+    case AGENT_TODO_STATUS.IN_PROGRESS:
       return `- [ ] ${todo.content} (in progress)`;
-    case CODING_AGENT_TODO_STATUS.DONE:
+    case AGENT_TODO_STATUS.DONE:
       return `- [x] ${todo.content}`;
   }
 }
 
 /** A to-do list's row, a whole list's write or the list as it stood after one of Claude Code's task calls (`agent-todos.ts`): how far the list has got, and the list as checkboxes. The call's answer only says the list was taken, so none is shown. */
-export function todosListView(todos: CodingAgentTodos["todos"]): ToolCallView {
+export function todosListView(todos: AgentTodos["todos"]): ToolCallView {
   return {
     kind: CALL_KIND.TODOS,
     subject: todosSummary(todos),
@@ -1190,8 +1190,6 @@ export const TOOL_TARGET = {
   AGENT: "agent",
   /** A page's tab in the side panel. */
   PAGE: "page",
-  /** The side panel's Board tab. */
-  BOARD: "board",
   /** The task's own tab, its document. */
   PLAN: "plan",
   /** The task's Inbox tab, on the item a call names by its key where it names one. */
@@ -1205,7 +1203,6 @@ export const TOOL_TARGET = {
 export type ToolTarget =
   | { readonly kind: typeof TOOL_TARGET.AGENT; readonly agent: string }
   | { readonly kind: typeof TOOL_TARGET.PAGE; readonly page: string }
-  | { readonly kind: typeof TOOL_TARGET.BOARD }
   | { readonly kind: typeof TOOL_TARGET.PLAN }
   | {
       readonly kind: typeof TOOL_TARGET.INBOX;
@@ -1219,7 +1216,6 @@ export type ToolTarget =
 export const TARGET_HINT = {
   [TOOL_TARGET.AGENT]: "Open the agent",
   [TOOL_TARGET.PAGE]: "Open the page",
-  [TOOL_TARGET.BOARD]: "Open the Board",
   [TOOL_TARGET.PLAN]: "Open the plan",
   [TOOL_TARGET.INBOX]: "Open the Inbox",
   [TOOL_TARGET.TASK]: "Open the task",
@@ -1403,7 +1399,7 @@ export function calledAgent(call: Omit<TargetedCall, "callId">): CalledAgent | u
   return model === undefined ? { id, title } : { id, title, model };
 }
 
-/** The fields a delegation's part carries, in the wire's words (`codingAgentDelegationInputSchema`, `codingAgentDelegationOutputSchema`), and the message the brain's worker is handed in the task's place. */
+/** The fields a delegation's part carries, in the wire's words (`agentDelegationInputSchema`, `agentDelegationOutputSchema`), and the message the brain's worker is handed in the task's place. */
 const DELEGATION_FIELD = {
   TASK: "task",
   MESSAGE: "message",

@@ -1,12 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE, AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { BROWSER_TAB_OPEN_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
-import { EXPERIMENT } from "@luke/settings";
-import { experimentsOn } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -18,18 +16,17 @@ import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel.js";
 import { NO_LOOKS } from "./use-task-looks.js";
 
 /**
  * Where a Browser tab is offered: the side panel's "+" lists New browser tab
- * under Browser while the account has the Browser tab experiment on and the
- * task has a coding agent, always in an agent's cloud browser: one agent's
+ * under Browser while the task has a coding agent, always in an agent's cloud browser: one agent's
  * at once, and with several, a submenu of whose, the one viewed first. A
  * pick lands on a draft, which opens nothing until its bar's Enter
- * (`cloud-browser-tab.test.ts`). With no agent, or the experiment off, the
- * "+" offers none. A synthetic plan and agents throughout.
+ * (`cloud-browser-tab.test.ts`). With no agent, or only one on a Mac, which
+ * runs no browser, the "+" offers none. A synthetic plan and agents throughout.
  */
 
 const TASK: Task = {
@@ -52,18 +49,18 @@ const SUMMARY: TaskSummary = {
 };
 
 /** A coding agent on the task, and a second beside it. */
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40",
   planId: TASK.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Invite expiry",
   createdAt: 3,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
 };
 
-const OTHER_AGENT: CodingAgentSummary = {
+const OTHER_AGENT: AgentSummary = {
   ...AGENT,
   id: "1c6a9d2f-5e4b-4f7c-9a3d-0b2e8f4c6d51",
   title: "Invite emails",
@@ -75,6 +72,7 @@ const roots: Root[] = [];
 beforeEach(() => {
   installScrollIntoView();
   fakeAppBridge({ onMenuCommand: () => () => undefined });
+  handState({});
 });
 
 afterEach(() => {
@@ -89,9 +87,9 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The plan drawn with its side panel open on its Board, answering the tabs it was asked to show. */
+/** The plan drawn with its side panel open on its Comments, answering the tabs it was asked to show. */
 async function mount(
-  agents: readonly CodingAgentSummary[] = [],
+  agents: readonly AgentSummary[] = [],
   viewed?: string,
   strip?: readonly SidePanelTab[],
 ): Promise<{ readonly chosen: readonly SidePanelTab[] }> {
@@ -114,13 +112,13 @@ async function mount(
     sidePanel: {
       ...base.sidePanel,
       open: true,
-      tab: SIDE_PANEL_TAB.BOARD,
+      tab: SIDE_PANEL_TAB.COMMENTS,
       onChoose: (tab) => {
         chosen.push(tab);
       },
       ...(strip === undefined ? undefined : { strip }),
     },
-    agents: codingAgentsControl({ agents, agentIds: agents.map((agent) => agent.id) }),
+    agents: agentsControl({ agents, agentIds: agents.map((agent) => agent.id) }),
   });
   act(() =>
     root.render(
@@ -147,14 +145,12 @@ async function browserRows(): Promise<HTMLElement[]> {
   ].filter((row) => row.closest('[role="group"]')?.textContent?.startsWith("Browser") === true);
 }
 
-test("on a task with no coding agent, the panel's + offers no Browser tab, and none with the experiment off", async () => {
-  handState(experimentsOn(EXPERIMENT.BROWSER));
+test("on a task with no coding agent, or only one on a Mac, the panel's + offers no Browser tab", async () => {
   await mount();
   assert.deepEqual(await browserRows(), []);
 
   for (const root of roots.splice(0)) act(() => root.unmount());
-  handState({});
-  await mount([AGENT]);
+  await mount([{ ...AGENT, machine: AGENT_MACHINE.DEVICE }]);
   assert.deepEqual(await browserRows(), []);
 });
 
@@ -171,7 +167,6 @@ function landedOnDraft(chosen: readonly SidePanelTab[]): boolean {
 }
 
 test("on a task with one coding agent, the panel's + New browser tab drafts a tab in its browser at once, with no submenu, and opens nothing", async () => {
-  handState(experimentsOn(EXPERIMENT.BROWSER));
   const asked: unknown[] = [];
   fakeActPort({
     [ACT_KIND.TASKS_BROWSER_TAB_OPEN]: (payload) => {
@@ -199,7 +194,6 @@ function submenuChoices(): HTMLElement[] {
 }
 
 test("on a task with several coding agents, the panel's + New browser tab opens a submenu of the agents alone, the one viewed first, and an agent drafts a tab in its browser and opens nothing", async () => {
-  handState(experimentsOn(EXPERIMENT.BROWSER));
   const asked: unknown[] = [];
   fakeActPort({
     [ACT_KIND.TASKS_BROWSER_TAB_OPEN]: (payload) => {
@@ -227,7 +221,6 @@ test("on a task with several coding agents, the panel's + New browser tab opens 
 });
 
 test("a cloud Browser tab wears its agent's glyph in the strip and hangs a card naming the agent's browser and the page's address", async () => {
-  handState(experimentsOn(EXPERIMENT.BROWSER));
   const tab = {
     id: "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b",
     agentId: OTHER_AGENT.id,
@@ -251,7 +244,7 @@ test("a cloud Browser tab wears its agent's glyph in the strip and hangs a card 
     // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
     [ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: () => Promise.resolve(held as never),
   });
-  await mount([AGENT, OTHER_AGENT], undefined, [SIDE_PANEL_TAB.BOARD, { cloudBrowser: tab.id }]);
+  await mount([AGENT, OTHER_AGENT], undefined, [SIDE_PANEL_TAB.COMMENTS, { cloudBrowser: tab.id }]);
 
   const drawn = [...document.querySelectorAll<HTMLElement>('.side-panel-tabs [role="tab"]')].find(
     (each) => each.textContent?.includes("Sign in"),

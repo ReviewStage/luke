@@ -137,7 +137,6 @@ const sentryAutomation = (
 ) =>
   Effect.map(
     createAutomation(owner, {
-      taskId: null,
       organizationId: workspaceId,
       repositories: ["Acme/Storefront"],
       name: "Fix Sentry errors",

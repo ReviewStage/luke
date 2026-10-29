@@ -1,0 +1,3 @@
+-- task_board is declared no longer, and this release reads and writes it no longer, but the release
+-- before it still names it while this one migrates; a later release's migration drops it
+-- (apps/web/server/README.md, "Dropping a column ... takes two deployments").

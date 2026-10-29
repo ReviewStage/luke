@@ -5,9 +5,14 @@ import { eq, getTableColumns } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
-import { createCodingAgent } from "../../models/coding-agent-store.js";
+import { createAgent } from "../../models/agent-store.js";
 import { createTask } from "../../models/task-store.js";
-import { getTestDB, migrationStatements, openWorkspace } from "../../testing/index.js";
+import {
+  getTestDB,
+  migrationStatements,
+  openWorkspace,
+  syncCaptureTakenOff,
+} from "../../testing/index.js";
 import { user } from "../auth.js";
 import { inboxItem } from "../inbox.js";
 import { inboxMessage } from "../inbox-message.js";
@@ -40,7 +45,7 @@ const openAgent = Effect.gen(function* () {
   const organizationId = yield* openWorkspace(userId);
   const task = yield* createTask(userId, { organizationId, name: "Teammate invitations" });
   const started = Option.getOrThrow(
-    yield* createCodingAgent(userId, {
+    yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -93,6 +98,8 @@ it.layer(getTestDB())("inbox_message_ask over a database from before it", (it) =
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         const place = yield* openAgent;
+        // The database as it stood before the migration: no sync capture yet, and the migration undone.
+        for (const statement of syncCaptureTakenOff()) yield* sql.unsafe(statement);
         for (const statement of UNDO) yield* sql.unsafe(statement);
 
         // Written as a deployment from before the migration writes them, naming none of its columns.

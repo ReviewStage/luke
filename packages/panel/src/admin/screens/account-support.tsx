@@ -21,8 +21,8 @@ import type {
   AdminAccountSupport,
   AdminAccountWorkspace,
 } from "@luke/features/admin-answer-wire";
+import { CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import { AGENT_STATUS_WORDS } from "@luke/features/automation-list-model";
-import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { formatCount, formatPercent } from "@luke/features/number-format";
 import { FAST_ACCESS, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
 import { formatInstant } from "@luke/features/time-format";
@@ -43,7 +43,7 @@ import {
   TEXT_TONE,
   Text,
 } from "@luke/ui";
-import { AGENT_STATUS_TONE } from "../../tasks/coding-agent-model.js";
+import { AGENT_STATUS_TONE } from "../../tasks/agent-model.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import {
@@ -71,7 +71,7 @@ const SKELETON_EXPERIMENTS_WIDTH = "192px";
 
 /** What each kind of failure is called on the timeline. */
 const FAILURE_SUBJECT = {
-  [ADMIN_FAILURE_KIND.AGENT]: "Coding agent failed",
+  [ADMIN_FAILURE_KIND.AGENT]: "Agent failed",
   [ADMIN_FAILURE_KIND.KEY]: "Provider key",
   [ADMIN_FAILURE_KIND.CONNECTION]: "Connection",
   [ADMIN_FAILURE_KIND.AUTOMATION]: "Automation run failed",
@@ -106,7 +106,7 @@ function workStats(windowDays: number): readonly StatSpec<AdminAccountSupport>[]
     },
     {
       key: "agents",
-      label: () => `Coding agents · ${windowDays} days`,
+      label: () => `Agents · ${windowDays} days`,
       value: ({ totals }) => formatCount(totals.agentsStarted),
       hint: ({ totals }) => {
         const failed = percentOf(totals.agentsFailed, totals.agentsRead);
@@ -276,7 +276,7 @@ const FAILURE_COLUMNS: readonly DataTableColumn<FailureRow>[] = [
   },
 ];
 
-/** The account's coding-agent defaults and the experiments it turned on. */
+/** The account's agent defaults and the experiments it turned on. */
 function DefaultsLines({ support }: { support: AdminAccountSupport }): React.JSX.Element {
   const { defaults } = support;
   const choice =
@@ -285,7 +285,7 @@ function DefaultsLines({ support }: { support: AdminAccountSupport }): React.JSX
       : `${defaults.model} · ${defaults.effort ?? NONE}${windowWords(defaults.contextWindow)}`;
   return (
     <Stack gap={GAP.CONTROL}>
-      <Text>Coding agents start on {choice}.</Text>
+      <Text>Agents start on {choice}.</Text>
       {defaults.experiments.length === 0 ? (
         <Text tone={TEXT_TONE.MUTED}>No experiments turned on.</Text>
       ) : (
@@ -365,11 +365,11 @@ export function AccountSupportSections({
 
       <AdminSection title="Recent agents">
         <SupportTable
-          label="The account's newest coding agents"
+          label="The account's newest agents"
           columns={AGENT_COLUMNS}
           rows={support?.recentAgents}
           rowKey={(agent) => agent.id}
-          empty="No coding agent started yet."
+          empty="No agent started yet."
           minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
           skeletonRows={SKELETON_ROWS.AGENTS}
         />

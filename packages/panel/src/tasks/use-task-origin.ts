@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
-import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import type { AgentStatus } from "@luke/features/agent-wire";
 import { agentName } from "@luke/features/model-label";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { AppStateSnapshot } from "@luke/host/app-state";
@@ -7,7 +7,7 @@ import { type Actor, type OriginAgent, originActor } from "@luke/ui/actor-model"
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback } from "react";
 import { appStateDerivedAtom } from "../use-app-state.js";
-import { agentActorState, providerOf } from "./coding-agent-model.js";
+import { agentActorState, providerOf } from "./agent-model.js";
 
 /**
  * use-task-origin.ts -- who made a task for its member, where they did not make it by hand: Luke on their call, a coding agent, or the automation whose run started it.
@@ -26,7 +26,7 @@ interface ListedAgent {
   readonly id: string;
   readonly title: string | null;
   readonly model: string;
-  readonly status: CodingAgentStatus;
+  readonly status: AgentStatus;
   readonly automationName?: string | undefined;
 }
 

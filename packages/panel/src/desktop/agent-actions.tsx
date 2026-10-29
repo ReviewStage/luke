@@ -1,59 +1,182 @@
 import {
-  CODING_AGENT_KIND,
-  CODING_AGENT_MACHINE,
-  type CodingAgentAttachment,
-  type CodingAgentBrief,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_KIND,
+  AGENT_MACHINE,
+  type AgentAttachment,
+  type AgentBrief,
+  type AgentSummary,
+} from "@luke/features/agent-wire";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
-import { useMemo } from "react";
 import { pressAct } from "../act.js";
+import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { useSteadyDoor } from "../steady-door.js";
-import type { AgentCallDoors, AgentCallPlace, AgentCallPress } from "../tasks/agent-call.js";
 import type { AgentFork } from "../tasks/fork-model.js";
+import { markReadItem, type ReadMark } from "../tasks/task-menu-items.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
-import { agentTranscript, readWholeTranscript } from "../tasks/transcript-copy.js";
-import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
+import {
+  agentTranscript,
+  readWholeTranscript,
+  TRANSCRIPT_COPY,
+  type TranscriptCopy,
+} from "../tasks/transcript-copy.js";
+import type { AgentsControl } from "../tasks/use-agents.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import { useCapability } from "../use-app-state.js";
+import type { MenuAction, MenuEntry } from "./action-menu.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { useAgentDelete } from "./agent-delete.js";
-import { type TabDoors, type TranscriptRead, useTranscriptCopier } from "./strip-tabs.js";
+import { type TranscriptRead, useTranscriptCopier } from "./strip-tabs.js";
 
 /**
- * agent-actions.tsx -- one coding agent's actions, the same wherever the agent is drawn: its tab in a task's column and its own page, on a task or on none.
+ * agent-actions.tsx -- one coding agent's menu, built once (`agentMenuGroups`) and drawn the same wherever the agent is drawn: its tab's right-click and its column's ⋯ on a task, its own page's ⋯, and its rows in the sidebar, a task's summary, a person's page, the sidebar's pins, and the summary's Archived.
  *
- * Every surface that draws an agent offers what this hook answers, and
- * nothing of its own beside it, so an agent with no task, as an
- * automation's run starts, is acted on as a task's is: its tab, its page,
- * and its sidebar row, which leaves out only what `NOT_ON_A_ROW` names.
- * Rename, which opens its name's field where the surface draws its name,
- * while neither it nor what it stands under is archived; Show terminal, where the platform runs one,
- * and none for an archived agent, whose sandbox takes no shell, which for a local agent opens the
- * Mac's own Terminal in its worktree instead of the relayed tab; Copy link; its transcript's
- * two copies, read whole from the service; Archive, asked first
- * while a teammate's agent works (`agent-archive.tsx`), or Unarchive once it is archived;
- * and last and alone, Permanently delete, always asked first
- * (`agent-delete.tsx`), which closes the surface once it landed.
+ * Every surface that draws an agent offers what `useAgentActions` answers,
+ * laid out by `agentMenuGroups` in the one order every menu of the window
+ * keeps, Copy, then name and read, then organize, then open elsewhere, then
+ * lifecycle, and Delete last and alone: Copy link and the transcript's two
+ * copies, read whole from the service; Rename, which opens its name's field
+ * where the surface draws its name, while neither it nor what it stands
+ * under is archived, and Mark as unread or Mark as read, for an agent with
+ * no task, whose marks are a task's (`agent-read-marks.ts`); Pin or Unpin
+ * and Move to section, the reader's own, for an agent with no task, which
+ * has a row of its own among the sidebar's tasks (an agent on a task has
+ * none, and its tab keeps Pin tab among its tab's keeping); Show terminal,
+ * where the platform runs one, and none for an archived agent, whose sandbox
+ * takes no shell, which for a local agent opens the Mac's own Terminal in
+ * its worktree instead of the relayed tab; Archive, asked first while a
+ * teammate's agent works (`agent-archive.tsx`), or Unarchive once it is
+ * archived; and last and alone, Permanently delete, always asked first
+ * (`agent-delete.tsx`), which closes the surface once it landed. A row
+ * leaves out only what `NOT_ON_A_ROW` names, and nothing of its own is
+ * added beside the menu but what the row's kind keeps, a pinned tab's Unpin
+ * before it and a summary row's Show details (`row-menu.tsx`).
  * Run, which runs the agent's pushed branch on this Mac, stands on its
  * Pull request tab instead (`agent-pull-request-tab.tsx`).
  * The doors that open a terminal are the column's, from where it stands
  * (`useAgentTerminalDoors`), and so are those that open a fork of one of its
  * messages or a continue of it as a draft (`useAgentDraftDoors`): the
  * task's draft tab, or the draft on an agent's own page, each started
- * through the same control. So are the doors its Call takes a call through
- * (`useAgentCallDoors`), the window's one press told where the surface's
- * agents stand: the open task for its column, and the agent's own task, or
- * none, for its page.
+ * through the same control.
  */
 
-/** What an agent offers on itself, as a tab's menu and a toolbar's ⋯ draw it (`strip-tabs.tsx`), and its sidebar row (`RowDoors`). */
-type AgentDoors = Pick<
-  TabDoors,
+/** A pin as a menu offers it, Pin or Unpin: whether it stands, and the press that sets it or takes it away. */
+export interface PinDoor {
+  pinned: boolean;
+  onToggle: () => void;
+}
+
+/**
+ * What an agent's menu is built from: each door none where the surface, or
+ * the agent, offers no such act, which leaves its item out. A tab's doors
+ * (`strip-tabs.tsx`'s `TabDoors`) hold the first six, and so does every
+ * other tab's, whose menu is these same groups over the few doors it has.
+ */
+export interface AgentMenuDoors {
+  /** Whether the menu is the chosen tab's or the page's, whose Show terminal alone prints ⌘J, which opens the chosen agent's terminal. */
+  chosen?: boolean | undefined;
+  /** Copies the link of what the menu is about (`copy-link-item.tsx`). */
+  copyLink?: MenuAction | undefined;
+  /** Copies the agent's transcript, concise or full. */
+  onCopy?: ((copy: TranscriptCopy) => void) | undefined;
+  /** Opens the agent's name's field where the surface draws its name. */
+  onRename?: (() => void) | undefined;
+  /** Mark as unread or Mark as read, for an agent with read marks: one with no task. */
+  read?: ReadMark | undefined;
+  /** Pin or Unpin, for an agent with a sidebar row of its own: one with no task, not archived. */
+  agentPin?: PinDoor | undefined;
+  /** Move to section ▸, the reader's own sections, for the same agents (`sidebar-sections.tsx`). */
+  section?: MenuEntry | undefined;
+  /** Opens the agent's own Terminal tab in the side panel, adding no shell. */
+  onOpenTerminal?: (() => void) | undefined;
+  /** Opens the agent in its full place, its tab on its task, from where it stands apart from it: beside the Inbox. */
+  onOpenInTask?: (() => void) | undefined;
+  /** Archives the agent, or Unarchive once it is archived (`agent-archive.tsx`). */
+  archive?: MenuAction | undefined;
+  /** Deletes the agent for good, asked first (`agent-delete.tsx`). */
+  deletion?: MenuAction | undefined;
+  /** Whether U and P act on the agent from its row while the row is focused, a sidebar row's, so its read mark and pin print them. */
+  rowKeys?: boolean | undefined;
+}
+
+/**
+ * The agent's menu, built once for every surface that draws it, in the
+ * groups every menu of the window keeps: Copy link and the transcript's two
+ * copies; Rename and the read mark; Pin and Move to section; Show terminal,
+ * and Open in task, for an agent drawn apart from its task; Archive or
+ * Unarchive; and last and alone, Permanently delete. The copies, Show
+ * terminal, Open in task, and Permanently delete print ⌥⌘C, ⇧⌥⌘C, ⌘J, ⌘O,
+ * and ⌘⌫ only where the menu is the chosen tab's or the agent's page's,
+ * since each chord acts on that agent; the read mark and Pin print U and P
+ * there too, and on a sidebar row, whose focus the letters act on
+ * (`rowKeys`). A group with nothing in it is left out, so a surface
+ * with few doors draws the few groups it has in the same order.
+ */
+export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
+  const { copyLink, onCopy, onRename, read, agentPin, section, onOpenTerminal, onOpenInTask } =
+    doors;
+  const { archive, deletion } = doors;
+  const chosen = doors.chosen === true;
+  const lettered = chosen || doors.rowKeys === true;
+  const copies: MenuEntry[] = [
+    ...(copyLink === undefined ? [] : [copyLink]),
+    ...(onCopy === undefined
+      ? []
+      : [
+          commandAction(
+            PANEL_COMMAND.COPY_CONCISE_TRANSCRIPT,
+            () => onCopy(TRANSCRIPT_COPY.CONCISE),
+            chosen,
+          ),
+          commandAction(
+            PANEL_COMMAND.COPY_FULL_TRANSCRIPT,
+            () => onCopy(TRANSCRIPT_COPY.FULL),
+            chosen,
+          ),
+        ]),
+  ];
+  const named: MenuEntry[] = [
+    ...(onRename === undefined ? [] : [commandAction(PANEL_COMMAND.RENAME, onRename, false)]),
+    ...(read === undefined ? [] : [markReadItem(read, lettered)]),
+  ];
+  const organized: MenuEntry[] = [
+    ...(agentPin === undefined
+      ? []
+      : [
+          commandAction(
+            agentPin.pinned ? PANEL_COMMAND.UNPIN_AGENT : PANEL_COMMAND.PIN_AGENT,
+            agentPin.onToggle,
+            lettered,
+          ),
+        ]),
+    ...(section === undefined ? [] : [section]),
+  ];
+  const opened: MenuEntry[] = [
+    ...(onOpenTerminal === undefined
+      ? []
+      : [commandAction(PANEL_COMMAND.SHOW_TERMINAL, onOpenTerminal, chosen)]),
+    ...(onOpenInTask === undefined
+      ? []
+      : [commandAction(PANEL_COMMAND.OPEN_IN_TASK, onOpenInTask, chosen)]),
+  ];
+  return [
+    copies,
+    named,
+    organized,
+    opened,
+    archive === undefined ? [] : [archive],
+    deletion === undefined
+      ? []
+      : [chosen ? { ...deletion, command: APP_COMMAND.DELETE } : deletion],
+  ].filter((group) => group.length > 0);
+}
+
+/** What an agent offers on itself wherever it is drawn: the doors of its menu that are the agent's own, which a surface adds its own to (`read`, `agentPin`, `section`). */
+export type AgentDoors = Pick<
+  AgentMenuDoors,
   "onCopy" | "onRename" | "onOpenTerminal" | "archive" | "deletion" | "copyLink"
 >;
 
@@ -65,12 +188,12 @@ type AgentDoors = Pick<
  * placed on the row or is named here, or that test fails.
  */
 const NOT_ON_A_ROW = {
-  onOpenTerminal: "The terminal opens in a side panel, and a sidebar row has none.",
-  onCopy: "A task's sidebar row offers no transcript copy either, so an agent's row offers none.",
+  onOpenTerminal: "The terminal opens in a side panel, and a row has none.",
+  onCopy: "A task's row offers no transcript copy either, so an agent's row offers none.",
 } as const satisfies Partial<Record<keyof AgentDoors, string>>;
 
-/** The doors an agent's sidebar row offers: every one but those `NOT_ON_A_ROW` names. */
-type RowDoors = Omit<AgentDoors, keyof typeof NOT_ON_A_ROW>;
+/** The doors an agent's row offers: every one but those `NOT_ON_A_ROW` names. */
+export type RowDoors = Omit<AgentDoors, keyof typeof NOT_ON_A_ROW>;
 
 /** The doors a row offers of those an agent offers, `NOT_ON_A_ROW`'s left out. */
 export function rowDoors(doors: AgentDoors): RowDoors {
@@ -98,10 +221,10 @@ export interface AgentActions {
 
 /** A coding agent's transcript read whole from the service under the title given, since its tab holds it only while shown. */
 export function agentTranscriptRead(
-  readTranscript: CodingAgentsControl["readTranscript"],
+  readTranscript: AgentsControl["readTranscript"],
   agentId: string,
   title: string,
-  brief: CodingAgentBrief | undefined,
+  brief: AgentBrief | undefined,
   quiet = false,
 ): TranscriptRead {
   return () =>
@@ -145,7 +268,7 @@ export function useAgentTerminalDoors(
 export interface AgentDraftDoors {
   readonly onFork: ((fork: AgentFork) => void) | undefined;
   readonly onContinue:
-    | ((agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) => void)
+    | ((agentId: string, words: string, attachments: readonly AgentAttachment[]) => void)
     | undefined;
 }
 
@@ -157,7 +280,7 @@ export interface AgentDraftDoors {
  * (`useSteadyDoor`), and none while what the agents stand under is archived.
  */
 export function useAgentDraftDoors(
-  agents: Pick<CodingAgentsControl, "onForkDraft" | "onContinueDraft">,
+  agents: Pick<AgentsControl, "onForkDraft" | "onContinueDraft">,
   archived: boolean,
   onOpenDraft: (draftId: string) => void,
 ): AgentDraftDoors {
@@ -167,34 +290,21 @@ export function useAgentDraftDoors(
   const onContinue = useSteadyDoor(
     archived
       ? undefined
-      : (agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) =>
+      : (agentId: string, words: string, attachments: readonly AgentAttachment[]) =>
           onOpenDraft(agents.onContinueDraft(agentId, words, attachments)),
   );
   return { onFork, onContinue };
 }
 
 /**
- * The doors a surface's agents take calls through: the window's press
- * (`TasksControl.calls`), told where the surface's agents stand, the task a
- * column holds or the task an agent's page's agent is on, none for an agent
- * with no task, and whether it is archived. Steady across renders, so a
- * pane handed them draws nothing again as the place moves; none where the
- * window has no voice.
+ * One agent's actions, as every surface that draws it offers them. Luke, the
+ * member's operator, is known by his kind and offers neither Rename, Archive,
+ * nor Delete wherever he is drawn, a Luke a Reset retired included: his
+ * name is his kind's, his Reset archives him, and there is one of him.
  */
-export function useAgentCallDoors(
-  calls: AgentCallPress | undefined,
-  place: AgentCallPlace,
-): AgentCallDoors | undefined {
-  const onPress = useSteadyDoor(
-    calls === undefined ? undefined : (agentId: string) => calls.onPress(agentId, place),
-  );
-  return useMemo(() => (onPress === undefined ? undefined : { onPress }), [onPress]);
-}
-
-/** One agent's actions, as every surface that draws it offers them. */
 export function useAgentActions(
   agent: Pick<
-    CodingAgentSummary,
+    AgentSummary,
     | "id"
     | "planId"
     | "status"
@@ -207,7 +317,7 @@ export function useAgentActions(
     | "machine"
     | "startedBy"
   >,
-  agents: CodingAgentsControl,
+  agents: AgentsControl,
   input: {
     /** The agent's name as the surface draws it, which a transcript copied is headed by. */
     readonly label: string;
@@ -220,17 +330,18 @@ export function useAgentActions(
 ): AgentActions {
   const { label, shown, terminals, onDeleted } = input;
   const copied = useTranscriptCopier();
-  const copyLink = useCopyLinkItem()(agentPlace(agent));
+  const copyLink = useCopyLinkItem()(agentPlace(agent.id));
   const rename = useInlineRename(agent.id, agents.onRename);
   const archive = useAgentArchive(agent, agents, shown);
   const unarchive = useAgentUnarchive(agent.id, agents);
   const deletion = useAgentDelete(agent, agents, { shown, onDeleted });
+  const luke = agent.kind === AGENT_KIND.OPERATOR;
   // Note that an Unarchive stands while what the agent stands under is archived, and neither it nor
   // an archived agent is renamed then.
-  const renamable = agents.onUnarchive === undefined && agent.archivedAt === undefined;
+  const renamable = !luke && agents.onUnarchive === undefined && agent.archivedAt === undefined;
   const { onOpenTerminal } = terminals;
   const macTerminal = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
-  const local = agent.machine === CODING_AGENT_MACHINE.DEVICE;
+  const local = agent.machine === AGENT_MACHINE.DEVICE;
   // Note that a local agent runs in a worktree on its starter's Mac, which no relayed tab reaches, so
   // its Terminal opens the Mac's own Terminal there, offered to its starter alone, whose Mac it is.
   const starter = agent.startedBy !== undefined && agent.startedBy.userId === agents.me;
@@ -241,21 +352,15 @@ export function useAgentActions(
     : onOpenTerminal === undefined
       ? undefined
       : () => onOpenTerminal(agent.id);
-  const read = agentTranscriptRead(
-    agents.readTranscript,
-    agent.id,
-    label,
-    agent.brief,
-    agent.kind === CODING_AGENT_KIND.OPERATOR,
-  );
+  const read = agentTranscriptRead(agents.readTranscript, agent.id, label, agent.brief, luke);
   return {
     doors: {
       onCopy: copied(read),
       onRename: renamable ? rename.begin : undefined,
       // Note that an archived agent's sandbox takes no shell, so it offers no terminal.
       onOpenTerminal: agent.archivedAt !== undefined ? undefined : terminal,
-      archive: agent.archivedAt === undefined ? archive.action : unarchive,
-      deletion: deletion.action,
+      archive: luke ? undefined : agent.archivedAt === undefined ? archive.action : unarchive,
+      deletion: luke ? undefined : deletion.action,
       copyLink,
     },
     rename: renamable ? rename : undefined,

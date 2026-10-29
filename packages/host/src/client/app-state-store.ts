@@ -1,5 +1,5 @@
 /**
- * app-state-store.ts -- the one document every window of a client is drawn from: the store that holds it, the push that carries it out, the patches that move it, and the projections a window is handed.
+ * app-state-store.ts -- the one document every window of a client is drawn from: the store that holds it, the push that carries it out, and the patches that move it.
  */
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
@@ -9,13 +9,7 @@ import { NOTIFICATIONS_STATUS } from "@luke/settings/settings-controls";
 import type { BuildCommit } from "@luke/settings/update";
 import { keepIdentity } from "@luke/wire";
 import { type Context, Effect, type Scope, Stream, SubscriptionRef } from "effect";
-import {
-  type AppState,
-  type AppStateSnapshot,
-  type AppWindowFacts,
-  NO_ACCESS,
-} from "../app-state.js";
-import { stagedCallState } from "../fixture-stage.js";
+import { type AppState, NO_ACCESS } from "../app-state.js";
 import type { HostBootstrap } from "../host-operator.js";
 import type { RunMode } from "../run-mode.js";
 import { idleUpdateSnapshot } from "../update-service.js";
@@ -58,10 +52,18 @@ function patchEntries(patch: AppStatePatch): [AppStateSlice, AppState[AppStateSl
  * one these writes run under. `runSyncWith` runs on the calling stack exactly
  * as it does without a context, and a `SubscriptionRef` read or write never
  * suspends, so the call still answers in the same turn its caller made it in.
+ *
+ * A write made while another is being announced is queued behind it rather
+ * than run there. A subscriber parked on `changes` is resumed on the writer's
+ * own stack, while `SubscriptionRef.set` still holds the ref's one permit, so
+ * a subscriber that answers a document with a write of its own would have its
+ * `set` wait for that permit, which `runSyncWith` cannot do. Queued, it lands
+ * next, once every subscriber has been handed the document it answered.
  */
 export class AppStateStore {
   readonly #ref: SubscriptionRef.SubscriptionRef<AppState>;
   readonly #services: Context.Context<never>;
+  #queued: (() => void)[] | undefined;
 
   constructor(initial: Omit<AppState, "version">, services: Context.Context<never>) {
     this.#services = services;
@@ -75,6 +77,43 @@ export class AppStateStore {
   }
 
   update(patch: AppStatePatch): void {
+    this.#write(() => this.#apply(patch));
+  }
+
+  /**
+   * Re-announces the document exactly as it stands, without a version. It is
+   * for the facts a window answers for and the document cannot — its mode and
+   * the display it stands on — which move without any slice moving: the
+   * snapshot a window is handed carries them, so a window whose own facts
+   * changed has to be handed one again. The ref is set to its own current
+   * value so `changes` re-announces it too, the same document under the same
+   * version.
+   */
+  touch(): void {
+    this.#write(() =>
+      Effect.runSyncWith(this.#services)(SubscriptionRef.set(this.#ref, this.snapshot())),
+    );
+  }
+
+  /** The document's own change stream, direct from the ref, for the one production subscriber. */
+  get changes(): Stream.Stream<AppState> {
+    return SubscriptionRef.changes(this.#ref);
+  }
+
+  #write(write: () => void): void {
+    if (this.#queued !== undefined) {
+      this.#queued.push(write);
+      return;
+    }
+    this.#queued = [write];
+    try {
+      for (let next = this.#queued.shift(); next !== undefined; next = this.#queued.shift()) next();
+    } finally {
+      this.#queued = undefined;
+    }
+  }
+
+  #apply(patch: AppStatePatch): void {
     const previous = this.snapshot();
     // Note that a slice kept whole is one that says nothing new, which is the
     // one walk that both decides that and shares what did not move.
@@ -89,24 +128,6 @@ export class AppStateStore {
       version: previous.version + 1,
     };
     Effect.runSyncWith(this.#services)(SubscriptionRef.set(this.#ref, next));
-  }
-
-  /**
-   * Re-announces the document exactly as it stands, without a version. It is
-   * for the facts a window answers for and the document cannot — its mode and
-   * the display it stands on — which move without any slice moving: the
-   * snapshot a window is handed carries them, so a window whose own facts
-   * changed has to be handed one again. The ref is set to its own current
-   * value so `changes` re-announces it too, the same document under the same
-   * version.
-   */
-  touch(): void {
-    Effect.runSyncWith(this.#services)(SubscriptionRef.set(this.#ref, this.snapshot()));
-  }
-
-  /** The document's own change stream, direct from the ref, for the one production subscriber. */
-  get changes(): Stream.Stream<AppState> {
-    return SubscriptionRef.changes(this.#ref);
   }
 }
 
@@ -139,64 +160,18 @@ export function publishAppStateChanges(
 
 /**
  * One host bootstrap as a patch of this document. What each slice carries is
- * the host's own answer; the readings of it are this client's. The trace gate
- * is a fact of the run rather than of the launch's arguments. And a halt
+ * the host's own answer; the readings of it are this client's. A halt
  * outlives a host read: the account it was raised for is going, the host
  * still answers `permitted` until its own change event lands, and only that
  * event stands the halt down.
  */
 export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePatch {
   return {
-    run: { ...held.run, agentTraceEnabled: boot.agentTraceEnabled },
     settings: boot.settings,
     account: boot.account,
     access: boot.access,
-    voice: held.voice,
     sessionReplay: { ...boot.sessionReplay, halted: held.sessionReplay.halted },
   };
-}
-
-/** Which window a document is handed to, as far as what it draws goes. */
-interface WindowRole {
-  readonly voice: boolean;
-  readonly call: boolean;
-}
-
-/**
- * The document as one window is handed it, its own facts beside it. The call
- * transcript reaches the panels alone, which draw it: the voice window
- * reports it and the call window draws no line of it. And the voice window
- * is handed no view, because the view is the one it reports itself
- * (`reportVoiceView`), and nothing else of the voice slice. Each
- * stream sends a window only what moved in what it is handed
- * (`push-procedures.ts`), so a caption the voice window reports reaches it
- * as nothing, and the call window as the view alone.
- */
-export function windowAppState(
-  held: AppState,
-  role: WindowRole,
-  window: AppWindowFacts,
-): AppStateSnapshot {
-  if (!role.voice && !role.call) return { ...held, window };
-  const { callTranscript: _callTranscript, ...drawn } = held;
-  return role.voice ? { ...drawn, voice: {}, window } : { ...drawn, window };
-}
-
-/**
- * The voice slice once the voice window that reported its view is gone: no
- * view, since an idle voice is what every panel draws in its place.
- */
-export function voiceWindowGone(): AppState["voice"] {
-  return {};
-}
-
-/**
- * The voice slice once the voice window has been given up on for the run:
- * gone as above, and voice unavailable until Luke is reopened, which every
- * panel says where it offers a call.
- */
-export function voiceWindowGaveUp(): AppState["voice"] {
-  return { ...voiceWindowGone(), unavailable: true };
 }
 
 /** What a launch knows of itself before the host answers anything, which is the run slice's own facts. */
@@ -215,11 +190,9 @@ interface ClientRunFacts {
 
 /**
  * The document as a launch begins it: this process's own facts, what the
- * platform offers, and an empty
- * standing for everything the host has not answered yet, but the call a
- * call profile's fixture run stages (`fixture-stage.ts`). Nothing here reads
- * a device or the host — the first bootstrap and the events after it are
- * what fill the rest in.
+ * platform offers, and an empty standing for everything the host has not
+ * answered yet. Nothing here reads a device or the host — the first bootstrap
+ * and the events after it are what fill the rest in.
  */
 export function initialAppState(
   config: ClientRunFacts,
@@ -227,8 +200,6 @@ export function initialAppState(
   capabilities: readonly HostCapability[],
 ): Omit<AppState, "version"> {
   const { launch, runMode } = config;
-  // A call profile's fixture run opens on its staged call, as no voice window reports one.
-  const staged = stagedCallState(launch);
   return {
     run: {
       profile: launch.profile,
@@ -240,20 +211,17 @@ export function initialAppState(
       captureMode: launch.captureMode,
       fixtureMode: launch.fixtureMode,
       accountRequired: runMode.requiresAccount,
-      agentTraceEnabled: false,
     },
     account: { status: ACCOUNT_STATUS.SIGNED_OUT },
     access: NO_ACCESS,
     update: idleUpdateSnapshot(config.appVersion, installSupported),
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
-    voice: staged?.voice ?? {},
-    tasks: staged?.tasks ?? IDLE_TASKS_VIEW,
-    codingAgents: { unseen: [] },
-    inbox: { waiting: [], tasks: [], taskless: [], automations: [], failedRuns: [] },
+    tasks: IDLE_TASKS_VIEW,
+    agents: { unseen: [] },
+    inbox: { waiting: [], tasks: [], taskless: [], automations: [], agents: [], failedRuns: [] },
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     network: { online: true },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
-    ...(staged === undefined ? undefined : { callTranscript: staged.callTranscript }),
   };
 }

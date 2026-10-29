@@ -5,12 +5,11 @@
  * editors, a Markdown document's text (a plan's, and any other document the
  * panel edits, `../tasks/markdown-editor.tsx`) and an agent's message box, ship as one bundle of
  * their own (`plan-editor.js`, built from `./index.ts`) that the panel starts
- * loading after its first paint (`../bundle-loader.ts`), as the whiteboard
- * and a File tab's tree load the first time they are shown. That bundle exports
+ * loading after its first paint (`../bundle-loader.ts`), as a File tab's tree
+ * loads the first time it is shown. That bundle exports
  * one module, `planEditor`, and this file is the whole of what the
  * two share. Nothing here imports a value, so the panel carries none of the
- * editor's libraries, and the voice window, which loads the panel's bundle,
- * parses none of them.
+ * editor's libraries.
  */
 
 import type {
@@ -97,9 +96,15 @@ export interface PlacedWords {
   readonly top: number;
 }
 
-/** Where the caret goes as the editor opens: where a click landed, on the words it landed on where they are known, the end of a section, or the end of the text; the start of the text without any. */
+/** Where the caret goes as the editor opens: where a click landed, on the words it landed on where they are known, selecting from the words its press started on where it selected some, the end of a section, or the end of the text; the start of the text without any. */
 export type PlanEditorPlacement =
-  | { readonly x: number; readonly y: number; readonly words?: PlacedWords | undefined }
+  | {
+      readonly x: number;
+      readonly y: number;
+      readonly words?: PlacedWords | undefined;
+      /** Where the words the press selected start, which the editor selects from to `words`; none where it selected nothing. */
+      readonly from?: PlacedWords | undefined;
+    }
   | { readonly section: number }
   | typeof PLACEMENT_END;
 

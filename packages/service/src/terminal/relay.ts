@@ -69,7 +69,7 @@ import type {
 import { attachTerminal, TMUX } from "../agents/terminal/tmux.js";
 import type { InteractiveShell, SandboxUnavailable } from "../agents/vercel-sandbox-api.js";
 import { jsonOf } from "../http/http-effect.js";
-import { frameBytes } from "../voice/socket.js";
+import { frameBytes } from "../http/socket.js";
 
 const TERMINAL_RELAY_BOUNDS = {
   /** How long a terminal stays connected past its last keystroke. */

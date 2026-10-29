@@ -77,7 +77,6 @@ async function opened() {
         reveal: undefined,
         children: createElement(PlanBody, {
           task: PLAN,
-          live: false,
           sectionLinks: PAGE_LINKS,
           onEdit: () => Promise.resolve({ saved: true } as const),
         }),
