@@ -39,7 +39,6 @@ import type { ToolTarget } from "../tasks/tool-call-model.js";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import type { MainTab, MainTabsControl } from "../tasks/use-main-tabs.js";
-import type { ColumnPinnableTab, PinnedTab } from "../tasks/use-side-panel.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type AgentTerminalDoors, useAgentActions } from "./agent-actions.js";
 import type { TaskCards } from "./side-panel.js";
@@ -484,11 +483,10 @@ export function MainTabStrip({
   /** The agents that ended while no one was looking, each in semibold until shown. */
   unread: readonly StripTab[];
   views: TabViews;
-  /** The sidebar's pins, which an agent's tab is pinned among, and their presses. */
+  /** Whether the reader pinned an agent on the account, which pins it among the sidebar's pins, and its press. */
   pins: {
-    pinned: readonly PinnedTab[];
-    onPin: (tab: ColumnPinnableTab, label: string, model?: string) => void;
-    onUnpin: (taskId: string, tab: ColumnPinnableTab) => void;
+    pinned: (agentId: string) => boolean;
+    onPin: (agentId: string, pinned: boolean) => void;
   };
   /** Whether the column offers its keys: on screen, and holding the window's focus. */
   keys: boolean;
@@ -502,8 +500,6 @@ export function MainTabStrip({
   onShown?: ((shown: ShownTab | undefined) => void) | undefined;
 }): React.JSX.Element {
   const drafted = useDraftedAgents();
-  const pinnedOf = (tab: ColumnPinnableTab) =>
-    pins.pinned.some((pin) => pin.task === task.id && sameTab(pin.tab, tab));
   // The agents' and the draft's tabs in the column's order,
   // which the developer's moves and their opening set (`use-main-tabs.ts`).
   const own = inTaskOrder(
@@ -531,25 +527,22 @@ export function MainTabStrip({
     APP_COMMAND.CLOSE_OTHER_TABS,
     keys && chosen !== undefined ? closeOthersOf(chosen) : undefined,
   );
-  const pinDoor = (tab: ColumnPinnableTab, label: string, model?: string): TabPin => {
-    const pinned = pinnedOf(tab);
-    return {
-      pinned,
-      onToggle: () => (pinned ? pins.onUnpin(task.id, tab) : pins.onPin(tab, label, model)),
-    };
+  // Note that an agent is pinned as itself, on the account, wherever it stands, so its tab's Pin is the agent's.
+  const pinDoor = (agentId: string): TabPin => {
+    const pinned = pins.pinned(agentId);
+    return { pinned, onToggle: () => pins.onPin(agentId, !pinned) };
   };
   const doorsOf = (entry: DrawnTab): TabDoors => {
     // An agent's link is its own action (`agent-actions.tsx`).
     const linked: LinkPlace | undefined =
       entry.agent === undefined ? undefined : { kind: LINK_PLACE.AGENT, agentId: entry.agent.id };
     const { agent } = entry;
-    const pinTab: ColumnPinnableTab | undefined =
-      agent === undefined ? undefined : { agent: agent.id };
     return {
       chosen: entry.look.selected,
       onClose: entry.close,
       onCloseOthers: closeOthersOf(entry),
-      pin: pinTab === undefined ? undefined : pinDoor(pinTab, entry.look.label, agent?.model),
+      // Note that an archived agent offers no pin, as its sidebar row does none, since no pin of it is drawn until it comes back.
+      pin: agent === undefined || agent.archivedAt !== undefined ? undefined : pinDoor(agent.id),
       copyLink: linked === undefined ? undefined : copyLink(linked),
     };
   };

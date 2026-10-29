@@ -21,12 +21,13 @@
 import type { AgentSummary } from "@luke/features/agent-wire";
 import {
   type TaskListLiveRows,
+  taskAgentPinsOfLiveRows,
   taskAgentsOfLiveRows,
   taskListGraceEdge,
   taskListOfLiveRows,
   taskPullRequestsOfLiveRows,
 } from "@luke/features/task-list-live";
-import type { TaskListAnswer, TaskPullRequests } from "@luke/features/task-wire";
+import type { TaskAgentPin, TaskListAnswer, TaskPullRequests } from "@luke/features/task-wire";
 import { Effect, type Scope } from "effect";
 import {
   answeredCollection,
@@ -48,6 +49,7 @@ export interface LiveTaskList {
   readonly list: TaskListAnswer;
   readonly taskAgents: readonly AgentSummary[];
   readonly taskPullRequests: readonly TaskPullRequests[];
+  readonly taskAgentPins: readonly TaskAgentPin[];
   readonly pendingTasks: readonly string[];
 }
 
@@ -91,6 +93,7 @@ export function taskListCollections(
         list: taskListOfLiveRows(rows, at),
         taskAgents: taskAgentsOfLiveRows(rows, at),
         taskPullRequests: taskPullRequestsOfLiveRows(rows),
+        taskAgentPins: taskAgentPinsOfLiveRows(rows),
         pendingTasks: plans.collection.toArray.flatMap((row) =>
           row.$hasPendingWrites ? [row.id] : [],
         ),

@@ -2767,10 +2767,83 @@ test("a Plan tab an earlier version pinned to the sidebar becomes the task's own
   await act(async () => undefined);
   assert.deepEqual(asked(refused), [{ taskId: TASK.id, pinned: true }]);
   assert.deepEqual(
-    refused.control().sidePanel.pins.map(({ task }) => task),
+    refused.control().sidePanel.pins.map((pin) => ("task" in pin ? pin.task : pin.agent)),
     [TASK.id],
     "the refused task's tab stays pinned, the pinned task's goes",
   );
+});
+
+/** An agent pin's payload, read back as the act's own schema admits it. */
+const readAgentPin = Schema.decodeUnknownOption(
+  Schema.Struct({
+    agentId: Schema.String,
+    pinned: Schema.Boolean,
+    position: Schema.optionalKey(Schema.String),
+  }),
+);
+
+test("an agent's tab an earlier version pinned on this Mac becomes the agent's own pin on the account, where it was dragged, once the list followed live names its task, and leaves this Mac only once that pin landed or the account already pinned it", async () => {
+  const kept = () =>
+    window.localStorage.setItem(
+      "luke.sidePanel",
+      JSON.stringify({
+        open: true,
+        tabs: ["plan"],
+        width: 320,
+        pins: [{ task: TASK.id, tab: { agent: AGENT_ID }, label: "Agent", at: 1, position: "a3" }],
+      }),
+    );
+  const storedPins = () =>
+    JSON.parse(window.localStorage.getItem("luke.sidePanel") ?? "{}").pins as unknown[];
+  const asked = (tab: ReturnType<typeof mount>) =>
+    tab.payloads
+      .filter((each) => each.kind === ACT_KIND.AGENTS_PIN)
+      .map((each) => Option.getOrUndefined(readAgentPin(each.payload)));
+  const live = { ...listRead([listed()]), taskAgents: [RUNNING_AGENT] };
+  const carriedPin = [{ agent: AGENT_ID, task: TASK.id, position: "a3" }];
+  /** A launch over the kept pin, the service answering its pin as `answer` does. */
+  const launch = async (
+    tasks: TasksView,
+    answer: () => Promise<PortActResult<typeof ACT_KIND.AGENTS_PIN>>,
+  ) => {
+    kept();
+    const tab = mount({ shown: true, tasks }, { [ACT_KIND.AGENTS_PIN]: answer });
+    await settle();
+    return tab;
+  };
+
+  const pending = Promise.withResolvers<PortActResult<typeof ACT_KIND.AGENTS_PIN>>();
+  const landed = await launch(listRead([listed()]), () => pending.promise);
+  assert.deepEqual(asked(landed), [], "nothing is asked before the list is followed live");
+  landed.stand({ tasks: live });
+  await settle();
+  assert.deepEqual(asked(landed), [{ agentId: AGENT_ID, pinned: true, position: "a3" }]);
+  assert.deepEqual(landed.control().sidePanel.carried, carriedPin, "kept while its pin is out");
+  assert.equal(storedPins().length, 1);
+  await act(async () => pending.resolve({ agent: RUNNING_AGENT }));
+  assert.deepEqual(landed.control().sidePanel.carried, []);
+  assert.deepEqual(storedPins(), [], "nor does it stay on this Mac");
+  closeWindow();
+
+  // The service answers so as well for an agent the account cannot see just now.
+  const refused = await launch(live, () =>
+    Promise.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND }),
+  );
+  assert.equal(asked(refused).length, 1);
+  assert.deepEqual(
+    refused.control().sidePanel.carried,
+    carriedPin,
+    "a refused pin keeps the tab's for the next launch",
+  );
+  closeWindow();
+
+  const already = await launch(
+    { ...live, taskAgentPins: [{ agentId: AGENT_ID, taskId: TASK.id, pinnedAt: 5 }] },
+    () => Promise.resolve({ agent: RUNNING_AGENT }),
+  );
+  assert.deepEqual(asked(already), [], "an agent already pinned is asked nothing");
+  assert.deepEqual(already.control().sidePanel.carried, []);
+  assert.deepEqual(storedPins(), []);
 });
 
 /** A start's agent, read back where it names one. */
@@ -3498,7 +3571,7 @@ it.effect(
       const pulls = { changes: AGENT_ID };
       act(() => panel().onOpenFile(FILE_REF));
       act(() => panel().onChoose(pulls));
-      act(() => panel().onPin(pulls, "Pull request"));
+      act(() => panel().onPin({ task: TASK.id }, pulls, "Pull request"));
       act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
       yield* landed;
       const strip = panel().strip;

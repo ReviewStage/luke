@@ -38,6 +38,7 @@ import {
   updateTask,
 } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { agentPin } from "@luke/database/schemas";
 import { agentTable } from "@luke/database/schemas/agent";
 import { attachment } from "@luke/database/schemas/attachment";
 import { device } from "@luke/database/schemas/device";
@@ -2946,7 +2947,7 @@ test("create_section, update_task's sectionId, and delete_section keep the calle
   });
 });
 
-test("update_agent renames a teammate's agent, moves it to a model the catalog offers as the catalog reads the choice, and switches its servers, pins an agent on no task, refuses a pin on a task's agent and a model the catalog refuses with nothing written, and changes no agent of another workspace", async () => {
+test("update_agent renames a teammate's agent, moves it to a model the catalog offers as the catalog reads the choice, and switches its servers, pins an agent on a task and one on no task, refuses a model the catalog refuses with nothing written, and changes no agent of another workspace", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const { caller, teammates, otherWorkspaces } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -2979,12 +2980,21 @@ test("update_agent renames a teammate's agent, moves it to a model the catalog o
     ["Billing export", SOL, "low", "long", ["notion"]],
   );
 
-  // A pin stands only on an agent with no task; one asked of a task's agent writes nothing asked beside it.
-  assert.deepEqual(
-    await call(CODER_TOOL.UPDATE_AGENT, { agentId: teammates.id, title: "Pinned", pinned: true }),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: UPDATE_AGENT_REFUSAL.PIN_ON_TASK },
-  );
-  assert.equal((await stored()).title, "Billing export");
+  // A pin is the caller's developer's alone, on a task's agent as on one with none.
+  const pinnedBy = async (agentId: string) =>
+    (
+      await database.run(
+        Database.use((db) =>
+          db
+            .select({ userId: agentPin.userId })
+            .from(agentPin)
+            .where(eq(agentPin.codingAgentId, agentId)),
+        ),
+      )
+    ).map((row) => row.userId);
+  const onTask = await call(CODER_TOOL.UPDATE_AGENT, { agentId: teammates.id, pinned: true });
+  assert.equal(onTask.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(onTask));
+  assert.deepEqual(await pinnedBy(teammates.id), [caller.userId]);
   const sweeper = await tasklessAgentOn(caller.userId, workspaceId);
   const pinned = await call(CODER_TOOL.UPDATE_AGENT, { agentId: sweeper.id, pinned: true });
   assert.equal(isRecord(pinned.agent) && pinned.agent.pinned, true, JSON.stringify(pinned));

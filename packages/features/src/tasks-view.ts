@@ -44,6 +44,7 @@ import {
   planRevisionsAnswerSchema,
   repositoryPinRequestSchema,
   repositoryPinSchema,
+  taskAgentPinSchema,
   taskAssigneeIdSchema,
   taskCreateRequestSchema,
   taskFileRefusalSchema,
@@ -185,6 +186,12 @@ export const tasksViewSchema = EffectSchema.Struct({
    * Tasks page's cards name each one rather than a count of the rest.
    */
   taskPullRequests: EffectSchema.optionalKey(EffectSchema.Array(taskPullRequestsSchema)),
+  /**
+   * The reader's pins of agents on a plan, the archived ones left out: present
+   * only while the list is followed live, when the sidebar's Pinned section
+   * draws each beside the pinned tasks.
+   */
+  taskAgentPins: EffectSchema.optionalKey(EffectSchema.Array(taskAgentPinSchema)),
   /**
    * The tasks a rename, a pin, or where they stand, asked on this Mac and not
    * yet carried by the list, is drawn over, so a list that holds its rows

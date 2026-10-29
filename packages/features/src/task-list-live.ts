@@ -28,6 +28,7 @@ import {
   PLAN_ACTOR,
   TASK_AGENTS_BOUNDS,
   type TaskAgentLine,
+  type TaskAgentPin,
   type TaskAgentsSummary,
   type TaskListAnswer,
   type TaskOrigin,
@@ -466,6 +467,20 @@ export function taskAgentsOfLiveRows(rows: TaskListLiveRows, now: number): reado
     .filter((row) => row.planId !== null && row.archivedAt === null)
     .toSorted(firstStarted)
     .map((row) => agentSummaryOf(row, now));
+}
+
+/**
+ * The reader's pins of agents on a plan, the archived ones left out, since
+ * an archived agent stands in no list a pin is drawn in: what the sidebar's
+ * Pinned section draws beside the pinned plans.
+ */
+export function taskAgentPinsOfLiveRows(rows: TaskListLiveRows): readonly TaskAgentPin[] {
+  return rows.agents.flatMap((row): TaskAgentPin[] => {
+    const { planId, pinnedAt, pinPosition } = row;
+    if (planId === null || pinnedAt === null || row.archivedAt !== null) return [];
+    const at = { agentId: row.id, taskId: planId, pinnedAt };
+    return [pinPosition === null ? at : { ...at, pinPosition }];
+  });
 }
 
 /**

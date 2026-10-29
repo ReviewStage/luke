@@ -1416,18 +1416,40 @@ it.layer(getTestDB())("an agent's pin", (it) => {
     }),
   );
 
-  it.effect(
-    "an agent on a plan is not pinned, since only an agent with no plan stands in the sidebar",
-    () =>
-      Effect.gen(function* () {
-        const dean = yield* openAccount;
-        const workspace = yield* openWorkspace(dean);
-        const task = yield* createTask(dean, { organizationId: workspace, name: "Billing" });
-        const { agentId } = yield* tasklessAgent(dean, workspace, { taskId: task.id });
+  it.effect("an agent on a plan is pinned as one with none is, the pinning member's alone", () =>
+    Effect.gen(function* () {
+      const dean = yield* openAccount;
+      const charles = yield* openAccount;
+      const workspace = yield* openWorkspace(dean);
+      yield* joinWorkspace(workspace, charles);
+      const task = yield* createTask(dean, { organizationId: workspace, name: "Billing" });
+      const { agentId } = yield* tasklessAgent(dean, workspace, { taskId: task.id });
 
-        assert.ok(Option.isNone(yield* pinAgent(dean, agentId, true)));
-        assert.deepEqual(yield* pinnedOnes(agentId), []);
-      }),
+      assert.equal(Option.getOrUndefined(yield* pinAgent(charles, agentId, true))?.id, agentId);
+      assert.deepEqual(yield* pinnedOnes(agentId), [{ userId: charles }]);
+    }),
+  );
+
+  it.effect("a member who cannot see the agent's task can neither pin it nor unpin it", () =>
+    Effect.gen(function* () {
+      const starter = yield* openAccount;
+      const teammate = yield* openAccount;
+      const workspace = yield* openWorkspace(starter);
+      yield* joinWorkspace(workspace, teammate);
+      // A task on its starter's own token, which a teammate does not see.
+      const task = yield* createTask(starter, {
+        organizationId: workspace,
+        name: "Billing",
+        repository: "acme/relay",
+        githubAccess: GITHUB_ACCESS.TOKEN,
+      });
+      const { agentId } = yield* tasklessAgent(starter, workspace, { taskId: task.id });
+      yield* pinAgent(starter, agentId, true);
+
+      assert.ok(Option.isNone(yield* pinAgent(teammate, agentId, true)));
+      assert.ok(Option.isNone(yield* pinAgent(teammate, agentId, false)));
+      assert.deepEqual(yield* pinnedOnes(agentId), [{ userId: starter }]);
+    }),
   );
 
   it.effect("an agent's pins go with the agent, and an account's with the account", () =>
