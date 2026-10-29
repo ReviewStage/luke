@@ -472,12 +472,13 @@ export const deviceAgentClaimRequestSchema = EffectSchema.Struct({
 /** A line settled: its id, and for a launch line whose runner exited, its exit code. */
 /**
  * Why a device settled a launch without starting its runner, where it is
- * one the service words for the agent's reader: the agent ran directly on
- * the device before, which now runs every agent in a VM, so its session
- * cannot be reached again there.
+ * one the service words for the agent's reader.
  */
 export const DEVICE_LAUNCH_REFUSAL = {
+  /** The agent ran directly on the device before, which now runs every agent in a VM, so its session cannot be reached again there. */
   RAN_DIRECTLY: "ran-directly",
+  /** The agent's saved state could not be brought back onto a device that held none of it; nothing was deleted, and its next launch tries again. */
+  STATE_NOT_RESTORED: "state-not-restored",
 } as const;
 
 export type DeviceLaunchRefusal =

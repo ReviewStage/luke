@@ -64,6 +64,12 @@ import {
 } from "./effect/seams.js";
 import { releaseFollowerLock, renewFollowerLock, takeFollowerLock } from "./follower-lock.js";
 import type { HostKernel } from "./host-kernel.js";
+import {
+  LAUNCH_NOTE,
+  notedFirstLines,
+  sessionResumed,
+  unsavedNote,
+} from "./local-agent-first-lines.js";
 import { answeredLocalAgentRequest } from "./local-agent-requests.js";
 import { localAgentSaves } from "./local-agent-saves.js";
 import {
@@ -142,7 +148,18 @@ import type { RunMode } from "./run-mode.js";
  * that fails keeps the folder and records the agent as unsaved, and a
  * bundle sealed but not committed is tried again on the beat. A launch
  * records the generation of the agent's saved state it names and holds the
- * agent's state key in memory; a discard that removes the folder lets go
+ * agent's state key in memory. A launch that finds none of the agent's
+ * work on the device, and names a generation, restores it before its
+ * runner starts: its bundle downloaded, checked and opened on the device,
+ * its repository made at the commit its work was saved on, and the pack
+ * applied in the fresh VM by the runner bundle's `state restore`; a
+ * restore that fails settles the launch unstarted
+ * (`DEVICE_LAUNCH_REFUSAL.STATE_NOT_RESTORED`) and deletes nothing, so
+ * the next message restores again, never starting the agent afresh. One
+ * that names none, its saved state expired, starts the agent afresh with no
+ * harness session. Either is told the agent ahead of its first message, as
+ * is why its last turn's work could not be saved
+ * (`local-agent-first-lines.ts`). A discard that removes the folder lets go
  * of the agent's record. A discard deletes any VM still standing before it
  * removes the agent's folder. The runner runs on the VM's
  * own Node, Claude Code and Codex, which the device registers. For an agent
@@ -744,16 +761,24 @@ export function composeLocalAgents(
             yield* settledLaunch(id, ending);
           });
 
-        /** The agent's own repository made where it has none, reading the agent's GitHub token where it has one through the sandbox's helper, never the token itself: a folder for an agent with no repository. */
+        /**
+         * The agent's own repository made where it has none, reading the
+         * agent's GitHub token where it has one through the sandbox's helper,
+         * never the token itself: a folder for an agent with no repository.
+         * A launch restoring the agent's saved state (`restoring`) has it made
+         * at the commit its work was saved on, or none at all where its work
+         * needs none, as the restore requires.
+         */
         const madeWorktree = (
           layout: DeviceAgentLayout,
           repository: string | null,
           branch: string | null,
           github: Readonly<Record<string, string>> | undefined,
+          restoring?: { readonly base: string | null },
         ) =>
           Effect.gen(function* () {
             if (yield* fileSystem.exists(path.join(layout.checkoutPath, ".git"))) return true;
-            if (repository === null) {
+            if (repository === null || restoring?.base === null) {
               yield* fileSystem.makeDirectory(layout.checkoutPath, { recursive: true });
               return true;
             }
@@ -762,6 +787,7 @@ export function composeLocalAgents(
               repository,
               worktree: layout.checkoutPath,
               branch,
+              base: restoring?.base,
             });
             const code = yield* Effect.scoped(
               Effect.flatMap(
@@ -863,7 +889,37 @@ export function composeLocalAgents(
             }
           });
 
-        /** The runner started for a launch line, its first lines written, and its exit settling the line; the line settled as not started where it cannot be. */
+        /**
+         * Whether the agent's work stands on the device, for a launch to go on
+         * from: its repository, or its folder for an agent with none, with no
+         * restore into it left unfinished.
+         */
+        const workStands = (agentId: string, layout: DeviceAgentLayout, withRepository: boolean) =>
+          Effect.gen(function* () {
+            if (yield* saves.restoring(agentId)) return false;
+            const work = withRepository
+              ? path.join(layout.checkoutPath, ".git")
+              : layout.checkoutPath;
+            return yield* Effect.orElseSucceed(fileSystem.exists(work), () => false);
+          });
+
+        /**
+         * The runner started for a launch line, its first lines written, and
+         * its exit settling the line; the line settled as not started where it
+         * cannot be. On a device that saves, a launch that finds none of the
+         * agent's work on it (`workStands`) and names a generation of its saved
+         * state restores it first: the folder made, the bundle downloaded,
+         * checked and opened into the pack (`saves.fetched`), the repository
+         * made at the pack's base, the VM started, and the pack restored in it
+         * (`saves.restored`); a restore that fails at any step settles the
+         * launch unstarted with the refusal that says so, deleting nothing, so
+         * the agent's next message restores again. One that names none but
+         * still continues a harness's session found its saved state expired,
+         * so the session is let go of and the agent starts afresh. The agent
+         * is told so ahead of its first message (`local-agent-first-lines.ts`),
+         * and why its last turn's work could not be saved, where its record
+         * says, which is let go of once told.
+         */
         const launched = (
           agentId: string,
           line: DeviceAgentLine,
@@ -907,6 +963,32 @@ export function composeLocalAgents(
             }
             // Note that the agent is kept as this machine's before its folder or VM is made, so an uninstall finds whatever a launch cut off left.
             yield* keepOwnedAgent(kernel.stateRoot, agentId);
+            const generation = payload.value.stateGeneration;
+            const cold = savesState && !(yield* workStands(agentId, layout, withRepository));
+            const restore =
+              cold && generation !== undefined
+                ? { userId, agentId, layout, shellVariables, generation }
+                : undefined;
+            const expired = cold && generation === undefined && sessionResumed(secrets.stdin);
+            if (expired) {
+              report("a local agent's saved state expired, so it starts afresh with no session");
+            }
+            const notRestored = () =>
+              notStarted(agentId, line.id, DEVICE_LAUNCH_REFUSAL.STATE_NOT_RESTORED);
+            const restoreSince = yield* Clock.currentTimeMillis;
+            // Note that a restore is recorded before anything of it is made, and its bundle is opened before its repository is made, so a refused one costs no fetch or VM; its `tmp` is made fresh, so no link left there takes the pack elsewhere.
+            const fetched =
+              restore === undefined
+                ? Option.none()
+                : yield* Effect.gen(function* () {
+                    yield* saves.restoreBegun(userId, agentId, restore.generation);
+                    yield* Effect.ignore(
+                      fileSystem.makeDirectory(layout.folder, { recursive: true }),
+                    );
+                    yield* tempEmptied(layout);
+                    return yield* saves.fetched(restore, secrets.state);
+                  });
+            if (restore !== undefined && Option.isNone(fetched)) return yield* notRestored();
             // Note that the token is had before the repository is made, since the device's git reads it too, through the sandbox's helper.
             const hadToken = withRepository && (yield* gaveGithubToken(agentId));
             const made = yield* madeWorktree(
@@ -914,7 +996,15 @@ export function composeLocalAgents(
               payload.value.repository,
               payload.value.startBranch,
               withRepository ? sandbox.deviceGit(agentId) : undefined,
+              Option.getOrUndefined(Option.map(fetched, (state) => ({ base: state.baseCommit }))),
             );
+            if (!made && restore !== undefined) {
+              yield* saves.notRestored(
+                restore.generation,
+                "its repository could not be made at the commit its work was saved on",
+              );
+              return yield* notRestored();
+            }
             if (!made) return yield* notStarted(agentId, line.id);
             const temp = layout.temp;
             yield* Effect.ignore(fileSystem.makeDirectory(temp, { recursive: true, mode: 0o700 }));
@@ -939,6 +1029,13 @@ export function composeLocalAgents(
               yield* Scope.close(runnerScope, Exit.void);
               report(`a local agent's VM could not be started: ${refused.value}`);
               return yield* notStarted(agentId, line.id);
+            }
+            // Note that a restore that fails lets its VM go with nothing packed, since its folder holds no turn of the agent's (`saves.turnEnded`).
+            if (restore !== undefined && Option.isSome(fetched)) {
+              if (!(yield* saves.restored(restore, fetched.value, restoreSince))) {
+                yield* Scope.close(runnerScope, Exit.void);
+                return yield* notRestored();
+              }
             }
             const identity = payload.value.identity;
             if (withRepository && identity !== undefined) {
@@ -985,7 +1082,18 @@ export function composeLocalAgents(
             if (withRepository)
               yield* Effect.forkIn(renewingGithub(agentId, hadToken), runnerScope);
             yield* keepLaunch(userId, line.id, agentId);
-            yield* Queue.offer(stdin, secrets.stdin);
+            const why = savesState ? yield* saves.whyUnsaved(agentId) : undefined;
+            const firstLines = notedFirstLines(
+              secrets.stdin,
+              [
+                ...(restore === undefined ? [] : [LAUNCH_NOTE.RESTORED]),
+                ...(expired ? [LAUNCH_NOTE.EXPIRED] : []),
+                ...(why === undefined ? [] : [unsavedNote(why)]),
+              ],
+              expired,
+            );
+            yield* Queue.offer(stdin, firstLines.stdin);
+            if (why !== undefined && firstLines.said) yield* saves.whySaid(userId, agentId);
             // Note that the launch is forgotten only once the service took its settle, which every
             // beat asks again where it did not, so one an outage left unsettled is settled once it ends.
             const exited = yield* Effect.gen(function* () {

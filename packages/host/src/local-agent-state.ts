@@ -60,9 +60,13 @@ export type PendingSave = typeof PendingSaveSchema.Type;
  * turn's save having failed or never run, and, where the save was refused
  * for a reason in the agent's own folder that trying again will not clear,
  * why, in plain words of at most `UNSAVED_WHY_CHARACTERS`, which the
- * agent's next launch reads and clears; and its bundle waiting to be
- * committed, where one is. An agent's folder is saved only where its record
- * names neither: a sweep keeps the folder of one that is unsaved or has a
+ * agent's next launch reads and clears; its bundle waiting to be
+ * committed, where one is; and the generation a restore into its folder
+ * began from and has not finished (`restoring`), while which the folder
+ * holds none of the agent's work as it stands, so a launch restores it
+ * again rather than going on from it, and no turn's end saves it. An
+ * agent's folder is saved only where its record names neither `unsaved`
+ * nor `pending`: a sweep keeps the folder of one that is unsaved or has a
  * bundle waiting, and of one with no record, which never saved.
  */
 const AgentSaveSchema = Schema.Struct({
@@ -70,6 +74,7 @@ const AgentSaveSchema = Schema.Struct({
   generation: Schema.optionalKey(Schema.Int),
   unsaved: Schema.optionalKey(Schema.Struct({ why: Schema.optionalKey(Schema.String) })),
   pending: Schema.optionalKey(PendingSaveSchema),
+  restoring: Schema.optionalKey(Schema.Int),
 });
 
 export type AgentSave = typeof AgentSaveSchema.Type;
