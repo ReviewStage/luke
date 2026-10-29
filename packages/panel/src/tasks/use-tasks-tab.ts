@@ -1320,7 +1320,7 @@ export function useTasksTab(input: {
     listedAgents: tasks.tasks.some((task) => task.id === viewed.activeTaskId)
       ? liveAgents
       : undefined,
-    mode: tasks.tasks.find((task) => task.id === viewed.activeTaskId)?.mode,
+    modeOf: (planId) => tasks.tasks.find((task) => task.id === planId)?.mode,
     onOpenIntegrations: input.onOpenIntegrations,
     onOpenApiKeys: input.onOpenApiKeys,
     me: input.accountId,
