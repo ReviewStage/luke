@@ -206,6 +206,19 @@ const decodeFailure = Schema.decodeUnknownOption(
   ),
 );
 
+/**
+ * Whether a machine smolvm says was made from `image` runs the pinned one:
+ * the same digest where the pin names one, since a registry may be spelled
+ * with or without its tag beside it (smolvm's own canonical form drops it),
+ * and the same reference otherwise.
+ */
+function isPinned(image: string | null): boolean {
+  const digestOf = (reference: string) => reference.split("@")[1];
+  const pinned = digestOf(SANDBOX_IMAGE);
+  if (image === null) return false;
+  return pinned === undefined ? image === SANDBOX_IMAGE : digestOf(image) === pinned;
+}
+
 /** A failure smolvm printed: its code where it printed one as JSON, and its words, the last line where it did not, cut short. */
 function failureOf(printed: string): { readonly code: string | undefined; readonly words: string } {
   const last = printed.trim().split("\n").at(-1) ?? "";
@@ -439,10 +452,7 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
         // Note that a stopped machine made from another image is deleted, its folder and credentials kept, so the start below makes it again from the pinned one; a running one is never touched.
         const status = yield* statusOf(agentId);
         if (
-          Option.exists(
-            status,
-            (each) => STOPPED_STATES.has(each.state) && each.image !== SANDBOX_IMAGE,
-          )
+          Option.exists(status, (each) => STOPPED_STATES.has(each.state) && !isPinned(each.image))
         ) {
           const removed = yield* ran(
             ["machine", "delete", "--name", machineOf(agentId), "-f", "--error-format", "json"],

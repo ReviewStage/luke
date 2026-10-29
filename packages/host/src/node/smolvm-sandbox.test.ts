@@ -535,6 +535,14 @@ it.effect.each([
     refused: undefined,
   },
   {
+    case: "a stopped VM smolvm names by the pinned digest alone, without its tag, is started as it is",
+    state: "stopped",
+    image: `ghcr.io/reviewstage/luke-sandbox@${IMAGE.split("@")[1]}`,
+    deletes: true,
+    verbs: ["status", "start"],
+    refused: undefined,
+  },
+  {
     case: "a running VM made from an earlier image is left as it is",
     state: "running",
     image: EARLIER_IMAGE,
