@@ -164,22 +164,25 @@ export const agentDefaultWriteSchema = EffectSchema.Struct({
 /**
  * The default of an account that stored none, read off the models it is
  * offered as `GET /api/models` marks them (`credentialMissing`): OpenAI's
- * fallback where no Claude model offered is one a credential of the
- * account's pays for and OpenAI's fallback model is offered and paid for,
- * Anthropic's otherwise. So an account a Claude credential pays for, or
- * nothing does, or whose OpenAI fallback left the catalog, starts on
- * Anthropic's. A Start naming no model, the preferences snapshot, and
- * Settings' marks all read it here, so they never disagree.
+ * fallback where the Claude models offered are marked as no credential of
+ * the account's paying for them and OpenAI's fallback model is offered and
+ * paid for, Anthropic's otherwise. So an account a Claude credential pays
+ * for, or nothing does, or whose OpenAI fallback left the catalog, starts on
+ * Anthropic's. Note that a mark is the provider's, so one Claude model
+ * marked says no Claude credential pays, and a catalog offering none says
+ * nothing of it, so it reads Anthropic's. A Start naming no model, the
+ * preferences snapshot, and Settings' marks all read it here, so they never
+ * disagree.
  */
 export function agentFallbackChoice(
   models: readonly Pick<CatalogModel, "id" | "provider" | "credentialMissing">[],
 ): ModelChoice {
   const openai = AGENT_FALLBACK_CHOICE[MODEL_PROVIDER.OPENAI];
-  const claudePaid = models.some(
-    (model) => model.provider === MODEL_PROVIDER.ANTHROPIC && model.credentialMissing !== true,
+  const claudeUnpaid = models.some(
+    (model) => model.provider === MODEL_PROVIDER.ANTHROPIC && model.credentialMissing === true,
   );
   const listed = models.find((model) => model.id === openai.model);
-  return !claudePaid && listed !== undefined && listed.credentialMissing !== true
+  return claudeUnpaid && listed !== undefined && listed.credentialMissing !== true
     ? openai
     : AGENT_DEFAULT_CHOICE;
 }
