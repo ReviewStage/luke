@@ -42,6 +42,8 @@ import {
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
   type RepositoryPin,
+  TASK_BLOCK_CHANGE,
+  TASK_BLOCK_RELATION,
   TASK_PRIORITY,
   TASK_SKILL_SOURCE,
   TASK_STATUS,
@@ -52,6 +54,7 @@ import {
   type TaskTreeAnswer,
 } from "@luke/features/task-wire";
 import {
+  type BlockCallFailure,
   BROWSER_TAB_OPEN_FAILURE,
   GITHUB_DISCONNECT_FAILURE,
   HOST_LIVE,
@@ -942,8 +945,17 @@ function fakeService(tasks: Task[]): FakeService {
         );
         return { ok: true, answer: { task: moved } };
       }),
-    // Note that no test asks for a block, so the fake answers every one as not found.
-    block: () => Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND } as const),
+    // The service adds the block to the task the change names, as the store does, and answers the task whole.
+    block: (taskId, change) =>
+      Effect.sync((): TaskCallResult<TaskWritten, BlockCallFailure> => {
+        const found = service.tasks.find((candidate) => candidate.id === taskId);
+        if (found === undefined) return { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND };
+        const blocked = { ...found, blockedBy: [...(found.blockedBy ?? []), change.taskId] };
+        service.tasks = service.tasks.map((candidate) =>
+          candidate.id === taskId ? blocked : candidate,
+        );
+        return { ok: true, answer: { task: blocked } };
+      }),
     // The service re-titles the document with the name, as the store does.
     rename: (taskId, { name }) =>
       Effect.sync(() => {
@@ -2018,6 +2030,36 @@ it.effect(
       assert.equal(drawn, "acme/relay");
       assert.equal(repositoryOf(), "acme/relay");
     }),
+);
+
+it.effect("a block the service answered stands on the open task through the list's next draw", () =>
+  Effect.gen(function* () {
+    const service = fakeService([
+      task(INVITES, "Teammate invitations", "# Draft", 10),
+      task(BILLING, "Billing", "# Draft", 11),
+    ]);
+    const { call, last, listed, openTask } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* listed();
+    yield* openTask(INVITES);
+    const blockedBy = () => {
+      const document = last()?.document;
+      return document?.status === TASKS_READ.READY ? document.task?.blockedBy : undefined;
+    };
+
+    const answered = yield* call(GATEWAY_METHOD.TASKS_BLOCK, {
+      taskId: INVITES,
+      block: {
+        change: TASK_BLOCK_CHANGE.ADD,
+        relation: TASK_BLOCK_RELATION.BLOCKED_BY,
+        taskId: BILLING,
+      },
+    });
+    yield* listed();
+
+    assert.deepEqual(answered, { blockedBy: [BILLING], blocks: [] });
+    assert.deepEqual(blockedBy(), [BILLING]);
+  }),
 );
 
 it.effect("a task marked done here is drawn finished now, so the recently finished find it", () =>

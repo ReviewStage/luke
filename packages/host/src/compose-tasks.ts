@@ -1332,14 +1332,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * change a teammate or an agent made reaches the open task as it reaches
    * the list. Note that the row is the whole of what the task carries but
    * its document, so a field the row leaves out is one the task no longer
-   * has, and that the last save is the document's own, kept with its body.
+   * has, and that the last save is the document's own, kept with its body,
+   * as are its blocks, which a row of the list never carries.
    */
   function heldAsListed(taskId: string): void {
     const held = heldTaskOf(taskId);
     const listed = view.tasks.find((row) => row.id === taskId);
     if (held === undefined || listed === undefined) return;
     const { agents: _agents, ...row } = listed;
-    const { updatedAt, document, agentEdits, lastEdit, sectionEdits } = held;
+    const { updatedAt, document, agentEdits, lastEdit, sectionEdits, blockedBy, blocks } = held;
     const task: Task = {
       ...row,
       updatedAt,
@@ -1347,6 +1348,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ...(agentEdits === undefined ? undefined : { agentEdits }),
       ...(lastEdit === undefined ? undefined : { lastEdit }),
       ...(sectionEdits === undefined ? undefined : { sectionEdits }),
+      ...(blockedBy === undefined ? undefined : { blockedBy }),
+      ...(blocks === undefined ? undefined : { blocks }),
     };
     write({ document: { ...view.document, task } });
   }
