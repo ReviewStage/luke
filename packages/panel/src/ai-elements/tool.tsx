@@ -414,6 +414,33 @@ function acknowledges(block: ToolBlock): boolean {
   return values.length > 0 && values.every((item) => ACKNOWLEDGEMENTS.has(item));
 }
 
+/** The block an answer's card draws, read as words; nothing where the answer only acknowledges the call. */
+function shownOutput(block: ToolBlock): ToolBlock | undefined {
+  return acknowledges(block) ? undefined : readableBlock(block);
+}
+
+/**
+ * The words a call's body draws, as a find counts them before the body is
+ * drawn: a command's line and what it printed, then its error; or the
+ * input read as words, then the error or else the answer as its card or
+ * its "No output" line says it. Note that it reads each block as the cards
+ * below do, so a find counts what a reader sees.
+ */
+export function bodyWords(
+  input: ToolBlock | undefined,
+  output: ToolBlock | undefined,
+  errorText: string | undefined,
+): readonly string[] {
+  if (input?.kind === TOOL_BLOCK.COMMAND) {
+    const printed = output === undefined ? "" : readableBlock(output).text;
+    return [input.text, printed, errorText ?? ""].filter((words) => words !== "");
+  }
+  const shown = output === undefined ? undefined : shownOutput(output);
+  const answer = shown === undefined || shown.text.trim() !== "" ? shown?.text : NO_OUTPUT;
+  const inputWords = input === undefined ? "" : readableBlock(input).text;
+  return [inputWords, errorText ?? answer ?? ""].filter((words) => words !== "");
+}
+
 /** What the call was given, read as words; nothing where it was given nothing. */
 export function ToolInput({ block }: { block: ToolBlock }): ReactNode {
   const readable = readableBlock(block);
@@ -442,8 +469,8 @@ export function ToolOutput({ block, errorText }: ToolOutputProps): ReactNode {
       </div>
     );
   }
-  if (block === undefined || acknowledges(block)) return null;
-  const readable = readableBlock(block);
+  const readable = block === undefined ? undefined : shownOutput(block);
+  if (readable === undefined) return null;
   if (readable.text.trim() === "") {
     return (
       <div data-tool-output="" data-empty="">
