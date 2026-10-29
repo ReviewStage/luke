@@ -11,6 +11,7 @@ import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
 import { type PlanAgentEdit, planAgentEditSchema } from "@luke/features/plan-template";
 import {
+  mergePolicySchema,
   PLAN_ACTOR,
   type PlanLastEdit,
   type PlanSectionEdit,
@@ -22,6 +23,7 @@ import {
   type TaskRunsOn,
   type TaskStatus,
   type TaskSummary,
+  taskModeSchema,
   taskPrioritySchema,
   taskStatusSchema,
   UNKNOWN_AGENT_LABEL,
@@ -63,6 +65,7 @@ import { reopenTaskInboxItems, settleTaskInboxItems } from "./inbox-settle.js";
 import { stampSavedAttachments } from "./plan-attachments.js";
 import { readLastEdit, readSectionWriters } from "./plan-revisions.js";
 import { stampConversationsDeleted } from "./soft-delete.js";
+import { readTaskBlocks } from "./task-block-store.js";
 import {
   isWorkspaceMember,
   reachableTask,
@@ -260,6 +263,9 @@ const TASK_SUMMARY_COLUMNS = {
   githubAccess: task.githubAccess,
   machine: task.machine,
   deviceId: task.deviceId,
+  parentTaskId: task.parentTaskId,
+  mode: task.mode,
+  mergePolicy: task.mergePolicy,
   completedAt: task.completedAt,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -288,6 +294,9 @@ const TaskSummaryRowSchema = Schema.Struct({
   githubAccess: GitHubAccessSchema,
   machine: MachineSchema,
   deviceId: Schema.NullOr(Schema.String),
+  parentTaskId: Schema.NullOr(Schema.String),
+  mode: taskModeSchema,
+  mergePolicy: mergePolicySchema,
   completedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -488,7 +497,9 @@ function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
  * The row's plan, as the window and the model read it for `userId`, the
  * reader, whose own pin it carries: its text as the
  * document's body with no assumptions, since they are a section of the text,
- * and who last changed each section, as its revisions read. The row's own account is the one its
+ * who last changed each section, as its revisions read, and the tasks it
+ * waits on and that wait on it, each one the reader reaches
+ * (`task-block-store.ts`). The row's own account is the one its
  * agents are read under. Its last edit is its newest revision, or, before its
  * history begins, the newest save a coding agent made. A task is saved once
  * a save has moved its last save past its start, which no creation and no
@@ -506,6 +517,7 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
           Effect.map(agentLabelsOf(row, sectionWriters), (labels) => ({ sectionWriters, labels })),
         ),
         lastRevision: readLastEdit(row.id),
+        blocks: readTaskBlocks(userId, row.id),
       },
       { concurrency: yield* readConcurrency },
     );
@@ -525,6 +537,7 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
         ...(Option.isSome(lastEdit) ? { lastEdit: lastEdit.value } : undefined),
         document: { body: row.document, assumptions: [] },
         sectionEdits: sectionWriters.map((writer) => sectionEditOf(writer, labels)),
+        ...Option.getOrUndefined(read.blocks),
       },
       ownerId: row.userId,
       githubAccess: row.githubAccess,
@@ -638,6 +651,9 @@ function summaryOf(
       ? undefined
       : { assignee: { userId: row.assigneeId, name: assignee } }),
     ...runsOnOf(row, names, devices),
+    ...(row.parentTaskId === null ? undefined : { parentTaskId: row.parentTaskId }),
+    mode: row.mode,
+    mergePolicy: row.mergePolicy,
   };
 }
 

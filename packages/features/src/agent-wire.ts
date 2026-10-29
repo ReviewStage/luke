@@ -191,12 +191,16 @@ export const NATIVE_AGENT_RUNTIMES = [AGENT_RUNTIME.CLAUDE_CODE, AGENT_RUNTIME.C
 export type NativeAgentRuntime = (typeof NATIVE_AGENT_RUNTIMES)[number];
 
 /**
- * What kind of agent a row is: a coder, which every agent started on work is,
- * or a member's operator, the one agent per member per workspace that
- * manages their other agents, started blank with no task and no repository.
+ * What kind of agent a row is: a coder, which every agent started on work is;
+ * a pilot, which stands on a task worked in pilot mode (`TASK_MODE.PILOT`),
+ * breaks it into child tasks, and runs coders on them, started on its task
+ * and repository as a coder is; or a member's operator, the one agent per
+ * member per workspace that manages their other agents, started blank with
+ * no task and no repository.
  */
 export const AGENT_KIND = {
   CODER: "coder",
+  PILOT: "pilot",
   OPERATOR: "operator",
 } as const;
 

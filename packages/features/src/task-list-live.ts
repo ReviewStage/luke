@@ -101,6 +101,12 @@ const taskLiveRowSchema = EffectSchema.Struct({
   ),
   /** The coding agent that made the task; null for any other maker and once its row is gone. */
   creatorAgentId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  /** The task this one is a child of; null for a task at the top. Absent from a service before child tasks. */
+  parentTaskId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  /** How the task is worked; absent from a service before modes. */
+  mode: plan.mode,
+  /** What becomes of its agents' pull requests once their checks pass; absent from a service before it. */
+  mergePolicy: plan.mergePolicy,
 });
 
 /** Who archived an agent as its row holds it. */
@@ -122,7 +128,7 @@ const agentLiveRowSchema = EffectSchema.Struct({
   effort: EffectSchema.String,
   contextWindow: EffectSchema.NullOr(EffectSchema.String),
   title: EffectSchema.NullOr(EffectSchema.String),
-  /** What kind of agent it is, a coder or a member's operator; absent from a statement before operators. */
+  /** What kind of agent it is, a coder, a task's pilot, or a member's operator; absent from a statement before operators. */
   kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_KIND))),
   /** Whether the agent was handed a prompt rather than its plan. */
   /** What the agent was handed as its first message: the plan, the developer's prompt, or nothing, for one started blank. */
@@ -367,6 +373,11 @@ function taskSummaryOf(
     ...(row.assigneeId === null || row.assigneeName === null
       ? undefined
       : { assignee: { userId: row.assigneeId, name: row.assigneeName } }),
+    ...(row.parentTaskId === undefined || row.parentTaskId === null
+      ? undefined
+      : { parentTaskId: row.parentTaskId }),
+    ...(row.mode === undefined ? undefined : { mode: row.mode }),
+    ...(row.mergePolicy === undefined ? undefined : { mergePolicy: row.mergePolicy }),
     ...(agents === undefined ? undefined : { agents: agentsSummaryOf(agents, now) }),
   };
 }

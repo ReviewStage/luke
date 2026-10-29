@@ -45,6 +45,11 @@ import { trimmedText } from "./text-schema.js";
  * can mark a task at work or with a pull request without a read per row.
  * A task belongs to one workspace, which its summary names; a start names
  * the workspace it starts in, or none for the account's first one.
+ * A task may be the child of another, to any depth, which its summary names
+ * by id; it is worked by its agents or by a pilot (`TASK_MODE`), and its
+ * agents' pull requests merge on green or wait for a member (`MERGE_POLICY`).
+ * A task opened whole also names, by id, the tasks it waits on and the tasks
+ * that wait on it, as Linear's blocked-by and blocks.
  * The starting account and the conversation a task resumes in are the
  * service's own and never travel here.
  *
@@ -127,9 +132,38 @@ export const TASK_PRIORITY_ORDER: readonly TaskPriority[] = [
   TASK_PRIORITY.NONE,
 ];
 
+/**
+ * How a task is worked: by the agents its members start on it, or by one
+ * pilot agent that breaks it into child tasks and runs agents on them. A
+ * task's mode is fixed as it starts; every task from before it is worked by
+ * agents.
+ */
+export const TASK_MODE = {
+  AGENT: "agent",
+  PILOT: "pilot",
+} as const;
+
+export type TaskMode = (typeof TASK_MODE)[keyof typeof TASK_MODE];
+
+/**
+ * What becomes of a pull request a task's agents open once its checks pass:
+ * merged on green, or held for a member's go. A task starts at merge on
+ * green.
+ */
+export const MERGE_POLICY = {
+  MERGE_ON_GREEN: "merge-on-green",
+  HOLD: "hold",
+} as const;
+
+export type MergePolicy = (typeof MERGE_POLICY)[keyof typeof MERGE_POLICY];
+
 export const taskStatusSchema = EffectSchema.Literals(Object.values(TASK_STATUS));
 
 export const taskPrioritySchema = EffectSchema.Literals(Object.values(TASK_PRIORITY));
+
+export const taskModeSchema = EffectSchema.Literals(Object.values(TASK_MODE));
+
+export const mergePolicySchema = EffectSchema.Literals(Object.values(MERGE_POLICY));
 
 /**
  * The member a task is assigned to, by their account's id, as a start or a
@@ -494,6 +528,12 @@ const taskSummaryFields = {
   assignee: EffectSchema.optionalKey(memberRefSchema),
   /** Where the task's agents run: absent for the cloud, and from a service before tasks said. */
   runsOn: EffectSchema.optionalKey(taskRunsOnSchema),
+  /** The task this one is a child of; absent for a task at the top, and from a service before child tasks. */
+  parentTaskId: EffectSchema.optionalKey(wireUuidSchema),
+  /** How the task is worked; absent from a service before modes, where every task is worked by its agents. */
+  mode: EffectSchema.optionalKey(taskModeSchema),
+  /** What becomes of its agents' pull requests once their checks pass; absent from a service before it, where they merge on green. */
+  mergePolicy: EffectSchema.optionalKey(mergePolicySchema),
 };
 
 /** How much of a task's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */
@@ -683,7 +723,7 @@ const planSectionEditSchema = EffectSchema.Struct({
 
 export type PlanSectionEdit = typeof planSectionEditSchema.Type;
 
-/** One task with its saved document, its newest revision, who last changed each section, and the saves coding agents made on it, oldest first. */
+/** One task with its saved document, its newest revision, who last changed each section, the saves coding agents made on it, oldest first, and the tasks it waits on and that wait on it. */
 export const taskSchema = EffectSchema.Struct({
   ...taskSummaryFields,
   document: planDocumentSchema,
@@ -699,6 +739,10 @@ export const taskSchema = EffectSchema.Struct({
       EffectSchema.isMaxLength(PLAN_SECTION_BOUNDS.MAX_SECTIONS),
     ),
   ),
+  /** The tasks this one waits on, by id, the earliest added first, each one the reader reaches; absent from a service before blocks. */
+  blockedBy: EffectSchema.optionalKey(EffectSchema.Array(wireUuidSchema)),
+  /** The tasks that wait on this one, on the same terms as `blockedBy`. */
+  blocks: EffectSchema.optionalKey(EffectSchema.Array(wireUuidSchema)),
 });
 
 export type Task = typeof taskSchema.Type;
