@@ -56,7 +56,11 @@ import {
   readRepositoryFile,
   repositorySegments,
 } from "../github/repository-file.js";
-import { GIT_ENTRY, readRepositoryFolder } from "../github/repository-folder.js";
+import {
+  GIT_ENTRY,
+  type RepositoryFolder,
+  readRepositoryFolder,
+} from "../github/repository-folder.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../http/http-effect.js";
 import {
   DISCOVERY_FILE,
@@ -278,10 +282,13 @@ const commitFile = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * Every file of the commit by its path and size, as one read of its tree
- * lists it, whether or not the commit's archive was read; none where GitHub
- * names no tree there. Note that the listing is never the archive's, which
- * leaves out what `export-ignore` marks.
+ * Every file of the commit by its path and size: what one read of its tree
+ * lists as a file, never a link, and every file of its archive besides.
+ * Note that both are read because each lacks what the other holds: an
+ * archive leaves out what `export-ignore` marks, and a tree past GitHub's
+ * bound is cut short. A tree GitHub does not answer is left to the archive
+ * where there is one, so a commit already read whole is not refused for
+ * the one listing request a limit refused.
  */
 const commitFiles = /* @__PURE__ */ Effect.fnUntraced(function* (
   repository: SkillRepository,
@@ -291,8 +298,9 @@ const commitFiles = /* @__PURE__ */ Effect.fnUntraced(function* (
   HostedRefusal,
   HttpClient.HttpClient | DatabaseServices
 > {
+  const archive = archiveAt(repository, sha);
   // Note that a commit's sha names its tree as a branch's name would, so the listing is of the pinned commit.
-  const tree = yield* onRepository(
+  const read = onRepository(
     repository,
     readRepositoryFolder(
       repository.bearer,
@@ -301,15 +309,26 @@ const commitFiles = /* @__PURE__ */ Effect.fnUntraced(function* (
       true,
     ),
   );
-  if (!tree.found) return [];
-  if (tree.truncated) {
-    yield* Effect.logWarning(
-      `The tree of ${repository.fullName} was cut short; skills past it are not found`,
-    );
+  const listed = Effect.map(read, (folder) => Option.some(folder));
+  const tree = yield* archive === undefined
+    ? listed
+    : Effect.catch(listed, () => Effect.succeed(Option.none<RepositoryFolder>()));
+  const files = new Map<string, number>();
+  if (Option.isSome(tree) && tree.value.found) {
+    if (tree.value.truncated) {
+      yield* Effect.logWarning(
+        `The tree of ${repository.fullName} was cut short; skills past it are found in its archive alone`,
+      );
+    }
+    for (const entry of tree.value.entries) {
+      if (entry.type === GIT_ENTRY.BLOB && entry.link !== true)
+        files.set(entry.name, entry.size ?? 0);
+    }
   }
-  return tree.entries.flatMap((entry) =>
-    entry.type === GIT_ENTRY.BLOB ? [{ name: entry.name, size: entry.size ?? 0 }] : [],
-  );
+  for (const [name, bytes] of archive?.files ?? []) {
+    if (!files.has(name)) files.set(name, bytes.byteLength);
+  }
+  return [...files].map(([name, size]) => ({ name, size }));
 });
 
 /** The folder's plugin as a key to spread, where a manifest groups it. */

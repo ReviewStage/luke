@@ -361,6 +361,15 @@ function perFileRefused(repository: (sent: SentToGitHub) => Response | undefined
       : repository(sent);
 }
 
+/** GitHub answering every tree read as given rather than as the repository holds it; any other request goes on to the repository. */
+function treeAnswered(
+  answer: () => Response,
+  repository: (sent: SentToGitHub) => Response | undefined,
+) {
+  return (sent: SentToGitHub): Response | undefined =>
+    /\/git\/trees\//u.test(new URL(sent.url).pathname) ? answer() : repository(sent);
+}
+
 /** The one skill a list answered, by id. */
 function installedId(answer: Answer): string {
   const [skill] = readAnswer(installedSkillListAnswerSchema, HOSTED_HTTP_STATUS.OK, answer).skills;
@@ -604,6 +613,62 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
             undefined,
             {},
             repositoryScript(kit, { archives: true, exportIgnore: "skills/review/" }),
+          ),
+        );
+        const text = "npx skills add acme/kit --skill review";
+
+        const previewed = sourcePreview(
+          yield* ask(`${SKILLS}/preview`, owner, preview(workspace, text)),
+        );
+        assert.deepEqual(
+          previewed.skills.map((skill) => skill.name),
+          ["release", "review"],
+        );
+        const [review] = readAnswer(
+          installedSkillInstallAnswerSchema,
+          201,
+          yield* ask(
+            SKILLS,
+            owner,
+            install({ workspaceId: workspace, scope: INSTALLED_SKILL_SCOPE.PERSONAL, text }),
+          ),
+        ).skills;
+        assert.ok(review);
+        assert.equal(yield* storedText(owner, review.id, "scripts/check.sh"), "echo check");
+      }),
+  );
+
+  it.effect.each([
+    {
+      tree: "GitHub does not answer",
+      answer: () => Response.json({ message: "Server Error" }, { status: 502 }),
+    },
+    {
+      tree: "GitHub cuts short before the skill",
+      answer: () =>
+        Response.json({
+          tree: [{ path: "skills/release/SKILL.md", type: "blob", size: 10 }],
+          truncated: true,
+        }),
+    },
+  ] as const)(
+    "a skill whose tree $tree is still found and installed from its archive",
+    ({ answer }) =>
+      Effect.gen(function* () {
+        const kit = fakeRepository("acme", "kit");
+        commitTo(kit, "main", {
+          "skills/review/SKILL.md": skillFile("review", "Review a pull request."),
+          "skills/review/scripts/check.sh": "echo check",
+          "skills/release/SKILL.md": skillFile("release", "Write release notes."),
+        });
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        const ask = yield* routes(
+          githubReaching(
+            [],
+            undefined,
+            {},
+            treeAnswered(answer, repositoryScript(kit, { archives: true })),
           ),
         );
         const text = "npx skills add acme/kit --skill review";
