@@ -108,6 +108,8 @@ const taskLiveRowSchema = EffectSchema.Struct({
   mode: plan.mode,
   /** What becomes of its agents' pull requests once their checks pass; absent from a service before it. */
   mergePolicy: plan.mergePolicy,
+  /** Whether a pilot tree's agents may work, set on its top task; absent from a service before it. */
+  running: plan.running,
   /** Whether it waits on an open task the reader reaches; absent from a service before blocks. */
   blocked: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
@@ -388,6 +390,7 @@ function taskSummaryOf(
       : { parentTaskId: row.parentTaskId }),
     ...(row.mode === undefined ? undefined : { mode: row.mode }),
     ...(row.mergePolicy === undefined ? undefined : { mergePolicy: row.mergePolicy }),
+    ...(row.running === undefined ? undefined : { running: row.running }),
     ...(row.blocked === true ? { blocked: true } : undefined),
     ...(agents === undefined ? undefined : { agents: agentsSummaryOf(agents, now) }),
   };

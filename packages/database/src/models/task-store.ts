@@ -278,6 +278,7 @@ const TASK_SUMMARY_COLUMNS = {
   parentTaskId: task.parentTaskId,
   mode: task.mode,
   mergePolicy: task.mergePolicy,
+  running: task.running,
   completedAt: task.completedAt,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -309,6 +310,7 @@ const TaskSummaryRowSchema = Schema.Struct({
   parentTaskId: Schema.NullOr(Schema.String),
   mode: taskModeSchema,
   mergePolicy: mergePolicySchema,
+  running: Schema.Boolean,
   completedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -667,6 +669,7 @@ function summaryOf(
     ...(row.parentTaskId === null ? undefined : { parentTaskId: row.parentTaskId }),
     mode: row.mode,
     mergePolicy: row.mergePolicy,
+    running: row.running,
   };
 }
 
