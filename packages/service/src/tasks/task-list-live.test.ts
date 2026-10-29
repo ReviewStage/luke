@@ -707,6 +707,54 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
   );
 
   it.effect(
+    "name the pilot that started an agent, on its task or another, and no other starter",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const plan = yield* startTask(owner, { name: "Teammate invitations" });
+        const child = yield* startTask(owner, { name: "Invitation emails" });
+        /** An agent of the kind given on the task, started by the agent named, or by the member where none is. */
+        const started = (
+          taskId: string,
+          kind: typeof AGENT_KIND.CODER | typeof AGENT_KIND.PILOT,
+          startedByAgentId?: string,
+        ) =>
+          Effect.map(
+            createAgent(owner, {
+              taskId,
+              planSnapshot: "# Invitations\n",
+              prompt: null,
+              kind,
+              ...(startedByAgentId === undefined ? undefined : { startedByAgentId }),
+              idempotencyKey: randomUUID(),
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              repository: "acme/relay",
+            }),
+            (made) => Option.getOrThrow(made).agent,
+          );
+        const pilot = yield* started(plan.id, AGENT_KIND.PILOT);
+        yield* renameAgentCommitted(owner, pilot.id, "Invitations pilot");
+        const coder = yield* started(plan.id, AGENT_KIND.CODER, pilot.id);
+        const subPilot = yield* started(child.id, AGENT_KIND.PILOT, pilot.id);
+        const helper = yield* started(plan.id, AGENT_KIND.CODER, coder.id);
+
+        const agents = taskAgentsOfLiveRows(yield* liveRowsOf(owner), NOW);
+        const pilotOf = (id: string) => agents.find((agent) => agent.id === id)?.startedByPilot;
+        const named = {
+          agentId: pilot.id,
+          taskId: plan.id,
+          title: "Invitations pilot",
+          model: "anthropic/claude-opus-5.5",
+        };
+        assert.deepEqual(
+          [pilot, coder, subPilot, helper].map((agent) => pilotOf(agent.id)),
+          [undefined, named, named, undefined],
+        );
+      }),
+  );
+
+  it.effect(
     "say an operator's newest turn is quiet only where its reply is the quiet reply alone, and never a coder's",
     () =>
       Effect.gen(function* () {
