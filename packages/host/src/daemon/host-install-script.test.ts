@@ -26,6 +26,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import { SANDBOX_IMAGE, SMOLVM_LINUX_PIN } from "@luke/agent-runner/pins";
+import { resolveAppName } from "../app-identity.js";
 import { DARWIN_HOST } from "./host-os.js";
 
 const SCRIPT = join(import.meta.dirname, "../../../../apps/web/install/install.sh");
@@ -545,12 +546,30 @@ describe("the host's install script", () => {
   );
 
   it.each([
-    { appHost: false, loaded: false, kept: false, status: 0 },
-    { appHost: true, loaded: false, kept: true, status: 0 },
-    { appHost: false, loaded: true, kept: true, status: 1 },
+    { app: "none", stateOf: undefined, loaded: false, kept: false, status: 0 },
+    {
+      app: "release",
+      stateOf: (home: string) => DARWIN_HOST.stateRoot(home, { developerIdSigned: true }),
+      loaded: false,
+      kept: true,
+      status: 0,
+    },
+    {
+      app: "development",
+      stateOf: (home: string) =>
+        join(
+          home,
+          "Library/Application Support",
+          resolveAppName({ packaged: false, developerIdSigned: false }),
+        ),
+      loaded: false,
+      kept: true,
+      status: 0,
+    },
+    { app: "none", stateOf: undefined, loaded: true, kept: true, status: 1 },
   ])(
-    "a Mac's uninstall removes the agents' machines and folders under the installing user's home, never root's, and leaves the clones the desktop app shares, unless the Luke app's state is there or the LaunchAgent will not stop (app state: $appHost, still loaded: $loaded)",
-    ({ appHost, loaded, kept, status }) => {
+    "a Mac's uninstall removes the agents' machines and folders under the installing user's home, never root's, and leaves the clones the desktop app shares, unless a Luke app profile's state is there or the LaunchAgent will not stop (app state: $app, still loaded: $loaded)",
+    ({ stateOf, loaded, kept, status }) => {
       const bin = folder();
       const home = folder();
       const rootHome = folder();
@@ -582,8 +601,8 @@ describe("the host's install script", () => {
           mkdirSync(join(place, ".luke", each), { recursive: true });
         }
       }
-      if (appHost) {
-        const appState = DARWIN_HOST.stateRoot(home, { developerIdSigned: true });
+      if (stateOf !== undefined) {
+        const appState = stateOf(home);
         mkdirSync(appState, { recursive: true });
         writeFileSync(join(appState, "device.json"), "{}");
       }
