@@ -158,6 +158,40 @@ export const INPUT_LINE = {
  */
 export const CODEX_TOKEN_COMMAND = "codex-token";
 
+/**
+ * The argument that starts the runner's bundle as the command that keeps an
+ * agent's state between turns (`state.ts`), run inside the agent's VM as its
+ * user: `node <bundle> state <action> <agent folder> <pack file>`. It prints
+ * sizes and digests alone on stdout, and why it failed on stderr.
+ */
+export const STATE_COMMAND = "state";
+
+/** What the state command does, as its first argument after `state`. */
+export const STATE_ACTION = {
+  /** Writes the agent's state into the pack file. */
+  PACK: "pack",
+  /** Restores the pack into a scratch folder under the agent's `tmp/` and compares it with the agent's folder. */
+  VERIFY: "verify",
+  /** Applies the pack to the agent's folder, whose repository was made at the pack's base commit. */
+  RESTORE: "restore",
+} as const;
+
+export type StateAction = (typeof STATE_ACTION)[keyof typeof STATE_ACTION];
+
+/** How the state command exits. */
+export const STATE_EXIT = {
+  DONE: 0,
+  /** Packing, verifying or restoring failed, or a verify found a difference; stderr says which. */
+  FAILED: 1,
+  /** The command line was not one the command takes. */
+  USAGE: 2,
+  /** The state is over what a pack may hold (`STATE_CAP_BYTES`); stderr names its largest parts, and trying again will not help. */
+  TOO_LARGE: 3,
+} as const;
+
+/** The most a pack may hold, its parts' sizes summed before compression: 500 MB. */
+export const STATE_CAP_BYTES = 500_000_000;
+
 /** What Luke's token route answers a runner: the plan's access token, good for at least the route's margin. */
 export const RunnerTokenAnswerSchema = Schema.Struct({ accessToken: Schema.String });
 export type RunnerTokenAnswer = typeof RunnerTokenAnswerSchema.Type;
