@@ -88,6 +88,10 @@ export interface ToolCallView {
   readonly kind: CallKind;
   /** The thing the call was done to, after its kind's verb. */
   readonly subject: string;
+  /** For a call that read, wrote, or edited files, their paths as the call named them, in order, which its row names by the first one's chip. */
+  readonly files?: readonly string[];
+  /** For a read of a web page, its whole address, which its row names by its website chip. */
+  readonly page?: string;
   /** For a command, the plain words the model said it is for, which its line says in place of the verb and the command; for a browser call, what it did (`browserCallWords`); absent where there are none. */
   readonly description?: string;
   readonly input: ToolBlock;
@@ -149,6 +153,12 @@ function pathsSubject(paths: readonly string[]): string {
 /** The string under a key of a record, or nothing where the record has none. */
 function stringAt(value: WireValue | undefined, key: string): string | undefined {
   return isRecord(value) && isWireString(value[key]) ? value[key] : undefined;
+}
+
+/** The one file a call's `filePath` names, as a list; none where it names none. */
+function filesAt(input: WireValue | undefined): readonly string[] {
+  const path = stringAt(input, "filePath");
+  return path === undefined || path === "" ? [] : [path];
 }
 
 /** The files a `show_image` call named, in order, as its row's subject. */
@@ -953,6 +963,7 @@ const AGENT_TOOL_VIEWS = {
   [AGENT_TOOL.READ_WEB_PAGE]: ({ input, output }) => ({
     kind: CALL_KIND.WEB_PAGE,
     subject: pageName(stringAt(input, "url") ?? ""),
+    page: stringAt(input, "url") ?? "",
     input: textBlock(stringAt(input, "url") ?? ""),
     output: output === undefined ? undefined : wordsOutput(output, "text"),
   }),
@@ -992,12 +1003,14 @@ const AGENT_TOOL_VIEWS = {
   [AGENT_TOOL.READ_FILE]: ({ input, output }) => ({
     kind: CALL_KIND.READ_FILE,
     subject: stringAt(input, "filePath") ?? "",
+    files: filesAt(input),
     input: textBlock(stringAt(input, "filePath") ?? ""),
     output: output === undefined ? undefined : wordsOutput(output, "content"),
   }),
   [AGENT_TOOL.WRITE_FILE]: ({ input, output }) => ({
     kind: CALL_KIND.WRITE_FILE,
     subject: stringAt(input, "filePath") ?? "",
+    files: filesAt(input),
     input: textBlock(stringAt(input, "content") ?? ""),
     output: output === undefined ? undefined : wordsOutput(output, "path"),
   }),
@@ -1005,9 +1018,11 @@ const AGENT_TOOL_VIEWS = {
   [AGENT_TOOL.GREP]: READ_SEARCH,
   [AGENT_TOOL.APPLY_PATCH]: ({ input, output }) => {
     const patchText = stringAt(input, "patchText") ?? "";
+    const files = patchPaths(patchText);
     return {
       kind: CALL_KIND.EDIT,
-      subject: pathsSubject(patchPaths(patchText)),
+      subject: pathsSubject(files),
+      files,
       input: { kind: TOOL_BLOCK.PATCH, text: patchText },
       output: output === undefined ? undefined : patchOutput(output),
     };
@@ -1107,6 +1122,7 @@ const RETIRED_TOOL_VIEWS = {
   [RETIRED_TOOL.WEB_FETCH]: ({ input, output }) => ({
     kind: CALL_KIND.WEB_PAGE,
     subject: pageName(stringAt(input, "url") ?? ""),
+    page: stringAt(input, "url") ?? "",
     input: textBlock(stringAt(input, "url") ?? ""),
     output: output === undefined ? undefined : wordsOutput(output, "content"),
   }),

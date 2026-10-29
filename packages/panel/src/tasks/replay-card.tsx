@@ -310,6 +310,8 @@ function CallStep({
       server={server}
       subject={call.subject}
       description={call.description}
+      files={call.files}
+      page={call.page}
       agent={agent}
       agentCard={agentId === undefined ? undefined : place.card(agentId)}
       input={call.input}

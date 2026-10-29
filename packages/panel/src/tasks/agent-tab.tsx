@@ -567,6 +567,8 @@ function ToolCallView({
         server={server}
         subject={view.subject}
         description={view.description}
+        files={view.files}
+        page={view.page}
         agent={calledAgentActor(part, cards, known)}
         agentCard={agentCard}
         input={view.input}
