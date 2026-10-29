@@ -1947,6 +1947,32 @@ const findVisibleAgent = SqlSchema.findOneOption({
     ),
 });
 
+/** The most continues of a pilot a message follows to the pilot that took over from it, every one archived but the last. */
+const TAKEOVER_HOPS = 10;
+
+/** The newest pilot that continued the agent, where the account may read it (`agentVisibleTo`), archived or not; a fork is none. */
+const findTakingOverPilot = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: AgentRowSchema,
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select(AGENT_COLUMNS)
+        .from(agentTable)
+        .where(
+          and(
+            // Note that the source is matched on the expression its index is built on.
+            sql`(${agentTable.startedFrom}->>'agentId') = ${agentId}`,
+            sql`${agentTable.startedFrom}->>'messageId' is null`,
+            eq(agentTable.kind, AGENT_KIND.PILOT),
+            agentVisibleTo(userId),
+          ),
+        )
+        .orderBy(desc(agentTable.createdAt), desc(agentTable.id))
+        .limit(1),
+    ),
+});
+
 /** The account's pin of the agent, from now; one already standing keeps its instant. */
 const insertAgentPin = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, now: Schema.Date }),
@@ -2550,6 +2576,28 @@ export function readVisibleAgent(
   agentId: string,
 ): AgentStoreEffect<Option.Option<Agent>> {
   return findVisibleAgent({ userId, agentId });
+}
+
+/**
+ * The pilot that took over from the agent, where the account may read it:
+ * the newest pilot that continued it, or, where that one is archived too,
+ * the newest that continued that one, and so on for at most
+ * `TAKEOVER_HOPS` continues; nothing where the chain ends archived or no
+ * pilot continued the agent.
+ */
+export function readTakeoverPilot(
+  userId: string,
+  agentId: string,
+): AgentStoreEffect<Option.Option<Agent>> {
+  return Effect.gen(function* () {
+    let from = agentId;
+    for (let hop = 0; hop < TAKEOVER_HOPS; hop += 1) {
+      const next = yield* findTakingOverPilot({ userId, agentId: from });
+      if (Option.isNone(next) || next.value.archivedAt === null) return next;
+      from = next.value.id;
+    }
+    return Option.none();
+  });
 }
 
 /** The agent given another model, effort, and context window, which its next step runs on, the model's whole window where the choice names none; nothing for an agent of a workspace the account is not in. */

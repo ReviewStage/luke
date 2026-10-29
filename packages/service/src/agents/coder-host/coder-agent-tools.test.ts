@@ -2313,6 +2313,52 @@ test("message_agent hands another agent of the workspace the words under the sen
   );
 });
 
+test("message_agent to a pilot a continue took over and archived reaches the pilot that took it over, and answers that pilot", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  const start = {
+    ...AGENT_CHOICE,
+    taskId: tasks.invitations,
+    planSnapshot: "# Teammate invitations",
+    prompt: null,
+  };
+  const pilot = await claimed(agents.caller.userId, {
+    ...start,
+    idempotencyKey: randomUUID(),
+    kind: AGENT_KIND.PILOT,
+  });
+  const worker = await claimed(agents.caller.userId, {
+    ...start,
+    idempotencyKey: randomUUID(),
+    startedByAgentId: pilot.id,
+  });
+  const continued = await claimed(agents.caller.userId, {
+    ...start,
+    idempotencyKey: randomUUID(),
+    kind: AGENT_KIND.PILOT,
+    startedFrom: { agentId: pilot.id, steps: 1, totalSteps: 1 },
+    takesOverFrom: pilot.id,
+  });
+  await database.run(archiveAgent(agents.caller.userId, pilot.id, true));
+
+  const sent = await directMessage(host, worker, pilot, eve.services);
+
+  assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
+  assert.equal(isRecord(sent.agent) ? sent.agent.id : undefined, continued.id);
+  const [line] = await database.run(
+    Database.use((db) =>
+      db
+        .select({ metadata: messages.metadata })
+        .from(messages)
+        .where(eq(messages.conversationId, continued.conversationId))
+        .orderBy(desc(messages.seq))
+        .limit(1),
+    ),
+  );
+  assert.deepEqual(line?.metadata, { channel: MESSAGE_CHANNEL.AGENT_MESSAGE });
+});
+
 test("a message to an agent whose session eve no longer runs opens a fresh session over its conversation rather than being refused, and settles the turn the ended session was running as failed for its session's end, once", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId, [], undefined, "no_active_turn", true);
