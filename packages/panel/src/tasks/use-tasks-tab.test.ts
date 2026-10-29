@@ -2781,7 +2781,7 @@ const readAgentPin = Schema.decodeUnknownOption(
   }),
 );
 
-test("an agent's tab an earlier version pinned on this Mac becomes the agent's own pin on the account, where it was dragged, once the list followed live names its task, and leaves this Mac only once that pin landed, the service reads no such agent, or the account already pinned it", async () => {
+test("an agent's tab an earlier version pinned on this Mac becomes the agent's own pin on the account, where it was dragged, once the list followed live names its task, and leaves this Mac only once that pin landed or the account already pinned it", async () => {
   const kept = () =>
     window.localStorage.setItem(
       "luke.sidePanel",
@@ -2824,8 +2824,9 @@ test("an agent's tab an earlier version pinned on this Mac becomes the agent's o
   assert.deepEqual(storedPins(), [], "nor does it stay on this Mac");
   closeWindow();
 
+  // The service answers so as well for an agent the account cannot see just now.
   const refused = await launch(live, () =>
-    Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    Promise.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND }),
   );
   assert.equal(asked(refused).length, 1);
   assert.deepEqual(
@@ -2833,10 +2834,6 @@ test("an agent's tab an earlier version pinned on this Mac becomes the agent's o
     carriedPin,
     "a refused pin keeps the tab's for the next launch",
   );
-  closeWindow();
-
-  const gone = await launch(live, () => Promise.resolve({ failure: AGENT_CALL_FAILURE.NOT_FOUND }));
-  assert.deepEqual(gone.control().sidePanel.carried, [], "an agent the service reads none of");
   closeWindow();
 
   const already = await launch(

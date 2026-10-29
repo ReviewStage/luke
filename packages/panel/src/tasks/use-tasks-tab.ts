@@ -977,11 +977,10 @@ const NO_IDS: readonly string[] = [];
 /** No agent with no plan, before the list carries any. */
 const NO_TASKLESS_AGENTS: readonly TasklessAgent[] = [];
 
-/** How an agent's pin asked of the service landed: written, refused, of an agent the service reads none of, or never asked, the account having changed while it waited its turn. */
+/** How an agent's pin asked of the service landed: written, refused, or never asked, the account having changed while it waited its turn. */
 const AGENT_PIN_ASKED = {
   CHANGED: "changed",
   REFUSED: "refused",
-  GONE: "gone",
   UNASKED: "unasked",
 } as const;
 
@@ -1841,12 +1840,7 @@ export function useTasksTab(input: {
       (): Promise<AgentPinAsked> | AgentPinAsked =>
         accountNow.current === pressedBy
           ? act(ACT_KIND.AGENTS_PIN, { agentId, pinned, ...placed }).then(
-              (answer) =>
-                "agent" in answer
-                  ? AGENT_PIN_ASKED.CHANGED
-                  : answer.failure === AGENT_CALL_FAILURE.NOT_FOUND
-                    ? AGENT_PIN_ASKED.GONE
-                    : AGENT_PIN_ASKED.REFUSED,
+              (answer) => ("agent" in answer ? AGENT_PIN_ASKED.CHANGED : AGENT_PIN_ASKED.REFUSED),
               () => AGENT_PIN_ASKED.REFUSED,
             )
           : AGENT_PIN_ASKED.UNASKED,
@@ -1874,10 +1868,13 @@ export function useTasksTab(input: {
   // becomes its task's: once the list followed live names the task it was
   // pinned on, asked after that agent's pins already in flight, so an Unpin
   // pressed at launch is not undone by it. It leaves this Mac only once the
-  // account's pin landed, or once the service says it reads no such agent,
-  // archived ones among those it reads, so one deleted since is let go and a
-  // refusal keeps it for a later launch, drawn nowhere. An agent the account
-  // already pinned only lets it go. Each agent is asked once a launch.
+  // account's pin landed, archived agents among those pinned, and a refusal
+  // keeps it for a later launch, drawn nowhere. Note that a refusal of an
+  // agent the service says it reads none of keeps it too, because the
+  // service answers so as well for an agent the account cannot see just now,
+  // its access to the agent's repository gone for a while, and only the pin
+  // kept here would bring it back. An agent the account already pinned only
+  // lets it go. Each agent is asked once a launch.
   const carriedAsked = useRef(new Set<string>());
   const { carried, onCarried } = sidePanel;
   const { taskAgents, taskAgentPins = NO_TASK_AGENT_PINS } = tasks;
@@ -1899,9 +1896,7 @@ export function useTasksTab(input: {
         continue;
       }
       askCarried.current(pin.agent, true, pin.position).then((asked) => {
-        if (asked === AGENT_PIN_ASKED.CHANGED || asked === AGENT_PIN_ASKED.GONE) {
-          onCarried(pin.agent);
-        }
+        if (asked === AGENT_PIN_ASKED.CHANGED) onCarried(pin.agent);
       });
     }
   }, [fixture, carried, tasks.tasks, taskAgents, taskAgentPins, tasklessAgents, onCarried]);
