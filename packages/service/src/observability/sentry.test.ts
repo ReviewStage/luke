@@ -76,19 +76,39 @@ it.effect(
     }),
 );
 
-it.effect("a log line becomes a Sentry log, and a span a Sentry span", () =>
-  Effect.gen(function* () {
-    const sentry = recordingSentry();
-    yield* Effect.logWarning("a title could not be generated").pipe(
-      Effect.withSpan("web/title"),
-      Effect.provide(Logger.layer([sentryLogger])),
-      Effect.provide(sentry.layer),
-    );
-    const logs = sentOfType(sentry.sent, "log").map((item) => item.text);
-    const spans = sentry.sent.filter((item) => item.type !== "log").map((item) => item.text);
-    assert.ok(logs.some((text) => text.includes("a title could not be generated")));
-    assert.ok(spans.some((text) => text.includes("web/title")));
-  }),
+it.effect(
+  "a log line becomes a Sentry log with its annotations, on the trace of the span it was written under",
+  () =>
+    Effect.gen(function* () {
+      const sentry = recordingSentry();
+      const span = yield* Effect.gen(function* () {
+        yield* Effect.logWarning("a title could not be generated").pipe(
+          Effect.annotateLogs({ agentId: "a" }),
+        );
+        return yield* Effect.currentSpan;
+      }).pipe(
+        Effect.withSpan("web/title"),
+        Effect.provide(Logger.layer([sentryLogger])),
+        Effect.provide(sentry.layer),
+      );
+      const [log] = sentOfType(sentry.sent, "log").flatMap((item) => JSON.parse(item.text).items);
+      assert.deepEqual(
+        {
+          body: log.body,
+          agentId: log.attributes.agentId?.value,
+          traceId: log.trace_id,
+          spanId: log.attributes["sentry.trace.parent_span_id"]?.value,
+        },
+        {
+          body: "a title could not be generated",
+          agentId: "a",
+          traceId: span.traceId,
+          spanId: span.spanId,
+        },
+      );
+      const spans = sentOfType(sentry.sent, "span").map((item) => item.text);
+      assert.ok(spans.some((text) => text.includes("web/title")));
+    }),
 );
 
 it.effect(

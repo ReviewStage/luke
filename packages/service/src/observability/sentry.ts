@@ -37,7 +37,7 @@ import {
 } from "@luke/features/sentry-addresses";
 import * as Sentry from "@sentry/effect";
 import { addBreadcrumb, type ErrorEvent, type EventHint } from "@sentry/effect/server";
-import { Effect, ErrorReporter, Exit, Layer, type Logger, Tracer } from "effect";
+import { Effect, ErrorReporter, Exit, Layer, Logger, Predicate, References, Tracer } from "effect";
 
 export const SENTRY_ENVIRONMENT = {
   /** The `luke-web` project's DSN; absent means nothing is sent. */
@@ -302,8 +302,48 @@ const sentryTelemetry = Layer.mergeAll(
   Sentry.SentryEffectMetricsLayer,
 );
 
-/** Every Effect log line as a Sentry log, for the runtime's logger set beside the JSON one. */
-export const sentryLogger: Logger.Logger<unknown, void> = Sentry.SentryEffectLogger;
+/** What every log line this logger sends is marked with, as Sentry's own Effect logger marks its lines. */
+const LOG_ORIGIN = { "sentry.origin": "auto.log.effect" } as const;
+
+/** Sentry's logger method for each Effect level a line is written at. */
+const SENTRY_LOG_METHOD = {
+  Fatal: Sentry.logger.fatal,
+  Error: Sentry.logger.error,
+  Warn: Sentry.logger.warn,
+  Info: Sentry.logger.info,
+  Debug: Sentry.logger.debug,
+  Trace: Sentry.logger.trace,
+} as const;
+
+/** A line's message as one string, folded as Sentry's own Effect logger folds it, so a search for its words still matches. */
+function foldedLogMessage(message: unknown): string {
+  if (Predicate.isString(message)) return message;
+  if (Array.isArray(message) && message.length === 1) {
+    const [only] = message;
+    return Predicate.isString(only) ? only : JSON.stringify(only);
+  }
+  return JSON.stringify(message);
+}
+
+/**
+ * Every Effect log line as a Sentry log, for the runtime's logger set beside
+ * the JSON one: at its level, with the fiber's log annotations as its
+ * attributes, so a line can be found in Sentry by the ids it was logged with.
+ * `beforeSendLog` scrubs them as it scrubs every log's.
+ *
+ * Note that this replaces `Sentry.SentryEffectLogger`, because that one sends
+ * the message alone and drops the annotations. The line still reaches its
+ * trace as Sentry links any log: the tracer (`SentryEffectTracer`) makes the
+ * fiber's span the active one while the fiber runs, and Sentry's logger reads
+ * the trace and span ids from it.
+ */
+export const sentryLogger: Logger.Logger<unknown, void> = Logger.make(
+  ({ fiber, logLevel, message }) => {
+    if (logLevel === "All" || logLevel === "None") return;
+    const annotations = fiber.getRef(References.CurrentLogAnnotations);
+    SENTRY_LOG_METHOD[logLevel](foldedLogMessage(message), { ...annotations, ...LOG_ORIGIN });
+  },
+);
 
 /**
  * Sentry started on `options`, with its `ErrorReporter` registered: a route
