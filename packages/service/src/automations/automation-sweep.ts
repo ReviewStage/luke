@@ -151,12 +151,12 @@ const archiveFinishedRunAgents = Effect.fnUntraced(function* (now: number) {
       // one woken since, or whose starter left, stands and is read again by a later sweep.
       const archived =
         finishedWell &&
-        (yield* archiveUnmovedAgent(agent.userId, agent.codingAgentId, agent.conversationSeq));
+        (yield* archiveUnmovedAgent(agent.userId, agent.agentId, agent.conversationSeq));
       // A local agent archived is let go of on its device, as an archive by hand lets it go, and
       // its run stays unsettled until the discard is queued, so a later sweep asks again.
       const discarded =
         archived || agent.archivedAt !== null
-          ? yield* discardedOrLogged({ id: agent.codingAgentId, userId: agent.userId })
+          ? yield* discardedOrLogged({ id: agent.agentId, userId: agent.userId })
           : true;
       if (discarded && (archived || agent.archivedAt !== null || ENDED_UNWELL.has(status))) {
         yield* settleRunArchive(agent.runId);

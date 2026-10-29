@@ -328,9 +328,9 @@ const findDefaults = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .select({
-          model: accountPreference.codingAgentModel,
-          effort: accountPreference.codingAgentEffort,
-          contextWindow: accountPreference.codingAgentContextWindow,
+          model: accountPreference.agentModel,
+          effort: accountPreference.agentEffort,
+          contextWindow: accountPreference.agentContextWindow,
           experiments: accountPreference.experiments,
         })
         .from(accountPreference)
