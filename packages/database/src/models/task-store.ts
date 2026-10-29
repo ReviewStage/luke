@@ -1264,19 +1264,27 @@ export function readTaskHeader(
   );
 }
 
-/** A task's tree-wide switches, its parent, and its workspace, which is all the walk up to its top task reads. */
+/** A task's tree-wide switches, its mode, its parent, and its workspace, which is all the walk up to its top task reads. */
 const TopTaskRowSchema = Schema.Struct({
   organizationId: Schema.String,
   parentTaskId: Schema.NullOr(Schema.String),
+  mode: taskModeSchema,
   mergePolicy: mergePolicySchema,
   running: Schema.Boolean,
 });
 
 type TopTaskRow = typeof TopTaskRowSchema.Type;
 
+/** A task's own row and its top task's, which is its own where it stands at the top. */
+interface TreeRows {
+  readonly own: TopTaskRow;
+  readonly top: TopTaskRow;
+}
+
 const TOP_TASK_COLUMNS = {
   organizationId: task.organizationId,
   parentTaskId: task.parentTaskId,
+  mode: task.mode,
   mergePolicy: task.mergePolicy,
   running: task.running,
 };
@@ -1304,7 +1312,7 @@ const findAncestorTopTaskRow = SqlSchema.findOneOption({
 });
 
 /**
- * The row of a task's top task, found by walking `parent_task_id` up to the
+ * The row of a task, and of its top task, found by walking `parent_task_id` up to the
  * root, so one switch on the top task governs the whole tree and a child's
  * own columns are never read once it has a parent. Nothing for a task the
  * account does not reach. The parents above it are read without a second
@@ -1314,10 +1322,7 @@ const findAncestorTopTaskRow = SqlSchema.findOneOption({
  * a task it has already seen stops there, with that task's own row, since
  * the row constraint only refuses a task its own parent.
  */
-function readTopTaskRow(
-  userId: string,
-  taskId: string,
-): TaskStoreEffect<Option.Option<TopTaskRow>> {
+function readTopTaskRow(userId: string, taskId: string): TaskStoreEffect<Option.Option<TreeRows>> {
   return Effect.gen(function* () {
     const first = yield* findTopTaskRow({ userId, taskId });
     if (Option.isNone(first)) return Option.none();
@@ -1333,7 +1338,7 @@ function readTopTaskRow(
       if (Option.isNone(parent)) break;
       top = parent.value;
     }
-    return Option.some(top);
+    return Option.some({ own: first.value, top });
   });
 }
 
@@ -1348,7 +1353,7 @@ export function readEffectiveMergePolicy(
 ): TaskStoreEffect<Option.Option<MergePolicy>> {
   return Effect.map(
     readTopTaskRow(userId, taskId),
-    Option.map((top) => top.mergePolicy),
+    Option.map(({ top }) => top.mergePolicy),
   );
 }
 
@@ -1362,7 +1367,24 @@ export function readEffectiveRunning(
 ): TaskStoreEffect<Option.Option<boolean>> {
   return Effect.map(
     readTopTaskRow(userId, taskId),
-    Option.map((top) => top.running),
+    Option.map(({ top }) => top.running),
+  );
+}
+
+/**
+ * Whether a task's agents are held still: it is a child task, and its top
+ * task (`readTopTaskRow`) is worked in pilot mode with its running switch
+ * off. A top task never is, since its pilot plans and talks to the developer
+ * while its tree is stopped, nor is a child of a tree worked any other way,
+ * whose switch nothing sets. False for a task the account does not reach.
+ */
+export function readTreeStopped(userId: string, taskId: string): TaskStoreEffect<boolean> {
+  return Effect.map(readTopTaskRow(userId, taskId), (rows) =>
+    Option.match(rows, {
+      onNone: () => false,
+      // Note that a child whose parent left the walk is its own top, and so is held by nothing.
+      onSome: ({ own, top }) => top !== own && top.mode === TASK_MODE.PILOT && !top.running,
+    }),
   );
 }
 

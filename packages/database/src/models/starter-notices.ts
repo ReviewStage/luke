@@ -19,7 +19,10 @@
  * No ending is due a starter archived, one whose own newest turn failed, or
  * a member's operator, which hears of its member's agents through its own
  * notices (`operator-notices.ts`), so no ending wakes a starter that cannot
- * answer it or is told another way.
+ * answer it or is told another way. An ending whose starter works on a child
+ * task of a pilot tree whose Running switch is off (`readTreeStopped`) is
+ * held: not due while the switch is off, and due again once it is on, for
+ * as long as the window still holds it.
  */
 
 import { AGENT_KIND } from "@luke/features/agent-wire";
@@ -33,6 +36,7 @@ import { Database, type DatabaseServices, type QueryError } from "../core/query.
 import { agentTable } from "../schemas/agent.js";
 import { messages, standingLine, turns } from "../schemas/storage.js";
 import { agentAutomationNameSql } from "./agent-name.js";
+import { readTreeStopped } from "./task-store.js";
 
 /** How a started agent's run ended without its finishing. */
 export const STARTER_NOTICE_ENDING = {
@@ -57,6 +61,8 @@ const DueNoticeSchema = Schema.Struct({
   organizationId: Schema.String,
   starterId: Schema.String,
   starterConversationId: Schema.String,
+  /** The task the starter works on; null for one on none. */
+  starterTaskId: Schema.NullOr(Schema.String),
   agentId: Schema.String,
   taskId: Schema.NullOr(Schema.String),
   agentKind: Schema.Literals(Object.values(AGENT_KIND)),
@@ -83,6 +89,7 @@ const AGENT_COLUMNS = {
   organizationId: agentTable.organizationId,
   starterId: starter.id,
   starterConversationId: starter.conversationId,
+  starterTaskId: starter.taskId,
   agentId: agentTable.id,
   taskId: agentTable.taskId,
   agentKind: agentTable.kind,
@@ -202,13 +209,31 @@ const findToldLines = SqlSchema.findAll({
     ),
 });
 
+/** The starters' tasks among the endings that are child tasks of a stopped pilot tree, each read once as its account. */
+const stoppedStarterTasks = (endings: readonly DueStarterNotice[]) =>
+  Effect.gen(function* () {
+    const accountOf = new Map<string, string>();
+    for (const { starterTaskId, userId } of endings) {
+      if (starterTaskId !== null && !accountOf.has(starterTaskId)) {
+        accountOf.set(starterTaskId, userId);
+      }
+    }
+    const stopped = new Set<string>();
+    for (const [taskId, userId] of accountOf) {
+      if (yield* readTreeStopped(userId, taskId)) stopped.add(taskId);
+    }
+    return stopped;
+  });
+
 /**
  * The endings between `since` and `until` whose starter has not been told
  * of them, oldest first and at most `limit`, across every account: each
  * starter is the account's own agent (`createAgent`), so its line goes
  * to the account the ended agent is of. Note that the endings already told
  * are left out before the limit, because a window holding more of them than
- * the limit would otherwise starve the newer ones.
+ * the limit would otherwise starve the newer ones, and so are those held
+ * while their starter's pilot tree is stopped, which would otherwise starve
+ * every other workspace's.
  */
 export function dueStarterNotices(
   since: Date,
@@ -228,8 +253,12 @@ export function dueStarterNotices(
     for (const { conversationId, clientId } of told) {
       toldIn.set(conversationId, (toldIn.get(conversationId) ?? new Set()).add(clientId));
     }
-    return endings
-      .filter((each) => !toldIn.get(each.starterConversationId)?.has(sentLineId(each.key)))
+    const untold = endings.filter(
+      (each) => !toldIn.get(each.starterConversationId)?.has(sentLineId(each.key)),
+    );
+    const held = yield* stoppedStarterTasks(untold);
+    return untold
+      .filter((each) => each.starterTaskId === null || !held.has(each.starterTaskId))
       .slice(0, limit);
   });
 }
