@@ -1,0 +1,87 @@
+/* view-transition.css -- the pseudo-elements a view transition plays
+   (view-transition.tsx), every one timed on the motion tokens.
+
+   The browser draws a view transition as a tree of pseudo-elements on the
+   root element, so they read the tokens as `:root` holds them: reduced
+   motion zeroes them there (motion.css), and a capture run zeroes them there
+   too (the panel's `base.css`), which leaves no motion either can't stop.
+   Nothing here keeps the browser's own timing: every group and picture is
+   set, the window itself (`root`, all that no boundary names) included. */
+
+@layer components {
+  /* A task title's box hugs its words, so the picture that travels holds
+     them alone. It keeps them to one line where its container does, and
+     never fragments, which the browser would refuse to capture. */
+  .luke-task-title-transition {
+    display: inline-block;
+    min-width: 0;
+    max-width: 100%;
+    vertical-align: top;
+  }
+
+  /* Every group and both of its pictures, the window's among them: what no
+     motion below names crossfades as one picture over the arriving pair's
+     opacity beat, so the frame around what moves lands with it. */
+  ::view-transition-group(*) {
+    animation-duration: var(--luke-duration-quick);
+    animation-timing-function: var(--luke-motion-exit);
+  }
+
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: var(--luke-duration-quick);
+    animation-timing-function: var(--luke-motion-exit);
+  }
+
+  /* A travel: the title's box glides and grows from where it stood to where
+     it lands on the spring, its two pictures crossfading early on the
+     opacity beat. Note that the pictures take the group's height and keep
+     their own proportion, rather than the browser's stretch to its width,
+     because the two boxes differ in width far more than words do: scaled
+     by height, the row's words grow into the title's at its type size. */
+  ::view-transition-group(.luke-vt-travel) {
+    animation-duration: var(--luke-duration-shape);
+    animation-timing-function: var(--luke-spring);
+  }
+
+  ::view-transition-old(.luke-vt-travel),
+  ::view-transition-new(.luke-vt-travel) {
+    inline-size: auto;
+    block-size: 100%;
+  }
+
+  /* A swap: what stood leaves first, over the exit beat, and what arrives
+     fades in rising on the spring once it has gone (docs/DESIGN.md). */
+  ::view-transition-group(.luke-vt-swap) {
+    animation-duration: calc(var(--luke-duration-exit) + var(--luke-duration-fast));
+  }
+
+  ::view-transition-old(.luke-vt-swap) {
+    animation: luke-vt-fade-out var(--luke-duration-exit) var(--luke-motion-exit) both;
+  }
+
+  ::view-transition-new(.luke-vt-swap) {
+    animation:
+      luke-vt-fade-in var(--luke-duration-quick) var(--luke-motion-exit) var(--luke-duration-exit)
+      both,
+      luke-vt-rise var(--luke-duration-fast) var(--luke-spring) var(--luke-duration-exit) both;
+  }
+
+  @keyframes luke-vt-fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-vt-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-vt-rise {
+    from {
+      translate: 0 var(--luke-space-8);
+    }
+  }
+}

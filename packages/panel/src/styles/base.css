@@ -356,9 +356,11 @@ body,
    Zeroing the tokens every transition is written in terms of is enough — no
    rule has to be overridden. They are zeroed on the body as well as on the
    stage, so a hint, a menu, the palette, or a toast drawn at the body's end,
-   which none stands under, holds still too. */
+   which none stands under, holds still too, and on the root, whose
+   view-transition pseudo-elements read them from nowhere else. */
 .app-stage[data-capture="true"],
-body:has(.app-stage[data-capture="true"]) {
+body:has(.app-stage[data-capture="true"]),
+:root:has(.app-stage[data-capture="true"]) {
   --luke-duration-shape: 0s;
   --luke-duration-exit: 0s;
   --luke-duration-quick: 0s;

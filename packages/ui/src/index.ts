@@ -156,6 +156,7 @@ export * from "./components/tooltip/tooltip.js";
 export * from "./components/turn-into-menu/turn-into-menu.js";
 export * from "./components/unread-mark/unread-mark.js";
 export * from "./components/video-player/video-player.js";
+export * from "./components/view-transition/view-transition.js";
 export * from "./components/visually-hidden/visually-hidden.js";
 export * from "./components/working-mark/working-mark.js";
 export * from "./components/writing-glyph/writing-glyph.js";
