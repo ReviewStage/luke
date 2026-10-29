@@ -1,9 +1,9 @@
 /**
- * pilot-switches.ts -- whether a task's head shows a pilot tree's switches, Auto-merge and Running, and what each reads.
+ * pilot-switches.ts -- whether a task's head shows a pilot tree's controls, the Auto-merge switch and Start or Stop, and what each reads.
  *
  * A pilot tree carries one merge policy (`MERGE_POLICY`) and one running
- * switch, both set on its top task, which its child tasks follow: so the
- * switches stand on a pilot task with no parent alone, and on no child task
+ * switch, both set on its top task, which its child tasks follow: so their
+ * controls stand on a pilot task with no parent alone, and on no child task
  * and no task worked by its agents. A task from a service before merge
  * policies merges on green, as every task starts, and one from a service
  * before the running switch reads as stopped, as every pilot task starts.
@@ -29,7 +29,7 @@ export function mergePolicySwitchOf(
   return task.mergePolicy ?? MERGE_POLICY.MERGE_ON_GREEN;
 }
 
-/** Whether a task's tree runs, where its head shows the Running switch: a pilot task at the top of its tree; none for any other. */
+/** Whether a task's tree runs, where its head shows Start or Stop: a pilot task at the top of its tree; none for any other. */
 export function runningSwitchOf(
   task: Pick<TaskSummary, "mode" | "parentTaskId" | "running">,
 ): boolean | undefined {

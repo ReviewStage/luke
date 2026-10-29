@@ -94,6 +94,13 @@ function chip(host: HTMLElement, label: string): HTMLButtonElement {
   return found ?? assert.fail(`no ${label} chip`);
 }
 
+/** The button a task's head names `name`, by its accessible name; none where it draws none. */
+function buttonNamed(host: HTMLElement, name: string): HTMLButtonElement | undefined {
+  return [...host.querySelectorAll("button")].find(
+    (button) => (button.getAttribute("aria-label") ?? button.textContent?.trim()) === name,
+  );
+}
+
 /** The switch a task's head draws under `label`. */
 function switchNamed(host: HTMLElement, label: string): HTMLElement {
   return (
@@ -161,24 +168,44 @@ test("a pilot task's Auto-merge switch is on while it merges on green, and a pre
   assert.equal(drawn(TASK, () => undefined).querySelector('[role="switch"]'), null);
 });
 
-test("a top pilot task's Running switch reads off where the task names none, and a press sends the other side", () => {
+test("a top pilot task's head offers Start where the task names no running, and Stop while its tree runs, each press sending the other side", () => {
   const sent: TaskStanding[] = [];
   const pilot: Task = { ...TASK, mode: TASK_MODE.PILOT };
-  const stopped = switchNamed(
-    drawn(pilot, (standing) => sent.push(standing)),
-    "Running",
-  );
-  assert.equal(stopped.getAttribute("aria-checked"), "false");
-  act(() => stopped.click());
+  const stopped = drawn(pilot, (standing) => sent.push(standing));
+  assert.equal(buttonNamed(stopped, "Stop"), undefined);
+  act(() => (buttonNamed(stopped, "Start") ?? assert.fail("no Start")).click());
 
-  const running = switchNamed(
-    drawn({ ...pilot, running: true }, (standing) => sent.push(standing)),
-    "Running",
-  );
-  assert.equal(running.getAttribute("aria-checked"), "true");
-  act(() => running.click());
+  const running = drawn({ ...pilot, running: true }, (standing) => sent.push(standing));
+  assert.equal(buttonNamed(running, "Start"), undefined);
+  act(() => (buttonNamed(running, "Stop") ?? assert.fail("no Stop")).click());
 
   assert.deepEqual(sent, [{ running: true }, { running: false }]);
+  assert.equal(
+    buttonNamed(
+      drawn(TASK, () => undefined),
+      "Start",
+    ),
+    undefined,
+  );
+});
+
+test("Start takes no second press while the service has yet to answer the first", async () => {
+  const sent: TaskStanding[] = [];
+  let answer: () => void = () => undefined;
+  const host = drawn({ ...TASK, mode: TASK_MODE.PILOT }, (standing) => {
+    sent.push(standing);
+    return new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+  });
+  const start = buttonNamed(host, "Start") ?? assert.fail("no Start");
+  act(() => start.click());
+  act(() => (buttonNamed(host, "Starting") ?? assert.fail("no Starting")).click());
+  assert.deepEqual(sent, [{ running: true }]);
+
+  await act(async () => answer());
+  act(() => (buttonNamed(host, "Start") ?? assert.fail("no Start")).click());
+  assert.deepEqual(sent, [{ running: true }, { running: true }]);
 });
 
 test("a status picked from the menu, opened by its chip or by S, is handed to the page, and the one standing is not picked again", () => {
@@ -263,7 +290,9 @@ test("the assignee's menu lists No assignee, then the reader, then every other m
         readerId: "user-dean",
         children: createElement(TaskStandingChips, {
           task: TASK,
-          onSet: (standing: TaskStanding) => sent.push(standing),
+          onSet: (standing: TaskStanding) => {
+            sent.push(standing);
+          },
         }),
       }),
     );
