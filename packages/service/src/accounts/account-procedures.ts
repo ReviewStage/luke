@@ -13,8 +13,9 @@
  * desktop syncs, where the account's Luke links open, a synced setting of
  * its own part so a build that predates it neither refuses the snapshot nor
  * clears the choice by writing the shared part back whole, the coding
- * agents' default model, effort, and context window, which Settings and the
- * Start menu both write, the Claude model the account's Generate chapters
+ * agents' default model, effort, and context window, which Settings alone
+ * writes and which reads, until it does, as the fallback a Start naming no
+ * model runs on (`accountModelChoices`), the Claude model the account's Generate chapters
  * runs on, one of a fixed set (`@luke/features/chapters-model-choice`), and the experiments the account turned on in
  * Settings › Experimental. A write carries any of them, a coding-agent
  * choice is accepted only as the catalog accepts it
@@ -61,6 +62,7 @@ import { Effect, Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { isAdminRole } from "../admin/admin-access.js";
 import { unconnectedProviders } from "../agents/coder-host/agent-runtime-choice.js";
+import { accountModelChoices } from "../agents/coder-host/start.js";
 import type { EveReach } from "../agents/coder-host/stop.js";
 import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
 import { HostedEnvironment } from "../environment.js";
@@ -113,15 +115,35 @@ const ModelChoiceSchema = Schema.Struct({
 const readModelChoice = readEither(ModelChoiceSchema);
 
 /**
- * The snapshot as the account answers it, the preferences' instant beside
- * it where the preferences were ever written, and the link choice as a part
- * of its own where the account made one.
+ * The coding-agent default the snapshot answers: the account's stored one,
+ * or where it stored none the fallback a Start naming no model runs on
+ * (`accountModelChoices`), so Settings and every chip draw what that Start
+ * would run. Note that a catalog or a store that cannot be read meanwhile
+ * answers Anthropic's fallback rather than refusing the settings beside it,
+ * because a Start is refused as unavailable then anyway.
  */
-function snapshotAnswer(row: AccountPreferencesRow | undefined) {
+const snapshotAgent = (
+  userId: string,
+  row: AccountPreferencesRow | undefined,
+): Effect.Effect<ModelChoice, never, DatabaseServices | ModelCatalog> =>
+  row?.agent === undefined
+    ? accountModelChoices(userId).pipe(
+        Effect.map((choices) => choices.defaultChoice),
+        Effect.catch(() => Effect.succeed(AGENT_DEFAULT_CHOICE)),
+      )
+    : Effect.succeed(row.agent);
+
+/**
+ * The snapshot as the account answers it, the coding-agent default as
+ * `snapshotAgent` reads it, the preferences' instant beside it where the
+ * preferences were ever written, and the link choice as a part of its own
+ * where the account made one.
+ */
+function snapshotAnswer(row: AccountPreferencesRow | undefined, agent: ModelChoice) {
   const updatedAt = row?.updatedAt;
   return {
     ...accountPreferencesParts(row?.preferences ?? {}),
-    agent: row?.agent ?? AGENT_DEFAULT_CHOICE,
+    agent,
     chaptersModel: row?.chaptersModel ?? CHAPTERS_MODEL_DEFAULT,
     experiments: row?.experiments ?? NO_EXPERIMENTS,
     ...(updatedAt === undefined ? undefined : { updatedAt: updatedAt.getTime() }),
@@ -180,8 +202,9 @@ const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
       ).pipe(Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE))),
     ),
   );
-  const standing = snapshotAnswer(yield* hostedStoreOrUnavailable(seams.readPreferences(userId)));
-  if (accepted.model === standing.agent.model) return accepted;
+  const row = yield* hostedStoreOrUnavailable(seams.readPreferences(userId));
+  const standing = yield* snapshotAgent(userId, row);
+  if (accepted.model === standing.model) return accepted;
   // Note that the default never moves to a model nothing pays for, because every Start on it would be refused.
   const unconnected = yield* hostedStoreOrUnavailable(unconnectedProviders(userId));
   const provider = providerModelOf(accepted.model)?.provider;
@@ -230,10 +253,10 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       return { deleted: true } as const;
     }),
 
-    /** The caller's own stored snapshot, or the defaults for a user with none stored. */
+    /** The caller's own stored snapshot, or the defaults for a user with none stored, the coding agents' the one its credentials pay for. */
     preferences: signedIn.preferences.effect(function* ({ context }) {
       const row = yield* hostedStoreOrUnavailable(seams.readPreferences(context.userId));
-      return snapshotAnswer(row);
+      return snapshotAnswer(row, yield* snapshotAgent(context.userId, row));
     }),
 
     /** Whether the caller's own account is an admin, any role but the admin role not. */
@@ -290,7 +313,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       }
 
       const row = yield* hostedStoreOrUnavailable(seams.writePreferences(context.userId, write));
-      return snapshotAnswer(row);
+      return snapshotAnswer(row, yield* snapshotAgent(context.userId, row));
     }),
 
     ...providerKeysProcedures(seams),
