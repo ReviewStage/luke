@@ -1388,12 +1388,18 @@ test("a channel narrows the Inbox to its own threads, everyone's, under its name
   );
 });
 
-test("a channel left on another scope opens on All of everyone's again", async () => {
+test("a scope turned in one channel stands in every channel, and when the reader comes back", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = ACME;
   answerChannels({ channels: () => [GENERAL, APP_CHANNEL] });
   world.inboxes = new Map([
-    [BILLING.id, [{ ...THRESHOLD, channelId: GENERAL.id, startedBy: TEAMMATE }]],
+    [
+      BILLING.id,
+      [
+        { ...THRESHOLD, channelId: GENERAL.id, startedBy: TEAMMATE },
+        { ...RETRY, channelId: APP_CHANNEL.id, startedBy: TEAMMATE },
+      ],
+    ],
   ]);
   const { page } = mount([], { channels: true });
   await settle();
@@ -1401,12 +1407,17 @@ test("a channel left on another scope opens on All of everyone's again", async (
   await settle();
   assert.deepEqual(rowTitles(page), [], "For you leaves out the teammate's thread");
 
+  act(() => chooseChannel(APP_CHANNEL.id));
+  await settle();
+  assert.equal(headTitle(page), `#${APP_CHANNEL.name} · For you`);
+  assert.deepEqual(rowTitles(page), [], "another channel opens on For you too");
+
   act(() => leaveChannel());
   await settle();
   act(() => chooseChannel(GENERAL.id));
   await settle();
-  assert.equal(headTitle(page), "#general");
-  assert.deepEqual(rowTitles(page), [THRESHOLD.title]);
+  assert.equal(headTitle(page), "#general · For you");
+  assert.deepEqual(rowTitles(page), [], "#general is still on For you");
 });
 
 test("a channel chosen while the workspace's channels could not be read says so with Retry", async () => {

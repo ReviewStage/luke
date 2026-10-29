@@ -6,20 +6,18 @@ import { useCallback, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import {
   type InboxViewChoices,
+  useChannelScope,
   useInboxTaskFolds,
   useInboxViewChoices,
 } from "../desktop/folded-groups.js";
 import { useInboxCloser } from "./inbox-close.js";
 import {
   channelGroups,
-  EVERYONES,
   INBOX_HOLDER,
   INBOX_SHOW,
   INBOX_WHOSE,
   type InboxGroup,
   type InboxListed,
-  type InboxShow,
-  type InboxWhose,
   inboxAgentOf,
   inboxCounts,
   listedItems,
@@ -50,11 +48,12 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * scope (`inboxList`).
  *
  * Narrowed to a channel, it lists and counts that channel's items alone
- * (`channelGroups`), under a scope of the channel's own: All of everyone's
- * each time a channel opens, since a channel is everyone's threads on one
- * topic, and whatever the reader turns it to while that channel stays
- * shown, never kept. Its grouping, its order, and the rest of its view are
- * the Inbox's own.
+ * (`channelGroups`), under the channels' scope, one for every channel and
+ * apart from the Inbox's: All of everyone's until the reader turns it,
+ * since a channel is everyone's threads on one topic, and then whatever
+ * they turned it to, in every channel and across a launch
+ * (`useChannelScope`). Its grouping, its order, and the rest of its view
+ * are the Inbox's own.
  */
 
 /**
@@ -70,33 +69,11 @@ function listedHoldings(
   return holdings.filter((holding) => listed.some((task) => task.id === holding.taskId));
 }
 
-/** A channel's own scope, as the reader last turned it while that channel stood. */
-interface ChannelScope {
-  readonly channelId: string;
-  readonly show: InboxShow;
-  readonly whose: InboxWhose;
-}
-
-/**
- * The Inbox's view choices, narrowed to a channel where one is given: its
- * scope the channel's own, All of everyone's as it opens, held only while
- * it stands; the Inbox's kept choices where none is.
- */
+/** The Inbox's view choices, under the channels' scope where a channel is given; the Inbox's kept choices where none is. */
 function useScopedChoices(channelId: string | undefined): InboxViewChoices {
   const kept = useInboxViewChoices();
-  const [scope, setScope] = useState<ChannelScope | undefined>(undefined);
-  // Note that a scope is forgotten once its channel is left, so the channel opens on All of everyone's again.
-  if (scope !== undefined && scope.channelId !== channelId) setScope(undefined);
-  if (channelId === undefined) return kept;
-  const standing =
-    scope?.channelId === channelId ? scope : { channelId, show: INBOX_SHOW.ALL, whose: EVERYONES };
-  return {
-    ...kept,
-    show: standing.show,
-    onShow: (show) => setScope({ ...standing, show }),
-    whose: standing.whose,
-    onWhose: (whose) => setScope({ ...standing, whose }),
-  };
+  const channels = useChannelScope();
+  return channelId === undefined ? kept : { ...kept, ...channels };
 }
 
 /** The choice that opens a listed item: by its task, and its agent, which its link names, or by its agent where it has none. */
