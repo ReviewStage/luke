@@ -142,7 +142,6 @@ export const FAILURE_SURFACE = {
   PICTURE_READ: "picture.read",
   PIN_MOVE: "pin.move",
   PLAN_ADD: "plan.add",
-  PLAN_BREAKDOWN: "plan.breakdown",
   PLAN_COMMENTS_READ: "plan_comments.read",
   PLAN_COMMENT_DELETE: "plan_comment.delete",
   PLAN_COMMENT_DISCARD: "plan_comment.discard",
