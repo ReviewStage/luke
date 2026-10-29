@@ -546,7 +546,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
   );
 
   it.effect(
-    "a member's operator, with no repository, is delivered and says its kind, as the held read reads it, while a coder says none",
+    "a member's operator, with no repository, and a task's pilot are delivered and say their kind, as the held read reads them, while a coder says none",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
@@ -573,6 +573,26 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         assert.equal(listed.get(operator.id)?.kind, AGENT_KIND.OPERATOR);
         assert.equal(listed.get(operator.id)?.repository, null);
         assert.equal(listed.get(coder.id)?.kind, undefined);
+
+        const plan = yield* startTask(owner, { name: "Teammate invitations" });
+        const { agent: pilot } = Option.getOrThrow(
+          yield* createAgent(owner, {
+            taskId: plan.id,
+            planSnapshot: "# Invitations\n",
+            prompt: null,
+            kind: AGENT_KIND.PILOT,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "acme/relay",
+          }),
+        );
+        const taskAgents = taskAgentsOfLiveRows(yield* liveRowsOf(owner), NOW);
+        assert.deepEqual(
+          taskAgents.filter((agent) => agent.planId === plan.id),
+          yield* heldTaskAgentsOf(owner, plan.id, NOW),
+        );
+        assert.equal(taskAgents.find((agent) => agent.id === pilot.id)?.kind, AGENT_KIND.PILOT);
       }),
   );
 

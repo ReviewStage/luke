@@ -471,7 +471,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number, continued: Continuations
       : undefined),
     ...(runtime === undefined ? undefined : { runtime }),
     title: row.title,
-    ...(row.kind === AGENT_KIND.OPERATOR ? { kind: row.kind } : undefined),
+    ...(row.kind === undefined || row.kind === AGENT_KIND.CODER ? undefined : { kind: row.kind }),
     ...(row.machine === AGENT_MACHINE.DEVICE ? { machine: AGENT_MACHINE.DEVICE } : undefined),
     ...(mac === undefined ? undefined : { mac }),
     createdAt: row.createdAt,

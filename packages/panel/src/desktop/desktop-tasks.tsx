@@ -68,6 +68,7 @@ import { DesktopWelcome } from "./desktop-welcome.js";
 import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
 import { PhoneBack, PhoneHead, PlaceMore, phoneBar } from "./phone-head.js";
 import { PlanAgents } from "./plan-agents.js";
+import { PlanBreakdown } from "./plan-breakdown.js";
 import { type InboxItemAsk, SideInboxTab } from "./side-inbox-tab.js";
 import {
   COLUMN,
@@ -781,17 +782,43 @@ function PlanDocument({
       pullRequestCardDoor,
     ],
   );
-  // The task's agents head its plan, a row opening its agent in this column as its tab does.
+  // The task's agents head its plan, a row opening its agent in this column
+  // as its tab does, under a pilot's breakdown where one waits for the go.
+  const { tasks: allTasks } = tasks;
+  const openTask = useSteadyDoor(tasks.onSelect);
   const planAgents = useMemo(
     () => (
-      <PlanAgents
-        agents={agents}
-        held={views.held}
-        main={{ tab, onChoose: openAgentTab }}
-        onOpenPullRequest={openPullRequestDoor}
-      />
+      <>
+        {opened === undefined || workspace === undefined ? null : (
+          <PlanBreakdown
+            task={opened}
+            tasks={allTasks}
+            agents={agents}
+            place={{ workspace, repository: opened.repository }}
+            workspaceName={workspaceName}
+            onOpenTask={openTask}
+          />
+        )}
+        <PlanAgents
+          agents={agents}
+          held={views.held}
+          main={{ tab, onChoose: openAgentTab }}
+          onOpenPullRequest={openPullRequestDoor}
+        />
+      </>
     ),
-    [agents, views.held, tab, openAgentTab, openPullRequestDoor],
+    [
+      opened,
+      workspace,
+      allTasks,
+      workspaceName,
+      openTask,
+      agents,
+      views.held,
+      tab,
+      openAgentTab,
+      openPullRequestDoor,
+    ],
   );
   // A row in a transcript that opens a tab hangs that tab's card, read as
   // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
