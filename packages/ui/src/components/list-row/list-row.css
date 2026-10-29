@@ -736,11 +736,23 @@
      and the title never moves. The mark gives way to the chevron while the
      pointer rests on the row or the keyboard is on the chevron, as a group's
      head gives its glyph way (`group-header.tsx`), and on a screen with no
-     hover, where nothing would bring it, the chevron stands at rest. */
+     hover, where nothing would bring it, the chevron stands at rest. Note
+     that the chevron's box is the mark's own, the cell less the press's
+     inset before it and the mark's gap after it, so the two share a centre
+     whatever the mark's size, and stands level with the mark on a mail-style
+     row as the ⋯ does. */
   .luke-list-row-fold {
-    margin-inline-start: var(--luke-list-row-inset-inline);
+    justify-self: stretch;
+    margin-block: 0;
+    margin-inline: var(--luke-list-row-inset-inline) var(--luke-icon-gap);
     opacity: 0;
     transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
+  }
+
+  .luke-list-row[data-meta="title"] .luke-list-row-fold {
+    align-self: start;
+    height: var(--luke-type-label-leading);
+    margin-block-start: var(--luke-list-row-inset-block);
   }
 
   .luke-list-row:has(.luke-list-row-fold) .luke-list-row-leading {
