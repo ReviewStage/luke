@@ -28,7 +28,11 @@ import {
  * same keys itself. A read that failed says so in the list's place with
  * Retry rather than that nothing matches. A submenu turns left where it
  * would run past the room its menu keeps to; and a row's own end marks
- * stand at its end, drawn in place as well.
+ * stand at its end, drawn in place as well. In a phone's layout the menu
+ * rises as a sheet whose list, not its field, takes the focus as it opens,
+ * a focus moving inside it never told as leaving, and a pinned row's
+ * submenu stands in the sheet's place, a pick in it putting the sheet away
+ * first; a finger dragging from its field swipes nothing.
  */
 
 declare global {
@@ -56,6 +60,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
+  document.documentElement.removeAttribute("data-luke-room");
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -66,10 +71,11 @@ const ROWS: readonly MenuRow[] = [
   { id: "haiku", label: "Haiku" },
 ];
 
-/** What the menu was asked to do, in order. */
+/** What the menu was asked to do, in order, and each time it said the focus left it. */
 interface Asked {
   readonly said: string[];
   readonly escapedPast: string[];
+  readonly left: string[];
 }
 
 /** A pinned effort row with its submenu, and a press of its own. */
@@ -104,7 +110,7 @@ function mount(
     embedded?: boolean;
   } = {},
 ) {
-  const asked: Asked = { said: [], escapedPast: [] };
+  const asked: Asked = { said: [], escapedPast: [], left: [] };
   // Note that the page listens a box above React's root, because a press
   // kept from it still reaches the root's own listeners.
   const page = document.body.appendChild(document.createElement("div"));
@@ -127,7 +133,7 @@ function mount(
         noMatch: "No models match",
         onPick: (id) => asked.said.push(`pick ${id}`),
         onClose: () => asked.said.push("close"),
-        onLeave: () => undefined,
+        onLeave: () => asked.left.push("leave"),
         foot: options.foot === true ? footOf(asked.said) : undefined,
         ...(options.embedded === true
           ? { layer: SEARCHABLE_MENU_LAYER.EMBEDDED }
@@ -568,4 +574,91 @@ test("rows drawn in place wear their end marks and hang their cards while the po
       (card) => card.textContent === "Sweep card",
     ),
   );
+});
+
+/** The window drawn in a phone's layout, as the panel's shell marks its root. */
+function inPhoneLayout(): void {
+  document.documentElement.setAttribute("data-luke-room", "narrow");
+}
+
+/** The sheet the menu stands as in a phone's layout. */
+function sheet(): HTMLElement {
+  return document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("the sheet stands");
+}
+
+/** The name the sheet's head gives it. */
+function sheetName(): string | null | undefined {
+  return document.getElementById(sheet().getAttribute("aria-labelledby") ?? "")?.textContent;
+}
+
+/** The names of the lists the sheet holds now. */
+function sheetLists(): (string | null)[] {
+  return [...sheet().querySelectorAll('[role="listbox"]')].map((list) =>
+    list.getAttribute("aria-label"),
+  );
+}
+
+/** A press on the button in the sheet named `name`. */
+function pressNamed(name: string): void {
+  const named =
+    [...sheet().querySelectorAll<HTMLElement>("button")].find(
+      (button) => (button.getAttribute("aria-label") ?? button.textContent) === name,
+    ) ?? assert.fail(`${name} is drawn`);
+  act(() => named.click());
+}
+
+test("in a phone's layout the menu rises as a sheet whose list holds the keys as it opens, not its field, typing still filters, and no focus inside it is told as leaving", () => {
+  inPhoneLayout();
+  const asked = mount({ placeholder: "Search models" });
+  const list = sheet().querySelector<HTMLElement>('[role="listbox"]') ?? assert.fail("it lists");
+  const holder = document.activeElement?.getAttribute("role");
+  act(() => {
+    list.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" }));
+  });
+  const moved = announced();
+  const field = sheet().querySelector<HTMLInputElement>('[role="combobox"]');
+  act(() => field?.focus());
+  type("ha");
+
+  assert.equal(sheet().getAttribute("aria-modal"), "true");
+  assert.equal(sheetName(), "Model");
+  assert.equal(holder, "listbox");
+  assert.equal(moved, "Haiku");
+  assert.deepEqual(listed(), ["Haiku"]);
+  assert.deepEqual(asked.left, []);
+});
+
+test("in a sheet a pinned row's submenu stands in its place with a way back, and a pick in it puts the sheet away before the pick is handed on", () => {
+  inPhoneLayout();
+  const asked = mount({ placeholder: "Search models", foot: true });
+  pressNamed("Effort");
+  const paged = { name: sheetName(), lists: sheetLists() };
+  const holder = document.activeElement?.getAttribute("aria-label");
+  pressNamed("Model");
+  const back = sheetLists();
+  pressNamed("Effort");
+  const low =
+    sheet().querySelector<HTMLElement>('[role="option"]') ?? assert.fail("Effort lists Low");
+  act(() => low.click());
+
+  assert.deepEqual(paged, { name: "Effort", lists: ["Effort"] });
+  assert.equal(holder, "Effort");
+  assert.deepEqual(back, ["Model"]);
+  assert.deepEqual(asked.said, ["close", "effort low"]);
+});
+
+test("a finger dragging the sheet from its field types rather than swiping it away", () => {
+  inPhoneLayout();
+  const asked = mount({ placeholder: "Search models" });
+  const field = sheet().querySelector<HTMLElement>('[role="combobox"]') ?? assert.fail("a field");
+  const finger = (type: string, y: number) =>
+    new PointerEvent(type, { bubbles: true, pointerId: 1, pointerType: "touch", clientY: y });
+  act(() => {
+    field.dispatchEvent(finger("pointerdown", 100));
+    field.dispatchEvent(finger("pointermove", 400));
+    field.dispatchEvent(finger("pointerup", 400));
+  });
+
+  assert.equal(document.querySelector<HTMLElement>(".luke-menu-sheet")?.style.translate, "");
+  assert.deepEqual(asked.said, []);
 });
