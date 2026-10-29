@@ -18,14 +18,14 @@ export {
 } from "./account-token.js";
 export { HostedAdminClient } from "./admin-client.js";
 export {
+  HostedAgentClient,
+  type HostedAgentClientOptions,
+} from "./agent-client.js";
+export {
   HostedAutomationClient,
   type HostedAutomationClientOptions,
 } from "./automation-client.js";
 export { HostedChannelClient, type HostedChannelClientOptions } from "./channel-client.js";
-export {
-  HostedCodingAgentClient,
-  type HostedCodingAgentClientOptions,
-} from "./coding-agent-client.js";
 export {
   DEVICE_AGENT_NOT_CLAIMED,
   type DeviceAgentBeat,

@@ -1,11 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-} from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@luke/features/agent-view";
+import { AGENT_STATUS, type AgentTranscriptMessage } from "@luke/features/agent-wire";
 import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
@@ -26,8 +23,8 @@ import { type HeldComposer, useAgentComposer } from "./use-agent-composer.js";
 function message(
   id: string,
   role: typeof MESSAGE_ROLE.USER | typeof MESSAGE_ROLE.ASSISTANT,
-  arrivedIn?: CodingAgentMessage["arrivedIn"],
-): CodingAgentMessage {
+  arrivedIn?: AgentTranscriptMessage["arrivedIn"],
+): AgentTranscriptMessage {
   return {
     id,
     role,
@@ -37,7 +34,7 @@ function message(
 }
 
 /** The plan, two answered lines, and a line a turn took in while it ran. */
-const TRANSCRIPT: readonly CodingAgentMessage[] = [
+const TRANSCRIPT: readonly AgentTranscriptMessage[] = [
   message("plan", MESSAGE_ROLE.USER),
   message("first-reply", MESSAGE_ROLE.ASSISTANT),
   message("second-line", MESSAGE_ROLE.USER),
@@ -48,7 +45,7 @@ const TRANSCRIPT: readonly CodingAgentMessage[] = [
 ];
 
 test("Edit writes again a person's lines, a teammate's among them, and never an automation's, GitHub's, or another agent's, which a reply still reverts to", () => {
-  const lines: readonly CodingAgentMessage[] = [
+  const lines: readonly AgentTranscriptMessage[] = [
     message("plan", MESSAGE_ROLE.USER),
     message("first-reply", MESSAGE_ROLE.ASSISTANT),
     {
@@ -101,7 +98,7 @@ async function settle(): Promise<void> {
 }
 
 /** The agent's box over the transcript, every call it makes written down in order, a rewind answered by `rewound` and a send by `sent`. */
-async function box(rewound: CodingAgentAgentAnswer, sent: CodingAgentAgentAnswer = REWOUND) {
+async function box(rewound: AgentAgentAnswer, sent: AgentAgentAnswer = REWOUND) {
   const calls: string[] = [];
   const held: { composer: HeldComposer | undefined } = { composer: undefined };
   function Box(): ReactNode {
@@ -133,7 +130,7 @@ async function box(rewound: CodingAgentAgentAnswer, sent: CodingAgentAgentAnswer
   return { calls, composer };
 }
 
-const REWOUND: CodingAgentAgentAnswer = {
+const REWOUND: AgentAgentAnswer = {
   agent: {
     id: "8f0c1d2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f",
     planId: null,
@@ -141,7 +138,7 @@ const REWOUND: CodingAgentAgentAnswer = {
     effort: "high",
     title: null,
     createdAt: 0,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
   },
 };
@@ -164,7 +161,7 @@ test("an edit's send takes the agent back to just before the line, then sends th
 });
 
 test("a rewind that did not go sends nothing, and keeps the edit's line marked as not sent, its Retry rewinding again", async () => {
-  const { calls, composer } = await box({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  const { calls, composer } = await box({ failure: AGENT_CALL_FAILURE.UNANSWERED });
 
   await act(async () => composer().edit("second-line"));
   await act(async () => composer().sendEdit("second-line", "second line, again", []));
@@ -181,7 +178,7 @@ test("a rewind that did not go sends nothing, and keeps the edit's line marked a
 });
 
 test("an edit whose rewind went and whose words did not keeps them on its line, its Retry sending them without taking the agent back again", async () => {
-  const { calls, composer } = await box(REWOUND, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  const { calls, composer } = await box(REWOUND, { failure: AGENT_CALL_FAILURE.UNANSWERED });
 
   await act(async () => composer().sendEdit("second-line", "second line, again", []));
   await settle();
@@ -225,7 +222,7 @@ test("a revert hides the line and everything after it until the transcript drops
 });
 
 /** A line a member sent: the reader's own, or a teammate's by name. */
-function lineFrom(id: string, name: string, userId: string | undefined): CodingAgentMessage {
+function lineFrom(id: string, name: string, userId: string | undefined): AgentTranscriptMessage {
   return {
     ...message(id, MESSAGE_ROLE.USER),
     sentBy: { name, ...(userId === undefined ? undefined : { userId }), kind: "member" },
@@ -233,7 +230,7 @@ function lineFrom(id: string, name: string, userId: string | undefined): CodingA
 }
 
 /** The transcript a teammate joined: the reader's line, then Sam's two, a reply between, and Priya's. */
-const SHARED: readonly CodingAgentMessage[] = [
+const SHARED: readonly AgentTranscriptMessage[] = [
   lineFrom("mine", "Dean", "user-1"),
   message("reply-1", MESSAGE_ROLE.ASSISTANT),
   lineFrom("sam-1", "Sam", "user-2"),
@@ -269,7 +266,7 @@ test("a rewind names the teammates whose messages it drops and how many, and non
 /** The body of the question a press on Revert to here raises, over `shared` as the reader `readerId` sees it. */
 async function revertBody(
   readerId: string,
-  shared: readonly CodingAgentMessage[] = SHARED,
+  shared: readonly AgentTranscriptMessage[] = SHARED,
 ): Promise<string | undefined> {
   const container = document.createElement("div");
   document.body.append(container);

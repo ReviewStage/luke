@@ -168,11 +168,11 @@ export const GATEWAY_METHOD = {
   /** The admin dashboard's star set or taken back on one account under the account's session; whether it landed. */
   ADMIN_FAVORITE: "admin.favorite",
   /** The models a coding agent may run on, read from the service's catalog now. */
-  CODING_AGENTS_MODELS: "codingAgents.models",
+  AGENTS_MODELS: "agents.models",
   /** The account's default model and effort for a coding agent, read from the service now. */
-  CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
+  AGENTS_DEFAULT_READ: "agents.defaultRead",
   /** The account's default model and effort for a coding agent, written to the service; the default as kept, or why it is unchanged. */
-  CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
+  AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
   /** The account's hosts, as Settings lists them, read from the service now. */
   HOSTS_LIST: "hosts.list",
   /** How long ago the account's own devices last beat, read from the service now; the ages, or why not. */
@@ -184,46 +184,46 @@ export const GATEWAY_METHOD = {
   /** One of the account's install tokens revoked; done, or why not. */
   HOSTS_REVOKE_INSTALL_TOKEN: "hosts.revokeInstallToken",
   /** One task's coding agents with their status, read from the service now. */
-  CODING_AGENTS_LIST: "codingAgents.list",
+  AGENTS_LIST: "agents.list",
   /** A workspace's coding agents, newest started first, narrowed to one repository where one is named. */
-  CODING_AGENTS_WORKSPACE_LIST: "codingAgents.workspaceList",
+  AGENTS_WORKSPACE_LIST: "agents.workspaceList",
   /** A coding agent started on one task under the panel's own key; the agent, or why none started. */
-  CODING_AGENTS_START: "codingAgents.start",
+  AGENTS_START: "agents.start",
   /** One agent's transcript past a cursor, held open by the service while the agent runs. */
-  CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  AGENTS_MESSAGES: "agents.messages",
   /**
    * One agent's transcript, or one of its workers', followed from now until
    * it is let go or the account signs out. Its pages are heard as
    * `TRANSCRIPT_CHANGED` events, never answered: the first from the start,
    * then each one past the last; following again starts over.
    */
-  CODING_AGENTS_TRANSCRIPT_FOLLOW: "codingAgents.transcriptFollow",
+  AGENTS_TRANSCRIPT_FOLLOW: "agents.transcriptFollow",
   /** One agent's or worker's transcript let go: no more `TRANSCRIPT_CHANGED` events of it until it is followed again. */
-  CODING_AGENTS_TRANSCRIPT_UNFOLLOW: "codingAgents.transcriptUnfollow",
+  AGENTS_TRANSCRIPT_UNFOLLOW: "agents.transcriptUnfollow",
   /** The page of an agent's or worker's transcript below the oldest message a window holds, read at once: its messages, and where the page older still is read below. */
-  CODING_AGENTS_TRANSCRIPT_OLDER: "codingAgents.transcriptOlder",
+  AGENTS_TRANSCRIPT_OLDER: "agents.transcriptOlder",
   /** One agent sent a message, naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
-  CODING_AGENTS_MESSAGE: "codingAgents.message",
+  AGENTS_MESSAGE: "agents.message",
   /** One agent's model and effort changed for its next step; the agent as it then stands, or why it is unchanged. */
-  CODING_AGENTS_CHOOSE: "codingAgents.choose",
+  AGENTS_CHOOSE: "agents.choose",
   /** One agent renamed, or its title cleared; the agent as it then stands, or why it is unchanged. */
-  CODING_AGENTS_RENAME: "codingAgents.rename",
+  AGENTS_RENAME: "agents.rename",
   /** One agent's MCP servers switched, the whole list of those off, for its next turn on; the agent as it then stands, or why it is unchanged. */
-  CODING_AGENTS_SERVERS: "codingAgents.servers",
+  AGENTS_SERVERS: "agents.servers",
   /** One agent stopped; the agent as it then stands, or why it was not. */
-  CODING_AGENTS_STOP: "codingAgents.stop",
+  AGENTS_STOP: "agents.stop",
   /** One agent taken back to just before one of the developer's lines, stopped first where it still works; the agent as it then stands, or why it was not. */
-  CODING_AGENTS_REWIND: "codingAgents.rewind",
+  AGENTS_REWIND: "agents.rewind",
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
-  CODING_AGENTS_ARCHIVE: "codingAgents.archive",
+  AGENTS_ARCHIVE: "agents.archive",
   /** One agent pinned for the account alone, or unpinned; the agent as it then stands, or why it is unchanged. */
-  CODING_AGENTS_PIN: "codingAgents.pin",
+  AGENTS_PIN: "agents.pin",
   /** The account's operator in a workspace ensured, or reset and ensured afresh; its id, or why there is none. */
-  CODING_AGENTS_ENSURE_OPERATOR: "codingAgents.ensureOperator",
+  AGENTS_ENSURE_OPERATOR: "agents.ensureOperator",
   /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
-  CODING_AGENTS_DELETE: "codingAgents.delete",
+  AGENTS_DELETE: "agents.delete",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
-  CODING_AGENTS_PAGE: "codingAgents.page",
+  AGENTS_PAGE: "agents.page",
   /** A workspace's open channels, each with what waits on the reader there and when they last looked; or why there are none. */
   CHANNELS_LIST: "channels.list",
   /** A channel made; the workspace's channels as they then stand. */
@@ -287,30 +287,31 @@ export const GATEWAY_METHOD = {
   INSTALLED_SKILLS_SHARE: "installedSkills.share",
   /** One installed skill removed with its files; or why it stands. */
   INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
-  CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
+  AGENTS_PULL_REQUEST: "agents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
-  CODING_AGENTS_CHANGES: "codingAgents.changes",
+  AGENTS_CHANGES: "agents.changes",
   /** The workspace's newest chapters of one agent's pull request, with its head as GitHub holds it now; or why there are none. */
-  CODING_AGENTS_CHAPTERS: "codingAgents.chapters",
+  AGENTS_CHAPTERS: "agents.chapters",
   /** One agent's pull request's chapters generated for its head on Luke's own model key, or the generation already under way, answered as a read of them is. */
-  CODING_AGENTS_CHAPTERS_GENERATE: "codingAgents.chaptersGenerate",
+  AGENTS_CHAPTERS_GENERATE: "agents.chaptersGenerate",
   /** The Claude model the account's Generate chapters runs on, read from the service now. */
   CHAPTERS_MODEL_READ: "chapters.modelRead",
   /** The Claude model the account's Generate chapters runs on, written to the service; the model as kept, or why it is unchanged. */
   CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
-  CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
-  CODING_AGENTS_REVIEW_OPTIONS: "codingAgents.reviewOptions",
+  AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
+  AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
+  AGENTS_LUKE_TOOLS: "agents.lukeTools",
   /** The checks on one agent's pull request's head, as its overview draws them. */
-  CODING_AGENTS_OVERVIEW_CHECKS: "codingAgents.overviewChecks",
+  AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
   /** One agent's pull request's conversation and where its reviewers stand, as its overview draws them. */
-  CODING_AGENTS_OVERVIEW_CONVERSATION: "codingAgents.overviewConversation",
+  AGENTS_OVERVIEW_CONVERSATION: "agents.overviewConversation",
   /** One image an agent's pull request's overview names, read by the service on the App's token: its bytes in base64 and their type. */
-  CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
+  AGENTS_GITHUB_IMAGE: "agents.githubImage",
   /** One change to an agent's pull request, made on GitHub by the service as the account on its own GitHub sign-in: how GitHub took it. */
-  CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
+  AGENTS_PULL_REQUEST_ACTION: "agents.pullRequestAction",
   /** Which of an agent's pull request's files the account marked viewed on GitHub, read by the service on its own GitHub sign-in. */
-  CODING_AGENTS_PULL_REQUEST_VIEWED: "codingAgents.pullRequestViewed",
+  AGENTS_PULL_REQUEST_VIEWED: "agents.pullRequestViewed",
   /** The account's own provider keys an agent runs on, read from the service now as hints and statuses; never a key. */
   PROVIDER_KEYS_READ: "providerKeys.read",
   /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */
@@ -340,21 +341,21 @@ export const GATEWAY_METHOD = {
    * or the account signs out, over Neon Realtime. What it holds is heard as
    * `INBOX_CHANGED` events, never answered; following again starts over.
    */
-  CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
+  AGENTS_INBOX_FOLLOW: "agents.inboxFollow",
   /** One plan's or agent's inbox let go: no more `INBOX_CHANGED` events of it until it is followed again. */
-  CODING_AGENTS_INBOX_UNFOLLOW: "codingAgents.inboxUnfollow",
+  AGENTS_INBOX_UNFOLLOW: "agents.inboxUnfollow",
   /** One item of a task's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
-  CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  AGENTS_INBOX_ANSWER: "agents.inboxAnswer",
   /** One open item of a task's inbox closed without an answer against the revision the panel drew, under the panel's own key; answered as an answer is. */
-  CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
+  AGENTS_INBOX_CLOSE: "agents.inboxClose",
   /** One message of the account's on an item's thread, open or settled, under the panel's own key, carrying the answer to the thread's open ask where the reader attached one; the item as it then stands, its thread with the message on it, or why there is no answer. */
-  CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
+  AGENTS_INBOX_MESSAGE: "agents.inboxMessage",
   /** A thread the account starts with one agent, its subject and first message under the panel's own key; the thread as it then stands, its message on it, or why there is no answer. */
-  CODING_AGENTS_INBOX_START: "codingAgents.inboxStart",
+  AGENTS_INBOX_START: "agents.inboxStart",
   /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
-  CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",
+  AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
   /** Every item of the account's Inbox marked read, in one workspace or in all; how many were unread, or why there is no answer. */
-  CODING_AGENTS_INBOX_READ_ALL: "codingAgents.inboxReadAll",
+  AGENTS_INBOX_READ_ALL: "agents.inboxReadAll",
   /** Where every one of the account's integrations stands, read from the service now. */
   INTEGRATIONS_STATUS: "integrations.status",
   /** A browser sign-in to one account at a provider, or to a new one, begun on the service and opened on this Mac; whether it was opened and the account it signs in, never the address. */
@@ -373,24 +374,24 @@ export const GATEWAY_METHOD = {
    * `ACCOUNT_INBOX_CHANGED` events, never answered; following again starts
    * over. Main's own follow, which no window asks.
    */
-  CODING_AGENTS_ACCOUNT_INBOX_FOLLOW: "codingAgents.accountInboxFollow",
+  AGENTS_ACCOUNT_INBOX_FOLLOW: "agents.accountInboxFollow",
   /** The account inbox let go: no more `ACCOUNT_INBOX_CHANGED` events until it is followed again. */
-  CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW: "codingAgents.accountInboxUnfollow",
+  AGENTS_ACCOUNT_INBOX_UNFOLLOW: "agents.accountInboxUnfollow",
   /**
    * Every inbox item the account reaches, whole, followed from now until it
    * is let go or the account signs out, on one held poll: heard as
    * `ACCOUNT_ITEMS_CHANGED` events by the plans and agents that moved,
    * never answered; following again starts over, told whole.
    */
-  CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW: "codingAgents.accountItemsFollow",
+  AGENTS_ACCOUNT_ITEMS_FOLLOW: "agents.accountItemsFollow",
   /** The account's items let go: no more `ACCOUNT_ITEMS_CHANGED` events until they are followed again. */
-  CODING_AGENTS_ACCOUNT_ITEMS_UNFOLLOW: "codingAgents.accountItemsUnfollow",
+  AGENTS_ACCOUNT_ITEMS_UNFOLLOW: "agents.accountItemsUnfollow",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
-  CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
+  AGENTS_INBOX_ATTACHMENT: "agents.inboxAttachment",
   /** One picture a tool answered an agent or one of its workers, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
-  CODING_AGENTS_PICTURE: "codingAgents.picture",
+  AGENTS_PICTURE: "agents.picture",
   /** One part of a message of an agent's transcript or one of its workers', whole, fetched under the account: what the page carried cut, or why there is none. */
-  CODING_AGENTS_PART: "codingAgents.part",
+  AGENTS_PART: "agents.part",
   /**
    * A coding agent's terminals (`@luke/features/terminal-view`): its shells
    * listed, started, named, and ended, and its sandbox resumed on the

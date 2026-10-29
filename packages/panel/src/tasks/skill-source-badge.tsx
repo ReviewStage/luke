@@ -6,10 +6,10 @@ import { Badge, STATUS_TONE } from "@luke/ui";
  *
  * A skill is offered from the task's repository or from the skills a member
  * installed into Luke, for the whole workspace or for themselves
- * (`task-skills.ts`), and the list, the composer's chip's card, and a sent
- * chip's card each say which beside its name, so a member reading
- * `/release-notes` knows whether the repository keeps it or Settings ›
- * Skills does. The words are the badge, in the neutral tone, since where a
+ * (`task-skills.ts`), and the list and Settings › Skills each say which
+ * beside its name, as a skill's card says it under its name, so a member
+ * reading `/release-notes` knows whether the repository keeps it or
+ * Settings › Skills does. The words are the badge, in the neutral tone, since where a
  * skill comes from is no state of it.
  */
 

@@ -1,8 +1,8 @@
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxChanged,
+  AGENT_CALL_FAILURE,
+  type AgentInboxChanged,
   type INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
+} from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import {
   inboxOfLiveRows,
@@ -46,12 +46,10 @@ type Standing =
       readonly kind: typeof LIVE_STATE.LIVE;
       readonly inbox: SubscriptionRef.SubscriptionRef<LiveState>;
     }
-  | { readonly kind: typeof LIVE_STATE.REFUSED; readonly failure: CodingAgentCallFailure };
+  | { readonly kind: typeof LIVE_STATE.REFUSED; readonly failure: AgentCallFailure };
 
 /** Why a scope's read is refused: not found, or unanswered. */
-type CodingAgentCallFailure =
-  | typeof CODING_AGENT_CALL_FAILURE.NOT_FOUND
-  | typeof CODING_AGENT_CALL_FAILURE.UNANSWERED;
+type AgentCallFailure = typeof AGENT_CALL_FAILURE.NOT_FOUND | typeof AGENT_CALL_FAILURE.UNANSWERED;
 
 /** A follow before its first rows, with them, or stopped for good. */
 type LiveState =
@@ -93,9 +91,9 @@ export function scopeInboxes(
         const first = yield* seal(false);
         if ("failure" in first) {
           const failure =
-            first.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND
-              ? CODING_AGENT_CALL_FAILURE.NOT_FOUND
-              : CODING_AGENT_CALL_FAILURE.UNANSWERED;
+            first.failure === AGENT_CALL_FAILURE.NOT_FOUND
+              ? AGENT_CALL_FAILURE.NOT_FOUND
+              : AGENT_CALL_FAILURE.UNANSWERED;
           return { kind: LIVE_STATE.REFUSED, failure } as const;
         }
         const inbox = yield* SubscriptionRef.make<LiveState>({ kind: LIVE_STATE.WAITING });
@@ -143,7 +141,7 @@ export function scopeInboxes(
 }
 
 /** A followed inbox as the window is told it: its items whole, or why there are none. */
-type Told = CodingAgentInboxChanged["inbox"];
+type Told = AgentInboxChanged["inbox"];
 
 /**
  * The scope's inbox followed until interrupted, each change told whole from
@@ -162,7 +160,7 @@ export function followInbox(
       const standing = yield* RcMap.get(inboxes, scope);
       if (standing.kind === LIVE_STATE.REFUSED) {
         yield* tell({ failure: standing.failure });
-        return standing.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND;
+        return standing.failure === AGENT_CALL_FAILURE.NOT_FOUND;
       }
       // Note that a delivery that moved nothing is told nobody, every item compared whole, its thread's messages and files among it.
       yield* SubscriptionRef.changes(standing.inbox).pipe(

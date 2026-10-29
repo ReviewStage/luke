@@ -7,7 +7,7 @@
  * sweep's minute: a failure notice still unread that no wake answered
  * within `HOLD` before it is handed to the operator as a short line from
  * Luke naming the agent, the one way a message reaches an agent
- * (`steerCodingAgent`). So an agent that fails again within the hour of
+ * (`steerAgent`). So an agent that fails again within the hour of
  * a wake wakes nothing, and its notice waits on the desk; one that fails
  * past the hour wakes it again. An operator's own turns leave no notice,
  * so never wake it.
@@ -21,7 +21,7 @@
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readAgent } from "@luke/database/models/agent-store";
 import {
   type DueOperatorWake,
   dueOperatorWakes,
@@ -34,7 +34,7 @@ import { MENTION_KIND } from "@luke/features/mention-link";
 import { agentName } from "@luke/features/model-label";
 import { Duration, Effect, Option, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
-import { steerCodingAgent } from "../agents/coder-host/steer.js";
+import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { workspaceStepOf, writtenMention } from "../agents/written-mentions.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
@@ -77,22 +77,16 @@ function wakeLine(wake: DueOperatorWake, step: string): string {
  */
 const wake = (eveFor: EveForAccount, due: DueOperatorWake, now: Date) =>
   Effect.gen(function* () {
-    const operator = yield* readCodingAgent(due.userId, due.operatorId);
+    const operator = yield* readAgent(due.userId, due.operatorId);
     if (Option.isNone(operator) || operator.value.archivedAt !== null) return true;
     const step = yield* workspaceStepOf(due.userId, due.organizationId);
     const eve = yield* eveFor(due.userId);
-    yield* steerCodingAgent(
-      eve,
-      storeWriter({ tools: CODER_TOOL_SET }),
-      due.userId,
-      operator.value,
-      {
-        text: wakeLine(due, step),
-        clientKey: wakeKey(due),
-        sender: { kind: MESSAGE_SENDER.LUKE },
-        metadata: LUKE_LINE_METADATA,
-      },
-    );
+    yield* steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), due.userId, operator.value, {
+      text: wakeLine(due, step),
+      clientKey: wakeKey(due),
+      sender: { kind: MESSAGE_SENDER.LUKE },
+      metadata: LUKE_LINE_METADATA,
+    });
     yield* recordOperatorWake(due.operatorId, due.agentId, now);
     return true;
   }).pipe(

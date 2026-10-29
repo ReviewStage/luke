@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import type { MemorySummary } from "@luke/features/memory-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -75,7 +75,7 @@ const done = (value: PortActResult<PortActKind>): FakeActAnswer => ({
   value,
 });
 
-const unanswered = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const unanswered = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** The bridge, answering the page's acts the way the host would. */
 function answer(request: AnyAct): Promise<FakeActAnswer> {

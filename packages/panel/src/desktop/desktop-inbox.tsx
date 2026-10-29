@@ -1,12 +1,8 @@
+import { AGENT_CALL_FAILURE, type AgentInboxMessagedView } from "@luke/features/agent-view";
 import type { Channel } from "@luke/features/channel-wire";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxMessagedView,
-} from "@luke/features/coding-agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND, type MentionLines } from "@luke/features/mention-link";
 import type { CodeRef } from "@luke/features/task-wire";
-import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import { backToWords, readFailedWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
@@ -33,7 +29,7 @@ import {
 } from "../tasks/channel-head.js";
 import { CHANNEL_SHOWN, channelShown, generalChannel } from "../tasks/channels-model.js";
 import { agentName, messageFailureWords } from "../tasks/coding-agent-model.js";
-import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
+import { type InboxCodeDoors, UNREAD_FILE } from "../tasks/inbox-code-card.js";
 import {
   INBOX_COLUMNS,
   INBOX_VIEW,
@@ -161,10 +157,6 @@ const ITEM_NOT_READ = readFailedWords("this item");
 /** What leads back to the list from a missing item's notice, where the Inbox shows one column. */
 const BACK_TO_INBOX = backToWords("inbox");
 
-/** The code of an item whose agent's repository is not known yet reads no file, there being no repository to read it through. */
-const UNREAD_FILE = (): Promise<TasksFileAnswer> =>
-  Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED });
-
 const _nothing = (): void => undefined;
 
 /** No tab of the Inbox's panel is drawn in semibold: what arrives on a task arrives on its page. */
@@ -241,6 +233,7 @@ export function DesktopInbox({
     counts,
     list,
     steps,
+    onPointing,
     chosen,
     filteredOut,
     search,
@@ -352,8 +345,8 @@ export function DesktopInbox({
             clientKey: start.clientKey,
           })
             .catch(
-              (): CodingAgentInboxMessagedView => ({
-                failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+              (): AgentInboxMessagedView => ({
+                failure: AGENT_CALL_FAILURE.UNANSWERED,
               }),
             )
             .then((answer) => {
@@ -615,6 +608,7 @@ export function DesktopInbox({
                     onMark={(listed, unread, saying) => markItem(listed.item, unread, saying)}
                     onClose={closeItem}
                     onAskMove={askMove}
+                    onPointing={onPointing}
                   />
                 )}
                 {chosen === undefined ? (

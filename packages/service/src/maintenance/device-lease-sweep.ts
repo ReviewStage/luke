@@ -27,10 +27,7 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
-import {
-  readCodingAgent,
-  recordCodingAgentRunnerToken,
-} from "@luke/database/models/coding-agent-store";
+import { readAgent, recordAgentRunnerToken } from "@luke/database/models/agent-store";
 import {
   type DeviceAgentLapsedLaunch,
   lapsedDeviceAgentLaunches,
@@ -39,7 +36,7 @@ import {
   settleLapsedDeviceAgentLine,
 } from "@luke/database/models/device-agent-store";
 import type { StoreWriter } from "@luke/database/models/writer";
-import { DEVICE_LEASE } from "@luke/features/coding-agent-wire";
+import { DEVICE_LEASE } from "@luke/features/agent-wire";
 import { DEVICE_AGENT_LINE_KIND } from "@luke/features/device-agent-wire";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -84,8 +81,8 @@ const lapsedOne = (
         // Note that an older launch a newer one replaced is only settled, because its runner was
         // ended as the newer launch was taken, and a stop queued for it would end the newer one.
         if (Option.isNone(newest) || newest.value.id !== launch.id) return true;
-        yield* recordCodingAgentRunnerToken(userId, agentId, null);
-        const agent = yield* readCodingAgent(userId, agentId);
+        yield* recordAgentRunnerToken(userId, agentId, null);
+        const agent = yield* readAgent(userId, agentId);
         if (Option.isSome(agent)) {
           yield* settleRunnerLostTurns(
             writer,

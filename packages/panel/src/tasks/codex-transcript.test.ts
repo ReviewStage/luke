@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import type { AgentTranscriptMessage } from "@luke/features/agent-wire";
 import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -45,7 +45,7 @@ function storedPart(tool: string, input: WireRecord, output?: WireValue): WireRe
 
 /** The parts drawn as a turn of the agent's, every target its rows open recorded. */
 function drawn(...parts: WireRecord[]) {
-  const message: CodingAgentMessage = { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts };
+  const message: AgentTranscriptMessage = { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts };
   const opened: ToolTarget[] = [];
   const container = document.createElement("div");
   document.body.append(container);

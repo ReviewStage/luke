@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { type CodingAgentInboxChanged, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
+import { type AgentInboxChanged, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -82,7 +82,7 @@ const RESEND = item("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?")
 
 test("a task taken up again holds no read until its follow pushes anew, and then the items posted since", async () => {
   // What the host pushes as each task is followed; nothing at all where it holds no word yet.
-  const inboxes = new Map<string, CodingAgentInboxChanged["inbox"]>([
+  const inboxes = new Map<string, AgentInboxChanged["inbox"]>([
     [INVITES, { items: [EXPIRY] }],
     [BILLING, { items: [] }],
   ]);

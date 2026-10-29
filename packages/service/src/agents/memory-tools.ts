@@ -1,13 +1,13 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { accountExperimentOn } from "@luke/database/models/account-store";
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import type { Agent } from "@luke/database/models/agent-store";
 import {
   listMemories,
   MEMORY_OUTCOME,
   rememberMemory,
   type StoredMemory,
 } from "@luke/database/models/memory-store";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import { MEMORY_BOUNDS, memoryIdSchema } from "@luke/features/memory-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { describeWire } from "@luke/wire/effect";
@@ -15,12 +15,7 @@ import { Effect, Option, Result, Schema } from "effect";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "../core.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import {
-  AGENT_CALLER,
-  type CodingAgentCall,
-  callerUserId,
-  callerWorkspace,
-} from "./coding-agent-tools.js";
+import { AGENT_CALLER, type AgentCall, callerUserId, callerWorkspace } from "./agent-tools.js";
 import { rememberRefusal } from "./memory-provenance.js";
 
 /**
@@ -359,11 +354,9 @@ export function runRecall(
  * may go off mid-run, so the refusal stands here as well.
  */
 function agentMemory(
-  call: CodingAgentCall,
+  call: AgentCall,
   run: (memory: MemoryCall) => Effect.Effect<WireRecord, never, DatabaseServices>,
-  refusal?: (
-    agent: CodingAgent,
-  ) => Effect.Effect<string | undefined, StoreFailure, DatabaseServices>,
+  refusal?: (agent: Agent) => Effect.Effect<string | undefined, StoreFailure, DatabaseServices>,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return orUnavailable(
     Effect.gen(function* () {
@@ -374,7 +367,7 @@ function agentMemory(
       const workspace = yield* callerWorkspace(call.caller);
       if (Option.isNone(workspace)) return rejected(MEMORY_REFUSAL.UNAVAILABLE);
       // Note that only an operator reaches private memories, because a coder's transcript is read by every member of the workspace.
-      const readsPrivate = call.caller.agent.kind === CODING_AGENT_KIND.OPERATOR;
+      const readsPrivate = call.caller.agent.kind === AGENT_KIND.OPERATOR;
       return yield* run({ workspaceId: workspace.value, userId, readsPrivate });
     }),
   );
@@ -382,7 +375,7 @@ function agentMemory(
 
 /** One call of `remember` from a coding agent, refused on a turn whose words are no member's (`rememberRefusal`). */
 export function runAgentRemember(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return agentMemory(call, (memory) => runRemember(memory, input), rememberRefusal);
@@ -390,7 +383,7 @@ export function runAgentRemember(
 
 /** One call of `recall` from a coding agent. */
 export function runAgentRecall(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return agentMemory(call, (memory) => runRecall(memory, input));
@@ -409,7 +402,7 @@ const SEED_MEMORY_MARKER =
  * seeds none, so the session still opens.
  */
 export function seedMemoryText(
-  agent: CodingAgent,
+  agent: Agent,
 ): Effect.Effect<string | undefined, never, DatabaseServices> {
   return Effect.gen(function* () {
     if (!(yield* memoryOnFor(agent.userId))) return undefined;

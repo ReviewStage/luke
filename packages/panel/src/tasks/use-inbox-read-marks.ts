@@ -1,4 +1,4 @@
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { countWords, TERM } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
@@ -60,7 +60,7 @@ export function markedNote(unread: boolean, landed: number, refused: number): st
 }
 
 /** What a mark the act channel refused hears, as the service not answering. */
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** The Inbox's read marks, sent through `act`; every item marked read in `workspaceId` where the Inbox lists one. */
 export function useInboxReadMarks({
@@ -77,7 +77,7 @@ export function useInboxReadMarks({
   );
   const onMark = useCallback(
     (item: InboxItem, unread: boolean, saying?: MarkSaying): Promise<boolean> =>
-      act(ACT_KIND.CODING_AGENTS_INBOX_READ_STATE, { itemId: item.id, unread })
+      act(ACT_KIND.AGENTS_INBOX_READ_STATE, { itemId: item.id, unread })
         .catch(() => UNANSWERED)
         .then((answer) => {
           if (!("failure" in answer)) return true;
@@ -90,7 +90,7 @@ export function useInboxReadMarks({
     (items: readonly InboxItem[]) => {
       const itemIds = items.filter(isUnread).map((item) => item.id);
       if (itemIds.length === 0) return;
-      act(ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, {
+      act(ACT_KIND.AGENTS_INBOX_READ_ALL, {
         ...(workspaceId === undefined ? undefined : { workspaceId }),
         itemIds,
       })

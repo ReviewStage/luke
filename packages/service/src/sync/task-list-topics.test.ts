@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { pinCodingAgentCommitted } from "@luke/database/models/coding-agent-store";
+import { pinAgentCommitted } from "@luke/database/models/agent-store";
 import { createTask, updateTaskCommitted } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
+import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
 import {
   expectTopicsFire,
@@ -94,13 +94,13 @@ it.layer(getTestDB())("what moves an account's task list notifies", (it) => {
         );
 
         const agentPinned = yield* wakesTheTaskList(
-          pinCodingAgentCommitted(userId, agentId, true),
+          pinAgentCommitted(userId, agentId, true),
           account,
           userId,
         );
         const agentPin = Option.getOrElse(agentPinned.value, () => assert.fail("no agent pinned"));
         assert.deepEqual(agentPinned.txids, [agentPin.txid]);
-        yield* wakesTheTaskList(pinCodingAgentCommitted(userId, agentId, false), account, userId);
+        yield* wakesTheTaskList(pinAgentCommitted(userId, agentId, false), account, userId);
       }),
   );
 
@@ -117,9 +117,9 @@ it.layer(getTestDB())("what moves an account's task list notifies", (it) => {
         const agentId = yield* openTaskAgent(teammate, teamId, task.id);
         const db = yield* Database;
         const [agent] = yield* db
-          .select({ conversationId: codingAgent.conversationId })
-          .from(codingAgent)
-          .where(eq(codingAgent.id, agentId));
+          .select({ conversationId: agentTable.conversationId })
+          .from(agentTable)
+          .where(eq(agentTable.id, agentId));
         const conversationId =
           agent?.conversationId ?? assert.fail("the agent has no conversation");
         const writer = yield* storeWriter({ tools: CODER_TOOL_SET });

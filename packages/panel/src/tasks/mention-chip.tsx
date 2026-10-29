@@ -62,7 +62,7 @@ import {
 } from "./date-picker.js";
 import { useInboxItemTitle } from "./inbox-item-chip.js";
 import { holderTaskId, type MentionHolder } from "./mention-holder.js";
-import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes.js";
+import { OpenedByRow, PullRequestCard } from "./pull-request-card.js";
 import { branchNote, thingCard } from "./thing-card.js";
 import { type AgentTiles, thingMark } from "./thing-mark.js";
 import { useKnownNames, useTaskNameCatchUp, useWordTargets } from "./use-known-names.js";
@@ -97,9 +97,10 @@ import { useWordsDates } from "./words-dates.js";
  * answered for is then called by its number alone, `#42`, its repository's
  * name before it where that is not the task's, `relay#42`, whatever words
  * its link was written with, so a pasted address, an agent's `[@#42](…)`,
- * and its `[@the fix](…)` draw one chip. Its card then says its title, its
- * key and state, and a pull request's its size, who opened it and when, its
- * branches, labels, and counts (`pull-request-card-notes.tsx`), in its
+ * and its `[@the fix](…)` draw one chip. An issue's card then says its
+ * title, its key and state, and who opened it, and a pull request's is the
+ * one card every pull request hangs, with its size, who opened it and when,
+ * its branches, labels, and counts (`pull-request-card.tsx`), in its
  * address's place, which it says only while GitHub has answered nothing. A page an
  * agent showed on a plan wears its tab's glyph, and one of a plan's coding agents its harness's
  * mark, as the place drawing it knows it (`MentionDoors.agentOf`), and any
@@ -345,7 +346,7 @@ function noteOf(
   return undefined;
 }
 
-/** The card a chip hangs: its thing's (`thing-card.tsx`), a file's own card and a server's or a tool's its server's row among them, an agent's tab's or a pull request's Pull request tab's where the place has one, or its glyph and whole name, a provider's page's key and state with what a pull request's notes say, and why it is gone where it is. */
+/** The card a chip hangs: its thing's (`thing-card.tsx`), a file's own card and a server's or a tool's its server's row among them, an agent's tab's or a pull request's Pull request tab's where the place has one, a pull request's one card with what GitHub answered of it, or its glyph and whole name, a GitHub issue's key and state and who opened it, and why it is gone where it is. */
 function MentionCard({
   mention,
   target,
@@ -389,35 +390,39 @@ function MentionCard({
       standing={standing}
     />
   );
-  const card = (
-    <HoverCard data-mention-card="">
-      <HoverCardHead
-        glyph={glyph}
-        name={standing?.title ?? whole}
-        sub={mention.kind === MENTION_KIND.FOLDER ? repository : undefined}
+  // A pull request GitHub answered for hangs the one card every pull request hangs, with what GitHub answered of it (`pull-request-card.tsx`).
+  const card =
+    mention.kind === MENTION_KIND.LINK && standing?.pullRequest !== undefined ? (
+      <PullRequestCard
+        pullRequest={{ ...standing.pullRequest, title: standing.title, url: mention.url }}
+        lines={standing.pullRequest.lines}
+        files={standing.pullRequest.files}
+        when={standing.pullRequest.when}
+        branches={standing.pullRequest.branches}
+        labels={standing.pullRequest.labels}
+        comments={standing.pullRequest.comments}
+        commits={standing.pullRequest.commits}
+        opener={standing.opener}
       />
-      {mention.kind === MENTION_KIND.FOLDER ? (
-        <OptionalNote words={branchNote(repository)} />
-      ) : null}
-      {standing === undefined ? null : standing.pullRequest === undefined ? (
-        <>
+    ) : (
+      <HoverCard data-mention-card="">
+        <HoverCardHead
+          glyph={glyph}
+          name={standing?.title ?? whole}
+          sub={mention.kind === MENTION_KIND.FOLDER ? repository : undefined}
+        />
+        {mention.kind === MENTION_KIND.FOLDER ? (
+          <OptionalNote words={branchNote(repository)} />
+        ) : null}
+        {standing === undefined ? null : (
           <HoverCardNote>
             {standing.state === undefined ? standing.key : `${standing.key} · ${standing.state}`}
           </HoverCardNote>
-          {standing.opener === undefined ? null : <OpenedNote opener={standing.opener} />}
-        </>
-      ) : (
-        <PullRequestCardNotes
-          heading={
-            standing.state === undefined ? standing.key : `${standing.key} · ${standing.state}`
-          }
-          pullRequest={standing.pullRequest}
-          opener={standing.opener}
-        />
-      )}
-      {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
-    </HoverCard>
-  );
+        )}
+        {note === undefined ? null : <HoverCardNote>{note}</HoverCardNote>}
+        {standing?.opener === undefined ? null : <OpenedByRow opener={standing.opener} />}
+      </HoverCard>
+    );
   // Note that what the mention names hangs the card the window hangs for it elsewhere, its own card standing in where the window holds none.
   return thingCard(thingOfMention(mention), {
     own: card,

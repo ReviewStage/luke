@@ -1,6 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
-import type { CodingAgentKind } from "@luke/features/coding-agent-wire";
+import type { AgentKind } from "@luke/features/agent-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
@@ -131,7 +131,7 @@ interface AppSessionReplaySlice {
  * is drawn from. Main's, because main is what watches the agents while no
  * tab does, and so a reload of the window does not lose the dots.
  */
-interface AppCodingAgentsSlice {
+interface AppAgentsSlice {
   unseen: readonly string[];
 }
 
@@ -174,7 +174,7 @@ export interface AppInboxTasklessItem extends AppInboxWaitingItem {
   /** When the item last changed, by the service's clock, which a follow of its agent's inbox is current once it holds. */
   updatedAt: number;
   /** What kind of agent posted it, which sets the member's operator apart; absent from a service before it, which reads as a coder. */
-  agentKind?: CodingAgentKind;
+  agentKind?: AgentKind;
   agentTitle: string | null;
   agentModel: string;
   automationId: string | null;
@@ -196,6 +196,28 @@ interface AppInboxAutomationHolding {
 }
 
 /**
+ * One agent with no task holding inbox items, waiting or settled, as a task
+ * holding items is listed: how many, how many are the reader's to do, and
+ * when the latest changed, by the service's clock; and the agent as an item
+ * of it names it, since one whose items are all settled has none waiting.
+ */
+export type AppInboxAgentHolding = Pick<
+  AppInboxTasklessItem,
+  | "agentId"
+  | "agentKind"
+  | "agentTitle"
+  | "agentModel"
+  | "automationId"
+  | "automationName"
+  | "repository"
+  | "workspaceId"
+  | "updatedAt"
+> & {
+  items: number;
+  toDo: number;
+};
+
+/**
  * What waits on the developer across the account's tasks, as main's own
  * read of it last answered (`@luke/host/agent-notices`): each task with an
  * open inbox item, the task whose item changed latest first. What the
@@ -210,6 +232,8 @@ export interface AppInboxSlice {
   taskless: readonly AppInboxTasklessItem[];
   /** Every automation holding items of its agents with no task, as `tasks` lists the tasks. */
   automations: readonly AppInboxAutomationHolding[];
+  /** Every agent with no task holding an inbox item, waiting or settled, as `tasks` lists the tasks; none from a service before it. */
+  agents: readonly AppInboxAgentHolding[];
   /** The newest run of each of the account's own automations that failed to start lately, the latest first, which marks the window's Automations until that automation is opened. */
   failedRuns: readonly AccountFailedRun[];
 }
@@ -288,7 +312,7 @@ export interface AppState {
    * the panel's Tasks tab draws it.
    */
   tasks: TasksView;
-  codingAgents: AppCodingAgentsSlice;
+  agents: AppAgentsSlice;
   inbox: AppInboxSlice;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;

@@ -2,6 +2,12 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_CALL_FAILURE,
+  type AgentInboxStartParams,
+  INBOX_SCOPE_KIND,
+} from "@luke/features/agent-view";
+import { AGENT_KIND } from "@luke/features/agent-wire";
+import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_SCOPE,
@@ -9,12 +15,6 @@ import {
   type AutomationSummary,
 } from "@luke/features/automation-wire";
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentInboxStartParams,
-  INBOX_SCOPE_KIND,
-} from "@luke/features/coding-agent-view";
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { INBOX_MESSAGE_AUTHOR, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/link-grammar";
 import { pageFrameUrl } from "@luke/features/page-frame";
@@ -390,9 +390,12 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
   const card = document.querySelector(".luke-tooltip-card [data-page-card]");
   assert.ok(card, "the agent's page hangs the page's own card");
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Flake ledger");
-  assert.equal(
-    card.querySelector(".luke-hover-card-sub")?.textContent,
-    "Version 3 · Shown by Sweep the flaky tests",
+  assert.deepEqual(
+    [
+      card.querySelector(".luke-hover-card-sub")?.textContent,
+      card.querySelector(".luke-hover-card-row")?.textContent,
+    ],
+    ["Version 3", "Shown by Sweep the flaky tests"],
   );
   assert.equal(
     card.querySelector(".luke-page-thumb-frame")?.getAttribute("src"),
@@ -410,7 +413,7 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
       refused?.querySelector(".luke-hover-card-name")?.textContent,
       refused?.querySelector(".luke-hover-card-note")?.textContent,
     ],
-    ["Their ledger", "Luke cannot read this page."],
+    ["Their ledger", "Luke can't read this page."],
   );
 });
 
@@ -453,7 +456,7 @@ function lukeTaskless(asked: InboxItem): AppInboxTasklessItem {
   return {
     id: asked.id,
     agentId: asked.agentId,
-    agentKind: CODING_AGENT_KIND.OPERATOR,
+    agentKind: AGENT_KIND.OPERATOR,
     title: asked.title,
     postedAt: asked.postedAt,
     updatedAt: asked.updatedAt,
@@ -517,7 +520,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   );
   assert.match(
     hoveredCard(mark, "[data-inbox-row-card]") ?? "",
-    /^Nightly flake sweep.*Sweep the flaky tests$/su,
+    /^Quarantine the flaky test\?.*Nightly flake sweep.*Sweep the flaky tests$/su,
   );
 
   act(() => rowNamed(page, "Quarantine the flaky test?").click());
@@ -648,6 +651,25 @@ test("an agent with no plan whose waiting items move, one answered on another Ma
   await settle();
 
   assert.ok(listed(page).includes("Skip the slow suite?"), listed(page).join(" | "));
+});
+
+test("an agent with no plan whose items are all settled stays listed under the automation that started it, as main lists it holding them", async () => {
+  const settled = { ...SECOND_ASK, status: INBOX_STATUS.ANSWERED };
+  world.agentInboxes = new Map([[SECOND_AGENT, [settled]]]);
+  const { id: _id, title: _title, postedAt: _postedAt, ...agent } = waitingTaskless(settled);
+  const { page } = mount([], {
+    windowRoot: true,
+    accountFeed: true,
+    agents: [{ ...agent, items: 1, toDo: 0 }],
+  });
+  await settle();
+
+  const rows = listed(page);
+  assert.equal(
+    rows[rows.indexOf("# Nightly flake sweep") + 1],
+    "Skip the slow suite?",
+    rows.join(" | "),
+  );
 });
 
 test("a read of an agent with no plan that fails is said with Retry, which reads it again though it was read before", async () => {
@@ -781,7 +803,7 @@ test("an item a link names is not found though another task's read failed, and i
     taskId === BILLING.id
       ? Promise.resolve({
           status: FAKE_ANSWER.DONE,
-          value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+          value: { failure: AGENT_CALL_FAILURE.UNANSWERED },
         })
       : undefined;
   const { page } = mount();
@@ -923,7 +945,7 @@ test("an item a link names under a task whose own read fails is kept asked for, 
     taskId === quiet.id
       ? Promise.resolve({
           status: FAKE_ANSWER.DONE,
-          value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+          value: { failure: AGENT_CALL_FAILURE.UNANSWERED },
         })
       : undefined;
   const { page } = mount();
@@ -1099,14 +1121,14 @@ const STARTED: InboxItem = {
 };
 
 /** Every thread the box starts, written down and answered as the service starts it, the task's inbox then holding it. */
-function heldStarts(): CodingAgentInboxStartParams[] {
-  const sent: CodingAgentInboxStartParams[] = [];
+function heldStarts(): AgentInboxStartParams[] {
+  const sent: AgentInboxStartParams[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_START) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_START) return previous(request);
       sent.push(request.payload);
       world.inboxes.set(BILLING.id, [STARTED, ...(world.inboxes.get(BILLING.id) ?? [])]);
       pushAgain();
@@ -1467,7 +1489,7 @@ test("words written in the box while its new thread starts stay in it once the t
   fakeActs({
     ...appBridge(),
     act: (request: AnyAct): Promise<FakeActAnswer> =>
-      request.kind === ACT_KIND.CODING_AGENTS_INBOX_START ? answer.promise : previous(request),
+      request.kind === ACT_KIND.AGENTS_INBOX_START ? answer.promise : previous(request),
   });
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();

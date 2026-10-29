@@ -1,4 +1,4 @@
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readAgent } from "@luke/database/models/agent-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -10,7 +10,7 @@ import {
 } from "@luke/features/plan-comment-wire";
 import { MESSAGE_CHANNEL } from "@luke/wire";
 import { Effect, Option } from "effect";
-import { steerCodingAgent } from "../agents/coder-host/steer.js";
+import { steerAgent } from "../agents/coder-host/steer.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
@@ -93,7 +93,7 @@ export const askableAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   to: PlanCommentAsked,
 ) {
   if (to.actor !== PLAN_COMMENT_ACTOR.AGENT || to.agentId === undefined) return undefined;
-  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, to.agentId));
+  const agent = yield* hostedStoreOrUnavailable(readAgent(userId, to.agentId));
   if (Option.isNone(agent) || agent.value.taskId !== taskId || agent.value.archivedAt !== null) {
     return undefined;
   }
@@ -124,7 +124,7 @@ export const handCommentAskOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   const { userId, to, clientKey, text, threadId, words } = input;
   const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
   const writer = storeWriter({ tools: CODER_TOOL_SET });
-  yield* steerCodingAgent(eve, writer, userId, to, {
+  yield* steerAgent(eve, writer, userId, to, {
     text,
     serverWords: words,
     clientKey,

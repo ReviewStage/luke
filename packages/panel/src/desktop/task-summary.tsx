@@ -1,4 +1,4 @@
-import { CODING_AGENT_BOUNDS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { AGENT_BOUNDS, type AgentSummary } from "@luke/features/agent-wire";
 import {
   CARD_CORNER,
   CARD_LOOK,
@@ -41,9 +41,9 @@ import {
   useState,
 } from "react";
 import { agentSubject } from "../tasks/agent-ref.js";
-import { peopleOf } from "../tasks/changes-card.js";
 import { RENAME_FAILED } from "../tasks/coding-agent-model.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
+import { peopleOf } from "../tasks/pull-request-card.js";
 import { openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
@@ -526,7 +526,7 @@ function SummaryRow({
 }) {
   const editing = editor !== undefined;
   return (
-    <RowHintOptions card={entry.card} cardBeside>
+    <RowHintOptions card={entry.card}>
       <ListRow
         ref={rowRef}
         leading={<span className={SUMMARY_GLYPH}>{entry.row.icon}</span>}
@@ -563,7 +563,7 @@ function AgentSummaryRow({
   onPick,
 }: {
   entry: SummaryEntry;
-  agent: CodingAgentSummary;
+  agent: AgentSummary;
   agents: CodingAgentsControl;
   shown: boolean;
   onPick: () => void;
@@ -592,7 +592,7 @@ function AgentSummaryRow({
             <InlineEdit
               value={rename.asked ?? entry.row.label}
               label="Agent name"
-              maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+              maxLength={AGENT_BOUNDS.MAX_TITLE_CHARS}
               editing
               onEnd={(edit) => {
                 endedByKey(edit.byKey);

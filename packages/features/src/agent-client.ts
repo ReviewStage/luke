@@ -11,35 +11,35 @@ import {
 } from "./account-call.js";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "./account-inbox-wire.js";
 import type { AccountPreferencesAnswerWire } from "./account-wire.js";
-import { type ChaptersModelId, chaptersModelSchema } from "./chapters-model-choice.js";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-  type CodingAgentCallFailure,
-  type CodingAgentChangesAnswerView,
-  type CodingAgentDefaultAnswer,
-  type CodingAgentDeleteAnswerView,
-  type CodingAgentGitHubImageView,
-  type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAttachmentView,
-  type CodingAgentInboxMessagedView,
-  type CodingAgentInboxReadAllView,
-  type CodingAgentInboxReadStateView,
-  type CodingAgentListAnswer,
-  type CodingAgentMessageAnswerView,
-  type CodingAgentMessagesAnswerView,
-  type CodingAgentModelsAnswer,
-  type CodingAgentOperatorEnsureAnswerView,
-  type CodingAgentOverviewChecksAnswerView,
-  type CodingAgentOverviewConversationAnswerView,
-  type CodingAgentOverviewPullRequestAnswerView,
-  type CodingAgentPageAnswerView,
-  type CodingAgentPartView,
-  type CodingAgentPullRequestAnswerView,
-  type CodingAgentPullRequestViewedAnswerView,
-  type CodingAgentPullRequestWriteAnswerView,
-  type CodingAgentReviewOptionsAnswerView,
-  type CodingAgentWorkspaceListParams,
+  AGENT_CALL_FAILURE,
+  type AgentAgentAnswer,
+  type AgentCallFailure,
+  type AgentChangesAnswerView,
+  type AgentDefaultAnswer,
+  type AgentDeleteAnswerView,
+  type AgentGitHubImageView,
+  type AgentInboxAnsweredView,
+  type AgentInboxAttachmentView,
+  type AgentInboxMessagedView,
+  type AgentInboxReadAllView,
+  type AgentInboxReadStateView,
+  type AgentListAnswer,
+  type AgentLukeToolsAnswerView,
+  type AgentMessageAnswerView,
+  type AgentMessagesAnswerView,
+  type AgentModelsAnswer,
+  type AgentOperatorEnsureAnswerView,
+  type AgentOverviewChecksAnswerView,
+  type AgentOverviewConversationAnswerView,
+  type AgentOverviewPullRequestAnswerView,
+  type AgentPageAnswerView,
+  type AgentPartView,
+  type AgentPullRequestAnswerView,
+  type AgentPullRequestViewedAnswerView,
+  type AgentPullRequestWriteAnswerView,
+  type AgentReviewOptionsAnswerView,
+  type AgentWorkspaceListParams,
   type DevicePresenceAnswerView,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
@@ -56,29 +56,30 @@ import {
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
-} from "./coding-agent-view.js";
+} from "./agent-view.js";
 import {
-  CODING_AGENT_LIST_ARCHIVED,
-  CODING_AGENT_LIST_QUERY,
-  CODING_AGENT_WORKSPACE_QUERY,
-  type CodingAgentArchiveRequest,
-  type CodingAgentMessageRequest,
-  type CodingAgentNewestAnswer,
-  type CodingAgentOlderAnswer,
-  type CodingAgentPinRequest,
-  type CodingAgentRenameRequest,
-  type CodingAgentServersRequest,
-  type CodingAgentStartRequest,
-  codingAgentMessageRequestSchema,
-  codingAgentRenameRequestSchema,
-  codingAgentServersRequestSchema,
-  codingAgentStartRequestOnWire,
+  AGENT_LIST_ARCHIVED,
+  AGENT_LIST_QUERY,
+  AGENT_WORKSPACE_QUERY,
+  type AgentArchiveRequest,
+  type AgentMessageRequest,
+  type AgentNewestAnswer,
+  type AgentOlderAnswer,
+  type AgentPinRequest,
+  type AgentRenameRequest,
+  type AgentServersRequest,
+  type AgentStartRequest,
+  agentMessageRequestSchema,
+  agentRenameRequestSchema,
+  agentServersRequestSchema,
+  agentStartRequestOnWire,
   type LocalAgentRefusal,
   type OperatorEnsureRequest,
   type RefusedDevice,
   TRANSCRIPT_PARTS_QUERY,
-} from "./coding-agent-wire.js";
-import type { CodingAgentChangeRequest } from "./contract/agents.js";
+} from "./agent-wire.js";
+import { type ChaptersModelId, chaptersModelSchema } from "./chapters-model-choice.js";
+import type { AgentChangeRequest } from "./contract/agents.js";
 import {
   credentialMissingDataSchema,
   localAgentRefusedDataSchema,
@@ -123,7 +124,7 @@ import {
 } from "./live-wire.js";
 import { MEMORY_QUERY } from "./memory-wire.js";
 import {
-  codingAgentDefaultWriteSchema,
+  agentDefaultWriteSchema,
   type ModelChoice,
   type ModelProvider,
   modelChoiceSchema,
@@ -156,7 +157,7 @@ import {
 import type { TaskAgentRefusal } from "./task-wire.js";
 
 /**
- * coding-agent-client.ts -- the window's side of a task's coding agents, as the host asks the service for them.
+ * agent-client.ts -- the window's side of a task's coding agents, as the host asks the service for them.
  *
  * Every call is the one account call, so the bearer is read fresh per
  * attempt and a 401 is renewed and retried once. Each call answers one of
@@ -171,7 +172,7 @@ import type { TaskAgentRefusal } from "./task-wire.js";
  * call keeps the account call's usual one.
  */
 
-export interface HostedCodingAgentClientOptions {
+export interface HostedAgentClientOptions {
   /** What authorizes each call on the signed-in account, read fresh for every attempt. */
   credential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
@@ -179,10 +180,10 @@ export interface HostedCodingAgentClientOptions {
   requestTimeoutMs?: number;
 }
 
-const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 type Failed = {
-  readonly failure: CodingAgentCallFailure;
+  readonly failure: AgentCallFailure;
   readonly unreached?: RepositoryUnreached;
   readonly resetsAt?: number;
   readonly provider?: ModelProvider;
@@ -191,64 +192,64 @@ type Failed = {
 };
 
 /** The refusals a call may answer with, by the service's own word for each. */
-type NamedRefusals = Readonly<Partial<Record<HostedApiError, CodingAgentCallFailure>>>;
+type NamedRefusals = Readonly<Partial<Record<HostedApiError, AgentCallFailure>>>;
 
 /** The refusals a Start can answer with. */
 const START_REFUSALS = {
-  [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
-  [HOSTED_API_ERROR.NO_REPOSITORY]: CODING_AGENT_CALL_FAILURE.NO_REPOSITORY,
-  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
-  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
-  [HOSTED_API_ERROR.INVALID_REQUEST]: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE,
-  [HOSTED_API_ERROR.NOT_PERMITTED]: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED,
-  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING]: CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING,
-  [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE,
-  [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT,
-  [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE,
-  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED,
-  [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE,
-  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
-  [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE]: CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE,
-  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
-  [HOSTED_API_ERROR.DEVICE_REMOVED]: CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED,
+  [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.NO_REPOSITORY]: AGENT_CALL_FAILURE.NO_REPOSITORY,
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
+  [HOSTED_API_ERROR.INVALID_REQUEST]: AGENT_CALL_FAILURE.INVALID_CHOICE,
+  [HOSTED_API_ERROR.NOT_PERMITTED]: AGENT_CALL_FAILURE.NOT_PERMITTED,
+  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING]: AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING,
+  [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE,
+  [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT,
+  [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE,
+  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED,
+  [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE,
+  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
+  [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE]: AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE,
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
+  [HOSTED_API_ERROR.DEVICE_REMOVED]: AGENT_CALL_FAILURE.DEVICE_REMOVED,
 } satisfies NamedRefusals;
 
 /** The refusals a memories read or forget can answer with: a workspace the account is not in, or a memory it may not forget. */
 const MEMORY_REFUSALS = {
-  [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
-  [HOSTED_API_ERROR.NOT_PERMITTED]: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED,
+  [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.NOT_PERMITTED]: AGENT_CALL_FAILURE.NOT_PERMITTED,
 } satisfies NamedRefusals;
 
 /** The refusals a call that names one row can answer with. */
 const ROW_REFUSALS = {
-  [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
 } satisfies NamedRefusals;
 
 /** The refusals an archive or a delete can answer with: the agent gone, or one still starting or awaiting its turn, which has no turn to stop yet. */
 const ARCHIVE_REFUSALS = {
-  [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
-  [HOSTED_API_ERROR.AGENT_NOT_READY]: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY,
+  [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.AGENT_NOT_READY]: AGENT_CALL_FAILURE.AGENT_NOT_READY,
 } satisfies NamedRefusals;
 
 /** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, the repository the turn's checkout no longer reaches, an agent on its starter's own GitHub token the caller did not start, and a device away, refused as a Start on it is. */
 const MESSAGE_REFUSALS = {
-  [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
-  [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG,
-  [HOSTED_API_ERROR.AGENT_NOT_READY]: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY,
-  [HOSTED_API_ERROR.AGENT_RETIRED]: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED,
-  [HOSTED_API_ERROR.DEVICE_REMOVED]: CODING_AGENT_CALL_FAILURE.DEVICE_REMOVED,
-  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
-  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
-  [HOSTED_API_ERROR.NOT_PERMITTED]: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED,
-  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING]: CODING_AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING,
-  [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: CODING_AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE,
-  [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT,
-  [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE,
-  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED,
-  [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE,
-  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
-  [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE]: CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE,
-  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
+  [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: AGENT_CALL_FAILURE.MESSAGE_TOO_LONG,
+  [HOSTED_API_ERROR.AGENT_NOT_READY]: AGENT_CALL_FAILURE.AGENT_NOT_READY,
+  [HOSTED_API_ERROR.AGENT_RETIRED]: AGENT_CALL_FAILURE.AGENT_RETIRED,
+  [HOSTED_API_ERROR.DEVICE_REMOVED]: AGENT_CALL_FAILURE.DEVICE_REMOVED,
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
+  [HOSTED_API_ERROR.NOT_PERMITTED]: AGENT_CALL_FAILURE.NOT_PERMITTED,
+  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING]: AGENT_CALL_FAILURE.AGENT_IMAGE_PREPARING,
+  [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: AGENT_CALL_FAILURE.NATIVE_AGENT_NOT_HERE,
+  [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: AGENT_CALL_FAILURE.AGENT_PLAN_SIGNED_OUT,
+  [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE,
+  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED,
+  [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE,
+  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING,
+  [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE]: AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE,
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
 } satisfies NamedRefusals;
 
 /** The refusals an answer to the inbox can answer with: a message's own, since an answer the agent needs to hear reaches it as one. */
@@ -256,12 +257,12 @@ const INBOX_ANSWER_REFUSALS = MESSAGE_REFUSALS;
 
 /** The refusals a dictated clip can answer with: the account saved no OpenAI key to hear it on. */
 const DICTATION_REFUSALS = {
-  [HOSTED_API_ERROR.OPENAI_KEY_MISSING]: CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING,
+  [HOSTED_API_ERROR.OPENAI_KEY_MISSING]: AGENT_CALL_FAILURE.OPENAI_KEY_MISSING,
 } satisfies NamedRefusals;
 
 /** The refusals writing the default can answer with: a choice the catalog does not offer. */
 const DEFAULT_REFUSALS = {
-  [HOSTED_API_ERROR.INVALID_REQUEST]: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE,
+  [HOSTED_API_ERROR.INVALID_REQUEST]: AGENT_CALL_FAILURE.INVALID_CHOICE,
 } satisfies NamedRefusals;
 
 /** The refusals changing an agent's choice can answer with: the agent gone, or a choice the catalog does not offer. */
@@ -312,15 +313,15 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
   const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
   const failure = refusal === undefined ? undefined : named[refusal];
   if (failure === undefined) return UNANSWERED;
-  if (failure === CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED) {
+  if (failure === AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED) {
     const limit = Result.getOrUndefined(readServiceAnswer(planLimitReachedDataSchema)(payload));
     return limit?.resetsAt === undefined ? { failure } : { failure, resetsAt: limit.resetsAt };
   }
-  if (failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
+  if (failure === AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
     const missing = Result.getOrUndefined(readServiceAnswer(credentialMissingDataSchema)(payload));
     return missing?.provider === undefined ? { failure } : { failure, provider: missing.provider };
   }
-  if (failure === CODING_AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED) {
+  if (failure === AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED) {
     const refused = Result.getOrUndefined(readServiceAnswer(localAgentRefusedDataSchema)(payload));
     if (refused?.localAgentRefusal === undefined) return { failure };
     return {
@@ -331,7 +332,7 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
         : { refusedDevice: refused.refusedDevice }),
     };
   }
-  if (failure !== CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) return { failure };
+  if (failure !== AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) return { failure };
   const reached = Result.getOrUndefined(readServiceAnswer(repositoryNotReachableSchema)(payload));
   return reached === undefined ? { failure } : { failure, unreached: reached.unreached };
 }
@@ -342,9 +343,7 @@ export function startRefusedAs(refusal: TaskAgentRefusal): Failed {
 }
 
 /** A transcript's picture's bytes in base64 under its type: a picture, or a WebM an agent recorded; unanswered under any other type. */
-function readConversationPicture(
-  response: Response,
-): Effect.Effect<CodingAgentInboxAttachmentView> {
+function readConversationPicture(response: Response): Effect.Effect<AgentInboxAttachmentView> {
   return Effect.map(
     imageBodyOf(response, conversationMediaTypeSchema),
     (picture) => picture ?? UNANSWERED,
@@ -355,7 +354,7 @@ function readConversationPicture(
 const inboxFileTypeSchema = Schema.Literals(Object.values(INBOX_FILE_TYPE));
 
 /** An inbox attachment's bytes in base64 under its type: a picture, a recording, or a file an answer carried; unanswered under any other type. */
-function readInboxFile(response: Response): Effect.Effect<CodingAgentInboxAttachmentView> {
+function readInboxFile(response: Response): Effect.Effect<AgentInboxAttachmentView> {
   return Effect.map(imageBodyOf(response, inboxFileTypeSchema), (file) => file ?? UNANSWERED);
 }
 
@@ -366,7 +365,7 @@ function readInboxFile(response: Response): Effect.Effect<CodingAgentInboxAttach
  */
 /** A transcript page read at once, or unanswered where the service said nothing of whether it would hold, as one too old to read at once does. */
 function readNow(
-  answer: (CodingAgentMessagesAnswerView & { readonly holds?: boolean }) | Failed,
+  answer: (AgentMessagesAnswerView & { readonly holds?: boolean }) | Failed,
 ): TranscriptNowAnswer | Failed {
   if ("failure" in answer) return answer;
   return answer.holds === undefined ? UNANSWERED : { ...answer, holds: answer.holds };
@@ -423,7 +422,7 @@ function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
  * coding-agent part as a choice reads, the settings parts beside it the
  * settings client's to read.
  */
-function defaultOf(read: AccountPreferencesAnswerWire | Failed): CodingAgentDefaultAnswer {
+function defaultOf(read: AccountPreferencesAnswerWire | Failed): AgentDefaultAnswer {
   if ("failure" in read) return read;
   const choice = Option.getOrUndefined(
     Schema.decodeUnknownOption(modelChoiceSchema)(read.codingAgent),
@@ -459,12 +458,12 @@ function chaptersModelAnswerOf(
  * of what its agents need of the developer, read past a cursor and
  * answered an item at a time, and what waits across the account's tasks.
  */
-export class HostedCodingAgentClient {
+export class HostedAgentClient {
   readonly #call: AccountCallEffects;
 
   readonly #hosted: HostedClient;
 
-  constructor(options: HostedCodingAgentClientOptions) {
+  constructor(options: HostedAgentClientOptions) {
     const { credential } = options;
     this.#hosted = hostedClient({
       baseUrl: options.serviceBaseUrl,
@@ -479,7 +478,7 @@ export class HostedCodingAgentClient {
   }
 
   /** The models a coding agent may run on, as the service offers them now. */
-  models(): Effect.Effect<CodingAgentModelsAnswer, never, HttpClient.HttpClient> {
+  models(): Effect.Effect<AgentModelsAnswer, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.models.list, undefined), {});
   }
 
@@ -516,7 +515,7 @@ export class HostedCodingAgentClient {
   }
 
   /** The account's default model and effort, read off the preferences snapshot. */
-  readDefault(): Effect.Effect<CodingAgentDefaultAnswer, never, HttpClient.HttpClient> {
+  readDefault(): Effect.Effect<AgentDefaultAnswer, never, HttpClient.HttpClient> {
     return Effect.map(
       hostedAnswer(askHosted(this.#hosted.account.preferences, undefined), {}),
       defaultOf,
@@ -526,9 +525,9 @@ export class HostedCodingAgentClient {
   /** The account's default written on its own, answering it as kept; a choice the service would refuse by shape is refused here without traveling at all. */
   writeDefault(
     choice: ModelChoice,
-  ): Effect.Effect<CodingAgentDefaultAnswer, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentDefaultAnswer, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(
-      readEither(codingAgentDefaultWriteSchema)({ codingAgent: choice }),
+      readEither(agentDefaultWriteSchema)({ codingAgent: choice }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return Effect.map(
@@ -684,12 +683,12 @@ export class HostedCodingAgentClient {
   list(
     taskId: string,
     includeArchived = false,
-  ): Effect.Effect<CodingAgentListAnswer, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentListAnswer, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(this.#hosted.agents.listOfTask, {
         id: taskId,
         ...(includeArchived
-          ? { [CODING_AGENT_LIST_QUERY.ARCHIVED]: CODING_AGENT_LIST_ARCHIVED.INCLUDE }
+          ? { [AGENT_LIST_QUERY.ARCHIVED]: AGENT_LIST_ARCHIVED.INCLUDE }
           : undefined),
       }),
       ROW_REFUSALS,
@@ -698,19 +697,19 @@ export class HostedCodingAgentClient {
 
   /** A workspace's agents, newest started first, narrowed to one repository where one is named and to the words given where some are, the archived ones among them where `includeArchived` asks. */
   listWorkspace(
-    params: CodingAgentWorkspaceListParams,
-  ): Effect.Effect<CodingAgentListAnswer, never, HttpClient.HttpClient> {
+    params: AgentWorkspaceListParams,
+  ): Effect.Effect<AgentListAnswer, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(this.#hosted.agents.listOfWorkspace, {
-        [CODING_AGENT_WORKSPACE_QUERY.WORKSPACE_ID]: params.workspaceId,
+        [AGENT_WORKSPACE_QUERY.WORKSPACE_ID]: params.workspaceId,
         ...(params.repository === undefined
           ? undefined
-          : { [CODING_AGENT_WORKSPACE_QUERY.REPOSITORY]: params.repository }),
+          : { [AGENT_WORKSPACE_QUERY.REPOSITORY]: params.repository }),
         ...(params.words === undefined
           ? undefined
-          : { [CODING_AGENT_WORKSPACE_QUERY.WORDS]: params.words }),
+          : { [AGENT_WORKSPACE_QUERY.WORDS]: params.words }),
         ...(params.includeArchived === true
-          ? { [CODING_AGENT_WORKSPACE_QUERY.ARCHIVED]: CODING_AGENT_LIST_ARCHIVED.INCLUDE }
+          ? { [AGENT_WORKSPACE_QUERY.ARCHIVED]: AGENT_LIST_ARCHIVED.INCLUDE }
           : undefined),
       }),
       ROW_REFUSALS,
@@ -724,9 +723,9 @@ export class HostedCodingAgentClient {
    */
   start(
     taskId: string,
-    request: CodingAgentStartRequest,
-  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(codingAgentStartRequestOnWire(request));
+    request: AgentStartRequest,
+  ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(agentStartRequestOnWire(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
       Effect.map(
@@ -748,10 +747,10 @@ export class HostedCodingAgentClient {
    * `start` is; a request whose `from` names no agent is refused here.
    */
   startFrom(
-    request: CodingAgentStartRequest,
-  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+    request: AgentStartRequest,
+  ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
     const sourceId = request.from?.agentId;
-    const admitted = Result.getOrUndefined(codingAgentStartRequestOnWire(request));
+    const admitted = Result.getOrUndefined(agentStartRequestOnWire(request));
     if (sourceId === undefined || admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
       Effect.map(
@@ -803,7 +802,7 @@ export class HostedCodingAgentClient {
     agentId: string,
     callId?: string,
     cut = false,
-  ): Effect.Effect<CodingAgentNewestAnswer | Failed, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentNewestAnswer | Failed, never, HttpClient.HttpClient> {
     return Effect.map(
       hostedAnswer(this.#newest(agentId, callId, undefined, cut), ROW_REFUSALS),
       // Note that a read naming no `before` is answered the newest page, which an older page alone is not.
@@ -822,10 +821,10 @@ export class HostedCodingAgentClient {
     before: string,
     callId?: string,
     cut = false,
-  ): Effect.Effect<CodingAgentOlderAnswer | Failed, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentOlderAnswer | Failed, never, HttpClient.HttpClient> {
     return Effect.map(
       hostedAnswer(this.#newest(agentId, callId, before, cut), ROW_REFUSALS),
-      (answer): CodingAgentOlderAnswer | Failed =>
+      (answer): AgentOlderAnswer | Failed =>
         "failure" in answer
           ? answer
           : {
@@ -857,7 +856,7 @@ export class HostedCodingAgentClient {
     messageId: string,
     index: number,
     callId?: string,
-  ): Effect.Effect<CodingAgentPartView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentPartView, never, HttpClient.HttpClient> {
     const part = { id: agentId, message: messageId, index: String(index) };
     const asked =
       callId === undefined
@@ -910,9 +909,9 @@ export class HostedCodingAgentClient {
    */
   message(
     agentId: string,
-    request: CodingAgentMessageRequest,
-  ): Effect.Effect<CodingAgentMessageAnswerView, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(codingAgentMessageRequestSchema)(request));
+    request: AgentMessageRequest,
+  ): Effect.Effect<AgentMessageAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(agentMessageRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
       askHosted(
@@ -928,7 +927,7 @@ export class HostedCodingAgentClient {
   choose(
     agentId: string,
     choice: ModelChoice,
-  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(modelChoiceSchema)(choice));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return this.#change(agentId, admitted, CHOOSE_REFUSALS);
@@ -937,9 +936,9 @@ export class HostedCodingAgentClient {
   /** Renames one agent, or clears its title with an empty one, answering it as it then stands; a title past the bound is refused here without traveling. */
   rename(
     agentId: string,
-    request: CodingAgentRenameRequest,
-  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(codingAgentRenameRequestSchema)(request));
+    request: AgentRenameRequest,
+  ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(agentRenameRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return this.#change(agentId, admitted, ROW_REFUSALS);
   }
@@ -947,9 +946,9 @@ export class HostedCodingAgentClient {
   /** Switches one agent's MCP servers for its next turn on, the whole list of those off, answering it as it then stands; a list past the bound is refused here without traveling. */
   switchServers(
     agentId: string,
-    request: CodingAgentServersRequest,
-  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(codingAgentServersRequestSchema)(request));
+    request: AgentServersRequest,
+  ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(agentServersRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return this.#change(agentId, admitted, ROW_REFUSALS);
   }
@@ -957,16 +956,16 @@ export class HostedCodingAgentClient {
   /** Archives one agent, stopping a turn it still runs first, or brings it back, answering it as it then stands. */
   archive(
     agentId: string,
-    request: CodingAgentArchiveRequest,
-  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+    request: AgentArchiveRequest,
+  ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
     return this.#change(agentId, { archived: request.archived }, ARCHIVE_REFUSALS);
   }
 
   /** Pins one agent for the account alone, or unpins it, answering it as it then stands. */
   pin(
     agentId: string,
-    request: CodingAgentPinRequest,
-  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+    request: AgentPinRequest,
+  ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
     return this.#change(
       agentId,
       request.position === undefined
@@ -981,7 +980,7 @@ export class HostedCodingAgentClient {
   ensureOperator(
     workspaceId: string,
     request: OperatorEnsureRequest,
-  ): Effect.Effect<CodingAgentOperatorEnsureAnswerView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentOperatorEnsureAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(this.#hosted.agents.ensureOperator, { params: { id: workspaceId }, body: request }),
       START_REFUSALS,
@@ -990,9 +989,9 @@ export class HostedCodingAgentClient {
 
   #change(
     agentId: string,
-    body: CodingAgentChangeRequest,
+    body: AgentChangeRequest,
     named: NamedRefusals,
-  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(this.#hosted.agents.change, { params: { id: agentId }, body }),
       named,
@@ -1000,14 +999,12 @@ export class HostedCodingAgentClient {
   }
 
   /** Deletes one agent for good, a turn it still runs stopped first; that it was, or why not: gone already, or one still starting with no turn to stop yet. */
-  delete(
-    agentId: string,
-  ): Effect.Effect<CodingAgentDeleteAnswerView, never, HttpClient.HttpClient> {
+  delete(agentId: string): Effect.Effect<AgentDeleteAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.agents.delete, { id: agentId }), ARCHIVE_REFUSALS);
   }
 
   /** Stops one agent, answering it as it then stands. */
-  stop(agentId: string): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+  stop(agentId: string): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.agents.stop, { id: agentId }), ROW_REFUSALS);
   }
 
@@ -1015,7 +1012,7 @@ export class HostedCodingAgentClient {
   rewind(
     agentId: string,
     messageId: string,
-  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(
         this.#hosted.agents.rewind,
@@ -1027,7 +1024,7 @@ export class HostedCodingAgentClient {
   }
 
   /** One agent read whole as its own page by its id, on a task or with none. */
-  agent(agentId: string): Effect.Effect<CodingAgentPageAnswerView, never, HttpClient.HttpClient> {
+  agent(agentId: string): Effect.Effect<AgentPageAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.agents.read, { id: agentId }), ROW_REFUSALS);
   }
 
@@ -1035,7 +1032,7 @@ export class HostedCodingAgentClient {
   pullRequest(
     agentId: string,
     number?: number,
-  ): Effect.Effect<CodingAgentPullRequestAnswerView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentPullRequestAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(this.#hosted.agentPullRequests.pullRequest, pullRequestRead(agentId, number)),
       ROW_REFUSALS,
@@ -1046,7 +1043,7 @@ export class HostedCodingAgentClient {
   changes(
     agentId: string,
     number?: number,
-  ): Effect.Effect<CodingAgentChangesAnswerView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentChangesAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(this.#hosted.agents.changes, {
         id: agentId,
@@ -1060,7 +1057,7 @@ export class HostedCodingAgentClient {
   overviewPullRequest(
     agentId: string,
     number?: number,
-  ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentOverviewPullRequestAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(
         this.#hosted.agentPullRequests.overviewPullRequest,
@@ -1070,10 +1067,17 @@ export class HostedCodingAgentClient {
     );
   }
 
+  /** Which of Luke's own tools one agent is offered, and whether its `run_on_mac` would run now. */
+  lukeTools(
+    agentId: string,
+  ): Effect.Effect<AgentLukeToolsAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.agents.lukeTools, { id: agentId }), ROW_REFUSALS);
+  }
+
   /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams as GitHub holds them now. */
   reviewOptions(
     agentId: string,
-  ): Effect.Effect<CodingAgentReviewOptionsAnswerView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentReviewOptionsAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(this.#hosted.agents.reviewOptions, { id: agentId }),
       ROW_REFUSALS,
@@ -1114,7 +1118,7 @@ export class HostedCodingAgentClient {
   overviewChecks(
     agentId: string,
     number?: number,
-  ): Effect.Effect<CodingAgentOverviewChecksAnswerView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentOverviewChecksAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(this.#hosted.agentPullRequests.overviewChecks, pullRequestRead(agentId, number)),
       ROW_REFUSALS,
@@ -1125,7 +1129,7 @@ export class HostedCodingAgentClient {
   overviewConversation(
     agentId: string,
     number?: number,
-  ): Effect.Effect<CodingAgentOverviewConversationAnswerView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentOverviewConversationAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(
         this.#hosted.agentPullRequests.overviewConversation,
@@ -1257,7 +1261,7 @@ export class HostedCodingAgentClient {
     agentId: string,
     pictureId: string,
     callId?: string,
-  ): Effect.Effect<CodingAgentInboxAttachmentView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentInboxAttachmentView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
       this.#call.send({
         method: HTTP_METHOD.GET,
@@ -1284,7 +1288,7 @@ export class HostedCodingAgentClient {
     agentId: string,
     request: PullRequestActionRequest,
     number?: number,
-  ): Effect.Effect<CodingAgentPullRequestWriteAnswerView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentPullRequestWriteAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(pullRequestActionRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     const read = pullRequestRead(agentId, number);
@@ -1302,7 +1306,7 @@ export class HostedCodingAgentClient {
   pullRequestViewed(
     agentId: string,
     number?: number,
-  ): Effect.Effect<CodingAgentPullRequestViewedAnswerView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentPullRequestViewedAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(
       askHosted(this.#hosted.agentPullRequests.viewed, pullRequestRead(agentId, number)),
       ROW_REFUSALS,
@@ -1318,10 +1322,10 @@ export class HostedCodingAgentClient {
   githubImage(
     agentId: string,
     src: string,
-  ): Effect.Effect<CodingAgentGitHubImageView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentGitHubImageView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: agentGitHubImagePath(agentId, src) }),
-      (answer): Effect.Effect<CodingAgentGitHubImageView> => {
+      (answer): Effect.Effect<AgentGitHubImageView> => {
         if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
         if (!answer.response.ok) {
           return Effect.map(jsonOf(answer.response), (body) =>
@@ -1347,7 +1351,7 @@ export class HostedCodingAgentClient {
   inboxAttachment(
     itemId: string,
     attachmentId: string,
-  ): Effect.Effect<CodingAgentInboxAttachmentView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentInboxAttachmentView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: inboxAttachmentPath(itemId, attachmentId) }),
       (answer) => {
@@ -1372,7 +1376,7 @@ export class HostedCodingAgentClient {
   answerInbox(
     itemId: string,
     request: InboxAcknowledgeRequest,
-  ): Effect.Effect<CodingAgentInboxAnsweredView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentInboxAnsweredView, never, HttpClient.HttpClient> {
     const body = wireRequestOf(inboxAcknowledgeRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
@@ -1390,7 +1394,7 @@ export class HostedCodingAgentClient {
   closeInbox(
     itemId: string,
     request: InboxCloseRequest,
-  ): Effect.Effect<CodingAgentInboxAnsweredView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentInboxAnsweredView, never, HttpClient.HttpClient> {
     const body = wireRequestOf(inboxCloseRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
@@ -1408,7 +1412,7 @@ export class HostedCodingAgentClient {
   messageInbox(
     itemId: string,
     request: InboxMessageRequest,
-  ): Effect.Effect<CodingAgentInboxMessagedView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentInboxMessagedView, never, HttpClient.HttpClient> {
     const body = wireRequestOf(inboxMessageRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
@@ -1429,7 +1433,7 @@ export class HostedCodingAgentClient {
    */
   startInboxThread(
     request: InboxStartRequest,
-  ): Effect.Effect<CodingAgentInboxMessagedView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentInboxMessagedView, never, HttpClient.HttpClient> {
     const body = wireRequestOf(inboxStartRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
@@ -1446,14 +1450,14 @@ export class HostedCodingAgentClient {
    */
   markInboxItemRead(
     itemId: string,
-  ): Effect.Effect<CodingAgentInboxReadStateView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentInboxReadStateView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.inbox.markItemRead, { id: itemId }), ROW_REFUSALS);
   }
 
   /** One item marked unread for the account until it reads the item again: its id and its read state; not found where the item is not one the account reaches. */
   markInboxItemUnread(
     itemId: string,
-  ): Effect.Effect<CodingAgentInboxReadStateView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentInboxReadStateView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.inbox.markItemUnread, { id: itemId }), ROW_REFUSALS);
   }
 
@@ -1465,7 +1469,7 @@ export class HostedCodingAgentClient {
    */
   markInboxRead(
     request: InboxReadAllRequest = {},
-  ): Effect.Effect<CodingAgentInboxReadAllView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<AgentInboxReadAllView, never, HttpClient.HttpClient> {
     const body = wireRequestOf(inboxReadAllRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(askHosted(this.#hosted.inbox.markAllRead, body), {});

@@ -15,11 +15,11 @@ import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {
-  codingAgentOverviewChecksAnswerSchema,
-  codingAgentOverviewConversationAnswerSchema,
-  codingAgentOverviewPullRequestAnswerSchema,
-  codingAgentPullRequestAnswerSchema,
-} from "../coding-agent-wire.js";
+  agentOverviewChecksAnswerSchema,
+  agentOverviewConversationAnswerSchema,
+  agentOverviewPullRequestAnswerSchema,
+  agentPullRequestAnswerSchema,
+} from "../agent-wire.js";
 import {
   PULL_REQUEST_WRITE_BOUNDS,
   pullRequestActionRequestSchema,
@@ -78,7 +78,7 @@ const read = (path: `/${string}`) =>
 export const agentPullRequestsContract = {
   /** What the agent published: the branch it pushed and the pull request from it, as GitHub holds them. */
   pullRequest: read(AGENT_PULL_REQUEST_PATH.PULL_REQUEST).output(
-    EffectSchema.flip(codingAgentPullRequestAnswerSchema),
+    EffectSchema.flip(agentPullRequestAnswerSchema),
   ),
   /** One change to the pull request, made on GitHub as the asking member. */
   action: hostedProcedure
@@ -98,14 +98,14 @@ export const agentPullRequestsContract = {
   ),
   /** The pull request itself, as its overview draws it. */
   overviewPullRequest: read(AGENT_PULL_REQUEST_PATH.OVERVIEW_PULL_REQUEST).output(
-    EffectSchema.flip(codingAgentOverviewPullRequestAnswerSchema),
+    EffectSchema.flip(agentOverviewPullRequestAnswerSchema),
   ),
   /** The checks on its head and its deployments, as its overview draws them. */
   overviewChecks: read(AGENT_PULL_REQUEST_PATH.OVERVIEW_CHECKS).output(
-    EffectSchema.flip(codingAgentOverviewChecksAnswerSchema),
+    EffectSchema.flip(agentOverviewChecksAnswerSchema),
   ),
   /** Its conversation and where its reviewers stand, as its overview draws them. */
   overviewConversation: read(AGENT_PULL_REQUEST_PATH.OVERVIEW_CONVERSATION).output(
-    EffectSchema.flip(codingAgentOverviewConversationAnswerSchema),
+    EffectSchema.flip(agentOverviewConversationAnswerSchema),
   ),
 };

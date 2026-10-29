@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { CONTEXT_WINDOW } from "@luke/features/agent-wire";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import {
   PROVIDER_KEY_PROVIDER,
@@ -94,20 +94,20 @@ const done = (value: PortActResult<PortActKind>): FakeActAnswer => ({
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   sent.push(request);
   switch (request.kind) {
-    case ACT_KIND.CODING_AGENTS_MODELS:
+    case ACT_KIND.AGENTS_MODELS:
       if (refuseModels) {
-        return Promise.resolve(done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+        return Promise.resolve(done({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
       }
       return Promise.resolve(done({ models }));
     case ACT_KIND.WEB_OPEN:
       return Promise.resolve(done(undefined));
-    case ACT_KIND.CODING_AGENTS_DEFAULT_READ:
+    case ACT_KIND.AGENTS_DEFAULT_READ:
       return Promise.resolve(done({ choice: stored }));
     case ACT_KIND.CHAPTERS_MODEL_READ:
       return Promise.resolve(done({ model: CHAPTERS_MODEL.HAIKU }));
     case ACT_KIND.CHAPTERS_MODEL_WRITE:
       if (refuseWrite) {
-        return Promise.resolve(done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+        return Promise.resolve(done({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
       }
       return Promise.resolve(done({ model: request.payload.model }));
     case ACT_KIND.PROVIDER_KEYS_READ:
@@ -118,9 +118,9 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
       keys = [{ ...OWN_ANTHROPIC, hint: "sk-ant-…new1" }];
       models = [OPUS, OPUS_FAST];
       return Promise.resolve(done({ keys }));
-    case ACT_KIND.CODING_AGENTS_DEFAULT_WRITE:
+    case ACT_KIND.AGENTS_DEFAULT_WRITE:
       if (refuseWrite) {
-        return Promise.resolve(done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+        return Promise.resolve(done({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
       }
       stored = request.payload;
       return Promise.resolve(done({ choice: stored }));
@@ -215,7 +215,7 @@ const errorsIn = (row: HTMLElement) =>
 /** The defaults the page asked the service to keep, in order. */
 const written = () =>
   sent.flatMap((request) =>
-    request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_WRITE ? [request.payload] : [],
+    request.kind === ACT_KIND.AGENTS_DEFAULT_WRITE ? [request.payload] : [],
   );
 
 /** The placeholders standing for reads still out, each what it says it reads and how many rows it stands. */
@@ -487,7 +487,7 @@ test("a catalog that could not be read says so in the Default model menu with Re
     "The models could not be read.Retry",
   );
   assert.doesNotMatch(menu.textContent ?? "", /Open Settings again/u);
-  const reads = () => sent.filter((request) => request.kind === ACT_KIND.CODING_AGENTS_MODELS);
+  const reads = () => sent.filter((request) => request.kind === ACT_KIND.AGENTS_MODELS);
   const before = reads().length;
 
   refuseModels = false;

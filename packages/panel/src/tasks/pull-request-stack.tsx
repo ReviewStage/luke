@@ -2,7 +2,7 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
   type PullRequestStackEntry,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/link-grammar";
 import { ACT_KIND } from "@luke/host/acts";
 import { BUTTON_VARIANT, Button, dropBelowStart, Tooltip, useMenu } from "@luke/ui";

@@ -14,8 +14,8 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, queryBuilder } from "../core/query.js";
+import { agentTable } from "../schemas/agent.js";
 import { user } from "../schemas/auth.js";
-import { codingAgent } from "../schemas/coding-agent.js";
 import { task } from "../schemas/task.js";
 import { agentSectionEntry, taskSection, taskSectionEntry } from "../schemas/task-section.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -38,7 +38,7 @@ import {
  * a task moved to another workspace leaves its section without a write. An
  * agent's entry is read on the same terms, and only while the agent stands
  * on no task, since only such an agent is a row of the sidebar of its own,
- * as its pin is (`pinCodingAgent`).
+ * as its pin is (`pinAgent`).
  * Every write runs under a lock on the account's own row, so two Macs
  * writing at once land one after the other and neither slips past the
  * bound, and answers the whole as it then stands, or nothing where it was
@@ -86,7 +86,7 @@ function agentEntryStands(userId: string) {
   return and(
     eq(agentSectionEntry.userId, userId),
     eq(AGENT_WORKSPACE, taskSection.organizationId),
-    isNull(codingAgent.taskId),
+    isNull(agentTable.taskId),
     agentVisibleTo(userId),
   );
 }
@@ -176,7 +176,7 @@ const findAgentEntries = SqlSchema.findAll({
         .select(AGENT_ENTRY_COLUMNS)
         .from(agentSectionEntry)
         .innerJoin(taskSection, eq(taskSection.id, agentSectionEntry.sectionId))
-        .innerJoin(codingAgent, eq(codingAgent.id, agentSectionEntry.codingAgentId))
+        .innerJoin(agentTable, eq(agentTable.id, agentSectionEntry.codingAgentId))
         .where(agentEntryStands(userId))
         .orderBy(asc(agentSectionEntry.addedAt), asc(agentSectionEntry.codingAgentId)),
     ),
@@ -270,13 +270,13 @@ const findAgentIn = SqlSchema.findOneOption({
   execute: ({ userId, agentId, organizationId }) =>
     Database.use((db) =>
       db
-        .select({ id: codingAgent.id })
-        .from(codingAgent)
+        .select({ id: agentTable.id })
+        .from(agentTable)
         .where(
           and(
-            eq(codingAgent.id, agentId),
+            eq(agentTable.id, agentId),
             eq(AGENT_WORKSPACE, organizationId),
-            isNull(codingAgent.taskId),
+            isNull(agentTable.taskId),
             agentVisibleTo(userId),
           ),
         )
@@ -638,7 +638,7 @@ export function taskSectionsLiveStatements(
     )
     .from(agentSectionEntry)
     .innerJoin(taskSection, eq(taskSection.id, agentSectionEntry.sectionId))
-    .innerJoin(codingAgent, eq(codingAgent.id, agentSectionEntry.codingAgentId))
+    .innerJoin(agentTable, eq(agentTable.id, agentSectionEntry.codingAgentId))
     .where(agentEntryStands(userId));
   return Option.all({
     sections: liveStatementOf(sections),

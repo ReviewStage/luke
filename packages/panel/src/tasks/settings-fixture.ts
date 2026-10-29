@@ -572,8 +572,8 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
       },
     ],
   }),
-  [ACT_KIND.CODING_AGENTS_MODELS]: () => ({ models: MODELS }),
-  [ACT_KIND.CODING_AGENTS_DEFAULT_READ]: () => ({
+  [ACT_KIND.AGENTS_MODELS]: () => ({ models: MODELS }),
+  [ACT_KIND.AGENTS_DEFAULT_READ]: () => ({
     choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
   }),
   [ACT_KIND.CHAPTERS_MODEL_READ]: () => ({ model: CHAPTERS_MODEL.SONNET }),

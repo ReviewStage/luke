@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
+import type { AgentAgentAnswer } from "@luke/features/agent-view";
 import type { TaskFileRequest } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -132,7 +132,7 @@ async function page({ box = true }: { box?: boolean } = {}) {
   const sent: string[] = [];
   const sender: MessageSender = (_agentId, text) => {
     sent.push(text);
-    return new Promise<CodingAgentAgentAnswer>(ignore);
+    return new Promise<AgentAgentAnswer>(ignore);
   };
   const container = document.createElement("div");
   document.body.append(container);

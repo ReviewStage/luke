@@ -1,5 +1,5 @@
-import type { TurnUsageRow } from "@luke/database/models/coding-agent-store";
-import type { CodingAgentUsage } from "@luke/features/coding-agent-wire";
+import type { TurnUsageRow } from "@luke/database/models/agent-store";
+import type { AgentUsage } from "@luke/features/agent-wire";
 import type { RunUsage } from "../../core.js";
 import {
   type OfferedModel,
@@ -67,7 +67,7 @@ export function costOfTurns(
 export function usageOfTurns(
   rows: readonly TurnUsageRow[],
   offered: readonly OfferedModel[],
-): CodingAgentUsage | undefined {
+): AgentUsage | undefined {
   if (rows.length === 0) return undefined;
   let inputTokens = 0;
   let outputTokens = 0;

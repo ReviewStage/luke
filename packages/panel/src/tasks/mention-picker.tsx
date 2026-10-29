@@ -1,5 +1,5 @@
 import { useAtom } from "@effect/atom-react";
-import type { CodingAgentPullRequest, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentPullRequest, AgentSummary } from "@luke/features/agent-wire";
 import {
   type DateSpan,
   dateChipText,
@@ -1262,7 +1262,7 @@ export interface MentionableAgent {
   readonly task?: { readonly id: string; readonly name?: string | undefined } | undefined;
   readonly archived?: boolean | undefined;
   /** The agent as the workspace's list read it, where a place drew it from that list: what a picker draws its tab's look and title from. */
-  readonly summary?: CodingAgentSummary | undefined;
+  readonly summary?: AgentSummary | undefined;
 }
 
 /** A person as the list offers them: their account's id, their name, their email where the members read names it, and their picture, which their row wears. */
@@ -1275,7 +1275,7 @@ interface MentionablePerson {
 
 /** One of the place's pull requests, as the list offers it: where it stands, which its mark wears, its GitHub address, and the name of the agent that published it, where the place knows it. */
 export interface MentionablePullRequest
-  extends Pick<CodingAgentPullRequest, "number" | "title" | "url" | "state" | "checks" | "queued"> {
+  extends Pick<AgentPullRequest, "number" | "title" | "url" | "state" | "checks" | "queued"> {
   readonly agent: string | undefined;
 }
 

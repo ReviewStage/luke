@@ -1,5 +1,5 @@
-import type { CodingAgentAgentAnswer } from "@luke/features/coding-agent-view";
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import type { AgentAgentAnswer } from "@luke/features/agent-view";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import { useRef, useState } from "react";
 import type { AgentServersControl } from "./agent-servers.js";
 
@@ -19,7 +19,7 @@ import type { AgentServersControl } from "./agent-servers.js";
 export type ServersWriter = (
   agentId: string,
   disabledServers: readonly string[],
-) => Promise<CodingAgentAgentAnswer>;
+) => Promise<AgentAgentAnswer>;
 
 /** Nothing switched off, which is what an agent from a service before the switch holds. */
 const NONE_OFF: readonly string[] = [];
@@ -30,9 +30,11 @@ interface Held {
 }
 
 export function useAgentServers(input: {
-  agent: Pick<CodingAgentSummary, "id" | "disabledServers">;
+  agent: Pick<AgentSummary, "id" | "disabledServers" | "startedBy">;
   write: ServersWriter;
   onOpenSettings: () => void;
+  /** The reader's account, which says whether they started the agent and so whether this Mac's setting meets its commands. */
+  me: string | undefined;
 }): AgentServersControl {
   const { agent } = input;
   const [held, setHeld] = useState<Held>(() => ({ agentId: agent.id, pending: undefined }));
@@ -59,5 +61,9 @@ export function useAgentServers(input: {
     disabled: held.pending ?? agent.disabledServers ?? NONE_OFF,
     onSwitch,
     onOpenSettings: () => latest.current.onOpenSettings(),
+    luke: {
+      agentId: agent.id,
+      starterReading: input.me !== undefined && agent.startedBy?.userId === input.me,
+    },
   };
 }

@@ -33,31 +33,27 @@
  * first and reads back only as far as it is scrolled.
  */
 
+import { type Agent, readAgent, readVisibleAgent } from "@luke/database/models/agent-store";
 import { childTitlesOf } from "@luke/database/models/child-titles";
-import {
-  type CodingAgent,
-  readCodingAgent,
-  readVisibleCodingAgent,
-} from "@luke/database/models/coding-agent-store";
 import { readRewoundRevision } from "@luke/database/models/conversation-rewind";
 import { childConversationId } from "@luke/database/models/ids";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_CURSOR_START,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentMessagesAnswer,
-  type CodingAgentNewestAnswer,
-  type CodingAgentOlderAnswer,
-  type CodingAgentPartAnswer,
-  codingAgentBeforeSchema,
-  codingAgentCallIdSchema,
-  codingAgentCursorSchema,
+  AGENT_BOUNDS,
+  AGENT_CURSOR_START,
+  AGENT_STATUS,
+  type AgentMessagesAnswer,
+  type AgentNewestAnswer,
+  type AgentOlderAnswer,
+  type AgentPartAnswer,
+  type AgentTranscriptMessage,
+  agentBeforeSchema,
+  agentCallIdSchema,
+  agentCursorSchema,
   TRANSCRIPT_PARTS_QUERY,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { TRANSCRIPT_NOW_QUERY } from "@luke/features/live-wire";
 import { PROVIDER_KEY_KIND } from "@luke/features/provider-key-wire";
 import { isRecord } from "@luke/wire";
@@ -76,7 +72,7 @@ import {
 import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
 import { cutMessage, wholePartOf } from "./coder-host/part-cut.js";
 import { startedBlank } from "./coder-host/status.js";
-import { steerCodingAgentWritten } from "./coder-host/steer.js";
+import { steerAgentWritten } from "./coder-host/steer.js";
 import { type EveReach, eveFor, summaryOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
@@ -110,7 +106,7 @@ export interface MessagesProcedureSeams extends EveReach {
 /** The agent the path names, where the account is a member of its workspace, its conversation targeted under the member who started it; not found otherwise. */
 const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, id: string) {
   const agentId = yield* pathUuid(id);
-  const agent = yield* hostedStoreOrUnavailable(readVisibleCodingAgent(userId, agentId));
+  const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(userId, agentId));
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const target: ConversationTarget = {
     userId: agent.value.userId,
@@ -123,7 +119,7 @@ const reachedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string
 const callNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   call: string,
 ): Effect.fn.Return<string, HostedRefusal> {
-  const read = readEither(codingAgentCallIdSchema)(unparsedWire(call));
+  const read = readEither(agentCallIdSchema)(unparsedWire(call));
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return read.success;
 });
@@ -133,7 +129,7 @@ const cursorNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   after: string | undefined,
 ): Effect.fn.Return<string | undefined, HostedRefusal> {
   if (after === undefined) return undefined;
-  const read = readEither(codingAgentCursorSchema)(unparsedWire(after));
+  const read = readEither(agentCursorSchema)(unparsedWire(after));
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return read.success;
 });
@@ -143,7 +139,7 @@ const beforeNamed = /* @__PURE__ */ Effect.fnUntraced(function* (
   before: string | undefined,
 ): Effect.fn.Return<number | undefined, HostedRefusal> {
   if (before === undefined) return undefined;
-  const read = readEither(codingAgentBeforeSchema)(unparsedWire(before));
+  const read = readEither(agentBeforeSchema)(unparsedWire(before));
   const seq = Result.isFailure(read) ? Number.NaN : Number(read.success);
   if (!Number.isSafeInteger(seq)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return seq;
@@ -179,11 +175,11 @@ function titleAwaitedOf(parent: ConversationTarget, childConversationId?: string
  * wire's verbatim JSON does.
  */
 function wireMessages(
-  messages: TranscriptPage["messages"] | readonly CodingAgentMessage[],
+  messages: TranscriptPage["messages"] | readonly AgentTranscriptMessage[],
   cut: boolean,
-): CodingAgentMessagesAnswer["messages"] {
+): AgentMessagesAnswer["messages"] {
   // SAFETY: every part and metadata is the JSON its row stored (`storedObjectSchema`), which the SDK's part types only name more narrowly.
-  const stored = messages as CodingAgentMessagesAnswer["messages"];
+  const stored = messages as AgentMessagesAnswer["messages"];
   return cut ? stored.map(cutMessage) : stored;
 }
 
@@ -212,7 +208,7 @@ const partAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Option.isNone(part) || !isRecord(part.value)) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   }
-  const answer: CodingAgentPartAnswer = { part: part.value };
+  const answer: AgentPartAnswer = { part: part.value };
   return answer;
 });
 
@@ -235,7 +231,7 @@ function transcriptAnswer(
   cut: boolean,
   holds?: boolean,
   wakeIn?: number,
-): CodingAgentMessagesAnswer & { readonly holds?: boolean; readonly wakeIn?: number } {
+): AgentMessagesAnswer & { readonly holds?: boolean; readonly wakeIn?: number } {
   return {
     ...(holds === undefined ? undefined : { holds }),
     ...(wakeIn === undefined ? undefined : { wakeIn }),
@@ -259,7 +255,7 @@ function newestAnswer(
   newest: TranscriptNewest,
   title: string | null,
   cut: boolean,
-): CodingAgentNewestAnswer {
+): AgentNewestAnswer {
   return {
     ...transcriptAnswer(newest.page, title, cut),
     ...(newest.before === undefined ? undefined : { before: String(newest.before) }),
@@ -267,7 +263,7 @@ function newestAnswer(
 }
 
 /** An older page of a transcript as the wire answers it. */
-function olderAnswer(older: TranscriptOlder, cut: boolean): CodingAgentOlderAnswer {
+function olderAnswer(older: TranscriptOlder, cut: boolean): AgentOlderAnswer {
   return {
     messages: wireMessages(older.messages, cut),
     ...(older.before === undefined ? undefined : { before: String(older.before) }),
@@ -279,9 +275,7 @@ const isTooLong = Schema.is(
   Schema.Struct({
     body: Schema.Struct({
       text: Schema.String.check(
-        Schema.makeFilter(
-          (text: string) => text.trim().length > CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS,
-        ),
+        Schema.makeFilter((text: string) => text.trim().length > AGENT_BOUNDS.MAX_MESSAGE_CHARS),
       ),
     }),
   }),
@@ -309,7 +303,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
   return {
     agent: signedIn.agent.effect(function* ({ input, context }) {
-      const after = (yield* cursorNamed(input.after)) ?? CODING_AGENT_CURSOR_START;
+      const after = (yield* cursorNamed(input.after)) ?? AGENT_CURSOR_START;
       const { agent, target } = yield* reachedAgent(context.userId, input.id);
       const titleAwaited = titleAwaitedOf(target);
       const cursor = cursorOfWire(after);
@@ -346,13 +340,13 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
               wakeIn: undefined,
             };
       // The title is read after the page, since it lands after a turn ends, which a held read may span.
-      const titled = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agent.id));
+      const titled = yield* hostedStoreOrUnavailable(readAgent(context.userId, agent.id));
       return {
         ...transcriptAnswer(
           page,
           Option.match(titled, {
             onNone: () => agent.title,
-            onSome: (now: CodingAgent) => now.title,
+            onSome: (now: Agent) => now.title,
           }),
           readsCut(input.parts),
           holds,
@@ -368,7 +362,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       .send.effect(function* ({ input, context }) {
         const { agent } = yield* reachedAgent(context.userId, input.params.id);
         const eve = yield* eveFor<EveTypedTurn>(seams, context.request, context.userId);
-        const { txid } = yield* steerCodingAgentWritten(eve, writer, context.userId, agent, {
+        const { txid } = yield* steerAgentWritten(eve, writer, context.userId, agent, {
           ...input.body,
           sender: { kind: MESSAGE_SENDER.MEMBER, userId: context.userId },
         });
@@ -378,7 +372,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       }),
 
     agentWorker: signedIn.agentWorker.effect(function* ({ input, context }) {
-      const after = (yield* cursorNamed(input.after)) ?? CODING_AGENT_CURSOR_START;
+      const after = (yield* cursorNamed(input.after)) ?? AGENT_CURSOR_START;
       const callId = yield* callNamed(input.call);
       const now = readsNow(input.wait);
       const { agent, target } = yield* reachedAgent(context.userId, input.id);
@@ -389,7 +383,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       if (read.delegation === undefined) {
         if (!read.agentRuns) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
         return transcriptAnswer(
-          { messages: [], cursor: cursorOfWire(after), status: CODING_AGENT_STATUS.STARTING },
+          { messages: [], cursor: cursorOfWire(after), status: AGENT_STATUS.STARTING },
           null,
           false,
           now ? true : undefined,
@@ -468,7 +462,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
         transcriptNewest(target, CODER_TOOL_SET, standing, agent),
       );
       // The title is read after the page, as the forward read's is, so one that landed while the page was read is told rather than lost to a follow that starts after it.
-      const titled = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agent.id));
+      const titled = yield* hostedStoreOrUnavailable(readAgent(context.userId, agent.id));
       return {
         ...newestAnswer(
           newest,
@@ -493,8 +487,8 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           {
             page: {
               messages: [],
-              cursor: cursorOfWire(CODING_AGENT_CURSOR_START),
-              status: CODING_AGENT_STATUS.STARTING,
+              cursor: cursorOfWire(AGENT_CURSOR_START),
+              status: AGENT_STATUS.STARTING,
             },
           },
           null,

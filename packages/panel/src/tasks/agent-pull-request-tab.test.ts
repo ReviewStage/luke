@@ -4,24 +4,24 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { MOTION_DELAY_MS } from "@luke/brand";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentOverviewChecksAnswerView,
-  type CodingAgentOverviewConversationAnswerView,
-  type CodingAgentOverviewPullRequestAnswerView,
-  type CodingAgentPullRequestAnswerView,
-  type CodingAgentPullRequestWriteAnswerView,
-} from "@luke/features/coding-agent-view";
+  AGENT_CALL_FAILURE,
+  type AgentOverviewChecksAnswerView,
+  type AgentOverviewConversationAnswerView,
+  type AgentOverviewPullRequestAnswerView,
+  type AgentPullRequestAnswerView,
+  type AgentPullRequestWriteAnswerView,
+} from "@luke/features/agent-view";
 import {
+  AGENT_STATUS,
+  type AgentOverviewChecks,
+  type AgentOverviewConversation,
+  type AgentOverviewPullRequest,
+  type AgentSummary,
   CHANGED_FILE_STATUS,
   CHECK_STATE,
   CHECK_SUMMARY,
   type CheckSummary,
-  CODING_AGENT_STATUS,
   CONVERSATION_ENTRY,
-  type CodingAgentOverviewChecks,
-  type CodingAgentOverviewConversation,
-  type CodingAgentOverviewPullRequest,
-  type CodingAgentSummary,
   DEPLOYMENT_STATE,
   DIFF_SIDE,
   type GitHubPerson,
@@ -34,7 +34,7 @@ import {
   REVIEW_DECISION,
   REVIEW_STATE,
   type ReviewThread,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { LINK_PLACE, PULL_REQUEST_THREAD_VIEW, type ReadLink } from "@luke/features/link-grammar";
 import {
   FILE_VIEWED_STATE,
@@ -119,14 +119,14 @@ const CHARLES: WorkspaceMember = {
   role: WORKSPACE_ROLE.MEMBER,
 };
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Expiry job",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
 };
 
@@ -158,7 +158,7 @@ const SCREENSHOT = "https://raw.githubusercontent.com/acme/relay/pr-assets/pr-42
 const PIXEL = { contentType: "image/png", base64: "iVBORw0KGgo=" } as const;
 
 /** The pull request itself, as its overview's first read answers it. */
-const PULL_REQUEST: CodingAgentOverviewPullRequest = {
+const PULL_REQUEST: AgentOverviewPullRequest = {
   number: 42,
   title: "Expire invitations",
   url: PAGE,
@@ -191,7 +191,7 @@ const PULL_REQUEST: CodingAgentOverviewPullRequest = {
 };
 
 /** Its checks, as the overview's second read answers them. */
-const CHECKS: CodingAgentOverviewChecks = {
+const CHECKS: AgentOverviewChecks = {
   checks: [
     check("lint", CHECK_STATE.FAILED),
     check("build", CHECK_STATE.PENDING),
@@ -200,7 +200,7 @@ const CHECKS: CodingAgentOverviewChecks = {
 };
 
 /** Its conversation, as the overview's third read answers it. */
-const CONVERSATION: CodingAgentOverviewConversation = {
+const CONVERSATION: AgentOverviewConversation = {
   reviewers: [{ by: CHARLES_ON_GITHUB, state: REVIEW_STATE.CHANGES_REQUESTED }],
   conversation: [
     {
@@ -287,7 +287,7 @@ beforeAll(async () => {
 /** Every change to the pull request the tab asked for, by agent, in order. */
 let changes: (readonly [string, PullRequestActionRequest])[] = [];
 /** How the service answers the next change asked for. */
-let changeAnswer: CodingAgentPullRequestWriteAnswerView = {
+let changeAnswer: AgentPullRequestWriteAnswerView = {
   outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
 };
 /** What the service waits on before it answers a change, where a test holds it; none answers at once. */
@@ -326,13 +326,13 @@ beforeEach(() => {
       return Promise.resolve();
     },
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([CHARLES]),
-    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: (payload) => {
+    [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: (payload) => {
       changes.push([payload.agentId, payload.request]);
       changeNumbers.push(payload.number);
       const answer = changeAnswer;
       return (changeHeld ?? Promise.resolve()).then(() => answer);
     },
-    [ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: ({ src }) => {
+    [ACT_KIND.AGENTS_GITHUB_IMAGE]: ({ src }) => {
       images.push(src);
       return Promise.resolve(PIXEL);
     },
@@ -795,7 +795,7 @@ it.effect(
     Effect.gen(function* () {
       const registry = registryOn(yield* Clock.Clock);
       yield* TestClock.setTime(66_000);
-      const checks: CodingAgentOverviewChecks = {
+      const checks: AgentOverviewChecks = {
         checks: [
           {
             ...check("build", CHECK_STATE.PENDING),
@@ -942,7 +942,7 @@ test("in the viewer, Open on GitHub opens the upload GitHub linked a picture to,
 });
 
 test("the Checks tab lists the head's deployments over its checks: each environment, where it stands, and a press opening the address it serves; a head with none lists no deployments", async () => {
-  const deployed: CodingAgentOverviewChecks = {
+  const deployed: AgentOverviewChecks = {
     ...CHECKS,
     deployments: [
       {
@@ -1071,7 +1071,7 @@ test("the header offers Preview once the checks land, before their tab is shown:
 
 test("every check is listed, however many there are, those that failed first, then those still running, then the rest, with no control folding any away", async () => {
   const passing = Array.from({ length: 6 }, (_, at) => check(`test ${at}`, CHECK_STATE.PASSED));
-  const many: CodingAgentOverviewChecks = {
+  const many: AgentOverviewChecks = {
     checks: [
       check("lint", CHECK_STATE.FAILED),
       check("types", CHECK_STATE.FAILED),
@@ -1548,7 +1548,7 @@ function drawnEntries(tab: HTMLElement): string[] {
 
 test("Hide bots and Hide resolved each count what they leave out, leave it out while on, a review whose every thread was resolved going with them, and stay as left for the next conversation drawn", async () => {
   const devin = { login: "devin-ai-integration[bot]", bot: true };
-  const conversation: CodingAgentOverviewConversation = {
+  const conversation: AgentOverviewConversation = {
     reviewers: [],
     conversation: [
       {
@@ -1654,7 +1654,7 @@ test("Hide bots and Hide resolved each count what they leave out, leave it out w
 });
 
 test("a phone draws the filters as one chip saying what is hidden, whose menu turns each on and off, counting what it leaves out", async () => {
-  const conversation: CodingAgentOverviewConversation = {
+  const conversation: AgentOverviewConversation = {
     reviewers: [],
     conversation: [
       {
@@ -1919,7 +1919,7 @@ test("an App's bot stands by the logo GitHub gives it at its App's address, in t
 });
 
 test("each tab counts what Luke holds of it: the conversation its comments, reviews, and threads; the checks how they went as published from the first frame, and how many once read; the files the lines published", async () => {
-  const checks = held<CodingAgentOverviewChecksAnswerView>();
+  const checks = held<AgentOverviewChecksAnswerView>();
   const tab = await draw(controlAnswering({ checks: checks.read }));
   assert.equal(tabCount(tab, "Conversation"), "2");
   assert.equal(
@@ -1955,7 +1955,7 @@ test("each tab counts what Luke holds of it: the conversation its comments, revi
 });
 
 test("the Checks tab counts what its glyph says: beside a wait how many still run, and where all passed how many there are", async () => {
-  const running: CodingAgentOverviewChecks = {
+  const running: AgentOverviewChecks = {
     checks: [
       check("build", CHECK_STATE.PENDING),
       check("e2e", CHECK_STATE.PENDING),
@@ -1970,7 +1970,7 @@ test("the Checks tab counts what its glyph says: beside a wait how many still ru
   assert.equal(tabCount(waits, "Checks"), "2");
 
   act(() => root?.unmount());
-  const passing: CodingAgentOverviewChecks = {
+  const passing: AgentOverviewChecks = {
     checks: [
       check("lint", CHECK_STATE.PASSED),
       check("test", CHECK_STATE.PASSED),
@@ -1986,7 +1986,7 @@ test("the Checks tab counts what its glyph says: beside a wait how many still ru
 });
 
 test("a check that ran for no time, skipped or cancelled before it began, says no duration", async () => {
-  const none: CodingAgentOverviewChecks = {
+  const none: AgentOverviewChecks = {
     checks: [
       { ...check("cancelled", CHECK_STATE.FAILED), completedAt: 1_000 },
       { ...check("docs", CHECK_STATE.SKIPPED), completedAt: 1_000 },
@@ -2001,7 +2001,7 @@ test("a check that ran for no time, skipped or cancelled before it began, says n
 });
 
 test("a merged pull request says so on its pill, as its overview read it, says nothing of merging, and one with no description, checks, or comments says so", async () => {
-  const merged: CodingAgentOverviewPullRequest = {
+  const merged: AgentOverviewPullRequest = {
     ...PULL_REQUEST,
     state: PULL_REQUEST_STATE.MERGED,
     mergedAt: 9_000,
@@ -2053,7 +2053,7 @@ test("where what the agent published is not read, the header still says where th
 });
 
 test("the toolbar's ⋯ offers Refresh dimmed while a read is out, which a refresh would only repeat", async () => {
-  const pullRequest = held<CodingAgentOverviewPullRequestAnswerView>();
+  const pullRequest = held<AgentOverviewPullRequestAnswerView>();
   const tab = await draw(controlAnswering({ pullRequest: pullRequest.read }));
   assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh (off)"]);
   await act(async () => pullRequest.answer({ pullRequest: PULL_REQUEST }));
@@ -2062,7 +2062,7 @@ test("the toolbar's ⋯ offers Refresh dimmed while a read is out, which a refre
 });
 
 test("the toolbar's ⋯ offers nothing for the pull request before any of it is held", async () => {
-  const pullRequest = held<CodingAgentOverviewPullRequestAnswerView>();
+  const pullRequest = held<AgentOverviewPullRequestAnswerView>();
   const tab = await draw({
     ...controlAnswering({ pullRequest: pullRequest.read }),
     pullRequests: new Map(),
@@ -2182,9 +2182,9 @@ test("an agent with no pull request yet says so, and the toolbar's ⋯ offers no
 });
 
 test("the pill, the title, and the files' count stand from what Luke holds before any read lands; each part is a skeleton until its own read lands, and is drawn the moment it does, whatever the order", async () => {
-  const pullRequest = held<{ pullRequest: CodingAgentOverviewPullRequest }>();
-  const checks = held<{ pullRequest: CodingAgentOverviewChecks }>();
-  const conversation = held<{ pullRequest: CodingAgentOverviewConversation }>();
+  const pullRequest = held<{ pullRequest: AgentOverviewPullRequest }>();
+  const checks = held<{ pullRequest: AgentOverviewChecks }>();
+  const conversation = held<{ pullRequest: AgentOverviewConversation }>();
   const tab = await draw(
     controlAnswering({
       pullRequest: pullRequest.read,
@@ -2248,20 +2248,20 @@ function inTurn<A>(...answers: readonly A[]): () => Promise<A> {
 }
 
 test("a part whose read failed says so with a Retry that reads it alone, the others standing; Refresh reads again the header's reads and the checks once shown", async () => {
-  const failure = { failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED } as const;
+  const failure = { failure: AGENT_CALL_FAILURE.GITHUB_UNANSWERED } as const;
   const later = (name: string) => ({ checks: [check(name, CHECK_STATE.PASSED)] });
   const tab = await draw(
     controlAnswering({
-      pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(
+      pullRequest: inTurn<AgentOverviewPullRequestAnswerView>(
         { pullRequest: PULL_REQUEST },
         { pullRequest: { ...PULL_REQUEST, title: "Expire invitations weekly" } },
       ),
-      checks: inTurn<CodingAgentOverviewChecksAnswerView>(
+      checks: inTurn<AgentOverviewChecksAnswerView>(
         failure,
         { pullRequest: later("retried") },
         { pullRequest: later("refreshed") },
       ),
-      conversation: inTurn<CodingAgentOverviewConversationAnswerView>(
+      conversation: inTurn<AgentOverviewConversationAnswerView>(
         { pullRequest: CONVERSATION },
         { pullRequest: { ...CONVERSATION, conversation: CONVERSATION.conversation.slice(0, 1) } },
       ),
@@ -2307,15 +2307,12 @@ test("a pull request renamed on GitHub renames its tab once Refresh is pressed, 
   const tab = await drawn(
     createElement(Named, {
       control: controlAnswering({
-        pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(
+        pullRequest: inTurn<AgentOverviewPullRequestAnswerView>(
           { pullRequest: PULL_REQUEST },
           { pullRequest: renamed },
         ),
       }),
-      reader: inTurn<CodingAgentPullRequestAnswerView>(
-        answer(PULL_REQUEST.title),
-        answer(renamed.title),
-      ),
+      reader: inTurn<AgentPullRequestAnswerView>(answer(PULL_REQUEST.title), answer(renamed.title)),
     }),
   );
   const name = () => tab.querySelector("[data-tab-name]")?.textContent;
@@ -2331,13 +2328,13 @@ test("a pull request renamed on GitHub renames its tab once Refresh is pressed, 
 });
 
 test("where nothing of the pull request is held and its reads fail, each part says so with its own Retry, and Files changed still reads on its own", async () => {
-  const failure = { failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED } as const;
+  const failure = { failure: AGENT_CALL_FAILURE.GITHUB_UNANSWERED } as const;
   const control = {
     ...controlAnswering({
-      pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(failure, {
+      pullRequest: inTurn<AgentOverviewPullRequestAnswerView>(failure, {
         pullRequest: PULL_REQUEST,
       }),
-      conversation: inTurn<CodingAgentOverviewConversationAnswerView>(failure, {
+      conversation: inTurn<AgentOverviewConversationAnswerView>(failure, {
         pullRequest: CONVERSATION,
       }),
     }),
@@ -2375,7 +2372,7 @@ test("the pill wears what was published of the checks only for the pull request 
   const control = {
     ...controlAnswering({
       pullRequest: () => Promise.resolve({ pullRequest: { ...PULL_REQUEST, number: 43 } }),
-      checks: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED }),
+      checks: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.GITHUB_UNANSWERED }),
     }),
   };
   const tab = await draw(control);
@@ -2484,7 +2481,7 @@ test("a member GitHub would not take as signed in is offered to sign in with Git
 });
 
 test("a change refused for a repository out of the workspace's reach says where access is given, and Open Settings opens the GitHub of the agent's task's workspace", async () => {
-  changeAnswer = { failure: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE };
+  changeAnswer = { failure: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE };
   const opened: string[] = [];
   const tab = await drawn(
     createElement(RepositoryRemedyProvider, {
@@ -2797,7 +2794,7 @@ test("an open tab reads its checks and merge state again as the task list pushes
   });
   const tab = await draw(
     controlAnswering({
-      pullRequest: inTurn<CodingAgentOverviewPullRequestAnswerView>(
+      pullRequest: inTurn<AgentOverviewPullRequestAnswerView>(
         merge(MERGE_STATE.UNKNOWN),
         merge(MERGE_STATE.CLEAN),
         {
@@ -2810,7 +2807,7 @@ test("an open tab reads its checks and merge state again as the task list pushes
           },
         },
       ),
-      checks: inTurn<CodingAgentOverviewChecksAnswerView>(
+      checks: inTurn<AgentOverviewChecksAnswerView>(
         { pullRequest: { checks: [check("build", CHECK_STATE.PENDING)] } },
         { pullRequest: { checks: [check("build", CHECK_STATE.PASSED)] } },
       ),
@@ -3318,7 +3315,7 @@ test("its reviewers stand compactly, three faces and a count of the rest: where 
   const priya = { login: "priyan", bot: false };
   const alex = { login: "alexr", bot: false };
   const linter = { login: "lint-app[bot]", bot: true };
-  const conversation = held<{ pullRequest: CodingAgentOverviewConversation }>();
+  const conversation = held<{ pullRequest: AgentOverviewConversation }>();
   const tab = await draw(
     controlAnswering({
       pullRequest: () =>
@@ -3515,7 +3512,7 @@ async function pressItem(words: string): Promise<void> {
 
 test("the reviewer picker lists the repository's teams then its people, the author left out and those asked checked; choosing one asks a review of them as the member, and the picker waits on the pull request's read before it opens again, then checks them", async () => {
   let asked: readonly GitHubPerson[] = [CHARLES_ON_GITHUB];
-  const reread = held<{ pullRequest: CodingAgentOverviewPullRequest }>();
+  const reread = held<{ pullRequest: AgentOverviewPullRequest }>();
   let reads = 0;
   const tab = await draw(
     controlAnswering({
@@ -3785,7 +3782,7 @@ test("a picker whose repository could not be read offers Retry in its menu, whic
         reads += 1;
         return Promise.resolve(
           reads === 1
-            ? { failure: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED }
+            ? { failure: AGENT_CALL_FAILURE.GITHUB_UNANSWERED }
             : { labels: [], users: [{ login: "priyan", bot: false }], teams: [] },
         );
       },
@@ -3811,7 +3808,7 @@ test("a picker whose repository could not be read offers Retry in its menu, whic
 });
 
 /** A review carrying the threads given, as the conversation's read answers one. */
-function reviewWith(threads: readonly ReviewThread[]): CodingAgentOverviewConversation {
+function reviewWith(threads: readonly ReviewThread[]): AgentOverviewConversation {
   return {
     ...CONVERSATION,
     conversation: [
@@ -4663,9 +4660,7 @@ test("a comment being written outlives a read of the conversation that failed, s
       conversation: () => {
         reads += 1;
         return Promise.resolve(
-          reads === 2
-            ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
-            : { pullRequest: CONVERSATION },
+          reads === 2 ? { failure: AGENT_CALL_FAILURE.UNANSWERED } : { pullRequest: CONVERSATION },
         );
       },
     }),

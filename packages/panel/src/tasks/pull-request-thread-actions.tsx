@@ -1,4 +1,4 @@
-import type { ReviewThread } from "@luke/features/coding-agent-wire";
+import type { ReviewThread } from "@luke/features/agent-wire";
 import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
 import { BUTTON_VARIANT, Button } from "@luke/ui";
 import { CircleCheckIcon, RotateCcwIcon } from "lucide-react";

@@ -1,12 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_KIND,
-  CODING_AGENT_STATUS,
-  type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { AGENT_KIND, AGENT_STATUS, type TasklessAgent } from "@luke/features/agent-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
@@ -59,9 +55,9 @@ const OPERATOR: TasklessAgent = {
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Orla",
-  kind: CODING_AGENT_KIND.OPERATOR,
+  kind: AGENT_KIND.OPERATOR,
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
   automationId: null,
   workspaceId: ACME.id,
@@ -77,7 +73,7 @@ const SWEEP: TasklessAgent = {
   effort: OPERATOR.effort,
   title: "Copy sweep",
   createdAt: 1,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
   automationId: null,
   workspaceId: ACME.id,
@@ -100,7 +96,7 @@ function serve(ensure: (payload: unknown) => WireBoundaryInput): SentPortAct[] {
   fakeActPortAnswering((request) => {
     sent.push(request);
     return Promise.resolve(
-      request.kind === ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR ? ensure(request.payload) : undefined,
+      request.kind === ACT_KIND.AGENTS_ENSURE_OPERATOR ? ensure(request.payload) : undefined,
     );
   });
   return sent;
@@ -109,7 +105,7 @@ function serve(ensure: (payload: unknown) => WireBoundaryInput): SentPortAct[] {
 /** Every ensure the window asked, by its payload. */
 function ensures(sent: readonly SentPortAct[]): unknown[] {
   return sent
-    .filter((request) => request.kind === ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR)
+    .filter((request) => request.kind === ACT_KIND.AGENTS_ENSURE_OPERATOR)
     .map((request) => request.payload);
 }
 
@@ -249,7 +245,7 @@ test("a press on Luke's row opens his page", async () => {
 test("a failed ensure leaves Luke's row standing with a quiet retry, which asks again", async () => {
   let refusing = true;
   const sent = serve(() =>
-    refusing ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : { agentId: LUKE_ID },
+    refusing ? { failure: AGENT_CALL_FAILURE.UNANSWERED } : { agentId: LUKE_ID },
   );
   handState(experimentsOn(EXPERIMENT.OPERATOR));
   const { sidebar } = await mount(acme());
@@ -332,7 +328,7 @@ test("Reset asks nothing: it ensures a fresh Luke and opens him at once, and Und
 test("a Reset the service refuses opens nothing and says so, offering no Undo", async () => {
   serve((payload) =>
     (payload as { reset?: boolean }).reset === true
-      ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+      ? { failure: AGENT_CALL_FAILURE.UNANSWERED }
       : { agentId: LUKE_ID },
   );
   handState(experimentsOn(EXPERIMENT.OPERATOR));

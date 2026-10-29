@@ -19,7 +19,7 @@
  * answer it or is told another way.
  */
 
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import { TURN_STATUS } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
@@ -27,7 +27,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { agentTable } from "../schemas/agent.js";
 import { messages, standingLine, turns } from "../schemas/storage.js";
 import { agentAutomationNameSql } from "./agent-name.js";
 
@@ -56,7 +56,7 @@ const DueNoticeSchema = Schema.Struct({
   starterConversationId: Schema.String,
   agentId: Schema.String,
   taskId: Schema.NullOr(Schema.String),
-  agentKind: Schema.Literals(Object.values(CODING_AGENT_KIND)),
+  agentKind: Schema.Literals(Object.values(AGENT_KIND)),
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
   agentAutomationName: Schema.NullOr(Schema.String),
@@ -66,7 +66,7 @@ const DueNoticeSchema = Schema.Struct({
 export type DueStarterNotice = typeof DueNoticeSchema.Type;
 
 /** The agent that started the one whose run ended, as the read joins it apart from that agent. */
-const starter = alias(codingAgent, "starter");
+const starter = alias(agentTable, "starter");
 
 /** A turn of the starter's own, as its newest is read apart from the ended one. */
 const STARTER_TURN = "starter_turn";
@@ -76,16 +76,16 @@ const Window = Schema.Struct({ since: Schema.Date, until: Schema.Date });
 
 /** The columns both reads answer of the agent and its starter. */
 const AGENT_COLUMNS = {
-  userId: codingAgent.userId,
-  organizationId: codingAgent.organizationId,
+  userId: agentTable.userId,
+  organizationId: agentTable.organizationId,
   starterId: starter.id,
   starterConversationId: starter.conversationId,
-  agentId: codingAgent.id,
-  taskId: codingAgent.taskId,
-  agentKind: codingAgent.kind,
-  agentTitle: codingAgent.title,
-  agentModel: codingAgent.model,
-  agentAutomationName: agentAutomationNameSql(codingAgent),
+  agentId: agentTable.id,
+  taskId: agentTable.taskId,
+  agentKind: agentTable.kind,
+  agentTitle: agentTable.title,
+  agentModel: agentTable.model,
+  agentAutomationName: agentAutomationNameSql(agentTable),
 };
 
 /** A starter that can answer: a coder standing, whose own newest turn did not fail. */
@@ -95,7 +95,7 @@ function answeringStarter() {
     order by ${starterTurn.queuedAt} desc, ${starterTurn.id} desc limit 1)`;
   return and(
     isNull(starter.archivedAt),
-    eq(starter.kind, CODING_AGENT_KIND.CODER),
+    eq(starter.kind, AGENT_KIND.CODER),
     sql`${newest} is distinct from ${TURN_STATUS.FAILED}`,
   );
 }
@@ -128,12 +128,12 @@ const findEndedTurns = SqlSchema.findAll({
           at: turns.settledAt,
           ...AGENT_COLUMNS,
         })
-        .from(codingAgent)
-        .innerJoin(starter, eq(starter.id, codingAgent.startedByAgentId))
-        .innerJoin(turns, eq(turns.conversationId, codingAgent.conversationId))
+        .from(agentTable)
+        .innerJoin(starter, eq(starter.id, agentTable.startedByAgentId))
+        .innerJoin(turns, eq(turns.conversationId, agentTable.conversationId))
         .where(
           and(
-            isNotNull(codingAgent.startedByAgentId),
+            isNotNull(agentTable.startedByAgentId),
             gte(turns.settledAt, since),
             lte(turns.settledAt, until),
             or(
@@ -154,24 +154,24 @@ const findArchives = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          key: codingAgent.id,
+          key: agentTable.id,
           ending: sql<StarterNoticeEnding>`${STARTER_NOTICE_ENDING.ARCHIVED}::text`,
           failure: sql<string | null>`null::text`,
-          at: codingAgent.archivedAt,
+          at: agentTable.archivedAt,
           ...AGENT_COLUMNS,
         })
-        .from(codingAgent)
-        .innerJoin(starter, eq(starter.id, codingAgent.startedByAgentId))
+        .from(agentTable)
+        .innerJoin(starter, eq(starter.id, agentTable.startedByAgentId))
         .where(
           and(
-            isNotNull(codingAgent.startedByAgentId),
-            gte(codingAgent.archivedAt, since),
-            lte(codingAgent.archivedAt, until),
-            sql`(${codingAgent.archivedBy} ->> 'agentId') is distinct from ${starter.id}::text`,
+            isNotNull(agentTable.startedByAgentId),
+            gte(agentTable.archivedAt, since),
+            lte(agentTable.archivedAt, until),
+            sql`(${agentTable.archivedBy} ->> 'agentId') is distinct from ${starter.id}::text`,
             answeringStarter(),
           ),
         )
-        .orderBy(asc(codingAgent.archivedAt), asc(codingAgent.id)),
+        .orderBy(asc(agentTable.archivedAt), asc(agentTable.id)),
     ),
 });
 
@@ -199,7 +199,7 @@ const findToldLines = SqlSchema.findAll({
 /**
  * The endings between `since` and `until` whose starter has not been told
  * of them, oldest first and at most `limit`, across every account: each
- * starter is the account's own agent (`createCodingAgent`), so its line goes
+ * starter is the account's own agent (`createAgent`), so its line goes
  * to the account the ended agent is of. Note that the endings already told
  * are left out before the limit, because a window holding more of them than
  * the limit would otherwise starve the newer ones.

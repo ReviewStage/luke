@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { agentTable } from "@luke/database/schemas/agent";
 import { user } from "@luke/database/schemas/auth";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { hostedUsage } from "@luke/database/schemas/usage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
@@ -11,10 +11,10 @@ import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { COST_SOURCE } from "@luke/features/admin-cost-wire";
 import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "@luke/features/admin-wire";
 import {
+  type AgentPullRequest,
   CHECK_SUMMARY,
-  type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { Effect } from "effect";
 import { modelCatalogOf } from "../providers/model-catalog.js";
@@ -227,7 +227,7 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
         effort: "high",
         repository: "owner/name",
       };
-      const pullRequest: CodingAgentPullRequest = {
+      const pullRequest: AgentPullRequest = {
         number: 1,
         title: "Synthetic",
         url: "https://github.test/pull/1",
@@ -237,7 +237,7 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
         deletions: 1,
         changedFiles: 1,
       };
-      yield* db.insert(codingAgent).values([
+      yield* db.insert(agentTable).values([
         {
           ...agentRow,
           // Each agent on a conversation of its own, as every Start makes one.

@@ -39,12 +39,12 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
+  type Agent,
   awaitingLinesOfReached,
-  type CodingAgent,
   latestTurnsOfReached,
-  listPublishedCodingAgentsById,
-  listWorkspaceCodingAgents,
-} from "@luke/database/models/coding-agent-store";
+  listPublishedAgentsById,
+  listWorkspaceAgents,
+} from "@luke/database/models/agent-store";
 import {
   markOperatorNoticesRead,
   type UnreadOperatorNotice,
@@ -52,7 +52,7 @@ import {
 } from "@luke/database/models/operator-notices";
 import { OPERATOR_NOTICE_KIND, type OperatorNoticeKind } from "@luke/database/storage-vocabulary";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
-import { CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { AGENT_STATUS, PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { mentionMarkdownLink } from "@luke/features/link-grammar";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { agentName } from "@luke/features/model-label";
@@ -60,8 +60,8 @@ import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "@
 import { Clock, DateTime, Effect, Schema } from "effect";
 import type { StoreFailure } from "../http/store-failure.js";
 import { type MemberOpenAsk, memberOpenAsks } from "../inbox/inbox-store.js";
-import { codingAgentFailureOf, codingAgentStatusOf, startedBlank } from "./coder-host/status.js";
-import { agentToolRejected, type CodingAgentCall, orStoreRefusal } from "./coding-agent-tools.js";
+import { type AgentCall, agentToolRejected, orStoreRefusal } from "./agent-tools.js";
+import { agentFailureOf, agentStatusOf, startedBlank } from "./coder-host/status.js";
 import { isOperator } from "./steward.js";
 import { workspaceStepOf, writtenMention } from "./written-mentions.js";
 
@@ -169,16 +169,16 @@ function deskText(sections: readonly DeskSection[]): string {
 }
 
 /** The member's own agents of the workspace standing, the operator left out, each with what it reads as now. */
-const memberAgentsOf = (operator: CodingAgent) =>
+const memberAgentsOf = (operator: Agent) =>
   Effect.gen(function* () {
     // The member's own are read before the bound, so a busy workspace's other agents crowd none out.
-    const listed = yield* listWorkspaceCodingAgents(operator.userId, operator.organizationId, {
+    const listed = yield* listWorkspaceAgents(operator.userId, operator.organizationId, {
       ownOnly: true,
       limit: OPERATOR_DESK.AGENTS_READ,
     });
     const own = listed.filter((agent) => agent.id !== operator.id);
     // What each published is read beside it, as its tab reads it: the pull request GitHub last answered.
-    const read = yield* listPublishedCodingAgentsById(
+    const read = yield* listPublishedAgentsById(
       operator.userId,
       own.map((agent) => agent.id),
     );
@@ -193,14 +193,13 @@ const memberAgentsOf = (operator: CodingAgent) =>
     const now = yield* Clock.currentTimeMillis;
     return agents.map(({ agent, published }) => {
       const turn = turns.get(agent.conversationId);
-      const status = codingAgentStatusOf(turn, {
+      const status = agentStatusOf(turn, {
         createdAt: agent.createdAt,
         now,
         awaitingLineAt: awaiting.get(agent.conversationId),
         blank: startedBlank(agent),
       });
-      const failure =
-        status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(turn) : undefined;
+      const failure = status === AGENT_STATUS.FAILED ? agentFailureOf(turn) : undefined;
       return { agent, published, status, failure };
     });
   });
@@ -212,7 +211,7 @@ const memberAgentsOf = (operator: CodingAgent) =>
  * member, so a workspace they have left reads as nothing standing.
  */
 const readDeskSections = (
-  operator: CodingAgent,
+  operator: Agent,
 ): Effect.Effect<readonly DeskSection[], StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
     const [agents, asks, step] = yield* Effect.all(
@@ -223,12 +222,11 @@ const readDeskSections = (
       ],
       { concurrency: "unbounded" },
     );
-    const named = (agent: CodingAgent) => agentMention(agent.id, agentName(agent), step);
+    const named = (agent: Agent) => agentMention(agent.id, agentName(agent), step);
     const running = agents.filter(
-      ({ status }) =>
-        status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING,
+      ({ status }) => status === AGENT_STATUS.STARTING || status === AGENT_STATUS.RUNNING,
     );
-    const failed = agents.filter(({ status }) => status === CODING_AGENT_STATUS.FAILED);
+    const failed = agents.filter(({ status }) => status === AGENT_STATUS.FAILED);
     const awaiting = agents.flatMap(({ agent, published }) =>
       published?.state === PULL_REQUEST_STATE.OPEN ? [{ agent, pull: published }] : [],
     );
@@ -321,7 +319,7 @@ export interface OperatorDesk {
 
 /** The desk for the operator, as a turn's message carries it, with the notices it hands. */
 export const readOperatorDesk = (
-  operator: CodingAgent,
+  operator: Agent,
 ): Effect.Effect<OperatorDesk, StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
     const [sections, notices, step] = yield* Effect.all(
@@ -341,7 +339,7 @@ export const readOperatorDesk = (
 
 /** Marks read the notices the desk handed, once its turn's message carries it. */
 export const markDeskNoticesRead = (
-  operator: CodingAgent,
+  operator: Agent,
   desk: OperatorDesk,
 ): Effect.Effect<void, StoreFailure, DatabaseServices> =>
   Effect.flatMap(DateTime.nowAsDate, (now) =>
@@ -364,7 +362,7 @@ function askWords(text: string | null): string | null {
  * nothing, since the tool takes none, so an extra field asks nothing.
  */
 export function runListOpenAsks(
-  call: CodingAgentCall,
+  call: AgentCall,
   _input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   const { caller } = call;

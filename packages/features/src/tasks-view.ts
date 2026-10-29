@@ -4,12 +4,8 @@ import {
   agentBrowserTabsAnswerSchema,
   browserTabsPlaceSchema,
 } from "./agent-browser-tab-wire.js";
-import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
-import {
-  codingAgentSummarySchema,
-  localAgentRefusalSchema,
-  tasklessAgentSchema,
-} from "./coding-agent-wire.js";
+import { agentAgentAnswerSchema } from "./agent-view.js";
+import { agentSummarySchema, localAgentRefusalSchema, tasklessAgentSchema } from "./agent-wire.js";
 import {
   githubIssueSummarySchema,
   githubPullRequestNumberSchema,
@@ -48,6 +44,7 @@ import {
   planRevisionsAnswerSchema,
   repositoryPinRequestSchema,
   repositoryPinSchema,
+  taskAgentPinSchema,
   taskAssigneeIdSchema,
   taskCreateRequestSchema,
   taskFileRefusalSchema,
@@ -182,13 +179,19 @@ export const tasksViewSchema = EffectSchema.Struct({
    * is followed live over Neon Realtime, when it is what the notices' ledger
    * reads in place of listing each plan's agents again on a clock.
    */
-  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSummarySchema)),
+  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(agentSummarySchema)),
   /**
    * Every pull request of each plan that has one, uncapped, as its row names
    * the first few: present only while the list is followed live, when the
    * Tasks page's cards name each one rather than a count of the rest.
    */
   taskPullRequests: EffectSchema.optionalKey(EffectSchema.Array(taskPullRequestsSchema)),
+  /**
+   * The reader's pins of agents on a plan, the archived ones left out: present
+   * only while the list is followed live, when the sidebar's Pinned section
+   * draws each beside the pinned tasks.
+   */
+  taskAgentPins: EffectSchema.optionalKey(EffectSchema.Array(taskAgentPinSchema)),
   /**
    * The tasks a rename, a pin, or where they stand, asked on this Mac and not
    * yet carried by the list, is drawn over, so a list that holds its rows
@@ -365,7 +368,7 @@ export type StartCallFailure = (typeof START_CALL_FAILURES)[number];
 export const tasksStartAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     planId: EffectSchema.String,
-    agentStart: EffectSchema.optionalKey(codingAgentAgentAnswerSchema),
+    agentStart: EffectSchema.optionalKey(agentAgentAnswerSchema),
   }),
   EffectSchema.Struct({
     failure: EffectSchema.Literals(START_CALL_FAILURES),

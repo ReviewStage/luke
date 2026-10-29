@@ -9,28 +9,28 @@ import {
   readAccountPreferences,
   writeAccountPreferences,
 } from "@luke/database/models/account-store";
+import {
+  type Agent,
+  archiveAgent,
+  createAgent,
+  discardAgent,
+  pinAgent,
+  readAgent,
+  readAgentByKey,
+  readAgentPublished,
+  recordAgentCompaction,
+  recordAgentPublished,
+  recordAgentStep,
+  renameAgent,
+  takeAgentMentionedServers,
+  updateAgentBranch,
+} from "@luke/database/models/agent-store";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import {
   createAutomation,
   recordAutomationRun,
   settleAutomationRun,
 } from "@luke/database/models/automation-store";
-import {
-  archiveCodingAgent,
-  type CodingAgent,
-  createCodingAgent,
-  discardCodingAgent,
-  pinCodingAgent,
-  readCodingAgent,
-  readCodingAgentByKey,
-  readCodingAgentPublished,
-  recordCodingAgentCompaction,
-  recordCodingAgentPublished,
-  recordCodingAgentStep,
-  renameCodingAgent,
-  takeCodingAgentMentionedServers,
-  updateCodingAgentBranch,
-} from "@luke/database/models/coding-agent-store";
 import {
   keepConversationPicture,
   readConversationPicture,
@@ -47,9 +47,9 @@ import { createTask, readTask, savePlanText, updateTask } from "@luke/database/m
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { agentPin } from "@luke/database/schemas";
+import { agentTable } from "@luke/database/schemas/agent";
 import { attachment } from "@luke/database/schemas/attachment";
 import { user } from "@luke/database/schemas/auth";
-import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { planRevision } from "@luke/database/schemas/plan-revision";
@@ -83,6 +83,35 @@ import {
   START_NOTE_HEADING,
   stepsBytes,
 } from "@luke/features/agent-replay";
+import { AGENT_TOOL } from "@luke/features/agent-tools";
+import {
+  AGENT_ARCHIVER,
+  AGENT_ATTACHMENT_TYPE,
+  AGENT_BOUNDS,
+  AGENT_BRIEF,
+  AGENT_KIND,
+  AGENT_MACHINE,
+  AGENT_SENDER,
+  AGENT_STATUS,
+  type AgentTranscriptMessage,
+  agentAnswerSchema,
+  agentChangesAnswerSchema,
+  agentListAnswerSchema,
+  agentMessageAnswerSchema,
+  agentMessagesAnswerSchema,
+  agentNewestAnswerSchema,
+  agentOlderAnswerSchema,
+  agentOverviewConversationAnswerSchema,
+  agentOverviewPullRequestAnswerSchema,
+  agentPageAnswerSchema,
+  agentPartAnswerSchema,
+  agentPullRequestAnswerSchema,
+  CHECK_SUMMARY,
+  LOCAL_AGENT_REFUSAL,
+  PART_CUT_FIELD,
+  PULL_REQUEST_STATE,
+  TRANSCRIPT_PARTS_QUERY,
+} from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
@@ -94,35 +123,8 @@ import {
   type AutomationFiring,
   GITHUB_TRIGGER_EVENT,
 } from "@luke/features/automation-wire";
-import {
-  CHECK_SUMMARY,
-  CODING_AGENT_ARCHIVER,
-  CODING_AGENT_ATTACHMENT_TYPE,
-  CODING_AGENT_BOUNDS,
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_KIND,
-  CODING_AGENT_MACHINE,
-  CODING_AGENT_SENDER,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  codingAgentAnswerSchema,
-  codingAgentChangesAnswerSchema,
-  codingAgentListAnswerSchema,
-  codingAgentMessageAnswerSchema,
-  codingAgentMessagesAnswerSchema,
-  codingAgentNewestAnswerSchema,
-  codingAgentOlderAnswerSchema,
-  codingAgentOverviewConversationAnswerSchema,
-  codingAgentOverviewPullRequestAnswerSchema,
-  codingAgentPageAnswerSchema,
-  codingAgentPartAnswerSchema,
-  codingAgentPullRequestAnswerSchema,
-  LOCAL_AGENT_REFUSAL,
-  PART_CUT_FIELD,
-  PULL_REQUEST_STATE,
-  TRANSCRIPT_PARTS_QUERY,
-} from "@luke/features/coding-agent-wire";
 import { keptPictureIdOf } from "@luke/features/conversation-picture-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import {
   INBOX_ANSWER_LEAD,
   INBOX_APPROVAL_OPTION,
@@ -144,8 +146,9 @@ import {
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { transcriptNowAnswerSchema } from "@luke/features/live-wire";
+import { lukeToolsAnswerSchema } from "@luke/features/luke-tools-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
-import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER, taskPageOwner } from "@luke/features/page-wire";
 import {
   PULL_REQUEST_ACTION,
@@ -239,6 +242,7 @@ import {
   sourceSandbox,
 } from "../testing/source-sandbox.js";
 import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
+import { agentsApp } from "./agents-app.js";
 import { agentsProcedures } from "./agents-procedures.js";
 import { receivedMessage } from "./attached-files.js";
 import { CODER } from "./coder-host/bounds.js";
@@ -246,7 +250,6 @@ import { instancePublishedCache } from "./coder-host/published.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import { codingAgentsApp } from "./coding-agents-app.js";
 import { EVE_HOST_TURN } from "./eve-host/bounds.js";
 import {
   type AgentSessions,
@@ -283,6 +286,8 @@ const AGENT_STARTS = "/api/agents/agents";
 const WORKSPACE_STARTS = "/api/workspaces/agents";
 const AGENT = "/api/agents/agent";
 const AGENT_INBOX = "/api/agents/{id}/inbox";
+/** Luke's own tools an agent is offered and where its `run_on_mac` stands, as its MCP popover reads them. */
+const AGENT_LUKE_TOOLS = "/api/agents/luke-tools";
 const WORKSPACE_AGENTS = "/api/agents";
 /** The overview's three reads, each its own route. */
 const AGENT_OVERVIEW = [
@@ -352,7 +357,7 @@ const CATALOG: readonly OfferedModel[] = [
     contextWindow: SMALL_WINDOW.tokens,
   },
   {
-    id: CODING_AGENT_DEFAULT_CHOICE.model,
+    id: AGENT_DEFAULT_CHOICE.model,
     name: "Claude Opus 5.5",
     provider: MODEL_PROVIDER.ANTHROPIC,
     efforts: ["low", "medium", "high", "max"],
@@ -537,6 +542,7 @@ const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/agents/messages-newest", (id: string) => `/api/agents/${id}/messages/newest`],
   ["/api/agents/changes", (id: string) => `/api/agents/${id}/changes`],
   ["/api/agents/review-options", (id: string) => `/api/agents/${id}/review-options`],
+  ["/api/agents/luke-tools", (id: string) => `/api/agents/${id}/luke-tools`],
   ["/api/agents/pull-request", (id: string) => `/api/agents/${id}/pull-request`],
   ["/api/agents/pull-request-action", (id: string) => `/api/agents/${id}/pull-request/action`],
   ["/api/agents/pull-request-viewed", (id: string) => `/api/agents/${id}/pull-request/viewed`],
@@ -608,7 +614,7 @@ const standing = (
       keepAwake: keepAwakeDetached,
     };
     const agents = HttpRouter.toWebHandler(
-      codingAgentsApp(seams).pipe(HttpRouter.provideRequest(services)),
+      agentsApp(seams).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
     // SAFETY: the plans and messages procedures yield the services above alone, which is all a test provides of the web runtime's services.
@@ -935,7 +941,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         );
 
         assert.equal(answered.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
-        assert.ok(Option.isNone(yield* readCodingAgentByKey(owner, idempotencyKey)));
+        assert.ok(Option.isNone(yield* readAgentByKey(owner, idempotencyKey)));
         assert.deepEqual(eve.opened, []);
       }),
   );
@@ -955,7 +961,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
               }),
             ),
             (started) =>
-              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).agent.id,
+              readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).agent.id,
           );
         const first = yield* start();
         yield* TestClock.adjust(Duration.seconds(1));
@@ -966,7 +972,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           return ask(new Request(url, { headers: { authorization: `Bearer ${by}` } }));
         };
         const ids = (answered: Answer) =>
-          readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agents.map(
+          readAnswer(agentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agents.map(
             (agent) => agent.id,
           );
 
@@ -999,7 +1005,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const { owner, task, ask } = yield* openTask();
         const kept = yield* startedAgentOf(owner, task.id, ask);
         const put = yield* startedAgentOf(owner, task.id, ask);
-        yield* archiveCodingAgent(owner, put.agent.id, true);
+        yield* archiveAgent(owner, put.agent.id, true);
         const listed = (query: Readonly<Record<string, string>>) => {
           const url = new URL(WORKSPACE_AGENTS, ORIGIN);
           url.searchParams.set("workspaceId", task.workspaceId);
@@ -1007,7 +1013,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           return Effect.map(
             ask(new Request(url, { headers: { authorization: `Bearer ${owner}` } })),
             (answered) =>
-              readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agents.map(
+              readAnswer(agentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agents.map(
                 (agent) => [agent.id, agent.archivedAt !== undefined],
               ),
           );
@@ -1033,8 +1039,8 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const { owner, task, ask } = yield* openTask();
         const titled = yield* startedAgentOf(owner, task.id, ask);
         const other = yield* startedAgentOf(owner, task.id, ask);
-        yield* renameCodingAgent(owner, titled.agent.id, "Ledger 100% sweep");
-        yield* renameCodingAgent(owner, other.agent.id, "Unrelated");
+        yield* renameAgent(owner, titled.agent.id, "Ledger 100% sweep");
+        yield* renameAgent(owner, other.agent.id, "Unrelated");
         const found = (words: string) => {
           const url = new URL(WORKSPACE_AGENTS, ORIGIN);
           url.searchParams.set("workspaceId", task.workspaceId);
@@ -1042,7 +1048,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           return Effect.map(
             ask(new Request(url, { headers: { authorization: `Bearer ${owner}` } })),
             (answered) =>
-              readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+              readAnswer(agentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
                 .agents.map((agent) => agent.id)
                 .toSorted(),
           );
@@ -1074,14 +1080,14 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           }),
         );
 
-        const { agent } = readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started);
+        const { agent } = readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started);
         assert.equal(agent.planId, task.id);
-        assert.equal(agent.model, CODING_AGENT_DEFAULT_CHOICE.model);
-        assert.equal(agent.effort, CODING_AGENT_DEFAULT_CHOICE.effort);
-        assert.equal(agent.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(agent.model, AGENT_DEFAULT_CHOICE.model);
+        assert.equal(agent.effort, AGENT_DEFAULT_CHOICE.effort);
+        assert.equal(agent.status, AGENT_STATUS.STARTING);
         assert.equal(agent.turnId, null);
-        assert.equal(agent.brief, CODING_AGENT_BRIEF.PLAN);
-        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.equal(agent.brief, AGENT_BRIEF.PLAN);
+        const stored = yield* readAgent(owner, agent.id);
         assert.ok(Option.isSome(stored));
         assert.equal(stored.value.planSnapshot, SNAPSHOT);
         assert.equal(stored.value.prompt, null);
@@ -1143,8 +1149,8 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           "the task its agent started on is under way",
         );
         assert.equal(agent.planId, plan.id);
-        assert.equal(agent.brief, CODING_AGENT_BRIEF.PROMPT);
-        assert.equal(agent.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(agent.brief, AGENT_BRIEF.PROMPT);
+        assert.equal(agent.status, AGENT_STATUS.STARTING);
         assert.deepEqual(
           eve.opened.map((opened) => [opened.authorization, opened.message.message]),
           [[`Bearer ${owner}`, prompt]],
@@ -1195,7 +1201,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         );
 
         assert.equal(
-          readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).agent.planId,
+          readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).agent.planId,
           task.id,
         );
         assert.equal(
@@ -1295,12 +1301,8 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           ask(request(WORKSPACE_STARTS, bearer, { method: "POST", id: task.workspaceId, body }));
         const placeOf = (answer: Answer) =>
           Effect.gen(function* () {
-            const { agent } = readAnswer(
-              codingAgentAnswerSchema,
-              HOSTED_HTTP_STATUS.CREATED,
-              answer,
-            );
-            const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
+            const { agent } = readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answer);
+            const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
             return [stored.taskId, stored.organizationId, stored.repository];
           });
 
@@ -1392,7 +1394,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           startAs(owner, task.id, { idempotencyKey: randomUUID(), model: SOL, effort: "low" }),
         );
 
-        const { agent } = readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started);
+        const { agent } = readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started);
         assert.equal(agent.model, SOL);
         assert.equal(agent.effort, "low");
         assert.equal((yield* readAccountPreferences(owner))?.codingAgent, undefined);
@@ -1449,7 +1451,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           organizationId: task.workspaceId,
           name: "On the Studio",
           repository: RELAY_FULL_NAME,
-          runsOn: { machine: CODING_AGENT_MACHINE.DEVICE, deviceId: studio },
+          runsOn: { machine: AGENT_MACHINE.DEVICE, deviceId: studio },
         });
 
         const theirKey = randomUUID();
@@ -1462,7 +1464,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
             refusedDevice: { name: "Studio", owner: "Test User" },
           },
         });
-        assert.ok(Option.isNone(yield* readCodingAgentByKey(other, theirKey)));
+        assert.ok(Option.isNone(yield* readAgentByKey(other, theirKey)));
         assert.deepEqual(eve.opened, []);
       }),
   );
@@ -1621,24 +1623,24 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
       Effect.gen(function* () {
         const { owner, other, task, ask } = yield* openTask();
         const first = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
         ).agent;
         yield* TestClock.adjust(Duration.minutes(1));
         const second = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
         ).agent;
-        const stored = yield* readCodingAgent(owner, second.id);
+        const stored = yield* readAgent(owner, second.id);
         assert.ok(Option.isSome(stored));
         const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
         const target = { userId: owner, conversationId: stored.value.conversationId };
         yield* writer.enqueueTurn(target, { origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
 
         const listed = readAnswer(
-          codingAgentListAnswerSchema,
+          agentListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(TASK_AGENTS, owner, { id: task.id })),
         );
@@ -1646,8 +1648,8 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           listed.agents.map((agent) => [agent.id, agent.status]),
           // The first has no turn yet, but its Start's line awaits the one eve opens on it.
           [
-            [first.id, CODING_AGENT_STATUS.RUNNING],
-            [second.id, CODING_AGENT_STATUS.RUNNING],
+            [first.id, AGENT_STATUS.RUNNING],
+            [second.id, AGENT_STATUS.RUNNING],
           ],
         );
         assert.deepEqual(
@@ -1684,7 +1686,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           [request(TASK_AGENTS, bearer, { id }), request(TASK_INBOX, bearer, { id })] as const;
 
         const [agents, inbox] = reads(owner, task.id);
-        readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(agents));
+        readAnswer(agentListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(agents));
         readAnswer(inboxAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(inbox));
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
         for (const refused of [...reads(other, task.id), ...reads(owner, randomUUID())]) {
@@ -1699,11 +1701,11 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
       Effect.gen(function* () {
         const { owner, other, task, ask } = yield* openTask();
         const agent = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
         ).agent;
-        const stored = yield* readCodingAgent(owner, agent.id);
+        const stored = yield* readAgent(owner, agent.id);
         assert.ok(Option.isSome(stored));
         const target = { userId: owner, conversationId: stored.value.conversationId };
         const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
@@ -1711,7 +1713,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         // Before any turn the Start's line awaits it: a read past the line is held rather than
         // spinning, and lets go at the hold with the status the page was read at.
         const opening = readAnswer(
-          codingAgentMessagesAnswerSchema,
+          agentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "0:0" })),
         );
@@ -1723,12 +1725,12 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(starting.pollUnsafe(), undefined);
         yield* TestClock.adjust(CODER.MESSAGES_HOLD);
         const empty = readAnswer(
-          codingAgentMessagesAnswerSchema,
+          agentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* drivenWhileStarting(starting),
         );
         assert.deepEqual(empty.messages, []);
-        assert.equal(empty.status, CODING_AGENT_STATUS.RUNNING);
+        assert.equal(empty.status, AGENT_STATUS.RUNNING);
         yield* writer.enqueueTurn(target, {
           turnId,
           origin: TURN_ORIGIN.TYPED,
@@ -1747,14 +1749,14 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         yield* writer.takeAwaitingLine(target, { text: SNAPSHOT, turnId });
 
         const page = readAnswer(
-          codingAgentMessagesAnswerSchema,
+          agentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
         );
         assert.equal(page.messages.length, 1);
         assert.equal(page.messages[0]?.role, MESSAGE_ROLE.USER);
         assert.notEqual(page.cursor, "0:0");
-        assert.equal(page.status, CODING_AGENT_STATUS.RUNNING);
+        assert.equal(page.status, AGENT_STATUS.RUNNING);
 
         assert.deepEqual(
           yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "later" })),
@@ -1773,9 +1775,9 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
       Effect.gen(function* () {
         const { owner, other, task, ask } = yield* openTask();
         const { agent } = yield* startedAgent(owner, task.id, ask);
-        const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
+        const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
         const output = "built one more file\n".repeat(100_000);
-        const half = CODING_AGENT_BOUNDS.MAX_PART_CHARS / 2;
+        const half = AGENT_BOUNDS.MAX_PART_CHARS / 2;
         const command = {
           type: "tool-bash",
           toolCallId: "call-1",
@@ -1806,7 +1808,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.ok(JSON.stringify(answered.body).length < 20_000);
         // The Start's line stands ahead of the journal.
         const [, cutJournal] = readAnswer(
-          codingAgentMessagesAnswerSchema,
+          agentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           answered,
         ).messages;
@@ -1831,7 +1833,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.deepEqual(cutJournal?.parts, [text("Building."), withoutOutput, withoutText, read]);
         // A reader that asks no cut, as a released desktop, is answered the part whole.
         const [, wholeJournal] = readAnswer(
-          codingAgentMessagesAnswerSchema,
+          agentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
         ).messages;
@@ -1839,7 +1841,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.equal(wholeJournal?.cutParts, undefined);
         // The read back from the end cuts the same parts where it is asked to.
         const [, newestJournal] = readAnswer(
-          codingAgentNewestAnswerSchema,
+          agentNewestAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(
             request(AGENT_NEWEST, owner, { id: agent.id, parts: TRANSCRIPT_PARTS_QUERY.CUT }),
@@ -1850,7 +1852,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const part = (bearer: string, index: number) =>
           ask(request(`/api/agents/${agent.id}/messages/${journal}/parts/${index}`, bearer));
         assert.deepEqual(
-          readAnswer(codingAgentPartAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* part(owner, 1)),
+          readAnswer(agentPartAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* part(owner, 1)),
           { part: command },
         );
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
@@ -1871,7 +1873,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           github: publishedPullRequest,
         });
         const { agent } = yield* startedAgent(owner, task.id, ask);
-        yield* updateCodingAgentBranch(owner, agent.id, PUBLISHED.branch);
+        yield* updateAgentBranch(owner, agent.id, PUBLISHED.branch);
         // Note that the Start reached the repository itself, so the reads begin past every kept answer.
         yield* TestClock.adjust(Duration.hours(2));
         const asked = github.sent.length;
@@ -1910,9 +1912,9 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const { agent } = yield* startedAgent(owner, task.id, ask);
         yield* Database.use((db) =>
           db
-            .update(codingAgent)
+            .update(agentTable)
             .set({ repository: "Acme/Former" })
-            .where(eq(codingAgent.id, agent.id)),
+            .where(eq(agentTable.id, agent.id)),
         );
         const unreached = {
           status: HOSTED_HTTP_STATUS.FORBIDDEN,
@@ -2357,14 +2359,14 @@ it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
       Effect.gen(function* () {
         const { owner, task, ask } = yield* openTask({ repository: null });
         const started = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), blank: true })),
         ).agent;
-        const agent = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
+        const agent = Option.getOrThrow(yield* readAgent(owner, started.id));
         const call = yield* callInto(agent, owner, ["What did you change?", "I moved the export."]);
         const read = Effect.map(ask(request(AGENT_MESSAGES, owner, { id: agent.id })), (answered) =>
-          readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          readAnswer(agentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
         );
 
         const page = yield* read;
@@ -2394,7 +2396,7 @@ it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
           ],
         );
         // A line the voice answered itself opened no turn and waits on none.
-        assert.equal(page.status, CODING_AGENT_STATUS.COMPLETED);
+        assert.equal(page.status, AGENT_STATUS.COMPLETED);
 
         // The store names the turn the agent's words were read aloud from; the line still carries no turn's record.
         const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
@@ -2443,7 +2445,7 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
       });
       if (options.otherJoins ?? true) yield* joinWorkspace(opened.task.workspaceId, opened.other);
       const { agent } = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
-      yield* updateCodingAgentBranch(opened.owner, agent.id, PUBLISHED.branch);
+      yield* updateAgentBranch(opened.owner, agent.id, PUBLISHED.branch);
       return { ...opened, agent, calls };
     });
 
@@ -2712,17 +2714,14 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
               }),
             ),
             (answered) =>
-              readAnswer(
-                codingAgentOverviewPullRequestAnswerSchema,
-                HOSTED_HTTP_STATUS.OK,
-                answered,
-              ).pullRequest?.title,
+              readAnswer(agentOverviewPullRequestAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+                .pullRequest?.title,
           );
 
         assert.equal(yield* header(String(earlier.number)), "Lay the invitations' base");
         assert.equal(yield* header(), "Expire teammate invitations");
         const named = readAnswer(
-          codingAgentPullRequestAnswerSchema,
+          agentPullRequestAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(
             request(AGENT_PULL_REQUEST, owner, { id: agent.id, number: String(earlier.number) }),
@@ -2797,11 +2796,8 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           Effect.map(
             ask(request(AGENT_OVERVIEW_PULL_REQUEST, owner, { id: agent.id })),
             (answered) =>
-              readAnswer(
-                codingAgentOverviewPullRequestAnswerSchema,
-                HOSTED_HTTP_STATUS.OK,
-                answered,
-              ).pullRequest,
+              readAnswer(agentOverviewPullRequestAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+                .pullRequest,
           );
 
         const read = yield* header();
@@ -2917,8 +2913,8 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           Effect.map(
             ask(request(AGENT_PULL_REQUEST, bearer, { id: agent.id })),
             (answered) =>
-              readAnswer(codingAgentPullRequestAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
-                .pullRequest?.state,
+              readAnswer(agentPullRequestAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).pullRequest
+                ?.state,
           );
         assert.equal(yield* stateAs(owner), PULL_REQUEST_STATE.DRAFT);
 
@@ -2966,7 +2962,7 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
         const changedUrl = Effect.map(
           ask(request(AGENT_CHANGES, other, { id: agent.id })),
           (answered) =>
-            readAnswer(codingAgentChangesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).pullRequest
+            readAnswer(agentChangesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).pullRequest
               ?.url ?? null,
         );
         assert.equal(yield* changedUrl, null);
@@ -3248,11 +3244,8 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           Effect.map(
             ask(request(AGENT_OVERVIEW[2], bearer, { id: agent.id })),
             (answered) =>
-              readAnswer(
-                codingAgentOverviewConversationAnswerSchema,
-                HOSTED_HTTP_STATUS.OK,
-                answered,
-              ).pullRequest?.descriptionReactions,
+              readAnswer(agentOverviewConversationAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+                .pullRequest?.descriptionReactions,
           );
 
         assert.deepEqual(yield* readAs(owner), [
@@ -3615,11 +3608,8 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           Effect.map(
             opened.ask(request(AGENT_OVERVIEW[2], bearer, { id: agentId })),
             (answered) =>
-              readAnswer(
-                codingAgentOverviewConversationAnswerSchema,
-                HOSTED_HTTP_STATUS.OK,
-                answered,
-              ).pullRequest?.pendingReview,
+              readAnswer(agentOverviewConversationAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+                .pullRequest?.pendingReview,
           );
         const two = yield* published({ otherToken: "ghu_teammate", answer: pendingAnswer });
         const unsigned = yield* published({ otherToken: null, answer: pendingAnswer });
@@ -3701,11 +3691,8 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           Effect.map(
             opened.ask(request(AGENT_OVERVIEW_PULL_REQUEST, bearer, { id: agentId })),
             (answered) =>
-              readAnswer(
-                codingAgentOverviewPullRequestAnswerSchema,
-                HOSTED_HTTP_STATUS.OK,
-                answered,
-              ).pullRequest,
+              readAnswer(agentOverviewPullRequestAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+                .pullRequest,
           );
         const two = yield* published({ otherToken: "ghu_teammate", answer: canUpdate });
         const unsigned = yield* published({ otherToken: null, answer: canUpdate });
@@ -3743,7 +3730,7 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
         const { owner, agent, ask } = yield* published({ repository: headed });
 
         const changes = readAnswer(
-          codingAgentChangesAnswerSchema,
+          agentChangesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_CHANGES, owner, { id: agent.id })),
         );
@@ -3784,7 +3771,7 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
         const { owner, agent, ask } = yield* published({ repository: listed });
 
         const changes = readAnswer(
-          codingAgentChangesAnswerSchema,
+          agentChangesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_CHANGES, owner, { id: agent.id })),
         );
@@ -3936,7 +3923,7 @@ it.layer(getTestDB())("asking reviews and labelling an agent's pull request", (i
       const opened = yield* openTask({ github: repository, otherToken });
       yield* joinWorkspace(opened.task.workspaceId, opened.other);
       const { agent } = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
-      yield* updateCodingAgentBranch(opened.owner, agent.id, PUBLISHED.branch);
+      yield* updateAgentBranch(opened.owner, agent.id, PUBLISHED.branch);
       return { ...opened, agent };
     });
 
@@ -4131,7 +4118,7 @@ function messageAs(bearer: string | undefined, agentId: string, body: WireBounda
 
 /** The words of each user row of a transcript page, in order. */
 function userTexts(page: {
-  readonly messages: readonly CodingAgentMessage[];
+  readonly messages: readonly AgentTranscriptMessage[];
 }): readonly (string | undefined)[] {
   return page.messages
     .filter((message) => message.role === MESSAGE_ROLE.USER)
@@ -4177,7 +4164,7 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
     Effect.gen(function* () {
       const { owner, task, ask } = yield* openTask({ github: standingPullRequest(standing) });
       const { agent } = yield* startedAgent(owner, task.id, ask);
-      yield* updateCodingAgentBranch(owner, agent.id, PUBLISHED.branch);
+      yield* updateAgentBranch(owner, agent.id, PUBLISHED.branch);
       const readAfter = (wait: Duration.Duration) =>
         Effect.gen(function* () {
           yield* TestClock.adjust(wait);
@@ -4186,7 +4173,7 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
           return answered.body;
         });
       const read = readAfter(CODER.PUBLISHED_ROW_FRESH);
-      const kept = readCodingAgentPublished(owner, agent.id);
+      const kept = readAgentPublished(owner, agent.id);
       return { owner, agentId: agent.id, task, read, readAfter, kept };
     });
 
@@ -4245,7 +4232,7 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
         const { owner, agentId, read } = yield* publishedAs(standing);
         const open = yield* read;
 
-        yield* archiveCodingAgent(owner, agentId, true);
+        yield* archiveAgent(owner, agentId, true);
         standing.mergedAt = MERGED_AT;
 
         assert.deepEqual(yield* read, open);
@@ -4263,7 +4250,7 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
           Effect.map(
             readAfter(wait),
             (body) =>
-              readAnswer(codingAgentPullRequestAnswerSchema, HOSTED_HTTP_STATUS.OK, {
+              readAnswer(agentPullRequestAnswerSchema, HOSTED_HTTP_STATUS.OK, {
                 status: HOSTED_HTTP_STATUS.OK,
                 body,
               }).pullRequest?.state,
@@ -4297,12 +4284,12 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
         const standing: Standing = { mergedAt: null };
         const { owner, task, read } = yield* publishedAs(standing);
         const operator = Option.getOrThrow(
-          yield* createCodingAgent(owner, {
+          yield* createAgent(owner, {
             taskId: null,
             organizationId: task.workspaceId,
             planSnapshot: null,
             prompt: null,
-            kind: CODING_AGENT_KIND.OPERATOR,
+            kind: AGENT_KIND.OPERATOR,
             idempotencyKey: randomUUID(),
             model: "anthropic/claude-opus-5.5",
             effort: "high",
@@ -4346,11 +4333,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   ) =>
     Effect.gen(function* () {
       const agent = readAnswer(
-        codingAgentAnswerSchema,
+        agentAnswerSchema,
         HOSTED_HTTP_STATUS.CREATED,
         yield* opened.ask(startAs(opened.owner, opened.task.id, { idempotencyKey: randomUUID() })),
       ).agent;
-      const stored = yield* readCodingAgent(opened.owner, agent.id);
+      const stored = yield* readAgent(opened.owner, agent.id);
       assert.ok(Option.isSome(stored));
       const target = { userId: opened.owner, conversationId: stored.value.conversationId };
       const sessionId = eve.opened.at(-1)?.sessionId ?? "";
@@ -4392,18 +4379,14 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         Effect.map(
           opened.ask(request(AGENT_MESSAGES, opened.owner, { id: agent.id })),
           (answered) => {
-            const page = readAnswer(
-              codingAgentMessagesAnswerSchema,
-              HOSTED_HTTP_STATUS.OK,
-              answered,
-            );
+            const page = readAnswer(agentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered);
             return { lines: userTexts(page), status: page.status };
           },
         );
       /** A message of the owner's under the key given, or one minted, answered as the wire declares a message taken. */
       const sent = (text: string, clientKey = randomUUID()) =>
         Effect.map(opened.ask(messageAs(opened.owner, agent.id, { text, clientKey })), (answered) =>
-          readAnswer(codingAgentMessageAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, answered),
+          readAnswer(agentMessageAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, answered),
         );
       return { ...opened, agent, target, sessionId, writer, turnId, transcript, sent };
     });
@@ -4459,7 +4442,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         });
         const shot = {
           name: "flow.png",
-          mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+          mediaType: AGENT_ATTACHMENT_TYPE.PNG,
           data: Buffer.from(SIZED_PNG).toString("base64"),
         };
         const body = { text: "Match this.", attachments: [shot], clientKey: randomUUID() };
@@ -4482,7 +4465,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const picture = Option.getOrThrow(
           yield* readConversationPicture(target.conversationId, row.id),
         );
-        assert.equal(picture.contentType, CODING_AGENT_ATTACHMENT_TYPE.PNG);
+        assert.equal(picture.contentType, AGENT_ATTACHMENT_TYPE.PNG);
         assert.deepEqual(new Uint8Array(picture.bytes), SIZED_PNG);
         // eve's receipt of the message, its image staged by name with no bytes, takes the line it was sent as.
         const taken = yield* writer.takeAwaitingLine(target, {
@@ -4523,8 +4506,8 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           messageAs(owner, agent.id, {
             text: "Match this.",
             attachments: [
-              { name: "flow.png", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG, data },
-              { name: "spec.pdf", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PDF, data: pdf },
+              { name: "flow.png", mediaType: AGENT_ATTACHMENT_TYPE.PNG, data },
+              { name: "spec.pdf", mediaType: AGENT_ATTACHMENT_TYPE.PDF, data: pdf },
             ],
             clientKey: randomUUID(),
           }),
@@ -4532,7 +4515,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.equal(sent.status, HOSTED_HTTP_STATUS.ACCEPTED, JSON.stringify(sent.body));
 
         const page = readAnswer(
-          codingAgentMessagesAnswerSchema,
+          agentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
         );
@@ -4543,7 +4526,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.ok(isRecord(image) && isRecord(spec) && more.length === 0, JSON.stringify(files));
         assert.equal(image.url, "", "the row carries no bytes of the image");
         assert.doesNotMatch(JSON.stringify(page.messages), /data:image\//u);
-        assert.equal(spec.url, `data:${CODING_AGENT_ATTACHMENT_TYPE.PDF};base64,${pdf}`);
+        assert.equal(spec.url, `data:${AGENT_ATTACHMENT_TYPE.PDF};base64,${pdf}`);
         const pictureId = keptPictureIdOf(image.providerMetadata);
         assert.ok(pictureId !== undefined, "the row names the kept picture");
 
@@ -4605,7 +4588,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           assert.deepEqual(eve.cancelledAs, [deploymentFor(owner)]);
         }
         assert.notEqual(
-          Option.getOrThrow(yield* readCodingAgent(archived.owner, archived.agent.id)).archivedAt,
+          Option.getOrThrow(yield* readAgent(archived.owner, archived.agent.id)).archivedAt,
           null,
         );
       }),
@@ -4814,11 +4797,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         // An agent with no task, so it holds a pin of its own.
         yield* Database.use((db) =>
           db
-            .update(codingAgent)
+            .update(agentTable)
             .set({ taskId: null, organizationId: task.workspaceId })
-            .where(eq(codingAgent.id, agent.id)),
+            .where(eq(agentTable.id, agent.id)),
         );
-        assert.ok(Option.isSome(yield* pinCodingAgent(owner, agent.id, true)));
+        assert.ok(Option.isSome(yield* pinAgent(owner, agent.id, true)));
         const posted = yield* postInboxThread(
           { userId: owner, taskId: null, agentId: agent.id },
           {
@@ -4835,7 +4818,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.match(JSON.stringify(deleted.body), /^\{"deleted":true,"txid":"\d+"\}$/u);
         assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
         assert.deepEqual(eve.reset, [sessionId]);
-        assert.ok(Option.isNone(yield* readCodingAgent(owner, agent.id)));
+        assert.ok(Option.isNone(yield* readAgent(owner, agent.id)));
         const db = yield* Database;
         const [conversation] = yield* db
           .select({ deletedAt: conversations.deletedAt })
@@ -4872,7 +4855,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const outside = yield* ask(request(AGENT, other, { method: "DELETE", id: agent.id }));
         assert.deepEqual(outside, notFound);
         assert.deepEqual([eve.cancelled, eve.reset], [[], []]);
-        assert.ok(Option.isSome(yield* readCodingAgent(owner, agent.id)));
+        assert.ok(Option.isSome(yield* readAgent(owner, agent.id)));
 
         const deleted = yield* ask(request(AGENT, owner, { method: "DELETE", id: agent.id }));
         const again = yield* ask(request(AGENT, owner, { method: "DELETE", id: agent.id }));
@@ -4898,7 +4881,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
         );
         assert.deepEqual(eve.reset, []);
-        assert.ok(Option.isSome(yield* readCodingAgent(owner, agent.id)));
+        assert.ok(Option.isSome(yield* readAgent(owner, agent.id)));
       }),
   );
 
@@ -4934,7 +4917,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const onEve = yield* startedAgent(fakeEve(), undefined);
         const onClaudeCode = yield* startedAgent(fakeEve(), undefined);
         const stored = Option.getOrThrow(
-          yield* readCodingAgent(onClaudeCode.owner, onClaudeCode.agent.id),
+          yield* readAgent(onClaudeCode.owner, onClaudeCode.agent.id),
         );
         yield* Database.use((db) =>
           db
@@ -4959,12 +4942,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           }),
         ];
         const taken = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* change(onClaudeCode, { model: SMALL_WINDOW.model, effort: "low" }),
         ).agent;
         const onEveTaken = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* change(onEve, { model: SOL, effort: "low" }),
         ).agent;
@@ -4992,13 +4975,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const changed = (archived: boolean) =>
           Effect.map(
             ask(request(AGENT, other, { method: "PATCH", id: agent.id, body: { archived } })),
-            (answered) =>
-              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agent,
+            (answered) => readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agent,
           );
 
         const archived = yield* changed(true);
         assert.ok(archived.archivedAt !== undefined);
-        assert.equal(archived.archivedBy?.by, CODING_AGENT_ARCHIVER.MEMBER);
+        assert.equal(archived.archivedBy?.by, AGENT_ARCHIVER.MEMBER);
         assert.equal(archived.archivedBy?.member?.userId, other);
         assert.equal(archived.archivedBy?.agent, undefined);
         const back = yield* changed(false);
@@ -5032,7 +5014,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           finished: true,
         });
         assert.equal(
-          Option.getOrThrow(yield* readCodingAgent(owner, agent.id)).archivedAt,
+          Option.getOrThrow(yield* readAgent(owner, agent.id)).archivedAt,
           null,
           "the agent is stopped, not archived",
         );
@@ -5043,7 +5025,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           finished: false,
         });
 
-        yield* recordCodingAgentPublished(owner, agent.id, {
+        yield* recordAgentPublished(owner, agent.id, {
           number: 7,
           title: "Invite teammates",
           url: "https://github.com/acme/relay/pull/7",
@@ -5084,7 +5066,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           yield* ask(request(TASK(task.id), owner, { method: "PATCH", body: { archived: true } })),
           refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
         );
-        assert.equal(Option.getOrThrow(yield* readCodingAgent(owner, agent.id)).archivedAt, null);
+        assert.equal(Option.getOrThrow(yield* readAgent(owner, agent.id)).archivedAt, null);
         assert.deepEqual(eve.cancelled, []);
       }),
   );
@@ -5121,7 +5103,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         });
 
         const page = readAnswer(
-          codingAgentMessagesAnswerSchema,
+          agentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
         );
@@ -5156,13 +5138,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* joinWorkspace(task.workspaceId, other);
 
         const listed = readAnswer(
-          codingAgentListAnswerSchema,
+          agentListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(TASK_AGENTS, other, { id: task.id })),
         );
         assert.deepEqual(
           listed.agents.map((each) => [each.id, each.status]),
-          [[agent.id, CODING_AGENT_STATUS.COMPLETED]],
+          [[agent.id, AGENT_STATUS.COMPLETED]],
         );
         // The teammate reads whose agent it is, which the window says as "Started by".
         assert.deepEqual(
@@ -5170,18 +5152,18 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           [owner],
         );
         const read = readAnswer(
-          codingAgentMessagesAnswerSchema,
+          agentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_MESSAGES, other, { id: agent.id })),
         );
         assert.deepEqual(userTexts(read), [SNAPSHOT]);
 
         const sent = readAnswer(
-          codingAgentMessageAnswerSchema,
+          agentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* asOther("Rename the subject line too."),
         );
-        assert.equal(sent.agent.status, CODING_AGENT_STATUS.RUNNING);
+        assert.equal(sent.agent.status, AGENT_STATUS.RUNNING);
         assert.equal(sent.agent.startedBy?.userId, owner);
         assert.deepEqual(
           eve.sent.map((each) => [each.authorization, each.sessionId]),
@@ -5189,7 +5171,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         assert.deepEqual(yield* transcript(), {
           lines: [SNAPSHOT, "Rename the subject line too."],
-          status: CODING_AGENT_STATUS.RUNNING,
+          status: AGENT_STATUS.RUNNING,
         });
       }),
   );
@@ -5205,17 +5187,17 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* TestClock.adjust(Duration.seconds(1));
         assert.equal(
           (yield* sent("Rename the subject line too.")).agent.status,
-          CODING_AGENT_STATUS.RUNNING,
+          AGENT_STATUS.RUNNING,
         );
         const statuses = () =>
           Effect.gen(function* () {
             const page = readAnswer(
-              codingAgentPageAnswerSchema,
+              agentPageAnswerSchema,
               HOSTED_HTTP_STATUS.OK,
               yield* ask(request(AGENT, owner, { id: agent.id })),
             );
             const listed = readAnswer(
-              codingAgentListAnswerSchema,
+              agentListAnswerSchema,
               HOSTED_HTTP_STATUS.OK,
               yield* ask(request(TASK_AGENTS, owner, { id: task.id })),
             );
@@ -5228,15 +5210,15 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         yield* TestClock.adjust(CODER.LINE_GRACE);
         assert.deepEqual(yield* statuses(), {
-          page: CODING_AGENT_STATUS.RUNNING,
-          list: CODING_AGENT_STATUS.RUNNING,
-          transcript: CODING_AGENT_STATUS.RUNNING,
+          page: AGENT_STATUS.RUNNING,
+          list: AGENT_STATUS.RUNNING,
+          transcript: AGENT_STATUS.RUNNING,
         });
         yield* TestClock.adjust(Duration.millis(1));
         assert.deepEqual(yield* statuses(), {
-          page: CODING_AGENT_STATUS.FAILED,
-          list: CODING_AGENT_STATUS.FAILED,
-          transcript: CODING_AGENT_STATUS.FAILED,
+          page: AGENT_STATUS.FAILED,
+          list: AGENT_STATUS.FAILED,
+          transcript: AGENT_STATUS.FAILED,
         });
       }),
   );
@@ -5275,7 +5257,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const automationIds = () =>
           Effect.gen(function* () {
             const agents = readAnswer(
-              codingAgentListAnswerSchema,
+              agentListAnswerSchema,
               HOSTED_HTTP_STATUS.OK,
               yield* ask(request(TASK_AGENTS, owner, { id: task.id })),
             );
@@ -5302,7 +5284,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         });
         const automationId = Option.getOrThrow(made).id;
         yield* Database.use((db) =>
-          db.update(codingAgent).set({ automationId }).where(eq(codingAgent.id, agent.id)),
+          db.update(agentTable).set({ automationId }).where(eq(agentTable.id, agent.id)),
         );
 
         assert.deepEqual(yield* automationIds(), [automationId, automationId]);
@@ -5318,20 +5300,20 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         // An automation's run leaves an agent so: in its workspace, on no task.
         yield* Database.use((db) =>
           db
-            .update(codingAgent)
+            .update(agentTable)
             .set({ taskId: null, organizationId: task.workspaceId })
-            .where(eq(codingAgent.id, agent.id)),
+            .where(eq(agentTable.id, agent.id)),
         );
 
         const sent = readAnswer(
-          codingAgentMessageAnswerSchema,
+          agentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(
             messageAs(owner, agent.id, { text: "Rebase on main.", clientKey: randomUUID() }),
           ),
         );
         const read = readAnswer(
-          codingAgentMessagesAnswerSchema,
+          agentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
         );
@@ -5353,15 +5335,15 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
         const page = () =>
           Effect.map(ask(request(AGENT, owner, { id: agent.id })), (answered) =>
-            readAnswer(codingAgentPageAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+            readAnswer(agentPageAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
           );
 
         const onTask = yield* page();
         yield* Database.use((db) =>
           db
-            .update(codingAgent)
+            .update(agentTable)
             .set({ taskId: null, organizationId: task.workspaceId })
-            .where(eq(codingAgent.id, agent.id)),
+            .where(eq(agentTable.id, agent.id)),
         );
         const taskless = yield* page();
         const outside = yield* ask(request(AGENT, other, { id: agent.id }));
@@ -5374,7 +5356,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           [taskless.agent.planId, taskless.agent.automationId, taskless.agent.workspaceId],
           [null, null, task.workspaceId],
         );
-        assert.equal(taskless.agent.status, CODING_AGENT_STATUS.COMPLETED);
+        assert.equal(taskless.agent.status, AGENT_STATUS.COMPLETED);
         assert.deepEqual(
           outside,
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
@@ -5392,16 +5374,16 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           Effect.gen(function* () {
             yield* Database.use((db) =>
               db
-                .update(codingAgent)
+                .update(agentTable)
                 .set({
                   taskId: null,
                   organizationId: task.workspaceId,
                   automationOrigin: { name: "Code review", firing, prompt: "Review it." },
                 })
-                .where(eq(codingAgent.id, agent.id)),
+                .where(eq(agentTable.id, agent.id)),
             );
             return readAnswer(
-              codingAgentPageAnswerSchema,
+              agentPageAnswerSchema,
               HOSTED_HTTP_STATUS.OK,
               yield* ask(request(AGENT, owner, { id: agent.id })),
             ).agent;
@@ -5441,9 +5423,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* joinWorkspace(task.workspaceId, other);
         yield* Database.use((db) =>
           db
-            .update(codingAgent)
+            .update(agentTable)
             .set({ taskId: null, organizationId: task.workspaceId })
-            .where(eq(codingAgent.id, agent.id)),
+            .where(eq(agentTable.id, agent.id)),
         );
         yield* ask(
           request(AGENT, other, { method: "PATCH", id: agent.id, body: { archived: true } }),
@@ -5455,7 +5437,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           yield* ask(request(TASKS, owner, { archived: TASK_LIST_ARCHIVED.INCLUDE })),
         );
         const by = listed.planlessAgents?.find((each) => each.id === agent.id)?.archivedBy;
-        assert.equal(by?.by, CODING_AGENT_ARCHIVER.MEMBER);
+        assert.equal(by?.by, AGENT_ARCHIVER.MEMBER);
         assert.equal(by?.member?.userId, other);
         assert.ok((by?.member?.name ?? "") !== "", JSON.stringify(by));
       }),
@@ -5469,16 +5451,16 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
         yield* Database.use((db) =>
           db
-            .update(codingAgent)
+            .update(agentTable)
             .set({ taskId: null, organizationId: task.workspaceId })
-            .where(eq(codingAgent.id, agent.id)),
+            .where(eq(agentTable.id, agent.id)),
         );
         const listed = (bearer: string, archived?: string) =>
           Effect.map(ask(request(TASKS, bearer, { archived })), (answered) =>
             readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
           );
         const page = readAnswer(
-          codingAgentPageAnswerSchema,
+          agentPageAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT, owner, { id: agent.id })),
         ).agent;
@@ -5486,10 +5468,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const standing = yield* listed(owner);
         const outside = yield* listed(other);
         yield* Database.use((db) =>
-          db
-            .update(codingAgent)
-            .set({ archivedAt: new Date() })
-            .where(eq(codingAgent.id, agent.id)),
+          db.update(agentTable).set({ archivedAt: new Date() }).where(eq(agentTable.id, agent.id)),
         );
         const archived = yield* listed(owner);
         const included = yield* listed(owner, TASK_LIST_ARCHIVED.INCLUDE);
@@ -5517,9 +5496,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
         yield* Database.use((db) =>
           db
-            .update(codingAgent)
+            .update(agentTable)
             .set({ taskId: null, organizationId: task.workspaceId })
-            .where(eq(codingAgent.id, agent.id)),
+            .where(eq(agentTable.id, agent.id)),
         );
         const pin = (bearer: string, pinned: boolean) =>
           ask(request(AGENT, bearer, { method: "PATCH", id: agent.id, body: { pinned } }));
@@ -5542,7 +5521,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const unpinned = yield* pinnedAt(owner);
 
         assert.equal(
-          readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.OK, pinned).agent.id,
+          readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.OK, pinned).agent.id,
           agent.id,
         );
         assert.equal(refused.status, HOSTED_HTTP_STATUS.NOT_FOUND);
@@ -5559,9 +5538,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const { owner, task, agent, ask } = yield* startedAgent(eve, { running: false });
         yield* Database.use((db) =>
           db
-            .update(codingAgent)
+            .update(agentTable)
             .set({ taskId: null, organizationId: task.workspaceId })
-            .where(eq(codingAgent.id, agent.id)),
+            .where(eq(agentTable.id, agent.id)),
         );
         const patch = (body: { pinned: boolean; position: string }) =>
           ask(request(AGENT, owner, { method: "PATCH", id: agent.id, body }));
@@ -5590,9 +5569,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
         yield* Database.use((db) =>
           db
-            .update(codingAgent)
+            .update(agentTable)
             .set({ taskId: null, organizationId: task.workspaceId })
-            .where(eq(codingAgent.id, agent.id)),
+            .where(eq(agentTable.id, agent.id)),
         );
         const posted = yield* postInboxThread(
           { userId: owner, taskId: null, agentId: agent.id },
@@ -5620,6 +5599,36 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         assert.deepEqual(
           outside,
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent's Luke tools read for its starter, and as not found for a member who reaches the agent but not its task",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: false });
+        yield* joinWorkspace(task.workspaceId, other);
+        // The task is seen on its starter's own token, which the teammate holds none of, while the agent is seen through the App.
+        yield* Database.use((db) =>
+          db
+            .update(taskTable)
+            .set({ githubAccess: GITHUB_ACCESS.TOKEN })
+            .where(eq(taskTable.id, task.id)),
+        );
+
+        const read = readAnswer(
+          lukeToolsAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_LUKE_TOOLS, owner, { id: agent.id })),
+        );
+        const teammate = yield* ask(request(AGENT_LUKE_TOOLS, other, { id: agent.id }));
+
+        assert.ok(read.tools.includes(AGENT_TOOL.RUN_ON_MAC));
+        assert.deepEqual(
+          teammate,
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
       }),
@@ -5672,7 +5681,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         githubDown = true;
 
         readAnswer(
-          codingAgentMessageAnswerSchema,
+          agentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(
             messageAs(owner, agent.id, { text: "Rebase on main.", clientKey: randomUUID() }),
@@ -5696,7 +5705,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           ask(messageAs(other, agent.id, { text: "Use seven days, not five.", clientKey }));
 
         const first = readAnswer(
-          codingAgentMessageAnswerSchema,
+          agentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* steer(),
         );
@@ -5712,11 +5721,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         assert.deepEqual(yield* transcript(), {
           lines: [SNAPSHOT, "Use seven days, not five."],
-          status: CODING_AGENT_STATUS.RUNNING,
+          status: AGENT_STATUS.RUNNING,
         });
 
         const again = readAnswer(
-          codingAgentMessageAnswerSchema,
+          agentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* steer(),
         );
@@ -5747,7 +5756,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         // Charles answers a minute later, which the time each line names says.
         yield* TestClock.adjust(Duration.minutes(1));
         readAnswer(
-          codingAgentMessageAnswerSchema,
+          agentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(messageAs(other, agent.id, { text: "Not five.", clientKey: randomUUID() })),
         );
@@ -5774,27 +5783,21 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         /** Each of the developer's lines as a member reads the page, beside what sent it. */
         const sendersAs = (reader: string) =>
           Effect.map(ask(request(AGENT_MESSAGES, reader, { id: agent.id })), (answered) =>
-            readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+            readAnswer(agentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
               .messages.filter((message) => message.role === MESSAGE_ROLE.USER)
               .map((message) => [userTexts({ messages: [message] })[0], message.sentBy]),
           );
 
         const named = [
           // The task the Start wrote names its starter.
-          [SNAPSHOT, { userId: owner, name: "Dean Stratakos", kind: CODING_AGENT_SENDER.MEMBER }],
+          [SNAPSHOT, { userId: owner, name: "Dean Stratakos", kind: AGENT_SENDER.MEMBER }],
           // A line from before senders were kept names nobody.
           ["Sweep the flaky tests.", undefined],
-          [
-            "Use seven days.",
-            { userId: owner, name: "Dean Stratakos", kind: CODING_AGENT_SENDER.MEMBER },
-          ],
-          ["Not five.", { userId: other, name: "Charles Pan", kind: CODING_AGENT_SENDER.MEMBER }],
+          ["Use seven days.", { userId: owner, name: "Dean Stratakos", kind: AGENT_SENDER.MEMBER }],
+          ["Not five.", { userId: other, name: "Charles Pan", kind: AGENT_SENDER.MEMBER }],
           // Luke and an automation are named by kind, so the window draws each as itself.
-          ["Rebase on main.", { name: "Luke", kind: CODING_AGENT_SENDER.LUKE }],
-          [
-            "Triage the failures.",
-            { name: "Nightly triage", kind: CODING_AGENT_SENDER.AUTOMATION },
-          ],
+          ["Rebase on main.", { name: "Luke", kind: AGENT_SENDER.LUKE }],
+          ["Triage the failures.", { name: "Nightly triage", kind: AGENT_SENDER.AUTOMATION }],
           // Another agent is marked as one beside its name, its model, and itself, with no kind an older window would refuse.
           [
             "Take the split view.",
@@ -5806,7 +5809,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         // Every line names when it was sent, a minute apart where they were.
         const sentAts = readAnswer(
-          codingAgentMessagesAnswerSchema,
+          agentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
         )
@@ -5818,7 +5821,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* Database.use((db) => db.delete(user).where(eq(user.id, other)));
         assert.deepEqual((yield* sendersAs(owner))[3], [
           "Not five.",
-          { name: "Former member", kind: CODING_AGENT_SENDER.FORMER },
+          { name: "Former member", kind: AGENT_SENDER.FORMER },
         ]);
       }),
   );
@@ -5832,7 +5835,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           running: true,
         });
         const answered = yield* sent("  Use the helper.  ");
-        assert.equal(answered.agent.status, CODING_AGENT_STATUS.RUNNING);
+        assert.equal(answered.agent.status, AGENT_STATUS.RUNNING);
         assert.deepEqual(
           eve.sent.map((each) => [each.authorization, each.sessionId, each.message]),
           [
@@ -5849,7 +5852,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         assert.deepEqual(yield* transcript(), {
           lines: [SNAPSHOT, "Use the helper."],
-          status: CODING_AGENT_STATUS.RUNNING,
+          status: AGENT_STATUS.RUNNING,
         });
       }),
   );
@@ -5882,7 +5885,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const eve = fakeEve();
         const { owner, task, ask, sent } = yield* startedAgent(eve, { running: true });
         const other = yield* startedAgentOf(owner, task.id, ask);
-        yield* updateCodingAgentBranch(owner, other.agent.id, "luke/store-invitations");
+        yield* updateAgentBranch(owner, other.agent.id, "luke/store-invitations");
         const shown = yield* writePage(
           owner,
           taskPageOwner(task.id),
@@ -5939,9 +5942,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const moved = (agentId: string, organizationId: string) =>
           Database.use((db) =>
             db
-              .update(codingAgent)
+              .update(agentTable)
               .set({ taskId: null, organizationId })
-              .where(eq(codingAgent.id, agentId)),
+              .where(eq(agentTable.id, agentId)),
           );
         yield* moved(oneOff.agent.id, task.workspaceId);
         yield* moved(foreign.agent.id, elsewhere);
@@ -6016,7 +6019,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         assert.notEqual(answered.status, HOSTED_HTTP_STATUS.ACCEPTED);
         assert.deepEqual(
-          yield* takeCodingAgentMentionedServers(target.userId, target.conversationId),
+          yield* takeAgentMentionedServers(target.userId, target.conversationId),
           [],
         );
       }),
@@ -6031,7 +6034,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         const task = `Triage ${mentionMarkdown({ kind: MENTION_KIND.SERVER, provider: INTEGRATION_PROVIDER.LINEAR }, "Linear", { workspace: "acme", repository: null })} first.`;
 
         const agent = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* opened.ask(
             startAs(opened.owner, opened.task.id, {
@@ -6042,11 +6045,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           ),
         ).agent;
 
-        const stored = yield* readCodingAgent(opened.owner, agent.id);
+        const stored = yield* readAgent(opened.owner, agent.id);
         assert.ok(Option.isSome(stored));
         assert.deepEqual(stored.value.disabledServers, [INTEGRATION_PROVIDER.LINEAR]);
         assert.deepEqual(
-          yield* takeCodingAgentMentionedServers(opened.owner, stored.value.conversationId),
+          yield* takeAgentMentionedServers(opened.owner, stored.value.conversationId),
           [INTEGRATION_PROVIDER.LINEAR],
         );
       }),
@@ -6069,10 +6072,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           JSON.stringify(handed[1]),
           /pointed you at the Linear MCP server \(connection `linear`\)/u,
         );
-        assert.deepEqual(
-          yield* takeCodingAgentMentionedServers(target.userId, target.conversationId),
-          [INTEGRATION_PROVIDER.LINEAR],
-        );
+        assert.deepEqual(yield* takeAgentMentionedServers(target.userId, target.conversationId), [
+          INTEGRATION_PROVIDER.LINEAR,
+        ]);
       }),
   );
 
@@ -6097,7 +6099,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           yield* ask(
             messageAs(owner, agent.id, {
               ...line,
-              text: "x".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1),
+              text: "x".repeat(AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1),
             }),
           ),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.MESSAGE_TOO_LONG),
@@ -6113,7 +6115,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           yield* ask(
             messageAs(owner, agent.id, {
               ...line,
-              clientKey: "k".repeat(CODING_AGENT_BOUNDS.MAX_KEY_CHARS + 1),
+              clientKey: "k".repeat(AGENT_BOUNDS.MAX_KEY_CHARS + 1),
             }),
           ),
           invalid,
@@ -6122,12 +6124,12 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual((yield* transcript()).lines, [SNAPSHOT]);
         // The bounds themselves are taken.
         readAnswer(
-          codingAgentMessageAnswerSchema,
+          agentMessageAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(
             messageAs(owner, agent.id, {
-              text: "y".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
-              clientKey: "k".repeat(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
+              text: "y".repeat(AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+              clientKey: "k".repeat(AGENT_BOUNDS.MAX_KEY_CHARS),
             }),
           ),
         );
@@ -6144,11 +6146,11 @@ const startedAgent = (
 ) =>
   Effect.gen(function* () {
     const agent = readAnswer(
-      codingAgentAnswerSchema,
+      agentAnswerSchema,
       HOSTED_HTTP_STATUS.CREATED,
       yield* ask(startAs(owner, taskId, { idempotencyKey: randomUUID() })),
     ).agent;
-    const stored = yield* readCodingAgent(owner, agent.id);
+    const stored = yield* readAgent(owner, agent.id);
     assert.ok(Option.isSome(stored));
     return { agent, target: { userId: owner, conversationId: stored.value.conversationId } };
   });
@@ -6234,11 +6236,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         Effect.map(
           opened.ask(request(AGENT_MESSAGES, opened.owner, { id: agent.id })),
           (answered) => {
-            const page = readAnswer(
-              codingAgentMessagesAnswerSchema,
-              HOSTED_HTTP_STATUS.OK,
-              answered,
-            );
+            const page = readAnswer(agentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered);
             return { lines: userTexts(page), status: page.status };
           },
         );
@@ -6574,7 +6572,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         const before = eve.sent.length;
         const trace = {
           name: "flag-trace.txt",
-          mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+          mediaType: AGENT_ATTACHMENT_TYPE.TEXT,
           data: Buffer.from("flag on in staging\n").toString("base64"),
         };
 
@@ -6605,7 +6603,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
       assert.ok(Result.isSuccess(asked));
       const shot = {
         name: "invite.png",
-        mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+        mediaType: AGENT_ATTACHMENT_TYPE.PNG,
         data: Buffer.from(PNG).toString("base64"),
       };
       const answered = (attachments?: readonly (typeof shot)[]) =>
@@ -6688,11 +6686,11 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
             (each) => each.author === INBOX_MESSAGE_AUTHOR.MEMBER && each.answers === undefined,
           );
         yield* turnEnded(target);
-        assert.equal((yield* transcript()).status, CODING_AGENT_STATUS.COMPLETED);
+        assert.equal((yield* transcript()).status, AGENT_STATUS.COMPLETED);
         const before = eve.sent.length;
         const trace = {
           name: "copy-review.txt",
-          mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+          mediaType: AGENT_ATTACHMENT_TYPE.TEXT,
           data: Buffer.from("subject line too long\n").toString("base64"),
         };
         const body = {
@@ -6723,7 +6721,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.ok(handed.includes(body.text), "it carries the words");
         assert.ok(handed.includes("subject line too long"), "it carries the file");
         const woken = yield* transcript();
-        assert.equal(woken.status, CODING_AGENT_STATUS.RUNNING, "the message woke the agent");
+        assert.equal(woken.status, AGENT_STATUS.RUNNING, "the message woke the agent");
         assert.ok(woken.lines.some((line) => line?.includes(body.text)));
 
         yield* message(id, body);
@@ -6958,7 +6956,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           handed.includes(`${INBOX_MESSAGE_LEAD} on \\"${body.title}\\" (key annual-plan-copy-2)`),
         );
         assert.ok(handed.includes(body.text), "it carries the words");
-        assert.equal((yield* transcript()).status, CODING_AGENT_STATUS.RUNNING);
+        assert.equal((yield* transcript()).status, AGENT_STATUS.RUNNING);
 
         const again = readAnswer(inboxMessagedSchema, HOSTED_HTTP_STATUS.OK, yield* start(body));
         assert.equal(again.item.id, started.item.id);
@@ -7809,7 +7807,7 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
       Effect.gen(function* () {
         const { owner, other, task, ask } = yield* openTask();
         const agent = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
         ).agent;
@@ -7829,7 +7827,7 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
           ),
         );
         assert.deepEqual(own.messages, []);
-        assert.equal(own.status, CODING_AGENT_STATUS.RUNNING);
+        assert.equal(own.status, AGENT_STATUS.RUNNING);
         assert.equal(own.holds, true);
 
         const worker = readAnswer(
@@ -7845,7 +7843,7 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
           ),
         );
         assert.deepEqual(worker.messages, []);
-        assert.equal(worker.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(worker.status, AGENT_STATUS.STARTING);
         assert.equal(worker.holds, true);
 
         assert.deepEqual(
@@ -7861,12 +7859,12 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
       Effect.gen(function* () {
         const { owner, other, task, ask } = yield* openTask();
         const agent = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
         ).agent;
-        const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
-        const PAGE = CODING_AGENT_BOUNDS.MESSAGES_PAGE;
+        const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
+        const PAGE = AGENT_BOUNDS.MESSAGES_PAGE;
         // Two pages and some, so the oldest page is the short one that ends the read.
         const total = 2 * PAGE + 37;
         const said = Array.from({ length: total }, (_, at) => `Step ${at}.`);
@@ -7885,7 +7883,7 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
             })),
           ),
         );
-        const wordsOf = (page: { readonly messages: readonly CodingAgentMessage[] }) =>
+        const wordsOf = (page: { readonly messages: readonly AgentTranscriptMessage[] }) =>
           page.messages.map((message) =>
             message.parts
               .map((part) => (isRecord(part) && isWireString(part.text) ? part.text : ""))
@@ -7893,13 +7891,13 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
           );
 
         const newest = readAnswer(
-          codingAgentNewestAnswerSchema,
+          agentNewestAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_NEWEST, owner, { id: agent.id })),
         );
         assert.deepEqual(wordsOf(newest), said.slice(-PAGE), "the newest page, oldest first");
         // The Start's line awaits the first turn.
-        assert.equal(newest.status, CODING_AGENT_STATUS.RUNNING);
+        assert.equal(newest.status, AGENT_STATUS.RUNNING);
         assert.notEqual(newest.before, undefined, "a full page says more stands below it");
 
         const read = [...wordsOf(newest)];
@@ -7907,7 +7905,7 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
         let pages = 1;
         while (before !== undefined) {
           const older = readAnswer(
-            codingAgentOlderAnswerSchema,
+            agentOlderAnswerSchema,
             HOSTED_HTTP_STATUS.OK,
             yield* ask(request(AGENT_NEWEST, owner, { id: agent.id, before })),
           );
@@ -7952,13 +7950,13 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
       Effect.gen(function* () {
         const { owner, task, ask } = yield* openTask();
         const agent = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
         ).agent;
         // The Start's own line is the transcript's one row.
         const newest = readAnswer(
-          codingAgentNewestAnswerSchema,
+          agentNewestAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_NEWEST, owner, { id: agent.id })),
         );
@@ -7966,12 +7964,12 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
         assert.equal(newest.before, undefined, "nothing older stands");
 
         const worker = readAnswer(
-          codingAgentNewestAnswerSchema,
+          agentNewestAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(SUBAGENT_NEWEST, owner, { id: agent.id, call: "call-7" })),
         );
         assert.deepEqual(worker.messages, []);
-        assert.equal(worker.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(worker.status, AGENT_STATUS.STARTING);
         assert.equal(worker.before, undefined);
       }),
   );
@@ -7982,18 +7980,18 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
       Effect.gen(function* () {
         const { owner, task, ask } = yield* openTask();
         const agent = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
         ).agent;
-        const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
+        const stored = Option.getOrThrow(yield* readAgent(owner, agent.id));
         yield* transcriptRow(stored, 2, MESSAGE_ROLE.USER, [text("Expire invitations.")]);
         yield* transcriptRow(stored, 3, MESSAGE_ROLE.ASSISTANT, [text("Expired.")]);
         const dropped = yield* transcriptRow(stored, 4, MESSAGE_ROLE.USER, [text("And emails.")]);
         yield* transcriptRow(stored, 5, MESSAGE_ROLE.ASSISTANT, [text("Emailed.")]);
         const newest = () =>
           Effect.map(ask(request(AGENT_NEWEST, owner, { id: agent.id })), (answered) =>
-            readAnswer(codingAgentNewestAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+            readAnswer(agentNewestAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
           );
         const before = yield* newest();
 
@@ -8075,7 +8073,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         ...(eve === undefined ? undefined : { eve }),
       });
       const source = readAnswer(
-        codingAgentAnswerSchema,
+        agentAnswerSchema,
         HOSTED_HTTP_STATUS.CREATED,
         yield* opened.ask(
           startAs(opened.owner, opened.task.id, {
@@ -8086,7 +8084,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           }),
         ),
       ).agent;
-      const stored = Option.getOrThrow(yield* readCodingAgent(opened.owner, source.id));
+      const stored = Option.getOrThrow(yield* readAgent(opened.owner, source.id));
       yield* transcriptRow(stored, 2, MESSAGE_ROLE.USER, [text("Use the mailer.")]);
       const firstTurn = yield* transcriptRow(stored, 3, MESSAGE_ROLE.ASSISTANT, [
         { type: "reasoning", text: "A thought of its own.", state: "done" },
@@ -8103,8 +8101,8 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         text("Also add tests."),
       ]);
       yield* transcriptRow(stored, 5, MESSAGE_ROLE.ASSISTANT, [text("Done.")]);
-      yield* updateCodingAgentBranch(opened.owner, source.id, PUBLISHED.branch);
-      yield* recordCodingAgentPublished(opened.owner, source.id, {
+      yield* updateAgentBranch(opened.owner, source.id, PUBLISHED.branch);
+      yield* recordAgentPublished(opened.owner, source.id, {
         number: PUBLISHED.number,
         title: "Expire teammate invitations",
         url: `https://github.com/${RELAY_FULL_NAME}/pull/${PUBLISHED.number}`,
@@ -8130,7 +8128,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         yield* savePlanText(owner, task.id, "## Goal\n\nInvite by link.\n");
 
         const started = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(
             startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
@@ -8178,14 +8176,14 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         );
         assert.ok(parts.replay?.preamble.includes(`/pull/${PUBLISHED.number}`));
         assert.doesNotMatch(handed, /A thought of its own/u);
-        const stored = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
+        const stored = Option.getOrThrow(yield* readAgent(owner, started.id));
         assert.equal(
           stored.planSnapshot,
           handed,
           "the agent keeps the first message it was handed",
         );
         const listed = readAnswer(
-          codingAgentListAnswerSchema,
+          agentListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(TASK_AGENTS, owner, { id: task.id })),
         );
@@ -8198,7 +8196,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   /** A source whose session eve opened is claimed, with a turn under way eve knows as `turn_0`; answers the session. */
-  const sourceRunning = (stored: CodingAgent, eve: ReturnType<typeof fakeEve>) =>
+  const sourceRunning = (stored: Agent, eve: ReturnType<typeof fakeEve>) =>
     Effect.gen(function* () {
       const target = { userId: stored.userId, conversationId: stored.conversationId };
       const sessionId = eve.opened[0]?.sessionId ?? "";
@@ -8238,22 +8236,21 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const startFrom = (from: { agentId: string; messageId?: string }) =>
           Effect.map(
             ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from })),
-            (answered) =>
-              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+            (answered) => readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
           );
         const sourceStatus = Effect.map(
           ask(request(AGENT, owner, { id: source.id })),
           (answered) =>
-            readAnswer(codingAgentPageAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agent.status,
+            readAnswer(agentPageAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agent.status,
         );
 
         yield* startFrom({ agentId: source.id, messageId: firstTurn });
         assert.deepEqual(eve.cancelled, [], "a fork stops nothing");
-        assert.equal(yield* sourceStatus, CODING_AGENT_STATUS.RUNNING);
+        assert.equal(yield* sourceStatus, AGENT_STATUS.RUNNING);
 
         yield* startFrom({ agentId: source.id });
         assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
-        assert.equal(yield* sourceStatus, CODING_AGENT_STATUS.CANCELLED);
+        assert.equal(yield* sourceStatus, AGENT_STATUS.CANCELLED);
 
         yield* startFrom({ agentId: source.id });
         assert.deepEqual(
@@ -8271,7 +8268,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       const sessionId = yield* sourceRunning(stored, eve);
 
       const started = readAnswer(
-        codingAgentAnswerSchema,
+        agentAnswerSchema,
         HOSTED_HTTP_STATUS.CREATED,
         yield* ask(
           startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
@@ -8281,11 +8278,11 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       assert.deepEqual(started.from?.agentId, source.id);
       assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
       const page = readAnswer(
-        codingAgentPageAnswerSchema,
+        agentPageAnswerSchema,
         HOSTED_HTTP_STATUS.OK,
         yield* ask(request(AGENT, owner, { id: source.id })),
       ).agent;
-      assert.equal(page.status, CODING_AGENT_STATUS.RUNNING);
+      assert.equal(page.status, AGENT_STATUS.RUNNING);
     }),
   );
 
@@ -8297,12 +8294,11 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const titleFrom = (from: { agentId: string; messageId?: string }) =>
           Effect.map(
             ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from })),
-            (answered) =>
-              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+            (answered) => readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
           );
 
         assert.equal((yield* titleFrom({ agentId: source.id })).title, null);
-        yield* renameCodingAgent(owner, source.id, "Invite by link");
+        yield* renameAgent(owner, source.id, "Invite by link");
         const continued = yield* titleFrom({ agentId: source.id });
         assert.equal(continued.title, "Invite by link (continued)");
         assert.equal(
@@ -8311,9 +8307,9 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         );
         assert.equal((yield* titleFrom({ agentId: source.id, messageId: firstTurn })).title, null);
         const long = "Expire teammate invitations ".repeat(4);
-        yield* renameCodingAgent(owner, source.id, long);
+        yield* renameAgent(owner, source.id, long);
         const cut = (yield* titleFrom({ agentId: source.id })).title ?? "";
-        assert.equal(cut.length <= CODING_AGENT_BOUNDS.MAX_TITLE_CHARS, true);
+        assert.equal(cut.length <= AGENT_BOUNDS.MAX_TITLE_CHARS, true);
         assert.match(cut, /^Expire teammate invitations Expire .*[^ ] \(continued\)$/u);
       }),
   );
@@ -8331,8 +8327,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const startFrom = (from: { agentId: string; messageId?: string }) =>
           Effect.map(
             ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from })),
-            (answered) =>
-              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+            (answered) => readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
           );
         const continued = yield* startFrom({ agentId: source.id });
         const forked = yield* startFrom({ agentId: source.id, messageId: firstTurn });
@@ -8346,7 +8341,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         ]);
 
         const listed = readAnswer(
-          codingAgentListAnswerSchema,
+          agentListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(TASK_AGENTS, owner, { id: task.id })),
         );
@@ -8354,13 +8349,13 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.deepEqual(byId(continuedByOf.get(source.id)), expected);
         assert.equal(continuedByOf.get(continued.id), undefined);
         const page = readAnswer(
-          codingAgentPageAnswerSchema,
+          agentPageAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT, owner, { id: source.id })),
         ).agent;
         assert.deepEqual(byId(page.continuedBy), expected);
         const archived = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(
             request(AGENT, owner, { method: "PATCH", id: source.id, body: { archived: true } }),
@@ -8383,7 +8378,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       yield* claimRuntimeSession(opened.stored, "wrun_source", new Date());
       const continued = Effect.gen(function* () {
         const started = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* opened.ask(
             startAs(opened.owner, opened.task.id, {
@@ -8453,18 +8448,18 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         // An automation's run leaves an agent so: in its workspace, on no task, handed a prompt.
         yield* Database.use((db) =>
           db
-            .update(codingAgent)
+            .update(agentTable)
             .set({
               taskId: null,
               organizationId: task.workspaceId,
               planSnapshot: null,
               prompt: SNAPSHOT,
             })
-            .where(eq(codingAgent.id, source.id)),
+            .where(eq(agentTable.id, source.id)),
         );
 
         const started = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(
             request(AGENT_STARTS, owner, {
@@ -8574,12 +8569,12 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           "origin",
           `HEAD:refs/heads/${pushedBranch}`,
         );
-        yield* updateCodingAgentBranch(owner, source.id, pushedBranch);
+        yield* updateAgentBranch(owner, source.id, pushedBranch);
         yield* Database.use((db) =>
           db
-            .update(codingAgent)
+            .update(agentTable)
             .set({ repository: "Acme/Former" })
-            .where(eq(codingAgent.id, source.id)),
+            .where(eq(agentTable.id, source.id)),
         );
 
         const { started, preamble } = yield* continued;
@@ -8665,7 +8660,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           );
 
         const started = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* fork(firstTurn),
         ).agent;
@@ -8730,7 +8725,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         }
 
         readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(
             startAs(owner, task.id, {
@@ -8770,7 +8765,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const fork = (messageSteps: number | undefined, messageStepParts?: number) =>
           Effect.gen(function* () {
             const started = readAnswer(
-              codingAgentAnswerSchema,
+              agentAnswerSchema,
               HOSTED_HTTP_STATUS.CREATED,
               yield* ask(
                 startAs(owner, task.id, {
@@ -8843,7 +8838,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const { owner, other, task, ask, eve, source } = yield* sourceAgent;
         const elsewhere = yield* startTask(owner, { name: "Billing", repository: RELAY_FULL_NAME });
         const away = Option.getOrThrow(
-          yield* createCodingAgent(owner, {
+          yield* createAgent(owner, {
             taskId: elsewhere.id,
             planSnapshot: "# Billing",
             prompt: null,
@@ -8887,7 +8882,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       Effect.gen(function* () {
         const { owner, other, task, ask, eve } = yield* openTask();
         const BRIEF = "Sweep the flaky tests.";
-        const made = yield* createCodingAgent(owner, {
+        const made = yield* createAgent(owner, {
           taskId: null,
           organizationId: task.workspaceId,
           planSnapshot: null,
@@ -8912,11 +8907,11 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const key = randomUUID();
         const continueBody = { idempotencyKey: key, from: { agentId: source.id } };
         const continued = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* startFromAs(owner, source.id, continueBody),
         ).agent;
-        const stored = Option.getOrThrow(yield* readCodingAgent(owner, continued.id));
+        const stored = Option.getOrThrow(yield* readAgent(owner, continued.id));
         assert.deepEqual(
           [stored.taskId, stored.organizationId, stored.repository, stored.planSnapshot],
           [null, task.workspaceId, RELAY_FULL_NAME, null],
@@ -8931,7 +8926,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.deepEqual(continued.from, { agentId: source.id, steps: 3, totalSteps: 3 });
         const opened = eve.opened.length;
         const again = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* startFromAs(owner, source.id, continueBody),
         ).agent;
@@ -8952,7 +8947,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         );
 
         const forked = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* startFromAs(owner, source.id, {
             idempotencyKey: randomUUID(),
@@ -8984,7 +8979,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
           "a task's Start refuses a source on no task rather than starting afresh",
         );
-        const bare = yield* createCodingAgent(owner, {
+        const bare = yield* createAgent(owner, {
           taskId: null,
           organizationId: task.workspaceId,
           planSnapshot: null,
@@ -9007,12 +9002,12 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
 
         // The same path from an agent on a task starts on that task, as the task's own Start would.
         const onTask = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
         ).agent;
         const fromTask = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* startFromAs(owner, onTask.id, {
             idempotencyKey: randomUUID(),
@@ -9020,12 +9015,12 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           }),
         ).agent;
         assert.equal(fromTask.planId, task.id);
-        assert.equal(Option.getOrThrow(yield* readCodingAgent(owner, fromTask.id)).taskId, task.id);
+        assert.equal(Option.getOrThrow(yield* readAgent(owner, fromTask.id)).taskId, task.id);
 
         // A retry is answered with the agent its key made though the source is gone since.
-        yield* Database.use((db) => db.delete(codingAgent).where(eq(codingAgent.id, source.id)));
+        yield* Database.use((db) => db.delete(agentTable).where(eq(agentTable.id, source.id)));
         const retried = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* startFromAs(owner, source.id, continueBody),
         ).agent;
@@ -9063,12 +9058,12 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const note = `Now check ${serverMention(INTEGRATION_PROVIDER.LINEAR, "Linear")} first.`;
         const png = {
           name: "flow.png",
-          mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+          mediaType: AGENT_ATTACHMENT_TYPE.PNG,
           data: Buffer.from(PNG).toString("base64"),
         };
 
         const started = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(
             startAs(owner, task.id, {
@@ -9088,8 +9083,8 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         });
         assert.equal(parts.replay?.steps.length, 6);
         assert.deepEqual(files, ["flow.png"]);
-        const kept = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
-        assert.deepEqual(yield* takeCodingAgentMentionedServers(owner, kept.conversationId), [
+        const kept = Option.getOrThrow(yield* readAgent(owner, started.id));
+        assert.deepEqual(yield* takeAgentMentionedServers(owner, kept.conversationId), [
           INTEGRATION_PROVIDER.LINEAR,
         ]);
       }),
@@ -9102,7 +9097,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const { owner, task, ask, eve } = yield* openTask();
         const data = Buffer.from(PNG).toString("base64");
         const source = Option.getOrThrow(
-          yield* createCodingAgent(owner, {
+          yield* createAgent(owner, {
             taskId: task.id,
             planSnapshot: null,
             prompt: "Match these screens.",
@@ -9113,16 +9108,16 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           }),
         ).agent;
         const shots = Array.from(
-          { length: CODING_AGENT_BOUNDS.MAX_ATTACHMENTS },
+          { length: AGENT_BOUNDS.MAX_ATTACHMENTS },
           (_, at) => `screen-${at}.png`,
         );
         yield* transcriptRow(source, 1, MESSAGE_ROLE.USER, [
           text("Match these screens."),
           ...shots.map((filename) => ({
             type: "file",
-            mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+            mediaType: AGENT_ATTACHMENT_TYPE.PNG,
             filename,
-            url: `data:${CODING_AGENT_ATTACHMENT_TYPE.PNG};base64,${data}`,
+            url: `data:${AGENT_ATTACHMENT_TYPE.PNG};base64,${data}`,
           })),
         ]);
 
@@ -9131,7 +9126,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             idempotencyKey: randomUUID(),
             from: { agentId: source.id },
             note: "And this one.",
-            attachments: [{ name: "new.png", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG, data }],
+            attachments: [{ name: "new.png", mediaType: AGENT_ATTACHMENT_TYPE.PNG, data }],
           }),
         );
         const { parts, files } = openedWithFiles(eve);
@@ -9148,19 +9143,17 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const { owner, task, ask, eve } = yield* openTask();
         const data = Buffer.from(SIZED_PNG).toString("base64");
         const source = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(
             startAs(owner, task.id, {
               idempotencyKey: randomUUID(),
               task: "Match this screen.",
-              attachments: [
-                { name: "flow.png", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG, data },
-              ],
+              attachments: [{ name: "flow.png", mediaType: AGENT_ATTACHMENT_TYPE.PNG, data }],
             }),
           ),
         ).agent;
-        const stored = Option.getOrThrow(yield* readCodingAgent(owner, source.id));
+        const stored = Option.getOrThrow(yield* readAgent(owner, source.id));
         const [first] = yield* Database.use((db) =>
           db
             .select({ parts: messages.parts })
@@ -9184,7 +9177,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
 
         assert.deepEqual(
           opened.flatMap((part) => (part.type === "file" ? [[part.filename, part.data]] : [])),
-          [["flow.png", `data:${CODING_AGENT_ATTACHMENT_TYPE.PNG};base64,${data}`]],
+          [["flow.png", `data:${AGENT_ATTACHMENT_TYPE.PNG};base64,${data}`]],
         );
         assert.doesNotMatch(
           openedWithFiles(eve).parts.replay?.preamble ?? "",
@@ -9200,7 +9193,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const { owner, task, ask } = yield* openTask();
         const prompt = `Triage ${serverMention(INTEGRATION_PROVIDER.LINEAR, "Linear")} daily.`;
         const run = Option.getOrThrow(
-          yield* createCodingAgent(owner, {
+          yield* createAgent(owner, {
             taskId: task.id,
             planSnapshot: null,
             prompt: `${prompt}\n\nThe webhook said: see ${serverMention(INTEGRATION_PROVIDER.NOTION, "Notion")}.`,
@@ -9217,7 +9210,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         ).agent;
 
         const started = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(
             startAs(owner, task.id, {
@@ -9228,9 +9221,9 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           ),
         ).agent;
 
-        const kept = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
+        const kept = Option.getOrThrow(yield* readAgent(owner, started.id));
         assert.deepEqual(
-          (yield* takeCodingAgentMentionedServers(owner, kept.conversationId)).toSorted(),
+          (yield* takeAgentMentionedServers(owner, kept.conversationId)).toSorted(),
           [INTEGRATION_PROVIDER.LINEAR, INTEGRATION_PROVIDER.SLACK],
         );
       }),
@@ -9243,7 +9236,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const { owner, task, ask, eve, source } = yield* sourceAgent;
         const png = {
           name: "flow.png",
-          mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+          mediaType: AGENT_ATTACHMENT_TYPE.PNG,
           data: Buffer.from(PNG).toString("base64"),
         };
         const opened = eve.opened.length;
@@ -9270,7 +9263,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const { owner, task, ask, eve, source, stored } = yield* sourceAgent;
         const body = { idempotencyKey: randomUUID(), from: { agentId: source.id } };
         const first = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(startAs(owner, task.id, body)),
         ).agent;
@@ -9285,9 +9278,9 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         );
         assert.equal(eve.opened.length, opened);
 
-        yield* discardCodingAgent(owner, source.id);
+        yield* discardAgent(owner, source.id);
         const again = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(startAs(owner, task.id, body)),
         ).agent;
@@ -9305,7 +9298,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const sourceOf = (handed: string) =>
           Effect.gen(function* () {
             const made = Option.getOrThrow(
-              yield* createCodingAgent(owner, {
+              yield* createAgent(owner, {
                 taskId: task.id,
                 planSnapshot: null,
                 prompt: handed,
@@ -9343,11 +9336,11 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       Effect.gen(function* () {
         const { owner, task, ask, eve } = yield* openTask();
         const source = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
         ).agent;
-        const stored = Option.getOrThrow(yield* readCodingAgent(owner, source.id));
+        const stored = Option.getOrThrow(yield* readAgent(owner, source.id));
         const turns = REPLAY_BOUNDS.MAX_ROWS + 50;
         const ids: string[] = [];
         // Note that the rows go in by the thousand, because one insert a row would take minutes.
@@ -9371,8 +9364,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const startFrom = (from: WireBoundaryInput) =>
           Effect.map(
             ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from })),
-            (answered) =>
-              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+            (answered) => readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
           );
 
         yield* startFrom({ agentId: source.id });
@@ -9424,7 +9416,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
     Effect.gen(function* () {
       const opened = yield* openTask(options);
       const first = readAnswer(
-        codingAgentAnswerSchema,
+        agentAnswerSchema,
         HOSTED_HTTP_STATUS.CREATED,
         yield* opened.ask(
           startAs(opened.owner, opened.task.id, {
@@ -9434,7 +9426,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           }),
         ),
       ).agent;
-      const stored = Option.getOrThrow(yield* readCodingAgent(opened.owner, first.id));
+      const stored = Option.getOrThrow(yield* readAgent(opened.owner, first.id));
       for (let turn = 0; turn < LONG_TURNS; turn += 1) {
         yield* transcriptRow(stored, turn + 2, MESSAGE_ROLE.ASSISTANT, [
           text(`Step ${turn}. ${"x".repeat(5_000)}`),
@@ -9452,8 +9444,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
               ...body,
             }),
           ),
-          (answered) =>
-            readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+          (answered) => readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
         );
       return { ...opened, first, stored, continueFrom };
     });
@@ -9476,7 +9467,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         ]);
 
         const started = readAnswer(
-          codingAgentAnswerSchema,
+          agentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(
             startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
@@ -9632,7 +9623,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
 
         const notes = {
           name: "notes.txt",
-          mediaType: CODING_AGENT_ATTACHMENT_TYPE.TEXT,
+          mediaType: AGENT_ATTACHMENT_TYPE.TEXT,
           data: Buffer.from("y".repeat(40_000), "utf8").toString("base64"),
         };
         const started = yield* continueFrom(first.id, {
@@ -9653,8 +9644,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const continueFrom = (agentId: string) =>
           Effect.map(
             ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId } })),
-            (answered) =>
-              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+            (answered) => readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
           );
         // The middle agent's session never ran a turn: it has no rows, no branch, and no sandbox.
         const never = yield* continueFrom(source.id);
@@ -9673,9 +9663,9 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         // A branch left in a repository the task has since moved from is none the new checkout holds.
         yield* Database.use((db) =>
           db
-            .update(codingAgent)
+            .update(agentTable)
             .set({ repository: "Acme/Former" })
-            .where(eq(codingAgent.id, source.id)),
+            .where(eq(agentTable.id, source.id)),
         );
         yield* continueFrom(never.id);
         const moved = openedParts(eve).parts.replay?.preamble ?? "";
@@ -9690,7 +9680,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       Effect.gen(function* () {
         const { owner, eve, first, continueFrom } = yield* longSource();
         const stepAt = (inputTokens: number, at: number) =>
-          recordCodingAgentStep(owner, first.id, {
+          recordAgentStep(owner, first.id, {
             inputTokens,
             outputTokens: 500,
             systemPromptTokens: 2_000,
@@ -9705,7 +9695,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
 
         // eve folded all but the newest into a summary, and the next step read far less.
         const measured = 6_000;
-        yield* recordCodingAgentCompaction(owner, first.id, new Date(2_000));
+        yield* recordAgentCompaction(owner, first.id, new Date(2_000));
         yield* stepAt(measured, 3_000);
         const bounded = yield* continueFrom(first.id, { model: SOL, effort: "low" });
         const replay = openedParts(eve).parts.replay;
@@ -9727,7 +9717,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           effort: "low",
         });
         // The runner's events record what Claude Code read, and nothing of instructions the CLI composed.
-        yield* recordCodingAgentStep(owner, first.id, {
+        yield* recordAgentStep(owner, first.id, {
           inputTokens: LONG_TURNS * 2_600,
           outputTokens: 500,
           systemPromptTokens: 0,
@@ -9750,7 +9740,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         const second = yield* continueFrom(first.id);
         const secondSteps = openedParts(eve).parts.replay?.steps ?? [];
 
-        const secondStored = Option.getOrThrow(yield* readCodingAgent(owner, second.id));
+        const secondStored = Option.getOrThrow(yield* readAgent(owner, second.id));
         yield* transcriptRow(secondStored, 2, MESSAGE_ROLE.ASSISTANT, [
           text(`Picked it up. ${"y".repeat(5_000)}`),
         ]);

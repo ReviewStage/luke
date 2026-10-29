@@ -1,6 +1,6 @@
 import { Schema as EffectSchema } from "effect";
-import type { CodingAgentChangedFile, ReviewThread } from "./coding-agent-wire.js";
-import { DIFF_SIDE } from "./coding-agent-wire.js";
+import type { AgentChangedFile, ReviewThread } from "./agent-wire.js";
+import { DIFF_SIDE } from "./agent-wire.js";
 import { DIFF_ROW, type DiffHunk, LOCKFILE_NAMES, patchHunks } from "./diff-hunks.js";
 
 /**
@@ -110,7 +110,7 @@ export interface ChapterHunk {
 }
 
 /** A file's hunks, none where it carries no patch, or one that holds no hunk or does not read as a diff. */
-function fileHunks(file: CodingAgentChangedFile): readonly DiffHunk[] {
+function fileHunks(file: AgentChangedFile): readonly DiffHunk[] {
   if (file.omitted !== null || file.patch === null) return [];
   return patchHunks(file.patch) ?? [];
 }
@@ -121,7 +121,7 @@ function fileHunks(file: CodingAgentChangedFile): readonly DiffHunk[] {
  * rename, a binary file, or one whose patch was left out, its name alone
  * (`HEADER_ONLY_OLD_START`).
  */
-export function chapterHunks(files: readonly CodingAgentChangedFile[]): readonly ChapterHunk[] {
+export function chapterHunks(files: readonly AgentChangedFile[]): readonly ChapterHunk[] {
   return files.flatMap((file): readonly ChapterHunk[] => {
     const hunks = fileHunks(file);
     if (hunks.length === 0) {
@@ -333,8 +333,8 @@ function hunkCounts(hunk: DiffHunk): LineCounts {
  */
 export function chapterPatches(
   chapter: Chapter,
-  files: readonly CodingAgentChangedFile[],
-): readonly CodingAgentChangedFile[] {
+  files: readonly AgentChangedFile[],
+): readonly AgentChangedFile[] {
   const byPath = new Map(files.map((file) => [file.path, file]));
   const wanted = new Map<string, Set<number>>();
   for (const ref of chapter.hunkRefs) {

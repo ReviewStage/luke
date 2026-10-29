@@ -17,15 +17,15 @@ import {
   wireUuidSchema,
 } from "../core.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import { calledId } from "./called-id.js";
 import {
+  AGENT_TOOL_REFUSAL,
+  type AgentCall,
   agentToolRejected,
-  CODING_AGENT_TOOL_REFUSAL,
-  type CodingAgentCall,
   callerUserId,
   callerWorkspace,
   orStoreRefusal,
-} from "./coding-agent-tools.js";
+} from "./agent-tools.js";
+import { calledId } from "./called-id.js";
 
 /**
  * task-section-tools.ts -- the tools every agent keeps the developer's sidebar sections by: make one, and delete one.
@@ -34,7 +34,7 @@ import {
  * `create_section` and `delete_section`, one implementation each, beside
  * `list_tasks`, which names each task's section and the sections themselves,
  * and `update_task`, whose `sectionId` moves a task into one or out of them
- * (`coding-agent-tools.ts`). A section is its maker's
+ * (`agent-tools.ts`). A section is its maker's
  * own, as the sidebar's are (`@luke/features/task-section-wire`), so each
  * call acts on the sections of the member the caller acts for (Luke's member
  * on the call, or the coding agent's starter), in the caller's own
@@ -118,7 +118,7 @@ function sectionReading(section: Pick<TaskSection, "id" | "title">) {
 
 /** One call of `create_section`: a section made for the caller's member in the caller's workspace, once under the call's key. */
 export function runCreateSection(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   const asked = readCreateAsked(input);
@@ -130,7 +130,7 @@ export function runCreateSection(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
       if (Option.isNone(workspace)) {
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       }
       const userId = callerUserId(call.caller);
       const id = calledId(userId, call.clientKey);
@@ -155,7 +155,7 @@ export function runCreateSection(
 
 /** One call of `delete_section`: one of the member's sections of the caller's workspace deleted, its tasks back under Tasks. */
 export function runDeleteSection(
-  call: CodingAgentCall,
+  call: AgentCall,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   const asked = readDeleteAsked(input);
@@ -167,7 +167,7 @@ export function runDeleteSection(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
       if (Option.isNone(workspace)) {
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_WORKSPACE);
+        return agentToolRejected(AGENT_TOOL_REFUSAL.NO_WORKSPACE);
       }
       const userId = callerUserId(call.caller);
       // Note that the read, the count, and the delete are one write under the account's lock, so the answer is what this call took.

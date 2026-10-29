@@ -1,4 +1,4 @@
-import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { searchTokens } from "@luke/ui/search-tokens";
@@ -39,7 +39,7 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
 /**
  * use-inbox-listing.ts -- the window's Inbox read once: every item of every
  * task of the listed workspace that holds one, and every agent with no task
- * that waits, as its list lists them under the view the developer chose, and
+ * that holds one, as its list lists them under the view the developer chose, and
  * the item chosen, read live through its holder's own read.
  *
  * The window's Inbox page reads it for its list and the item beside it
@@ -128,10 +128,11 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     [inboxTasks, listedTasks],
   );
   const waitingTaskless = tasks.inboxTaskless;
+  const agentsHolding = tasks.inboxAgents;
   const read = useHolderInboxItems(
     useMemo(
-      () => [...taskHoldings(holdings), ...agentHoldings(waitingTaskless)],
-      [holdings, waitingTaskless],
+      () => [...taskHoldings(holdings), ...agentHoldings(agentsHolding)],
+      [holdings, agentsHolding],
     ),
   );
   const readTasks = read.current[INBOX_SCOPE_KIND.PLAN];
@@ -193,13 +194,13 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
           ),
         }
       : read.items;
-  // An agent with no plan that a link names, none of whose items waits any longer, is grouped by its own read, which the account's list of waiting agents leaves out, in its own workspace's list alone.
+  // An agent with no plan that a link names, which main does not list as holding items yet, is grouped by its own read, in its own workspace's list alone.
   const pageAgent = agents.agents?.[0] ?? agents.archived?.[0];
   const settledAgent =
     chosenAgentId !== undefined &&
     holdsLive &&
     pageAgent !== undefined &&
-    !waitingTaskless.some((each) => each.agentId === chosenAgentId)
+    !agentsHolding.some((each) => each.agentId === chosenAgentId)
       ? [
           inboxAgentOf({
             ...pageAgent,
@@ -212,7 +213,7 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
   const everyChannel: readonly InboxGroup[] = inboxGroups(held, {
     tasks: holdings,
     listed: tasks.tasks,
-    agents: [...waitingTaskless, ...settledAgent],
+    agents: [...agentsHolding, ...settledAgent],
     workspaceId: tasks.workspace?.id,
   });
   const standing =
@@ -234,8 +235,8 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     readerId: tasks.me,
   };
   // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its place,
-  // both held still while the page stands.
-  const { list, steps } = useHeldInboxList(
+  // both held still while the page stands: every row while the pointer is over the list, and the chosen row while it stays chosen.
+  const { list, steps, onPointing } = useHeldInboxList(
     standing,
     filter,
     asked?.itemId,
@@ -330,6 +331,7 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     counts,
     list,
     steps,
+    onPointing,
     chosen,
     filteredOut,
     search: { query, onQuery: setQuery },

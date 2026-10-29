@@ -1,12 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import {
-  CODING_AGENT_STATUS,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
+import { AGENT_STATUS, type AgentStatus, type AgentSummary } from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { WireRecord } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -30,14 +26,14 @@ import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
  * tab, folds open on its task. Synthetic throughout.
  */
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "CSV export",
   createdAt: 1_000,
-  status: CODING_AGENT_STATUS.RUNNING,
+  status: AGENT_STATUS.RUNNING,
   turnId: null,
 };
 
@@ -61,7 +57,7 @@ function toolPart(tool: string, callId: string, input: WireRecord, output?: Wire
 }
 
 /** Another agent on the task, which a worker's call may be about. */
-const TEAMMATE: CodingAgentSummary = {
+const TEAMMATE: AgentSummary = {
   ...AGENT,
   id: "3f9d2b7e-6a41-4c58-9e0d-2b8c5a1f7d64",
   title: "Invoice export",
@@ -69,7 +65,7 @@ const TEAMMATE: CodingAgentSummary = {
 
 /** The worker's tab once its one page is read, the worker standing at `status`, opening what its rows name through `opens` where handed. */
 async function workerTab(
-  status: CodingAgentStatus,
+  status: AgentStatus,
   parts: readonly WireRecord[],
   opened: { task: string; first?: string; later?: string } = { task: "Audit the CSV writers" },
   opens?: (target: ToolTarget) => void,
@@ -148,7 +144,7 @@ function callRows(container: HTMLElement): string[] {
 }
 
 test("a worker still working draws its run of calls under one line, open on its calls", async () => {
-  const container = await workerTab(CODING_AGENT_STATUS.RUNNING, [
+  const container = await workerTab(AGENT_STATUS.RUNNING, [
     toolPart("grep", "grep-call", { pattern: "toCsv" }, { content: "2 matches" }),
     toolPart("bash", "test-call", { command: "pnpm test" }),
   ]);
@@ -160,7 +156,7 @@ test("a worker still working draws its run of calls under one line, open on its 
 });
 
 test("a worker that finished folds its lead under one line, its last words standing after it", async () => {
-  const container = await workerTab(CODING_AGENT_STATUS.COMPLETED, [
+  const container = await workerTab(AGENT_STATUS.COMPLETED, [
     toolPart("grep", "grep-call", { pattern: "toCsv" }, { content: "2 matches" }),
     toolPart("read_file", "read-call", { filePath: "src/csv.ts" }, { content: "export {}" }),
     { type: "text", text: "Both writers quote fields the same way." },
@@ -177,7 +173,7 @@ test("a worker that finished folds its lead under one line, its last words stand
 test("in a worker's transcript, a call about an agent opens its tab, and an agent's chip hangs its card", async () => {
   const opened: ToolTarget[] = [];
   const container = await workerTab(
-    CODING_AGENT_STATUS.RUNNING,
+    AGENT_STATUS.RUNNING,
     [
       toolPart("read_coding_agent", "read-call", { agentId: TEAMMATE.id }, { status: "running" }),
       toolPart(
@@ -203,7 +199,7 @@ test("in a worker's transcript, a call about an agent opens its tab, and an agen
 
 test("in a worker's transcript, a worker of its own, which opens no tab, folds open on its job's task and answer", async () => {
   const container = await workerTab(
-    CODING_AGENT_STATUS.RUNNING,
+    AGENT_STATUS.RUNNING,
     [
       toolPart(
         "delegate",
@@ -227,7 +223,7 @@ test("in a worker's transcript, a worker of its own, which opens no tab, folds o
 });
 
 test("a worker opened by its link, which carries no task's words, draws the task its own first row says, and no later task as the developer's", async () => {
-  const container = await workerTab(CODING_AGENT_STATUS.COMPLETED, [], {
+  const container = await workerTab(AGENT_STATUS.COMPLETED, [], {
     task: "",
     first: "Audit retries.",
     later: "Also check the timeouts.",
@@ -239,7 +235,7 @@ test("a worker opened by its link, which carries no task's words, draws the task
 
 test("a worker opened by its link whose own first row has no words still draws its work", async () => {
   const container = await workerTab(
-    CODING_AGENT_STATUS.COMPLETED,
+    AGENT_STATUS.COMPLETED,
     [{ type: "text", text: "Both writers quote fields the same way." }],
     { task: "", first: "" },
   );
@@ -250,9 +246,9 @@ test("a worker opened by its link whose own first row has no words still draws i
 test("a worker's tab whose earlier messages could not be read says so over its log, and Retry reads them again", async () => {
   const asked: unknown[] = [];
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER]: (payload: unknown) => {
+    [ACT_KIND.AGENTS_TRANSCRIPT_OLDER]: (payload: unknown) => {
       asked.push(payload);
-      return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      return Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
     },
   } as unknown as Parameters<typeof fakeActPort>[0]);
   const control = codingAgentsControl({
@@ -263,7 +259,7 @@ test("a worker's tab whose earlier messages could not be read says so over its l
           { id: "worker-turn", role: "assistant", parts: [{ type: "text", text: "Done." }] },
         ],
         cursor: "1:0",
-        status: CODING_AGENT_STATUS.COMPLETED,
+        status: AGENT_STATUS.COMPLETED,
         title: null,
         newest: true,
         before: "40",
@@ -285,7 +281,7 @@ test("a worker's tab whose earlier messages could not be read says so over its l
           agentId: AGENT.id,
           callId: "delegation-call",
           task: "Audit the CSV writers",
-          status: CODING_AGENT_STATUS.COMPLETED,
+          status: AGENT_STATUS.COMPLETED,
           control,
           shown: true,
           onStatus: () => undefined,

@@ -2,7 +2,7 @@ import {
   type GitHubPerson,
   PULL_REQUEST_STATE,
   type PullRequestState,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import type { GitHubPullRequestSummary, IssueState } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { issueAddressOf, pullRequestAddressOf } from "@luke/features/link-grammar";

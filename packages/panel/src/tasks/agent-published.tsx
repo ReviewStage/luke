@@ -1,8 +1,8 @@
 import {
+  type AgentPullRequest,
+  type AgentPullRequestAnswer,
   CHECK_SUMMARY,
-  type CodingAgentPullRequest,
-  type CodingAgentPullRequestAnswer,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import {
@@ -133,7 +133,7 @@ export function BranchChip({
   doors,
   narrow = false,
 }: {
-  published: CodingAgentPullRequestAnswer | undefined;
+  published: AgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
   /** Whether the composer is too narrow for the chip's words, so it draws its mark alone. */
   narrow?: boolean;
@@ -193,7 +193,7 @@ export function PublishedRow({
   branch,
   doors,
 }: {
-  pullRequest: CodingAgentPullRequest;
+  pullRequest: AgentPullRequest;
   /** The branch the pull request is from, whose name and checkout its menu copies; none where it is not known. */
   branch: string | null;
   doors: PublishedDoors;

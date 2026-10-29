@@ -1,8 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import {
-  listPublishedCodingAgentsById,
-  taskNamesOf,
-} from "@luke/database/models/coding-agent-store";
+import { listPublishedAgentsById, taskNamesOf } from "@luke/database/models/agent-store";
 import { listPages } from "@luke/database/models/plan-pages";
 import { agentName } from "@luke/features/model-label";
 import type { PageLine, PageOwner } from "@luke/features/page-wire";
@@ -27,7 +24,7 @@ import {
  * HTML, through the read the plan's side panel lists them by, so the sender is handed nothing of the plan they could
  * not open themselves. An agent is read by its id, on any task or none,
  * archived or not, with what it published and its task's name, through the
- * read opening its tab makes (`listPublishedCodingAgentsById`), so the
+ * read opening its tab makes (`listPublishedAgentsById`), so the
  * sender is handed only an agent they could open; and only one of the
  * workspace the message's agent stands in, so an agent of another
  * workspace, even one the sender is also in, is handed nothing. A person is
@@ -64,7 +61,7 @@ const readAgents = (userId: string, workspaceId: string, named: readonly string[
     // Note that an id that is no UUID names no agent, and is not asked of a store that would refuse it.
     const ids = named.flatMap((id) => Option.toArray(agentIdOf(id)));
     if (ids.length === 0) return found;
-    const read = yield* listPublishedCodingAgentsById(userId, ids);
+    const read = yield* listPublishedAgentsById(userId, ids);
     const standing = read.filter(({ agent }) => agent.organizationId === workspaceId);
     const tasks = yield* taskNamesOf(
       userId,

@@ -1,4 +1,4 @@
-import { CODING_AGENT_KIND, type CodingAgentKind } from "./coding-agent-wire.js";
+import { AGENT_KIND, type AgentKind } from "./agent-wire.js";
 import { type CatalogModel, MODEL_PROVIDER } from "./models-wire.js";
 
 /**
@@ -74,7 +74,7 @@ export const OPERATOR_NAME = "Luke";
 /** What names an agent: what kind it is, its title, the automation whose run started it, and the model it runs on. */
 interface NamedAgent {
   /** What kind of agent it is; an operator is named Luke whatever else it holds. Absent for a coder, as the wire leaves it. */
-  readonly kind?: CodingAgentKind | undefined;
+  readonly kind?: AgentKind | undefined;
   readonly title: string | null;
   readonly model: string;
   /** The name of the automation whose run started the agent, as the run started it; none for one started by hand. */
@@ -90,7 +90,7 @@ interface NamedAgent {
  * every one; a query names it as `agentGivenNameSql` does.
  */
 export function agentGivenName(agent: Pick<NamedAgent, "kind">): string | undefined {
-  return agent.kind === CODING_AGENT_KIND.OPERATOR ? OPERATOR_NAME : undefined;
+  return agent.kind === AGENT_KIND.OPERATOR ? OPERATOR_NAME : undefined;
 }
 
 /**

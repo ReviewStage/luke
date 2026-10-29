@@ -1,22 +1,22 @@
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentMessagesAnswerView,
-  type CodingAgentMessagesParams,
-  type CodingAgentTranscriptKey,
-  type CodingAgentTranscriptOlderAnswer,
-  type CodingAgentTranscriptOlderParams,
-  type CodingAgentTranscriptPage,
-} from "@luke/features/coding-agent-view";
+  AGENT_CALL_FAILURE,
+  type AgentMessagesAnswerView,
+  type AgentMessagesParams,
+  type AgentTranscriptKey,
+  type AgentTranscriptOlderAnswer,
+  type AgentTranscriptOlderParams,
+  type AgentTranscriptPage,
+} from "@luke/features/agent-view";
 import {
+  type AgentContext,
+  type AgentFailure,
+  type AgentPayer,
+  type AgentStatus,
+  type AgentSubagentStanding,
+  type AgentTranscriptMessage,
+  type AgentUsage,
   applyMessagesPage,
-  type CodingAgentContext,
-  type CodingAgentFailure,
-  type CodingAgentMessage,
-  type CodingAgentPayer,
-  type CodingAgentStatus,
-  type CodingAgentSubagentStanding,
-  type CodingAgentUsage,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import { askAct } from "../act.js";
@@ -27,7 +27,7 @@ import { type AgentRun, agentStillWriting } from "./coding-agent-model.js";
  * use-agent-transcript.ts -- one agent's transcript, or one of its workers', or a task's planning worker's, as its tab draws it, pushed to the window page by page while the tab is on screen.
  *
  * The tab holds its transcript's stream open on the act port while it is
- * shown (`codingAgents.transcript`) and closes it when it is not; the host
+ * shown (`agents.transcript`) and closes it when it is not; the host
  * follows the transcript and pushes every page down that stream, so nothing
  * here follows a cursor or keeps a loop. The first page is the
  * transcript's newest, which names where the page older than it is read
@@ -35,7 +35,7 @@ import { type AgentRun, agentStillWriting } from "./coding-agent-model.js";
  * messages held by id. A newest page that does not meet what is held, as
  * one pushed after the tab was away while more was written than a page
  * holds, takes its place. Older pages are read one at a time as the reader
- * asks for them (`loadOlder`, `codingAgents.transcriptOlder`), each put
+ * asks for them (`loadOlder`, `agents.transcriptOlder`), each put
  * before the messages held in a transition, which a page landing meanwhile
  * goes ahead of. Each page's status is
  * the agent's as the page was read, with why where its turn failed, which
@@ -50,9 +50,7 @@ import { type AgentRun, agentStillWriting } from "./coding-agent-model.js";
  */
 
 /** How one read is asked at once: the agent, the cursor to read past, and the worker's call where it is a worker's, answered as the view hears it. Copy transcript reads this way. */
-export type TranscriptReader = (
-  params: CodingAgentMessagesParams,
-) => Promise<CodingAgentMessagesAnswerView>;
+export type TranscriptReader = (params: AgentMessagesParams) => Promise<AgentMessagesAnswerView>;
 
 /**
  * How the window follows a transcript: each page is handed to `hear` as it
@@ -60,24 +58,24 @@ export type TranscriptReader = (
  * be read, until the returned call stops it.
  */
 export type TranscriptFollower = (
-  transcript: CodingAgentTranscriptKey,
-  hear: (page: CodingAgentTranscriptPage) => void,
+  transcript: AgentTranscriptKey,
+  hear: (page: AgentTranscriptPage) => void,
 ) => () => void;
 
 /** How the page below the oldest message held is read: the transcript and where to read below, answered as the view hears it. */
 export type TranscriptOlderReader = (
-  params: CodingAgentTranscriptOlderParams,
-) => Promise<CodingAgentTranscriptOlderAnswer>;
+  params: AgentTranscriptOlderParams,
+) => Promise<AgentTranscriptOlderAnswer>;
 
 /** The window's own older read, through the act door. */
 const windowTranscriptOlder: TranscriptOlderReader = (params) =>
-  askAct(ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER, params);
+  askAct(ACT_KIND.AGENTS_TRANSCRIPT_OLDER, params);
 
 /** The window's own follower: the transcript's stream, opened through the act door. */
 export const windowTranscriptFollower: TranscriptFollower = (transcript, hear) => {
   let stopped = false;
-  let stream: AsyncIteratorObject<CodingAgentTranscriptPage> | undefined;
-  const following = askAct(ACT_KIND.CODING_AGENTS_TRANSCRIPT, transcript).then(async (opened) => {
+  let stream: AsyncIteratorObject<AgentTranscriptPage> | undefined;
+  const following = askAct(ACT_KIND.AGENTS_TRANSCRIPT, transcript).then(async (opened) => {
     stream = opened;
     // A stream that opened only after the tab let it go is closed at once.
     if (stopped) {
@@ -90,7 +88,7 @@ export const windowTranscriptFollower: TranscriptFollower = (transcript, hear) =
     }
   });
   following.catch(() => {
-    if (!stopped) hear({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+    if (!stopped) hear({ failure: AGENT_CALL_FAILURE.UNANSWERED });
   });
   return () => {
     stopped = true;
@@ -99,27 +97,27 @@ export const windowTranscriptFollower: TranscriptFollower = (transcript, hear) =
 };
 
 /** Whether two keys name the same transcript. */
-function sameTranscript(one: CodingAgentTranscriptKey, other: CodingAgentTranscriptKey): boolean {
+function sameTranscript(one: AgentTranscriptKey, other: AgentTranscriptKey): boolean {
   return one.agentId === other.agentId && one.callId === other.callId;
 }
 
 /** What the tab draws of the transcript. */
 export interface AgentTranscriptControl {
-  messages: readonly CodingAgentMessage[];
+  messages: readonly AgentTranscriptMessage[];
   /** Why the agent's newest turn failed, as the last page said; nothing while it did not. */
-  failure: CodingAgentFailure | undefined;
+  failure: AgentFailure | undefined;
   /** Where a failed agent that ran directly on its Mac left its work, as the last page said; nothing for any other failure. */
   ranDirectly: { readonly folder: string } | undefined;
   /** What the agent has cost over every turn it settled, its workers' included, as the last page said; nothing before one settled. */
-  usage: CodingAgentUsage | undefined;
+  usage: AgentUsage | undefined;
   /** Who pays for the agent, as the last page said; nothing on a worker's, and for an agent from before payers. */
-  payer: CodingAgentPayer | undefined;
+  payer: AgentPayer | undefined;
   /** What the agent's model's context holds as its newest step left it, as the last page said; nothing before a step ended, and on a worker's. */
-  context: CodingAgentContext | undefined;
+  context: AgentContext | undefined;
   /** When the run under way began, as the last page said; nothing where it did not, which is where a worker's tab counts from. */
   runStartedAt: number | undefined;
   /** Where the agent, or the worker, stood as the last page said; nothing before one landed. */
-  pageStatus: CodingAgentStatus | undefined;
+  pageStatus: AgentStatus | undefined;
   /** Whether the last page read came back short, so every message written by then past the oldest held is read. */
   caughtUp: boolean;
   /** Whether messages older than the oldest held stand, which `loadOlder` reads. */
@@ -139,7 +137,7 @@ export interface AgentTranscriptControl {
   /** When each worker the agent's newest turn still waits on began, by the call that started it, as the last page said; none on a worker's. */
   delegations: ReadonlyMap<string, number>;
   /** Where each of the agent's workers stands, by the call that started it, as its own session reads and the last page said; none on a worker's, and from a service older than it. */
-  subagents: ReadonlyMap<string, CodingAgentSubagentStanding>;
+  subagents: ReadonlyMap<string, AgentSubagentStanding>;
   /** Whether a read is out, with nothing held yet to draw. */
   reading: boolean;
   /** Whether the last read did not answer, so the tab offers to try again. */
@@ -148,15 +146,15 @@ export interface AgentTranscriptControl {
 }
 
 interface Held {
-  transcript: CodingAgentTranscriptKey;
-  messages: readonly CodingAgentMessage[];
-  failure: CodingAgentFailure | undefined;
+  transcript: AgentTranscriptKey;
+  messages: readonly AgentTranscriptMessage[];
+  failure: AgentFailure | undefined;
   ranDirectly: { readonly folder: string } | undefined;
-  usage: CodingAgentUsage | undefined;
-  payer: CodingAgentPayer | undefined;
-  context: CodingAgentContext | undefined;
+  usage: AgentUsage | undefined;
+  payer: AgentPayer | undefined;
+  context: AgentContext | undefined;
   runStartedAt: number | undefined;
-  pageStatus: CodingAgentStatus | undefined;
+  pageStatus: AgentStatus | undefined;
   /** Whether the last page pushed came back short, so every message written by then past the oldest held is held. */
   caughtUp: boolean;
   /** Where the page older than the oldest message held is read below; none where nothing older stands, or before a page landed. */
@@ -170,13 +168,13 @@ interface Held {
   pageTitle: string | undefined;
   subagentTitles: ReadonlyMap<string, string>;
   delegations: ReadonlyMap<string, number>;
-  subagents: ReadonlyMap<string, CodingAgentSubagentStanding>;
+  subagents: ReadonlyMap<string, AgentSubagentStanding>;
   /** The rewind the newest page held was read at; none before a page landed or where the transcript was never rewound. */
   rewound: number | undefined;
   failed: boolean;
 }
 
-function fresh(transcript: CodingAgentTranscriptKey): Held {
+function fresh(transcript: AgentTranscriptKey): Held {
   return {
     transcript,
     messages: [],
@@ -221,7 +219,7 @@ function keptIfSame<V>(
 }
 
 /** Whether two readings of a worker say it stands alike. */
-function sameStanding(a: CodingAgentSubagentStanding, b: CodingAgentSubagentStanding): boolean {
+function sameStanding(a: AgentSubagentStanding, b: AgentSubagentStanding): boolean {
   return (
     a.callId === b.callId &&
     a.status === b.status &&
@@ -236,17 +234,17 @@ function sameStanding(a: CodingAgentSubagentStanding, b: CodingAgentSubagentStan
  * gap: it holds the whole transcript, or one of the held messages, since
  * both run unbroken to their ends.
  */
-function meets(held: readonly CodingAgentMessage[], page: CodingAgentTranscriptPage): boolean {
+function meets(held: readonly AgentTranscriptMessage[], page: AgentTranscriptPage): boolean {
   if ("failure" in page || page.before === undefined) return true;
   const ids = new Set(page.messages.map((message) => message.id));
   return held.some((message) => ids.has(message.id));
 }
 
 /** A page pushed, joined to what is held: its messages by id, and where the agent stands as it says. */
-function joined(was: Held, page: CodingAgentTranscriptPage): Held {
+function joined(was: Held, page: AgentTranscriptPage): Held {
   // Note that a transcript the account does not reach draws nothing it held of it, as one the host drew from what it held before access was checked.
   if ("failure" in page) {
-    return page.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND
+    return page.failure === AGENT_CALL_FAILURE.NOT_FOUND
       ? { ...fresh(was.transcript), pages: was.pages, failed: true }
       : { ...was, failed: true };
   }
@@ -300,7 +298,7 @@ function joined(was: Held, page: CodingAgentTranscriptPage): Held {
 interface FollowTiming {
   readonly startedAt: number;
   heard: number;
-  page: CodingAgentTranscriptPage | undefined;
+  page: AgentTranscriptPage | undefined;
   held: boolean;
   painted: boolean;
   caughtUp: boolean;
@@ -327,7 +325,7 @@ function endFollowSpan(
 
 export function useAgentTranscript(input: {
   /** Which transcript: the agent's own, one of its workers' by the call that started it, or a task's planning worker's. */
-  transcript: CodingAgentTranscriptKey;
+  transcript: AgentTranscriptKey;
   /** Whether the tab is on screen: the panel open on it, on the Tasks tab. */
   shown: boolean;
   follower: TranscriptFollower;
@@ -406,7 +404,7 @@ export function useAgentTranscript(input: {
         : was,
     );
     // Note that an answer is put before the messages only while they still begin where it was asked, so one for a transcript left or replaced since is dropped.
-    const settle = (answer: CodingAgentTranscriptOlderAnswer) =>
+    const settle = (answer: AgentTranscriptOlderAnswer) =>
       setHeld((was) => {
         if (!sameTranscript(was.transcript, transcript) || was.olderOut !== before) return was;
         if ("failure" in answer) return { ...was, olderOut: undefined, olderFailed: true };
@@ -424,7 +422,7 @@ export function useAgentTranscript(input: {
     // Note that an older page is put before the messages in a transition, so drawing it never holds the window: a page or a keystroke landing meanwhile is drawn first.
     latest.current.older({ ...transcript, before }).then(
       (answer) => startTransition(() => settle(answer)),
-      () => settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+      () => settle({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
     );
   }, [transcript, before, olderOut]);
 

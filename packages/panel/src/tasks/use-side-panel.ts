@@ -142,16 +142,21 @@ plan); an item has not
  * they keep their place until a launch and then drop out of the order,
  * leaving the rest as they stood.
  *
- * A fixed tab, a file's, or a Changes tab may be pinned to the sidebar, and so may a coding
- * agent's or the Inbox from the task's column, where it stands under Pinned beside the
- * pinned tasks, newest pinned first, and opens its task on that tab from
- * any task. The pins are kept here, with the rest of the window's tab
+ * A fixed tab, a file's, or a Changes tab may be pinned to the sidebar,
+ * where it stands under Pinned beside the pinned tasks, newest pinned
+ * first, and opens its holder on that tab from anywhere: a task's panel's
+ * tab is pinned on the task, and an agent's own page's on the agent
+ * (`PinHolder`). The pins are kept here, with the rest of the window's tab
  * preferences. The strip draws a pinned tab as it draws any other: it
  * closes, moves, and is closed by Close others the same way, and closing it
  * leaves its pin, which opens it again. A subagent's tab is a moment of its
- * agent's work, kept nowhere across a launch, so it is not pinned. The pins
- * are every task's, each with the name the sidebar draws for it, since an
- * agent's is read only while its task is open; what an earlier version
+ * agent's work, kept nowhere across a launch, so it is not pinned. A coding
+ * agent is pinned on the account (`agent_pin`), wherever it stands, never
+ * here: an agent's tab an earlier version pinned here is read, held apart
+ * (`carried`), and let go once the account holds its pin
+ * (`use-tasks-tab.ts`), so no pin is lost on the way. The pins are every
+ * holder's, each with the name the sidebar draws for it, since a Pull
+ * request's is read only while its task is open; what an earlier version
  * pinned in the strip itself reads as pinned to the sidebar, older than any
  * pin since.
  *
@@ -349,54 +354,123 @@ const anyTabSchema = Schema.Union([
 const PINS_KEPT = 100;
 
 /**
- * The tab a pin opens: a fixed one, an agent's, a file's, or an agent's
- * Changes. Note that a pin of the task's Call, which is gone, reads as the
- * retired fixed kind it is and is let go, and that a pin of the Plan tab,
- * which an earlier version offered, reads and is then made the task's own
- * pin on the account (`use-tasks-tab.ts`), since the Plan tab's Pin is the
- * task's.
+ * The tab a pin opens: a fixed one, a file's, or an agent's Changes. Note
+ * that a pin of the task's Call, which is gone, reads as the retired fixed
+ * kind it is and is let go, and that a pin of the Plan tab, which an earlier
+ * version offered, reads and is then made the task's own pin on the account
+ * (`use-tasks-tab.ts`), since the Plan tab's Pin is the task's.
  */
 const pinnableTabSchema = Schema.Union([
   sidePanelTabSchema,
-  Schema.Struct({ agent: Schema.String }),
   Schema.Struct({ file: Schema.String }),
   changesTabSchema,
 ]);
 
+/** The tab a pin an earlier version kept on a task opens: today's kinds, or a coding agent's, which the account pins now. */
+const keptTaskPinTabSchema = Schema.Union([
+  pinnableTabSchema,
+  Schema.Struct({ agent: Schema.String }),
+]);
+
 /**
- * A tab pinned to the sidebar: its task, the tab, the name the sidebar draws
- * for it, when it was pinned, where it stands among the pins once it was
- * dragged (`@luke/features/pin-order`), kept on this Mac alone, and, an
- * agent's, the model it ran on then, whose harness's mark its row wears
- * while its task is not the open one.
+ * A tab pinned to the sidebar on a task: the task, the tab, the name the
+ * sidebar draws for it, when it was pinned, where it stands among the pins
+ * once it was dragged (`@luke/features/pin-order`), kept on this Mac alone,
+ * and, an agent's an earlier version pinned, the model it ran on then.
  */
-const pinnedTabSchema = Schema.Struct({
+const taskPinSchema = Schema.Struct({
   task: Schema.String,
-  tab: pinnableTabSchema,
+  tab: keptTaskPinTabSchema,
   label: Schema.String,
   at: Schema.Number,
   position: Schema.optionalKey(Schema.String),
   model: Schema.optionalKey(Schema.String),
 });
 
+/** A tab pinned to the sidebar on an agent with no task, from its own page's panel, as a task's is. */
+const agentHolderPinSchema = Schema.Struct({
+  agent: Schema.String,
+  tab: pinnableTabSchema,
+  label: Schema.String,
+  at: Schema.Number,
+  position: Schema.optionalKey(Schema.String),
+});
+
+/** A tab pinned to the sidebar as it is kept: on a task, under `pins`, or on an agent's own page, under `agentPins`. */
+type KeptPin = typeof taskPinSchema.Type | typeof agentHolderPinSchema.Type;
+
 /** A tab of a kind the sidebar holds a pin of, of today's kinds. */
 export type PinnableTab = Exclude<typeof pinnableTabSchema.Type, RetiredSidePanelTab>;
 
-/** A tab pinned to the sidebar as the hook holds it, of today's kinds alone. */
-export interface PinnedTab extends Omit<typeof pinnedTabSchema.Type, "tab"> {
-  readonly tab: PinnableTab;
+/** What a tab is pinned on: the task whose panel holds it, or the agent with no task whose own page's panel does. */
+export type PinHolder = { readonly task: string } | { readonly agent: string };
+
+/** Whether two pins stand on one holder. */
+export function sameHolder(a: PinHolder, b: PinHolder): boolean {
+  return "task" in a ? "task" in b && a.task === b.task : "agent" in b && a.agent === b.agent;
 }
 
-/** What the open task's pins of agents and of their Pull requests are named now, each by agent id: an agent as its tab is, and its Pull request by the pull request's number and title; and a Pull request tab naming a pull request by its number likewise, by agent and then by number. */
+/** What every pin of a tab holds beside its holder. */
+interface PinFields {
+  readonly tab: PinnableTab;
+  readonly label: string;
+  readonly at: number;
+  readonly position?: string;
+}
+
+/** A tab pinned to the sidebar as the hook holds it, of today's kinds alone, on its holder. */
+export type PinnedTab = PinFields & PinHolder;
+
+/**
+ * A coding agent on a task the reader pinned on the account, as the
+ * sidebar's Pinned section draws and opens it: as its tab in the task's
+ * column, named as the agent is, at its pin's instant and place, wearing
+ * its model's harness mark while its task is not the open one.
+ */
+export interface AgentPin {
+  readonly task: string;
+  readonly tab: AgentStripTab;
+  readonly label: string;
+  readonly at: number;
+  readonly position?: string;
+  readonly model: string;
+}
+
+/** What a tab-shaped row under Pinned opens: a tab pinned on this Mac, or an agent on a task pinned on the account. */
+export type SidebarPin = PinnedTab | AgentPin;
+
+/** Whether a row's pin is an agent's on a task, pinned on the account, rather than a tab pinned on this Mac. */
+export function isAgentPin(pin: SidebarPin): pin is AgentPin {
+  return isAgentTab(pin.tab);
+}
+
+/** Whether two of the sidebar's pins are one: an agent's by its agent, and a tab's by its holder and the instant it was pinned, which no other pin shares. */
+export function samePin(a: SidebarPin, b: SidebarPin): boolean {
+  if (isAgentPin(a) || isAgentPin(b)) {
+    return isAgentPin(a) && isAgentPin(b) && a.tab.agent === b.tab.agent;
+  }
+  return sameHolder(a, b) && a.at === b.at;
+}
+
+/** An agent's tab an earlier version pinned here, held until the account holds the agent's pin. */
+type CarriedPin = typeof taskPinSchema.Type & { readonly tab: AgentStripTab };
+
+/** An agent's tab an earlier version pinned on this Mac, which the account is to pin now: the agent, the task it was pinned on, and where it was dragged. */
+export interface CarriedAgentPin {
+  readonly agent: string;
+  readonly task: string;
+  readonly position?: string;
+}
+
+/** What the open task's Pull request pins are named now, each by agent id, by the pull request's number and title; and a Pull request tab naming a pull request by its number likewise, by agent and then by number. */
 interface PinNames {
-  readonly agents: ReadonlyMap<string, string>;
   readonly pullRequests: ReadonlyMap<string, string>;
   readonly numbered?: ByPullRequestTab<string>;
 }
 
 /** A tab an earlier version pinned in the strip itself, of any kind it then held but a draft agent's. */
 const stripPinSchema = Schema.Union([
-  pinnableTabSchema,
+  keptTaskPinTabSchema,
   Schema.Struct({
     subagent: Schema.String,
     delegation: Schema.optionalKey(Schema.Struct({ agent: Schema.String, task: Schema.String })),
@@ -445,10 +519,15 @@ interface TaskTabs {
  * The fixed tabs in the order a task no tab was moved on draws them, which
  * an earlier version's drags set for every task, the chosen tab, each
  * task's own choices of fixed tab, by task id, and the tabs pinned to the
- * sidebar, newest pinned first. Note that `tabs`
+ * sidebar, newest pinned first: those on a task under `pins`, and those
+ * on an agent's own page under `agentPins`. Note that `tabs`
  * once held only the open fixed tabs, so what an earlier version kept reads
  * as an order with the kinds it closed last, and that a record with no
  * `pins` is one from before them, whose strip pins are read in their place.
+ * Note too that a pin on an agent is kept under a key of its own, because an
+ * earlier version reading the record, as one a rollback launches does, reads
+ * every pin under `pins` as a task's, and would let go of the whole record,
+ * open tabs and width among it, over one it could not read.
  */
 const sidePanelStateSchema = Schema.Struct({
   open: Schema.Boolean,
@@ -456,7 +535,8 @@ const sidePanelStateSchema = Schema.Struct({
   tab: Schema.optional(anyTabSchema),
   width: Schema.Number,
   tasks: Schema.optional(Schema.Record(Schema.String, taskTabsSchema)),
-  pins: Schema.optional(Schema.Array(pinnedTabSchema)),
+  pins: Schema.optional(Schema.Array(taskPinSchema)),
+  agentPins: Schema.optional(Schema.Array(agentHolderPinSchema)),
 });
 
 export type SidePanelState = typeof sidePanelStateSchema.Type;
@@ -505,6 +585,8 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "tasks" | "pin
   readonly previews: Readonly<Record<string, SidePanelTab>>;
   readonly tasks: Readonly<Record<string, TaskTabs>>;
   readonly pins: readonly PinnedTab[];
+  /** The agents' tabs an earlier version pinned here, kept as they were until the account holds each agent's pin, and drawn nowhere. */
+  readonly carried: readonly CarriedPin[];
 }
 
 /** A task the developer has chosen no fixed tab on. */
@@ -519,8 +601,8 @@ const earlierSidePanelSchema = Schema.Struct({
 
 /** A pin as it is read: one written before tasks had their name names its task `plan`. */
 const keptPinSchema = Schema.Union([
-  pinnedTabSchema,
-  pinnedTabSchema.mapFields(({ task: _task, ...fields }) => ({ ...fields, plan: Schema.String })),
+  taskPinSchema,
+  taskPinSchema.mapFields(({ task: _task, ...fields }) => ({ ...fields, plan: Schema.String })),
 ]);
 
 /** The kept preference as it is read: one written before tasks had their name keeps their choices under `plans`, and its pins under `plan`. */
@@ -645,10 +727,14 @@ export interface SidePanelControl {
    * and the history it had (`file`).
    */
   onReopen: (tab: SidePanelTab, at: number, file: OpenFile | undefined) => void;
-  /** Pins the open task's tab, of either strip, to the sidebar under the name given, newest of the pins; an agent's with the model it runs on. */
-  onPin: (tab: PinnableTab, label: string, model?: string) => void;
-  onUnpin: (taskId: string, tab: PinnableTab) => void;
-  /** Names each agent, and each agent's Pull request, pinned on the task as its tab is named now; one named nowhere keeps the name it has. */
+  /** Pins the holder's tab to the sidebar under the name given, newest of the pins. */
+  onPin: (holder: PinHolder, tab: PinnableTab, label: string) => void;
+  onUnpin: (holder: PinHolder, tab: PinnableTab) => void;
+  /** The agents' tabs an earlier version pinned here, which the account is to pin now, drawn nowhere until it does. */
+  carried: readonly CarriedAgentPin[];
+  /** Lets go of the agent's tabs an earlier version pinned here, once the account holds its pin. */
+  onCarried: (agentId: string) => void;
+  /** Names each agent's Pull request pinned on the task as its tab is named now; one named nowhere keeps the name it has. */
   onRenamePins: (taskId: string, names: PinNames) => void;
   /** Stands each pin dragged in the sidebar's Pinned section at its new place, named by the instant it was pinned, kept on this Mac; none stands it by that instant again. */
   onPlacePins: (places: ReadonlyMap<number, string | undefined>) => void;
@@ -701,6 +787,9 @@ function clampWidth(width: number): number {
  * tab, as nothing does.
  */
 export type TaskHolds = Partial<Record<FixedSidePanelTab, boolean | undefined>>;
+
+/** What an agent's own page holds of the fixed kinds: its Inbox, which it may always draw, its agent being the one that posts; the plan and its comments are a task's alone. */
+export const AGENT_PAGE_HOLDS: TaskHolds = { [SIDE_PANEL_TAB.INBOX]: true };
 
 /** The open task as the panel draws its fixed tabs: its id, none while no task is open, and what it holds. */
 export interface OpenTask {
@@ -810,41 +899,45 @@ function withChoice(
   });
 }
 
-/** Whether a tab of either strip is of a kind the sidebar holds a pin of: a fixed one, an agent's, a file's, or an agent's Changes. */
+/** Whether a tab of either strip is of a kind the sidebar holds a pin of: a fixed one, a file's, or an agent's Changes. A coding agent's own tab is pinned as the agent, on the account. */
 export function isPinnable(tab: StripTab): tab is PinnableTab {
-  return FIXED_TABS.has(tab) || isAgentTab(tab) || isFileTab(tab) || isChangesTab(tab);
+  return FIXED_TABS.has(tab) || isFileTab(tab) || isChangesTab(tab);
 }
 
-/** A pin of a tab in the task's own column rather than the side panel: an agent's. */
-export type ColumnPinnableTab = Extract<PinnableTab, AgentStripTab>;
-
-/** Whether a pin opens in the task's own column, an agent's tab, rather than in the side panel. */
-export function inColumn(tab: PinnableTab): tab is ColumnPinnableTab {
-  return isAgentTab(tab);
-}
-
-/** Whether the pin is of the plan's tab. */
-function pinOf(pin: PinnedTab, taskId: string, tab: PinnableTab): boolean {
-  return pin.task === taskId && sameTab(pin.tab, tab);
+/** Whether the pin is of the holder's tab. */
+function pinOf(pin: PinnedTab, holder: PinHolder, tab: PinnableTab): boolean {
+  return sameHolder(pin, holder) && sameTab(pin.tab, tab);
 }
 
 /**
- * The state with the plan's tab pinned, newest of the pins, the oldest let
+ * The state with the holder's tab pinned, newest of the pins, the oldest let
  * go past the bound; a tab already pinned keeps its place. Note that its
  * stamp is `at` or just after the newest pin's, so no two pins share one,
  * and a pin's stamp tells it from every other.
  */
-function withPin(held: HeldState, pin: Omit<PinnedTab, "at">, at: number): HeldState {
-  if (held.pins.some((each) => pinOf(each, pin.task, pin.tab))) return held;
+function withPin(
+  held: HeldState,
+  holder: PinHolder,
+  tab: PinnableTab,
+  label: string,
+  at: number,
+): HeldState {
+  if (held.pins.some((each) => pinOf(each, holder, tab))) return held;
   const newest = held.pins[0]?.at ?? Number.NEGATIVE_INFINITY;
-  const pinned = { ...pin, at: Math.max(at, newest + 1) };
+  const pinned: PinnedTab = { ...holder, tab, label, at: Math.max(at, newest + 1) };
   return { ...held, pins: [pinned, ...held.pins].slice(0, PINS_KEPT) };
 }
 
-/** The state with the plan's tab no longer pinned. */
-function withoutPin(held: HeldState, taskId: string, tab: PinnableTab): HeldState {
-  if (!held.pins.some((each) => pinOf(each, taskId, tab))) return held;
-  return { ...held, pins: held.pins.filter((each) => !pinOf(each, taskId, tab)) };
+/** The state with the holder's tab no longer pinned. */
+function withoutPin(held: HeldState, holder: PinHolder, tab: PinnableTab): HeldState {
+  if (!held.pins.some((each) => pinOf(each, holder, tab))) return held;
+  return { ...held, pins: held.pins.filter((each) => !pinOf(each, holder, tab)) };
+}
+
+/** The state with the agent's tabs an earlier version pinned here let go, once the account holds its pin. */
+function withoutCarried(held: HeldState, agentId: string): HeldState {
+  if (!held.carried.some((pin) => pin.tab.agent === agentId)) return held;
+  return { ...held, carried: held.carried.filter((pin) => pin.tab.agent !== agentId) };
 }
 
 /** The state with each pin `places` names, by the instant it was pinned, standing at the place given there, or by its instant again where none is. */
@@ -862,19 +955,18 @@ function withPinsPlaced(
   return pins.every((pin, at) => pin === held.pins[at]) ? held : { ...held, pins };
 }
 
-/** The name a pin of an agent's tab or its Changes tab wears as `names` names it, by agent id; none for any other pin, or one named nowhere. */
+/** The name a pin of an agent's Changes tab wears as `names` names it, by agent id; none for any other pin, or one named nowhere. */
 function agentPinLabel(tab: PinnableTab, names: PinNames): string | undefined {
-  if (isAgentTab(tab)) return names.agents.get(tab.agent);
   if (!isChangesTab(tab)) return undefined;
   return tab.number === undefined
     ? names.pullRequests.get(tab.changes)
     : ofPullRequestTab(names.numbered ?? new Map(), tab);
 }
 
-/** The state with each agent, and each agent's Changes, pinned on the task named as `names` names it, and the state as it is where every one already was. */
+/** The state with each agent's Changes pinned on the task named as `names` names it, and the state as it is where every one already was. */
 function withPinsRenamed(held: HeldState, taskId: string, names: PinNames): HeldState {
   const renamed = (pin: PinnedTab) => {
-    const label = pin.task === taskId ? agentPinLabel(pin.tab, names) : undefined;
+    const label = "task" in pin && pin.task === taskId ? agentPinLabel(pin.tab, names) : undefined;
     return label === undefined || label === pin.label ? pin : { ...pin, label };
   };
   const pins = held.pins.map(renamed);
@@ -1590,7 +1682,7 @@ function currentTasks(tasks: SidePanelState["tasks"]): HeldState["tasks"] {
 }
 
 /** The name a pin read from the strip's own carries until its task is next open: a fixed tab's kind, a file's name, any Changes tab's, or any agent's. */
-function stripPinLabel(tab: PinnableTab): string {
+function stripPinLabel(tab: PinnableTab | AgentStripTab): string {
   if (isFileTab(tab)) return fileName(tab.file);
   if (isChangesTab(tab)) return TAB_WORDS.PULL_REQUEST;
   return isAgentTab(tab) ? TAB_WORDS.CODING_AGENT : SIDE_PANEL_TAB_KIND[tab].label;
@@ -1607,13 +1699,31 @@ function currentPin<T>(tab: T): tab is Exclude<T, RetiredSidePanelTab> {
  * stamped before the one ahead of it. A subagent's, and a kind retired
  * since, is let go, since the sidebar holds no pin of one.
  */
-function stripPins(tasks: NonNullable<SidePanelState["tasks"]>): readonly PinnedTab[] {
+function stripPins(
+  tasks: NonNullable<SidePanelState["tasks"]>,
+): readonly (typeof taskPinSchema.Type)[] {
   const pinned = Object.entries(tasks).flatMap(([task, { pinned = [] }]) =>
     pinned.flatMap((tab) =>
-      isPinnable(tab) && currentPin(tab) ? [{ task, tab, label: stripPinLabel(tab) }] : [],
+      (isPinnable(tab) || isAgentTab(tab)) && currentPin(tab)
+        ? [{ task, tab, label: stripPinLabel(tab) }]
+        : [],
     ),
   );
   return pinned.map((pin, place) => ({ ...pin, at: -place }));
+}
+
+/** Whether a kept pin is of an agent's tab, which the account pins now. */
+function carriedPin(pin: KeptPin): pin is CarriedPin {
+  return "task" in pin && isAgentTab(pin.tab);
+}
+
+/** A kept pin of today's kinds as the hook holds it, on its holder; none for an agent's, or a retired kind's. */
+function heldPin(pin: KeptPin): PinnedTab[] {
+  const { tab } = pin;
+  if (isAgentTab(tab) || !currentPin(tab)) return [];
+  const { label, at, position } = pin;
+  const fields = position === undefined ? { tab, label, at } : { tab, label, at, position };
+  return ["task" in pin ? { ...fields, task: pin.task } : { ...fields, agent: pin.agent }];
 }
 
 /**
@@ -1623,7 +1733,11 @@ function stripPins(tasks: NonNullable<SidePanelState["tasks"]>): readonly Pinned
  * agent's, and its pins, or where it is from before them, its strip's.
  */
 function settled(state: SidePanelState): HeldState {
-  const { tab, pins } = state;
+  const { tab } = state;
+  const pins: readonly KeptPin[] = [
+    ...(state.pins ?? stripPins(state.tasks ?? {})),
+    ...(state.agentPins ?? []),
+  ];
   return {
     ...state,
     // The plan's tab leads, since a kept order from before it stood here holds it nowhere.
@@ -1641,13 +1755,8 @@ function settled(state: SidePanelState): HeldState {
     macTerminals: [],
     previews: {},
     tasks: currentTasks(state.tasks),
-    pins:
-      pins === undefined
-        ? stripPins(state.tasks ?? {})
-        : pins.flatMap((pin) => {
-            const { tab: pinned } = pin;
-            return currentPin(pinned) ? [{ ...pin, tab: pinned }] : [];
-          }),
+    pins: pins.flatMap(heldPin).toSorted((a, b) => b.at - a.at),
+    carried: pins.filter(carriedPin),
   };
 }
 
@@ -1705,10 +1814,17 @@ function stored(state: HeldState): SidePanelState {
     tabs: state.tabs,
     width: state.width,
     tasks: storedTasks(state.tasks),
-    pins: state.pins,
+    pins: [
+      ...state.pins.flatMap((pin): (typeof taskPinSchema.Type)[] => ("task" in pin ? [pin] : [])),
+      ...state.carried,
+    ],
   };
+  const agentPins = state.pins.flatMap((pin): (typeof agentHolderPinSchema.Type)[] =>
+    "agent" in pin ? [pin] : [],
+  );
+  const withAgents = agentPins.length === 0 ? kept : { ...kept, agentPins };
   const tab = state.tab;
-  return tab !== undefined && keptChoice(tab) ? { ...kept, tab } : kept;
+  return tab !== undefined && keptChoice(tab) ? { ...withAgents, tab } : withAgents;
 }
 
 /** What storage holds under the key, or nothing where it refuses the read. */
@@ -2169,17 +2285,18 @@ export function useSidePanel(
     [update, drawn, taskId],
   );
   const onPin = useCallback(
-    (tab: PinnableTab, label: string, model?: string) => {
-      if (taskId === undefined) return;
+    (holder: PinHolder, tab: PinnableTab, label: string) => {
       const at = Date.now();
-      const pin =
-        model === undefined ? { task: taskId, tab, label } : { task: taskId, tab, label, model };
-      update((held) => withPin(held, pin, at));
+      update((held) => withPin(held, holder, tab, label, at));
     },
-    [update, taskId],
+    [update],
   );
   const onUnpin = useCallback(
-    (on: string, tab: PinnableTab) => update((held) => withoutPin(held, on, tab)),
+    (holder: PinHolder, tab: PinnableTab) => update((held) => withoutPin(held, holder, tab)),
+    [update],
+  );
+  const onCarried = useCallback(
+    (agentId: string) => update((held) => withoutCarried(held, agentId)),
     [update],
   );
   const onRenamePins = useCallback(
@@ -2200,6 +2317,14 @@ export function useSidePanel(
       update((held) => withViewedAt(held, on, viewed, standing, at)),
     [update],
   );
+  const carried = useMemo(
+    () =>
+      state.carried.map(({ task, tab, position }): CarriedAgentPin => {
+        const pin = { agent: tab.agent, task };
+        return position === undefined ? pin : { ...pin, position };
+      }),
+    [state.carried],
+  );
   return {
     open: shown,
     tabs,
@@ -2208,6 +2333,7 @@ export function useSidePanel(
     closedTabs: taskTabs(state, taskId).closed,
     used,
     pins: state.pins,
+    carried,
     subagents: state.subagents,
     changes: taskTabs(state, taskId).changes ?? NO_CHANGES,
     pages: state.pages,
@@ -2236,6 +2362,7 @@ export function useSidePanel(
     onReopen,
     onPin,
     onUnpin,
+    onCarried,
     onRenamePins,
     onPlacePins,
     onOpenFile,

@@ -16,23 +16,23 @@
  * pushed is gone with its folder.
  */
 
-import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { type Agent, readAgent } from "@luke/database/models/agent-store";
 import { queueDeviceAgentLine } from "@luke/database/models/device-agent-store";
-import { CODING_AGENT_MACHINE } from "@luke/features/coding-agent-wire";
+import { AGENT_MACHINE } from "@luke/features/agent-wire";
 import { DEVICE_AGENT_LINE_KIND } from "@luke/features/device-agent-wire";
 import { Effect, Option } from "effect";
 import { holdingRunner } from "./coder-host/runner-lease.js";
 
 /** The archived agent's discard line queued to its device, where it runs on one that takes it and still stands archived under its runner lease. */
 const discardedWhileArchived = /* @__PURE__ */ Effect.fnUntraced(function* (
-  agent: Pick<CodingAgent, "id" | "userId">,
+  agent: Pick<Agent, "id" | "userId">,
 ) {
-  const read = yield* readCodingAgent(agent.userId, agent.id);
-  if (Option.isNone(read) || read.value.machine !== CODING_AGENT_MACHINE.DEVICE) return;
+  const read = yield* readAgent(agent.userId, agent.id);
+  if (Option.isNone(read) || read.value.machine !== AGENT_MACHINE.DEVICE) return;
   yield* holdingRunner(
     agent.id,
     Effect.gen(function* () {
-      const current = yield* readCodingAgent(agent.userId, agent.id);
+      const current = yield* readAgent(agent.userId, agent.id);
       if (Option.isNone(current) || current.value.archivedAt === null) return;
       yield* queueDeviceAgentLine(agent.userId, {
         agentId: agent.id,
@@ -48,7 +48,7 @@ const discardedWhileArchived = /* @__PURE__ */ Effect.fnUntraced(function* (
  * answered, so an archive never fails on its device: whether nothing failed,
  * so a caller that can ask again later knows to.
  */
-export const discardedOrLogged = (agent: Pick<CodingAgent, "id" | "userId">) =>
+export const discardedOrLogged = (agent: Pick<Agent, "id" | "userId">) =>
   discardedWhileArchived(agent).pipe(
     Effect.as(true),
     Effect.catch((failure) =>

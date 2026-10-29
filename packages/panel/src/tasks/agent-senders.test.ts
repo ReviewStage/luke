@@ -2,13 +2,13 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_SENDER,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentSender,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_BRIEF,
+  AGENT_SENDER,
+  AGENT_STATUS,
+  type AgentSender,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
@@ -51,7 +51,7 @@ import { OpenLinkProvider } from "./use-open-link.js";
 
 const DEAN = { userId: "user-dean", name: "Dean Stratakos" };
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
-const MEMBER = CODING_AGENT_SENDER.MEMBER;
+const MEMBER = AGENT_SENDER.MEMBER;
 
 /** Charles's sign-in picture, which the members read lists. */
 const CHARLES_PICTURE = "https://lh3.googleusercontent.com/a/charles=s96-c";
@@ -77,34 +77,34 @@ const SENDER_ID = "2f9e8d7c-6b5a-4c3d-9e8f-7a6b5c4d3e2f";
 const SENDER_TASK = "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d";
 
 /** That agent as its task's agents, or its workspace's, are read now: renamed since it sent the line, and moved to another model. */
-const SENDER_NOW: CodingAgentSummary = {
+const SENDER_NOW: AgentSummary = {
   id: SENDER_ID,
   planId: SENDER_TASK,
   model: "openai/gpt-6.1-sol",
   effort: "high",
   title: "Split view, merged",
   createdAt: 1_000,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
-  brief: CODING_AGENT_BRIEF.PROMPT,
+  brief: AGENT_BRIEF.PROMPT,
   startedBy: DEAN,
 };
 
-const AGENT: CodingAgentSummary = {
+const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   model: "anthropic/claude-opus-5.5",
   effort: "high",
   title: "Invite flow",
   createdAt: 1_000,
-  status: CODING_AGENT_STATUS.COMPLETED,
+  status: AGENT_STATUS.COMPLETED,
   turnId: null,
-  brief: CODING_AGENT_BRIEF.PROMPT,
+  brief: AGENT_BRIEF.PROMPT,
   startedBy: DEAN,
 };
 
 /** One of the developer's messages, with what sent it where its row kept it. */
-function line(id: string, text: string, sentBy?: CodingAgentSender): CodingAgentMessage {
+function line(id: string, text: string, sentBy?: AgentSender): AgentTranscriptMessage {
   return {
     id,
     role: MESSAGE_ROLE.USER,
@@ -113,24 +113,24 @@ function line(id: string, text: string, sentBy?: CodingAgentSender): CodingAgent
   };
 }
 
-const MESSAGES: readonly CodingAgentMessage[] = [
+const MESSAGES: readonly AgentTranscriptMessage[] = [
   line("task", "Add the invite flow."),
   line("dean", "Use seven days.", { ...DEAN, kind: MEMBER }),
   { ...line("charles", "Not five.", { ...CHARLES, kind: MEMBER }), sentAt: CHARLES_SENT_AT },
   line("earlier", "Keep the old copy."),
-  line("luke", "Rebase on main.", { name: "Luke", kind: CODING_AGENT_SENDER.LUKE }),
+  line("luke", "Rebase on main.", { name: "Luke", kind: AGENT_SENDER.LUKE }),
   line("automation", "Triage the failures.", {
     name: "Nightly triage",
-    kind: CODING_AGENT_SENDER.AUTOMATION,
+    kind: AGENT_SENDER.AUTOMATION,
   }),
-  line("gone", "Drop the banner.", { name: "Former member", kind: CODING_AGENT_SENDER.FORMER }),
+  line("gone", "Drop the banner.", { name: "Former member", kind: AGENT_SENDER.FORMER }),
   line("reviewer", "@octocat requested changes on your pull request #12.", {
     name: "octocat",
-    kind: CODING_AGENT_SENDER.GITHUB,
+    kind: AGENT_SENDER.GITHUB,
   }),
   line("review-bot", "@devin-ai-integration[bot] reviewed your pull request #12.", {
     name: "devin-ai-integration[bot]",
-    kind: CODING_AGENT_SENDER.GITHUB,
+    kind: AGENT_SENDER.GITHUB,
   }),
   line("left", "Keep the banner.", { userId: "user-ana", name: "Ana Ruiz", kind: MEMBER }),
   line("agent", "Thanks, that's everything I need.", { name: "Add PR overview tab", agent: true }),
@@ -167,16 +167,15 @@ afterEach(() => {
 async function drawnFor(
   reader: string,
   opened: LinkPlace[] = [],
-  agent: CodingAgentSummary = AGENT,
-  messages: readonly CodingAgentMessage[] = MESSAGES,
+  agent: AgentSummary = AGENT,
+  messages: readonly AgentTranscriptMessage[] = MESSAGES,
 ): Promise<readonly Element[]> {
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> =>
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
           ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
-          : request.kind === ACT_KIND.CODING_AGENTS_LIST ||
-              request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+          : request.kind === ACT_KIND.AGENTS_LIST || request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST
             ? { status: FAKE_ANSWER.DONE, value: { agents: [SENDER_NOW] } }
             : { status: FAKE_ANSWER.REFUSED, reason: "Not here." },
       ),
@@ -188,7 +187,7 @@ async function drawnFor(
       {
         messages: [...messages],
         cursor: "7:0",
-        status: CODING_AGENT_STATUS.COMPLETED,
+        status: AGENT_STATUS.COMPLETED,
         title: null,
       },
     ]),
@@ -227,8 +226,8 @@ async function drawnFor(
 /** Each of the developer's messages as `reader` sees the tab, by its id, where a sender is drawn with it. */
 async function sendersFor(
   reader: string,
-  agent: CodingAgentSummary = AGENT,
-  messages: readonly CodingAgentMessage[] = MESSAGES,
+  agent: AgentSummary = AGENT,
+  messages: readonly AgentTranscriptMessage[] = MESSAGES,
 ): Promise<readonly Seen[]> {
   const drawn = await drawnFor(reader, [], agent, messages);
   return drawn.flatMap((message, index): Seen[] => {
@@ -359,8 +358,8 @@ test("a sent message keeps its bubble on top, with its Copy, who sent it, and wh
 });
 
 test("an agent started blank draws its first line as a line, no plan's card and no task under its starter's name, a line spoken on a call naming no one and a teammate's typed line naming them", async () => {
-  const blank: CodingAgentSummary = { ...AGENT, brief: CODING_AGENT_BRIEF.BLANK };
-  const spoken: CodingAgentMessage = {
+  const blank: AgentSummary = { ...AGENT, brief: AGENT_BRIEF.BLANK };
+  const spoken: AgentTranscriptMessage = {
     ...line("spoken", "What did you change?"),
     metadata: { author: "developer", channel: "voice", voice_session_id: "call-1", from_ms: 0 },
   };

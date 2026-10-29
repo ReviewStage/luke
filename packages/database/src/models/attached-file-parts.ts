@@ -1,7 +1,4 @@
-import {
-  CODING_AGENT_ATTACHMENT_TYPE,
-  type CodingAgentAttachment,
-} from "@luke/features/coding-agent-wire";
+import { AGENT_ATTACHMENT_TYPE, type AgentAttachment } from "@luke/features/agent-wire";
 import {
   CONVERSATION_PICTURE_BOUNDS,
   KEPT_IMAGE_PROVIDER_KEY,
@@ -93,7 +90,7 @@ function mentionedTextOf(part: UIMessage["parts"][number]): string | undefined {
 export type KeptImage = { readonly id: string } | { readonly omitted: PictureOmission };
 
 /** A file as eve is handed it and the journal keeps it: an image with what was kept of it, where it was kept or refused. */
-export type HandedFile = CodingAgentAttachment & { readonly kept?: KeptImage | undefined };
+export type HandedFile = AgentAttachment & { readonly kept?: KeptImage | undefined };
 
 /** What was kept of an image as its file part keeps it. */
 const readKeptMetadata = EffectSchema.decodeUnknownOption(keptImageMetadataSchema);
@@ -224,12 +221,12 @@ export function receivedPartsOf(
   if (words === undefined || !isTextUIPart(words)) return undefined;
   const files = rest.filter(isFileUIPart);
   const texts = files.flatMap((part) => {
-    if (part.mediaType !== CODING_AGENT_ATTACHMENT_TYPE.TEXT) return [];
+    if (part.mediaType !== AGENT_ATTACHMENT_TYPE.TEXT) return [];
     const base64 = base64Of(part.url);
     return base64 === undefined ? [] : [inlinedFile(part.filename ?? "", textOf(base64))];
   });
   const marks = files.flatMap((part) => {
-    if (part.mediaType === CODING_AGENT_ATTACHMENT_TYPE.TEXT) return [];
+    if (part.mediaType === AGENT_ATTACHMENT_TYPE.TEXT) return [];
     const kept = keptImageOf(part);
     const mark = fileMark(part.filename, part.mediaType);
     return kept === undefined ? [mark] : [mark, keptImageLine(part.filename ?? "", kept)];

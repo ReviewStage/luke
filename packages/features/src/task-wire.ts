@@ -1,17 +1,17 @@
 import { WireValueSchema } from "@luke/wire";
 import { Schema as EffectSchema } from "effect";
 import {
+  AGENT_KIND,
+  AGENT_MACHINE,
+  AGENT_STATUS,
+  agentStartRequestFields,
+  agentSummarySchema,
   CHECK_SUMMARY,
-  CODING_AGENT_KIND,
-  CODING_AGENT_MACHINE,
-  CODING_AGENT_STATUS,
-  codingAgentStartRequestFields,
-  codingAgentSummarySchema,
   localAgentRefusalSchema,
   PULL_REQUEST_STATE,
   startBrief,
   tasklessAgentSchema,
-} from "./coding-agent-wire.js";
+} from "./agent-wire.js";
 import { DEVICE_KIND, DEVICE_PLATFORM } from "./device-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { modelProviderSchema } from "./models-wire.js";
@@ -67,7 +67,7 @@ export const TASK_BOUNDS = {
   MAX_ASSUMPTION_CHARS: 2_000,
   /** The most characters a workspace's id may spell; the service mints them far shorter. */
   MAX_WORKSPACE_ID_CHARS: 200,
-  /** The most characters a task's brief may spell: as many as a coding agent's prompt (`CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS`). */
+  /** The most characters a task's brief may spell: as many as a coding agent's prompt (`AGENT_BOUNDS.MAX_MESSAGE_CHARS`). */
   MAX_BRIEF_CHARS: 16_000,
 } as const;
 
@@ -177,12 +177,12 @@ const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchem
  * of the asking member's own devices (a Mac's desktop app or a host) by its
  * id, which the service checks is theirs, beat lately, and runs some model
  * before it keeps it. It decides where every agent started on the task runs
- * (`startCodingAgent`'s resolver), and is set when the task is created.
+ * (`startAgent`'s resolver), and is set when the task is created.
  */
 const taskRunsOnRequestSchema = EffectSchema.Union([
-  EffectSchema.Struct({ machine: EffectSchema.Literal(CODING_AGENT_MACHINE.VERCEL) }),
+  EffectSchema.Struct({ machine: EffectSchema.Literal(AGENT_MACHINE.VERCEL) }),
   EffectSchema.Struct({
-    machine: EffectSchema.Literal(CODING_AGENT_MACHINE.DEVICE),
+    machine: EffectSchema.Literal(AGENT_MACHINE.DEVICE),
     deviceId: wireUuidSchema,
   }),
 ]);
@@ -191,7 +191,7 @@ export type TaskRunsOnRequest = typeof taskRunsOnRequestSchema.Type;
 
 /**
  * The coding agent a task's start starts on it: an agent Start's own fields
- * (`coding-agent-wire.ts`), its key, which a retry carries again, the choice,
+ * (`agent-wire.ts`), its key, which a retry carries again, the choice,
  * a prompt and its files, and the servers switched off, held to the same
  * words-or-files rule, but never `from` or a note, since a new task has no
  * agent to take over from. The prompt travels as `prompt`, the key the
@@ -199,13 +199,13 @@ export type TaskRunsOnRequest = typeof taskRunsOnRequestSchema.Type;
  * spells it as is a released desktop's, which never sends this.
  */
 const taskAgentStartSchema = EffectSchema.Struct({
-  idempotencyKey: codingAgentStartRequestFields.idempotencyKey,
-  model: codingAgentStartRequestFields.model,
-  effort: codingAgentStartRequestFields.effort,
-  contextWindow: codingAgentStartRequestFields.contextWindow,
-  prompt: codingAgentStartRequestFields.prompt,
-  attachments: codingAgentStartRequestFields.attachments,
-  disabledServers: codingAgentStartRequestFields.disabledServers,
+  idempotencyKey: agentStartRequestFields.idempotencyKey,
+  model: agentStartRequestFields.model,
+  effort: agentStartRequestFields.effort,
+  contextWindow: agentStartRequestFields.contextWindow,
+  prompt: agentStartRequestFields.prompt,
+  attachments: agentStartRequestFields.attachments,
+  disabledServers: agentStartRequestFields.disabledServers,
 }).check(startBrief);
 
 export type TaskAgentStart = typeof taskAgentStartSchema.Type;
@@ -419,7 +419,7 @@ export type TaskOrigin = typeof taskOriginSchema.Type;
  * task is refused until it is changed.
  */
 const taskRunsOnSchema = EffectSchema.Struct({
-  machine: EffectSchema.Literal(CODING_AGENT_MACHINE.DEVICE),
+  machine: EffectSchema.Literal(AGENT_MACHINE.DEVICE),
   deviceId: EffectSchema.optionalKey(wireUuidSchema),
   owner: EffectSchema.optionalKey(memberRefSchema),
   device: EffectSchema.optionalKey(
@@ -510,11 +510,11 @@ const taskAgentLineSchema = EffectSchema.Struct({
   /** The agent's title; null where it has none, when it is named by its model. */
   title: EffectSchema.NullOr(EffectSchema.String),
   /** What kind of agent it is, said only of a member's operator, which every window names Luke (`agentName`); absent for a coder, and from a service before it was said. */
-  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_KIND))),
+  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_KIND))),
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: EffectSchema.String,
   effort: EffectSchema.String,
-  status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+  status: EffectSchema.Literals(Object.values(AGENT_STATUS)),
   /**
    * Epoch milliseconds: when its run began while it works, and when its
    * newest turn ended once it has; absent where neither is known.
@@ -561,6 +561,22 @@ export const taskPullRequestsSchema = EffectSchema.Struct({
 });
 
 export type TaskPullRequests = typeof taskPullRequestsSchema.Type;
+
+/**
+ * The reader's own pin of one agent on a plan (`agent_pin`), as a plan's
+ * is: the agent, the plan it stands on, when they pinned it, and where they
+ * dragged it in the sidebar's Pinned section (`pin-order.ts`), absent while
+ * it stands by `pinnedAt`. An agent with no plan carries its pin on its own
+ * row (`tasklessAgentSchema`).
+ */
+export const taskAgentPinSchema = EffectSchema.Struct({
+  agentId: EffectSchema.String,
+  taskId: EffectSchema.String,
+  pinnedAt: countedNumber,
+  pinPosition: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type TaskAgentPin = typeof taskAgentPinSchema.Type;
 
 /**
  * What a task's coding agents are doing and what they published, in brief:
@@ -750,8 +766,8 @@ export type TaskAgentRefusal = typeof taskAgentRefusalSchema.Type;
  */
 export const taskStartAnswerSchema = EffectSchema.Struct({
   plan: taskSchema,
-  agent: EffectSchema.optionalKey(codingAgentSummarySchema),
-  /** Retired, and kept optional so every answer decodes (`codingAgentAnswerSchema`'s). */
+  agent: EffectSchema.optionalKey(agentSummarySchema),
+  /** Retired, and kept optional so every answer decodes (`agentAnswerSchema`'s). */
   notice: EffectSchema.optionalKey(EffectSchema.String),
   agentRefusal: EffectSchema.optionalKey(taskAgentRefusalSchema),
   txid: EffectSchema.optionalKey(taskTxidSchema),

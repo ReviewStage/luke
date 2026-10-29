@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
+import { AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import {
   type JsonValue,
   jsonResponse,
@@ -101,8 +101,8 @@ it.effect("the default choice is one the catalog as published accepts", () =>
     const { layer } = gateway(() => jsonResponse(CATALOG));
     const offered = yield* readCatalog.pipe(Effect.provide(layer));
     assert.deepEqual(
-      validateModelChoice(offered, CODING_AGENT_DEFAULT_CHOICE),
-      Result.succeed(CODING_AGENT_DEFAULT_CHOICE),
+      validateModelChoice(offered, AGENT_DEFAULT_CHOICE),
+      Result.succeed(AGENT_DEFAULT_CHOICE),
     );
   }),
 );

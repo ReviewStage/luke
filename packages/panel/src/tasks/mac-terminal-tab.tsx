@@ -207,11 +207,10 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
             ? "▸ Reading the agent's pushed branch…"
             : `▸ Reading the branch of pull request #${number}…`,
         ),
-        act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, pullRequestAsked(agentId, number)).then(
-          (answer) =>
-            "failure" in answer || answer.branch === null
-              ? null
-              : { branch: answer.branch, pullRequest: answer.pullRequest?.number ?? null },
+        act(ACT_KIND.AGENTS_PULL_REQUEST, pullRequestAsked(agentId, number)).then((answer) =>
+          "failure" in answer || answer.branch === null
+            ? null
+            : { branch: answer.branch, pullRequest: answer.pullRequest?.number ?? null },
         ));
     reading
       .then((read) => {

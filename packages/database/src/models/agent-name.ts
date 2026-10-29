@@ -7,7 +7,7 @@
  * query and a window never name or sort one agent two ways.
  */
 
-import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { AGENT_KIND } from "@luke/features/agent-wire";
 import { OPERATOR_NAME } from "@luke/features/model-label";
 import { type SQL, type SQLWrapper, sql } from "drizzle-orm";
 
@@ -20,7 +20,7 @@ interface NamingColumns {
 export function agentGivenNameSql(agent: NamingColumns): SQL<string | null> {
   return sql<
     string | null
-  >`case when ${agent.kind} = ${CODING_AGENT_KIND.OPERATOR}::text then ${OPERATOR_NAME}::text else null end`;
+  >`case when ${agent.kind} = ${AGENT_KIND.OPERATOR}::text then ${OPERATOR_NAME}::text else null end`;
 }
 
 /** The name of the automation whose run started the agent of `agent`'s row, as the run kept it; null for one started by hand. */

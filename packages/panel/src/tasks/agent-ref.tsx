@@ -1,15 +1,22 @@
-import type { ChannelThreadAgent } from "@luke/features/channel-wire";
 import {
-  CODING_AGENT_KIND,
-  type CodingAgentKind,
-  type CodingAgentStatus,
-  type CodingAgentSummary,
+  AGENT_KIND,
+  type AgentKind,
+  type AgentStatus,
+  type AgentSummary,
   type TasklessAgent,
-} from "@luke/features/coding-agent-wire";
+} from "@luke/features/agent-wire";
+import type { ChannelThreadAgent } from "@luke/features/channel-wire";
 import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TaskAgentLine } from "@luke/features/task-wire";
-import { HoverCard, HoverCardHead, INLINE_REF_LOOK, InlineRef, Tooltip } from "@luke/ui";
+import {
+  HoverCard,
+  HoverCardHead,
+  HoverCardSkeleton,
+  INLINE_REF_LOOK,
+  InlineRef,
+  Tooltip,
+} from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref.js";
@@ -17,12 +24,12 @@ import type { HeldTranscripts } from "../desktop/strip-tabs.js";
 import { useMemberDirectory } from "../member-directory.js";
 import {
   AgentTabCard,
+  type CardFoot,
   type CardReading,
   cardCorner,
   heldLatest,
   lastFinished,
 } from "./agent-tab-card.js";
-import { ChipCardSkeleton } from "./chip-cards.js";
 import {
   agentActor,
   agentName,
@@ -71,7 +78,7 @@ export interface AgentSubject {
   /** The agent's tile, as every place naming an actor draws it (`actor-ref.tsx`). */
   readonly tile: Actor;
   readonly read: () => CardReading;
-  readonly agent?: CodingAgentSummary | undefined;
+  readonly agent?: AgentSummary | undefined;
 }
 
 /**
@@ -86,7 +93,7 @@ export interface AgentSubject {
  * when its newest run began, the latest moment its summary knows.
  */
 export function agentCardReading(
-  agent: CodingAgentSummary,
+  agent: AgentSummary,
   label: string,
   held: HeldTranscripts,
   chosen: boolean,
@@ -112,10 +119,11 @@ export function agentCardReading(
           title: label,
           messages,
           brief: agent.brief,
-          quiet: agent.kind === CODING_AGENT_KIND.OPERATOR,
+          quiet: agent.kind === AGENT_KIND.OPERATOR,
         }),
       startedBy: teammateRef(agent.startedBy, agents.me),
       automationId: agent.automationId,
+      startedAt: agent.createdAt,
       tile: agentActor(agent, label),
       pullRequest: agents.pullRequests.get(agent.id),
       archivedBy:
@@ -163,7 +171,7 @@ export function tasklessRowSubject(
   agents: Pick<CodingAgentsControl, "models" | "me" | "pullRequests">,
 ): AgentSubject {
   const { automationId, pullRequest, ...rest } = agent;
-  const summary: CodingAgentSummary = automationId === null ? rest : { ...rest, automationId };
+  const summary: AgentSummary = automationId === null ? rest : { ...rest, automationId };
   const name = agentName(summary, agents.models);
   const tile = agentActor(summary, name);
   const base = agentCardReading(summary, name, NOTHING_HELD, false, agents);
@@ -196,7 +204,7 @@ export function tasklessRowSubject(
  */
 export function tasklessSubject(
   line: {
-    readonly agentKind?: CodingAgentKind | undefined;
+    readonly agentKind?: AgentKind | undefined;
     readonly agentTitle: string | null;
     readonly agentModel: string;
     readonly automationId: string | null;
@@ -236,8 +244,8 @@ export function tasklessSubject(
 
 /** An agent as a line read beside its thread names it: its task's row, or its channel thread; where it stands, where the line says so. */
 export type AgentLine = ChannelThreadAgent & {
-  readonly kind?: CodingAgentKind | undefined;
-  readonly status?: CodingAgentStatus | undefined;
+  readonly kind?: AgentKind | undefined;
+  readonly status?: AgentStatus | undefined;
 };
 
 /**
@@ -292,8 +300,8 @@ export function AgentCard({
 }: {
   subject: AgentSubject;
   models: readonly CatalogModel[] | undefined;
-  /** One line under a rule, said by a place naming the agent off its task's page: the task it works on. */
-  foot?: React.ReactNode;
+  /** One row at the foot, said by a place naming the agent off its task's page: the task it works on. */
+  foot?: CardFoot | undefined;
 }): React.JSX.Element {
   return <AgentTabCard name={subject.name} models={models ?? []} read={subject.read} foot={foot} />;
 }
@@ -388,7 +396,9 @@ export function AgentActorRef({
  * hangs it: its tab's card read as it is first hung, on the task it works
  * on or in the workspace the place's members are of
  * (`mentioned-agent-card.tsx`), its tile and name standing while it is
- * read, and where the read answers nothing.
+ * read, and where the read answers nothing. Note that the tile leads the
+ * head at a card's size in every state, as the loaded card wears it, so
+ * the head does not move as the read lands.
  */
 export function AgentHoverCard({
   actor,
@@ -398,10 +408,10 @@ export function AgentHoverCard({
   agentId: string;
 }): React.ReactNode {
   const { workspaceId } = useMemberDirectory();
-  const glyph = <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />;
+  const mark = <ActorMark actor={actor} size={ACTOR_SIZE.CARD} />;
   const fallback = (
     <HoverCard>
-      <HoverCardHead glyph={glyph} name={actor.name} />
+      <HoverCardHead mark={mark} name={actor.name} />
     </HoverCard>
   );
   return (
@@ -410,7 +420,7 @@ export function AgentHoverCard({
       taskId={actor.taskId}
       name={actor.name}
       workspaceId={workspaceId}
-      reading={<ChipCardSkeleton glyph={glyph} name={actor.name} />}
+      reading={<HoverCardSkeleton mark={mark} name={actor.name} sub />}
       fallback={fallback}
     />
   );

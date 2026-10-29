@@ -1,3 +1,4 @@
+import type { AgentAttachment, AgentTranscriptMessage } from "@luke/features/agent-wire";
 import {
   ATTACHMENT_VIEW,
   attachmentView,
@@ -5,7 +6,6 @@ import {
   type FileChip,
   sizeLabel,
 } from "@luke/features/attachment-model";
-import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
 import { keptPictureIdOf } from "@luke/features/conversation-picture-wire";
 import {
   ALIGN,
@@ -57,10 +57,10 @@ import { FileTypeIcon } from "./file-type-icon.js";
 const FILE_PART = "file";
 
 /** The chip drawn for each file a message box holds, so the box's row follows a file by its chip. */
-const BOX_CHIPS = new WeakMap<CodingAgentAttachment, FileChip>();
+const BOX_CHIPS = new WeakMap<AgentAttachment, FileChip>();
 
 /** The files the message box holds, as chips: the same chip for a file each time. */
-export function attachmentChips(attachments: readonly CodingAgentAttachment[]): FileChip[] {
+export function attachmentChips(attachments: readonly AgentAttachment[]): FileChip[] {
   return attachments.map((file) => {
     const known = BOX_CHIPS.get(file);
     if (known !== undefined) return known;
@@ -80,7 +80,7 @@ export interface MessageFileChip extends FileChip {
 }
 
 /** The files a row of the transcript carries, as chips: its AI SDK file parts, in order, each the row keeps no bytes of naming the picture it was kept as, where it was. */
-export function messageFileChips(message: CodingAgentMessage): MessageFileChip[] {
+export function messageFileChips(message: AgentTranscriptMessage): MessageFileChip[] {
   return message.parts.flatMap((part): MessageFileChip[] => {
     if (!isRecord(part) || part.type !== FILE_PART || !isWireString(part.mediaType)) return [];
     const chip = {

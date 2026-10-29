@@ -12,12 +12,12 @@ import {
   toolStep,
 } from "@luke/features/agent-replay";
 import {
-  CODING_AGENT_BRIEF,
-  CODING_AGENT_SENDER,
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentSummary,
-} from "@luke/features/coding-agent-wire";
+  AGENT_BRIEF,
+  AGENT_SENDER,
+  AGENT_STATUS,
+  type AgentSummary,
+  type AgentTranscriptMessage,
+} from "@luke/features/agent-wire";
 import { CALL_KIND } from "@luke/features/turn-rows";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { test } from "vitest";
@@ -68,11 +68,11 @@ function replay(overrides: Partial<Replay> = {}): Replay {
 
 const FILE = { type: "file", mediaType: "image/png", filename: "flow.png", url: "data:," };
 
-function first(text: string): CodingAgentMessage {
+function first(text: string): AgentTranscriptMessage {
   return { id: "first", role: MESSAGE_ROLE.USER, parts: [FILE, { type: "text", text }] };
 }
 
-function summary(overrides: Partial<CodingAgentSummary>): CodingAgentSummary {
+function summary(overrides: Partial<AgentSummary>): AgentSummary {
   return {
     id: "00000000-0000-4000-8000-000000000000",
     planId: null,
@@ -80,7 +80,7 @@ function summary(overrides: Partial<CodingAgentSummary>): CodingAgentSummary {
     effort: "high",
     title: null,
     createdAt: 1,
-    status: CODING_AGENT_STATUS.COMPLETED,
+    status: AGENT_STATUS.COMPLETED,
     turnId: null,
     ...overrides,
   };
@@ -187,7 +187,7 @@ test("an agent continued from an automation's run, at any remove, is drawn from 
   });
   const continued = summary({
     id: "33333333-3333-4333-8333-333333333333",
-    brief: CODING_AGENT_BRIEF.PROMPT,
+    brief: AGENT_BRIEF.PROMPT,
     from: { agentId: run.id, steps: 3, totalSteps: 3 },
   });
   const again = summary({
@@ -575,7 +575,7 @@ test("the note's own files go with the note and the brief's stay with the brief,
       other: 1,
     },
   );
-  const message: CodingAgentMessage = {
+  const message: AgentTranscriptMessage = {
     id: "first",
     role: MESSAGE_ROLE.USER,
     parts: [
@@ -603,7 +603,7 @@ test("a line whose marker names its sender is named as a transcript's line is: a
     stepView({ kind: REPLAY_STEP_KIND.LINE, summary, words: "Go.", sender });
   const member = view({ kind: REPLAY_SENDER.MEMBER, memberId: "user-charles" }, "Charles Pan: Go.");
   assert.deepEqual(member.kind === STEP_VIEW.LINE && member.sentBy, {
-    kind: CODING_AGENT_SENDER.MEMBER,
+    kind: AGENT_SENDER.MEMBER,
     userId: "user-charles",
     name: "Charles Pan",
   });

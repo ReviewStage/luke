@@ -10,13 +10,13 @@ import {
 import { eq } from "drizzle-orm";
 import { Clock, Effect } from "effect";
 import { Database } from "../core/query.js";
-import { codingAgent } from "../schemas/coding-agent.js";
+import { agentTable } from "../schemas/agent.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { inboxMessage } from "../schemas/inbox-message.js";
 import { conversations } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
 
-type AgentKind = (typeof codingAgent.$inferInsert)["kind"];
+type AgentKind = (typeof agentTable.$inferInsert)["kind"];
 
 /**
  * task-agents.ts -- a coding agent on a test's task, and an inbox item it holds open, written beneath the store.
@@ -43,7 +43,7 @@ export const openTaskAgent = (
     yield* db
       .insert(conversations)
       .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
-    yield* db.insert(codingAgent).values({
+    yield* db.insert(agentTable).values({
       id,
       organizationId,
       userId,

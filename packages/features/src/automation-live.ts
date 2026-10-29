@@ -1,4 +1,6 @@
 import { Schema as EffectSchema } from "effect";
+import { agentStatusAt, type StatusTurn, statusClockEdge } from "./agent-status.js";
+import { AGENT_FAILURE, AGENT_STATUS } from "./agent-wire.js";
 import {
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
@@ -14,8 +16,6 @@ import {
   automationTargetKindSchema,
   automationTriggerSchema,
 } from "./automation-wire.js";
-import { codingAgentStatusAt, type StatusTurn, statusClockEdge } from "./coding-agent-status.js";
-import { CODING_AGENT_FAILURE, CODING_AGENT_STATUS } from "./coding-agent-wire.js";
 import { sealedLiveQuerySchema } from "./live-wire.js";
 import { automationWebhookPath } from "./service-paths.js";
 import { countedNumber } from "./service-wire.js";
@@ -23,7 +23,7 @@ import { countedNumber } from "./service-wire.js";
 /**
  * automation-live.ts -- a workspace's automations and runs, and one automation's runs, as the host follows them over the service's held poll: the statements the service answers, the rows they deliver, and the list and the histories as the held reads answer them, built from the rows at an instant.
  *
- * A run's agent's status turns on the clock (`coding-agent-status.ts`), so
+ * A run's agent's status turns on the clock (`agent-status.ts`), so
  * the reader builds each at the instant it reads, and again at
  * `automationsGraceEdge` or `automationRunsGraceEdge`, the next instant the
  * clock alone moves one. A webhook automation is answered with the address
@@ -68,7 +68,7 @@ const runAgentFields = {
   turnSettledAt: EffectSchema.NullOr(countedNumber),
   turnSessionEnded: EffectSchema.NullOr(EffectSchema.Boolean),
   awaitingLineAt: EffectSchema.NullOr(countedNumber),
-  failureWord: EffectSchema.NullOr(EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE))),
+  failureWord: EffectSchema.NullOr(EffectSchema.Literals(Object.values(AGENT_FAILURE))),
 };
 
 /** One run as its row delivers it. */
@@ -160,13 +160,13 @@ function turnOf(row: RunAgentRow): StatusTurn | undefined {
 /** A run's agent as the wire says it, its status read at `now` and why it failed where it did; none where the run started none. */
 function runAgentOf(row: RunAgentRow, now: number): AutomationRunSummary["agent"] {
   if (row.agentId === null || row.agentCreatedAt === null) return null;
-  const status = codingAgentStatusAt(turnOf(row), {
+  const status = agentStatusAt(turnOf(row), {
     createdAt: row.agentCreatedAt,
     now,
     awaitingLineAt: row.awaitingLineAt ?? undefined,
   });
   const failureReason =
-    status === CODING_AGENT_STATUS.FAILED && row.failureWord !== null ? row.failureWord : undefined;
+    status === AGENT_STATUS.FAILED && row.failureWord !== null ? row.failureWord : undefined;
   return {
     id: row.agentId,
     title: row.agentTitle,

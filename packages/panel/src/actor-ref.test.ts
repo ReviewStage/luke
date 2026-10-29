@@ -167,11 +167,11 @@ test("someone on GitHub stands by their avatar, a person on a circle with their 
 test("someone on GitHub hangs a card saying who they are there and that a person is no member here, an App's bot that it is an app, and opens nothing", () => {
   const person = cardOf({ kind: ACTOR_KIND.GITHUB, login: "octocat", bot: false });
   assert.equal(person.querySelector(".luke-hover-card-name")?.textContent, "@octocat");
-  assert.equal(person.querySelector(".luke-hover-card-sub")?.textContent, "GitHub user");
   assert.equal(
-    person.querySelector(".luke-hover-card-corner")?.textContent,
-    "Not in this workspace",
+    person.querySelector(".luke-hover-card-sub")?.textContent,
+    "GitHub user · Not in this workspace",
   );
+  assert.equal(person.querySelector(".luke-hover-card-corner"), null);
   assert.equal(document.querySelector('[data-actor-ref][data-kind="github"]')?.tagName, "SPAN");
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -259,12 +259,15 @@ test("an App's bot on GitHub stands by its App's avatar and wears a quiet bot ba
   );
   restOn(pile.querySelector(".actor-stack-more") ?? assert.fail("the count stands"));
   const row =
-    document.querySelector('.luke-tooltip-card [data-actor-card="more"] .actor-more-row') ??
+    document.querySelector('.luke-tooltip-card [data-actor-card="more"] [data-actor-more]') ??
     assert.fail("the count's card names the rest");
-  assert.equal(
-    row.textContent,
-    "dependabot\u00a0bot · Commented",
-    "the badge keeps to its name's line",
+  assert.deepEqual(
+    [
+      row.querySelector(".luke-hover-card-row-label")?.textContent,
+      row.querySelector(".luke-hover-card-row-end")?.textContent,
+    ],
+    ["dependabot\u00a0bot", "Commented"],
+    "the badge keeps to its name's line, what the face says at the row's end",
   );
 });
 

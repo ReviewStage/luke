@@ -3,10 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { RUNNER_LINES } from "@luke/agent-runner/protocol";
 import { Database } from "@luke/database/core/query";
-import {
-  createCodingAgent,
-  recordCodingAgentRunnerToken,
-} from "@luke/database/models/coding-agent-store";
+import { createAgent, recordAgentRunnerToken } from "@luke/database/models/agent-store";
 import { queueRunnerLine } from "@luke/database/models/runner-line-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
@@ -56,7 +53,7 @@ const agentWithLines = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const task = yield* startTask(userId, { name: "Invitations" });
-  const started = yield* createCodingAgent(userId, {
+  const started = yield* createAgent(userId, {
     taskId: task.id,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
@@ -67,7 +64,7 @@ const agentWithLines = Effect.gen(function* () {
   });
   const agentId = Option.getOrThrow(started).agent.id;
   const bearer = randomBytes(32).toString("base64url");
-  yield* recordCodingAgentRunnerToken(userId, agentId, runnerTokenDigest(bearer));
+  yield* recordAgentRunnerToken(userId, agentId, runnerTokenDigest(bearer));
   const first = yield* queueRunnerLine(userId, { agentId, launch: LAUNCH, text: "one" });
   yield* queueRunnerLine(userId, { agentId, launch: LAUNCH, text: "two" });
   return { userId, agentId, bearer, first: Option.getOrThrow(first) };
@@ -92,7 +89,7 @@ it.layer(getTestDB())("the runner lines route", (it) => {
     Effect.gen(function* () {
       const ask = yield* standing;
       const retired = yield* agentWithLines;
-      yield* recordCodingAgentRunnerToken(retired.userId, retired.agentId, null);
+      yield* recordAgentRunnerToken(retired.userId, retired.agentId, null);
       const read = yield* ask(retired.bearer, 0);
       assert.equal(read.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
     }),

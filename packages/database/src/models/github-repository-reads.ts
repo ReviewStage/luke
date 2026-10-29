@@ -3,8 +3,8 @@ import { and, eq, gte, isNotNull, ne, notExists, type SQLWrapper, sql } from "dr
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, queryBuilder } from "../core/query.js";
+import { agentTable } from "../schemas/agent.js";
 import { member } from "../schemas/auth.js";
-import { codingAgent } from "../schemas/coding-agent.js";
 import { githubPersonalToken } from "../schemas/github-personal-token.js";
 import { githubRepositoryRead } from "../schemas/github-repository-read.js";
 import { task } from "../schemas/task.js";
@@ -78,16 +78,16 @@ const findUnaskedAgentRepositories = SqlSchema.findAll({
   execute: ({ userId, since }) =>
     Database.use((db) =>
       db
-        .selectDistinct({ repository: sql<string>`lower(${codingAgent.repository})` })
+        .selectDistinct({ repository: sql<string>`lower(${agentTable.repository})` })
         .from(member)
-        .innerJoin(codingAgent, eq(codingAgent.organizationId, member.organizationId))
+        .innerJoin(agentTable, eq(agentTable.organizationId, member.organizationId))
         .where(
           and(
             eq(member.userId, userId),
-            eq(codingAgent.githubAccess, GITHUB_ACCESS.TOKEN),
-            ne(codingAgent.userId, userId),
-            isNotNull(codingAgent.repository),
-            notExists(askedSince(userId, codingAgent.repository, since)),
+            eq(agentTable.githubAccess, GITHUB_ACCESS.TOKEN),
+            ne(agentTable.userId, userId),
+            isNotNull(agentTable.repository),
+            notExists(askedSince(userId, agentTable.repository, since)),
           ),
         ),
     ),

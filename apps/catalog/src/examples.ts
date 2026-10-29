@@ -69,6 +69,7 @@ import { LOADING_INDICATORS_EXAMPLE } from "./examples/loading-indicators";
 import { MARKDOWN_EXAMPLE } from "./examples/markdown";
 import { MENU_EXAMPLE } from "./examples/menu";
 import { MENU_KEYS_EXAMPLE } from "./examples/menu-keys";
+import { MENU_SECTIONS_EXAMPLE } from "./examples/menu-sections";
 import { MESSAGES_EXAMPLE } from "./examples/messages";
 import { MORE_BUTTONS_EXAMPLE } from "./examples/more-buttons";
 import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
@@ -232,6 +233,7 @@ export const EXAMPLES: readonly Example[] = [
   LIST_MOTION_EXAMPLE,
   ROVING_KEYS_EXAMPLE,
   MENU_EXAMPLE,
+  MENU_SECTIONS_EXAMPLE,
   MORE_BUTTONS_EXAMPLE,
   FORMAT_TOOLBAR_EXAMPLE,
   BLOCK_MENU_EXAMPLE,
