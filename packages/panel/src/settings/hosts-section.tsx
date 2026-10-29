@@ -1,6 +1,7 @@
 import { DEVICE_STANDING } from "@luke/features/agent-wire";
-import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
+import { DEVICE_PLATFORM } from "@luke/features/device-agent-wire";
 import {
+  HOST_UNINSTALL_COMMAND,
   HOST_WIRE,
   type Host,
   hostInstallCommand,
@@ -73,7 +74,9 @@ import {
  * seen otherwise, and, where its host program is below the service's floor,
  * Upgrade needed with how to upgrade it: a server's command, or a Mac's app
  * updated. Remove, behind the row's ⋯, refuses that machine at once, after
- * asking. Adding takes a Linux server and a Mac alike, through one command.
+ * asking with the command that takes Luke off the machine itself where the
+ * install command may have set it up. Adding takes a Linux server and a Mac
+ * alike, through one command.
  *
  * In the desktop app this Mac stands first, with where its `luke-host`
  * stands under it (`this-mac-host-row.tsx`) and Retry where it failed: on
@@ -166,13 +169,27 @@ function seenWords(host: Host, book: PresenceBook, now: number): string {
   return `${standing === DEVICE_STANDING.OFFLINE ? "Offline" : WORDS.UNKNOWN}${lastSeen}`;
 }
 
-/** What Remove says goes, by the machine's platform: a server is cleaned on the box itself, and a Mac joins again only from its app. */
-const REMOVE_BODY = {
-  [DEVICE_PLATFORM.LINUX]:
-    "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke. To clean the server itself, run sudo luke-host uninstall on it.",
-  [DEVICE_PLATFORM.DARWIN]:
-    "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke. To use it again, choose Turn on again under This Mac in the Luke app on it.",
-} as const satisfies Record<DevicePlatform, string>;
+/** What Remove says goes, whatever the machine. */
+const REMOVED =
+  "It stops taking agents now, and its agents stop. Their tasks and transcripts stay in Luke.";
+
+/**
+ * What Remove says, and the title of the uninstall command it shows, by what
+ * the machine is: a server the install command set up is cleaned on the box
+ * itself, this Mac's own This Mac joins again only from its app, and another
+ * Mac may be either, since the service lists no word of how a Mac joined.
+ */
+const REMOVE_WORDS = {
+  SERVER: { body: REMOVED, uninstall: "Run this on the host to take Luke off it" },
+  THIS_MAC: {
+    body: `${REMOVED} To use it again, choose Turn on again under This Mac.`,
+    uninstall: undefined,
+  },
+  MAC: {
+    body: `${REMOVED} If it runs This Mac in a Luke app, choose Turn on again there to use it again.`,
+    uninstall: "If you used the install command, run this on it",
+  },
+} as const;
 
 /** One machine's row: its name, what it is and whether it is online, Upgrade needed with how to upgrade it, and Remove behind its ⋯; for this Mac, where its `luke-host` stands and Retry where it failed. */
 function HostRow({
@@ -195,6 +212,12 @@ function HostRow({
   // Note that a service older than platforms listed only Linux servers.
   const platform = host.platform ?? DEVICE_PLATFORM.LINUX;
   const seen = `${DEVICE_PLATFORM_NAME[platform]} · ${seenWords(host, book, now)}`;
+  const removeWords =
+    thisMac !== undefined
+      ? REMOVE_WORDS.THIS_MAC
+      : platform === DEVICE_PLATFORM.DARWIN
+        ? REMOVE_WORDS.MAC
+        : REMOVE_WORDS.SERVER;
   const line = thisMac?.line ?? null;
   return (
     <>
@@ -241,12 +264,21 @@ function HostRow({
         confirm={removing}
         question={{
           title: `Remove ${host.name}?`,
-          body: REMOVE_BODY[platform],
+          body: removeWords.body,
           verb: "Remove",
           running: "Removing",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
-      />
+      >
+        {removeWords.uninstall === undefined ? null : (
+          <CodeCard
+            title={removeWords.uninstall}
+            titleIs={CODE_CARD_TITLE.WORDS}
+            code={HOST_UNINSTALL_COMMAND}
+            copy={copyThroughShell}
+          />
+        )}
+      </ConfirmDialog>
     </>
   );
 }

@@ -293,7 +293,7 @@ export function ConfirmDialog({
   gate?: string | undefined;
   /** Where focus goes once the card is gone if the act took away what asked (`nextRowOrHead`), as `Dialog` takes it. */
   restoreTo?: RestoreTo | undefined;
-  /** What the card holds under its body: the field, where the question asks one. */
+  /** What the card holds under its body: the field, where the question asks one, or what else the reader needs to act on it, such as a command to run. */
   children?: React.ReactNode;
 }): React.JSX.Element {
   const answer = useAnswerState(confirm);
