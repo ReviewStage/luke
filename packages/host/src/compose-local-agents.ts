@@ -11,6 +11,7 @@ import {
   checkoutIdentityEnv,
 } from "@luke/features/checkout-identity";
 import {
+  DEVICE_AGENT_FOLDER,
   DEVICE_AGENT_LINE_KIND,
   DEVICE_CAPABILITY,
   DEVICE_ISOLATION,
@@ -211,6 +212,24 @@ import type { RunMode } from "./run-mode.js";
  * answer may have been read before its claim. A service from before the
  * list names none, and the device only settles what it kept.
  *
+ * The service's list of the device's live agents, those pinned to it and
+ * not archived, is what the device holds things for. After the first beat
+ * it answers, and every `LIVE_READ_EVERY` after, the device lists what it
+ * holds under an agent's id (a machine smolvm lists under the agent's name,
+ * a folder of its credentials, and its folder under the agents' root, each
+ * named by a UUID and nothing else), reads the list, and lets go of every
+ * agent it holds that `ORPHAN_AFTER` successful reads in a row have left
+ * out, through the steps a discard takes, at most `ORPHANS_PER_PASS` a
+ * pass. A read that was not answered, from a service that refused it or
+ * never had it, changes nothing, and neither does a listing smolvm could
+ * not give. An agent whose line is being delivered, whose runner runs, or
+ * whose launch is still kept is left for a later pass; one whose folder the
+ * platform's check kept is recorded and never checked again; and one whose
+ * VM, credentials or folder could not be removed is tried again the next
+ * pass. This is what catches every agent a discard line never reached:
+ * archived while the device was away, whose line expired, discarded by a
+ * run that crashed, whose VM refused its delete, or deleted with its task.
+ *
  * Requests are each answered on a fiber of their own, inside the agent's
  * folder alone (`local-agent-requests.ts`). Turning the experiment off,
  * signing out, or a run that sends nothing shuts the gate:
@@ -252,6 +271,18 @@ const KILL_GRACE = Duration.seconds(3);
 const NOT_STARTED = 1;
 /** How often an agent's GitHub token's age is read off the wall clock, and so how soon one the service did not hand is asked for again, well inside the hour the last one lasts. */
 const GITHUB_TOKEN_CHECK = Duration.minutes(1);
+/** How often a following device reads which of its agents should still stand, and lets go of what it holds of the rest. */
+const LIVE_READ_EVERY = Duration.minutes(10);
+/** How many successful reads in a row must leave an agent out before what the device holds of it is let go of. */
+const ORPHAN_AFTER = 2;
+/** How many agents one pass lets go of at most, so a backlog clears over a few passes rather than in one long one. */
+const ORPHANS_PER_PASS = 5;
+/** What an agent's id is, and so the one name a folder or machine must have to be taken for an agent's. */
+const AGENT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+/** How a discard ended: everything removed, the folder kept for work in it, or a step that failed, which a later pass tries again. */
+const DISCARD_END = { REMOVED: "removed", KEPT: "kept", FAILED: "failed" } as const;
+type DiscardEnd = (typeof DISCARD_END)[keyof typeof DISCARD_END];
 
 const VARIABLE = {
   HOME: "HOME",
@@ -307,6 +338,7 @@ type LocalAgentClient = Pick<
   | "githubToken"
   | "saveState"
   | "commitState"
+  | "liveAgents"
 >;
 
 export interface LocalAgentsDependencies {
@@ -681,6 +713,10 @@ export function composeLocalAgents(
         const stopping = yield* FiberSet.make();
         /** The tries a beat starts at committing a bundle left waiting, one per agent. */
         const saving = yield* FiberMap.make<string>();
+        /** Held by an agent's worker while it delivers a line of the agent's, and by a pass letting go of the agent, so neither runs under the other. */
+        const deliveryLocks = new Map<string, Semaphore.Semaphore>();
+        /** Done once a beat of this follow is answered, after which the device reads its live agents (`orphansLetGo`). */
+        const beaten = yield* Deferred.make<void>();
 
         /** The lock over the agent's VM's start and delete, one per agent, so one agent's slow start holds up no other's. */
         const vmLockOf = (agentId: string) => {
@@ -1264,8 +1300,11 @@ export function composeLocalAgents(
          * the next worktree made of it prunes this one's record. A device
          * whose platform names a check of the worktree keeps the folder, and
          * says why, where the check finds work in it that is nowhere else, or
-         * cannot say; its VM goes either way. A removal that fails is
-         * reported.
+         * cannot say, and records it kept, so no later pass checks it
+         * again (`orphansLetGo`); its VM goes either way. A VM that could not
+         * be deleted keeps the agent in the record, and a step that fails is
+         * reported; either is tried again by a later pass, since the agent
+         * still holds something here.
          */
         const discarded = (agentId: string) =>
           Effect.gen(function* () {
@@ -1283,19 +1322,28 @@ export function composeLocalAgents(
                 ),
               ));
             if (Option.isSome(unsaved)) {
-              return yield* Effect.sync(() =>
-                report(`a local agent's folder was kept, since ${unsaved.value}`),
-              );
+              report(`a local agent's folder was kept, since ${unsaved.value}: ${agentId}`);
+              yield* updateState((current) => ({
+                ...current,
+                kept: [...new Set([...(current.kept ?? []), agentId])],
+              }));
+              return DISCARD_END.KEPT;
             }
             yield* fileSystem.remove(layout.folder, { recursive: true, force: true });
             yield* saves.forgotten(userId, agentId);
-            // Note that a VM left standing keeps the agent in the record, so an uninstall deletes it yet.
+            // Note that a VM left standing keeps the agent in the record, so an uninstall deletes it yet, and a later pass tries it again.
             if (vmGone) yield* forgetOwnedAgent(kernel.stateRoot, agentId);
             // Note that a folder kept keeps its record too, so the agent, launched again, runs the way it ran.
             if ((yield* Ref.get(state)).modes?.[agentId] !== undefined) yield* forgetMode(agentId);
+            if (vmGone) return DISCARD_END.REMOVED;
+            report(`a local agent's VM could not be deleted: ${agentId}`);
+            return DISCARD_END.FAILED;
           }).pipe(
             Effect.catch(() =>
-              Effect.sync(() => report("a local agent's folder could not be removed")),
+              Effect.sync(() => {
+                report(`a local agent's folder could not be removed: ${agentId}`);
+                return DISCARD_END.FAILED;
+              }),
             ),
           );
 
@@ -1390,6 +1438,15 @@ export function composeLocalAgents(
             yield* Queue.offer(yield* mailboxOf(claimed.line.agentId), claimed);
           });
 
+        /** The lock an agent's line is delivered under, one per agent (`deliveryLocks`). */
+        const deliveryLockOf = (agentId: string) => {
+          const kept = deliveryLocks.get(agentId);
+          if (kept !== undefined) return kept;
+          const made = Semaphore.makeUnsafe(1);
+          deliveryLocks.set(agentId, made);
+          return made;
+        };
+
         /** The agent's mailbox, its worker started the first time a line of its arrives. */
         const mailboxOf = (agentId: string) =>
           Effect.gen(function* () {
@@ -1402,7 +1459,9 @@ export function composeLocalAgents(
                 const agentScope = yield* Effect.scope;
                 for (;;) {
                   const claimed = yield* Queue.take(mailbox);
-                  yield* delivered(agentId, claimed, agentScope);
+                  yield* deliveryLockOf(agentId).withPermit(
+                    delivered(agentId, claimed, agentScope),
+                  );
                 }
               }),
             );
@@ -1596,6 +1655,7 @@ export function composeLocalAgents(
           const beat: DeviceAgentBeat | undefined = yield* asked(
             client.beat(deviceId, NOT_SIGNED_IN),
           );
+          if (beat !== undefined) yield* Deferred.succeed(beaten, undefined);
           const open = beat?.openLaunches === undefined ? undefined : new Set(beat.openLaunches);
           yield* pendingSettled(open);
           for (const agentId of yield* saves.due(userId)) {
@@ -1622,8 +1682,107 @@ export function composeLocalAgents(
           );
         });
 
+        /** The successful reads in a row each agent the device holds things for was left out of, by its id. */
+        const missedReads = new Map<string, number>();
+        /** The agents a pass could not let go of, which the next pass tries after the rest, so a few that always fail never take every place. */
+        const failedLetGo = new Set<string>();
+
+        /** The agents whose folders stand directly under the agents' root, each named by its id. */
+        const agentFolders = Effect.gen(function* () {
+          const root = path.join(folder, DEVICE_AGENT_FOLDER.ROOT);
+          const names = yield* fileSystem
+            .readDirectory(root)
+            .pipe(Effect.orElseSucceed((): readonly string[] => []));
+          const folders: string[] = [];
+          for (const name of names.filter((each) => AGENT_UUID.test(each))) {
+            const info = yield* Effect.option(fileSystem.stat(path.join(root, name)));
+            if (Option.exists(info, (each) => each.type === "Directory")) folders.push(name);
+          }
+          return folders;
+        });
+
+        /** The ids of every agent the device holds anything of, its VM, credentials, or folder, each a UUID; none where smolvm could not list its machines. */
+        const heldAgents = Effect.gen(function* () {
+          const vms = yield* platform.sandbox.held;
+          if (Option.isNone(vms)) return Option.none<ReadonlySet<string>>();
+          const ids = [...vms.value].filter((each) => AGENT_UUID.test(each));
+          return Option.some<ReadonlySet<string>>(new Set([...ids, ...(yield* agentFolders)]));
+        });
+
+        /**
+         * The agent let go of as a discard lets go of it, under its delivery
+         * lock and only where it is free; none where a line of its is being
+         * delivered, its runner runs, or a launch of its is still kept, since
+         * the service may hold the device to it yet.
+         */
+        const orphanLetGo = (agentId: string) =>
+          deliveryLockOf(agentId)
+            .withPermitsIfAvailable(1)(
+              Effect.gen(function* () {
+                const kept = (yield* Ref.get(state)).launches.some(
+                  (launch) => launch.agentId === agentId,
+                );
+                if (runners.has(agentId) || kept) return Option.none<DiscardEnd>();
+                return Option.some(yield* discarded(agentId));
+              }),
+            )
+            .pipe(Effect.map(Option.flatten));
+
+        /**
+         * One pass over what the device holds: listed first, then the live
+         * agents read, so an agent listed was made before the read was
+         * asked; each agent held and left out counted, and every one left
+         * out of `ORPHAN_AFTER` reads in a row and not kept for its unsaved
+         * work let go of (`orphanLetGo`), up to `ORPHANS_PER_PASS`. A listing
+         * or a read that failed changes nothing.
+         */
+        const orphansLetGo = Effect.gen(function* () {
+          const held = yield* heldAgents;
+          if (Option.isNone(held)) return;
+          const live = yield* asked(client.liveAgents(deviceId));
+          if (live === undefined) return;
+          const standing = new Set(live);
+          for (const id of [...missedReads.keys()]) {
+            if (!held.value.has(id) || standing.has(id)) missedReads.delete(id);
+          }
+          for (const id of held.value) {
+            if (!standing.has(id)) missedReads.set(id, (missedReads.get(id) ?? 0) + 1);
+          }
+          // Note that a kept folder no longer held, or whose agent stands again, is forgotten, so the agent is checked anew if it is ever left out again.
+          const wasKept = (yield* Ref.get(state)).kept ?? [];
+          const kept = wasKept.filter((id) => held.value.has(id) && !standing.has(id));
+          if (kept.length !== wasKept.length)
+            yield* updateState((current) => ({ ...current, kept }));
+          const orphans = [...missedReads]
+            .filter(([id, missed]) => missed >= ORPHAN_AFTER && !kept.includes(id))
+            .map(([id]) => id)
+            .sort((one, other) => Number(failedLetGo.has(one)) - Number(failedLetGo.has(other)));
+          let tried = 0;
+          for (const id of orphans) {
+            if (tried >= ORPHANS_PER_PASS) break;
+            const ended = yield* orphanLetGo(id);
+            if (Option.isNone(ended)) continue;
+            tried += 1;
+            if (ended.value === DISCARD_END.FAILED) {
+              failedLetGo.add(id);
+              continue;
+            }
+            failedLetGo.delete(id);
+            missedReads.delete(id);
+            if (ended.value === DISCARD_END.REMOVED) {
+              report(`a local agent the service no longer lists here was removed: ${id}`);
+            }
+          }
+        });
+
         yield* Effect.forkScoped(linesFollowed);
         yield* Effect.forkScoped(requestsFollowed);
+        yield* Effect.forkScoped(
+          Effect.andThen(
+            Deferred.await(beaten),
+            Effect.repeat(orphansLetGo, Schedule.spaced(LIVE_READ_EVERY)),
+          ),
+        );
         yield* presence(userId, deviceId, Effect.provideContext(reconciledBeat, services));
       });
 

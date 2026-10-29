@@ -2,7 +2,7 @@
  * fake-sandbox.ts -- a local agent's VM as a suite stands it in for smolvm (`LocalAgentSandbox`): ready as the suite says, every VM made at once, each command in a VM run as the program `VM_EXEC` with the command after it, and what was handed to it written down.
  */
 
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import type { LocalAgentSandbox } from "../effect/seams.js";
 
 /** The program a command in a fake VM is spawned as, the command's own program and arguments after it. */
@@ -39,6 +39,8 @@ export function fakeSandbox(ready: LocalAgentSandbox["ready"] = () => Effect.voi
     }),
     signalled: (agentId) => Effect.sync(() => void signalled.push(agentId)),
     deleted: (agentId) => Effect.sync(() => deleted.push(agentId)).pipe(Effect.as(true)),
+    // Note that a fake VM lists nothing, so no suite's follower lets go of an agent unless it says so.
+    held: Effect.succeed(Option.none()),
     githubToken: (_agentId, token) => Effect.sync(() => tokens.push(token)),
     deviceGit: () => ({}),
   };

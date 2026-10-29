@@ -19,6 +19,7 @@ import {
   type Effect,
   Layer,
   Logger,
+  type Option,
   type Path,
   type Result,
   type Stream,
@@ -226,6 +227,17 @@ export interface LocalAgentSandbox {
   readonly deleted: (
     agentId: string,
   ) => Effect.Effect<boolean, never, ChildProcessSpawner.ChildProcessSpawner | FileSystem>;
+  /**
+   * The ids the device's VMs hold anything under: each machine smolvm lists
+   * under an agent's name, and each folder of credentials kept beside them;
+   * none where smolvm could not list its machines, so an agent is never
+   * taken as holding nothing where it may.
+   */
+  readonly held: Effect.Effect<
+    Option.Option<ReadonlySet<string>>,
+    never,
+    ChildProcessSpawner.ChildProcessSpawner | FileSystem
+  >;
   /** The agent's GitHub token written where its VM's bindings read it, replacing the last, so a renewal needs no restart. */
   readonly githubToken: (
     agentId: string,

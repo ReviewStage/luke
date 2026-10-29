@@ -311,6 +311,29 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
       Effect.orElseSucceed(() => Option.none<{ state: string }>()),
     );
 
+  /** The names of every machine smolvm keeps, one a line (`machine ls -q`); none where it could not list them in time. */
+  const machinesListed = Effect.scoped(
+    Effect.gen(function* () {
+      const started = spawned(["machine", "ls", "-q"]);
+      const handle = yield* ChildProcess.make(started.command, [...started.args], {
+        stdin: "ignore",
+        stderr: "ignore",
+      });
+      const printed = yield* Stream.mkString(Stream.decodeText(handle.stdout));
+      if (Number(yield* handle.exitCode) !== 0) return Option.none<readonly string[]>();
+      return Option.some<readonly string[]>(
+        printed
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0),
+      );
+    }),
+  ).pipe(
+    Effect.timeoutOption(STOP_TIMEOUT),
+    Effect.map(Option.flatten),
+    Effect.orElseSucceed(() => Option.none<readonly string[]>()),
+  );
+
   /** Whether a `smolvm` command ran and exited 0. */
   const succeeded = (args: readonly string[], within: Duration.Input) =>
     Effect.map(
@@ -561,6 +584,24 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
         );
         return gone;
       }),
+
+    held: Effect.gen(function* () {
+      const machines = yield* machinesListed;
+      if (Option.isNone(machines)) return Option.none<ReadonlySet<string>>();
+      const fileSystem = yield* FileSystem.FileSystem;
+      const credentials = yield* fileSystem
+        .readDirectory([options.stateRoot, CREDENTIALS_FOLDER].join("/"))
+        .pipe(Effect.orElseSucceed((): readonly string[] => []));
+      const prefix = machineOf("");
+      return Option.some<ReadonlySet<string>>(
+        new Set([
+          ...machines.value.flatMap((name) =>
+            name.startsWith(prefix) ? [name.slice(prefix.length)] : [],
+          ),
+          ...credentials.filter((name) => AGENT_ID.test(name)),
+        ]),
+      );
+    }),
 
     githubToken: (agentId, token) =>
       Effect.gen(function* () {
