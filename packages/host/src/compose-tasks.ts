@@ -34,6 +34,7 @@ import {
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TaskCallFailure,
+  type TasksBlockAnswer,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabsAnswer,
   type TasksCommentAnswer,
@@ -70,6 +71,7 @@ import {
   taskBrowserTabsFollowSchema,
   taskHistoryFollowSchema,
   taskPagesFollowSchema,
+  tasksBlockParamsSchema,
   tasksBrowserTabOpenParamsSchema,
   tasksBrowserTabsParamsSchema,
   tasksCommentActParamsSchema,
@@ -276,6 +278,7 @@ export type TasksClient = Pick<
   | "delete"
   | "rename"
   | "mark"
+  | "block"
   | "pinRepository"
   | "sidebarLive"
   | "writeTaskSection"
@@ -2265,6 +2268,36 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               carried<TasksMoveAnswer>({ workspaceId: moved.answer.task.workspaceId }),
               moved.answer.txid,
               takeAnswered(moved.answer.task),
+            ] as const;
+          }),
+        );
+      }),
+    // The service answers the task with its blocks as they then stand, so the
+    // open document takes them in place and nothing is read again.
+    [GATEWAY_METHOD.TASKS_BLOCK]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          tasksBlockParamsSchema,
+          params,
+          "a block change names the task, the other task, and the side it stands on",
+        );
+        if (!gate()) {
+          return carried<TasksBlockAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        }
+        return yield* writtenThenListed(
+          Effect.gen(function* () {
+            const changed = yield* served(client.block(read.taskId, read.block));
+            if (!changed.ok) {
+              return [carried<TasksBlockAnswer>({ failure: changed.failure }), undefined] as const;
+            }
+            const { task } = changed.answer;
+            return [
+              carried<TasksBlockAnswer>({
+                blockedBy: task.blockedBy ?? [],
+                blocks: task.blocks ?? [],
+              }),
+              changed.answer.txid,
+              takeAnswered(task),
             ] as const;
           }),
         );

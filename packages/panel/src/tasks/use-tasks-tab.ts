@@ -21,6 +21,7 @@ import {
   type RepositoryPin,
   type Task,
   type TaskAgentPin,
+  type TaskBlockRequest,
   type TaskMode,
   type TaskRunsOnRequest,
   type TaskStanding,
@@ -29,6 +30,7 @@ import {
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
 import {
+  TASK_BLOCK_FAILURE,
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TasksEditAnswer,
@@ -692,6 +694,8 @@ export interface TasksControl {
     standing: TaskStanding,
     assigneeName?: string,
   ) => Promise<boolean>;
+  /** Adds one block of a task or takes it away, which the open document draws as the service answers it; a refusal says why in a toast. */
+  onSetTaskBlock: (taskId: string, block: TaskBlockRequest) => void;
   /** Opens a task's repository on GitHub in the browser. */
   onOpenOnGitHub: (taskId: string) => void;
   /** Opens Settings › Workspace at its GitHub, for the workspace the task belongs to. */
@@ -1024,6 +1028,12 @@ const OPEN_STARTED_TASK = "Open";
 
 /** What the toast says when the service did not move a task, which stays where it was. */
 const MOVE_REFUSED_NOTE = "The task could not be moved. Try again.";
+
+/** What the toast says when the service kept no change to a task's blocks, which stand as they were. */
+const BLOCK_REFUSED_NOTE = "That relation could not be changed. Try again.";
+
+/** What the toast says when a block would close a cycle, the other task already waiting on this one. */
+const BLOCK_CYCLE_NOTE = "That task already waits on this one, so it can't block it too.";
 
 /** What the toast says when opening a task listed the workspace it is in. */
 function switchedNote(workspace: string): string {
@@ -2254,6 +2264,21 @@ export function useTasksTab(input: {
     return sendStanding(taskId, standing, assigneeName);
   };
 
+  // A fixture's tasks are read from nowhere, so no block of one is kept. The
+  // open document takes the task the service answers, so a refusal is all
+  // there is to say, in a toast, since the menu that asked has closed.
+  const setTaskBlock = (taskId: string, block: TaskBlockRequest) => {
+    if (fixture !== undefined) return;
+    void act(ACT_KIND.TASKS_BLOCK, { taskId, block })
+      .catch(() => ({ failure: TASK_CALL_FAILURE.UNANSWERED }) as const)
+      .then((answer) => {
+        if (!("failure" in answer)) return;
+        const words =
+          answer.failure === TASK_BLOCK_FAILURE.CYCLE ? BLOCK_CYCLE_NOTE : BLOCK_REFUSED_NOTE;
+        toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
+      });
+  };
+
   // A fixture's tasks move nowhere, as they are read from nowhere. Note that
   // the workspace moves with the task, because the sidebar lists one
   // workspace's tasks and the open task must not drop out of it, but only
@@ -3394,6 +3419,7 @@ export function useTasksTab(input: {
     onChangeRepository: changeRepository,
     onSetRepository: setRepository,
     onSetTaskStanding: setTaskStanding,
+    onSetTaskBlock: setTaskBlock,
     onMoveTask: moveTask,
     onOpenWorkspaceGitHub: (taskId) => {
       // The open document names its workspace where the list read did not land.

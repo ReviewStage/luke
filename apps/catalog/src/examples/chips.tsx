@@ -27,7 +27,8 @@ import { CatalogSection } from "../section";
  * filters, one pressed at a time; a row of compact counts, one pressed and
  * one busy; each tone, and each in a compact pill beside a badge of its size; each width; a chip drawn as
  * its mark alone; a name in the code face; removable filters, each
- * springing in as one is added and scaling out as its × lifts it; and a
+ * springing in as one is added and scaling out as its × lifts it, and
+ * removable pills whose words open what they name; and a
  * branch cut in its middle, its start fading where the cut stands.
  */
 
@@ -220,7 +221,22 @@ function Chips(): React.JSX.Element {
         </Inline>
       </CatalogSection>
       <CatalogSection id="chips-removable" title="Removable">
-        <RemovableRow />
+        <Stack gap={GAP.CONTROL} align={ALIGN.START}>
+          <RemovableRow />
+          <Inline gap={GAP.TIGHT}>
+            {["Schema", "Sidebar"].map((name) => (
+              <Chip
+                key={name}
+                look={CHIP_LOOK.PILL}
+                removeLabel={`Remove ${name}`}
+                onRemove={() => undefined}
+                onOpen={() => undefined}
+              >
+                <ChipName>{name}</ChipName>
+              </Chip>
+            ))}
+          </Inline>
+        </Stack>
       </CatalogSection>
       <CatalogSection id="chips-narrow" title="Narrow column, long names">
         <div className="catalog-narrow">

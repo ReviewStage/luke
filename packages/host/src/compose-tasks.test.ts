@@ -942,6 +942,8 @@ function fakeService(tasks: Task[]): FakeService {
         );
         return { ok: true, answer: { task: moved } };
       }),
+    // Note that no test asks for a block, so the fake answers every one as not found.
+    block: () => Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND } as const),
     // The service re-titles the document with the name, as the store does.
     rename: (taskId, { name }) =>
       Effect.sync(() => {

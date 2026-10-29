@@ -374,6 +374,37 @@ export type TaskStanding = Pick<
   "status" | "priority" | "assigneeId" | "mergePolicy"
 >;
 
+/** Which side of a block the other task stands on, as the task a change names reads it: one it waits on, or one that waits on it. */
+export const TASK_BLOCK_RELATION = {
+  BLOCKED_BY: "blocked-by",
+  BLOCKS: "blocks",
+} as const;
+
+export type TaskBlockRelation = (typeof TASK_BLOCK_RELATION)[keyof typeof TASK_BLOCK_RELATION];
+
+/** Whether a block change adds the block or takes it away. */
+export const TASK_BLOCK_CHANGE = {
+  ADD: "add",
+  REMOVE: "remove",
+} as const;
+
+export type TaskBlockChange = (typeof TASK_BLOCK_CHANGE)[keyof typeof TASK_BLOCK_CHANGE];
+
+/**
+ * One block of the task the path names, added or taken away (POST): the
+ * other task, of the same workspace, and the side it stands on. A block is
+ * advice, as Linear's is; one that would close a cycle is refused
+ * (`HOSTED_API_ERROR.TASK_BLOCK_CYCLE`), and adding a block that stands, or
+ * taking away one that does not, changes nothing.
+ */
+export const taskBlockRequestSchema = EffectSchema.Struct({
+  change: EffectSchema.Literals(Object.values(TASK_BLOCK_CHANGE)),
+  relation: EffectSchema.Literals(Object.values(TASK_BLOCK_RELATION)),
+  taskId: wireUuidSchema,
+});
+
+export type TaskBlockRequest = typeof taskBlockRequestSchema.Type;
+
 /**
  * A repository the account pinned in the sidebar, and the instant it was
  * pinned: a pinned repository's group of tasks stands above the others,

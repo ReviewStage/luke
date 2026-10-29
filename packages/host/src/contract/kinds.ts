@@ -306,6 +306,8 @@ export const TASKS_ACT_KIND = {
   TASKS_SET_REPOSITORY: "tasks.setRepository",
   /** A task moved on the service to another of the account's workspaces, its owner's alone; answers the workspace it now belongs to, or why it stands where it was. */
   TASKS_MOVE: "tasks.move",
+  /** One block of a task added or taken away on the service; answers the task's blocks as they then stand, or why they are unchanged. */
+  TASKS_BLOCK: "tasks.block",
   /** The developer's edit of the open task's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
   TASKS_EDIT: "tasks.edit",
   /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */
