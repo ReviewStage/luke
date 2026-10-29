@@ -14,6 +14,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { KEPT } from "../act.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { INBOX_COLUMNS, type InboxColumnsShown, useInboxRowPresses } from "./inbox-columns.js";
 import { InboxList } from "./inbox-list.js";
@@ -123,7 +124,7 @@ function mount(
       onChoose: (listed) => opened.push(listed.item.id),
       onMark: async (listed) => {
         marked.push(listed.item.id);
-        return true;
+        return KEPT;
       },
     });
   }

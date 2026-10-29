@@ -157,12 +157,12 @@ test("a mark the service refused says so once, and Mark all as read names the un
   assert.deepEqual(hook.toasts(), ["Could not mark 1 item unread", "Could not mark 1 item read"]);
 });
 
-test("a refused mark from a caller that says the refusal itself toasts nothing, and still answers false", async () => {
+test("a refused mark from a caller that says the refusal itself toasts nothing, and still answers not kept", async () => {
   const hook = marks();
   let answered: boolean | undefined;
   act(() => {
-    void hook.marks.onMark(item(X, false), true, { quiet: true }).then((kept) => {
-      answered = kept;
+    void hook.marks.onMark(item(X, false), true, { quiet: true }).then((mark) => {
+      answered = mark.kept;
     });
   });
   await settle();

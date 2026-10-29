@@ -186,17 +186,53 @@ export function pressAct<Kind extends PortActKind>(
 }
 
 /**
+ * An act's answer as a row reads it, with what failed beneath where the act
+ * itself failed, which a shown failure reports (`failure-report.ts`) and
+ * nothing draws.
+ */
+export type ActedResult = ActionResult & { readonly cause?: unknown };
+
+/**
  * An act whose answer a row reads as an `ActionResult`, a refusal and any
  * other failure settled into the REJECTED one carrying the sentence a
- * refusal drew, or the one fixed sentence, so a control that waits on the
- * answer is never left waiting on a rejection.
+ * refusal drew, or the one fixed sentence, and the error beneath, so a
+ * control that waits on the answer is never left waiting on a rejection and
+ * an act that never arrived is reported as such rather than as a refusal.
  */
-export async function askActResult(asked: Promise<ActionResult>): Promise<ActionResult> {
+export async function askActResult(asked: Promise<ActionResult>): Promise<ActedResult> {
   try {
     return await asked;
   } catch (error) {
-    return { status: ACTION_RESULT_STATUS.REJECTED, reason: actFailureWords(error) };
+    return { status: ACTION_RESULT_STATUS.REJECTED, reason: actFailureWords(error), cause: error };
   }
+}
+
+/** Whether a write was kept, with what refused it where it was not, which a shown failure reports. */
+export type Kept = { readonly kept: true } | { readonly kept: false; readonly cause: unknown };
+
+/** A write kept. */
+export const KEPT: Kept = { kept: true };
+
+/** A write not kept, with what refused it: the answer that said so, or the error the act failed with. */
+export function notKept(cause: unknown): Kept {
+  return { kept: false, cause };
+}
+
+/** What refused the first of several writes that was not kept; nothing where each was kept. */
+export function firstRefusal(answers: readonly Kept[]): unknown {
+  const refused = answers.find((answer) => !answer.kept);
+  return refused === undefined || refused.kept ? undefined : refused.cause;
+}
+
+/**
+ * The answer a caller settles an act that never answered into: the failure
+ * its words draw, with the error beneath, which a shown failure reports.
+ */
+export function unreachedAs<const Failure extends string>(failure: Failure) {
+  return (cause: unknown): { readonly failure: Failure; readonly cause: unknown } => ({
+    failure,
+    cause,
+  });
 }
 
 /**

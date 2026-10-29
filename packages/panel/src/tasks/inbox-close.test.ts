@@ -21,6 +21,7 @@ import {
 } from "../composer-drafts.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { KEPT } from "../act.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { type InboxCloser, useInboxClose, useInboxCloser } from "./inbox-close.js";
 
@@ -75,7 +76,7 @@ function CloseProbe({ item, closed }: { item: InboxItem; closed: InboxItem[] }):
     item,
     (each) => {
       closed.push(each);
-      return Promise.resolve(true);
+      return Promise.resolve(KEPT);
     },
     true,
   );

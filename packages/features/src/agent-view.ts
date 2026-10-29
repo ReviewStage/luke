@@ -148,12 +148,21 @@ export type AgentCallFailure = (typeof AGENT_CALL_FAILURE)[keyof typeof AGENT_CA
 
 const failureSchema = EffectSchema.Literals(Object.values(AGENT_CALL_FAILURE));
 
-/** A failed call, as every answer below spells one. */
-const failed = EffectSchema.Struct({ failure: failureSchema });
+/**
+ * A failed call, as every answer below spells one, with what failed beneath
+ * it where it was caught: the host's facts of a call that never answered
+ * (`failure-facts.ts`), or, past the act port, the error a window's own act
+ * failed with. The window reports it and never draws or reads it, so it is
+ * carried as it is.
+ */
+const failed = EffectSchema.Struct({
+  failure: failureSchema,
+  cause: EffectSchema.optionalKey(EffectSchema.Unknown),
+});
 
 /** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`), when a plan's reached limit resets where it is that, the provider whose credential is missing where it is that, and why the task's device would not take the agent, with the device and its owner where it is another member's, where it is that. */
 const failedReaching = EffectSchema.Struct({
-  failure: failureSchema,
+  ...failed.fields,
   unreached: EffectSchema.optionalKey(repositoryUnreachedSchema),
   resetsAt: EffectSchema.optionalKey(EffectSchema.Number),
   provider: EffectSchema.optionalKey(modelProviderSchema),

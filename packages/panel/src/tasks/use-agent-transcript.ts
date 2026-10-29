@@ -87,8 +87,8 @@ export const windowTranscriptFollower: TranscriptFollower = (transcript, hear) =
       if (!stopped) hear(page);
     }
   });
-  following.catch(() => {
-    if (!stopped) hear({ failure: AGENT_CALL_FAILURE.UNANSWERED });
+  following.catch((cause: unknown) => {
+    if (!stopped) hear({ failure: AGENT_CALL_FAILURE.UNANSWERED, cause });
   });
   return () => {
     stopped = true;
@@ -142,6 +142,8 @@ export interface AgentTranscriptControl {
   reading: boolean;
   /** Whether the last read did not answer, so the tab offers to try again. */
   failed: boolean;
+  /** What the last read that did not answer failed with, for the tab to report: the page saying so, with what failed beneath it; nothing while none failed. */
+  failedWith: unknown;
   onRetry: () => void;
 }
 
@@ -172,6 +174,7 @@ interface Held {
   /** The rewind the newest page held was read at; none before a page landed or where the transcript was never rewound. */
   rewound: number | undefined;
   failed: boolean;
+  failedWith: unknown;
 }
 
 function fresh(transcript: AgentTranscriptKey): Held {
@@ -196,6 +199,7 @@ function fresh(transcript: AgentTranscriptKey): Held {
     subagents: new Map(),
     rewound: undefined,
     failed: false,
+    failedWith: undefined,
   };
 }
 
@@ -245,8 +249,8 @@ function joined(was: Held, page: AgentTranscriptPage): Held {
   // Note that a transcript the account does not reach draws nothing it held of it, as one the host drew from what it held before access was checked.
   if ("failure" in page) {
     return page.failure === AGENT_CALL_FAILURE.NOT_FOUND
-      ? { ...fresh(was.transcript), pages: was.pages, failed: true }
-      : { ...was, failed: true };
+      ? { ...fresh(was.transcript), pages: was.pages, failed: true, failedWith: page }
+      : { ...was, failed: true, failedWith: page };
   }
   // Note that a newest page that does not meet what is held replaces it, older pages and all, rather than leave a gap,
   // and so does one read at another rewind, since the rewind dropped messages a join would keep.
@@ -287,6 +291,7 @@ function joined(was: Held, page: AgentTranscriptPage): Held {
       sameStanding,
     ),
     failed: false,
+    failedWith: undefined,
   };
 }
 
@@ -424,7 +429,7 @@ export function useAgentTranscript(input: {
   }, [transcript, before, olderOut]);
 
   const onRetry = useCallback(() => {
-    setHeld((was) => ({ ...was, failed: false }));
+    setHeld((was) => ({ ...was, failed: false, failedWith: undefined }));
     setAttempt((count) => count + 1);
   }, []);
 
@@ -450,6 +455,7 @@ export function useAgentTranscript(input: {
     subagents: held.subagents,
     reading: shown && !held.failed && held.messages.length === 0 && writing,
     failed: held.failed,
+    failedWith: held.failedWith,
     onRetry,
   };
 }

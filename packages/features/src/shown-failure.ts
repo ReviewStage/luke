@@ -14,7 +14,9 @@
  * names, tags, codes, HTTP statuses, faults, ids, the app's state, and the
  * cause's own message, every string read from the cause with each
  * credential-shaped run replaced (`credential-redaction.ts`) and cut at a
- * bound. There is no field for what
+ * bound, but the trace a hosted call travelled under, read only in a trace
+ * id's shape, which the service's log lines for that call carry. There is
+ * no field for what
  * a person typed, a transcript, a plan, or a file. Note that a cause's
  * message is the error's own words, as an error's words already reach
  * Sentry (root `AGENTS.md`), and a refusal's is the sentence the service or
@@ -40,6 +42,8 @@ export const FAILURE_SURFACE = {
   AGENT_SERVERS: "agent.servers",
   AGENT_START: "agent.start",
   AGENT_STOP: "agent.stop",
+  /** A file handed to a message box could not be read on this machine. */
+  ATTACHMENT_READ: "attachment.read",
   AUTOMATION_RUN: "automation.run",
   AUTOMATION_TOGGLE: "automation.toggle",
   CHANNEL_MOVE: "channel.move",
@@ -208,7 +212,12 @@ const FAILURE_ATTRIBUTE = {
   ONLINE: "app.online",
   ACCOUNT: "app.account",
   LIVE: "app.live",
+  /** The trace the hosted call that failed travelled under, which the service's log lines for it carry. */
+  HOSTED_TRACE: "hosted.trace_id",
 } as const;
+
+/** A W3C trace id, the one shape a hosted call's trace is read in. */
+const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/;
 
 /** The issue's context its attributes travel under. */
 const SHOWN_FAILURE_CONTEXT = "shown_failure";
@@ -276,7 +285,9 @@ function factsOf(cause: unknown): CauseFacts {
   const code = numberOf(cause, "code")?.toString() ?? sendableOf(cause, "code");
   const message = stringOf(cause, "message") ?? stringOf(cause, "reason");
   return {
-    name: cause instanceof Error ? sendableText(cause.name) : sendableOf(cause, "name"),
+    name:
+      sendableOf(cause, "errorName") ??
+      (cause instanceof Error ? sendableText(cause.name) : sendableOf(cause, "name")),
     tag: sendableOf(cause, "_tag"),
     code:
       code ??
@@ -335,8 +346,28 @@ function aboutAttributes(about: FailureAbout): FailureAttributes {
   return attributes;
 }
 
-/** What a failure's log line and issue carry: where, how, its cause and its root's, the ids, and the app's state. */
-function attributesOf(report: ShownFailureReport, chain: readonly CauseFacts[], code: string) {
+/**
+ * The trace a hosted call travelled under, the first down the chain that
+ * names one (`failure-facts.ts`), so the report and the service's log lines
+ * for that call share it. Note that it is read outside the redaction, which
+ * takes any run of 32 characters for a credential, and only in a trace id's
+ * own shape, so nothing else travels through it unredacted.
+ */
+function hostedTraceOf(chain: readonly unknown[]): string | undefined {
+  for (const cause of chain) {
+    const traceId = stringOf(cause, "traceId");
+    if (traceId !== undefined && TRACE_ID_PATTERN.test(traceId)) return traceId;
+  }
+  return undefined;
+}
+
+/** What a failure's log line and issue carry: where, how, its cause and its root's, the hosted call's trace, the ids, and the app's state. */
+function attributesOf(
+  report: ShownFailureReport,
+  chain: readonly CauseFacts[],
+  code: string,
+  trace: string | undefined,
+) {
   const root = chain.length > 1 ? chain.at(-1) : undefined;
   return {
     [FAILURE_ATTRIBUTE.SURFACE]: report.surface,
@@ -345,6 +376,7 @@ function attributesOf(report: ShownFailureReport, chain: readonly CauseFacts[], 
     ...(report.act === undefined ? {} : { [FAILURE_ATTRIBUTE.ACT]: report.act }),
     ...factAttributes(chain[0] ?? {}, ERROR_ATTRIBUTE),
     ...(root === undefined ? {} : factAttributes(root, ROOT_ATTRIBUTE)),
+    ...(trace === undefined ? {} : { [FAILURE_ATTRIBUTE.HOSTED_TRACE]: trace }),
     ...aboutAttributes(report.about),
     [FAILURE_ATTRIBUTE.ONLINE]: report.state.online,
     [FAILURE_ATTRIBUTE.ACCOUNT]: report.state.account,
@@ -412,7 +444,8 @@ export function sendShownFailure(sentry: ShownFailureSentry, report: ShownFailur
   const chain = chainOf(report.cause);
   const facts = chain.map(factsOf);
   const code = codeOf(facts);
-  const attributes = attributesOf(report, facts, code);
+  const trace = hostedTraceOf(chain);
+  const attributes = attributesOf(report, facts, code, trace);
   const line = `A failure was shown on ${report.surface}: ${code}`;
   if (report.kind === FAILURE_KIND.REFUSED) {
     sentry.logger.warn(line, attributes);
@@ -427,6 +460,7 @@ export function sendShownFailure(sentry: ShownFailureSentry, report: ShownFailur
       tags: {
         [FAILURE_ATTRIBUTE.SURFACE]: report.surface,
         [FAILURE_ATTRIBUTE.CODE]: code,
+        ...(trace === undefined ? {} : { [FAILURE_ATTRIBUTE.HOSTED_TRACE]: trace }),
         ...aboutAttributes(report.about),
       },
       contexts: { [SHOWN_FAILURE_CONTEXT]: attributes },

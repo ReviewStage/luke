@@ -98,11 +98,16 @@ function namesRefusal(cause: unknown): boolean {
  * Whether a failure was named, and so expected: one its surface says was
  * refused, an act's answer that refused it, a client's answer naming a
  * failure the service worded, or the act port's refusal; any other failure
- * is unexpected.
+ * is unexpected. An act's refused answer that carries what failed beneath
+ * it is judged by that.
  */
 function kindOf(failure: ShownFailure): FailureKind {
   const { cause } = failure;
   const answered = Predicate.hasProperty(cause, "status") && REFUSED_ANSWERS.has(cause.status);
+  // Note that a refused answer settled from what failed beneath it, an act that never arrived among them, is judged by what is beneath.
+  if (answered && Predicate.hasProperty(cause, "cause") && cause.cause !== undefined) {
+    return kindOf({ ...failure, cause: cause.cause });
+  }
   return failure.refused === true || answered || namesRefusal(cause) || carriesRefusal(cause)
     ? FAILURE_KIND.REFUSED
     : FAILURE_KIND.UNEXPECTED;
