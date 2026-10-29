@@ -17,7 +17,7 @@ import { agentTable } from "./agent.js";
  * again (`agent-wakeups.ts`). The rows go with their agent.
  */
 export const agentWakeupTable = pgTable(
-  "coding_agent_wakeup",
+  "agent_wakeup",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     agentId: uuid("agent_id")
@@ -33,8 +33,8 @@ export const agentWakeupTable = pgTable(
   },
   (table) => [
     // The sweep reads the wakeups due, the longest due first.
-    index("coding_agent_wakeup_due").on(table.dueAt),
+    index("agent_wakeup_due").on(table.dueAt),
     // A release replaces, and a Stop deletes, one agent's wakeups.
-    index("coding_agent_wakeup_agent").on(table.agentId),
+    index("agent_wakeup_agent").on(table.agentId),
   ],
 );

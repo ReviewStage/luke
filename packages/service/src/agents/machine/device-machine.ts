@@ -1,8 +1,8 @@
 /**
  * device-machine.ts -- the agent machine over the starter's Mac: the runner launched there by a line the Mac follows, its stdin written as more lines, and Luke's doors read through requests the Mac answers.
  *
- * A local agent (`coding_agent.machine` is `mac`) runs its runner on the
- * Mac it is pinned to (`coding_agent.device_id`), which follows the rows the
+ * A local agent (`agent.machine` is `mac`) runs its runner on the
+ * Mac it is pinned to (`agent.device_id`), which follows the rows the
  * service queues for it (`@luke/database/models/device-agent-store`, the wire
  * in `@luke/features/device-agent-wire`) and answers through its procedures
  * (`../device-agents-procedures.ts`). Nothing here reaches the Mac directly:

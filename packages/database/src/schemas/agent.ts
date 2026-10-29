@@ -15,7 +15,6 @@ import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-reposito
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
-  foreignKey,
   index,
   jsonb,
   pgTable,
@@ -233,7 +232,7 @@ export interface StoredPublishedRead {
 }
 
 export const agentTable = pgTable(
-  "coding_agent",
+  "agent",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     /** The task the agent works on; null for an agent an automation started with no task. */
@@ -322,28 +321,28 @@ export const agentTable = pgTable(
   },
   (table) => [
     // One agent per Start: a retry carrying the same key finds this row.
-    uniqueIndex("coding_agent_user_idempotency").on(table.userId, table.idempotencyKey),
+    uniqueIndex("agent_user_idempotency").on(table.userId, table.idempotencyKey),
     // The tabs read one task's agents in the order they were started.
-    index("coding_agent_task_created").on(table.taskId, table.createdAt),
+    index("agent_task_created").on(table.taskId, table.createdAt),
     // Every Luke tool call, runner event, and session route finds the agent its conversation is;
     // one agent per conversation, since an agent is started on a conversation of its own.
-    uniqueIndex("coding_agent_conversation").on(table.conversationId),
+    uniqueIndex("agent_conversation").on(table.conversationId),
     // A workspace's agents with no task are read newest first.
-    index("coding_agent_org_created").on(table.organizationId, table.createdAt),
+    index("agent_org_created").on(table.organizationId, table.createdAt),
     // The agents with no task, which the sidebar lists across the account's workspaces, are read
     // by workspace newest first, apart from the task agents that outnumber them.
-    index("coding_agent_org_taskless_created")
+    index("agent_org_taskless_created")
       .on(table.organizationId, table.createdAt)
       .where(sql`${table.taskId} is null`),
     // An agent's summary names the agents started from it, read by the source's id.
-    index("coding_agent_started_from_agent").on(sql`(${table.startedFrom}->>'agentId')`),
+    index("agent_started_from_agent").on(sql`(${table.startedFrom}->>'agentId')`),
     // Luke's MCP server and the events route find the agent a runner's bearer stands for by the
     // bearer's digest, on every call; one digest names one agent.
-    uniqueIndex("coding_agent_runner_token_hash")
+    uniqueIndex("agent_runner_token_hash")
       .on(table.runnerTokenHash)
       .where(sql`${table.runnerTokenHash} is not null`),
     // A member holds one standing operator per workspace, so two ensures that race make one row.
-    uniqueIndex("coding_agent_member_operator")
+    uniqueIndex("agent_member_operator")
       .on(table.organizationId, table.userId)
       .where(sql`${table.kind} = ${literal(AGENT_KIND.OPERATOR)} and ${table.archivedAt} is null`),
   ],
@@ -361,23 +360,13 @@ export const agentTable = pgTable(
  * by that call. The row goes with its conversation, which goes with the
  * agent's.
  */
-export const agentDelegationTable = pgTable(
-  "coding_agent_delegation",
-  {
-    childConversationId: uuid("child_conversation_id").primaryKey(),
-    /** eve's id for the delegation call; null on a row recorded before migration 0079 kept it. */
-    callId: text("call_id"),
-    /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
-    model: text("model").notNull(),
-    effort: text("effort").notNull(),
-  },
-  (table) => [
-    // Note that the name is spelled out, because the one Drizzle derives is
-    // longer than Postgres's 63 bytes and the database holds it truncated.
-    foreignKey({
-      name: "coding_agent_delegation_child_conversation_id_conversations_id_",
-      columns: [table.childConversationId],
-      foreignColumns: [conversations.id],
-    }).onDelete("cascade"),
-  ],
-);
+export const agentDelegationTable = pgTable("agent_delegation", {
+  childConversationId: uuid("child_conversation_id")
+    .primaryKey()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  /** eve's id for the delegation call; null on a row recorded before migration 0079 kept it. */
+  callId: text("call_id"),
+  /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
+  model: text("model").notNull(),
+  effort: text("effort").notNull(),
+});
