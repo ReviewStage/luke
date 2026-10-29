@@ -741,7 +741,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
             ? Effect.fail(failure.refusal)
             : failure._tag === "TaskAssigneeNotMember"
               ? Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)
-              : hostedStoreOrUnavailable(Effect.fail(failure)),
+              : failure._tag === "TaskTreeRepositoryLocked"
+                ? Effect.fail(HOSTED_REFUSAL.CHILD_REPOSITORY_LOCKED)
+                : hostedStoreOrUnavailable(Effect.fail(failure)),
         ),
       );
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);

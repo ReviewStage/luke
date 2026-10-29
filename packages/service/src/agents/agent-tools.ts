@@ -327,6 +327,9 @@ export const UPDATE_TASK_REFUSAL = {
   GITHUB_UNANSWERED:
     "Not run: GitHub did not answer whether the workspace reaches that repository. The call " +
     "may be made again.",
+  TREE_REPOSITORY:
+    "Not run: a task with a parent or with children works in its tree's repository, so it " +
+    "cannot be given another; leave the repository as it is.",
   NO_SECTION:
     "Not run: the developer you work for keeps no section of this workspace under that id; " +
     `${AGENT_TOOL.LIST_TASKS} names the sections.`,
@@ -2196,6 +2199,9 @@ export function runUpdateTask(
           Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_SECTION)),
         ),
         Effect.catchTag("TaskBlockRefused", ({ words }) => Effect.succeed(Result.fail(words))),
+        Effect.catchTag("TaskTreeRepositoryLocked", () =>
+          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.TREE_REPOSITORY)),
+        ),
       );
       if (Result.isFailure(changed)) return agentToolRejected(changed.failure);
       const { task, blocksChanged } = changed.success;

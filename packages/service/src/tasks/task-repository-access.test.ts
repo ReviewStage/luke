@@ -192,6 +192,36 @@ it.layer(getTestDB())("a plan's repository on a member's own GitHub token", (it)
       }).pipe(Effect.provide(GITHUB_APP_WITH_TOKENS)),
   );
 
+  it.effect("a child plan's repository cannot be changed to another", () =>
+    Effect.gen(function* () {
+      const owner = yield* openTokenMember();
+      const workspace = yield* openWorkspace(owner);
+      const parent = yield* createTask(owner, {
+        organizationId: workspace,
+        name: "Other",
+        repository: "octo-member/other",
+      });
+      const child = yield* createTask(owner, {
+        organizationId: workspace,
+        name: "Child",
+        repository: "octo-member/other",
+        parentTaskId: parent.id,
+      });
+      const send = yield* standing(new Map([["Bearer owner", owner]]));
+
+      const moved = yield* send("PATCH", `/api/plans/${child.id}`, "Bearer owner", {
+        repository: "octo-member/side",
+      });
+
+      assert.deepEqual(moved, {
+        status: 409,
+        body: { error: HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED },
+      });
+      const read = Option.getOrThrow(yield* readTask(owner, child.id));
+      assert.equal(read.task.repository, "octo-member/other");
+    }).pipe(Effect.provide(GITHUB_APP_WITH_TOKENS)),
+  );
+
   it.effect("a member cannot make a child of a plan they do not reach, and nothing is made", () =>
     Effect.gen(function* () {
       const owner = yield* openTokenMember();
