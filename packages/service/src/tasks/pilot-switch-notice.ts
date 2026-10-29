@@ -26,13 +26,14 @@
 import { randomUUID } from "node:crypto";
 import { type Agent, listAgents } from "@luke/database/models/agent-store";
 import { readTaskHeader, type TaskHeader } from "@luke/database/models/task-store";
-import type { StoreWriter } from "@luke/database/models/writer";
+import { LUKE_LINE_METADATA, type StoreWriter } from "@luke/database/models/writer";
 import { AGENT_KIND, MESSAGE_SENDER } from "@luke/features/agent-wire";
 import { MERGE_POLICY, type MergePolicy } from "@luke/features/task-wire";
 import { Effect, Option } from "effect";
 import { steerAgentWritten } from "../agents/coder-host/steer.js";
-import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
+import { type EveReach, eveActingFor, eveFor } from "../agents/coder-host/stop.js";
 import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
+import { HOSTED_REFUSAL } from "../http/http-effect.js";
 
 /** The words every merge-policy notice opens with, which the pilot's instructions recognize. */
 export const MERGE_POLICY_NOTICE_LEAD = "Merge policy is now";
@@ -60,7 +61,11 @@ export function pilotOf(agents: readonly Agent[]): Agent | undefined {
 /**
  * Tells the pilot of the top task `taskId` the words `noticeOf` makes of the
  * task as it now stands, as the member `userId` said them, and nothing where
- * it makes none; logs and answers nothing where it could not be told.
+ * it makes none; logs and answers nothing where it could not be told. Where
+ * `lukeWhereRefused` asks, a pilot that takes no words from the member (one
+ * on its starter's own Mac or token, or its starter's plan) is told by Luke
+ * instead, as the deployment acting for its starter, as a resume is
+ * (`running-tree.ts`).
  */
 const tellPilot = /* @__PURE__ */ Effect.fnUntraced(
   function* (
@@ -70,18 +75,39 @@ const tellPilot = /* @__PURE__ */ Effect.fnUntraced(
     userId: string,
     taskId: string,
     noticeOf: (task: TaskHeader) => string | undefined,
+    lukeWhereRefused: boolean,
   ) {
     const pilot = pilotOf(yield* listAgents(userId, taskId));
     const task = yield* readTaskHeader(userId, taskId);
     if (pilot === undefined || Option.isNone(task)) return;
     const text = noticeOf(task.value);
     if (text === undefined) return;
-    const eve = yield* eveFor<EveTypedTurn>(reach, request, userId);
-    yield* steerAgentWritten(eve, writer, userId, pilot, {
-      text,
-      clientKey: randomUUID(),
-      sender: { kind: MESSAGE_SENDER.MEMBER, userId },
-    });
+    const clientKey = randomUUID();
+    const asMember = Effect.flatMap(eveFor<EveTypedTurn>(reach, request, userId), (eve) =>
+      steerAgentWritten(eve, writer, userId, pilot, {
+        text,
+        clientKey,
+        sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+      }),
+    );
+    const asLuke = Effect.flatMap(eveActingFor<EveTypedTurn>(reach, pilot.userId), (eve) =>
+      steerAgentWritten(eve, writer, pilot.userId, pilot, {
+        text,
+        clientKey,
+        sender: { kind: MESSAGE_SENDER.LUKE },
+        metadata: LUKE_LINE_METADATA,
+      }),
+    );
+    // A refusal of the member writes nothing, so the same key goes again as Luke's.
+    yield* asMember.pipe(
+      Effect.catch((failure) =>
+        lukeWhereRefused &&
+        "error" in failure &&
+        failure.error === HOSTED_REFUSAL.NOT_PERMITTED.error
+          ? asLuke
+          : Effect.fail(failure),
+      ),
+    );
   },
   // The failure's kind alone: nothing of the task or its member rides the log.
   Effect.catch((failure) =>
@@ -106,14 +132,16 @@ export function tellPilotOfMergePolicy(
     userId,
     taskId,
     (task) => MERGE_POLICY_NOTICE[task.mergePolicy],
+    false,
   );
 }
 
 /**
  * Tells the pilot of the top task `taskId` that its tree now runs, as the
- * member `userId` said it. Note that the task is read again as the notice
- * goes, so a switch back off meanwhile, which stopped the pilot, wakes it
- * with nothing.
+ * member `userId` said it, or as Luke where the pilot takes no words from
+ * them, since this is the one wake a pilot the switch stopped has. Note that
+ * the task is read again as the notice goes, so a switch back off
+ * meanwhile, which stopped the pilot, wakes it with nothing.
  */
 export function tellPilotOfRunning(
   reach: EveReach,
@@ -122,7 +150,13 @@ export function tellPilotOfRunning(
   userId: string,
   taskId: string,
 ) {
-  return tellPilot(reach, request, writer, userId, taskId, (task) =>
-    task.running ? RUNNING_ON_NOTICE : undefined,
+  return tellPilot(
+    reach,
+    request,
+    writer,
+    userId,
+    taskId,
+    (task) => (task.running ? RUNNING_ON_NOTICE : undefined),
+    true,
   );
 }
