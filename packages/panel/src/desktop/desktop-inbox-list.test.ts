@@ -157,35 +157,6 @@ test("the list holds every plan's items under the sidebar's group header for eac
   assert.deepEqual(listed(page), oneRun);
 });
 
-test("Second line in the view's menu, checked at first, makes every row one line once unchecked, its title alone, and the choice outlives a relaunch", async () => {
-  let { page } = mount();
-  await settle();
-  const described = (title: string) =>
-    rowNamed(page, title).querySelector(".luke-list-row-description") !== null;
-  assert.ok(described("Alert at 80%?"), "a row has its second line at first");
-  const toggle = () => {
-    const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
-    act(() => options?.click());
-    const item = [
-      ...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]'),
-    ].find((each) => each.textContent?.includes("Second line"));
-    assert.ok(item, "the view's menu offers Second line");
-    const checked = item.getAttribute("aria-checked");
-    act(() => item.click());
-    return checked;
-  };
-  assert.equal(toggle(), "true");
-  await settle();
-  assert.equal(described("Alert at 80%?"), false, "unchecked, the row is one line");
-  assert.equal(described("Expire after 7 days?"), false);
-
-  act(() => world.root?.unmount());
-  world.root = undefined;
-  ({ page } = mount());
-  await settle();
-  assert.equal(described("Alert at 80%?"), false, "the choice outlives a relaunch");
-});
-
 /** ⌘-clicks the row of the item so titled, as a Mac's list chooses a row in or out. */
 function commandClick(page: HTMLElement, title: string): void {
   act(() => {
@@ -620,49 +591,42 @@ test("Order by in the view's menu offers Latest first and Oldest first, which li
   assert.equal(viewItem("Latest first").getAttribute("aria-checked"), "true");
 });
 
-test("grouped by person or by nothing, each row names its task on a line of its own between its title and its preview, never on its title's line, which the title keeps whole, nor in the preview, which keeps its line whole; grouped by task, the header names it and the rows name none", async () => {
+test("in every grouping, each row names its task on its first line with its time at that line's end, then its title on a line of its own, then its preview", async () => {
   world.inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
   const { page } = mount();
   await settle();
-  const chips = () =>
+  const lines = () =>
     ["Alert at 80%?", "Expire after 7 days?"].map((title) => {
       const row = rowNamed(page, title);
+      const head = row.querySelector(".luke-list-row-head");
       return {
-        chip: row.querySelector('.luke-list-row-text > .luke-list-row-lead[data-at="line"]')
-          ?.textContent,
-        firstLine: row.querySelector(".luke-list-row-head")?.textContent?.includes(title)
-          ? row.querySelector(".luke-list-row-head .luke-list-row-lead, .home-row-context")
-          : "the title is not on the first line",
+        task: head?.querySelector('.luke-list-row-lead[data-at="above"]')?.textContent,
+        time: head?.querySelector(".home-row-meta time") !== null,
+        titleOnFirstLine: head?.textContent?.includes(title),
         preview: row.querySelector(".luke-list-row-description")?.textContent,
       };
     });
-  assert.deepEqual(
-    chips().map(({ chip }) => chip),
-    [undefined, undefined],
-  );
+  const expected = [
+    {
+      task: "Billing usage alerts",
+      time: true,
+      titleOnFirstLine: false,
+      preview: "Retry 3 times over an hour (recommended) / Retry once",
+    },
+    {
+      task: "Invites",
+      time: true,
+      titleOnFirstLine: false,
+      preview: "Retry 3 times over an hour (recommended) / Retry once",
+    },
+  ];
+  assert.deepEqual(lines(), expected, "grouped by task, the rows still name it");
 
   chooseView(page, "Group by", "None");
-  assert.deepEqual(chips(), [
-    {
-      chip: "Billing usage alerts",
-      firstLine: null,
-      preview: "Retry 3 times over an hour (recommended) / Retry once",
-    },
-    {
-      chip: "Invites",
-      firstLine: null,
-      preview: "Retry 3 times over an hour (recommended) / Retry once",
-    },
-  ]);
+  assert.deepEqual(lines(), expected);
 
   chooseView(page, "Group by", "Person");
-  assert.deepEqual(
-    chips().map(({ chip, firstLine }) => [chip, firstLine]),
-    [
-      ["Billing usage alerts", null],
-      ["Invites", null],
-    ],
-  );
+  assert.deepEqual(lines(), expected);
 });
 
 test("a folded plan counts what in it needs you, and one where nothing does counts nothing", async () => {
@@ -1054,7 +1018,7 @@ function pending(): PendingRead {
   return { promise, settle };
 }
 
-test("an item's row reads as two lines, its title and time over the last word in its thread: what an open item asks, an answer by who gave it, You for the reader, a teammate's latest message by their name, and the agent's words alone where it took its ask back", async () => {
+test("an item's row reads as its task line and time, then its title, over the last word in its thread: what an open item asks, an answer by who gave it, You for the reader, a teammate's latest message by their name, and the agent's words alone where it took its ask back", async () => {
   const NIGHT = asking(
     item("a1b2c3d4-0000-4000-8000-000000000004", "Page on-call at night?", 2_000),
     { type: INBOX_ASK.DO, steps: ["Add the **rota** to PagerDuty."] },
@@ -1292,8 +1256,6 @@ test("Mark all as read in the view's menu, under Group by, marks every unread it
     "Order by",
     "—",
     "Whose",
-    "—",
-    "Second line",
     "—",
     "Mark all as read",
   ]);

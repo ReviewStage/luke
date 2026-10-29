@@ -203,13 +203,16 @@ function ListRows(): React.JSX.Element {
           </List>
         </div>
       </CatalogSection>
-      <CatalogSection id="list-row-lead-line" title="What a row belongs to, on a line of its own">
+      <CatalogSection
+        id="list-row-lead-above"
+        title="What a row belongs to, on a line of its own over its title"
+      >
         <div className="catalog-column">
           <List label="Inbox items">
             <ListRow
               title="PR: remove the leftover Call tab code"
               lead={{ icon: <UserIcon />, label: "Revert agent to the previous layout" }}
-              leadAt={LIST_ROW_LEAD.LINE}
+              leadAt={LIST_ROW_LEAD.ABOVE}
               description="Merge / Request changes"
               meta="1h"
               metaAt={LIST_ROW_META.TITLE}
@@ -223,7 +226,7 @@ function ListRows(): React.JSX.Element {
             <ListRow
               title="Board cards wrap and hover per part"
               lead={{ icon: <UserIcon />, label: "Board card overflow fix" }}
-              leadAt={LIST_ROW_LEAD.LINE}
+              leadAt={LIST_ROW_LEAD.ABOVE}
               description="Approve / Request changes"
               meta="2h"
               metaAt={LIST_ROW_META.TITLE}

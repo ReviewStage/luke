@@ -68,7 +68,6 @@ const STORAGE_KEY = {
   INBOX_SORT: "luke.inboxSort",
   INBOX_WHOSE: "luke.inboxWhose",
   CHANNEL_SCOPE: "luke.channelScope",
-  INBOX_SECOND_LINE: "luke.inboxSecondLine",
   INBOX_LIST_WIDTH: "luke.inboxListWidth",
   RUNS_PANEL: "luke.automationRunsPanel",
   FILE_TREE_WIDTH: "luke.fileTreeWidth",
@@ -223,7 +222,6 @@ const KEPT = {
   SORT: keptKey<InboxSort>(STORAGE_KEY.INBOX_SORT, storedSort),
   WHOSE: keptKey<InboxWhose>(STORAGE_KEY.INBOX_WHOSE, storedWhose),
   CHANNEL_SCOPE: keptKey<ChannelScope>(STORAGE_KEY.CHANNEL_SCOPE, storedChannelScope),
-  SECOND_LINE: keptKey(STORAGE_KEY.INBOX_SECOND_LINE, storedFlag),
   FOLDED_GROUPS: keptKey(STORAGE_KEY.GROUPS, storedFolds),
   FOLDED_CREATORS: keptKey(STORAGE_KEY.CREATORS, storedFolds),
   FOLDED_ASSIGNEES: keptKey(STORAGE_KEY.ASSIGNEES, storedFolds),
@@ -363,9 +361,6 @@ export interface InboxViewChoices extends InboxShowChoice, InboxWhoseChoice {
   onGrouping: (grouping: InboxGrouping) => void;
   sort: InboxSort;
   onSort: (sort: InboxSort) => void;
-  /** Whether each row shows its second line, what its item asks or how it ended, under its title; off, every row is one line. */
-  secondLine: boolean;
-  onSecondLine: (secondLine: boolean) => void;
 }
 
 /** Whose items the window's Inbox lists, and the press that lists another's. */
@@ -391,7 +386,6 @@ export function useInboxViewChoices(): InboxViewChoices {
   const [grouping, onGrouping] = useKept(KEPT.GROUPING, INBOX_GROUPING.NONE);
   const [sort, onSort] = useKept(KEPT.SORT, INBOX_SORT.LATEST);
   const [whose, onWhose] = useKept(KEPT.WHOSE, EVERYONES);
-  const [secondLine, onSecondLine] = useKept(KEPT.SECOND_LINE, true);
   return {
     ...shown,
     grouping,
@@ -400,8 +394,6 @@ export function useInboxViewChoices(): InboxViewChoices {
     onSort,
     whose,
     onWhose,
-    secondLine,
-    onSecondLine,
   };
 }
 

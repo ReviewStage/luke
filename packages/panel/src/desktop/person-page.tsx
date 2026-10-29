@@ -792,7 +792,6 @@ function PersonColumn({
                 now={now}
                 models={tasks.agents.models}
                 readerId={tasks.me}
-                chip
                 onChoose={openItem}
               />
             ))}

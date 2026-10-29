@@ -149,13 +149,11 @@ test("the Inbox's choices are read as they were kept, and an earlier sort as the
   keep("luke.inboxGrouping", '"plan"');
   keep("luke.inboxSort", '"waiting"');
   keep("luke.inboxWhose", '{"kind":"person","userId":"u1","name":"Ana"}');
-  keep("luke.inboxSecondLine", "false");
   const choices = draw(() => useInboxViewChoices());
   expect(choices.now().show).toBe("all");
   expect(choices.now().grouping).toBe("plan");
   expect(choices.now().sort).toBe("oldest");
   expect(choices.now().whose).toEqual({ kind: "person", userId: "u1", name: "Ana" });
-  expect(choices.now().secondLine).toBe(false);
   act(() => choices.now().onShow("to-do"));
   act(() => choices.now().onSort("latest"));
   expect(kept("luke.inboxShow")).toBe('"to-do"');
