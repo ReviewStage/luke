@@ -1,11 +1,19 @@
-import { AlertIcon, PencilIcon, ROW_MARK, RowMark, Tooltip, UnreadMark } from "@luke/ui";
+import {
+  AlertIcon,
+  BlockedMark,
+  PencilIcon,
+  ROW_MARK,
+  RowMark,
+  Tooltip,
+  UnreadMark,
+} from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * row-marks.tsx -- the marks a row or a tab wears beside its words: a
  * failure in the danger colour, with its hint, a waiting draft in the
- * muted ink, and the unread dot in the gutter before a row's words, which
+ * muted ink, a task waiting on another's work in the same ink, and the unread dot in the gutter before a row's words, which
  * stands empty once read.
  */
 
@@ -22,6 +30,11 @@ function RowMarks(): React.JSX.Element {
       <CatalogSection id="row-mark-draft" title="Draft">
         <div className="catalog-frame">
           <RowMark kind={ROW_MARK.DRAFT} label="Draft" glyph={<PencilIcon />} />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="row-mark-blocked" title="Blocked">
+        <div className="catalog-frame">
+          <BlockedMark />
         </div>
       </CatalogSection>
       <CatalogSection id="row-mark-unread" title="Unread, and read">

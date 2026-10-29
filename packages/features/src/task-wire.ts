@@ -548,6 +548,12 @@ const taskSummaryFields = {
   mode: EffectSchema.optionalKey(taskModeSchema),
   /** What becomes of its agents' pull requests once their checks pass; absent from a service before it, where they merge on green. */
   mergePolicy: EffectSchema.optionalKey(mergePolicySchema),
+  /**
+   * True while a task it waits on (`blockedBy`) is neither done nor
+   * canceled, as its sidebar row is marked; absent while none is, and from a
+   * service before blocks.
+   */
+  blocked: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 };
 
 /** How much of a task's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */

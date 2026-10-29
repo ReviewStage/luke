@@ -4,6 +4,7 @@ import {
   liveStatementOf,
 } from "@luke/database/core/live-statement";
 import { queryBuilder } from "@luke/database/core/query";
+import { taskBlockedFor } from "@luke/database/models/task-block-store";
 import {
   AGENT_WORKSPACE,
   agentVisibleTo,
@@ -58,8 +59,9 @@ export interface TaskListLiveStatements {
 }
 
 /**
- * The plans the account reaches, each with the reader's own pin and its
- * owner's name. Note that `archivedAt` is still answered, as null, because
+ * The plans the account reaches, each with the reader's own pin, its
+ * owner's name, and whether it waits on an open task the account reaches
+ * (`taskBlockedFor`). Note that `archivedAt` is still answered, as null, because
  * a desktop from before #4541 decodes a row without it as no row: no
  * plan is archived any more, and the column is dropped. The key goes with
  * the minimum supported desktop version, not with a service deploy, since a
@@ -88,6 +90,7 @@ function tasksStatement(userId: string) {
           parentTaskId: task.parentTaskId,
           mode: task.mode,
           mergePolicy: task.mergePolicy,
+          blocked: taskBlockedFor(userId),
         },
         {
           pinnedAt: taskPin.pinnedAt,
