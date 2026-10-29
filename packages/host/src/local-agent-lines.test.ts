@@ -244,6 +244,12 @@ const LAUNCH: DeviceAgentLine = {
   kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
   payload: {},
 };
+/** A launch the service queued after `LAUNCH`, which replaces its runner. */
+const NEXT_LAUNCH: DeviceAgentLine = {
+  ...LAUNCH,
+  id: "7c6b5a4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
+  seq: 2,
+};
 /** The agent's state key as the service answers it: 32 bytes, in standard base64. */
 const STATE_KEY = Buffer.alloc(32, 7).toString("base64");
 /** What the scripted VM's pack writes, standing in for a pack's bytes. */
@@ -271,7 +277,9 @@ function opened(bundle: Uint8Array): string {
 
 /**
  * The follower on a host that saves its agents' state, one launch line
- * handed once unless `launches` says none, whose runner ends at once: its
+ * handed once, whose runner ends at once, unless `launches` says none, or
+ * says that line is replaced by `NEXT_LAUNCH`, handed with it, whose own
+ * runner ends at once while the first's runs until it is signalled: its
  * VM's pack writes the pack and names its base, or answers as the script
  * given, and its verify passes; the store refuses as many uploads as
  * `uploadsRefused` says before it takes one. The device's state holds the
@@ -288,7 +296,7 @@ const saving = (
   options: {
     readonly pack?: Script;
     readonly uploadsRefused?: number;
-    readonly launches?: false;
+    readonly launches?: "none" | "replaced";
     readonly record?: AgentSave;
     readonly strayBundle?: true;
   } = {},
@@ -312,6 +320,13 @@ const saving = (
     const commits: unknown[] = [];
     const uploads: Uint8Array[] = [];
     const reported: string[] = [];
+    const launches =
+      options.launches === "none"
+        ? []
+        : options.launches === "replaced"
+          ? [LAUNCH, NEXT_LAUNCH]
+          : [LAUNCH];
+    const signal = Deferred.makeUnsafe<void>();
     const launchSettled = Deferred.makeUnsafe<void>();
     const beaten = Deferred.makeUnsafe<void>();
     let refusing = options.uploadsRefused ?? 0;
@@ -333,7 +348,7 @@ const saving = (
         case HOSTED_SERVICE_PATH.DEVICE_AGENT_LINE_CLAIM:
           return json({
             line: {
-              ...LAUNCH,
+              ...launches.find((line) => line.id === body.id),
               payload: {
                 checkoutPath: layout.checkoutPath,
                 repository: null,
@@ -341,16 +356,14 @@ const saving = (
                 firstSequence: 0,
               },
             },
-            secrets: { env: { LUKE_RUNNER_TOKEN: "runner-secret" }, stdin: "{}\n" },
+            secrets: { env: { LUKE_RUNNER_TOKEN: `runner-${body.id}` }, stdin: "{}\n" },
           });
         case HOSTED_SERVICE_PATH.DEVICE_AGENT_LINES:
           if (init?.method === "POST") {
-            if (body.id === LAUNCH.id) Deferred.doneUnsafe(launchSettled, Exit.void);
+            if (body.id === launches.at(-1)?.id) Deferred.doneUnsafe(launchSettled, Exit.void);
             return json({ done: true });
           }
-          return linesRead++ === 0
-            ? json({ lines: options.launches === false ? [] : [LAUNCH] })
-            : held();
+          return linesRead++ === 0 ? json({ lines: launches }) : held();
         case HOSTED_SERVICE_PATH.DEVICE_AGENT_STATE_SAVE:
           saves.push(body);
           return json({
@@ -376,7 +389,11 @@ const saving = (
       if (program === "/bin/bash" && args[0] === "-l") {
         return { stdout: "/usr/bin:/bin", exitCode: 0 };
       }
-      if (program === "/opt/luke/launch") return { exitCode: 0 };
+      if (program === "/opt/luke/launch") {
+        return launches.length > 1 && args[0] === `runner-${LAUNCH.id}`
+          ? { exitCode: 143, until: Deferred.await(signal) }
+          : { exitCode: 0 };
+      }
       if (program !== VM_EXEC) return undefined;
       const action = args[3];
       if (action !== undefined) happened.push(action);
@@ -398,9 +415,16 @@ const saving = (
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME: home, SHELL: "/bin/bash" })),
       Layer.succeed(Reporter, { report: (line) => reported.push(line) }),
       Layer.succeed(LocalAgentPlatform, {
-        launch: () => ({ command: "/opt/luke/launch", args: [], env: {} }),
+        launch: ({ env }) => ({
+          command: "/opt/luke/launch",
+          args: [env.LUKE_RUNNER_TOKEN ?? ""],
+          env: {},
+        }),
         sandbox: {
           ...vm.sandbox,
+          // Note that a runner signalled in its VM ends there, as the one the platform starts does.
+          signalled: (agentId) =>
+            Effect.andThen(vm.sandbox.signalled(agentId), Deferred.succeed(signal, undefined)),
           deleted: (agentId) =>
             Effect.andThen(
               Effect.sync(() => happened.push("deleted")),
@@ -555,7 +579,7 @@ it.effect(
     Effect.scoped(
       Effect.gen(function* () {
         const { bundle, saveRecord, beaten } = yield* saving({
-          launches: false,
+          launches: "none",
           record: { userId: DEVICE_ID, generation: 2 },
           strayBundle: true,
         });
@@ -564,6 +588,23 @@ it.effect(
         const fileSystem = yield* FileSystem.FileSystem;
         assert.equal(yield* fileSystem.exists(bundle), false);
         assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, generation: 2, unsaved: {} });
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a launch queued naming no saved state before the runner it replaces saved keeps the generation that save committed, and its own save starts from it",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { saves, saveRecord, launchSettled } = yield* saving({ launches: "replaced" });
+        yield* launchSettled;
+
+        assert.deepEqual(
+          saves.map((each) => (each as { fromGeneration: number | null }).fromGeneration),
+          [null, 1],
+        );
+        assert.deepEqual(yield* saveRecord, { userId: DEVICE_ID, generation: 2 });
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );

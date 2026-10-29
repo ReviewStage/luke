@@ -190,6 +190,9 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
     const locks = new Map<string, Semaphore.Semaphore>();
     /** How many tries in a row of each agent's waiting bundle failed, and when it is due again (epoch milliseconds). */
     const retries = new Map<string, { readonly failed: number; readonly at: number }>();
+    /** How many saves this device has committed since it started, and the count each agent's last one made, so a launch claimed before it can be told apart. */
+    let commitsMade = 0;
+    const committedAs = new Map<string, number>();
 
     const lockOf = (agentId: string) => {
       const kept = locks.get(agentId);
@@ -347,6 +350,13 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
         ) {
           return Result.succeed(granted.path);
         }
+        if (
+          !(yield* fileSystem.exists(bundleOf(agentId)).pipe(Effect.orElseSucceed(() => false)))
+        ) {
+          return Result.fail(
+            yield* dropped(userId, agentId, "its bundle is gone from this device"),
+          );
+        }
         const answer =
           asked ??
           (yield* Effect.provideContext(
@@ -425,11 +435,14 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
           });
           return SENT.LATER;
         }
+        commitsMade += 1;
+        committedAs.set(agentId, commitsMade);
+        // Note that the bundle goes before its record does, since a bundle no record names reads as a save that never landed (`straysLetGo`), while a record whose bundle is gone commits again under its path, which the service answers with the same generation.
+        yield* Effect.ignore(fileSystem.remove(bundleOf(agentId), { force: true }));
         yield* saveChanged(userId, agentId, ({ pending: _pending, ...save }) => ({
           ...save,
           generation: answer,
         }));
-        yield* Effect.ignore(fileSystem.remove(bundleOf(agentId), { force: true }));
         const seconds = ((yield* Clock.currentTimeMillis) - since) / 1000;
         report(
           `a local agent's state was saved as generation ${answer}: ${bytes} bytes, sha256 ${sha256}, in ${seconds.toFixed(1)} s`,
@@ -558,23 +571,30 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
         return gone;
       });
 
+    /** Where this device's commits stand now, which a launch's claim notes (`launched`). */
+    const commitMark = () => commitsMade;
+
     /**
-     * What a launch of the agent's on a device that saves says of its saved
-     * state: the generation it restores, which the record moves up to,
-     * unless the record names a newer one, a save of this device's that
-     * landed after the launch was queued; or none, where Luke holds none of
-     * the agent's, its last save having expired, which lets the record's go,
-     * so the next save starts afresh; and the agent's state key, held for its
-     * next seal.
+     * What a launch of the agent's on a device that saves, claimed at
+     * `claimedAt` (`commitMark`), says of its saved state: the generation it
+     * restores, which the record moves up to, unless the record names a
+     * newer one, a save of this device's that landed after the launch was
+     * queued; or none, where Luke holds none of the agent's, its last save
+     * having expired, which lets the record's go, so the next save starts
+     * afresh. A save this device committed since the claim, as the runner the
+     * launch replaces saved, is newer than whatever the launch says, so the
+     * record stands. And the agent's state key, held for its next seal.
      */
     const launched = (
       userId: string,
       agentId: string,
       generation: number | undefined,
       key: string | undefined,
+      claimedAt: number,
     ) =>
       Effect.gen(function* () {
         if (key !== undefined) keys.set(agentId, key);
+        if ((committedAs.get(agentId) ?? 0) > claimedAt) return;
         const kept = (yield* saveOf(agentId))?.generation;
         if (generation === undefined) {
           if (kept === undefined) return;
@@ -654,6 +674,15 @@ export function localAgentSaves(dependencies: LocalAgentSavesDependencies) {
         }),
       );
 
-    return { turnEnded, launched, unsavedMarked, straysLetGo, due, tried, forgotten };
+    return {
+      turnEnded,
+      commitMark,
+      launched,
+      unsavedMarked,
+      straysLetGo,
+      due,
+      tried,
+      forgotten,
+    };
   });
 }

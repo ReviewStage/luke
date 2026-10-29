@@ -649,6 +649,8 @@ export function composeLocalAgents(
         const vmLocks = new Map<string, Semaphore.Semaphore>();
         /** The launch lines claimed and handed to their agents whose runners are not yet running or settled unstarted, which no beat settles. */
         const starting = new Set<string>();
+        /** Where this device's commits of saved state stood as each launch line still to be delivered was claimed (`saves.commitMark`), by its id. */
+        const launchClaims = new Map<string, number>();
         /** How each launch whose settle the service has not taken yet ended, by its line's id. */
         const endings = new Map<string, LaunchEnding>();
         /** Held by each claim and by a beat's settle of a launch the device never kept, so neither runs while the other is unanswered. */
@@ -869,6 +871,7 @@ export function composeLocalAgents(
           agentScope: Scope.Scope,
         ) =>
           Effect.gen(function* () {
+            const claimedAt = launchClaims.get(line.id) ?? saves.commitMark();
             const layout = deviceAgentLayout(folder, agentId);
             const payload = decodeLaunch(line.payload);
             // Note that a launch naming a worktree outside the agent's own folder is never made.
@@ -899,6 +902,7 @@ export function composeLocalAgents(
                 agentId,
                 payload.value.stateGeneration,
                 secrets.state?.key,
+                claimedAt,
               );
             }
             // Note that the agent is kept as this machine's before its folder or VM is made, so an uninstall finds whatever a launch cut off left.
@@ -1191,7 +1195,14 @@ export function composeLocalAgents(
                   // Note that a launch whose claim was asked again lost its secrets with the first answer, so it is settled as a runner gone, which ends its turn in words.
                   if (claimed.secretsGone === true) return yield* settle(line.id);
                   return yield* launched(agentId, line, claimed.secrets, agentScope);
-                }).pipe(Effect.ensuring(Effect.sync(() => starting.delete(line.id))));
+                }).pipe(
+                  Effect.ensuring(
+                    Effect.sync(() => {
+                      starting.delete(line.id);
+                      launchClaims.delete(line.id);
+                    }),
+                  ),
+                );
               case DEVICE_AGENT_LINE_KIND.MESSAGE:
               case DEVICE_AGENT_LINE_KIND.RETUNE: {
                 const text = decodeStdin(line.payload);
@@ -1217,7 +1228,10 @@ export function composeLocalAgents(
         /** A claimed line handed to its agent's worker, a launch marked starting first, so no beat settles it before its runner runs. */
         const handedOver = (claimed: DeviceAgentClaimedLine) =>
           Effect.gen(function* () {
-            if (claimed.line.kind === DEVICE_AGENT_LINE_KIND.LAUNCH) starting.add(claimed.line.id);
+            if (claimed.line.kind === DEVICE_AGENT_LINE_KIND.LAUNCH) {
+              starting.add(claimed.line.id);
+              launchClaims.set(claimed.line.id, saves.commitMark());
+            }
             yield* Queue.offer(yield* mailboxOf(claimed.line.agentId), claimed);
           });
 
