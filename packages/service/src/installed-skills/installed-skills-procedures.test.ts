@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import { it } from "@effect/vitest";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
 import { readInstalledSkill } from "@luke/database/models/installed-skill-store";
@@ -117,14 +118,65 @@ function treeAnswer(files: Commit, folder: string, recursive: boolean): Response
   });
 }
 
+/** A tar header for an entry of the type and size given, as `git archive` writes one. */
+function tarHeader(name: string, type: string, size: number): Uint8Array {
+  const header = new Uint8Array(512);
+  const put = (offset: number, value: string) => header.set(Buffer.from(value), offset);
+  put(0, name);
+  put(100, "0000644\0");
+  put(124, `${size.toString(8).padStart(11, "0")}\0`);
+  put(156, type);
+  put(257, "ustar\0");
+  return header;
+}
+
+/** The commit as GitHub serves its archive: gzipped, the commit named in a pax global header, every file under one top folder. */
+function archiveOf(repository: FakeRepository, sha: string): Uint8Array<ArrayBuffer> {
+  const tail = ` comment=${sha}\n`;
+  let length = tail.length + 1;
+  while (String(length).length + tail.length !== length)
+    length = String(length).length + tail.length;
+  const entries: [string, string, string][] = [
+    ["pax_global_header", "g", `${length}${tail}`],
+    ...Object.entries(repository.commits.get(sha) ?? {}).map(
+      ([path, content]): [string, string, string] => [
+        `${repository.name}-${sha}/${path}`,
+        "0",
+        content,
+      ],
+    ),
+  ];
+  const blocks = entries.flatMap(([name, type, content]) => {
+    const body = Buffer.from(content);
+    return [
+      tarHeader(name, type, body.byteLength),
+      body,
+      new Uint8Array((512 - (body.byteLength % 512)) % 512),
+    ];
+  });
+  return new Uint8Array(gzipSync(Buffer.concat([...blocks, new Uint8Array(1024)])));
+}
+
 /**
  * The repository's paths as GitHub answers them: the repository itself
- * (anonymously too where it is public), a ref's commit, a tree, and a
- * file's contents; a private one answers only the installation's token.
+ * (anonymously too where it is public), a ref's commit as its sha alone, a
+ * tree, and a file's contents; and, where `archives` is set, a commit's
+ * archive, from codeload for a public one and through the API for a
+ * private one. A private one answers only the installation's token.
  */
-function repositoryScript(repository: FakeRepository) {
+function repositoryScript(
+  repository: FakeRepository,
+  options: { readonly archives?: boolean } = {},
+) {
   return (sent: SentToGitHub): Response | undefined => {
     const url = new URL(sent.url);
+    const codeload = `/${repository.owner}/${repository.name}/tar.gz/`;
+    if (url.host === "codeload.github.com" && url.pathname.startsWith(codeload)) {
+      const sha = commitOf(repository, decodeURIComponent(url.pathname.slice(codeload.length)));
+      return options.archives === true && !repository.private && sha !== undefined
+        ? new Response(archiveOf(repository, sha))
+        : notFound();
+    }
     const base = `/repos/${repository.owner}/${repository.name}`;
     if (!url.pathname.startsWith(base)) return undefined;
     const reached =
@@ -132,6 +184,13 @@ function repositoryScript(repository: FakeRepository) {
       sent.headers.get("authorization") === `Bearer ${GITHUB_FIXTURE_INSTALLATION_TOKEN}`;
     if (!reached) return notFound();
     const rest = url.pathname.slice(base.length);
+    const tarball = /^\/tarball\/(.+)$/u.exec(rest);
+    if (tarball !== null) {
+      const sha = commitOf(repository, decodeURIComponent(tarball[1] ?? ""));
+      return options.archives === true && sha !== undefined
+        ? new Response(archiveOf(repository, sha))
+        : notFound();
+    }
     if (rest === "") {
       return Response.json({
         name: repository.name,
@@ -145,7 +204,7 @@ function repositoryScript(repository: FakeRepository) {
     const commit = /^\/commits\/(.+)$/u.exec(rest);
     if (commit !== null) {
       const sha = commitOf(repository, decodeURIComponent(commit[1] ?? ""));
-      return sha === undefined ? Response.json({}, { status: 422 }) : Response.json({ sha });
+      return sha === undefined ? Response.json({}, { status: 422 }) : new Response(sha);
     }
     const tree = /^\/git\/trees\/(.+)$/u.exec(rest);
     if (tree !== null) {
@@ -279,6 +338,17 @@ function withAudit(
 function anonymousLimited(repository: (sent: SentToGitHub) => Response | undefined) {
   return (sent: SentToGitHub): Response | undefined =>
     sent.headers.get("authorization") === null
+      ? Response.json(
+          { message: "API rate limit exceeded" },
+          { status: 403, headers: { "x-ratelimit-remaining": "0" } },
+        )
+      : repository(sent);
+}
+
+/** GitHub refusing every read of one file or tree as past its rate limit, so only an archive can serve a commit; any other request goes on to the repository. */
+function perFileRefused(repository: (sent: SentToGitHub) => Response | undefined) {
+  return (sent: SentToGitHub): Response | undefined =>
+    /\/(?:contents|git\/trees)\//u.test(new URL(sent.url).pathname)
       ? Response.json(
           { message: "API rate limit exceeded" },
           { status: 403, headers: { "x-ratelimit-remaining": "0" } },
@@ -460,6 +530,54 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
           previewed.skills.map((skill) => skill.name),
           ["review"],
         );
+      }),
+  );
+
+  it.effect.each([
+    { source: "a public source, from codeload", isPrivate: false },
+    { source: "a private source, through the API on the installation's token", isPrivate: true },
+  ] as const)(
+    "$source, previews and installs from its one archive while GitHub refuses every read of a file",
+    ({ isPrivate }) =>
+      Effect.gen(function* () {
+        const kit = fakeRepository("acme", "kit", isPrivate);
+        commitTo(kit, "main", {
+          "skills/review/SKILL.md": skillFile("review", "Review a pull request."),
+          "skills/review/scripts/check.sh": "echo check",
+          "skills/release/SKILL.md": skillFile("release", "Write release notes."),
+        });
+        const installation = installationFor(kit);
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        if (isPrivate) yield* connectWorkspaceGitHub(workspace, installation);
+        const ask = yield* routes(
+          githubReaching(
+            isPrivate ? [installation] : [],
+            undefined,
+            {},
+            perFileRefused(repositoryScript(kit, { archives: true })),
+          ),
+        );
+        const text = "npx skills add acme/kit --skill review";
+
+        const previewed = sourcePreview(
+          yield* ask(`${SKILLS}/preview`, owner, preview(workspace, text)),
+        );
+        assert.deepEqual(
+          previewed.skills.map((skill) => skill.name),
+          ["release", "review"],
+        );
+        const [review] = readAnswer(
+          installedSkillInstallAnswerSchema,
+          201,
+          yield* ask(
+            SKILLS,
+            owner,
+            install({ workspaceId: workspace, scope: INSTALLED_SKILL_SCOPE.PERSONAL, text }),
+          ),
+        ).skills;
+        assert.ok(review);
+        assert.equal(yield* storedText(owner, review.id, "scripts/check.sh"), "echo check");
       }),
   );
 

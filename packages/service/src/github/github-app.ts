@@ -1213,6 +1213,16 @@ export function readBody<A>(
   );
 }
 
+/** An OK answer's body as text, on the terms of `readBody`. */
+export function readText(
+  response: HttpClientResponse.HttpClientResponse,
+): Effect.Effect<string, GitHubUnavailable> {
+  return HttpClientResponse.filterStatusOk(response).pipe(
+    Effect.mapError(unavailable),
+    Effect.flatMap((ok) => Effect.mapError(ok.text, () => unreadable(response.status))),
+  );
+}
+
 /**
  * The read made on a repository token, where GitHub answering 401 to a
  * member's own token marks that token invalid, as the reach does

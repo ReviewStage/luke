@@ -80,7 +80,7 @@ import {
 import {
   folderName,
   folderTreeSha,
-  pinnedCommit,
+  pinnedArchive,
   reachSkillRepository,
   readSkillFolder,
   readSkillFolderFile,
@@ -190,8 +190,8 @@ const pinnedSource = /* @__PURE__ */ Effect.fnUntraced(function* (
   workspaceId: string,
   paste: SkillPasteSource,
 ): Effect.fn.Return<PinnedSource, HostedRefusal, SourceServices> {
-  const repository = yield* reachSkillRepository(workspaceId, paste.owner, paste.repo, userId);
-  const { ref, sha } = yield* pinnedCommit(repository, paste.ref);
+  const reached = yield* reachSkillRepository(workspaceId, paste.owner, paste.repo, userId);
+  const { ref, sha, repository } = yield* pinnedArchive(reached, paste.ref);
   const folders = yield* skillFolders(repository, sha, paste.path, paste.fullDepth === true);
   const all = yield* Effect.forEach(folders, (folder) => candidateOf(repository, sha, folder), {
     concurrency: CANDIDATE_CONCURRENCY,
@@ -705,7 +705,7 @@ export const previewedSkillFile = /* @__PURE__ */ Effect.fnUntraced(function* (
  * where the folder is gone, now names another skill, or breaks a check.
  */
 export const revisionAtRef = /* @__PURE__ */ Effect.fnUntraced(function* (
-  repository: SkillRepository,
+  reached: SkillRepository,
   name: string,
   source: {
     readonly path: string;
@@ -718,7 +718,7 @@ export const revisionAtRef = /* @__PURE__ */ Effect.fnUntraced(function* (
   HostedRefusal,
   HttpClient.HttpClient | DatabaseServices
 > {
-  const { sha } = yield* pinnedCommit(repository, source.ref);
+  const { sha, repository } = yield* pinnedArchive(reached, source.ref);
   const folders = yield* skillFolders(repository, sha, source.path, false);
   const folder = folders.find((one) => one.path === source.path);
   if (folder === undefined) {
