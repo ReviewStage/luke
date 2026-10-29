@@ -74,7 +74,17 @@ import type { TaskStoreEffect } from "./task-store.js";
 /** How long a generation of saved state stands past its commit before the sweep may delete it, the agent's newest included. */
 const AGENT_STATE_RETENTION_MS = Duration.toMillis(Duration.days(7));
 
-/** How long an upload's grant stands before the sweep takes it: far past the minutes its upload may be sent in. */
+/**
+ * How long a grant may be committed after it was granted: the minutes its
+ * upload may be sent in, and room for its commit to be asked again.
+ */
+const UPLOAD_GRANT_COMMIT_MS = Duration.toMillis(Duration.hours(1));
+
+/**
+ * How long an upload's grant stands before the sweep takes it: far past
+ * the hour it may be committed in, so no grant the sweep takes as
+ * abandoned can still be committed while it deletes the blob.
+ */
 const UPLOAD_GRANT_RETENTION_MS = Duration.toMillis(Duration.days(1));
 
 /** The commit's generation is no longer the agent's newest: a newer save landed since its saver started. */
@@ -86,7 +96,7 @@ export class AgentStateStale extends Data.TaggedError("AgentStateStale")<{
 /** The account reaches no such agent, or the agent is not pinned to the device that asked. */
 export class AgentStateUnreachable extends Data.TaggedError("AgentStateUnreachable") {}
 
-/** The commit names a path no upload was granted for its agent, or whose grant is gone. */
+/** The commit names a path no upload was granted for its agent, whose grant is gone, or which was granted too long ago to commit. */
 export class AgentStateUngranted extends Data.TaggedError("AgentStateUngranted") {}
 
 const GenerationSchema = Schema.Struct({
@@ -201,6 +211,7 @@ const insertNext = SqlSchema.findAll({
     baseCommit: Schema.NullOr(Schema.String),
     deviceId: Schema.String,
     now: Schema.Date,
+    grantedAfter: Schema.Date,
   }),
   Result: GenerationSchema,
   execute: (commit) =>
@@ -235,6 +246,7 @@ const insertNext = SqlSchema.findAll({
                       and(
                         eq(agentStateUpload.path, commit.path),
                         eq(agentStateUpload.agentId, agentTable.id),
+                        gt(agentStateUpload.grantedAt, commit.grantedAfter),
                       ),
                     ),
                 ),
@@ -517,11 +529,13 @@ export function grantAgentStateUpload(
 /**
  * Commits the saver's bundle as the agent's next generation, and answers
  * it, where the generation the saver started from is still the agent's
- * newest and its path was granted for the agent, whose grant goes with it.
- * Fails with `AgentStateStale` where a newer save landed since, with
+ * newest and its path was granted for the agent within
+ * `UPLOAD_GRANT_COMMIT_MS`, whose grant goes with it. Fails with
+ * `AgentStateStale` where a newer save landed since, with
  * `AgentStateUnreachable` where the account reaches no such agent or the
  * agent is not pinned to the saver's device, and with `AgentStateUngranted`
- * where no grant for the agent names the path; none writes anything.
+ * where no grant for the agent names the path, or it was granted too long
+ * ago, past what the sweep may already be deleting; none writes anything.
  */
 export function commitAgentState(
   userId: string,
@@ -533,7 +547,8 @@ export function commitAgentState(
   DatabaseServices
 > {
   return Effect.gen(function* () {
-    const [committed] = yield* insertNext({ userId, ...commit, now });
+    const grantedAfter = new Date(now.getTime() - UPLOAD_GRANT_COMMIT_MS);
+    const [committed] = yield* insertNext({ userId, ...commit, now, grantedAfter });
     if (committed !== undefined) {
       yield* deleteGrants([commit.path]);
       return committed;

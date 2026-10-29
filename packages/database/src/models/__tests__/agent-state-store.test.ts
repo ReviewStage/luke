@@ -205,7 +205,7 @@ it.layer(getTestDB())("an agent's saved state", (it) => {
   );
 
   it.effect(
-    "a commit naming a path never granted for its agent is refused and writes nothing, and a grant goes with the commit that names it",
+    "a commit naming a path never granted for its agent, or granted an hour ago or more, is refused and writes nothing, and a grant goes with the commit that names it",
     () =>
       Effect.gen(function* () {
         const { userId, agentId, deviceId } = yield* openAccount;
@@ -214,12 +214,23 @@ it.layer(getTestDB())("an agent's saved state", (it) => {
         const ungranted = yield* Effect.flip(
           commitAgentState(userId, saved(agentId, deviceId, null, `state/${randomUUID()}`), NOW),
         );
+        // A grant an hour old may already be on its way to the sweep, which takes it as abandoned.
+        const late = `state/${randomUUID()}`;
+        yield* grantAgentStateUpload(userId, { agentId, deviceId, path: late }, NOW);
+        const tooLate = yield* Effect.flip(
+          commitAgentState(
+            userId,
+            saved(agentId, deviceId, null, late),
+            new Date(NOW.getTime() + 60 * 60 * 1000),
+          ),
+        );
         const kept = yield* committed(userId, saved(agentId, deviceId, null, granted), NOW);
         const reused = yield* Effect.flip(
           commitAgentState(userId, saved(agentId, deviceId, 1, granted), NOW),
         );
 
         assert.deepEqual(ungranted, new AgentStateUngranted());
+        assert.deepEqual(tooLate, new AgentStateUngranted());
         assert.equal(kept.generation, 1);
         assert.deepEqual(reused, new AgentStateUngranted(), "its grant went with its commit");
         assert.equal(Option.getOrThrow(yield* newestAgentState(userId, agentId)).generation, 1);
