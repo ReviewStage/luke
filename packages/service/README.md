@@ -229,7 +229,7 @@ reading the workspace's repositories again when the window next takes focus
 
 The App's webhook is `POST /api/github/webhook` (`src/github/github-webhook-app.ts`),
 which keeps what an agent published current on the agent's row
-(`coding_agent.published`) for the task list while nobody has the agent's tab
+(`agent.published`) for the task list while nobody has the agent's tab
 open. GitHub signs every delivery with the App's webhook secret,
 `GITHUB_APP_WEBHOOK_SECRET`, and the route compares `X-Hub-Signature-256`
 against the HMAC-SHA256 of the body's own bytes in constant time before it
@@ -1222,7 +1222,7 @@ models offered or the named model's efforts, which the body throws so the
 model reads it and tries again), opens the child conversation the call
 names (`childConversationId(agent conversation, callId)`) and writes the
 pair under it
-(`coding_agent_delegation`, migration 0066); then the body opens the worker
+(`agent_delegation`, migration 0066); then the body opens the worker
 through `ctx.agent("worker")`. eve hands a resolver no lineage, so the
 worker's hook (`subagents/worker/hooks/store.ts`) pins the parent call's id
 in the worker's own state as the session starts, the model resolver reads
@@ -1365,7 +1365,7 @@ resets the chosen model and the Start menu never touches the settings. A
 it (below): a model it does not offer or an effort that model does not list
 is `invalid-request`, and a catalog the instance cannot read is `unavailable`.
 The store keeps the columns on `account_preference`, and
-reads a half-written pair as the default; `coding_agent_context_window` is
+reads a half-written pair as the default; `agent_context_window` is
 null for the model's whole window (migration 0077). `updated_at` is the preferences
 part's own instant, nullable since migration 0062 and left null by a write
 that carries only `codingAgent`: the desktop reads the answer's `updatedAt`
@@ -1599,7 +1599,7 @@ shell alone, and the branch its sandbox stands on as a turn ends is the one
 its pull request is on, whatever it cut, switched, or deleted on the way:
 the service's hook (`apps/dev/hooks/store.ts`) runs `git branch
 --show-current` in the checkout as each turn ends and writes the answer on
-the agent's row (`coding_agent.branch`, through `src/agents/coder-host/host.ts`'s
+the agent's row (`agent.branch`, through `src/agents/coder-host/host.ts`'s
 `recordBranch`), null for a detached HEAD, ahead of relaying the end (a
 tab reads the pull request the moment it hears the agent ended, and the
 answer is then kept a while) and before it stops the sandbox; a read that
@@ -1615,7 +1615,7 @@ request from the branch, else whether the branch was pushed at all, with
 the head's check runs and commit statuses read together for the one word,
 and a head whose checks the App may not read reading as `none` with a
 warning rather than failing the answer. Every answer read is written on the
-agent's row (`coding_agent.published`, the pull request or null), which is
+agent's row (`agent.published`, the pull request or null), which is
 what the task list's `agents` reads. The answer is kept
 per agent for `CODER.PUBLISHED_TTL` (thirty seconds) in an Effect `Cache`
 built once with the routes, under a key that says whether the agent had
@@ -1840,7 +1840,7 @@ with its title, model, effort, status, since when, and the member who
 started it while their account stands, and the pull requests they opened,
 each number once and at most three, as GitHub last answered a read of them.
 Four statements answer the whole list: the agents of every task listed with
-`coding_agent.published` (migration 0078), their newest turns, the lines
+`agent.published` (migration 0078), their newest turns, the lines
 awaiting a turn, and their starters' names; the list asks GitHub nothing.
 `packages/features/src/task-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in

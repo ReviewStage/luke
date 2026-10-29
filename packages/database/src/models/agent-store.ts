@@ -64,6 +64,7 @@ import { organization, user } from "../schemas/auth.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import {
+  AGENT_CONVERSATION_KINDS,
   CONVERSATION_KIND,
   CONVERSATION_RUNTIME,
   type ConversationRuntime,
@@ -1299,7 +1300,7 @@ const findRunnerTokenConversation = SqlSchema.findOneOption({
         .where(
           and(
             eq(agentTable.runnerTokenHash, runnerTokenHash),
-            eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+            inArray(conversations.kind, AGENT_CONVERSATION_KINDS),
             isNull(conversations.deletedAt),
           ),
         )
@@ -1644,10 +1645,7 @@ const findTasklessAgents = SqlSchema.findAll({
           pinPosition: agentPin.position,
         })
         .from(agentTable)
-        .leftJoin(
-          agentPin,
-          and(eq(agentPin.codingAgentId, agentTable.id), eq(agentPin.userId, userId)),
-        )
+        .leftJoin(agentPin, and(eq(agentPin.agentId, agentTable.id), eq(agentPin.userId, userId)))
         .where(
           and(
             isNull(agentTable.taskId),
@@ -1897,7 +1895,7 @@ const insertAgentPin = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .insert(agentPin)
-        .values({ userId, codingAgentId: agentId, pinnedAt: now })
+        .values({ userId, agentId: agentId, pinnedAt: now })
         .onConflictDoNothing()
         .returning({ txid: TXID }),
     ),
@@ -1916,9 +1914,9 @@ const placeAgentPin = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .insert(agentPin)
-        .values({ userId, codingAgentId: agentId, position, pinnedAt: now })
+        .values({ userId, agentId: agentId, position, pinnedAt: now })
         .onConflictDoUpdate({
-          target: [agentPin.userId, agentPin.codingAgentId],
+          target: [agentPin.userId, agentPin.agentId],
           set: { position },
         })
         .returning({ txid: TXID }),
@@ -1933,7 +1931,7 @@ const deleteAgentPin = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .delete(agentPin)
-        .where(and(eq(agentPin.userId, userId), eq(agentPin.codingAgentId, agentId)))
+        .where(and(eq(agentPin.userId, userId), eq(agentPin.agentId, agentId)))
         .returning({ txid: TXID }),
     ),
 });

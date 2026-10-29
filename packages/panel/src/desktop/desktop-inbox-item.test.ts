@@ -964,7 +964,7 @@ test("Next follows the way the keys last went: after K it offers the nearest ite
   assert.equal(readTitle(page), "How is a failed email retried?");
   assert.equal(offered()?.querySelector(".inbox-next-title")?.textContent, "Expire after 7 days?");
   assert.ok(wordsOf(offered())?.endsWith("J"));
-  assert.equal(offered()?.getAttribute("aria-keyshortcuts"), "J Alt+ArrowDown");
+  assert.equal(offered()?.getAttribute("aria-keyshortcuts"), "J");
 
   pressKey("j");
   pressKey("k");
@@ -974,7 +974,7 @@ test("Next follows the way the keys last went: after K it offers the nearest ite
   assert.equal(next.querySelector(".inbox-next-lead")?.textContent, "Next ↑");
   assert.equal(next.querySelector(".inbox-next-title")?.textContent, "Alert at 80%?");
   assert.ok(wordsOf(next)?.endsWith("K"));
-  assert.equal(next.getAttribute("aria-keyshortcuts"), "K Alt+ArrowDown");
+  assert.equal(next.getAttribute("aria-keyshortcuts"), "K");
   act(() => next.click());
   assert.equal(readTitle(page), "Alert at 80%?");
   act(() => keys.unmount());
@@ -2370,16 +2370,12 @@ test("a notice shown while its plan's follow has failed reads Got it, since open
     [BILLING.id, [notice, RETRY]],
     [INVITES.id, [EXPIRY]],
   ]);
-  // The list's follow of the plan reads its items, and the item's own follow of it could not be read.
+  // The list draws the plan's items from the account's feed, and the item's own follow of it could not be read.
   const unanswered = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
-  let follows = 0;
-  world.startRead = (taskId) => {
-    if (taskId !== BILLING.id) return undefined;
-    follows += 1;
-    return follows === 1
-      ? undefined
-      : Promise.resolve({ status: FAKE_ANSWER.DONE, value: unanswered });
-  };
+  world.startRead = (taskId) =>
+    taskId === BILLING.id
+      ? Promise.resolve({ status: FAKE_ANSWER.DONE, value: unanswered })
+      : undefined;
   const { page } = mount();
   await settle();
   act(() => rowNamed(page, notice.title).click());

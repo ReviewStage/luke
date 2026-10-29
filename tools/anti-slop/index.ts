@@ -7,6 +7,7 @@ import { noAwaitDrizzleStatementRule } from "./rules/no-await-drizzle-statement.
 import { noDirectViewStorageRule } from "./rules/no-direct-view-storage.ts";
 import { noDocumentPressListenerRule } from "./rules/no-document-press-listener.ts";
 import { noFocusedOrSkippedTestRule } from "./rules/no-focused-or-skipped-test.ts";
+import { noFollowOutsideHostReadRule } from "./rules/no-follow-outside-host-read.ts";
 import { noHandWrittenArrowKeysRule } from "./rules/no-hand-written-arrow-keys.ts";
 import { noHandWrittenLiveRegionRule } from "./rules/no-hand-written-live-region.ts";
 import { noInternalViMockRule } from "./rules/no-internal-vi-mock.ts";
@@ -26,7 +27,8 @@ import { skeletonThroughComponentsRule } from "./rules/skeleton-through-componen
  * Oxlint rules that catch code or tests that silently do nothing or wipe data,
  * and the design system's guards against controls and headings built outside `@luke/ui`,
  * loading skeletons that copy the surface they stand for, buttons that wait on a press without saying so, buttons that open a page,
- * popovers that close on a press through a listener of their own, view choices stored by hand rather than through `useKept`, a vendored
+ * popovers that close on a press through a listener of their own, view choices stored by hand rather than through `useKept`, a follow
+ * opened beside `useHostRead`, a vendored
  * shadcn component hiding the keyboard's ring, and the classes, glyphs and patterns phase 2 retired coming back; and the testing policy's
  * guards against a test that mocks a module of this repository, runs less than it declares, or reads source text.
  */
@@ -40,6 +42,7 @@ const antiSlopPlugin = eslintCompatPlugin({
     "no-direct-view-storage": noDirectViewStorageRule,
     "no-document-press-listener": noDocumentPressListenerRule,
     "no-focused-or-skipped-test": noFocusedOrSkippedTestRule,
+    "no-follow-outside-host-read": noFollowOutsideHostReadRule,
     "no-hand-written-arrow-keys": noHandWrittenArrowKeysRule,
     "no-hand-written-live-region": noHandWrittenLiveRegionRule,
     "no-internal-vi-mock": noInternalViMockRule,

@@ -52,6 +52,7 @@ import {
   userSync,
 } from "@luke/database/sync/tables";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@luke/features/account-inbox-wire";
+import { LIVE_READ } from "@luke/features/live-wire";
 import { macCommandKindsRead } from "@luke/features/mac-command-wire";
 import { Effect, Option } from "effect";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
@@ -286,7 +287,7 @@ function instantParam(param: string): Date {
  * procedure binds from the clock, since a live statement reads none.
  */
 export const inboxItemsLive = defineLiveQuery({
-  name: "inboxItems",
+  name: LIVE_READ.INBOX_ITEMS,
   params: ["userId", "since", "settledSince"],
   reads: SCOPE_INBOX_READS,
   topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],

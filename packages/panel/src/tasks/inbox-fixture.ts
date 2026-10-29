@@ -17,11 +17,7 @@
  */
 
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import {
-  type AgentAccountItems,
-  type AgentInboxChanged,
-  INBOX_SCOPE_KIND,
-} from "@luke/features/agent-view";
+import { type AgentInboxChanged, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import { AUTOMATION_FOLLOW, type AutomationListView } from "@luke/features/automation-view";
 import {
@@ -36,6 +32,7 @@ import {
   type InboxItem,
   type InboxMessage,
 } from "@luke/features/inbox-wire";
+import { LIVE_READ } from "@luke/features/live-wire";
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import type { TasksView } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
@@ -577,7 +574,16 @@ function stagedInbox(inbox: AppStateSnapshot["inbox"]): AppStateSnapshot["inbox"
  */
 export function inboxAppState(state: AppStateSnapshot): AppStateSnapshot {
   if (!STAGED_PROFILES.has(state.run.profile)) return state;
-  return { ...state, account: ACCOUNT, inbox: stagedInbox(state.inbox) };
+  // Note that the account's feed of every item, which the window's Inbox draws from, holds each staged task's items whole.
+  const fed = Object.fromEntries([...INBOXES].filter(([, items]) => items.length > 0));
+  return {
+    ...state,
+    account: ACCOUNT,
+    inbox: stagedInbox(state.inbox),
+    [LIVE_READ.INBOX_ITEMS]: {
+      rows: { [INBOX_SCOPE_KIND.PLAN]: fed, [INBOX_SCOPE_KIND.AGENT]: {} },
+    },
+  };
 }
 
 /* ----- The act door ----- */
@@ -608,15 +614,6 @@ const NO_AUTOMATIONS: AutomationListView = { automations: [] };
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.AGENTS_INBOX_FOLLOW]: ({ id }) => {
     const pushed: AgentInboxChanged["inbox"] = { items: INBOXES.get(id) ?? [] };
-    return pushedOnce(pushed);
-  },
-  // The account's feed of every item, which the window's Inbox draws from, each staged task's items whole.
-  [ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
-    const scopes = [...INBOXES].map(([id, items]) => ({
-      scope: { kind: INBOX_SCOPE_KIND.PLAN, id },
-      items,
-    }));
-    const pushed: AgentAccountItems = { whole: true, scopes };
     return pushedOnce(pushed);
   },
   [ACT_KIND.AGENTS_LIST]: ({ taskId }) => {

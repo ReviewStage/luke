@@ -219,9 +219,9 @@ const runNow = (automation: Automation) =>
   );
 
 /** The run's agent, its session having run one turn that ended as `status`. */
-const ranTurn = (owner: string, codingAgentId: string, status: TurnStatus) =>
+const ranTurn = (owner: string, agentId: string, status: TurnStatus) =>
   Effect.gen(function* () {
-    const agent = Option.getOrThrow(yield* readAgent(owner, codingAgentId));
+    const agent = Option.getOrThrow(yield* readAgent(owner, agentId));
     yield* Database.use((db) =>
       db.insert(turns).values({
         userId: owner,
@@ -240,7 +240,7 @@ const startedNow = (eve: ReturnType<typeof fakeEve>, automation: Automation) =>
       Effect.provide(services),
     );
     assert.equal(outcome?.status, AUTOMATION_RUN_STATUS.STARTED);
-    return outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+    return outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
   });
 
 /** What sent the line standing under a send's key, as an agent's page names it; nothing where no line or no sender stands. */
@@ -324,13 +324,13 @@ const pullRequestRun = (automation: Automation, title: string) =>
 /** The run acted on, answering the agent it reached; none where it reached none. */
 const agentOfRun = (eve: ReturnType<typeof fakeEve>, run: AutomationRun) =>
   Effect.map(executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services)), (outcome) =>
-    outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "",
+    outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "",
   );
 
 /** The servers left for the agent's next turn to take, whatever its switches say. */
-const serversTaken = (owner: string, codingAgentId: string) =>
+const serversTaken = (owner: string, agentId: string) =>
   Effect.gen(function* () {
-    const agent = Option.getOrThrow(yield* readAgent(owner, codingAgentId));
+    const agent = Option.getOrThrow(yield* readAgent(owner, agentId));
     return yield* takeAgentMentionedServers(owner, agent.conversationId);
   });
 
@@ -470,7 +470,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const run = yield* runNow(same);
         const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
 
-        assert.deepEqual(outcome, { status: AUTOMATION_RUN_STATUS.STARTED, codingAgentId: first });
+        assert.deepEqual(outcome, { status: AUTOMATION_RUN_STATUS.STARTED, agentId: first });
         assert.equal(eve.opened.length, 1, "no second agent was started");
         assert.deepEqual(
           eve.sent.map((each) => [each.sessionId, each.message.conversationId]),
@@ -642,7 +642,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         yield* Database.use((db) =>
           db
             .update(automationRun)
-            .set({ status: AUTOMATION_RUN_STATUS.STARTED, codingAgentId: null })
+            .set({ status: AUTOMATION_RUN_STATUS.STARTED, agentId: null })
             .where(eq(automationRun.id, run.id)),
         );
 
@@ -658,12 +658,12 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         // Read as the store holds it, since the creator who left reads none of the automation's runs.
         const [settled] = yield* Database.use((db) =>
           db
-            .select({ status: automationRun.status, codingAgentId: automationRun.codingAgentId })
+            .select({ status: automationRun.status, agentId: automationRun.agentId })
             .from(automationRun)
             .where(eq(automationRun.id, run.id)),
         );
         assert.deepEqual(
-          [settled?.status, settled?.codingAgentId],
+          [settled?.status, settled?.agentId],
           [AUTOMATION_RUN_STATUS.STARTED, theirs.id],
         );
       }),
@@ -705,7 +705,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         yield* Database.use((db) =>
           db
             .update(automationRun)
-            .set({ status: AUTOMATION_RUN_STATUS.STARTED, codingAgentId: null })
+            .set({ status: AUTOMATION_RUN_STATUS.STARTED, agentId: null })
             .where(inArray(automationRun.id, [delivered.id, lost.id])),
         );
 
@@ -741,7 +741,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           (yield* listAutomationRuns(owner, automation.id)).map((run) => [run.id, run]),
         );
         assert.deepEqual(
-          [runs.get(delivered.id)?.codingAgentId, runs.get(delivered.id)?.status],
+          [runs.get(delivered.id)?.agentId, runs.get(delivered.id)?.status],
           [first, AUTOMATION_RUN_STATUS.STARTED],
         );
         assert.deepEqual(
@@ -765,7 +765,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const read = yield* archivableRunAgents(new Date(departing.now - 86_400_000), 1);
 
         assert.deepEqual(
-          read.map((agent) => agent.codingAgentId),
+          read.map((agent) => agent.agentId),
           [standing],
         );
         assert.notEqual(standing, orphaned);
@@ -879,7 +879,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const [run] = runs;
         assert.equal(run?.status, AUTOMATION_RUN_STATUS.STARTED);
         assert.equal(run?.firing.kind, AUTOMATION_FIRING.SCHEDULE);
-        const agent = Option.getOrThrow(yield* readAgent(owner, run?.codingAgentId ?? ""));
+        const agent = Option.getOrThrow(yield* readAgent(owner, run?.agentId ?? ""));
         assert.equal(agent.model, SOL);
         assert.equal(agent.effort, "low");
         assert.equal(agent.automationId, automation.id, "the agent names the automation it ran");
@@ -1073,7 +1073,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         yield* Database.use((db) =>
           db
             .update(automationRun)
-            .set({ status: AUTOMATION_RUN_STATUS.STARTED, codingAgentId: null })
+            .set({ status: AUTOMATION_RUN_STATUS.STARTED, agentId: null })
             .where(eq(automationRun.id, run.id)),
         );
 
@@ -1082,11 +1082,11 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         assert.equal(again, undefined, "the claim is the other act's to settle");
         const [standing] = yield* Database.use((db) =>
           db
-            .select({ codingAgentId: automationRun.codingAgentId })
+            .select({ agentId: automationRun.agentId })
             .from(automationRun)
             .where(eq(automationRun.id, run.id)),
         );
-        assert.equal(standing?.codingAgentId, null, "no agent is attached in its place");
+        assert.equal(standing?.agentId, null, "no agent is attached in its place");
       }),
   );
 
@@ -1127,8 +1127,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           Effect.provide(services),
         );
         // Its session ran a turn, as eve opening it does.
-        const agentId =
-          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+        const agentId = outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
         const agent = Option.getOrThrow(yield* readAgent(owner, agentId));
         yield* Database.use((db) =>
           db.insert(turns).values({
@@ -1145,7 +1144,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         yield* Database.use((db) =>
           db
             .update(automationRun)
-            .set({ status: AUTOMATION_RUN_STATUS.STARTED, codingAgentId: null })
+            .set({ status: AUTOMATION_RUN_STATUS.STARTED, agentId: null })
             .where(eq(automationRun.automationId, automation.id)),
         );
 
@@ -1162,7 +1161,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           (yield* listAutomationRuns(owner, automation.id)).map((run) => [run.id, run]),
         );
         assert.equal(runs.get(started.id)?.status, AUTOMATION_RUN_STATUS.STARTED);
-        assert.notEqual(runs.get(started.id)?.codingAgentId, null, "its agent is found by its key");
+        assert.notEqual(runs.get(started.id)?.agentId, null, "its agent is found by its key");
         assert.equal(
           runs.get(unopened.id)?.status,
           AUTOMATION_RUN_STATUS.FAILED,
@@ -1196,8 +1195,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
 
         const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
 
-        const agentId =
-          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+        const agentId = outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
         const task = Option.getOrThrow(yield* readAgent(owner, agentId)).prompt ?? "";
         assert.ok(task.startsWith(PROMPT), "the developer's prompt comes first");
         assert.match(task, /because a pull request was opened on GitHub\./u);
@@ -1231,8 +1229,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
 
         const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
 
-        const agentId =
-          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+        const agentId = outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
         const task = Option.getOrThrow(yield* readAgent(owner, agentId)).prompt ?? "";
         assert.match(task, /No GitHub event came with this run/u);
         assert.doesNotMatch(task, /<github-event>/u);
@@ -1283,8 +1280,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
 
         const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
 
-        const agentId =
-          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+        const agentId = outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
         const agent = Option.getOrThrow(yield* readAgent(owner, agentId));
         assert.equal(agent.repository, "Acme/Relay", "spelled as the automation names it");
         assert.match(
@@ -1308,8 +1304,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           }),
         );
         const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
-        const agentId =
-          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+        const agentId = outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
 
         yield* deleteAutomation(owner, automation.id);
         const agent = Option.getOrThrow(yield* readAgent(owner, agentId));
@@ -1350,7 +1345,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
               Effect.provide(services),
             );
             const agentId =
-              outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+              outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
             return Option.getOrThrow(yield* readAgent(owner, agentId)).title;
           });
 
@@ -1378,8 +1373,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           }),
         );
         const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
-        const agentId =
-          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+        const agentId = outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
         const agent = Option.getOrThrow(yield* readAgent(owner, agentId));
 
         assert.equal(agent.automationOrigin?.prompt, PROMPT);
@@ -1403,8 +1397,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           }),
         );
         const outcome = yield* executeAutomationRun(eve.eveFor, run).pipe(Effect.provide(services));
-        const agentId =
-          outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+        const agentId = outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
         const agent = Option.getOrThrow(yield* readAgent(owner, agentId));
         const told = /<webhook-body>\n([\s\S]*?)\n<\/webhook-body>/u.exec(agent.prompt ?? "")?.[1];
 
@@ -1438,7 +1431,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
               Effect.provide(services),
             );
             const agentId =
-              outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : "";
+              outcome?.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : "";
             return Option.getOrThrow(yield* readAgent(owner, agentId)).prompt ?? "";
           });
 
@@ -1506,7 +1499,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           status: AUTOMATION_RUN_STATUS.SKIPPED,
           reason: AUTOMATION_RUN_REASON.REPOSITORY_CHANGED,
         });
-        assert.deepEqual(own, { status: AUTOMATION_RUN_STATUS.STARTED, codingAgentId: first });
+        assert.deepEqual(own, { status: AUTOMATION_RUN_STATUS.STARTED, agentId: first });
         assert.equal(eve.sent.length, 1, "only the event of the agent's own repository reached it");
       }),
   );

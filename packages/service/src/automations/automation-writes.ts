@@ -140,10 +140,10 @@ function runSummaryOf(
   readerId: string,
 ): AutomationRunSummary {
   const agent =
-    run.codingAgentId === null || run.agentConversationId === null || run.agentCreatedAt === null
+    run.agentId === null || run.agentConversationId === null || run.agentCreatedAt === null
       ? null
       : agentOf(
-          run.codingAgentId,
+          run.agentId,
           run.agentTitle,
           run.agentCreatedAt,
           run.agentUserId === readerId,

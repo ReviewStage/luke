@@ -41,9 +41,45 @@ export function undoneRename(statement: string): string {
   if (table) return `ALTER TABLE "${table[2]}" RENAME TO "${table[1]}"`;
   const column = /^ALTER TABLE "([^"]+)" RENAME COLUMN "([^"]+)" TO "([^"]+)";?$/u.exec(statement);
   if (column) return `ALTER TABLE "${column[1]}" RENAME COLUMN "${column[3]}" TO "${column[2]}"`;
+  const constraint = /^ALTER TABLE "([^"]+)" RENAME CONSTRAINT "([^"]+)" TO "([^"]+)";?$/u.exec(
+    statement,
+  );
+  if (constraint) {
+    return `ALTER TABLE "${constraint[1]}" RENAME CONSTRAINT "${constraint[3]}" TO "${constraint[2]}"`;
+  }
   const index = /^ALTER INDEX "([^"]+)" RENAME TO "([^"]+)";?$/u.exec(statement);
   if (index) return `ALTER INDEX "${index[2]}" RENAME TO "${index[1]}"`;
   throw new Error(`the migration holds a statement that is no rename: ${statement}`);
+}
+
+/** The migration that names the agent's tables `agent…` and leaves a view under each old name, which a test of an earlier migration walks back first. */
+export const RENAME_AGENT_TABLES = "20261029021951_agent_tables_rename";
+
+/** The views that migration leaves under the agent tables' old names. */
+const AGENT_TABLE_VIEWS = [
+  "coding_agent",
+  "coding_agent_delegation",
+  "coding_agent_runner_lease",
+  "coding_agent_wakeup",
+] as const;
+
+/**
+ * The agent tables' rename walked back, its views dropped first, and its
+ * renames run forward again: a test that stands the database before an
+ * earlier migration, spelled in the old names, runs `back` first and
+ * `forward` before it reads with today's schema.
+ */
+export function agentTablesRename(): Effect.Effect<{
+  readonly back: readonly string[];
+  readonly forward: readonly string[];
+}> {
+  return Effect.map(migrationStatements(RENAME_AGENT_TABLES), (statements) => {
+    const forward = statements.filter((statement) =>
+      /^ALTER (TABLE|INDEX) "[^"]+" RENAME /u.test(statement),
+    );
+    const views = AGENT_TABLE_VIEWS.map((view) => `DROP VIEW "${view}"`);
+    return { back: [...views, ...[...forward].reverse().map(undoneRename)], forward };
+  });
 }
 
 /** The tables a later migration dropped: the attachments' old names (`20261021000416_attachment_views_drop`), Chat's (`drop_chat`), and the cut features' (`drop_retired_storage`). */

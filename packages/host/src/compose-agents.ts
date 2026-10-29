@@ -2,7 +2,6 @@ import type { HostedAgentClient } from "@luke/features";
 import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
-  type AgentAccountItems,
   type AgentAgentAnswer,
   type AgentChangesAnswerView,
   type AgentDefaultAnswer,
@@ -90,6 +89,7 @@ import {
   closedNow,
   type InboxReader,
 } from "@luke/features/inbox-writes";
+import { LIVE_READ, type LiveRead } from "@luke/features/live-wire";
 import {
   type ChaptersModelAnswerView,
   chaptersModelWriteParamsSchema,
@@ -107,7 +107,8 @@ import {
 import { Effect, Equal, FiberHandle, FiberMap, Option, RcMap, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
-import { type AccountItems, accountItems, followSignedInItems } from "./account-items-follow.js";
+import { followAccountItems } from "./account-items-follow.js";
+import { type AppHostRead, type AppInboxItems, UNREAD } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -117,7 +118,13 @@ import {
   type InboxWritten,
   inboxReads,
 } from "./inbox-collections.js";
-import type { RowRefused, RowWrite, RowWritten } from "./live-collection.js";
+import {
+  type AccountReads,
+  accountReads,
+  type RowRefused,
+  type RowWrite,
+  type RowWritten,
+} from "./live-collection.js";
 import type { RunMode } from "./run-mode.js";
 import {
   followInbox,
@@ -150,8 +157,10 @@ import { type TranscriptHeld, transcriptHeld } from "./transcript-held.js";
  * account's own live read (`account-inbox-follow.ts`), heard as
  * `ACCOUNT_INBOX_CHANGED` events by main's notices rather than a window
  * (`agent-notices.ts`). Every item the account reaches is followed whole
- * on one read of its own (`account-items-follow.ts`), heard by a window as
- * `ACCOUNT_ITEMS_CHANGED` events. Behind a
+ * on one read of its own (`account-items-follow.ts`) for the signed-in
+ * session (`accountReads`), from the gate opening (`open`) until a
+ * sign-out, told as `INBOX_ITEMS_CHANGED` events to the app state every
+ * window draws. Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
  * unanswered. A provider key passes through on its way to the service and
  * is held nowhere here; no answer carries one back.
@@ -252,6 +261,8 @@ export interface AgentsDependencies {
 }
 
 export interface AgentsComposer extends Composer {
+  /** The session's account reads opened for the account signed in, as the gate opening opens them. */
+  readonly open: Effect.Effect<void>;
   /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
 }
@@ -310,21 +321,33 @@ export function composeAgents(
       seal: (userId, poll, after) => asked(client.accountInboxLive(userId, poll, after)),
       reads,
     });
-    const items = yield* accountItems({
-      seal: (userId, since, poll, after) =>
-        asked(client.accountInboxItemsLive(userId, since, poll, after)),
-      reads,
-    });
+    const gate = gateOf(dependencies);
+    const tellItems = (read: AppHostRead<AppInboxItems>) =>
+      Effect.sync(() => dependencies.kernel.emit(GATEWAY_EVENT.INBOX_ITEMS_CHANGED, carried(read)));
+    // Note that a session's reads close before the window is told it holds none, so nothing the last account drew lands after.
+    const sessionReads = yield* accountReads<LiveRead>(
+      () => (gate() ? dependencies.accountId() : undefined),
+      tellItems(UNREAD),
+    );
+    const followItems = (userId: string) =>
+      followAccountItems(
+        {
+          seal: (account, since, poll, after) =>
+            asked(client.accountInboxItemsLive(account, since, poll, after)),
+          reads,
+        },
+        userId,
+        tellItems,
+      );
     const inboxFollows = yield* FiberMap.make<InboxScopeKey>();
     const accountFollow = yield* FiberHandle.make();
-    const itemsFollow = yield* FiberHandle.make();
     return composed(
       dependencies,
       http,
       { transcripts, followed, held },
       { inboxes, followed: inboxFollows, reads },
       { accounts, followed: accountFollow },
-      { items, followed: itemsFollow },
+      { reads: sessionReads, followItems },
     );
   });
 }
@@ -350,10 +373,10 @@ interface AccountFollow {
   readonly followed: FiberHandle.FiberHandle;
 }
 
-/** The account's items' subscriptions, and the one follow the windows asked for. */
-interface ItemsFollow {
-  readonly items: AccountItems;
-  readonly followed: FiberHandle.FiberHandle;
+/** The session's account reads, and the follow of every item the account reaches among them. */
+interface SessionReads {
+  readonly reads: AccountReads<LiveRead>;
+  readonly followItems: (userId: string) => Effect.Effect<void>;
 }
 
 /** The composer's one table, built from its seams; nothing here starts anything but a transcript's or a scope's inbox subscription, while a window reads it. */
@@ -364,8 +387,8 @@ function composed(
   { inboxes, followed: inboxFollows, reads }: ScopeFollows,
   /** What waits across the account, and main's one follow of it. */
   { accounts, followed: accountFollow }: AccountFollow,
-  /** Every item the account reaches, and the windows' one follow of them. */
-  { items, followed: itemsFollow }: ItemsFollow,
+  /** The session's account reads, every item the account reaches among them. */
+  { reads: sessionReads, followItems }: SessionReads,
 ): AgentsComposer {
   const { client, kernel } = dependencies;
   const gate = gateOf(dependencies);
@@ -426,17 +449,6 @@ function composed(
         key: new TranscriptKey({ agentId: transcript.agentId, callId: transcript.callId }),
       };
     });
-
-  /** The account's items as a window is told them. */
-  const tellItems = (told: AgentAccountItems) =>
-    Effect.sync(() => kernel.emit(GATEWAY_EVENT.ACCOUNT_ITEMS_CHANGED, carried(told)));
-  /** Whether a window follows the account's items, so a sign-out follows them again for whoever signs in next. */
-  let itemsFollowed = false;
-  const followItems = followSignedInItems(
-    items,
-    () => (gate() ? dependencies.accountId() : undefined),
-    tellItems,
-  );
 
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.AGENTS_MODELS]: () =>
@@ -1127,33 +1139,25 @@ function composed(
       }),
     [GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_UNFOLLOW]: () =>
       Effect.as(FiberHandle.clear(accountFollow), {}),
-    [GATEWAY_METHOD.AGENTS_ACCOUNT_ITEMS_FOLLOW]: () =>
-      Effect.gen(function* () {
-        itemsFollowed = true;
-        yield* FiberHandle.run(itemsFollow, followItems);
-        return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_ACCOUNT_ITEMS_UNFOLLOW]: () =>
-      Effect.gen(function* () {
-        itemsFollowed = false;
-        yield* FiberHandle.clear(itemsFollow);
-        return {};
-      }),
+    [GATEWAY_METHOD.AGENTS_INBOX_ITEMS_RETRY]: () =>
+      Effect.as(sessionReads.reopen(LIVE_READ.INBOX_ITEMS, followItems), {}),
   };
 
   const reset = Effect.gen(function* () {
     yield* FiberMap.clear(followed);
     yield* FiberMap.clear(inboxFollows);
     yield* FiberHandle.clear(accountFollow);
-    yield* FiberHandle.clear(itemsFollow);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
     yield* held.clear;
     for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
     for (const userId of yield* RcMap.keys(accounts)) yield* RcMap.invalidate(accounts, userId);
-    for (const userId of yield* RcMap.keys(items)) yield* RcMap.invalidate(items, userId);
-    // Note that a window still following the account's items is told there are none, then the next account's whole once one signs in.
-    if (itemsFollowed) yield* FiberHandle.run(itemsFollow, followItems);
+    yield* sessionReads.end;
   });
 
-  return { methods, lifetime: Effect.void, reset };
+  return {
+    methods,
+    lifetime: Effect.void,
+    open: sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems),
+    reset,
+  };
 }

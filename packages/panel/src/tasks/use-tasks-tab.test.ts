@@ -3001,6 +3001,32 @@ test("New task's agent start opens its page at once on the words as its agent's 
   assert.equal(tab.control().agents.opening?.line.text, prompt);
 });
 
+test("what the developer opened while New task's agent start was out, a page and New task again, still stands as the start lands", async () => {
+  const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
+  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
+  );
+  act(() => tab.control().onNewTask());
+  let note: Promise<Failure | undefined> = Promise.resolve(undefined);
+  act(() => {
+    note = tab.control().newTask.start("", "acme/web", undefined, {
+      handed: { idempotencyKey: AGENT_KEY, prompt: "Fix it.", attachments: [], choice: undefined },
+    });
+  });
+  act(() => tab.control().automationsView.onOpen());
+  act(() => tab.control().onNewTask());
+
+  await act(async () => {
+    answers[0]?.({ planId: OTHER_TASK_ID, agentStart: { agent: started } });
+    await note;
+  });
+  assert.equal(tab.control().automationsView.open, true, "the page stands");
+  assert.equal(tab.control().newTask.open, true, "New task stands");
+  assert.equal(tab.control().starting, undefined);
+});
+
 test("New task's agent start opens no draft beside its agent while the task stands open before the start answers", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
@@ -3059,6 +3085,7 @@ test("New task's agent start refused after its page opened opens the card again 
       key: AGENT_KEY,
       ask: { repository: "acme/web", workspaceId: undefined, agent: handed },
     },
+    words: handed.prompt,
   };
   act(() => tab.control().onNewTask());
   let note: Promise<Failure | undefined> = Promise.resolve(undefined);
@@ -3105,6 +3132,7 @@ test("Create with an agent opens New task's card for an automation's agent over 
       key: AGENT_KEY,
       ask: { repository: "acme/web", workspaceId: undefined, agent: handed },
     },
+    words: handed.prompt,
   };
   let note: Promise<Failure | undefined> = Promise.resolve(undefined);
   act(() => {

@@ -112,6 +112,9 @@ BOOT_WORKLOAD_USER="0:0"
 BOOT_WAIT_SECONDS=180
 # How long stopping or deleting the throwaway machine may take.
 BOOT_CLEANUP_SECONDS=60
+# How long a command `timeout` signalled, at its deadline or on an interrupt it
+# was handed, has to end before `timeout` kills it.
+TIMEOUT_KILL_SECONDS=10
 
 if [ -t 1 ]; then
   CHECK="$(printf '\033[32m✓\033[0m')"
@@ -258,18 +261,24 @@ fail_unstarted() {
   fail "$1. $UNIT was restarted on this box's existing enrollment."
 }
 
-# Runs smolvm as the luke-host user, in its home, as the daemon's service does:
-# $@ smolvm's arguments, after a timeout command and its seconds where $1 is
-# --within <seconds>.
-smolvm_as_host() {
+# Runs smolvm as the luke-host user, in its home, as the daemon's service does,
+# replacing the shell it runs in, so it is run in a subshell or in the
+# background, where the shell's pid is the command's: $@ smolvm's arguments,
+# after a timeout command and its seconds where $1 is --within <seconds>.
+smolvm_exec() {
   limit=""
   if [ "$1" = "--within" ]; then
-    command -v timeout >/dev/null 2>&1 && limit="timeout $2"
+    command -v timeout >/dev/null 2>&1 && limit="timeout -k $TIMEOUT_KILL_SECONDS $2"
     shift 2
   fi
-  (cd "$HOST_HOME" && runuser -u "$HOST_USER" -- env \
+  cd "$HOST_HOME" && exec runuser -u "$HOST_USER" -- env \
     -u XDG_DATA_HOME -u XDG_CACHE_HOME -u XDG_CONFIG_HOME HOME="$HOST_HOME" \
-    $limit "$SMOLVM" "$@")
+    $limit "$SMOLVM" "$@"
+}
+
+# smolvm_exec in a subshell, as an ordinary command: it returns what smolvm did.
+smolvm_as_host() {
+  (smolvm_exec "$@")
 }
 
 # The last line smolvm printed in the file $1, or that it timed out where it
@@ -287,16 +296,14 @@ smolvm_said() {
 # a run of the image, which keeps the image for every VM after it.
 fetch_sandbox_image() {
   printf 'Fetching the sandbox image (about 1.3 GB), so the first agent does not wait for it...\n'
-  said="$(mktemp)"
+  said="$work/image-said"
   code=0
   smolvm_as_host --within "$IMAGE_WAIT_SECONDS" machine run --net --image "$SANDBOX_IMAGE" -- true \
     >/dev/null 2>"$said" || code=$?
   if [ "$code" -ne 0 ]; then
     why="$(smolvm_said "$said" "$code")"
-    rm -f "$said"
     fail_unstarted "Could not fetch the sandbox image (smolvm: $why)"
   fi
-  rm -f "$said"
   ok "Fetched the sandbox image"
 }
 
@@ -310,50 +317,85 @@ remove_boot_machine() {
   smolvm_as_host --within "$BOOT_CLEANUP_SECONDS" machine delete --name "$BOOT_MACHINE" -f >/dev/null 2>"$1"
 }
 
+# The boot check's smolvm command, $@ as smolvm_as_host takes them, run in the
+# background and waited for, so a signal the script traps is handled the moment
+# it comes rather than once the command ends. It returns what smolvm did, and
+# $boot_job is its pid while it runs, which is smolvm_exec's own: the command
+# replaces the job's shell.
+boot_run() {
+  boot_status=0
+  smolvm_exec "$@" &
+  boot_job=$!
+  wait "$boot_job" || boot_status=$?
+  boot_job=""
+  return "$boot_status"
+}
+
+# What an interrupt (INT or TERM) during the boot check does: ends the step in
+# flight, deletes the boot check's machine, and fails like any other failure of
+# the check, so a service this run stopped is started again. Note that a trap
+# is the one thing here that holds: `timeout` runs its command in a process
+# group of its own so that it can kill the whole group at the deadline, which
+# is also why a terminal's Ctrl-C never reaches the command and a signal sent
+# to this script alone is not passed on; `timeout --foreground` would give up
+# that group kill to change the first and still leave the second, and neither
+# would delete the machine.
+boot_interrupted() {
+  trap - INT TERM
+  # Note that the step is waited out before the machine goes, since a create still finishing after the delete would leave the machine behind; `timeout` ends only once smolvm has, killing it after TIMEOUT_KILL_SECONDS where it ignores the TERM it is relayed.
+  if [ -n "$boot_job" ]; then
+    kill "$boot_job" 2>/dev/null || true
+    wait "$boot_job" 2>/dev/null || true
+  fi
+  remove_boot_machine "$removal" || true
+  fail_unstarted "The VM boot check was interrupted"
+}
+
 # Proves a VM boots before anything is started: one throwaway machine made from
 # the pinned image as the daemon makes every agent's (smolvm-sandbox.ts), with
 # the same smolvm, user and flags, nested where the box has $KVM_DEVICE on
 # Linux, started, `true` run in it as luke-host, then stopped and deleted
-# whether it booted or not. It fails with the step and smolvm's last line, and
-# where the machine booted but could not be deleted.
+# whether it booted, failed, or was interrupted. It fails with the step and
+# smolvm's last line, and where the machine booted but could not be deleted.
 require_vm_boots() {
   boot_nested=""
   if [ "$(uname -s)" = "Linux" ] && [ -e "$KVM_DEVICE" ]; then
     boot_nested="--nested"
   fi
   boot_user="$(id -u "$HOST_USER"):$(id -g "$HOST_USER")"
-  said="$(mktemp)"
-  removal="$(mktemp)"
+  # Note that the files are made in $work, so its EXIT trap removes them.
+  said="$work/boot-said"
+  removal="$work/boot-removal"
+  boot_job=""
+  trap boot_interrupted INT TERM
   # Note that one an interrupted run left behind is cleared first, so the name is free.
   remove_boot_machine "$removal" || true
   boot_step=create
   code=0
-  smolvm_as_host --within "$BOOT_WAIT_SECONDS" machine create --name "$BOOT_MACHINE" \
+  boot_run --within "$BOOT_WAIT_SECONDS" machine create --name "$BOOT_MACHINE" \
     --image "$SANDBOX_IMAGE" --net --user "$BOOT_WORKLOAD_USER" $boot_nested \
     -- sh -c "$BOOT_WORKLOAD" >/dev/null 2>"$said" || code=$?
   if [ "$code" -eq 0 ]; then
     boot_step=start
-    smolvm_as_host --within "$BOOT_WAIT_SECONDS" machine start --name "$BOOT_MACHINE" \
+    boot_run --within "$BOOT_WAIT_SECONDS" machine start --name "$BOOT_MACHINE" \
       >/dev/null 2>"$said" || code=$?
   fi
   if [ "$code" -eq 0 ]; then
     boot_step=exec
-    smolvm_as_host --within "$BOOT_WAIT_SECONDS" machine exec --name "$BOOT_MACHINE" \
+    boot_run --within "$BOOT_WAIT_SECONDS" machine exec --name "$BOOT_MACHINE" \
       --user "$boot_user" -- true >/dev/null 2>"$said" || code=$?
   fi
   removed=0
   remove_boot_machine "$removal" || removed=$?
+  trap - INT TERM
   if [ "$code" -ne 0 ]; then
     why="$(smolvm_said "$said" "$code")"
-    rm -f "$said" "$removal"
     fail_unstarted "No VM booted (smolvm machine $boot_step: $why)"
   fi
   if [ "$removed" -ne 0 ]; then
     why="$(smolvm_said "$removal" "$removed")"
-    rm -f "$said" "$removal"
     fail_unstarted "A VM booted, but smolvm could not delete it (smolvm machine delete --name $BOOT_MACHINE: $why)"
   fi
-  rm -f "$said" "$removal"
   ok "Booted a VM from the sandbox image"
 }
 

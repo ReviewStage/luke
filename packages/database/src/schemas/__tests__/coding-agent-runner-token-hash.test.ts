@@ -11,6 +11,7 @@ import {
 } from "../../models/agent-store.js";
 import { createTask } from "../../models/task-store.js";
 import {
+  agentTablesRename,
   getTestDB,
   migrationStatements,
   openWorkspace,
@@ -71,12 +72,16 @@ it.layer(getTestDB())("coding_agent_runner_token_hash over a database from befor
         const digest = randomUUID();
         const holding = yield* agentHolding();
         const bare = yield* agentHolding();
-        for (const statement of [...syncCaptureTakenOff(), ...UNDO]) yield* sql.unsafe(statement);
+        const agentTables = yield* agentTablesRename();
+        for (const statement of [...syncCaptureTakenOff(), ...agentTables.back, ...UNDO]) {
+          yield* sql.unsafe(statement);
+        }
         yield* sql`UPDATE conversations SET runner_token_hash = ${digest} WHERE id = ${holding.conversationId}`;
 
         const migration = yield* migrationStatements(MIGRATION);
         for (const statement of migration) yield* sql.unsafe(statement);
         for (const statement of migration) yield* sql.unsafe(statement);
+        for (const statement of agentTables.forward) yield* sql.unsafe(statement);
 
         const routing = (agent: { userId: string; agentId: string }) =>
           Effect.map(

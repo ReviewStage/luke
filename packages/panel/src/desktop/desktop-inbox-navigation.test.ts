@@ -104,8 +104,8 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 // The parser an answer's note is drawn through, landed as the panel lands it.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
-test("the Inbox left and come back to under the window's root draws the rows it held at once, before any follow pushes again", async () => {
-  const { page } = mount([], { windowRoot: true, accountFeed: true });
+test("the Inbox left and come back to draws the rows the window holds at once, before anything is pushed again", async () => {
+  const { page } = mount([], { drawnWhileOpen: true });
   await settle();
   const rows = listed(page);
   assert.ok(
@@ -116,11 +116,15 @@ test("the Inbox left and come back to under the window's root draws the rows it 
   act(() => world.setInboxOpen(false));
   await settle();
   act(() => world.setInboxOpen(true));
-  assert.deepEqual(listed(page), rows, "drawn from what the window held, nothing pushed anew");
+  assert.deepEqual(
+    listed(page),
+    rows,
+    "drawn from the account's feed in app state, nothing pushed anew",
+  );
 });
 
-test("the Inbox under the window's root draws each task held whole by the account's feed from it, following none on its own", async () => {
-  const { page } = mount([], { windowRoot: true, accountFeed: true });
+test("the Inbox draws each task held whole by the account's feed from it, following none on its own", async () => {
+  const { page } = mount();
   await settle();
   const rows = listed(page);
   assert.ok(
@@ -140,10 +144,10 @@ test("the Inbox under the window's root draws each task held whole by the accoun
   }
 });
 
-test("an Inbox under the window's root whose feed holds nothing of its tasks says so rather than reading for good", async () => {
+test("an Inbox whose feed holds nothing of its tasks says so rather than reading for good", async () => {
   // The feed answers with no task, as it leaves out one whose items all settled past its bound.
   world.inboxes = new Map();
-  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  const { page } = mount();
   await settle();
   const list = page.querySelector(".inbox-tasks");
   assert.ok(list, "the list is drawn");
@@ -161,7 +165,7 @@ test("a link to an item the account's feed leaves out waits for its task's own r
             resolve({ status: FAKE_ANSWER.DONE, value: { items: [EXPIRY], cursor: "1" } });
         })
       : undefined;
-  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  const { page } = mount();
   await settle();
   act(() => world.chooseFromOutside({ taskId: INVITES.id, itemId: EXPIRY.id, opened: true }));
   await settle();
@@ -178,7 +182,7 @@ test("a link to an item the account's feed leaves out waits for its task's own r
 
 test("an Inbox whose account feed refused before it ever answered reads it again on Retry", async () => {
   world.feedRefused = true;
-  const { page } = mount([], { windowRoot: true, accountFeed: true });
+  const { page } = mount();
   await settle();
   const retry = [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks button")].find(
     (each) => each.textContent === "Retry",
@@ -332,9 +336,6 @@ test("an item of an agent with no plan stands under the automation that started 
   ]);
   await settle();
 
-  assert.ok(
-    world.agentReads.length > 0 && world.agentReads.every((agentId) => agentId === SWEEP_AGENT),
-  );
   const rows = listed(page);
   assert.ok(rows.includes("# Nightly flake sweep"), rows.join(" | "));
   assert.equal(rows[rows.indexOf("# Nightly flake sweep") + 1], "*Quarantine the flaky test?");
@@ -657,11 +658,7 @@ test("an agent with no plan whose items are all settled stays listed under the a
   const settled = { ...SECOND_ASK, status: INBOX_STATUS.ANSWERED };
   world.agentInboxes = new Map([[SECOND_AGENT, [settled]]]);
   const { id: _id, title: _title, postedAt: _postedAt, ...agent } = waitingTaskless(settled);
-  const { page } = mount([], {
-    windowRoot: true,
-    accountFeed: true,
-    agents: [{ ...agent, items: 1, toDo: 0 }],
-  });
+  const { page } = mount([], { agents: [{ ...agent, items: 1, toDo: 0 }] });
   await settle();
 
   const rows = listed(page);
@@ -670,32 +667,6 @@ test("an agent with no plan whose items are all settled stays listed under the a
     "Skip the slow suite?",
     rows.join(" | "),
   );
-});
-
-test("a read of an agent with no plan that fails is said with Retry, which reads it again though it was read before", async () => {
-  world.agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
-  const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless));
-  await settle();
-
-  world.agentReadFails = true;
-  act(() => world.setTaskless([QUARANTINE, THIRD_ASK].map(waitingTaskless)));
-  await settle();
-  assert.match(
-    page.querySelector(".inbox-tasks")?.textContent ?? "",
-    /Some items could not be read\./u,
-  );
-  const before = world.agentReads.filter((agentId) => agentId === SECOND_AGENT).length;
-
-  world.agentReadFails = false;
-  act(() =>
-    [...page.querySelectorAll<HTMLButtonElement>(".inbox-tasks button")]
-      .find((button) => button.textContent === "Retry")
-      ?.click(),
-  );
-  await settle();
-
-  assert.ok(world.agentReads.filter((agentId) => agentId === SECOND_AGENT).length > before);
-  assert.doesNotMatch(page.querySelector(".inbox-tasks")?.textContent ?? "", /could not be read/u);
 });
 
 test("an item chosen by a notification's click, in an Inbox showing its list alone, is shown itself, and Back stands on the list again, the notification's ask taken once", async () => {
@@ -1763,9 +1734,10 @@ test("archiving the channel shown moves the window to #general and says so", asy
 
 test("an item opened whose agent's inbox could not be read says so in the pane, and Retry reads it there", async () => {
   world.listedWorkspace = ACME;
-  // Note that no holding names the billing task, so its item is opened by its agent, whose own read fails.
+  // Note that no holding names the billing task, nor the feed its agent, so its item is opened by its agent, whose own read fails.
   world.pageAgents = new Map([[AGENT.id, AGENT]]);
   world.agentInboxes = new Map([[AGENT.id, [THRESHOLD]]]);
+  world.feedLeavesOut = new Set([AGENT.id]);
   world.agentReadFails = true;
   const { page } = mount([], { holding: [] });
   await settle();

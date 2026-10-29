@@ -915,14 +915,12 @@ test("the Plan tab's ⋯ prints the chords that act on the open task, and leaves
     CHIP_ITEMS,
     "a row draws no chips, so its menu keeps them",
   );
-  // Note that Show details' ⌥↓ is the row's own key, which opens its card rather than acting on the task.
   assert.deepEqual(
     itemChords(),
     [
       ["Mark as unread", "U"],
       ["Status", "S"],
       ["Pin", "P"],
-      ["Show details", "⌥↓"],
     ],
     "no chord but the focused row's letters acts on a task that is not open",
   );

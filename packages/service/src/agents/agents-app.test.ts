@@ -4830,7 +4830,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             yield* db
               .select({ userId: agentPin.userId })
               .from(agentPin)
-              .where(eq(agentPin.codingAgentId, agent.id)),
+              .where(eq(agentPin.agentId, agent.id)),
             yield* db
               .select({ id: inboxItem.id })
               .from(inboxItem)

@@ -167,7 +167,7 @@ const RunRowSchema = Schema.Struct({
   firing: automationFiringSchema,
   status: automationRunStatusSchema,
   reason: Schema.NullOr(automationRunReasonSchema),
-  codingAgentId: Schema.NullOr(Schema.String),
+  agentId: Schema.NullOr(Schema.String),
   firedAt: InstantColumnSchema,
   settledAt: Schema.NullOr(InstantColumnSchema),
 });
@@ -181,7 +181,7 @@ const RUN_COLUMNS = {
   firing: automationRun.firing,
   status: automationRun.status,
   reason: automationRun.reason,
-  codingAgentId: automationRun.codingAgentId,
+  agentId: automationRun.agentId,
   firedAt: automationRun.firedAt,
   settledAt: automationRun.settledAt,
 };
@@ -211,7 +211,7 @@ export interface NewAutomationRun {
 
 /** How a run settled: started with its agent, or skipped or failed for a reason. */
 export type AutomationRunOutcome =
-  | { readonly status: typeof AUTOMATION_RUN_STATUS.STARTED; readonly codingAgentId: string }
+  | { readonly status: typeof AUTOMATION_RUN_STATUS.STARTED; readonly agentId: string }
   | {
       readonly status: Exclude<
         AutomationRunStatus,
@@ -539,15 +539,15 @@ const writeRunOutcome = SqlSchema.findAll({
     id: Schema.String,
     status: automationRunStatusSchema,
     reason: Schema.NullOr(automationRunReasonSchema),
-    codingAgentId: Schema.NullOr(Schema.String),
+    agentId: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ id, status, reason, codingAgentId, now }) =>
+  execute: ({ id, status, reason, agentId, now }) =>
     Database.use((db) =>
       db
         .update(automationRun)
-        .set({ status, reason, codingAgentId, settledAt: now })
+        .set({ status, reason, agentId, settledAt: now })
         .where(
           and(eq(automationRun.id, id), eq(automationRun.status, AUTOMATION_RUN_STATUS.QUEUED)),
         )
@@ -595,7 +595,7 @@ const findRuns = SqlSchema.findAll({
       db
         .select(HISTORY_COLUMNS)
         .from(automationRun)
-        .leftJoin(agentTable, eq(agentTable.id, automationRun.codingAgentId))
+        .leftJoin(agentTable, eq(agentTable.id, automationRun.agentId))
         .where(historyOf(userId, automationId))
         .orderBy(desc(automationRun.firedAt), desc(automationRun.id))
         .limit(limit),
@@ -614,7 +614,7 @@ const findRunByKey = SqlSchema.findOneOption({
       db
         .select(HISTORY_COLUMNS)
         .from(automationRun)
-        .leftJoin(agentTable, eq(agentTable.id, automationRun.codingAgentId))
+        .leftJoin(agentTable, eq(agentTable.id, automationRun.agentId))
         .where(and(historyOf(userId, automationId), eq(automationRun.dedupeKey, dedupeKey))),
     ),
 });
@@ -713,7 +713,7 @@ const findQueuedRuns = SqlSchema.findAll({
 });
 
 const StartedAgentSchema = Schema.Struct({
-  codingAgentId: Schema.String,
+  agentId: Schema.String,
   conversationId: Schema.String,
   createdAt: InstantColumnSchema,
 });
@@ -728,12 +728,12 @@ const findStartedAgents = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          codingAgentId: agentTable.id,
+          agentId: agentTable.id,
           conversationId: agentTable.conversationId,
           createdAt: agentTable.createdAt,
         })
         .from(automationRun)
-        .innerJoin(agentTable, eq(agentTable.id, automationRun.codingAgentId))
+        .innerJoin(agentTable, eq(agentTable.id, automationRun.agentId))
         .where(
           and(
             eq(automationRun.automationId, automationId),
@@ -747,7 +747,7 @@ const findStartedAgents = SqlSchema.findAll({
 const ArchivableAgentSchema = Schema.Struct({
   runId: Schema.String,
   userId: Schema.String,
-  codingAgentId: Schema.String,
+  agentId: Schema.String,
   conversationId: Schema.String,
   createdAt: InstantColumnSchema,
   archivedAt: Schema.NullOr(InstantColumnSchema),
@@ -776,7 +776,7 @@ const findArchivableAgents = SqlSchema.findAll({
         .select({
           runId: automationRun.id,
           userId: agentTable.userId,
-          codingAgentId: agentTable.id,
+          agentId: agentTable.id,
           conversationId: agentTable.conversationId,
           createdAt: agentTable.createdAt,
           archivedAt: agentTable.archivedAt,
@@ -784,7 +784,7 @@ const findArchivableAgents = SqlSchema.findAll({
         })
         .from(automationRun)
         .innerJoin(automation, eq(automation.id, automationRun.automationId))
-        .innerJoin(agentTable, eq(agentTable.id, automationRun.codingAgentId))
+        .innerJoin(agentTable, eq(agentTable.id, automationRun.agentId))
         .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))
         .where(
           and(
@@ -878,17 +878,17 @@ const writeClaim = SqlSchema.findAll({
 /** A run claimed for its start and not yet holding the agent it started: started, with no agent. */
 const CLAIMED = and(
   eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
-  isNull(automationRun.codingAgentId),
+  isNull(automationRun.agentId),
 );
 
 const writeAgent = SqlSchema.findAll({
-  Request: Schema.Struct({ id: Schema.String, codingAgentId: Schema.String, now: Schema.Date }),
+  Request: Schema.Struct({ id: Schema.String, agentId: Schema.String, now: Schema.Date }),
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ id, codingAgentId, now }) =>
+  execute: ({ id, agentId, now }) =>
     Database.use((db) =>
       db
         .update(automationRun)
-        .set({ status: AUTOMATION_RUN_STATUS.STARTED, codingAgentId, settledAt: now })
+        .set({ status: AUTOMATION_RUN_STATUS.STARTED, agentId, settledAt: now })
         .where(
           and(
             eq(automationRun.id, id),
@@ -1351,8 +1351,7 @@ export function settleAutomationRun(
       id: runId,
       status: outcome.status,
       reason: outcome.status === AUTOMATION_RUN_STATUS.STARTED ? null : outcome.reason,
-      codingAgentId:
-        outcome.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.codingAgentId : null,
+      agentId: outcome.status === AUTOMATION_RUN_STATUS.STARTED ? outcome.agentId : null,
       now,
     });
     return written.length > 0;
@@ -1533,9 +1532,9 @@ export function claimAutomationRun(
 }
 
 /** The run started with the agent named, from queued or from its claim; false where it settled otherwise. */
-export function attachRunAgent(runId: string, codingAgentId: string): TaskStoreEffect<boolean> {
+export function attachRunAgent(runId: string, agentId: string): TaskStoreEffect<boolean> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(writeAgent({ id: runId, codingAgentId, now }), (rows) => rows.length > 0),
+    Effect.map(writeAgent({ id: runId, agentId, now }), (rows) => rows.length > 0),
   );
 }
 
