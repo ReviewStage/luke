@@ -1,5 +1,5 @@
 /**
- * command-palette.tsx -- ⌘K: the tasks, the open task's agents and files, the Inbox's items, every command the window can run now, and the Settings pages and settings, found by typing, in a dialog over the window.
+ * command-palette.tsx -- ⌘K: the tasks, the open task's agents and files, the Inbox's items, the workspace's automations, every command the window can run now, and the Settings pages and settings, found by typing, in a dialog over the window.
  *
  * The palette is `@luke/ui`'s command dialog (`@luke/ui/command`), its
  * rows the window's menu rows, under a row of filters as Cursor's palette has them: All, then
@@ -42,6 +42,12 @@
  * anything its thread says, the words that found it then said beside its
  * task's name. One chosen opens in the Inbox, as its row there would.
  *
+ * The automations are the listed workspace's, followed the first time they
+ * are searched, as the Inbox's items are: each found by its name, what fires
+ * it, and its task's name, hanging its card beside its row, as every place
+ * naming one does. One chosen opens its page, as its row on the Automations
+ * page would.
+ *
  * It is the nearest layer while it stands: no key pressed in it goes on to
  * the window, so Escape closes the palette and nothing else, and no chord
  * changes what stands behind it. Closing hands focus
@@ -56,13 +62,22 @@
  */
 
 import type { TasklessAgent } from "@luke/features/agent-wire";
+import { automationTriggerText } from "@luke/features/automation-list-model";
+import type { AutomationSummary } from "@luke/features/automation-wire";
 import type { Channel } from "@luke/features/channel-wire";
 import { OPERATOR_NAME } from "@luke/features/model-label";
 import { formatCount } from "@luke/features/number-format";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TasksTreeAnswer } from "@luke/features/tasks-view";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
-import { noMatchWords, readFailedWords, readingWords, TERM, VERB } from "@luke/features/words";
+import {
+  noMatchWords,
+  REFRESH_FAILED_WORDS,
+  readFailedWords,
+  readingWords,
+  TERM,
+  VERB,
+} from "@luke/features/words";
 import { taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import {
@@ -143,7 +158,7 @@ import {
   useState,
 } from "react";
 import { useAct } from "../act.js";
-import { AssigneeFaceMark } from "../actor-ref.js";
+import { AssigneeFaceMark, AutomationCard } from "../actor-ref.js";
 import {
   appCommandOffered,
   runAppCommand,
@@ -190,7 +205,7 @@ import { type InboxSearch, useInboxSearch } from "../tasks/use-inbox-search.js";
 import { SIDE_PANEL_TAB_KIND, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
-import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
@@ -198,6 +213,7 @@ import {
 import { useCapability, useExperimentChoices } from "../use-app-state.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
+import { READING_AUTOMATIONS } from "./automation-words.js";
 import { type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, inboxEntries } from "./main-tabs.js";
 import {
@@ -210,6 +226,7 @@ import {
 import type { AddEntry } from "./strip-tabs.js";
 import { taskOf } from "./task-actions.js";
 import { homeTaskCardOf, TaskRowStatus } from "./task-card.js";
+import { useAutomations } from "./use-automations.js";
 import { WorkspaceRef } from "./workspace-ref.js";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the filters stand. */
@@ -220,6 +237,7 @@ const PALETTE_FILTER = {
   INBOX: "inbox",
   CHANNELS: "channels",
   PEOPLE: "people",
+  AUTOMATIONS: "automations",
   FILES: "files",
   COMMANDS: "commands",
   SETTINGS: "settings",
@@ -253,6 +271,7 @@ const FILTER_LABEL = {
   [PALETTE_FILTER.INBOX]: "Inbox",
   [PALETTE_FILTER.CHANNELS]: "Channels",
   [PALETTE_FILTER.PEOPLE]: "People",
+  [PALETTE_FILTER.AUTOMATIONS]: "Automations",
   [PALETTE_FILTER.FILES]: "Files",
   [PALETTE_FILTER.COMMANDS]: "Commands",
   [PALETTE_FILTER.SETTINGS]: "Settings",
@@ -348,6 +367,9 @@ const SNIPPET_REACH = 40;
 /** What the People filter says while the listed workspace's members are read, and where that read did not land. */
 const PEOPLE_READING_LINE = readingWords(`the workspace's ${TERM.MEMBER.many}`);
 const PEOPLE_FAILED_LINE = "The workspace's members could not be read.";
+
+/** What the Automations filter says where the listed workspace's automations could not be read. */
+const AUTOMATIONS_FAILED_LINE = "Your automations could not be read.";
 
 /** What the list says in place of "No results match": a line of its own, a source still reading, or one refused. */
 const PALETTE_NOTICE = {
@@ -670,6 +692,24 @@ function inboxNotice(search: InboxSearch, channelsOn: boolean): PaletteNotice | 
         line: channelsOn ? THREADS_FAILED_LINE : INBOX_FAILED_LINE,
         onRetry: search.onRetry,
       }
+    : undefined;
+}
+
+/** What the Automations filter says while the listed workspace, or its automations, have not been read, or a push did not land, a later one under the rows it kept as the Automations page says it; nothing once they are, as People says of its members. */
+function automationsNotice(
+  tasks: Pick<TasksControl, "signedIn" | "workspace" | "workspaces" | "listFailed">,
+  automations: Pick<ReturnType<typeof useAutomations>, "read" | "refreshFailed" | "reload">,
+): PaletteNotice | undefined {
+  const { read, refreshFailed, reload: onRetry } = automations;
+  if (tasks.workspace === undefined) {
+    const coming = tasks.signedIn && tasks.workspaces.length === 0 && !tasks.listFailed;
+    return coming ? { kind: PALETTE_NOTICE.READING, line: READING_AUTOMATIONS } : undefined;
+  }
+  if (read === undefined) return { kind: PALETTE_NOTICE.READING, line: READING_AUTOMATIONS };
+  if ("failure" in read)
+    return { kind: PALETTE_NOTICE.FAILED, line: AUTOMATIONS_FAILED_LINE, onRetry };
+  return refreshFailed
+    ? { kind: PALETTE_NOTICE.FAILED, line: REFRESH_FAILED_WORDS, onRetry }
     : undefined;
 }
 
@@ -1074,6 +1114,26 @@ function channelRows(
     terms: [channel.name, `#${channel.name}`, channel.purpose],
     onChoose: () => open(channel.id),
   }));
+}
+
+/** The listed workspace's automations, each by its name and what fires it, as the Automations page lists it, then its task's name, hanging its card as every place naming one does, which choosing opens on its page; its task's name finds it too. */
+function automationRows(
+  automations: readonly AutomationSummary[],
+  workspaceName: string | undefined,
+  open: (automationId: string) => void,
+): readonly PaletteRow[] {
+  return automations.map((automation) => {
+    const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
+    return {
+      icon: <GLYPH.AUTOMATION />,
+      label: automation.name,
+      // Note that its task's name, which finds it too, is said after what fires it, so a row it found says why.
+      detail: automation.planName === null ? trigger : `${trigger} · ${automation.planName}`,
+      card: <AutomationCard automation={automation} workspaceName={workspaceName} />,
+      terms: [automation.name, trigger, automation.planName].filter((term) => term !== null),
+      onChoose: () => open(automation.id),
+    };
+  });
 }
 
 /**
@@ -2175,6 +2235,10 @@ export function CommandPalette({
     channelsOn && tasks.signedIn ? tasks.workspace?.id : undefined,
     open,
   );
+  // Note that the automations are followed the first time they are searched, on the Inbox's terms.
+  const automationsAsked =
+    open && tasks.signedIn && (filter === PALETTE_FILTER.AUTOMATIONS || tokens.length > 0);
+  const automations = useAutomations(automationsAsked ? tasks.workspace?.id : undefined);
   const now = useMinute();
 
   // Note that the repository is read the first time its files are searched
@@ -2253,6 +2317,18 @@ export function CommandPalette({
     [PALETTE_FILTER.PEOPLE]: () => [
       peopleRows(members, tasks.me, (userId) => onTasks(() => tasks.personView.onOpen(userId))),
     ],
+    [PALETTE_FILTER.AUTOMATIONS]: () => [
+      automationRows(
+        automations.read !== undefined && "automations" in automations.read
+          ? automations.read.automations
+          : [],
+        tasks.workspace?.name,
+        (automationId) =>
+          onTasks(() =>
+            tasks.automationsView.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
+          ),
+      ),
+    ],
     // Note that a command is found by its letters in order too, as a path is, since a command's name is typed by its first letters.
     // Note that the commands are one tier, so a query ranks them all alike, and their order
     // is what an empty field lists and what breaks a tie: the open thing's, then Go to, then the window's.
@@ -2321,6 +2397,8 @@ export function CommandPalette({
         : undefined,
     [PALETTE_FILTER.CHANNELS]: () => undefined,
     [PALETTE_FILTER.PEOPLE]: () => peopleNotice(tasks, membersRead),
+    [PALETTE_FILTER.AUTOMATIONS]: () =>
+      automationsAsked ? automationsNotice(tasks, automations) : undefined,
     [PALETTE_FILTER.FILES]: () =>
       fileQuery === undefined ? undefined : filesNotice(filesOpen, held),
     [PALETTE_FILTER.COMMANDS]: () => undefined,

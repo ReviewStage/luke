@@ -59,7 +59,12 @@ import { ShellRoomContext } from "../stage-room.js";
 import { fileLook } from "../tasks/file-ref.js";
 import { SIDE_PANEL_TAB, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { NO_LOOKS, useTaskLooks } from "../tasks/use-task-looks.js";
-import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
+import {
+  AUTOMATIONS_PAGE,
+  type AutomationsPlace,
+  type InboxChoice,
+  type TasksControl,
+} from "../tasks/use-tasks-tab.js";
 import {
   fakeActPort,
   fakeActPortAnswering,
@@ -612,7 +617,7 @@ test("in a row too narrow for every filter, the filter a key chooses is scrolled
   key(BACK);
   key(BACK);
   assert.equal(chosenFilter(), "Settings");
-  assert.equal(bar.scrollLeft, 300);
+  assert.equal(bar.scrollLeft, 350);
   key(FORWARD);
   assert.equal(chosenFilter(), "All");
   assert.equal(bar.scrollLeft, 0);
@@ -2101,7 +2106,11 @@ test("under All, a query nothing else matches says the repository's files are st
       },
     ],
   });
-  membersAnswer(() => Promise.resolve([]));
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.AUTOMATIONS_LIST]: () => Promise.resolve({ automations: [] }),
+  });
   openPalette(
     { ...tasks, workspace: ACME },
     () =>
@@ -2111,6 +2120,7 @@ test("under All, a query nothing else matches says the repository's files are st
   );
   await settle();
   type("zqx");
+  await settle();
 
   assert.deepEqual(rows(), []);
   assert.equal(emptyLine(), "Reading the repository's files");
@@ -2898,7 +2908,18 @@ test("⌘K draws no Issues filter, with every experiment on, since Luke keeps no
 
   assert.deepEqual(
     filterOptions().map((option) => option.textContent),
-    ["All", "Tasks", "This task", "Threads", "Channels", "People", "Files", "Commands", "Settings"],
+    [
+      "All",
+      "Tasks",
+      "This task",
+      "Threads",
+      "Channels",
+      "People",
+      "Automations",
+      "Files",
+      "Commands",
+      "Settings",
+    ],
   );
 });
 
@@ -2939,6 +2960,46 @@ test("with Channels on, ⌘K's Channels lists the workspace's channels by name a
   await settle();
   assert.deepEqual(opened, [app.id]);
   handState({});
+});
+
+test("⌘K's Automations lists the workspace's automations by name and what fires them, found by their task's name too, and one chosen opens its page", async () => {
+  const automation = {
+    id: "3f0e6f5c-7d1a-4f6e-9a55-000000000002",
+    planId: "7e4f0a9b-0000-4000-8000-0000000000c3",
+    planName: "Billing usage alerts",
+    workspaceId: ACME.id,
+    name: "Deploy notes",
+    enabled: true,
+    pausedReason: null,
+    trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+    action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Write the deploy notes." },
+    guards: AUTOMATION_DEFAULT_GUARDS,
+    nextRunAt: null,
+    lastRun: null,
+    createdAt: 1,
+  } as const;
+  fakeActPort({
+    [ACT_KIND.AUTOMATIONS_LIST]: () => Promise.resolve({ automations: [automation] }),
+  });
+  handState({});
+  const opened: (AutomationsPlace | undefined)[] = [];
+  const base = tasksControl({ workspace: ACME });
+  await paletteUnderState(
+    tasksControl({
+      workspace: ACME,
+      automationsView: { ...base.automationsView, onOpen: (place) => opened.push(place) },
+    }),
+  );
+  await settle();
+  chooseFilter("Automations");
+  await settle();
+
+  assert.deepEqual(rows(), ["Deploy notes · When its webhook is called · Billing usage alerts"]);
+  type("billing");
+  await settle();
+  press("Deploy notes · When its webhook is called · Billing usage alerts");
+  await settle();
+  assert.deepEqual(opened, [{ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id }]);
 });
 
 /** The agent asking the Inbox's questions below, as its task's list sums it up. */
