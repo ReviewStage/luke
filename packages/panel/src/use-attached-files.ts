@@ -4,7 +4,9 @@ import {
   type AgentAttachment,
   base64Bytes,
 } from "@luke/features/agent-wire";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { useRef, useState } from "react";
+import { reportShownFailure } from "./failure-report.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
 import { ATTACH_TAKES, type AttachTakes, base64Of } from "./tasks/attached-files.js";
 import { type FileDrop, useFileDrop } from "./use-file-drop.js";
@@ -72,7 +74,15 @@ async function attachmentOf(file: File): Promise<FileRead> {
   const pdf = file.type === AGENT_ATTACHMENT_TYPE.PDF || name.toLowerCase().endsWith(".pdf");
   const bound = pdf ? AGENT_BOUNDS.MAX_PDF_BYTES : AGENT_BOUNDS.MAX_TEXT_BYTES;
   if (file.size > bound) return { refusal: REFUSAL.TOO_LARGE(name) };
-  const bytes = new Uint8Array(await file.arrayBuffer().catch(() => new ArrayBuffer(0)));
+  const bytes = await file.arrayBuffer().then(
+    (buffer) => new Uint8Array(buffer),
+    (cause: unknown) => {
+      // Note that a file this machine could not read is reported as it is said, since nothing named why.
+      reportShownFailure({ surface: FAILURE_SURFACE.ATTACHMENT_READ, cause }, Date.now());
+      return undefined;
+    },
+  );
+  if (bytes === undefined) return { refusal: REFUSAL.UNREADABLE(name) };
   if (bytes.length === 0) return { refusal: REFUSAL.EMPTY(name) };
   if (!pdf && !spellsText(bytes)) return { refusal: REFUSAL.KIND(name) };
   const mediaType = pdf ? AGENT_ATTACHMENT_TYPE.PDF : AGENT_ATTACHMENT_TYPE.TEXT;

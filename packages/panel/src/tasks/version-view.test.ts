@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { FAILURE_CONDITION } from "@luke/features/shown-failure";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { KEPT, notKept } from "../act.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost, type ToastNotice, useToast } from "../toast.js";
 import { HISTORY_READ } from "./use-plan-history.js";
@@ -124,7 +126,7 @@ test("a restore with a version before it says so with an Undo, which restores th
   act(() =>
     sayRestored(toast, () => {
       undone.push("restored the version before");
-      return Promise.resolve(true);
+      return Promise.resolve(KEPT);
     }),
   );
   assert.ok(undoButton(), "the restore offers its Undo");
@@ -139,7 +141,7 @@ test("a restore with a version before it says so with an Undo, which restores th
 test("an Undo that is refused says the restore could not be undone", async () => {
   mount();
   const toast = show ?? assert.fail("the window shows toasts");
-  act(() => sayRestored(toast, () => Promise.resolve(false)));
+  act(() => sayRestored(toast, () => Promise.resolve(notKept(FAILURE_CONDITION.NOT_KEPT))));
 
   await act(async () => undoButton()?.click());
 

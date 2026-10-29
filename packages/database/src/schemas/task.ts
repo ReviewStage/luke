@@ -16,6 +16,7 @@ import {
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
+  boolean,
   check,
   index,
   integer,
@@ -81,6 +82,8 @@ export const task = pgTable(
       .$type<MergePolicy>()
       .notNull()
       .default(MERGE_POLICY.MERGE_ON_GREEN),
+    /** Whether a pilot tree's agents may work, set on its top task; every task starts stopped. */
+    running: boolean("running").notNull().default(false),
     /** Where the task stands (`TASK_STATUS`). */
     status: text("status").$type<TaskStatus>().notNull().default(TASK_STATUS.TODO),
     /** How much the task matters (`TASK_PRIORITY`); none until someone weighs it. */

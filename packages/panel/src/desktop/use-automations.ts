@@ -9,7 +9,7 @@ import {
 import type { AutomationSummary } from "@luke/features/automation-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useState } from "react";
-import { useAct } from "../act.js";
+import { unreachedAs, useAct } from "../act.js";
 import { useFollowedAutomations } from "./use-followed-automations.js";
 
 /**
@@ -34,7 +34,7 @@ type AutomationsRead =
   | { readonly failure: AutomationCallFailure }
   | undefined;
 
-const UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
+const unreached = unreachedAs(AUTOMATION_CALL_FAILURE.UNANSWERED);
 
 /** A read held with the workspace it is of, so another workspace's list is never drawn as this one's, and whether the push after it failed. */
 interface HeldRead {
@@ -66,12 +66,12 @@ export function useAutomations(workspaceId: string | undefined) {
   });
   const create = useCallback(
     (params: AutomationCreateParams): Promise<AutomationView> =>
-      act(ACT_KIND.AUTOMATIONS_CREATE, params).catch(() => UNANSWERED),
+      act(ACT_KIND.AUTOMATIONS_CREATE, params).catch(unreached),
     [act],
   );
   const change = useCallback(
     (params: AutomationChangeParams): Promise<AutomationView> =>
-      act(ACT_KIND.AUTOMATIONS_CHANGE, params).catch(() => UNANSWERED),
+      act(ACT_KIND.AUTOMATIONS_CHANGE, params).catch(unreached),
     [act],
   );
   /** One automation turned on or off, and why where the service refused it. */
@@ -81,13 +81,13 @@ export function useAutomations(workspaceId: string | undefined) {
   );
   const remove = useCallback(
     (automationId: string): Promise<AutomationDeletedView> =>
-      act(ACT_KIND.AUTOMATIONS_DELETE, { automationId }).catch(() => UNANSWERED),
+      act(ACT_KIND.AUTOMATIONS_DELETE, { automationId }).catch(unreached),
     [act],
   );
   /** A webhook's new secret, answered once for the asking page to show; the list keeps the automation alone. */
   const newWebhookSecret = useCallback(
     (automationId: string): Promise<AutomationView> =>
-      act(ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET, { automationId }).catch(() => UNANSWERED),
+      act(ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET, { automationId }).catch(unreached),
     [act],
   );
   const current = held?.workspaceId === workspaceId ? held : undefined;

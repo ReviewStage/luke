@@ -51,6 +51,8 @@ import { trimmedText } from "./text-schema.js";
  * summary names.
  * A task's agents' pull requests merge on green or wait for a member's go
  * (`MERGE_POLICY`), which its summary names.
+ * A task is running or stopped, the switch a pilot tree's agents follow from
+ * its top task, which its summary names.
  * A task opened whole also names, by id, the tasks it waits on and the tasks
  * that wait on it, as Linear's blocked-by and blocks.
  * The starting account and the conversation a task resumes in are the
@@ -585,6 +587,8 @@ const taskSummaryFields = {
   mode: EffectSchema.optionalKey(taskModeSchema),
   /** What becomes of its agents' pull requests once their checks pass; absent from a service before it, where they merge on green. */
   mergePolicy: EffectSchema.optionalKey(mergePolicySchema),
+  /** Whether a pilot tree's agents may work, set on its top task; absent from a service before it, read as stopped. */
+  running: EffectSchema.optionalKey(EffectSchema.Boolean),
   /**
    * True while a task it waits on (`blockedBy`) is neither done nor
    * canceled, as its sidebar row is marked; absent while none is, and from a

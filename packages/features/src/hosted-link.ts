@@ -26,11 +26,17 @@ import { LIVE_POLL } from "./live-wire.js";
  */
 
 import { HTTP_METHOD, type HttpMethod, type UnparsedWireValue } from "@luke/wire";
-import { type Client, createORPCClient, ORPCError } from "@orpc/client";
+import {
+  type Client,
+  createORPCClient,
+  isORPCErrorJson,
+  MalformedResponseError,
+  ORPCError,
+} from "@orpc/client";
 import type { InferSchemaInput, ProcedureContract } from "@orpc/contract";
 import { createEffectClient, type EffectClient } from "@orpc/experimental-effect";
 import { OpenAPILink } from "@orpc/openapi/fetch";
-import { Cause, type Context, Data, Duration, Effect, Exit, Result, Schema } from "effect";
+import { Cause, type Context, Data, Duration, Effect, Exit, Random, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   accountCall,
@@ -48,8 +54,10 @@ import {
 } from "./contract/errors.js";
 import { hostedContract } from "./contract/index.js";
 import { outputWireSchema } from "./contract/output-schema.js";
+import { FAILURE_FACT, type FailureFacts } from "./failure-facts.js";
 import { hostUpgradeNeededDataSchema } from "./host-wire.js";
 import { installedSkillRefusedDataSchema } from "./installed-skill-route-wire.js";
+import { SENTRY_TRACES_SAMPLE_RATE } from "./sentry-tracing.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -97,6 +105,12 @@ const LONG_DEADLINE_MS = {
   [HOSTED_DEADLINE.BROWSER_OPEN]: 120_000,
 } as const satisfies Record<Exclude<HostedDeadline, typeof HOSTED_DEADLINE.USUAL>, number>;
 
+/** The span a hosted ask runs under, whose trace every attempt it sends carries. */
+const HOSTED_ASK_SPAN = "hosted.ask";
+
+/** The code the link's own error names an error the service declares no refusal for under, its status and oRPC code kept beneath. */
+const UNDECLARED_CODE = "UNDECLARED";
+
 /** The content type the link names a JSON body with, which the account call writes itself. */
 const CONTENT_TYPE_HEADER = "content-type";
 
@@ -118,21 +132,64 @@ type HostedRefusalData = typeof repositoryNotReachableDataSchema.Type &
 export class HostedRefused extends Data.TaggedError("HostedRefused")<{
   readonly refusal: HostedApiError;
   readonly data?: HostedRefusalData;
+  /** The trace the call travelled under, once `askHosted` has answered it. */
+  readonly traceId?: string;
 }> {}
+
+/** What of an answer that arrived the link could not read. */
+const HOSTED_UNREAD = {
+  /** The answer's body did not end within its deadline, or could not be read. */
+  BODY: "body-unread",
+  /** The answer was not the procedure's output as its wire schema reads it. */
+  OUTPUT: "output-unread",
+} as const;
 
 /**
  * The procedure reached no answer the link could read: the call ended before
  * any status (no credential, the holder changed, the network, the deadline),
- * or the service answered something that is neither its output nor a
- * declared refusal. A fault names which; the error's kind is a name, never
- * its words, which could carry a credential.
+ * its answer could not be read, or the service answered an error it declares
+ * no refusal for, such as a server error. A fault names where a call ended
+ * before any status, so a caller can tell a call that never reached the
+ * service from one it answered; an answer that arrived names what of it went
+ * unread, and an undeclared error keeps its HTTP status and oRPC code. The
+ * error's kind is a name, never its words, which could carry a credential.
  */
 export class HostedUnanswered extends Data.TaggedError("HostedUnanswered")<{
   readonly fault?: (typeof CALL_FAULT)[keyof typeof CALL_FAULT];
+  readonly unread?: (typeof HOSTED_UNREAD)[keyof typeof HOSTED_UNREAD];
   readonly errorName?: string;
+  readonly status?: number;
+  readonly code?: string;
+  /** The trace the call travelled under, once `askHosted` has answered it. */
+  readonly traceId?: string;
 }> {}
 
 export type HostedFailure = HostedRefused | HostedUnanswered;
+
+/**
+ * A hosted failure as it crosses to a window beside the answer it was
+ * flattened to (`failure-facts.ts`): the refusal a caller names no failure
+ * for, or where the call ended, what the service answered, and the error's
+ * kind.
+ */
+export function hostedFailureFacts(failed: HostedFailure): FailureFacts {
+  const { traceId } = failed;
+  const trace = traceId === undefined ? undefined : { traceId };
+  if (failed._tag === "HostedRefused") {
+    return { _tag: FAILURE_FACT.HOSTED_REFUSED, refusal: failed.refusal, ...trace };
+  }
+  const { fault, unread, errorName, status } = failed;
+  // Note that what went unread is sent as the code, which an answer the link could not read has no other of.
+  const code = failed.code ?? unread;
+  return {
+    _tag: FAILURE_FACT.HOSTED_UNANSWERED,
+    ...(fault === undefined ? undefined : { fault }),
+    ...(errorName === undefined ? undefined : { errorName }),
+    ...(status === undefined ? undefined : { status }),
+    ...(code === undefined ? undefined : { code }),
+    ...trace,
+  };
+}
 
 /**
  * Each procedure as the link answers it: the output as the wire schema
@@ -297,7 +354,9 @@ async function sent(
     textWithin(response, Duration.millis(call.requestTimeoutMs)),
     init.signal ? { signal: init.signal } : undefined,
   );
-  if (text === undefined) throw new HostedUnanswered({});
+  if (text === undefined) {
+    throw new HostedUnanswered({ unread: HOSTED_UNREAD.BODY, status: response.status });
+  }
   return new Response(text, {
     status: response.status,
     statusText: response.statusText,
@@ -309,10 +368,17 @@ async function sent(
 export function hostedClient(options: HostedClientOptions): HostedClient {
   const link = new OpenAPILink<HostedLinkContext>(hostedContract, {
     fetch: (url, init, call) => sent(options, url, init, call.context),
-    customErrorResponseBodyDecoder: (body) => {
+    customErrorResponseBodyDecoder: (body, response) => {
       // SAFETY: the link's serializer read the body out of the response's JSON text.
       const refused = refusalOf(body as UnparsedWireValue);
-      return refused === undefined ? null : new ORPCError(refused.refusal, { cause: refused });
+      if (refused !== undefined) return new ORPCError(refused.refusal, { cause: refused });
+      // Note that an error the service declares no refusal for, a server error among them, keeps its status and oRPC code, since oRPC's own error carries no status.
+      const code = isORPCErrorJson(body) ? body.code : undefined;
+      const unanswered = new HostedUnanswered({
+        status: response.status,
+        ...(code === undefined ? undefined : { code }),
+      });
+      return new ORPCError(UNDECLARED_CODE, { cause: unanswered });
     },
     interceptors: [
       async ({ next, path }) => {
@@ -321,7 +387,7 @@ export function hostedClient(options: HostedClientOptions): HostedClient {
         if (wire === undefined) return output;
         // SAFETY: the link's serializer read the output out of the response's JSON text.
         const read = readServiceAnswer(wire)(output as UnparsedWireValue);
-        if (Result.isFailure(read)) throw new HostedUnanswered({});
+        if (Result.isFailure(read)) throw new HostedUnanswered({ unread: HOSTED_UNREAD.OUTPUT });
         return read.success;
       },
     ],
@@ -329,9 +395,41 @@ export function hostedClient(options: HostedClientOptions): HostedClient {
   return createEffectClient(createORPCClient<HostedLinkClient<typeof hostedContract>>(link));
 }
 
+/** What a procedure's failure was, read off what oRPC or the link threw. */
+function hostedFailureOf(error: unknown): HostedFailure {
+  if (error instanceof HostedUnanswered) return error;
+  if (error instanceof ORPCError && error.cause instanceof HostedRefused) return error.cause;
+  if (error instanceof ORPCError && error.cause instanceof HostedUnanswered) return error.cause;
+  if (error instanceof MalformedResponseError) {
+    return new HostedUnanswered({ status: error.response.status, errorName: error.name });
+  }
+  return new HostedUnanswered(error instanceof Error ? { errorName: error.name } : {});
+}
+
+/** A failure with the trace its call travelled under, which the service's log lines for it carry. */
+function traced(failed: HostedFailure, traceId: string): HostedFailure {
+  if (failed._tag === "HostedRefused") {
+    const { refusal, data } = failed;
+    return new HostedRefused({ refusal, ...(data === undefined ? undefined : { data }), traceId });
+  }
+  const { fault, unread, errorName, status, code } = failed;
+  return new HostedUnanswered({
+    ...(fault === undefined ? undefined : { fault }),
+    ...(unread === undefined ? undefined : { unread }),
+    ...(errorName === undefined ? undefined : { errorName }),
+    ...(status === undefined ? undefined : { status }),
+    ...(code === undefined ? undefined : { code }),
+    traceId,
+  });
+}
+
 /**
  * One procedure asked on the calling fiber's own services, under the
- * deadline named: its output, or why there was none.
+ * deadline named: its output, or why there was none, with the trace it
+ * travelled under. The ask is a client span of its own, so every attempt it
+ * sends carries that span's trace in `traceparent` (Effect's `HttpClient`
+ * writes it), which the service continues, and is sampled at the rate the
+ * service's traces are, so the flag it sends says whether to trace it.
  */
 export function askHosted<Input, Output>(
   procedure: HostedProcedure<Input, Output>,
@@ -339,15 +437,16 @@ export function askHosted<Input, Output>(
   deadline: HostedDeadline = HOSTED_DEADLINE.USUAL,
 ): Effect.Effect<Output, HostedFailure, HttpClient.HttpClient> {
   return Effect.gen(function* () {
-    const services = yield* Effect.context<HttpClient.HttpClient>();
-    return yield* Effect.mapError(
-      procedure(input, { context: { services, deadline } }),
-      (error): HostedFailure => {
-        if (error instanceof HostedUnanswered) return error;
-        if (error instanceof ORPCError && error.cause instanceof HostedRefused) return error.cause;
-        return new HostedUnanswered({});
-      },
-    );
+    const sampled = (yield* Random.next) < SENTRY_TRACES_SAMPLE_RATE;
+    const asked = Effect.gen(function* () {
+      const span = yield* Effect.orDie(Effect.currentSpan);
+      const services = yield* Effect.context<HttpClient.HttpClient>();
+      return yield* Effect.mapError(
+        procedure(input, { context: { services, deadline } }),
+        (error) => traced(hostedFailureOf(error), span.traceId),
+      );
+    });
+    return yield* Effect.withSpan(asked, HOSTED_ASK_SPAN, { kind: "client", sampled });
   });
 }
 

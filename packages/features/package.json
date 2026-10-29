@@ -126,6 +126,7 @@
     "./contract": "./src/contract/index.js",
     "./contract/browser-client": "./src/contract/browser-client.js",
     "./hosted-link": "./src/hosted-link.js",
+    "./failure-facts": "./src/failure-facts.js",
     "./analytics": "./src/analytics/index.js",
     "./analytics/sender": "./src/analytics/sender.js",
     "./turn-run": "./src/turn-run/index.js",

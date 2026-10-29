@@ -44,7 +44,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import type { ActHandle } from "../act.js";
+import { type ActHandle, KEPT, type Kept } from "../act.js";
 import {
   installWindowHistory,
   useWindowHistory,
@@ -422,7 +422,7 @@ test("a member assigned from a chip goes to main with the name the reader knows 
     { shown: true, tasks: listRead([listed()]) },
     { [ACT_KIND.TASKS_SET_STANDING]: () => Promise.resolve(false) },
   );
-  let kept: Promise<boolean> = Promise.resolve(true);
+  let kept: Promise<Kept> = Promise.resolve(KEPT);
 
   await act(async () => {
     kept = tab
@@ -448,7 +448,7 @@ test("a member assigned from a chip goes to main with the name the reader knows 
       },
     ],
   );
-  assert.equal(await kept, false);
+  assert.equal((await kept).kept, false);
 });
 
 test("New plan opens its dialog over the open plan, which stays open; a second press leaves it as it stands, only a plan that starts closes it, and leaving the tab puts it away", async () => {

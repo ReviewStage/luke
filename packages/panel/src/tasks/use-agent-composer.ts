@@ -8,6 +8,7 @@ import {
 import type { Failure } from "@luke/features/failure-remedy";
 import { sentLineId } from "@luke/wire/host-ids";
 import { useEffect, useRef, useState } from "react";
+import type { AgentActAnswer } from "../act.js";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
 import {
   closesComposer,
@@ -78,10 +79,10 @@ export type MessageSender = (
   text: string,
   clientKey: string,
   attachments: readonly AgentAttachment[],
-) => Promise<AgentAgentAnswer>;
+) => Promise<AgentActAnswer>;
 
 /** How the agent is taken back to just before one of the developer's lines, by its message id, answered as the view hears it. */
-export type MessageRewinder = (agentId: string, messageId: string) => Promise<AgentAgentAnswer>;
+export type MessageRewinder = (agentId: string, messageId: string) => Promise<AgentActAnswer>;
 
 /** Everything the composer draws and presses. */
 export interface AgentComposerControl {
@@ -282,9 +283,9 @@ export function useAgentComposer(input: {
 
   const { update } = kept;
   /** The agent taken back to just before the line named, answered as unanswered where the box was handed no rewind. */
-  const rewindTo = (agentId: string, messageId: string): Promise<AgentAgentAnswer> =>
+  const rewindTo = (agentId: string, messageId: string): Promise<AgentActAnswer> =>
     (latest.current.rewind?.(agentId, messageId) ?? Promise.resolve(UNANSWERED)).catch(
-      (): AgentAgentAnswer => UNANSWERED,
+      (): AgentActAnswer => UNANSWERED,
     );
   /** Sends one line once every line before it has answered, and takes its answer. */
   const deliver = (line: SentLine) => {

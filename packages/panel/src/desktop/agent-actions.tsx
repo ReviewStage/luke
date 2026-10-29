@@ -229,7 +229,7 @@ export function agentTranscriptRead(
 ): TranscriptRead {
   return () =>
     readWholeTranscript(readTranscript, { agentId }).then((messages) =>
-      messages === undefined ? undefined : agentTranscript({ title, messages, brief, quiet }),
+      "unread" in messages ? messages : agentTranscript({ title, messages, brief, quiet }),
     );
 }
 

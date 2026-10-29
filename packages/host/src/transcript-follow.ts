@@ -10,6 +10,7 @@ import {
   type AgentTranscriptMessage,
   applyMessagesPage,
 } from "@luke/features/agent-wire";
+import { FAILURE_FACT, type FailureFacts } from "@luke/features/failure-facts";
 import {
   type AgentTranscriptLiveAnswer,
   agentTranscriptLiveRowsSchema,
@@ -74,8 +75,11 @@ const RESEAL = Duration.seconds(1);
 /** How many times in a row a read the service did not answer is asked for again before the follow says the transcript could not be read. */
 const RESEALS = 30;
 
-/** The service did not answer the transcript's live read, asked `RESEALS` times over. */
-class SealUnanswered extends Data.TaggedError("SealUnanswered")<{ readonly failure: string }> {}
+/** The service did not answer the transcript's live read, asked `RESEALS` times over: the last failure it answered, and what failed beneath it where the client said. */
+class SealUnanswered extends Data.TaggedError("SealUnanswered")<{
+  readonly failure: string;
+  readonly cause?: FailureFacts;
+}> {}
 
 /** Which transcript: an agent's own, or one of its workers' by the delegation call that started it. A task's planning workers are keyed by their composer's own key, on the same terms. */
 export class TranscriptKey extends Data.Class<{
@@ -96,7 +100,7 @@ interface Drawn {
 type LiveState =
   | { readonly kind: typeof LIVE_STATE.WAITING }
   | { readonly kind: typeof LIVE_STATE.STANDING; readonly digest: string; readonly drawn: Drawn }
-  | { readonly kind: typeof LIVE_STATE.BROKEN };
+  | { readonly kind: typeof LIVE_STATE.BROKEN; readonly cause: FailureFacts };
 
 /** What a transcript's read is answered from. */
 type Standing =
@@ -106,9 +110,10 @@ type Standing =
     }
   | { readonly kind: typeof LIVE_STATE.REFUSED };
 
-/** A failure as the service answered one. */
+/** A failure as the service answered one, with what failed beneath it where the client said. */
 interface Failed {
   readonly failure: string;
+  readonly cause?: FailureFacts;
 }
 
 export interface TranscriptFollowDependencies<Key = TranscriptKey> {
@@ -209,7 +214,10 @@ function sealedOf(
       ) {
         return Effect.succeed(Option.none());
       }
-      return Effect.fail(new SealUnanswered({ failure: answer.failure }));
+      const { failure, cause } = answer;
+      return Effect.fail(
+        new SealUnanswered(cause === undefined ? { failure } : { failure, cause }),
+      );
     }),
     Effect.retry({ schedule: Schedule.spaced(RESEAL), times: RESEALS }),
   );
@@ -225,7 +233,11 @@ export function transcriptFollows<Key = TranscriptKey>(
       Effect.gen(function* () {
         // The account the follow starts for, which every poll names, so one under another's session is refused as signed out.
         const userId = dependencies.accountId();
-        const seal = (poll: boolean, after?: string, cursor?: string) =>
+        const seal = (
+          poll: boolean,
+          after?: string,
+          cursor?: string,
+        ): Effect.Effect<AgentTranscriptLiveAnswer | Failed> =>
           userId === undefined
             ? Effect.succeed(LIVE_SIGNED_OUT)
             : dependencies.seal(key, poll, userId, after, cursor);
@@ -247,7 +259,14 @@ export function transcriptFollows<Key = TranscriptKey>(
                 digest: digestOf(decoded),
                 drawn: drawnOf(decoded),
               }),
-          ).pipe(Effect.catch(() => SubscriptionRef.set(state, { kind: LIVE_STATE.BROKEN }))),
+          ).pipe(
+            Effect.catch((broken) =>
+              SubscriptionRef.set(state, {
+                kind: LIVE_STATE.BROKEN,
+                cause: { _tag: FAILURE_FACT.LIVE_BROKEN, reason: broken.reason },
+              }),
+            ),
+          ),
         );
         return { kind: LIVE_STATE.LIVE, state } as const;
       }),
@@ -284,7 +303,19 @@ function unanswered(answer: { readonly failure: string } | object): boolean {
   return "failure" in answer && answer.failure !== AGENT_CALL_FAILURE.NOT_FOUND;
 }
 
-const UNANSWERED_PAGE = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
+/** A page that could not be read, as the window draws it, with what failed beneath it, which the window reports. */
+function unansweredPage(cause: FailureFacts): AgentTranscriptPage {
+  return { failure: AGENT_CALL_FAILURE.UNANSWERED, cause };
+}
+
+/** What a first read the service kept not answering says of itself: the failure it last answered as its code, and what failed beneath that. */
+function sealFacts({ failure, cause }: SealUnanswered): FailureFacts {
+  return {
+    _tag: FAILURE_FACT.SEAL_UNANSWERED,
+    code: failure,
+    ...(cause === undefined ? undefined : { cause }),
+  };
+}
 
 /** How one followed transcript is read at once: its newest page, which the follow opens with, and the page past a cursor, with whether the service's held read would have held on it. */
 export interface TranscriptReads {
@@ -372,7 +403,7 @@ export function followTranscript<Key>(
         if (opening !== undefined) yield* Fiber.interrupt(opening);
         if (sealed._tag === "Failure") {
           yield* RcMap.invalidate(follows, key);
-          return yield* tell(UNANSWERED_PAGE);
+          return yield* tell(unansweredPage(sealFacts(sealed.failure)));
         }
         yield* memory.forget;
         if (toldNotFound) return;
@@ -458,7 +489,7 @@ export function followTranscript<Key>(
         const was = yield* SubscriptionRef.get(state);
         if (was.kind === LIVE_STATE.BROKEN) {
           yield* RcMap.invalidate(follows, key);
-          return yield* tell(UNANSWERED_PAGE);
+          return yield* tell(unansweredPage(was.cause));
         }
         // Note that the rows drawn while the page is read go on being told beside it, because a
         // turn that starts moves the turns and the reply's first words land with it; the page

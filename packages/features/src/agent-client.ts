@@ -87,6 +87,7 @@ import {
 } from "./contract/errors.js";
 import { conversationMediaTypeSchema } from "./conversation-picture-wire.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
+import type { FailureFacts } from "./failure-facts.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
   askHosted,
@@ -95,6 +96,7 @@ import {
   type HostedClient,
   type HostedFailure,
   hostedClient,
+  hostedFailureFacts,
 } from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
 import {
@@ -184,6 +186,7 @@ const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 type Failed = {
   readonly failure: AgentCallFailure;
+  readonly cause?: FailureFacts;
   readonly unreached?: RepositoryUnreached;
   readonly resetsAt?: number;
   readonly provider?: ModelProvider;
@@ -398,10 +401,17 @@ function pullRequestRead(agentId: string, number: number | undefined) {
   return number === undefined ? { id: agentId } : { id: agentId, number: String(number) };
 }
 
+/**
+ * The refusal a hosted failure is, where it is one the caller names, with
+ * the fields that refusal carries; unanswered for everything else, with the
+ * failure beneath it and the trace its call travelled under, which the
+ * window reports and never draws.
+ */
 function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
-  if (failed._tag !== "HostedRefused") return UNANSWERED;
-  const failure = named[failed.refusal];
-  if (failure === undefined) return UNANSWERED;
+  const failure = failed._tag === "HostedRefused" ? named[failed.refusal] : undefined;
+  if (failed._tag !== "HostedRefused" || failure === undefined) {
+    return { ...UNANSWERED, cause: hostedFailureFacts(failed) };
+  }
   const unreached = failed.data?.unreached;
   const resetsAt = failed.data?.resetsAt;
   const provider = failed.data?.provider;
@@ -1260,7 +1270,7 @@ export class HostedAgentClient {
         method: HTTP_METHOD.GET,
         path: agentPicturePath(agentId, pictureId, callId),
       }),
-      (answer) => {
+      (answer): Effect.Effect<AgentInboxAttachmentView> => {
         if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
         if (!answer.response.ok) {
           return Effect.map(jsonOf(answer.response), (body) =>
@@ -1347,7 +1357,7 @@ export class HostedAgentClient {
   ): Effect.Effect<AgentInboxAttachmentView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.GET, path: inboxAttachmentPath(itemId, attachmentId) }),
-      (answer) => {
+      (answer): Effect.Effect<AgentInboxAttachmentView> => {
         if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
         if (!answer.response.ok) {
           return Effect.map(jsonOf(answer.response), (body) =>

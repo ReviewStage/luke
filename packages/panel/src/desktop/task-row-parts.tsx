@@ -1,4 +1,4 @@
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import {
   TASK_PRIORITY,
   TASK_PRIORITY_ORDER,
@@ -116,7 +116,7 @@ export function useStandingDoor(
     if (standsAt(task, standing)) return;
     const named = members?.find((member) => member.userId === standing.assigneeId)?.name;
     void tasks.onSetTaskStanding(task.id, standing, named).then((kept) => {
-      if (kept) return;
+      if (kept.kept) return;
       onRefused?.();
       toast({
         words: UNCHANGED_LINE,
@@ -124,7 +124,7 @@ export function useStandingDoor(
         hold: TOAST_HOLD.FAILED,
         failure: {
           surface: FAILURE_SURFACE.TASK_STANDING,
-          cause: FAILURE_CONDITION.NOT_KEPT,
+          cause: kept.cause,
           about: { taskId: task.id, workspaceId: task.workspaceId },
         },
       });

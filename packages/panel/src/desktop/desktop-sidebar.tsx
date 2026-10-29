@@ -89,9 +89,11 @@ import {
   type CreatorGroup,
   childTaskCounts,
   creatorGroups,
+  type DrawnTaskRow,
   drawnGrouping,
   drawnTaskRows,
   hiddenStatuses,
+  homedTaskRows,
   orderTaskRows,
   type RepositoryGroup,
   repositoryGroups,
@@ -166,7 +168,7 @@ import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
-import { childTasksFold, storedSlot, useNestedRows } from "./nested-rows.js";
+import { childTasksFold, movedBeside, storedSlot, useNestedRows } from "./nested-rows.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { useChannelWaiting, useInboxWaiting } from "./places-waiting.js";
@@ -466,8 +468,9 @@ function LeavingGroups<G>({
  * repository's name where `repository` names one, and the faces `faces`
  * lets it wear (`rowFaceOf`): under a group by creator, its assignee's alone.
  * A task's child tasks among the rows stand nested under it, folded until
- * its chevron opens them, to any depth; one whose parent the rows leave out
- * stands among them at the top (`drawnTaskRows`).
+ * its chevron opens them, to any depth, the sidebar having moved each into
+ * the list holding its parent (`homedTaskRows`); under a fold, the open
+ * one stands at the top (`drawnTaskRows`).
  */
 function TaskRows({
   rows,
@@ -733,27 +736,91 @@ function leaveSection(tasks: TasksControl, member: SectionMember): TaskSectionWr
   return memberSection(tasks.taskSections, member) === undefined ? [] : unplaceAllWrites([member]);
 }
 
-/** The rows of the list walked by ⌥↑ and ⌥↓ that Pinned holds: its plans and its agents with no plan, a pinned tab, or an agent drawn as one, being its holder's. */
-function pinnedTaskRows(rows: readonly PinnedRow[]): TaskRow[] {
+/** The rows Pinned holds of its own, which child tasks stand under: its plans and its agents with no plan, a pinned tab, or an agent drawn as one, being its holder's. */
+function pinnedHeld(rows: readonly PinnedRow[]): TaskRow[] {
   return rows.flatMap((row): TaskRow[] => {
     if (row.pin !== undefined) return [];
     return [row.kind === TASK_ROW.AGENT ? agentRow(row.agent) : taskRow(row.task)];
   });
 }
 
+/** One row Pinned draws: a pin, with how its child tasks stand under it where it is a task's own, or a child task nested under one. */
+type PinnedDrawn =
+  | { readonly pin: PinnedRow; readonly held: DrawnTaskRow | undefined }
+  | { readonly pin: undefined; readonly held: DrawnTaskRow };
+
+/** A row Pinned draws's key: its pin's, or its child task's id. */
+function pinnedDrawnKey(drawn: PinnedDrawn): string {
+  return drawn.pin === undefined ? taskRowKey(drawn.held.row) : pinnedRowKey(drawn.pin);
+}
+
+/** How deep a row Pinned draws stands: a pin at the top, a child task under it. */
+const depthOf = (drawn: PinnedDrawn) => ({ depth: drawn.held?.depth ?? 0 });
+
 /**
- * The Pinned section's rows, each a plan's, an agent's, or a tab's. A tab's
- * row is keyed by when it was pinned, which no other pin shares, and a plan's
- * or an agent's by its id.
+ * The rows Pinned draws, in its order: each pin, a pinned task's own
+ * followed by the child tasks the sidebar stands under it (`adopted`,
+ * `homedTaskRows`), nested and folded as any list's (`drawnTaskRows`); and
+ * after them any of those whose parent `rows` leaves out, as a fold does.
+ */
+function pinnedDrawn(
+  rows: readonly PinnedRow[],
+  adopted: readonly TaskRow[],
+  opened: (taskId: string) => boolean,
+  standing: (row: TaskRow) => boolean,
+): PinnedDrawn[] {
+  const tops = new Map<TaskRow, PinnedRow>();
+  for (const pin of rows) {
+    if (pin.kind === TASK_ROW.TASK && pin.pin === undefined) tops.set(taskRow(pin.task), pin);
+  }
+  const under = new Map<PinnedRow, PinnedDrawn[]>();
+  const strays: PinnedDrawn[] = [];
+  let into = strays;
+  for (const held of drawnTaskRows([...tops.keys(), ...adopted], opened, standing)) {
+    const pin = held.depth === 0 ? tops.get(held.row) : undefined;
+    if (pin !== undefined) {
+      into = [{ pin, held }];
+      under.set(pin, into);
+    } else {
+      if (held.depth === 0) into = strays;
+      into.push({ pin: undefined, held });
+    }
+  }
+  return [...rows.flatMap((pin) => under.get(pin) ?? [{ pin, held: undefined }]), ...strays];
+}
+
+/** The pin a row carried into Pinned lands before, let go at the drawn slot `at`: the count of pins drawn above it. */
+function pinSlot(drawn: readonly PinnedDrawn[], at: number): number {
+  return drawn.slice(0, at).filter((each) => each.pin !== undefined).length;
+}
+
+/** The rows of the list walked by ⌥↑ and ⌥↓ that Pinned holds: its plans, their child tasks, and its agents with no plan, a pinned tab, or an agent drawn as one, being its holder's. */
+function pinnedTaskRows(drawn: readonly PinnedDrawn[]): TaskRow[] {
+  return drawn.flatMap(({ pin, held }): TaskRow[] => {
+    if (pin === undefined) return [held.row];
+    if (pin.pin !== undefined) return [];
+    return [pin.kind === TASK_ROW.AGENT ? agentRow(pin.agent) : taskRow(pin.task)];
+  });
+}
+
+/**
+ * The Pinned section's rows, each a plan's, an agent's, or a tab's, a
+ * plan's child tasks nested under it. A tab's row is keyed by when it was
+ * pinned, which no other pin shares, and a plan's or an agent's by its id.
+ * A pin moves among the pins, its child tasks with it, and a child task
+ * keeps its place under its parent.
  */
 function PinnedRows({
   rows,
+  drawn: listed,
   context,
   onOpenTab,
   movable,
   onDropOut,
 }: {
   rows: readonly PinnedRow[];
+  /** The rows drawn, the pins among them and the child tasks nested under them (`pinnedDrawn`). */
+  drawn: readonly PinnedDrawn[];
   context: RowContext;
   onOpenTab: (pin: SidebarPin) => void;
   /** Whether a row is dragged to another place among them, which a fold drawing only some of them forbids. */
@@ -761,15 +828,28 @@ function PinnedRows({
   /** Hears a row let go over a section or Tasks, while the account keeps sections; none while it does not. */
   onDropOut: ((row: PinnedRow, zone: string, at: number) => void) | undefined;
 }): React.JSX.Element {
-  const move = movable
+  const movePin = movable
     ? (from: number, to: number) => movePinned(rows, from, to, context.tasks)
     : undefined;
+  // Note that a drag counts the rows drawn, child tasks among them, so a pin lands beside the pin it was let go among.
+  const depths = listed.map(depthOf);
+  const move =
+    movePin === undefined
+      ? undefined
+      : (from: number, to: number) => {
+          const beside = movedBeside(depths, from, to);
+          const moved = listed[from]?.pin;
+          const by = beside === undefined ? undefined : listed[beside]?.pin;
+          if (moved !== undefined && by !== undefined) {
+            movePin(rows.indexOf(moved), rows.indexOf(by));
+          }
+        };
   const drag = useRowDrag(move, {
     onDropOut:
       onDropOut === undefined
         ? undefined
         : (from, zone, at) => {
-            const row = rows[from];
+            const row = listed[from]?.pin;
             if (row !== undefined) onDropOut(row, zone, at);
           },
   });
@@ -778,11 +858,11 @@ function PinnedRows({
   const listedAt = new Map(rows.map((row, at) => [pinnedRowKey(row), at]));
   const placeOf = (key: string) => {
     const at = listedAt.get(key);
-    return move === undefined || at === undefined
+    return movePin === undefined || at === undefined
       ? undefined
-      : { at, count: rows.length, onMove: move };
+      : { at, count: rows.length, onMove: movePin };
   };
-  const drawn = useLeaving(rows, pinnedRowKey);
+  const drawn = useLeaving(listed, pinnedDrawnKey);
   return (
     // An open Pinned keeps an order a row carried in lands at a place in; a folded one draws only some of its rows, so a drop lands on top.
     <Stack
@@ -794,7 +874,25 @@ function PinnedRows({
       onPointerDown={drag}
       {...keys}
     >
-      {drawn.map(({ key, value: row }) => {
+      {drawn.map(({ key, value: { pin: row, held } }) => {
+        if (row === undefined) {
+          const child = held.row;
+          return child.kind === TASK_ROW.TASK ? (
+            <SidebarTask
+              key={key}
+              tasks={context.tasks}
+              task={child.task}
+              current={context.marked(child.task.id, undefined)}
+              open={context.current(child.task.id)}
+              unread={context.unread(child.task)}
+              now={context.now}
+              depth={held.depth}
+              fold={childTasksFold(held, context.onFoldTask)}
+              childCount={context.childCount(child.task.id)}
+              onOpen={() => context.onOpen(child.task.id)}
+            />
+          ) : null;
+        }
         if (row.kind === TASK_ROW.AGENT && row.pin !== undefined) {
           const { agent, pin } = row;
           return (
@@ -843,6 +941,8 @@ function PinnedRows({
                 open={context.current(task.id)}
                 unread={context.unread(task)}
                 now={context.now}
+                fold={held === undefined ? undefined : childTasksFold(held, context.onFoldTask)}
+                childCount={context.childCount(task.id)}
                 onOpen={() => context.onOpen(task.id)}
               />
             ) : (
@@ -877,10 +977,13 @@ function PinnedRows({
  * heading over an empty slot, with no fold and no count, since there is
  * nothing to fold or count, and no words of its own, since the heading
  * names what letting go there does and the row in hand is what it does it
- * to. A row's hover Pin and its ⋯ menu still make the first pin.
+ * to. A row's hover Pin and its ⋯ menu still make the first pin. A pinned
+ * plan's child tasks stand under it, folded until it opens them, as in any
+ * list, and are not counted as pins.
  */
 function PinnedSection({
   rows,
+  adopted,
   folds,
   shown,
   context,
@@ -889,6 +992,8 @@ function PinnedSection({
   carried,
 }: {
   rows: readonly PinnedRow[];
+  /** The child tasks standing under its plans (`homedTaskRows`). */
+  adopted: readonly TaskRow[];
   folds: FoldedGroups;
   /** Whether a row is the plan open, the agent whose page stands, or the pinned tab on show, which a fold leaves standing. */
   shown: (row: PinnedRow) => boolean;
@@ -900,7 +1005,14 @@ function PinnedSection({
   carried: boolean;
 }): React.JSX.Element {
   const folded = folds.pinnedFolded;
-  const standing = rows.filter(shown);
+  const { taskOpened } = folds;
+  const drawn = pinnedDrawn(rows, adopted, taskOpened, context.currentRow);
+  const standing = pinnedDrawn(
+    rows.filter(shown),
+    adopted.filter(context.currentRow),
+    taskOpened,
+    context.currentRow,
+  );
   const empty = rows.length === 0;
   return (
     <nav
@@ -919,7 +1031,8 @@ function PinnedSection({
         standing={
           standing.length === 0 ? undefined : (
             <PinnedRows
-              rows={standing}
+              rows={rows.filter(shown)}
+              drawn={standing}
               context={context}
               onOpenTab={onOpenTab}
               movable={false}
@@ -933,6 +1046,7 @@ function PinnedSection({
         ) : (
           <PinnedRows
             rows={rows}
+            drawn={drawn}
             context={context}
             onOpenTab={onOpenTab}
             movable
@@ -1281,6 +1395,56 @@ function drawnTasks(
     case TASK_GROUPING.NONE:
       return nestedRows(sections.rows, folds, current);
   }
+}
+
+/** The rows of each of the sections' lists: each group's, or the one run's. */
+function taskSectionLists(sections: TaskSections): (readonly TaskRow[])[] {
+  return sections.grouping === TASK_GROUPING.NONE
+    ? [sections.rows]
+    : sections.groups.map((group) => group.rows);
+}
+
+/** The sections with each list's rows as `lists` hands them, in `taskSectionLists`'s order, a group left with none taken out. */
+function withTaskLists(
+  sections: TaskSections,
+  lists: readonly (readonly TaskRow[])[],
+): TaskSections {
+  const rowsAt = (at: number) => lists[at] ?? [];
+  switch (sections.grouping) {
+    case TASK_GROUPING.REPOSITORY:
+      return {
+        ...sections,
+        groups: sections.groups
+          .map((group, at) => ({ ...group, rows: rowsAt(at) }))
+          .filter((group) => group.rows.length > 0),
+      };
+    case TASK_GROUPING.ASSIGNEE:
+      return {
+        ...sections,
+        groups: sections.groups
+          .map((group, at) => ({ ...group, rows: rowsAt(at) }))
+          .filter((group) => group.rows.length > 0),
+      };
+    case TASK_GROUPING.CREATOR:
+      return {
+        ...sections,
+        groups: sections.groups
+          .map((group, at) => ({ ...group, rows: rowsAt(at) }))
+          .filter((group) => group.rows.length > 0),
+      };
+    case TASK_GROUPING.NONE:
+      return { ...sections, rows: rowsAt(0) };
+  }
+}
+
+/** A section as it draws `rows` (`homedTaskRows`): the entries of its own rows among them, a child task standing under a parent it holds after them with no entry. */
+function homedSection(drawn: DrawnSection, rows: readonly TaskRow[]): DrawnSection {
+  const kept = new Set(rows);
+  const entries = drawn.entries.filter((_, at) => {
+    const row = drawn.rows[at];
+    return row !== undefined && kept.has(row);
+  });
+  return { ...drawn, entries, rows };
 }
 
 /** What decides where the Tasks section stands its rows: the workspace listed, the grouping, the order, and the filters. */
@@ -2015,6 +2179,7 @@ function SidebarColumn({
     folds.sectionFolded(target.section.id)
       ? at
       : storedSlot(target.rows, drawnTaskRows(target.rows, folds.taskOpened, currentRow), at);
+  // Note that the drops read the sections and Pinned as drawn, child tasks standing under their parents, once the lists below are homed.
   // Note that the sidebar draws a task in one place, so a row dragged into
   // Pinned leaves its section, and one dragged out of Pinned is unpinned and
   // stands where it was let go, under Tasks or in a section.
@@ -2022,7 +2187,7 @@ function SidebarColumn({
     const member = rowMember(row);
     if (zone === PINNED_DROP_ZONE) {
       tasks.onWriteSections(leaveSection(tasks, member));
-      pinAt(pinnedSection, row, at, tasks);
+      pinAt(pinnedSection, row, pinSlot(pinnedDrawnRows, at), tasks);
       return;
     }
     if (zone === TASKS_DROP_ZONE) {
@@ -2030,7 +2195,7 @@ function SidebarColumn({
       if (sectionedIds.has(member.id)) tasks.onWriteSections(unplaceAllWrites([member]));
       return;
     }
-    const target = shownSections.find((drawn) => drawn.section.id === zone);
+    const target = homedSections.find((drawn) => drawn.section.id === zone);
     if (target === undefined) return;
     tasks.onWriteSections(
       placeWrites(target.entries, member, zone, sectionSlot(target, at), Date.now()),
@@ -2047,7 +2212,7 @@ function SidebarColumn({
       if (member !== undefined) tasks.onWriteSections(leaveSection(tasks, member));
       return;
     }
-    const target = shownSections.find((drawn) => drawn.section.id === zone);
+    const target = homedSections.find((drawn) => drawn.section.id === zone);
     if (target === undefined || member === undefined) return;
     unpin(row, tasks);
     tasks.onWriteSections([
@@ -2146,15 +2311,6 @@ function SidebarColumn({
   const sectionRows = sectioned.sections.flatMap((drawn) => drawn.rows);
   const hidden = hiddenStatuses([...sectionRows, ...rows], statuses);
   const statusRows = taskRowsInStatuses(rows, statuses);
-  // The tasks are chosen together across Pinned, the sections, and Tasks, only those the view draws staying chosen.
-  const selection = useTasksSelection(
-    tasks,
-    new Set(
-      [...pinnedSection, ...shownSections.flatMap((drawn) => drawn.rows), ...statusRows].flatMap(
-        (row) => (row.kind === TASK_ROW.TASK ? [row.task.id] : []),
-      ),
-    ),
-  );
   const { grouping, order } = taskView.view;
   const orderView: TaskOrderView = {
     workspaceId: tasks.workspace?.id,
@@ -2192,6 +2348,29 @@ function SidebarColumn({
     },
     placesOf: (_drawn, held) => taskPlaces(statusRows, held, placing),
   });
+  // A child task stands only under its parent, wherever a list draws it, and nowhere where none does (`homedTaskRows`).
+  const pinnedOwn = pinnedHeld(pinnedSection);
+  const homed = homedTaskRows([
+    pinnedOwn,
+    ...shownSections.map((drawn) => drawn.rows),
+    ...taskSectionLists(sections),
+  ]);
+  const pinnedAdopted = (homed[0] ?? []).slice(pinnedOwn.length);
+  const homedSections = shownSections.map((drawn, at) => homedSection(drawn, homed[at + 1] ?? []));
+  const homedTasks = withTaskLists(sections, homed.slice(shownSections.length + 1));
+  const pinnedDrawnRows = pinnedDrawn(pinnedSection, pinnedAdopted, folds.taskOpened, currentRow);
+  // The tasks are chosen together across Pinned, the sections, and Tasks, only those the view draws staying chosen, a child task homed nowhere among those it does not.
+  const selection = useTasksSelection(
+    tasks,
+    new Set(
+      [
+        ...pinnedSection,
+        ...pinnedAdopted,
+        ...homedSections.flatMap((drawn) => drawn.rows),
+        ...taskSectionLists(homedTasks).flat(),
+      ].flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task.id] : [])),
+    ),
+  );
   // A row names its repository as its group's header would, owner and all where two share a name.
   const named = repositoryGroups(unpinned);
   const repositoryOf = (row: TaskRow) => {
@@ -2201,12 +2380,16 @@ function SidebarColumn({
   // The rows as the list draws them: the pinned, then each group not folded
   // away, the open row standing in its place even under a fold, so walking
   // the list still moves from it.
-  const pinnedDrawn = pinnedTaskRows(pinnedSection);
-  const sectionsDrawn = shownSections.flatMap(({ section, rows: held }) =>
+  const pinnedWalked = pinnedTaskRows(pinnedDrawnRows);
+  const sectionsDrawn = homedSections.flatMap(({ section, rows: held }) =>
     nestedRows(folds.sectionFolded(section.id) ? held.filter(currentRow) : held, folds, currentRow),
   );
-  const pinnedShownDrawn = folds.pinnedFolded ? pinnedDrawn.filter(currentRow) : pinnedDrawn;
-  const drawn = [...pinnedShownDrawn, ...sectionsDrawn, ...drawnTasks(sections, folds, currentRow)];
+  const pinnedShownDrawn = folds.pinnedFolded ? pinnedWalked.filter(currentRow) : pinnedWalked;
+  const drawn = [
+    ...pinnedShownDrawn,
+    ...sectionsDrawn,
+    ...drawnTasks(homedTasks, folds, currentRow),
+  ];
   // Moving up and down the list as it reads: down from the home page, where
   // no row is open, is the first row. The ends go no further.
   const at = drawn.findIndex((row) =>
@@ -2344,6 +2527,7 @@ function SidebarColumn({
                       <PinnedSection
                         key={key}
                         rows={pinnedSection}
+                        adopted={pinnedAdopted}
                         folds={folds}
                         shown={pinnedShown}
                         context={context}
@@ -2354,7 +2538,7 @@ function SidebarColumn({
                     )}
                   />
                   <SidebarSections
-                    sections={shownSections}
+                    sections={homedSections}
                     context={{
                       tasks,
                       dialogs: sectionDialogs,
@@ -2477,7 +2661,7 @@ function SidebarColumn({
                       <NoteLine look={NOTE_LINE_LOOK.ROWS}>Sign in to start a task.</NoteLine>
                     )}
                     <TaskGroups
-                      sections={sections}
+                      sections={homedTasks}
                       repositoryOf={repositoryOf}
                       folds={folds}
                       onNewTaskIn={chosen(newTaskIn)}

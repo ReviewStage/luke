@@ -119,17 +119,18 @@ export const WHOLE_TEXT = {
 
 export type WholeText =
   | { readonly kind: typeof WHOLE_TEXT.READ; readonly text: string }
-  | { readonly kind: typeof WHOLE_TEXT.REFUSED }
-  | { readonly kind: typeof WHOLE_TEXT.UNREAD };
+  | { readonly kind: typeof WHOLE_TEXT.REFUSED; readonly cause: unknown }
+  | { readonly kind: typeof WHOLE_TEXT.UNREAD; readonly cause: unknown };
 
 /**
  * A raw read's answer as a copy or a download of the file hears it: the
  * file's text as it holds it, its lines uncut; a file the service refuses
  * to carry whole, as one grown past its bound since it was drawn; or a read
- * that did not land.
+ * that did not land. Either failure keeps the answer that said so, which
+ * its toast reports.
  */
 export function wholeTextOf(answer: TasksFileAnswer): WholeText {
   if ("text" in answer) return { kind: WHOLE_TEXT.READ, text: answer.text.text };
-  if ("refusal" in answer) return { kind: WHOLE_TEXT.REFUSED };
-  return { kind: WHOLE_TEXT.UNREAD };
+  if ("refusal" in answer) return { kind: WHOLE_TEXT.REFUSED, cause: answer };
+  return { kind: WHOLE_TEXT.UNREAD, cause: answer };
 }

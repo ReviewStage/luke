@@ -563,6 +563,29 @@ it.layer(getTestDB())("a task's number", (it) => {
   );
 });
 
+it.layer(getTestDB())("a task's running switch", (it) => {
+  it.effect("a pilot task starts stopped, and every read follows its row once it runs", () =>
+    Effect.gen(function* () {
+      const dean = yield* openAccount;
+      const organizationId = yield* openWorkspace(dean);
+      const pilot = yield* createTask(dean, { organizationId, mode: TASK_MODE.PILOT });
+      const reads = Effect.gen(function* () {
+        const whole = Option.getOrThrow(yield* readTask(dean, pilot.id));
+        const listed = (yield* listTasks(dean)).find((row) => row.id === pilot.id);
+        return [whole.task.running, listed?.running];
+      });
+
+      assert.equal(pilot.running, false);
+      assert.deepEqual(yield* reads, [false, false]);
+
+      yield* Database.use((db) =>
+        db.update(task).set({ running: true }).where(eq(task.id, pilot.id)),
+      );
+      assert.deepEqual(yield* reads, [true, true]);
+    }),
+  );
+});
+
 it.layer(getTestDB())("a task's status and priority", (it) => {
   it.effect("start to do and unweighed, or as the start names them", () =>
     Effect.gen(function* () {

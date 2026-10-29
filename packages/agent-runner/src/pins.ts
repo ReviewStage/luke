@@ -241,6 +241,23 @@ export const SMOLVM_LINUX_PIN = {
   },
 } as const;
 
+/**
+ * The most smolvm's seed folder (`image-seeds/`) may hold, handed to every
+ * `smolvm` Luke runs, on a Mac and a host alike, under smolvm's own
+ * variable: about three seeds of the sandbox image (2.8 GB each), the pin,
+ * the one before it, and a second install's sharing the user's store. smolvm
+ * holds it only right after it builds a seed, which is when the pin moves,
+ * by evicting the least recently used seeds no machine's disk backs onto
+ * until the folder fits. It caps the whole folder, not Luke's image alone:
+ * a seed of another image the user ran can go, and is pulled again on its
+ * next use. `apps/web/install/install.sh` carries the bytes as a literal,
+ * which a test holds to this.
+ */
+export const SMOLVM_SEED_CAP = {
+  VARIABLE: "SMOLVM_IMAGE_SEED_MAX_BYTES",
+  BYTES: 9 * 1024 ** 3,
+} as const;
+
 /** Luke's sandbox image, as CI publishes it from the cloud's own setup script, pinned by digest: what every host agent's VM boots, and what the install script fetches ahead of the first. */
 export const SANDBOX_IMAGE =
   "ghcr.io/reviewstage/luke-sandbox:ea78580d96ce7256@sha256:f6ff07bdc663c9173a856a713e4caa02a725eedd3da4aed0029c662e3b0b33a5";

@@ -57,6 +57,7 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { relayout } from "../testing/resize-observer.js";
 import { ToastHost } from "../toast.js";
 import "../file-tree/index.js";
+import { askKept } from "../act.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
@@ -1127,7 +1128,7 @@ function standingPageMounted(keeps: boolean) {
               sidePanel: DOCUMENT_PANEL,
               onSetTaskStanding: (_taskId, standing) => {
                 sent.push(standing);
-                return Promise.resolve(keeps);
+                return askKept(Promise.resolve(keeps));
               },
             }),
           }),

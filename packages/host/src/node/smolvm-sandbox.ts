@@ -3,6 +3,7 @@ import {
   CLAUDE_CODE_PIN,
   CODEX_PIN,
   SANDBOX_IMAGE,
+  SMOLVM_SEED_CAP,
 } from "@luke/agent-runner/pins";
 import { Duration, Effect, Option, Ref, Schema, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
@@ -69,6 +70,13 @@ import { keptToolBinary, localAgentTool } from "../local-agent-tools.js";
  * throwaway machine, which leaves smolvm's own seed of it behind, so every
  * agent's VM made afterwards starts from a copy of that disk rather than
  * pulling the image again.
+ *
+ * Every `smolvm` it runs is handed the cap on smolvm's seed folder
+ * (`SMOLVM_SEED_CAP`), so the seed of an earlier pin goes once a later one is
+ * built rather than staying for good. smolvm holds the cap itself, evicting
+ * the least recently used seeds no machine's disk backs onto, across the
+ * whole folder: a seed of another image the user built themselves can go
+ * too, and that image is pulled again on its next use.
  *
  * Nothing `smolvm` prints is kept but the last line of a failure to make or
  * start a machine, which names no secret: a credential is only ever a
@@ -261,8 +269,12 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
     typeof options.smolvm === "string"
       ? options.smolvm
       : keptToolBinary(options.stateRoot, options.smolvm);
-  /** A `smolvm` command as the process it is started as. */
-  const spawned = (args: readonly string[]) => ({ command: program, args });
+  /** A `smolvm` command as the process it is started as, the cap on its seed folder beside the device's own environment. */
+  const spawned = (args: readonly string[]) => ({
+    command: program,
+    args,
+    env: { [SMOLVM_SEED_CAP.VARIABLE]: String(SMOLVM_SEED_CAP.BYTES) },
+  });
   const credentialsOf = (agentId: string) => {
     const folder = [options.stateRoot, CREDENTIALS_FOLDER, agentId].join("/");
     return {
@@ -278,6 +290,8 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
       Effect.gen(function* () {
         const started = spawned(args);
         const handle = yield* ChildProcess.make(started.command, [...started.args], {
+          env: started.env,
+          extendEnv: true,
           stdin: "ignore",
           stdout: "ignore",
         });
@@ -295,6 +309,8 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
       Effect.gen(function* () {
         const started = spawned(["machine", "status", "--name", machineOf(agentId), "--json"]);
         const handle = yield* ChildProcess.make(started.command, [...started.args], {
+          env: started.env,
+          extendEnv: true,
           stdin: "ignore",
           stderr: "ignore",
         });
@@ -346,8 +362,8 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
     ]);
     return {
       ...started,
-      // Note that smolvm reads each variable it hands in by name from its own environment, beside the device's own it runs under.
-      env: command.env,
+      // Note that smolvm reads each variable it hands in by name from its own environment, beside the device's own it runs under; the cap is not one of them, so it never enters the VM.
+      env: { ...command.env, ...started.env },
     };
   };
 

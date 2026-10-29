@@ -82,6 +82,7 @@ import {
   TRANSCRIPT_KIND,
 } from "@luke/features/agent-view";
 import { AGENT_ARCHIVER, CONTEXT_WINDOW } from "@luke/features/agent-wire";
+import { FAILURE_FACT, type FailureFacts, GATE_CLOSED_BY } from "@luke/features/failure-facts";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import {
   acknowledgedNow,
@@ -268,20 +269,41 @@ export interface AgentsComposer extends Composer {
   readonly reset: Effect.Effect<void>;
 }
 
-const UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
+/** What a call the closed gate kept from the service answers: unanswered, as the window draws it, with why the host asked nothing. */
+interface GateClosed {
+  readonly failure: typeof AGENT_CALL_FAILURE.UNANSWERED;
+  readonly cause: FailureFacts;
+}
+
+/** Why the service may not be asked now: a run that sends nothing, or no account behind the gate; none where it may. */
+function closedBy({ kernel, account }: AgentsDependencies): string | undefined {
+  if (!kernel.runMode.sendsNetwork) return GATE_CLOSED_BY.NO_NETWORK;
+  return account.capabilitiesActive() ? undefined : GATE_CLOSED_BY.NO_ACCOUNT;
+}
+
+/** The answer of a call the gate kept from the service, saying why, so it is never reported as a service that did not answer. */
+function gateClosed(by: string): GateClosed {
+  return {
+    failure: AGENT_CALL_FAILURE.UNANSWERED,
+    cause: { _tag: FAILURE_FACT.GATE_CLOSED, code: by },
+  };
+}
 
 /** Whether the service may be asked now: a run that sends, behind an open account gate. */
-function gateOf({ kernel, account }: AgentsDependencies): () => boolean {
-  return () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
+function gateOf(dependencies: AgentsDependencies): () => boolean {
+  return () => closedBy(dependencies) === undefined;
 }
 
 /** The service asked behind the gate, over the host's own HTTP client. */
 function askedOf(dependencies: AgentsDependencies, http: HttpClient.HttpClient) {
-  const gate = gateOf(dependencies);
   return <Answer>(
     call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
-  ): Effect.Effect<Answer | typeof UNANSWERED> =>
-    gate() ? Effect.provideService(call, HttpClient.HttpClient, http) : Effect.succeed(UNANSWERED);
+  ): Effect.Effect<Answer | GateClosed> => {
+    const by = closedBy(dependencies);
+    return by === undefined
+      ? Effect.provideService(call, HttpClient.HttpClient, http)
+      : Effect.succeed(gateClosed(by));
+  };
 }
 
 export function composeAgents(
@@ -393,6 +415,8 @@ function composed(
 ): AgentsComposer {
   const { client, kernel } = dependencies;
   const gate = gateOf(dependencies);
+  /** What a follow the gate keeps from the service is told; no account where the gate stands open but names none. */
+  const gateKept = () => gateClosed(closedBy(dependencies) ?? GATE_CLOSED_BY.NO_ACCOUNT);
   const asked = askedOf(dependencies, http);
   const listed = dependencies.listed ?? (() => Effect.void);
   const writeAgent: RowWrite<AgentRow> =
@@ -644,7 +668,7 @@ function composed(
               memoryOf(key),
               tell,
             )
-          : tell(UNANSWERED);
+          : tell(gateKept());
         yield* FiberMap.run(followed, key, follow);
         return {};
       }),
@@ -983,7 +1007,7 @@ function composed(
         const tell = (inbox: AgentInboxChanged["inbox"]) =>
           Effect.sync(() => kernel.emit(GATEWAY_EVENT.INBOX_CHANGED, carried({ scope, inbox })));
         const key = new InboxScopeKey(scope);
-        const follow = gate() ? followInbox(inboxes, key, tell) : tell(UNANSWERED);
+        const follow = gate() ? followInbox(inboxes, key, tell) : tell(gateKept());
         yield* FiberMap.run(inboxFollows, key, follow);
         return {};
       }),
@@ -1134,7 +1158,7 @@ function composed(
         const follow =
           gate() && userId !== undefined
             ? followAccountInbox(accounts, userId, tell)
-            : tell(UNANSWERED);
+            : tell(gateKept());
         yield* FiberHandle.run(accountFollow, follow);
         return {};
       }),
