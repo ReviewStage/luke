@@ -20,6 +20,12 @@ import { Cause, Option, Schema } from "effect";
 /** A tag as a line may carry it: one identifier, nothing shaped like a sentence or a value. */
 const KIND_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 
+/** The tag effect's `SqlError` carries, the one failure whose driver error is read for a code. */
+const SQL_ERROR_TAG = "SqlError";
+
+/** A driver's error code as a line may carry it: a SQLSTATE (`57P01`) or a socket's (`ECONNRESET`), upper-case and short. */
+const CODE_PATTERN = /^[A-Z0-9_]{2,32}$/;
+
 /** What a kind reads where the failure has no tag of that shape: a thrown string, a plain object, a renamed error. */
 const FAILURE_KIND = {
   INTERRUPT: "Interrupt",
@@ -32,6 +38,13 @@ const readKind = Schema.decodeUnknownOption(Kind);
 const readTagged = Schema.decodeUnknownOption(Tagged);
 const readReason = Schema.decodeUnknownOption(Schema.Struct({ reason: Tagged }));
 const readIssue = Schema.decodeUnknownOption(Schema.Struct({ issue: Tagged }));
+const readCode = Schema.decodeUnknownOption(Schema.String.check(Schema.isPattern(CODE_PATTERN)));
+const readSqlCause = Schema.decodeUnknownOption(
+  Schema.Struct({
+    _tag: Schema.Literal(SQL_ERROR_TAG),
+    reason: Schema.Struct({ cause: Schema.Unknown }),
+  }),
+);
 const readWrapper = Schema.decodeUnknownOption(Schema.Struct({ cause: Schema.Unknown }));
 
 /** The failure's own tag, or its error name, where either is shaped like an identifier. */
@@ -68,6 +81,30 @@ export function failureKind(cause: unknown): string {
   if (Option.isNone(kind)) return FAILURE_KIND.UNNAMED;
   const beneath = beneathOf(cause);
   return Option.isNone(beneath) ? kind.value : `${kind.value}: ${beneath.value}`;
+}
+
+/**
+ * What the driver's own error beneath a `SqlError` carries to tell it from
+ * another of its kind, in a few fixed words and never a value: its `code`,
+ * which is a Postgres SQLSTATE (`57P01`) or a socket's (`ECONNRESET`), as
+ * `code 57P01`; or, where it has none, the error's name, as `cause Error`,
+ * since a pool's own "Connection terminated" carries nothing else that is
+ * safe to write; or nothing where the failure is no `SqlError`. A `SqlError`
+ * is classified by its SQLSTATE, so one that reads `UnknownError` is one
+ * whose code no kind of its own was made for, which is why it is read here.
+ */
+export function failureDetail(cause: unknown): Option.Option<string> {
+  const wrapped = wrappedOf(cause);
+  if (Option.isSome(wrapped)) return failureDetail(wrapped.value);
+  const sql = readSqlCause(cause);
+  if (Option.isNone(sql)) return Option.none();
+  const driver = sql.value.reason.cause;
+  const code = readCode(
+    typeof driver === "object" && driver !== null && "code" in driver ? driver.code : undefined,
+  );
+  if (Option.isSome(code)) return Option.some(`code ${code.value}`);
+  const name = driver instanceof Error ? readKind(driver.name) : Option.none();
+  return Option.some(`cause ${Option.getOrElse(name, () => FAILURE_KIND.UNNAMED)}`);
 }
 
 /** The cause as `failureKind` names what it squashes to, or `Interrupt` where nothing failed. */
