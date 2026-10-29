@@ -9,7 +9,11 @@ import {
   readAccountPreferences,
   writeAccountPreferences,
 } from "@luke/database/models/account-store";
-import { claimQueueHead, type QueuedMessageRow } from "@luke/database/models/agent-queue-store";
+import {
+  claimQueueHead,
+  type QueuedMessageRow,
+  readAgentQueue,
+} from "@luke/database/models/agent-queue-store";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import {
   createAutomation,
@@ -251,6 +255,7 @@ import { CODER } from "./coder-host/bounds.js";
 import { instancePublishedCache } from "./coder-host/published.js";
 import { REPLAY_BOUNDS } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
+import { steerCodingAgentWritten } from "./coder-host/steer.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { codingAgentsApp } from "./coding-agents-app.js";
 import { EVE_HOST_TURN } from "./eve-host/bounds.js";
@@ -5308,9 +5313,24 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           }).queue;
         },
       );
+      /** One queued message sent as a hand-off sends it, the hand-off cut off before the message left the queue. */
+      const sentAlone = (message: QueuedMessageRow) =>
+        Effect.flatMap(eveFor(message.userId), (eveAs) =>
+          steerCodingAgentWritten(
+            eveAs,
+            storeWriter({ tools: CODER_TOOL_SET }),
+            message.userId,
+            stored,
+            {
+              text: message.text,
+              clientKey: message.clientKey,
+              sender: { kind: MESSAGE_SENDER.MEMBER, userId: message.userId },
+            },
+          ),
+        ).pipe(Effect.provide(reach));
       /** The maintenance sweep's pass over the queues standing unpaused. */
       const swept = sweepAgentQueues(eveFor).pipe(Effect.provide(reach));
-      return { agent, ask, owner, turnEnded, handedOn, swept, queued, stored };
+      return { agent, ask, owner, turnEnded, handedOn, sentAlone, swept, queued, stored };
     });
 
   /** How many times eve was handed words holding `text`. */
@@ -5364,6 +5384,33 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* swept;
         assert.equal(handedCount(eve, "Edited"), 1);
         assert.deepEqual((yield* queued)?.messages ?? [], []);
+      }),
+  );
+
+  it.effect(
+    "a hand-off cut off after its message went, its claim still standing, is finished by the sweep once the claim lapses, the message sent once",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { swept, queued, stored, sentAlone } = yield* queuedBehindEndedTurn(eve, ["Cut off"]);
+        const head = Option.getOrThrow(yield* claimQueueHead(stored.id));
+        yield* sentAlone(head);
+        assert.deepEqual(
+          (yield* queued)?.messages ?? [],
+          [],
+          "no window lists a message on its way",
+        );
+
+        yield* swept;
+        assert.equal(handedCount(eve, "Cut off"), 1, "a standing claim is not handed on again");
+        yield* TestClock.adjust(Duration.millis(LINE_GRACE_MILLIS + 1));
+        yield* swept;
+        assert.equal(handedCount(eve, "Cut off"), 1, "the repeat under its key sends nothing");
+        assert.deepEqual(
+          Option.getOrThrow(yield* readAgentQueue(stored.userId, stored.id)).messages,
+          [],
+          "the message left the queue rather than standing claimed",
+        );
       }),
   );
 
