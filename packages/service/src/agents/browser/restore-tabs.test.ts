@@ -40,7 +40,7 @@ const openConversation = Effect.gen(function* () {
   const [row] = yield* Database.use((db) =>
     db
       .insert(conversations)
-      .values({ userId: id, kind: CONVERSATION_KIND.CODING_AGENT })
+      .values({ userId: id, kind: CONVERSATION_KIND.AGENT })
       .returning({ id: conversations.id }),
   );
   assert.ok(row);

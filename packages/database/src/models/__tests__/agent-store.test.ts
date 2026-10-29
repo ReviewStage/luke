@@ -161,7 +161,7 @@ it.layer(getTestDB())("the coding-agent store's delegations", (it) => {
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const other = yield* openAccount;
-        const agent = yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT);
+        const agent = yield* openConversation(owner, CONVERSATION_KIND.AGENT);
         const later = yield* openConversation(
           owner,
           CONVERSATION_KIND.CHILD,
@@ -204,7 +204,7 @@ it.layer(getTestDB())("the coding-agent store's line senders", (it) => {
         yield* db.update(user).set({ name: "Charles Pan" }).where(eq(user.id, teammate));
         const target = {
           userId: owner,
-          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.AGENT),
         };
         const writer = yield* storeWriter({ tools: {} });
         /** The line written as a send lands, answering its row's id. */
@@ -320,7 +320,7 @@ it.layer(getTestDB())("the coding-agent store's line places", (it) => {
         const other = yield* openAccount;
         const target = {
           userId: owner,
-          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.AGENT),
         };
         const writer = yield* storeWriter({ tools: {} });
         const turnId = randomUUID();
@@ -399,7 +399,7 @@ it.layer(getTestDB())("the coding-agent store's lines typed into a call", (it) =
         const owner = yield* openAccount;
         const target = {
           userId: owner,
-          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.AGENT),
         };
         const writer = yield* storeWriter({ tools: {} });
         const turnId = randomUUID();
@@ -457,7 +457,7 @@ it.layer(getTestDB())("the coding-agent store's Fast refusals", (it) => {
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const other = yield* openAccount;
-        const agent = yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT);
+        const agent = yield* openConversation(owner, CONVERSATION_KIND.AGENT);
         const refused = yield* settledTurn(owner, agent);
         yield* settledTurn(owner, agent);
 
@@ -483,7 +483,7 @@ it.layer(getTestDB())("the coding-agent store's plan notes of a turn", (it) => {
         const db = yield* Database;
         const owner = yield* openAccount;
         const other = yield* openAccount;
-        const agent = yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT);
+        const agent = yield* openConversation(owner, CONVERSATION_KIND.AGENT);
         yield* settledTurn(owner, agent);
         const running = randomUUID();
         yield* db.insert(turns).values({
@@ -538,7 +538,7 @@ const tasklessAgent = (
   Effect.gen(function* () {
     const db = yield* Database;
     const id = randomUUID();
-    const conversationId = yield* openConversation(userId, CONVERSATION_KIND.CODING_AGENT);
+    const conversationId = yield* openConversation(userId, CONVERSATION_KIND.AGENT);
     yield* db.insert(agentTable).values({
       id,
       organizationId,
@@ -2304,7 +2304,7 @@ it.layer(getTestDB())("the coding-agent store's awaiting lines", (it) => {
         const owner = yield* openAccount;
         const target = {
           userId: owner,
-          conversationId: yield* openConversation(owner, CONVERSATION_KIND.CODING_AGENT),
+          conversationId: yield* openConversation(owner, CONVERSATION_KIND.AGENT),
         };
         const writer = yield* storeWriter({ tools: {} });
         const line = {
@@ -2397,7 +2397,7 @@ it.layer(getTestDB())("the coding-agent store's operators", (it) => {
           .values({
             organizationId: workspace,
             userId: member,
-            conversationId: yield* openConversation(member, CONVERSATION_KIND.CODING_AGENT),
+            conversationId: yield* openConversation(member, CONVERSATION_KIND.AGENT),
             model: "anthropic/claude-opus-5.5",
             effort: "high",
             kind: AGENT_KIND.OPERATOR,

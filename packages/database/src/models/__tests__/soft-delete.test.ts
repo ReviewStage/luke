@@ -35,7 +35,7 @@ const openConversation = (userId: string, parentConversationId?: string) =>
     yield* db.insert(conversations).values({
       id,
       userId,
-      kind: CONVERSATION_KIND.CODING_AGENT,
+      kind: CONVERSATION_KIND.AGENT,
       runtimeSessionId: `session-${id}`,
       ...(parentConversationId === undefined ? undefined : { parentConversationId }),
     });

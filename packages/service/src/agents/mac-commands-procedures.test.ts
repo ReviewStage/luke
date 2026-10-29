@@ -387,7 +387,7 @@ it.layer(getTestDB())("a command run on the developer's Mac", (it) => {
         const conversationId = randomUUID();
         yield* db
           .insert(conversations)
-          .values({ id: conversationId, userId: starter, kind: CONVERSATION_KIND.CODING_AGENT });
+          .values({ id: conversationId, userId: starter, kind: CONVERSATION_KIND.AGENT });
         yield* db.insert(messages).values({
           userId: starter,
           conversationId,

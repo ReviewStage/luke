@@ -188,7 +188,7 @@ const deleteTaskWithAgent = Effect.gen(function* () {
   const conversationId = randomUUID();
   yield* db
     .insert(conversations)
-    .values({ id: conversationId, userId: owner, kind: CONVERSATION_KIND.CODING_AGENT });
+    .values({ id: conversationId, userId: owner, kind: CONVERSATION_KIND.AGENT });
   yield* db.insert(agentTable).values({
     id: randomUUID(),
     organizationId: task.workspaceId,
