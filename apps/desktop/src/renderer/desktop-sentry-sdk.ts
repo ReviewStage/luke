@@ -17,6 +17,8 @@ import {
   browserTracingIntegration,
   captureException,
   eventLoopBlockIntegration,
+  getActiveSpan,
+  getCurrentScope,
   init,
   logger,
   startInactiveSpan,
@@ -102,6 +104,6 @@ export function initDesktopSentry(options: DesktopSentryOptions): DesktopSentry 
       });
     },
     // A log line through main, which sends what the window logs, and an issue where nothing named it.
-    reportShownFailure: (report) => sendShownFailure({ captureException, logger }, report),
+    reportShownFailure: (report) => sendShownFailure({ captureException, logger, getActiveSpan, getCurrentScope }, report),
   };
 }

@@ -8,7 +8,7 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 import { useToastSwipe } from "./toast-swipe.js";
 
 /**
- * toast.tsx -- one passing notice: a glyph for what it reports, its words, an optional second line under them, and at most one action at its end.
+ * toast.tsx -- one passing notice: a glyph for what it reports, its words, an optional second line under them, and at most one action, beside a failure's copy, at its end.
  *
  * A toast is a card of its words, each cut at two lines, led by the glyph its
  * tone picks: a check for what was done, an alert for what was refused, the
@@ -19,7 +19,7 @@ import { useToastSwipe } from "./toast-swipe.js";
  * words, and actions changed on the same card: the glyph it led with fades
  * out under the one it now leads with, which grows in on the spring, and its
  * words fade in anew. One with no action is never pointed at, so
- * clicks pass through it; one with an action (`ToastActions`, passed as
+ * clicks pass through it; one with an action or a copy (`ToastActions`, passed as
  * `actions`) takes the pointer, pauses its hold while the pointer is over it
  * or focus is in it, each of which it keeps apart so that one ending while
  * the other stands lets nothing run, and is dismissed by Escape while focus

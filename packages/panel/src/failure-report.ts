@@ -17,6 +17,11 @@
  * and the app's state read here, whether the machine was online and where
  * the account stood. Note that nothing a person typed has a field to travel
  * in.
+ *
+ * Each report answers the details a person may copy from what showed the
+ * failure (`shownFailureDetails`): the same facts, with the time, the app's
+ * version, and the Sentry event id and trace the reporter answered, so what
+ * they paste to an agent finds the very line and issue that were sent.
  */
 
 import { AGENT_CALL_FAILURE } from "@luke/features/agent-view";
@@ -26,6 +31,8 @@ import {
   type FailureKind,
   type FailureSurface,
   type ShownFailureReport,
+  type ShownFailureSent,
+  shownFailureDetails,
 } from "@luke/features/shown-failure";
 import { ACT_ERROR, type PortActKind } from "@luke/host/contract";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -50,8 +57,8 @@ export interface ShownFailure {
   readonly live?: string;
 }
 
-/** What a shell reports a shown failure through. */
-export type ShownFailureReporter = (report: ShownFailureReport) => void;
+/** What a shell reports a shown failure through, answering what Sentry answered where its SDK stands. */
+export type ShownFailureReporter = (report: ShownFailureReport) => ShownFailureSent | undefined;
 
 /** The account's state where no document has been read yet. */
 const ACCOUNT_UNREAD = "unread";
@@ -116,17 +123,29 @@ export function installShownFailureReporter(installed: ShownFailureReporter): ()
   };
 }
 
+/** Sends `report` through the window's reporter, where it has one; a report that throws answers nothing. */
+function sent(report: ShownFailureReport): ShownFailureSent | undefined {
+  try {
+    return reporter?.(report);
+  } catch (error) {
+    console.error("A failure shown could not be reported.", error);
+    return undefined;
+  }
+}
+
 /**
- * Hands one failure just shown to the window's reporter, with the app's
- * state now; a window with none reports nothing. Note that a report that
- * throws is let go with a line on the console, because whoever showed the
- * failure is showing it as this runs, and the person must still see it.
+ * Hands one failure just shown at `at` to the window's reporter, with the
+ * app's state now, and answers the details a person may copy of it; a
+ * window with no reporter reports nothing and answers them without what
+ * Sentry would have answered. Note that a report or a reading that throws is
+ * let go with a line on the console, answering no details, because whoever
+ * showed the failure is showing it as this runs, and the person must still
+ * see it.
  */
-export function reportShownFailure(failure: ShownFailure): void {
-  if (reporter === undefined) return;
+export function reportShownFailure(failure: ShownFailure, at: number): string | undefined {
   try {
     const state = appStateNow();
-    reporter({
+    const report: ShownFailureReport = {
       surface: failure.surface,
       kind: kindOf(failure),
       cause: failure.cause,
@@ -137,8 +156,10 @@ export function reportShownFailure(failure: ShownFailure): void {
         account: state?.account.status ?? ACCOUNT_UNREAD,
         live: failure.live,
       },
-    });
+    };
+    return shownFailureDetails(report, { at, version: state?.run.appVersion, sent: sent(report) });
   } catch (error) {
     console.error("A failure shown could not be reported.", error);
+    return undefined;
   }
 }

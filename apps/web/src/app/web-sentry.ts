@@ -22,6 +22,7 @@
 
 import { type EarlyReports, reportsOnceStarted } from "@luke/features/sentry-early-reports";
 import { type SentryCapture, sentryReporterLayer } from "@luke/features/sentry-reporting";
+import type { ShownFailureSent } from "@luke/features/shown-failure";
 import type { ShownFailureReporter } from "@luke/panel/failure-report";
 import type { Layer } from "effect";
 
@@ -203,7 +204,15 @@ export function startWebSentry(build: WebSentryBuild): WebSentryReports {
   if (build.dsn) listenForRefusals(say);
   return {
     reportBlankTab: (error) => say((sentry) => sentry.reportBlankTab(error)),
-    reportShownFailure: (report) => say((sentry) => sentry.reportShownFailure(report)),
+    // Note that what Sentry answered is known only where the SDK already stands,
+    // because a report kept for it is sent once it does, long after this answers.
+    reportShownFailure: (report) => {
+      let sent: ShownFailureSent | undefined;
+      say((sentry) => {
+        sent = sentry.reportShownFailure(report);
+      });
+      return sent;
+    },
     errorReporting: sentryReporterLayer({
       captureException: (error, hint) => {
         say((sentry) => sentry.captureException(error, hint));
