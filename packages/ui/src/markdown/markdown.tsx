@@ -28,11 +28,13 @@
  * or a step, so nothing here reaches an app.
  */
 
+import { MOTION_DELAY_MS } from "@luke/brand";
 import type { ElementContent, Root } from "hast";
-import { memo, type ReactNode, useMemo, useRef } from "react";
+import { memo, type ReactNode, useMemo, useRef, useState } from "react";
 import remarkGfm from "remark-gfm";
 import {
   type AllowedTags,
+  type AnimateOptions,
   Block,
   type Components,
   defaultRehypePlugins,
@@ -43,6 +45,7 @@ import {
   type UrlTransform,
 } from "streamdown";
 import { landedMark } from "../components/landed/landed.js";
+import { motionHeld } from "../motion-timing.js";
 import { QUOTE_CLASS } from "../quote-face.js";
 import { MARKDOWN_CLASS, markdownClass } from "./markdown-class.js";
 import {
@@ -104,6 +107,27 @@ export const MARKDOWN_HTML_STEP = {
  * between them.
  */
 const NOTE_REMARK_STEPS: MarkdownSteps = [[remarkGfm, { singleTilde: false }]];
+
+/**
+ * How far ahead of the clock a streaming reply's words may be set to fade
+ * in, in milliseconds. Note that this is the transcript's beat rather than a
+ * motion token: a running agent's reply lands a finished sentence at a time,
+ * up to twice a second, so a sentence is spread over about the wait for the
+ * next one rather than drawn at once, and no further, or its last words would
+ * still be fading in when the next sentence lands after them.
+ */
+const ARRIVING_SPREAD_MS = 480;
+
+/**
+ * How a streaming reply's newest words arrive: each word fades in on its own
+ * (`markdown-motion.css`), a row's stagger after the word before it, and a
+ * sentence that lands whole is spread over at most `ARRIVING_SPREAD_MS`.
+ */
+const WORDS_ARRIVING: AnimateOptions = {
+  sep: "word",
+  stagger: MOTION_DELAY_MS.ROW_STAGGER,
+  maxBacklogMs: ARRIVING_SPREAD_MS,
+};
 
 function heading(level: number, children: ReactNode): React.JSX.Element {
   return (
@@ -238,7 +262,7 @@ export interface MarkdownProps {
   className?: string | undefined;
   /** Whether a note was just landed on, lit once as every place landed on is (`landed.ts`). */
   landed?: boolean | undefined;
-  /** Whether a transcript's words are still arriving, read block by block, an unclosed fence or emphasis drawn as written so far. */
+  /** Whether a transcript's words are still arriving, read block by block, an unclosed fence or emphasis drawn as written so far, the newest fading in. */
   streaming?: boolean | undefined;
   /** The elements the place draws its own way, over the look's own. */
   components?: Components | undefined;
@@ -310,6 +334,28 @@ function WholeWords({
 }
 
 /**
+ * Whether a transcript has streamed since it was drawn, and whether its
+ * newest words fade in as they land. A transcript that has streamed is read
+ * block by block for as long as it is drawn, its words settled or not,
+ * because reading settled words whole draws a new tree in place of the one
+ * on screen, which takes away what the reader selected and cuts off a word
+ * still fading in, the last sentence's most of all, since it lands with the
+ * turn's end. Words fade only where motion is not held, read when the
+ * streaming starts, because a fade's delays would still stagger the words
+ * where its durations are zeroed.
+ */
+function useStreamed(streaming: boolean): { streamed: boolean; fades: boolean } {
+  const [streamed, setStreamed] = useState(streaming);
+  const [fades, setFades] = useState(() => streaming && !motionHeld());
+  // Note that the start is taken in the render that sees it, so its first words fade too.
+  if (streaming && !streamed) {
+    setStreamed(true);
+    setFades(!motionHeld());
+  }
+  return { streamed, fades };
+}
+
+/**
  * Words drawn as the Markdown they were written in. A note and a document
  * are drawn again only when what they are handed changes, since the words
  * are parsed afresh on every draw, and a plan drawing every section on each
@@ -343,10 +389,12 @@ export const Markdown = memo(function Markdown({
     () => ({ input: readTaskInput, ...components }),
     [components],
   );
+  const { streamed, fades } = useStreamed(streaming);
   if (look === MARKDOWN_LOOK.TRANSCRIPT) {
     return (
       <Streamdown
-        mode={streaming ? "streaming" : "static"}
+        mode={streamed ? "streaming" : "static"}
+        {...(fades ? { animated: WORDS_ARRIVING, isAnimating: true } : {})}
         {...(className === undefined ? {} : { className })}
         components={transcriptComponents}
         {...(remarkPlugins === undefined ? {} : { remarkPlugins })}
