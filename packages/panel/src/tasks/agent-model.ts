@@ -439,6 +439,9 @@ export const START_NEEDS_REPOSITORY = "Choose a repository";
 /** What a call refused for a repository out of the workspace's reach says, wherever it is refused. */
 export const REPOSITORY_UNREACHED_NOTE = "Luke cannot reach this task's repository on GitHub.";
 
+/** What a message no answer came back for says, which may have reached the agent all the same. */
+const NOT_HEARD_BACK = "Luke didn't hear back.";
+
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {
   [AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]: REPOSITORY_UNREACHED_NOTE,
@@ -1099,6 +1102,8 @@ function messageNoteWords(failure: AgentCallFailure): string {
       return MESSAGE_NOT_SENT;
     case AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
       return SHARED_FAILURE_NOTE[failure];
+    case AGENT_CALL_FAILURE.UNANSWERED:
+      return NOT_HEARD_BACK;
     default:
       return messageFailureWords(failure);
   }
@@ -1119,7 +1124,7 @@ export function messageFailureWords(failure: AgentCallFailure): string {
       return localAgentRefusalWords(LOCAL_AGENT_REFUSAL.MAC_AWAY, undefined);
     // No answer is not a refusal: the words may have reached the agent, and Retry carries the same key, so they reach it once.
     case AGENT_CALL_FAILURE.UNANSWERED:
-      return "Luke didn't hear back.";
+      return `${NOT_HEARD_BACK} Try again.`;
     case AGENT_CALL_FAILURE.AGENT_RETIRED:
       return MESSAGE_RETIRED;
     case AGENT_CALL_FAILURE.DEVICE_REMOVED:
