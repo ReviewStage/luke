@@ -8,6 +8,7 @@ import {
   AGENT_STATUS,
   type AgentNewestAnswer,
   type AgentPage,
+  type AgentStatus,
   type AgentSummary,
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
@@ -1377,7 +1378,7 @@ function windowRow(seq: number, text: string) {
 /** A page the service answers read at once: its messages, its cursor, its status, and whether its held read would have held. */
 function pageNow(
   cursor: string,
-  options: { holds: boolean; text?: string; status?: typeof AGENT_STATUS.RUNNING },
+  options: { holds: boolean; text?: string; status?: AgentStatus },
 ): TranscriptNowAnswer {
   return {
     messages:
@@ -1538,6 +1539,45 @@ it.effect(
       transcriptRows(live, 3, 2);
       yield* nextPoll;
       assert.equal(asked.at(-1), `messages-now:${AGENT_ID}:3:0`);
+    }),
+);
+
+it.effect(
+  "a line of the developer's that lands awaiting its turn after a stopped turn is told with the agent at work, never under the stopped turn's word",
+  () =>
+    Effect.gen(function* () {
+      const { call, pages, sealTranscript, pageNow: script, pageNewest, live } = yield* subject();
+      sealTranscript(LIVE_ANSWERED);
+      pageNewest(newestPage("1:0", "Reading the invites.", "40"));
+      script(
+        pageNow("1:0", {
+          holds: false,
+          text: "Reading the invites.",
+          status: AGENT_STATUS.CANCELLED,
+        }),
+      );
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      transcriptRows(live, 1);
+      yield* nextPoll;
+
+      // A queue's Resume hands on the member's line, which lands before any turn takes it.
+      const line = windowRow(2, "Open the pull request.");
+      live.transcript.set({
+        window: [{ ...line.row, role: "user", turnStatus: null }],
+        windowParts: [line.part],
+      });
+      yield* nextPoll;
+
+      const told = pages().find(
+        (each) =>
+          isRecord(each) &&
+          isRecord(each.page) &&
+          Array.isArray(each.page.messages) &&
+          each.page.messages.some((message) => isRecord(message) && message.id === "m-2"),
+      );
+      assert.ok(isRecord(told) && isRecord(told.page), "the line was told");
+      assert.equal(told.page.status, AGENT_STATUS.RUNNING);
     }),
 );
 

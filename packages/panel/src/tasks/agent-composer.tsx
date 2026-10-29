@@ -726,15 +726,15 @@ export function AgentComposer({
     else queueing.onQueue();
     return true;
   };
-  // Send says what a send does while it is other than steering: Save for an edit in words, and Queue or Steer
-  // as its glyph alone in the round send's place, as ⌘ turns it.
+  // Send says what a send does while it is other than steering, as its glyph alone in the round send's place:
+  // Save for an edit, and Queue or Steer as ⌘ turns it.
   const sendWay =
     editingQueued && !modifierHeld
-      ? { label: BUTTON.SAVE, icon: <GLYPH.DONE />, inWords: true }
+      ? { label: BUTTON.SAVE, icon: <GLYPH.DONE /> }
       : queuesNow
-        ? { label: BUTTON.QUEUE, icon: <GLYPH.QUEUED />, inWords: false }
+        ? { label: BUTTON.QUEUE, icon: <GLYPH.QUEUED /> }
         : (queues || editingQueued) && modifierHeld
-          ? { label: BUTTON.STEER, icon: <GLYPH.STEER />, inWords: false }
+          ? { label: BUTTON.STEER, icon: <GLYPH.STEER /> }
           : undefined;
 
   // Note that a popover closed by key while the ⋯ stands hands focus to the
@@ -913,9 +913,7 @@ export function AgentComposer({
           strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
           send={{
             label: sendWay?.label ?? sendLabel,
-            ...(sendWay === undefined
-              ? undefined
-              : { inWords: sendWay.inWords, icon: sendWay.icon }),
+            ...(sendWay === undefined ? undefined : { icon: sendWay.icon }),
             chord: wording?.chord,
             empty,
             held: held || !sendable || files.reading,

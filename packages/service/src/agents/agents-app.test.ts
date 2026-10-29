@@ -5781,6 +5781,35 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a message queued just after a message sent to the idle agent waits for the turn that message opens",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { agent, ask, owner } = yield* startedAgent(eve, { running: false });
+        const sent = yield* ask(
+          request(AGENT_MESSAGES, owner, {
+            method: "POST",
+            id: agent.id,
+            body: { text: "Fix the invite expiry.", clientKey: randomUUID() },
+          }),
+        );
+        assert.equal(sent.status, HOSTED_HTTP_STATUS.ACCEPTED);
+
+        const queue = yield* queueChanged(ask, owner, agent.id, {
+          change: QUEUE_CHANGE.ADD,
+          text: "Then open the pull request.",
+          clientKey: randomUUID(),
+        });
+
+        assert.deepEqual(
+          queue.messages.map((message) => message.text),
+          ["Then open the pull request."],
+        );
+        assert.equal(handedCount(eve, "Then open the pull request."), 0);
+      }),
+  );
+
+  it.effect(
     "only the agent's starter changes its queue: a teammate who may message the agent reads its queue and changes none of it",
     () =>
       Effect.gen(function* () {

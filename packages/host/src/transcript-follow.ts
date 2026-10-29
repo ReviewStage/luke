@@ -6,6 +6,7 @@ import {
 import {
   AGENT_BOUNDS,
   AGENT_CURSOR_START,
+  AGENT_STATUS,
   type AgentNewestAnswer,
   type AgentTranscriptMessage,
   applyMessagesPage,
@@ -92,6 +93,8 @@ interface Drawn {
   readonly highest: number;
   /** The conversation's journal revision as delivered beside them, which every change to a message past it counts up; none before the conversation's row lands. */
   readonly revision: number | undefined;
+  /** The developer's lines among them that no turn has taken yet, by id, each of which puts the agent to work. */
+  readonly awaiting: ReadonlySet<string>;
 }
 
 /** What the statements last delivered: what a page beside the messages is read by, as one digest any change to it moves, and the newest messages drawn. */
@@ -178,6 +181,11 @@ function drawnOf(rows: typeof agentTranscriptLiveRowsSchema.Type): Drawn {
     lowest: seqs.length === 0 ? 0 : Math.min(...seqs),
     highest: seqs.length === 0 ? 0 : Math.max(...seqs),
     revision: revisions.length === 0 ? undefined : Math.max(...revisions),
+    awaiting: new Set(
+      rows.window
+        .filter((row) => row.role === MESSAGE_ROLE.USER && row.turnStatus === null)
+        .map((row) => row.id),
+    ),
   };
 }
 
@@ -457,7 +465,16 @@ export function followTranscript<Key>(
             state.drawn.lowest <= seq + 1 && state.drawn.highest > seq
               ? `${state.drawn.highest}:${revision}`
               : window.cursor;
-          yield* tell({ ...page, messages: fresh, caughtUp: true });
+          // Note that a line of the developer's no turn has taken yet puts the agent to work, as the service reads
+          // it (`agentStatusAt`), so it is told running rather than under the last page's word for a turn
+          // it follows, which would draw that turn's end beneath it.
+          const opens = fresh.some((message) => state.drawn.awaiting.has(message.id));
+          yield* tell({
+            ...page,
+            ...(opens ? { status: AGENT_STATUS.RUNNING } : undefined),
+            messages: fresh,
+            caughtUp: true,
+          });
           window = { ...window, messages: applyMessagesPage(window.messages, fresh), cursor };
           yield* memory.keep(window);
         });
