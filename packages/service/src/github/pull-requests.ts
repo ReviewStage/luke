@@ -461,12 +461,27 @@ export function branchStands(
 }
 
 /**
- * One check on a head: its check run's name or its status's context, how it
- * ended, none while it is still to finish, and its page, where GitHub names
- * one. Note that it carries no output the check wrote, because a check's
- * title, summary, and annotations are words its line never carries.
+ * What a head's check is: a check run, which only an App makes
+ * (https://docs.github.com/en/rest/checks/runs#create-a-check-run), or a
+ * commit status, which anyone who may push to the repository may set with
+ * any context and page, and whose combined read does not say who set it.
+ */
+export const HEAD_CHECK_KIND = {
+  RUN: "run",
+  STATUS: "status",
+} as const;
+
+type HeadCheckKind = (typeof HEAD_CHECK_KIND)[keyof typeof HEAD_CHECK_KIND];
+
+/**
+ * One check on a head: what it is, its check run's name or its status's
+ * context, how it ended, none while it is still to finish, and its page,
+ * where GitHub names one. Note that it carries no output the check wrote,
+ * because a check's title, summary, and annotations are words its line never
+ * carries.
  */
 export interface HeadCheck {
+  readonly kind: HeadCheckKind;
   readonly name: string;
   readonly conclusion: GitHubCheckConclusion | null;
   readonly url: string | null;
@@ -579,6 +594,7 @@ export function headChecksOf(
         JSON.stringify(["run", run.id ?? null, run.status, run.conclusion]),
       ),
       checks: answer.check_runs.map((run) => ({
+        kind: HEAD_CHECK_KIND.RUN,
         name: run.name,
         conclusion: runConclusionOf(run.status, run.conclusion),
         url: run.html_url ?? run.details_url ?? null,
@@ -597,6 +613,7 @@ export function headChecksOf(
         JSON.stringify(["status", status.context ?? null, status.state, status.updated_at ?? null]),
       ),
       checks: answer.statuses.map((status) => ({
+        kind: HEAD_CHECK_KIND.STATUS,
         name: status.context ?? DEFAULT_STATUS_CONTEXT,
         conclusion: STATUS_CONCLUSION.get(status.state) ?? null,
         url: status.target_url ?? null,
