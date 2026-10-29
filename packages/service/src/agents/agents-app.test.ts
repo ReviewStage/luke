@@ -8261,6 +8261,54 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
       }),
   );
 
+  it.effect(
+    "a continue of a pilot is a pilot that the agents its source started now report to, its source archived, and a fork of it takes over nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, source, stored, firstTurn } = yield* sourceAgent;
+        // Note that no Start makes a pilot yet, so the source is made one in place.
+        yield* Database.use((db) =>
+          db.update(agentTable).set({ kind: AGENT_KIND.PILOT }).where(eq(agentTable.id, source.id)),
+        );
+        const coder = Option.getOrThrow(
+          yield* createAgent(owner, {
+            taskId: task.id,
+            planSnapshot: "# Invite by link",
+            prompt: null,
+            idempotencyKey: randomUUID(),
+            model: SOL,
+            effort: "low",
+            repository: stored.repository,
+            startedByAgentId: source.id,
+          }),
+        ).agent;
+        const startFrom = (from: { agentId: string; messageId?: string }) =>
+          Effect.map(
+            ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), from })),
+            (answered) => readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, answered).agent,
+          );
+        const stands = (agentId: string) =>
+          Effect.map(readAgent(owner, agentId), (read) => Option.getOrThrow(read));
+
+        yield* startFrom({ agentId: source.id, messageId: firstTurn });
+        assert.equal(
+          (yield* stands(coder.id)).startedByAgentId,
+          source.id,
+          "a fork takes over nothing",
+        );
+
+        const continued = yield* startFrom({ agentId: source.id });
+        assert.deepEqual(
+          [
+            (yield* stands(continued.id)).kind,
+            (yield* stands(coder.id)).startedByAgentId,
+            (yield* stands(source.id)).archivedAt !== null,
+          ],
+          [AGENT_KIND.PILOT, continued.id, true],
+        );
+      }),
+  );
+
   it.effect("a source eve refuses to stop still has its continue started, and runs on", () =>
     Effect.gen(function* () {
       const eve = fakeEve({ cancels: false });
