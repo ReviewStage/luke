@@ -44,5 +44,10 @@ export default defineConfig({
     server: { deps: { inline: ["streamdown", "@pierre/diffs"] } },
     // CI's shards split the files by their recorded time (`scripts/lib/test-shards.mjs`).
     sequence: { sequencer: DurationSharding },
+    // Note that the compiler's Babel pass runs on Vite's main thread as a
+    // test's first lazy import is transformed, inside that test's time: with
+    // Channels on, desktop-shell's sidebar test took 2.35 s against 0.41 s
+    // without it on a laptop, and past 5 s on a CI shard.
+    testTimeout: 15_000,
   },
 });
