@@ -45,6 +45,8 @@ import { trimmedText } from "./text-schema.js";
  * can mark a task at work or with a pull request without a read per row.
  * A task belongs to one workspace, which its summary names; a start names
  * the workspace it starts in, or none for the account's first one.
+ * A task may be the child of another, to any depth, which its summary names
+ * by id.
  * The starting account and the conversation a task resumes in are the
  * service's own and never travel here.
  *
@@ -494,6 +496,8 @@ const taskSummaryFields = {
   assignee: EffectSchema.optionalKey(memberRefSchema),
   /** Where the task's agents run: absent for the cloud, and from a service before tasks said. */
   runsOn: EffectSchema.optionalKey(taskRunsOnSchema),
+  /** The task this one is a child of; absent for a task at the top, and from a service before child tasks. */
+  parentTaskId: EffectSchema.optionalKey(wireUuidSchema),
 };
 
 /** How much of a task's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */

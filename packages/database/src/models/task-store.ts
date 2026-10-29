@@ -260,6 +260,7 @@ const TASK_SUMMARY_COLUMNS = {
   githubAccess: task.githubAccess,
   machine: task.machine,
   deviceId: task.deviceId,
+  parentTaskId: task.parentTaskId,
   completedAt: task.completedAt,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -288,6 +289,7 @@ const TaskSummaryRowSchema = Schema.Struct({
   githubAccess: GitHubAccessSchema,
   machine: MachineSchema,
   deviceId: Schema.NullOr(Schema.String),
+  parentTaskId: Schema.NullOr(Schema.String),
   completedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -638,6 +640,7 @@ function summaryOf(
       ? undefined
       : { assignee: { userId: row.assigneeId, name: assignee } }),
     ...runsOnOf(row, names, devices),
+    ...(row.parentTaskId === null ? undefined : { parentTaskId: row.parentTaskId }),
   };
 }
 
