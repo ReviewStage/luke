@@ -754,16 +754,20 @@ function CheckLead({
  * screen; a press opens its page where it has one. Note that a running
  * count stands only while the Checks tab is shown (`live`), because the
  * tab stays mounted behind `hidden`, and a count left reading the clock
- * there would tick for no one.
+ * there would tick for no one. A GitHub line's card draws its checks with
+ * it too (`line-cards.tsx`), each saying how it ended where its App would be.
  */
-function CheckRow({
+export function CheckRow({
   agentId,
   check,
   live,
+  says,
 }: {
   agentId: string;
   check: PullRequestCheck;
   live: boolean;
+  /** What the row says under its name in place of its App: how a check a GitHub line names ended, since the line names no App. */
+  says?: string | undefined;
 }): React.JSX.Element {
   const openLink = useOpenLink();
   const duration = durationOf(check);
@@ -786,7 +790,7 @@ function CheckRow({
           <VisuallyHidden>, {CHECK_WORDS[check.state]}</VisuallyHidden>
         </>
       }
-      description={check.app ?? undefined}
+      description={says ?? check.app ?? undefined}
       meta={running ? live ? <Time at={startedAt} look={TIME_LOOK.DURATION} /> : null : duration}
       onPress={url === null ? undefined : () => openLink(url)}
       linkHref={url ?? undefined}
@@ -826,8 +830,8 @@ function Checks({
   );
 }
 
-/** The checks' list, which the checks and their placeholder rows both stand in. */
-function CheckList({ children }: { children: ReactNode }): React.JSX.Element {
+/** The checks' list, which the checks and their placeholder rows both stand in, and a GitHub line's card its checks. */
+export function CheckList({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <List label="Check list" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.DENSE}>
       {children}

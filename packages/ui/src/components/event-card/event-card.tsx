@@ -1,6 +1,7 @@
 import { type ReactNode, useState } from "react";
 import { useUntilFound } from "../../use-until-found.js";
 import { CARD_CORNER, CARD_LOOK, CARD_PADDING, Card } from "../card/card.js";
+import { GlyphSlot } from "../glyph-slot/glyph-slot.js";
 import { ShowMoreRow } from "../show-more-row/show-more-row.js";
 import { SubjectLine } from "../subject-line/subject-line.js";
 import { TEXT_ELEMENT, TEXT_FONT, TEXT_VARIANT, Text } from "../text/text.js";
@@ -19,7 +20,8 @@ import { TEXT_ELEMENT, TEXT_FONT, TEXT_VARIANT, Text } from "../text/text.js";
  * The first `EVENT_CARD_NOTES_SHOWN` notes stand, and the rest wait behind
  * the foot every capped list ends in (`ShowMoreRow`), drawn and hidden
  * until found (`use-until-found.ts`), so a find reaches them and opens the
- * card where it lands in one.
+ * card where it lands in one. A card of another frame, a transcript's
+ * folding card, draws the same notes as `EventNotes`.
  */
 
 /** How many of a card's notes stand before the rest fold behind its foot. */
@@ -30,21 +32,67 @@ export interface EventCardNote {
   readonly key: string;
   /** Where it was left, as a link or words, such as `path:line`. */
   readonly where: ReactNode;
+  /** The glyph before its place, such as its file's icon; none for the place alone. */
+  readonly glyph?: ReactNode;
   readonly body: ReactNode;
 }
 
 /** No notes. */
 const NO_NOTES: readonly EventCardNote[] = [];
 
-/** One note: its place in the code's font over its words. */
+/** One note: its glyph and its place in the code's font over its words. */
 function NoteRow({ note }: { note: EventCardNote }): React.JSX.Element {
+  const where = (
+    <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION} font={TEXT_FONT.MONO} truncate>
+      {note.where}
+    </Text>
+  );
   return (
     <li className="flex min-w-0 flex-col gap-luke-4 border-t border-border pt-luke-8">
-      <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION} font={TEXT_FONT.MONO} truncate>
-        {note.where}
-      </Text>
+      {note.glyph == null ? (
+        where
+      ) : (
+        <div className="flex min-w-0 items-center gap-icon-gap">
+          <GlyphSlot>{note.glyph}</GlyphSlot>
+          {where}
+        </div>
+      )}
       <div className="min-w-0">{note.body}</div>
     </li>
+  );
+}
+
+/**
+ * The notes a service left, under what else it said: the first few
+ * standing, the rest behind the foot, drawn hidden until found. A rule
+ * stands over each note, apart from what was said before it, but for a
+ * first note nothing stands before, whose holder's own edge is rule enough.
+ */
+export function EventNotes({
+  notes,
+}: {
+  notes: readonly EventCardNote[];
+}): React.JSX.Element | null {
+  const [open, setOpen] = useState(false);
+  const rest = useUntilFound<HTMLUListElement>(!open, () => setOpen(true));
+  const more = notes.slice(EVENT_CARD_NOTES_SHOWN);
+  if (notes.length === 0) return null;
+  return (
+    <div className="flex min-w-0 flex-col gap-luke-8 first:[&>ul:first-child>li:first-child]:border-t-0 first:[&>ul:first-child>li:first-child]:pt-0">
+      <ul className="m-0 flex min-w-0 list-none flex-col gap-luke-8 p-0">
+        {notes.slice(0, EVENT_CARD_NOTES_SHOWN).map((note) => (
+          <NoteRow key={note.key} note={note} />
+        ))}
+      </ul>
+      {more.length === 0 ? null : (
+        <ul ref={rest} className="m-0 flex min-w-0 list-none flex-col gap-luke-8 p-0">
+          {more.map((note) => (
+            <NoteRow key={note.key} note={note} />
+          ))}
+        </ul>
+      )}
+      <ShowMoreRow more={more.length} shown={open} onToggle={() => setOpen(!open)} />
+    </div>
   );
 }
 
@@ -64,9 +112,6 @@ export function EventCard({
   children?: ReactNode;
   notes?: readonly EventCardNote[] | undefined;
 } & { readonly [data: `data-${string}`]: string | undefined }): React.JSX.Element {
-  const [open, setOpen] = useState(false);
-  const rest = useUntilFound<HTMLUListElement>(!open, () => setOpen(true));
-  const more = notes.slice(EVENT_CARD_NOTES_SHOWN);
   return (
     <Card
       {...attributes}
@@ -77,21 +122,7 @@ export function EventCard({
     >
       <SubjectLine lead={lead}>{subject}</SubjectLine>
       {children == null ? null : <div className="min-w-0">{children}</div>}
-      {notes.length === 0 ? null : (
-        <ul className="m-0 flex min-w-0 list-none flex-col gap-luke-8 p-0">
-          {notes.slice(0, EVENT_CARD_NOTES_SHOWN).map((note) => (
-            <NoteRow key={note.key} note={note} />
-          ))}
-        </ul>
-      )}
-      {more.length === 0 ? null : (
-        <ul ref={rest} className="m-0 flex min-w-0 list-none flex-col gap-luke-8 p-0">
-          {more.map((note) => (
-            <NoteRow key={note.key} note={note} />
-          ))}
-        </ul>
-      )}
-      <ShowMoreRow more={more.length} shown={open} onToggle={() => setOpen(!open)} />
+      <EventNotes notes={notes} />
     </Card>
   );
 }

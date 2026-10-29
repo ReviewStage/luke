@@ -242,6 +242,34 @@ test("GitHub's review is copied as its card reads, from its metadata, without th
   );
 });
 
+test("a check line kept before its metadata said a check failed is copied as its words told the agent, by the pull request rather than the commit", () => {
+  const checks: AgentTranscriptMessage = {
+    ...said(
+      "checks",
+      MESSAGE_ROLE.USER,
+      "Every check finished on `c0ffee5`, the head of your pull request #42.\n\nAt least one failed: read why, fix the cause, and push.",
+    ),
+    metadata: {
+      channel: "github",
+      event: "checks_completed",
+      repository: "acme/relay",
+      number: 42,
+      url: "https://github.com/acme/relay/commit/c0ffee5/checks",
+      by: "github-actions[bot]",
+      sha: "c0ffee5",
+    },
+  };
+  const transcript = agentTranscript({
+    title: "Add teammate invitations",
+    brief: undefined,
+    messages: [said("plan", MESSAGE_ROLE.USER, "Build invitations."), checks],
+  });
+  assert.match(
+    transcriptMarkdown(transcript, TRANSCRIPT_COPY.CONCISE),
+    /## Developer\n\nSome checks failed on #42\n$/u,
+  );
+});
+
 /** The first message of an agent forked from another: the brief, two of the source's three steps, and the developer's note. */
 const FORKED_FIRST = firstMessageText(
   "Fix the tile.",
