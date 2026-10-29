@@ -31,9 +31,7 @@ import { Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
  * the subject lives or who made it; a row of a list under a rule (`LINE`)
  * names one of the things the subject holds. Either is a button where a
  * press opens what it names and text where nothing does, in the same place
- * either way, washed under the pointer as a menu row is; text that hangs a
- * card of its own is still a stop the keyboard rests on, so the card opens on
- * focus as it does from a control (`HOVER_CARD_ROW_FOCUS`). A list names every
+ * either way, washed under the pointer as a menu row is. A list names every
  * thing it holds, never a count of the rest: past a few rows' height it
  * scrolls within the card, fading at the edge where more stands
  * (`HoverCardScroll`), so whatever the subject holds can be reached.
@@ -124,19 +122,6 @@ export const HOVER_CARD_ROW_LOOK = {
 } as const;
 
 export type HoverCardRowLook = (typeof HOVER_CARD_ROW_LOOK)[keyof typeof HOVER_CARD_ROW_LOOK];
-
-/**
- * Whether a row that opens nothing takes the keyboard's focus: text Tab
- * walks past, or a stop Tab rests on, washed as a pressed row is under the
- * keyboard, so a card hung from it (`Tooltip`) opens on focus as it does
- * from a control. A row with a press is a button and takes focus either way.
- */
-export const HOVER_CARD_ROW_FOCUS = {
-  NONE: "none",
-  STOP: "stop",
-} as const;
-
-export type HoverCardRowFocus = (typeof HOVER_CARD_ROW_FOCUS)[keyof typeof HOVER_CARD_ROW_FOCUS];
 
 /** What a row hands on to a hint hung from it, its handlers and its description among them. */
 type HoverCardRowAnchor = Omit<
@@ -298,13 +283,11 @@ export function HoverCardFigures({
 
 /**
  * A row of a card: its glyph, its words on one line, and what stands at its
- * end; a button where a press opens what it names, and otherwise text, which
- * `focus` makes a stop the keyboard rests on. What else it is handed, a hint's
- * handlers and description, it hands on to the row.
+ * end; a button where a press opens what it names, and otherwise text. What
+ * else it is handed, a hint's handlers and description, it hands on to the row.
  */
 export function HoverCardRow({
   look = HOVER_CARD_ROW_LOOK.LINE,
-  focus = HOVER_CARD_ROW_FOCUS.NONE,
   glyph,
   label,
   end,
@@ -313,8 +296,6 @@ export function HoverCardRow({
   ...anchor
 }: {
   look?: HoverCardRowLook;
-  /** Whether a row that opens nothing takes the keyboard's focus, so a card hung from it opens on focus. */
-  focus?: HoverCardRowFocus;
   glyph: ReactNode;
   label: ReactNode;
   /** What stands muted at the row's end: a size, a time, or a mark. */
@@ -334,14 +315,6 @@ export function HoverCardRow({
       {end === undefined ? null : <span className={ROW_END}>{end}</span>}
     </>
   );
-  if (onPress === undefined && focus === HOVER_CARD_ROW_FOCUS.STOP) {
-    return (
-      // biome-ignore lint/a11y/noNoninteractiveTabindex: the row's words hang a card, which the keyboard opens only from a stop it rests on, as a tooltip's trigger takes focus.
-      <span {...anchor} className={`${ROW} ${ROW_FOCUS}`} data-look={look} tabIndex={0}>
-        {row}
-      </span>
-    );
-  }
   return onPress === undefined ? (
     <span {...anchor} className={ROW} data-look={look}>
       {row}

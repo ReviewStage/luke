@@ -79,7 +79,7 @@ export function automationsLiveStatements(
       firing: automationRun.firing,
       status: automationRun.status,
       reason: automationRun.reason,
-      codingAgentId: automationRun.codingAgentId,
+      agentId: automationRun.agentId,
       firedAt: automationRun.firedAt,
       settledAt: automationRun.settledAt,
     })
@@ -117,7 +117,7 @@ export function automationsLiveStatements(
     })
     .from(automation)
     .leftJoinLateral(lastRun, sql`true`)
-    .leftJoin(agentTable, eq(agentTable.id, lastRun.codingAgentId))
+    .leftJoin(agentTable, eq(agentTable.id, lastRun.agentId))
     .leftJoinLateral(latest, sql`true`)
     .where(and(automationReadableBy(userId), eq(automation.organizationId, workspaceId)));
   return Option.map(liveStatementOf(statement), (automations) => ({ automations }));
@@ -155,7 +155,7 @@ export function automationRunsLiveStatements(
     })
     .from(automationRun)
     .innerJoin(automation, eq(automation.id, automationRun.automationId))
-    .leftJoin(agentTable, eq(agentTable.id, automationRun.codingAgentId))
+    .leftJoin(agentTable, eq(agentTable.id, automationRun.agentId))
     .leftJoinLateral(latest, sql`true`)
     .where(
       and(
@@ -212,7 +212,7 @@ export function automationWorkspaceRunsLiveStatements(
     })
     .from(automationRun)
     .innerJoin(automation, eq(automation.id, automationRun.automationId))
-    .leftJoin(agentTable, eq(agentTable.id, automationRun.codingAgentId))
+    .leftJoin(agentTable, eq(agentTable.id, automationRun.agentId))
     .leftJoinLateral(latest, sql`true`)
     .where(and(readable, inArray(automationRun.id, newest)));
   return Option.map(liveStatementOf(statement), (runs) => ({ runs }));

@@ -545,17 +545,10 @@ test("every action an agent's tab and page offer stands in its row's right-click
   }
 });
 
-test("an agent's row draws the one agent menu in its order: Rename and the read mark, then Pin, then Archive, then Permanently delete alone, Show details where the row's menu puts it; Copy link stands nowhere under no workspace", () => {
+test("an agent's row draws the one agent menu in its order: Rename and the read mark, then Pin, then Archive, then Permanently delete alone; Copy link stands nowhere under no workspace", () => {
   const row = mount(RUN);
   const labels = rightClick(row).map((each) => each.textContent);
-  assert.deepEqual(labels, [
-    "Rename",
-    "Mark as unreadU",
-    "PinP",
-    "Archive",
-    "Show details⌥↓",
-    "Permanently delete",
-  ]);
+  assert.deepEqual(labels, ["Rename", "Mark as unreadU", "PinP", "Archive", "Permanently delete"]);
 });
 
 test("an agent row's ⋯ opens the menu its right-click does, the ⋯ a Tab stop after its press", () => {

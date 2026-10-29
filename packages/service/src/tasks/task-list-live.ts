@@ -171,7 +171,7 @@ function agentsStatement(userId: string) {
       ),
     )
     .from(agentTable)
-    .leftJoin(agentPin, and(eq(agentPin.codingAgentId, agentTable.id), eq(agentPin.userId, userId)))
+    .leftJoin(agentPin, and(eq(agentPin.agentId, agentTable.id), eq(agentPin.userId, userId)))
     .leftJoin(starter, eq(starter.id, agentTable.userId))
     .leftJoin(archiver, eq(archiver.id, sql`${agentTable.archivedBy} ->> 'userId'`))
     .leftJoin(conversations, eq(conversations.id, agentTable.conversationId))

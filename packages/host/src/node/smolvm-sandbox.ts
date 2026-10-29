@@ -21,7 +21,10 @@ import { keptToolBinary, localAgentTool } from "../local-agent-tools.js";
  *
  * One machine per agent, named for it, made the first time its runner
  * starts and started again for every later launch, so what the agent
- * installed outside its folder lasts until it is discarded. The machine
+ * installed outside its folder lasts until it is discarded, or until the
+ * pin moves: a stopped machine smolvm says was made from another image is
+ * deleted and made again from the pinned one, with the mounts of now, as
+ * its runner starts, and a running one is never touched. The machine
  * boots the pinned image (`SANDBOX_IMAGE`), the one the cloud's sandbox is
  * built from, with networking on, the agent's folder and the folder of the
  * runner's bundle mounted at the paths they have on the device (the bundle
@@ -88,6 +91,8 @@ const WORKLOAD_USER = "0:0";
 const START_TIMEOUT = Duration.minutes(15);
 /** How long stopping or deleting a machine may take, past the workload's own stop timeout. */
 const STOP_TIMEOUT = Duration.minutes(1);
+/** How long smolvm may take to say what it has of a machine. */
+const STATUS_TIMEOUT = Duration.seconds(30);
 /** How long the signal to the agent's processes may take to be sent. */
 const SIGNAL_TIMEOUT = Duration.seconds(10);
 /** How much of a failure smolvm printed is kept. */
@@ -183,12 +188,36 @@ function vmFolders(folder: string) {
 /** The code smolvm gives a machine that does not exist, under `--error-format json`. */
 const NOT_FOUND = "NOT_FOUND";
 
+/** The states smolvm says a machine that is not running is in, by its own names: made and never started, stopped, or crashed. */
+const STOPPED_STATE = { CREATED: "created", STOPPED: "stopped", FAILED: "failed" } as const;
+const STOPPED_STATES: ReadonlySet<string> = new Set(Object.values(STOPPED_STATE));
+
+/** What smolvm says of a machine under `machine status --json`: its state, and the image it was made from, as it was named. */
+const decodeStatus = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({ state: Schema.String, image: Schema.NullOr(Schema.String) }),
+  ),
+);
+
 /** A failure as smolvm prints it under `--error-format json`: a stable code, and its words. */
 const decodeFailure = Schema.decodeUnknownOption(
   Schema.fromJsonString(
     Schema.Struct({ error: Schema.Struct({ code: Schema.String, message: Schema.String }) }),
   ),
 );
+
+/**
+ * Whether a machine smolvm says was made from `image` runs the pinned one:
+ * the same digest where the pin names one, since a registry may be spelled
+ * with or without its tag beside it (smolvm's own canonical form drops it),
+ * and the same reference otherwise.
+ */
+function isPinned(image: string | null): boolean {
+  const digestOf = (reference: string) => reference.split("@")[1];
+  const pinned = digestOf(SANDBOX_IMAGE);
+  if (image === null) return false;
+  return pinned === undefined ? image === SANDBOX_IMAGE : digestOf(image) === pinned;
+}
 
 /** A failure smolvm printed: its code where it printed one as JSON, and its words, the last line where it did not, cut short. */
 function failureOf(printed: string): { readonly code: string | undefined; readonly words: string } {
@@ -239,6 +268,24 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
     ).pipe(
       Effect.timeoutOption(within),
       Effect.orElseSucceed(() => Option.none<{ code: number; printed: string }>()),
+    );
+
+  /** What smolvm says of the agent's machine; none where it said nothing it could read, as of a machine it does not have. */
+  const statusOf = (agentId: string) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const started = spawned(["machine", "status", "--name", machineOf(agentId), "--json"]);
+        const handle = yield* ChildProcess.make(started.command, [...started.args], {
+          stdin: "ignore",
+          stderr: "ignore",
+        });
+        const printed = yield* Stream.mkString(Stream.decodeText(handle.stdout));
+        return Number(yield* handle.exitCode) === 0 ? decodeStatus(printed) : Option.none();
+      }),
+    ).pipe(
+      Effect.timeoutOption(STATUS_TIMEOUT),
+      Effect.map(Option.flatten),
+      Effect.orElseSucceed(() => Option.none<{ state: string; image: string | null }>()),
     );
 
   /** Whether a `smolvm` command ran and exited 0. */
@@ -400,6 +447,26 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
           const credentials = yield* credentialFolder(agentId);
           for (const each of [credentials.token, credentials.gitAuthorization]) {
             if (!(yield* fileSystem.exists(each))) yield* replaced(each, "");
+          }
+        }
+        // Note that a stopped machine made from another image is deleted, its folder and credentials kept, so the start below makes it again from the pinned one; a running one is never touched.
+        const status = yield* statusOf(agentId);
+        if (
+          Option.exists(status, (each) => STOPPED_STATES.has(each.state) && !isPinned(each.image))
+        ) {
+          const removed = yield* ran(
+            ["machine", "delete", "--name", machineOf(agentId), "-f", "--error-format", "json"],
+            STOP_TIMEOUT,
+          );
+          if (Option.isNone(removed)) {
+            return yield* unavailable(
+              "smolvm did not delete the machine made from an earlier image",
+            );
+          }
+          if (removed.value.code !== 0) {
+            return yield* unavailable(
+              `the machine made from an earlier image could not be deleted: ${failureOf(removed.value.printed).words}`,
+            );
           }
         }
         const start = ["machine", "start", "--name", machineOf(agentId), "--error-format", "json"];

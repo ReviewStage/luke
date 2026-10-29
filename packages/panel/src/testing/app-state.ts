@@ -3,8 +3,15 @@
  */
 
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { LIVE_READ } from "@luke/features/live-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
+import {
+  type AppHostRead,
+  type AppInboxItems,
+  type AppStateDelivery,
+  type AppStateSnapshot,
+  UNREAD,
+} from "@luke/host/app-state";
 import { SETTINGS_ACT_KIND } from "@luke/host/contract";
 import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/settings/microphone";
@@ -50,6 +57,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     tasks: IDLE_TASKS_VIEW,
     agents: { unseen: [] },
     inbox: { waiting: [], tasks: [], taskless: [], automations: [], agents: [], failedRuns: [] },
+    [LIVE_READ.INBOX_ITEMS]: UNREAD,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
@@ -133,4 +141,35 @@ export function handSettings(settings: Partial<AppSettingsView> = {}): void {
       });
     },
   });
+}
+
+/**
+ * Lays the account's feed of every item as given over whatever document
+ * the window was handed, its experiments among it, and answers with how the
+ * feed is delivered again as it moves, as the host tells it.
+ */
+export function handInboxItems(
+  first: AppHostRead<AppInboxItems>,
+): (next: AppHostRead<AppInboxItems>) => void {
+  const handed = fakeAppBridgeCalls().requestAppState;
+  const listeners = new Set<(delivery: AppStateDelivery) => void>();
+  let version = 1;
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: async () => ({
+      ...(handed === undefined ? snapshotWith({}) : await handed()),
+      version,
+      [LIVE_READ.INBOX_ITEMS]: first,
+    }),
+    onAppState: (listener: (delivery: AppStateDelivery) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
+  return (next) => {
+    version += 1;
+    for (const listener of [...listeners]) {
+      listener({ version, entries: { [LIVE_READ.INBOX_ITEMS]: next } });
+    }
+  };
 }

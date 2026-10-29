@@ -30,10 +30,10 @@ import { type TranscriptElement, TranscriptWords } from "./transcript-blocks.js"
  * slash command as a token too; a `/word` that names none stays words. The
  * chip is a button: a press, or Enter once it has the focus, opens the
  * skill's `SKILL.md` in a File tab of the side panel, at the default branch
- * as the repository's skills were read, and it hangs the skill's card,
- * which ⌥↓ opens from the keyboard. An installed skill names no file of the
- * repository's, so its chip is no button that opens nothing: it hangs its
- * card alone, and still takes the focus for it.
+ * as the repository's skills were read, and it hangs the skill's card. An
+ * installed skill names no file of the repository's, so its chip is no
+ * button that opens nothing: it hangs its card alone, and still takes the
+ * focus for it.
  * A chip the composer drew opens the same file on a press
  * (`skill-picker.tsx`). The words stay the message's own underneath, so a
  * copy of the message and a find in the tab read `/name`.

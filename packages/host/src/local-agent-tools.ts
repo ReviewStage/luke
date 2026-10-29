@@ -21,7 +21,9 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/process";
  * again at every answer, so a file changed on disk since is refused and
  * fetched anew. The mark is written
  * last, so a fetch cut off, or a build refused, leaves nothing that is ever
- * run, and the next ask fetches again.
+ * run, and the next ask fetches again. Once a build is answered, the other
+ * releases of the same tool beside it are removed, and nothing outside the
+ * tool's own folder.
  */
 
 const TOOL_FETCH = {
@@ -118,6 +120,22 @@ const fetchTool = Effect.fnUntraced(function* (pin: AgentToolPin, folder: string
 });
 
 /**
+ * The other releases of the pin's tool, each a folder beside the answered
+ * one under `agent-tools/<NAME>`, removed so old builds do not pile up; a
+ * folder a fetch is staging in (named for a dot) is left to that fetch, and
+ * a removal that fails is left for the next ask.
+ */
+const otherVersionsRemoved = (pin: AgentToolPin, toolFolder: string) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    for (const entry of yield* fileSystem.readDirectory(toolFolder)) {
+      if (entry === pin.VERSION || entry.startsWith(".")) continue;
+      yield* fileSystem.remove(path.join(toolFolder, entry), { recursive: true, force: true });
+    }
+  }).pipe(Effect.ignore);
+
+/**
  * Where the pin's binary is kept under the state root once fetched, for a
  * caller that names it before it is had, as a Mac's `smolvm` is named in
  * every command of its sandbox's.
@@ -156,10 +174,13 @@ export const localAgentTool = Effect.fnUntraced(function* (
   // developer's could have written them since: a binary changed since is fetched again.
   const kept =
     marked && (yield* filesAsPinned(pin, folder).pipe(Effect.orElseSucceed(() => false)));
-  if (kept) return Option.some(binary);
-  yield* fetching;
-  return yield* fetchTool(pin, folder).pipe(
-    Effect.as(Option.some(binary)),
-    Effect.orElseSucceed(() => Option.none<string>()),
-  );
+  if (!kept) yield* fetching;
+  const answer = kept
+    ? Option.some(binary)
+    : yield* fetchTool(pin, folder).pipe(
+        Effect.as(Option.some(binary)),
+        Effect.orElseSucceed(() => Option.none<string>()),
+      );
+  if (Option.isSome(answer)) yield* otherVersionsRemoved(pin, path.dirname(folder));
+  return answer;
 });

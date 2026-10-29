@@ -2,7 +2,6 @@ import { type IntegrationTool, toolsCount } from "@luke/features/integration-hea
 import { byName, toolBadge, toolSummary, toolTitle } from "@luke/features/integration-tool-model";
 import { INTEGRATION_NAME, type IntegrationProvider } from "@luke/features/integration-wire";
 import {
-  HOVER_CARD_ROW_FOCUS,
   HoverCard,
   HoverCardHead,
   HoverCardList,
@@ -155,10 +154,8 @@ function ToolLine({ tool }: { tool: IntegrationTool }): React.JSX.Element {
   const name = title === tool.name ? undefined : tool.name;
   const summary = tool.description === "" ? undefined : toolSummary(tool.description);
   const more = [name, summary].filter((part) => part !== undefined).join(". ");
-  // Note that a row hanging a card is a stop the keyboard rests on, so Tab in the server's entered card opens it.
   const row = (
     <HoverCardRow
-      focus={more === "" ? HOVER_CARD_ROW_FOCUS.NONE : HOVER_CARD_ROW_FOCUS.STOP}
       glyph={null}
       label={
         <>

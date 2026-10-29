@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
+import { LIVE_READ } from "@luke/features/live-wire";
 import {
   type AppStateDelivery,
   type AppStateSnapshot,
@@ -240,6 +241,7 @@ export const APP_SLICE = {
   TASKS: sliceAtom("tasks"),
   AGENTS: sliceAtom("agents"),
   INBOX: sliceAtom("inbox"),
+  INBOX_ITEMS: sliceAtom(LIVE_READ.INBOX_ITEMS),
   MAC_COMMANDS: sliceAtom("macCommands"),
   NOTIFICATIONS: sliceAtom("notifications"),
   NETWORK: sliceAtom("network"),

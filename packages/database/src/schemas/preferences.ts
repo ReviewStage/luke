@@ -32,9 +32,9 @@ export const accountPreference = pgTable("account_preference", {
    * which is also what a choice written before the window could be chosen
    * reads as, and `standard` where the smaller window was chosen.
    */
-  codingAgentModel: text("coding_agent_model"),
-  codingAgentEffort: text("coding_agent_effort"),
-  codingAgentContextWindow: text("coding_agent_context_window").$type<ContextWindow>(),
+  agentModel: text("agent_model"),
+  agentEffort: text("agent_effort"),
+  agentContextWindow: text("agent_context_window").$type<ContextWindow>(),
   /**
    * The Claude model a Generate chapters this account presses runs on
    * (`@luke/features/chapters-model-choice`); null until the account

@@ -1,5 +1,5 @@
 #!/bin/sh
-# luke-host -- the host's one command: `uninstall` removes Luke's host as root, from a Linux box with the smolvm the install script put beside it and, with the luke-host user's home, smolvm's state and every machine left behind, or from a Mac for the user who runs it under sudo, with its LaunchAgent, its folder, its logs and its agents' machines; every other command is the daemon's own (lib/luke-host.mjs), run on the Node the release carries.
+# luke-host -- the host's one command: `uninstall` removes Luke's host as root, from a Linux box with the smolvm the install script put beside it and, with the luke-host user's home, smolvm's state and every machine left behind, or from a Mac for the user who runs it under sudo, with its LaunchAgent, its folder, its logs, its agents' machines, and its agents' folders under ~/.luke/agents; every other command is the daemon's own (lib/luke-host.mjs), run on the Node the release carries.
 #
 # Shipped as bin/luke-host in every release tarball, a Mac's among them
 # (scripts/package.ts), and linked from /usr/local/bin by the install script.
@@ -14,14 +14,21 @@ SMOLVM_DIR="/opt/luke-smolvm"
 MAC_LABEL="dev.reviewstage.luke.host.standalone"
 MAC_APP_FOLDER="Library/Application Support/Luke Host"
 MAC_LOG_FOLDER="Library/Logs/Luke Host"
+# The Luke app's own state, whose device.json means its This Mac runs agents for the user, in the ~/.luke/agents folder that both share.
+MAC_APP_STATE_FOLDER="Library/Application Support/Luke"
 
 # Removes a Mac's install for the user who ran the command under sudo: its
 # LaunchAgent booted out, which stops the daemon and every agent's VM with it,
-# then each agent's machine deleted, and its LaunchAgent, folder (the release,
-# the Mac's secret and the agents' folders) and logs removed. Note that the
-# machines are smolvm's, kept in the user's own smolvm store rather than the
+# then each agent's machine deleted, and its LaunchAgent, folder (the release
+# and the Mac's secret) and logs removed, with the agents' folders
+# (~/.luke/agents), which stand under the user's home rather than the install's
+# folder. Note that ~/.luke/clones and ~/.luke/worktrees stay, since every Luke
+# install on the Mac shares them, the desktop app's own repositories among them.
+# Note that the machines are smolvm's, kept in the user's own smolvm store rather than the
 # state, so each is deleted by name, with the smolvm the daemon fetched, before
 # the state goes; smolvm's cache of the sandbox image stays with that store.
+# Note that the agents' folders are the Luke app's too, so they are left where
+# its own state stands for this user, which the install refuses beside this one.
 uninstall_darwin() {
   if [ "$(id -u)" -ne 0 ]; then
     printf 'Run it as root: sudo luke-host uninstall\n' >&2
@@ -38,7 +45,13 @@ uninstall_darwin() {
     exit 1
   fi
   app="$home/$MAC_APP_FOLDER"
-  launchctl bootout "gui/$(id -u "$user")/$MAC_LABEL" >/dev/null 2>&1 || true
+  agent="gui/$(id -u "$user")/$MAC_LABEL"
+  launchctl bootout "$agent" >/dev/null 2>&1 || true
+  # Note that nothing is removed while the LaunchAgent is still loaded, since its daemon and its agents' runners would run on with their folders gone.
+  if launchctl print "$agent" >/dev/null 2>&1; then
+    printf 'Could not stop Luke host for %s, so nothing was removed. Stop it with launchctl bootout %s, then run this again.\n' "$user" "$agent" >&2
+    exit 1
+  fi
   rm -f "$home/Library/LaunchAgents/$MAC_LABEL.plist"
   for smolvm in "$app"/state/agent-tools/smolvm/*/smolvm; do
     [ -x "$smolvm" ] || continue
@@ -53,6 +66,12 @@ uninstall_darwin() {
     rm -f /usr/local/bin/luke-host
   fi
   rm -rf "$app" "$home/$MAC_LOG_FOLDER"
+  if [ -e "$home/$MAC_APP_STATE_FOLDER/device.json" ]; then
+    printf 'The Luke app runs agents on this Mac for %s too, so ~/.luke/agents was left in place.\n' "$user"
+  else
+    rm -rf "${home:?}/.luke/agents"
+    rmdir "$home/.luke" 2>/dev/null || true
+  fi
   printf 'Luke host is removed from this Mac for %s. Remove it in Settings › Hosts too, if it is still listed.\n' "$user"
 }
 

@@ -55,7 +55,6 @@ import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.j
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
 import { ShellRoomContext, useStageRoom } from "./stage-room.js";
 import { useSteadyDoor, useSteadyDoors } from "./steady-door.js";
-import { HeldInboxesProvider } from "./tasks/held-inboxes.js";
 import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
 import { loadedTasksFixture, useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
@@ -185,14 +184,9 @@ export function App(): React.JSX.Element {
   const account = useAppSlice(APP_SLICE.ACCOUNT);
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
-  // Note that the account's key is read above the window, because every message box's Dictate reads it,
-  // and the inboxes it holds for the session are that account's.
+  // Note that the account's key is read above the window, because every message box's Dictate reads it.
   return (
-    <OpenAiKeyProvider account={accountKey}>
-      <HeldInboxesProvider account={accountKey}>
-        {landed ? <AppWindow /> : null}
-      </HeldInboxesProvider>
-    </OpenAiKeyProvider>
+    <OpenAiKeyProvider account={accountKey}>{landed ? <AppWindow /> : null}</OpenAiKeyProvider>
   );
 }
 

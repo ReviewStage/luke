@@ -33,7 +33,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { focusRestOn, restOn } from "../testing/hint-rest.js";
+import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
@@ -395,46 +395,4 @@ test("off an agent, as in a plan's or Luke's words, the server's row has no swit
     "List the team's issues.",
     "the tool's one-line row hangs what it does",
   );
-});
-
-test("a keyboard in the server's card reaches what a tool does: Tab to its row opens its card", async () => {
-  document.documentElement.dataset.keyboard = "true";
-  try {
-    const container = await drawn(createElement(TranscriptWords, { text: `Check ${SERVER}.` }));
-    const chip =
-      container.querySelector<HTMLElement>("[data-mention-ref]") ??
-      assert.fail("the server's chip stands");
-    focusRestOn(chip);
-    await settle();
-    act(() => {
-      chip.dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "ArrowDown",
-          code: "ArrowDown",
-          altKey: true,
-          bubbles: true,
-          cancelable: true,
-        }),
-      );
-    });
-    const card =
-      document.querySelector<HTMLElement>(".luke-tooltip-card:has(> [data-server-card])") ??
-      assert.fail("⌥↓ enters the server's card");
-    assert.ok(card.contains(document.activeElement), "focus is in the server's card");
-
-    // Tab, then the browser moving focus on to the first tool's row.
-    const row =
-      card.querySelector<HTMLElement>('ul[aria-label$=" tools"] > li > *') ??
-      assert.fail("the tool's row stands");
-    focusRestOn(row);
-    await settle();
-    assert.ok(document.activeElement === row, "the tool's row takes the keyboard's focus");
-    assert.equal(
-      document.querySelector("[data-tool-card] .luke-hover-card-note")?.textContent,
-      "Comment on an issue.",
-      "the row's focus opens what the tool does",
-    );
-  } finally {
-    delete document.documentElement.dataset.keyboard;
-  }
 });

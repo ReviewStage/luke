@@ -21,13 +21,8 @@
  * control. While the pointer is on it, only Escape among the keys takes it
  * down, so the shortcut that copies a selection reaches it. A card may hold
  * buttons and links, as GitHub's and Linear's do, and choosing one takes it
- * down. The keyboard reaches it too: ⌥↓ on its control (`SHOW_DETAILS`), or
- * Show details in the control's row menu (`showDetailsFrom`), opens it at
- * once, or takes the one already showing on the control's focus, as a
- * non-modal popover with focus inside it, so Tab walks its buttons and
- * links; Escape takes it down and hands focus back to the control, one card
- * at a time where a card hangs from a control on another, and focus leaving
- * it for anywhere else takes it down. A pill hung from words or a mark
+ * down; like theirs, it is the pointer's preview, which the keyboard never
+ * enters, so what a card's buttons do is offered elsewhere too. A pill hung from words or a mark
  * inside a control that hangs a card, as a row's name cut short is, never
  * shows: the pointer on them rests on the card's control, whose card shows
  * as it would anywhere else in it. A control of its own inside, as a chip's
@@ -92,12 +87,10 @@
 import { useAtomSet } from "@effect/atom-react";
 import { MOTION_DELAY_MS } from "@luke/brand";
 import {
-  APP_COMMAND,
   APP_SHORTCUTS,
   type KeyedCommand,
   type ShortcutChord,
   shortcutAria,
-  shortcutMatches,
 } from "@luke/settings/shortcuts";
 import { Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
@@ -185,19 +178,14 @@ type Heard = (typeof HEARD)[keyof typeof HEARD];
 /** What carries a context menu, whose long press is the menu's rather than a hint's (`useMenu`'s `contextMenu`). */
 const LONG_PRESS_MENU = "[data-long-press]";
 
-/** The chord that opens a focused control's card and takes focus into it. */
-const DETAILS_CHORD = APP_SHORTCUTS[APP_COMMAND.SHOW_DETAILS].chord;
-
-/** The ways into a control's card: opened at once with the keyboard in it, or waited for as the pointer resting on it waits, a finger's at once. */
+/** The way into a control's card: waited for as the pointer resting on it waits, a finger's at once. */
 interface CardDoor {
-  readonly enter: () => void;
   readonly rest: (touched: boolean) => void;
 }
 
 /**
- * How each control hanging a card opens it, by the control's element, so a
- * menu opened from it can open that card (`showDetailsFrom`) and words
- * inside it raise that card in their pill's place (`cardDoorAround`). Note
+ * How each control hanging a card opens it, by the control's element, so
+ * words inside it raise that card in their pill's place (`cardDoorAround`). Note
  * that it is keyed by the element, as the tooltip learns it from its ref
  * where the control is an element of the page's own, or else from the first
  * pointer or focus on it, because a control takes only the handlers a hint
@@ -323,13 +311,12 @@ interface AnchorProps {
 /**
  * A pill standing: the control it names, the row a card hung from it hangs
  * beside, whether a finger opened it, by a tap or a long press, rather than a
- * pointer resting or the keyboard, and whether the keyboard entered its card.
+ * pointer resting or the keyboard.
  */
 interface Shown {
   anchor: HTMLElement;
   region: HTMLElement | undefined;
   touched: boolean;
-  entered: boolean;
 }
 
 /** A pill drawn: what it stands for, and the words it says, kept through its exit. */
@@ -388,17 +375,6 @@ export function hintedControlOf(node: Node): HTMLElement | undefined {
 /** The chord as `aria-keyshortcuts` spells it, for a control that shows its shortcut without a tooltip. */
 export function commandKeyshortcuts(command: KeyedCommand): string {
   return shortcutAria(APP_SHORTCUTS[command].chord);
-}
-
-/**
- * The way to open, and enter, the card of the control `from` stands for, as
- * Show details in its menu does: the control itself, or one it stands in.
- * Note that a control inside it, as a creator's face on a task's row, is
- * never asked, because its card is of another thing than the row. Nothing
- * where no card hangs there.
- */
-export function showDetailsFrom(from: HTMLElement | null | undefined): (() => void) | undefined {
-  return cardDoorFrom(from ?? null)?.enter;
 }
 
 /** The door of the control hanging a card that `from` is, or stands in. */
@@ -518,7 +494,7 @@ function Hint({
   onCardPress: () => void;
   onCardChoice: () => void;
 }): React.JSX.Element {
-  const { anchor, region, entered } = drawn.shown;
+  const { anchor, region } = drawn.shown;
   const placed = { id, anchor, leaving, ref: hold };
   if (card !== undefined) {
     // Note that a card hung from a row hangs beside the whole row, because
@@ -530,7 +506,6 @@ function Hint({
         {...placed}
         anchor={region ?? anchor}
         beside={cardBeside}
-        entered={entered ? drawn.label : undefined}
         onHover={onCard}
         onPress={onCardPress}
         onChoice={onCardChoice}
@@ -565,9 +540,8 @@ function Hint({
  * is; `cardBeside` hangs it past the control's end rather
  * than under it, as a list row's card hangs, or before its start where the
  * window ends past the control. A card's buttons and links
- * take it down once chosen; ⌥↓ on the control opens its card and takes
- * focus into it, where Tab walks them and Escape hands focus back, and the
- * control says so in its `aria-keyshortcuts`. `cardRegion` is the row the
+ * take it down once chosen, and stay the pointer's alone, so the card is a
+ * description the keyboard never enters. `cardRegion` is the row the
  * control stands in, the whole of which counts as the control while its
  * card stands, and which the card hangs from in the control's place.
  */
@@ -629,12 +603,6 @@ export function Tooltip({
       return;
     }
     if (!carded) warmUntil = performance.now() + WARM_MS;
-    // A card the keyboard is in hands focus back to its control as it goes.
-    const stood = latest();
-    const focused = document.activeElement;
-    if (stood?.entered === true && focused !== null && pillElement.current?.contains(focused)) {
-      stood.anchor.focus({ preventScroll: true });
-    }
     // A card going takes down the cards hung from its controls with it.
     const at = standing.findIndex((each) => each.id === id);
     if (at !== -1) takeDownOver(at + 1, id);
@@ -645,7 +613,7 @@ export function Tooltip({
   }, [latest, stopRest, carded, id, setShown, linger]);
   // The hint up over `anchor`, over the standing card it stands on, if any,
   // and in place of every other.
-  const stand = (anchor: HTMLElement, touched: boolean, entered = false) => {
+  const stand = (anchor: HTMLElement, touched: boolean) => {
     if (label === undefined) return;
     // Note that a control on a standing card hangs its own over it and
     // leaves the card beneath standing, because the pointer is still on it.
@@ -653,7 +621,7 @@ export function Tooltip({
     takeDownOver(beneath + 1, id);
     unstack(id);
     const row = region();
-    setShown({ anchor, region: row, touched, entered });
+    setShown({ anchor, region: row, touched });
     standing.push({
       id,
       anchor,
@@ -691,33 +659,15 @@ export function Tooltip({
     }
     rest(() => stand(anchor, false));
   };
-  // The card opened at once over `anchor`, or the one standing there, with
-  // the keyboard in it.
-  const enter = (anchor: HTMLElement) => {
-    if (!carded || label === undefined) return;
-    const stood = latest();
-    linger(Atom.Interrupt);
-    if (stood?.anchor === anchor) {
-      setShown({ ...stood, entered: true });
-      return;
-    }
-    stopRest();
-    stand(anchor, false, true);
-  };
-  // Note that the doors to the card read the latest `enter` and `show`, because they are offered once for as long as the card is.
-  const enterRef = useRef(enter);
+  // Note that the door to the card reads the latest `show`, because it is offered once for as long as the card is.
   const showRef = useRef(show);
   useLayoutEffect(() => {
-    enterRef.current = enter;
     showRef.current = show;
   });
-  // A card on screen lingers for the pointer crossing to it, unless the
-  // keyboard is in it; a pill goes at once, and a hint still waiting is
-  // called off.
+  // A card on screen lingers for the pointer crossing to it; a pill goes at
+  // once, and a hint still waiting is called off.
   const leave = useCallback(() => {
-    const stood = latest();
-    if (stood?.entered === true) return;
-    if (carded && stood !== undefined) linger({ leave: hide });
+    if (carded && latest() !== undefined) linger({ leave: hide });
     else hide();
   }, [carded, latest, linger, hide]);
   // A selection dragged past the card's edge leaves it standing until the
@@ -725,7 +675,7 @@ export function Tooltip({
   const onCard = (over: boolean) => {
     overCard.current = over;
     if (over) linger(Atom.Interrupt);
-    else if (!pressingCard.current && latest()?.entered !== true) linger({ leave: hide });
+    else if (!pressingCard.current) linger({ leave: hide });
   };
   const onCardPress = () => {
     pressingCard.current = true;
@@ -735,7 +685,7 @@ export function Tooltip({
       pressingCard.current = false;
       // A card a finger opened stands until a tap elsewhere, as a popover does.
       const stood = latest();
-      if (stood !== undefined && !stood.touched && !stood.entered && !overCard.current) {
+      if (stood !== undefined && !stood.touched && !overCard.current) {
         linger({ leave: hide });
       }
     };
@@ -753,12 +703,11 @@ export function Tooltip({
     },
     [id, linger],
   );
-  // A control hanging a card offers it to the menus opened from it, once
-  // its element is known, and hears ⌥↓ while it holds focus.
+  // A control hanging a card offers it to the words inside it, once its
+  // element is known.
   const offersCard = carded && label !== undefined;
   const control = useRef<HTMLElement | null>(null);
   const doorTo = (element: HTMLElement): CardDoor => ({
-    enter: () => enterRef.current(element),
     rest: (touched) => showRef.current(element, touched),
   });
   const learn = useCallback(
@@ -777,26 +726,9 @@ export function Tooltip({
     if (offersCard) cardDoors.set(element, doorTo(element));
     else cardDoors.delete(element);
   }, [offersCard]);
-  const unhearKey = useRef<(() => void) | undefined>(undefined);
-  // Note that the key is heard on the window, ahead of the page's own, because a control takes no key handler a hint hands it.
-  const hearKey = (element: HTMLElement) => {
-    unhearKey.current?.();
-    const key = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || document.activeElement !== element) return;
-      if (!shortcutMatches(DETAILS_CHORD, event)) return;
-      event.preventDefault();
-      enterRef.current(element);
-    };
-    window.addEventListener("keydown", key, true);
-    unhearKey.current = () => {
-      window.removeEventListener("keydown", key, true);
-      unhearKey.current = undefined;
-    };
-  };
-  // A control that goes takes its door and its key with it.
+  // A control that goes takes its door with it.
   useEffect(
     () => () => {
-      unhearKey.current?.();
       if (control.current !== null) cardDoors.delete(control.current);
     },
     [],
@@ -833,28 +765,11 @@ export function Tooltip({
   // the pointer is on lets a key other than Escape pass, since that key is
   // most likely the copy of what was selected on it, and a list scrolling
   // within a standing card, this one or one stacked over it, leaves it
-  // standing, since that is the cards being read. A card the keyboard is
-  // in keeps its keys, Escape taking it down and the window's layered Escape
-  // with it, and ⌥↓ on the control is the control's, which enters its card.
+  // standing, since that is the cards being read.
   const up = shown !== undefined;
   useEffect(() => {
     if (!up) return;
     const key = (event: KeyboardEvent) => {
-      const stood = latest();
-      if (stood?.entered === true) {
-        if (event.key !== "Escape") return;
-        // Note that the press is spent here even where a card stacked over
-        // this one, hung from a control on it, is the one to go, because
-        // that card may be the pointer's, which leaves the press to the
-        // window; so Escape steps back one card at a time and no further.
-        event.preventDefault();
-        const at = standing.findIndex((each) => each.id === id);
-        if (at === standing.length - 1) hide();
-        return;
-      }
-      const { target } = event;
-      const onControl = target instanceof Node && stood?.anchor.contains(target) === true;
-      if (carded && onControl && shortcutMatches(DETAILS_CHORD, event)) return;
       if (event.key === "Escape" || !overCard.current) hide();
     };
     // Note that a card stacked over this one is portaled apart from it, so a scroll on any standing card is read as the cards being read.
@@ -871,23 +786,7 @@ export function Tooltip({
       window.removeEventListener("scroll", scrolled, true);
       window.removeEventListener("blur", hide);
     };
-  }, [up, latest, carded, hide]);
-
-  // While the keyboard is in a card, focus leaving it for anywhere but its
-  // control takes it down, as Tab past its last choice does.
-  const entered = shown?.entered === true;
-  useEffect(() => {
-    if (!entered) return;
-    const moved = (event: FocusEvent) => {
-      const { target } = event;
-      if (!(target instanceof Node)) return;
-      if (latest()?.anchor.contains(target) === true) return;
-      if (standing.some((each) => each.holds(target))) return;
-      hide();
-    };
-    document.addEventListener("focusin", moved);
-    return () => document.removeEventListener("focusin", moved);
-  }, [entered, latest, hide]);
+  }, [up, hide]);
 
   // While a card hung from a row stands, the pointer leaving the row, not
   // its control, is what lets it linger, the pointer back anywhere in the
@@ -937,15 +836,6 @@ export function Tooltip({
   const shownAtPress = useRef(false);
 
   const own = children.props;
-  // Note that a control hanging a card names ⌥↓ after the chord it already
-  // names, its own where the tooltip names none, space apart, as
-  // `aria-keyshortcuts` lists several.
-  const keyshortcuts = [
-    chord === undefined ? own["aria-keyshortcuts"] : shortcutAria(chord),
-    offersCard ? shortcutAria(DETAILS_CHORD) : undefined,
-  ]
-    .filter((each) => each !== undefined && each !== "")
-    .join(" ");
   const described = label !== undefined && heard === HEARD.DESCRIBED;
   // Note that the control's own description is kept, ahead of the label.
   const describedBy = [own["aria-describedby"], described ? wordsId : undefined]
@@ -958,7 +848,7 @@ export function Tooltip({
   const anchor = cloneElement(children, {
     ...(describedBy === "" ? undefined : { "aria-describedby": describedBy }),
     ...(owns === "" ? undefined : { "aria-owns": owns }),
-    ...(keyshortcuts === "" ? undefined : { "aria-keyshortcuts": keyshortcuts }),
+    ...(chord === undefined ? undefined : { "aria-keyshortcuts": shortcutAria(chord) }),
     // Note that only an element of the page's own is handed a ref, because a component may spread what it is handed over a ref of its own, as a chip's link address is.
     ...(typeof children.type === "string" ? { ref: anchorRef } : undefined),
     onPointerEnter: (event) => {
@@ -1014,18 +904,14 @@ export function Tooltip({
       // that control's to hint, so it raises nothing over it here.
       if (event.target !== event.currentTarget) return;
       learn(event.currentTarget);
-      if (offersCard) hearKey(event.currentTarget);
       // Only focus the keyboard moved shows the pill: a press focuses its
       // control too, and has just taken the pill down.
       if (document.documentElement.dataset.keyboard === "true") show(event.currentTarget);
     },
     onBlur: (event) => {
       own.onBlur?.(event);
-      if (event.target === event.currentTarget) unhearKey.current?.();
-      // A press on the card, anywhere while a finger's hint stands, or focus
-      // going into the card the keyboard entered, leaves it to its own close.
-      const stood = latest();
-      if (!overCard.current && stood?.touched !== true && stood?.entered !== true) hide();
+      // A press on the card, or anywhere while a finger's hint stands, leaves it to its own close.
+      if (!overCard.current && latest()?.touched !== true) hide();
     },
   });
   return (

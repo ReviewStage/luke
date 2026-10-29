@@ -62,6 +62,7 @@ import {
   openViewOptions,
   pagerOf,
   pressKey,
+  pushAgain,
   QUARANTINE,
   READER,
   RETRY,
@@ -930,12 +931,13 @@ test("on a phone, an Inbox with nothing chosen shows its list and says nothing n
   assert.equal(emptyStateIn(page, ".inbox-tasks"), "Nothing needs you");
 });
 
-test("while its plans are first read, the list stands placeholder rows in its items' place, saying to a reader that the inbox is being read, with no row to press and no ring; once the reads land, the items stand where they stood", async () => {
+test("while the account's feed is first read, the list stands placeholder rows in its items' place, saying to a reader that the inbox is being read, with no row to press and no ring; once it lands, the items stand where they stood", async () => {
   const reads = new Map([
     [BILLING.id, pending()],
     [INVITES.id, pending()],
   ]);
   world.startRead = (taskId) => reads.get(taskId)?.promise;
+  world.feedUnread = true;
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const list = page.querySelector<HTMLElement>(".inbox-tasks");
@@ -951,6 +953,8 @@ test("while its plans are first read, the list stands placeholder rows in its it
 
   reads.get(BILLING.id)?.settle({ items: [THRESHOLD, RETRY], cursor: "1" });
   reads.get(INVITES.id)?.settle({ items: [EXPIRY], cursor: "1" });
+  world.feedUnread = false;
+  act(() => pushAgain());
   await settle();
   assert.equal(list.querySelector('[aria-busy="true"]'), null);
   assert.deepEqual(listed(page), [
@@ -1377,7 +1381,7 @@ test("a row's mark over its time, the first item of its menu, and U each mark an
   );
 
   // Note that U acts only on the chosen item, so another row's menu does not name it.
-  assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Show details⌥↓", "—", "Mark as read"]);
+  assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Mark as read"]);
   act(() => menuItem("Mark as read").click());
   await settle();
   assert.equal(unreadOf(page, retry), false);
@@ -1385,8 +1389,6 @@ test("a row's mark over its time, the first item of its menu, and U each mark an
     "Copy link",
     "—",
     "Mark as unreadU",
-    "—",
-    "Show details⌥↓",
     "—",
     "Resolve without answering",
   ]);

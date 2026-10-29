@@ -21,6 +21,9 @@
  * Every collection here lives for as long as the scope that made it,
  * never by TanStack's own timer: `gcTime` 0 turns that timer off and the
  * scope's close cleans the collection up, so a test's clock stays its own.
+ * How long a read's scope stands is its lifetime class, declared here once
+ * rather than by each read: an account read (`accountReads`) stands for the
+ * signed-in session.
  */
 
 import {
@@ -41,6 +44,7 @@ import {
   Effect,
   Equal,
   Exit,
+  FiberMap,
   Queue,
   type Scope,
   Stream,
@@ -414,4 +418,56 @@ export function rowWrites<Row extends object>(
       // SAFETY: the work sets the answer before it settles, whether the service wrote or refused the row.
       return answered.value as Answer;
     });
+}
+
+/** One account read, for the account it is opened for, until its fiber is let go. */
+type AccountRead = (userId: string) => Effect.Effect<void>;
+
+/**
+ * The reads that stand for the signed-in session, as the Inbox's feed does:
+ * each opened once for the account signed in, by its name, and every one
+ * closed together when the session ends, so no read handles a sign-out or
+ * an account switch itself.
+ */
+export interface AccountReads<Name extends string> {
+  /** Opens `name`'s read for the account signed in unless it stands for it already, closing the last account's reads first; nothing while nobody is signed in. */
+  readonly open: (name: Name, read: AccountRead) => Effect.Effect<void>;
+  /** Opens `name`'s read again at once, as Try again asks, rather than waiting on its own restart. */
+  readonly reopen: (name: Name, read: AccountRead) => Effect.Effect<void>;
+  /** Closes every read: the session ended, by a sign-out or another account signing in. */
+  readonly end: Effect.Effect<void>;
+}
+
+/**
+ * The account lifetime for the account `accountId` names now, its reads
+ * closed with the caller's scope; `ended` runs once a session's reads are
+ * closed, so what they drew is let go before the next account's draw.
+ */
+export function accountReads<Name extends string>(
+  accountId: () => string | undefined,
+  ended: Effect.Effect<void>,
+): Effect.Effect<AccountReads<Name>, never, Scope.Scope> {
+  return Effect.map(FiberMap.make<Name>(), (reads) => {
+    /** The account every standing read is for; none while none stands. */
+    let session: string | undefined;
+    const end = Effect.suspend(() => {
+      if (session === undefined) return Effect.void;
+      session = undefined;
+      return Effect.andThen(FiberMap.clear(reads), ended);
+    });
+    const run = (name: Name, read: AccountRead, onlyIfMissing: boolean) =>
+      Effect.gen(function* () {
+        const userId = accountId();
+        // Note that another account's reads are closed before this one's opens, so nothing it drew reaches the next.
+        if (userId !== session) yield* end;
+        if (userId === undefined) return;
+        session = userId;
+        yield* FiberMap.run(reads, name, read(userId), { onlyIfMissing });
+      });
+    return {
+      open: (name, read) => run(name, read, true),
+      reopen: (name, read) => run(name, read, false),
+      end,
+    };
+  });
 }

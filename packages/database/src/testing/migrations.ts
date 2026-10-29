@@ -53,7 +53,7 @@ export function undoneRename(statement: string): string {
 }
 
 /** The migration that names the agent's tables `agent…` and leaves a view under each old name, which a test of an earlier migration walks back first. */
-export const RENAME_AGENT_TABLES = "20261029014511_agent_tables_rename";
+export const RENAME_AGENT_TABLES = "20261029021951_agent_tables_rename";
 
 /** The views that migration leaves under the agent tables' old names. */
 const AGENT_TABLE_VIEWS = [

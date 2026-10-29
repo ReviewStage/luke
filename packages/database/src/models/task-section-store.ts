@@ -75,7 +75,7 @@ const AgentEntryRowSchema = Schema.Struct({
 type AgentEntryRow = typeof AgentEntryRowSchema.Type;
 
 const AGENT_ENTRY_COLUMNS = {
-  agentId: agentSectionEntry.codingAgentId,
+  agentId: agentSectionEntry.agentId,
   sectionId: agentSectionEntry.sectionId,
   position: agentSectionEntry.position,
   addedAt: agentSectionEntry.addedAt,
@@ -93,7 +93,7 @@ function agentEntryStands(userId: string) {
 
 /** The condition that a statement touches the account's own entry for the agent. */
 function ownAgentEntry(userId: string, agentId: string) {
-  return and(eq(agentSectionEntry.userId, userId), eq(agentSectionEntry.codingAgentId, agentId));
+  return and(eq(agentSectionEntry.userId, userId), eq(agentSectionEntry.agentId, agentId));
 }
 
 const SECTION_COLUMNS = {
@@ -176,9 +176,9 @@ const findAgentEntries = SqlSchema.findAll({
         .select(AGENT_ENTRY_COLUMNS)
         .from(agentSectionEntry)
         .innerJoin(taskSection, eq(taskSection.id, agentSectionEntry.sectionId))
-        .innerJoin(agentTable, eq(agentTable.id, agentSectionEntry.codingAgentId))
+        .innerJoin(agentTable, eq(agentTable.id, agentSectionEntry.agentId))
         .where(agentEntryStands(userId))
-        .orderBy(asc(agentSectionEntry.addedAt), asc(agentSectionEntry.codingAgentId)),
+        .orderBy(asc(agentSectionEntry.addedAt), asc(agentSectionEntry.agentId)),
     ),
 });
 
@@ -472,9 +472,9 @@ const putAgentEntry = SqlSchema.findAll({
     Database.use((db) =>
       db
         .insert(agentSectionEntry)
-        .values({ userId, codingAgentId: agentId, sectionId, position, addedAt: now })
+        .values({ userId, agentId: agentId, sectionId, position, addedAt: now })
         .onConflictDoUpdate({
-          target: [agentSectionEntry.userId, agentSectionEntry.codingAgentId],
+          target: [agentSectionEntry.userId, agentSectionEntry.agentId],
           set: { sectionId, position, addedAt: now },
         })
         .returning(TXID),
@@ -629,7 +629,7 @@ export function taskSectionsLiveStatements(
     .select(
       liveSelection(
         {
-          agentId: agentSectionEntry.codingAgentId,
+          agentId: agentSectionEntry.agentId,
           sectionId: agentSectionEntry.sectionId,
           position: agentSectionEntry.position,
         },
@@ -638,7 +638,7 @@ export function taskSectionsLiveStatements(
     )
     .from(agentSectionEntry)
     .innerJoin(taskSection, eq(taskSection.id, agentSectionEntry.sectionId))
-    .innerJoin(agentTable, eq(agentTable.id, agentSectionEntry.codingAgentId))
+    .innerJoin(agentTable, eq(agentTable.id, agentSectionEntry.agentId))
     .where(agentEntryStands(userId));
   return Option.all({
     sections: liveStatementOf(sections),

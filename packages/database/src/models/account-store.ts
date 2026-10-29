@@ -136,9 +136,9 @@ export function deleteAccount(userId: string): Effect.Effect<void, StoreFailure,
 /** The columns every read and the write's `returning` project, so a row decodes one way whatever wrote it. */
 const PREFERENCE_COLUMNS = {
   linkOpen: accountPreference.linkOpen,
-  codingAgentModel: accountPreference.codingAgentModel,
-  codingAgentEffort: accountPreference.codingAgentEffort,
-  codingAgentContextWindow: accountPreference.codingAgentContextWindow,
+  agentModel: accountPreference.agentModel,
+  agentEffort: accountPreference.agentEffort,
+  agentContextWindow: accountPreference.agentContextWindow,
   chaptersModel: accountPreference.chaptersModel,
   experiments: accountPreference.experiments,
   updatedAt: accountPreference.updatedAt,
@@ -146,9 +146,9 @@ const PREFERENCE_COLUMNS = {
 
 const PreferenceRowSchema = Schema.Struct({
   linkOpen: Schema.NullOr(Schema.String),
-  codingAgentModel: Schema.NullOr(Schema.String),
-  codingAgentEffort: Schema.NullOr(Schema.String),
-  codingAgentContextWindow: Schema.NullOr(contextWindowSchema),
+  agentModel: Schema.NullOr(Schema.String),
+  agentEffort: Schema.NullOr(Schema.String),
+  agentContextWindow: Schema.NullOr(contextWindowSchema),
   chaptersModel: Schema.NullOr(Schema.String),
   experiments: Schema.NullOr(WireValueSchema),
   updatedAt: Schema.NullOr(InstantColumnSchema),
@@ -163,12 +163,12 @@ type PreferenceRow = typeof PreferenceRowSchema.Type;
  * window is named only where it is the standard one, as the wire names it.
  */
 function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
-  const standard = row.codingAgentContextWindow === CONTEXT_WINDOW.STANDARD;
+  const standard = row.agentContextWindow === CONTEXT_WINDOW.STANDARD;
   const agent: ModelChoice =
-    row.codingAgentModel !== null && row.codingAgentEffort !== null
+    row.agentModel !== null && row.agentEffort !== null
       ? {
-          model: row.codingAgentModel,
-          effort: row.codingAgentEffort,
+          model: row.agentModel,
+          effort: row.agentEffort,
           ...(standard ? { contextWindow: CONTEXT_WINDOW.STANDARD } : undefined),
         }
       : AGENT_DEFAULT_CHOICE;
@@ -272,9 +272,9 @@ function writtenColumns(write: PreferenceWrite) {
     ...(write.agent === undefined
       ? undefined
       : {
-          codingAgentModel: write.agent.model,
-          codingAgentEffort: write.agent.effort,
-          codingAgentContextWindow: write.agent.contextWindow ?? null,
+          agentModel: write.agent.model,
+          agentEffort: write.agent.effort,
+          agentContextWindow: write.agent.contextWindow ?? null,
         }),
   };
 }

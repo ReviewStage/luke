@@ -265,7 +265,7 @@ const HANDED_OUTSIDE_RUN = exists(
       and(
         or(
           eq(automationRun.claimedAgentId, startedAgent.id),
-          eq(automationRun.codingAgentId, startedAgent.id),
+          eq(automationRun.agentId, startedAgent.id),
         ),
         eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
         inArray(sql<string>`${automationRun.firing} ->> 'kind'`, OUTSIDE_FIRINGS),

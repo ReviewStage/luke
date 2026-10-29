@@ -11,8 +11,17 @@
  * touching the box or the network.
  */
 
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import {
+  createReadStream,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, describe, expect, it } from "@effect/vitest";
@@ -20,6 +29,7 @@ import { SANDBOX_IMAGE, SMOLVM_LINUX_PIN } from "@luke/agent-runner/pins";
 import { DARWIN_HOST, DARWIN_STANDALONE_LAUNCH_AGENT } from "./host-os.js";
 
 const SCRIPT = join(import.meta.dirname, "../../../../apps/web/install/install.sh");
+const UNINSTALL_SCRIPT = join(import.meta.dirname, "../../../../apps/host/scripts/luke-host.sh");
 
 /** /proc/version as WSL2's own kernel writes it. */
 const WSL2_PROC_VERSION =
@@ -149,10 +159,12 @@ const bootCheck = (
   writeFileSync(unitFile, "");
   mkdirSync(join(root, "state"));
   writeFileSync(join(root, "state", "device.json"), "{}");
+  const work = folder();
+  const tmp = folder();
   const answer = sh(
     [
       "-c",
-      `. "${SCRIPT}"; HOST_HOME="${root}"; HOST_USER="$(id -un)"; SMOLVM="${join(bin, "smolvm")}"; UNIT_FILE="${unitFile}"; STOPPED_SERVICE=${service.stopped}; require_vm_boots`,
+      `. "${SCRIPT}"; HOST_HOME="${root}"; HOST_USER="$(id -un)"; SMOLVM="${join(bin, "smolvm")}"; UNIT_FILE="${unitFile}"; STOPPED_SERVICE=${service.stopped}; work="${work}"; require_vm_boots`,
     ],
     {
       LUKE_HOST_INSTALL_LIBRARY: "1",
@@ -161,13 +173,15 @@ const bootCheck = (
       SMOLVM_LOG: log,
       SMOLVM_FAIL_AT: failAt,
       SYSTEMCTL_LOG: systemctlLog,
-      TMPDIR: folder(),
+      TMPDIR: tmp,
     },
   );
   const ids = sh(["-c", 'printf "%s:%s" "$(id -u)" "$(id -g)"'], {});
   return {
     answer,
     user: ids.stdout,
+    work,
+    tmp,
     asked: readFileSync(log, "utf8").trim().split("\n"),
     systemctl: readFileSync(systemctlLog, "utf8").trim().split("\n").filter(Boolean),
   };
@@ -473,6 +487,132 @@ describe("the host's install script", () => {
       "machine delete --name install-boot-check -f",
     ]);
   });
+
+  it("keeps the boot check's temporary files in its work folder, never in the system's", () => {
+    const { answer, work, tmp } = bootCheck("start");
+    expect(answer.status).toBe(1);
+    expect(readdirSync(work).sort()).toEqual(["boot-removal", "boot-said"]);
+    expect(readdirSync(tmp)).toEqual([]);
+  });
+
+  it.each(["SIGINT", "SIGTERM"] as const)(
+    "deletes the throwaway VM when %s interrupts the boot check, and ends the step in flight",
+    async (signal) => {
+      const bin = linuxUname();
+      const root = folder();
+      const log = join(root, "smolvm.log");
+      const started = join(root, "started");
+      execFileSync("mkfifo", [started]);
+      const kvm = join(root, "kvm");
+      writeFileSync(kvm, "");
+      writeFileSync(join(bin, "runuser"), '#!/bin/sh\nshift 3\nexec "$@"\n', { mode: 0o755 });
+      // Note that the fake VM's start hangs, as one that will not boot does, until the script ends it.
+      writeFileSync(
+        join(bin, "smolvm"),
+        [
+          "#!/bin/sh",
+          'printf \'%s\\n\' "$*" >>"$SMOLVM_LOG"',
+          'if [ "$2" = start ]; then',
+          '  echo started >"$SMOLVM_STARTED"',
+          "  exec sleep 30",
+          "fi",
+          "",
+        ].join("\n"),
+        { mode: 0o755 },
+      );
+      const unitFile = join(root, "luke-host.service");
+      writeFileSync(unitFile, "");
+      const work = folder();
+      const script = spawn(
+        "sh",
+        [
+          "-c",
+          `. "${SCRIPT}"; HOST_HOME="${root}"; HOST_USER="$(id -un)"; SMOLVM="${join(bin, "smolvm")}"; UNIT_FILE="${unitFile}"; STOPPED_SERVICE=false; work="${work}"; require_vm_boots`,
+        ],
+        {
+          env: {
+            PATH: `${bin}:${process.env.PATH}`,
+            LUKE_HOST_INSTALL_LIBRARY: "1",
+            LUKE_HOST_KVM_DEVICE: kvm,
+            SMOLVM_LOG: log,
+            SMOLVM_STARTED: started,
+          },
+          stdio: "ignore",
+        },
+      );
+      const ended = new Promise<number | null>((resolve) => script.on("exit", resolve));
+      try {
+        // Note that the fake VM's start writes to a pipe only once the test reads it, so the signal is sent as the start is under way, with no waiting on the clock.
+        await new Promise<void>((resolve, reject) => {
+          const reader = createReadStream(started);
+          reader.once("data", () => {
+            reader.destroy();
+            resolve();
+          });
+          reader.once("error", reject);
+          script.once("exit", () => reject(new Error("the boot check ended before its start")));
+        });
+
+        script.kill(signal);
+      } catch (failure) {
+        // Note that a script a failed test left running is ended, so it holds nothing open.
+        script.kill("SIGKILL");
+        throw failure;
+      }
+
+      expect(await ended).toBe(1);
+      expect(readFileSync(log, "utf8").trim().split("\n").slice(-2)).toEqual([
+        "machine stop --name install-boot-check",
+        "machine delete --name install-boot-check -f",
+      ]);
+    },
+  );
+
+  it.each([
+    { appHost: false, loaded: false, kept: false, status: 0 },
+    { appHost: true, loaded: false, kept: true, status: 0 },
+    { appHost: false, loaded: true, kept: true, status: 1 },
+  ])(
+    "a Mac's uninstall removes the agents' folders under the installing user's home, never root's, and leaves the clones the desktop app shares, unless the Luke app's state is there or the LaunchAgent will not stop (app state: $appHost, still loaded: $loaded)",
+    ({ appHost, loaded, kept, status }) => {
+      const bin = folder();
+      const home = folder();
+      const rootHome = folder();
+      const script = join(folder(), "bin");
+      mkdirSync(script);
+      for (const [name, body] of Object.entries({
+        uname: "echo Darwin",
+        id: '[ "$1" = -u ] && { [ -n "$2" ] && echo 501 || echo 0; }',
+        dscl: `echo "NFSHomeDirectory: ${home}"`,
+        launchctl: `[ "$1" != print ] || exit ${loaded ? 0 : 1}`,
+        sudo: "exit 0",
+      })) {
+        writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+      }
+      for (const place of [home, rootHome]) {
+        for (const each of ["agents/one", "clones/acme", "keep"]) {
+          mkdirSync(join(place, ".luke", each), { recursive: true });
+        }
+      }
+      if (appHost) {
+        mkdirSync(join(home, "Library/Application Support/Luke"), { recursive: true });
+        writeFileSync(join(home, "Library/Application Support/Luke/device.json"), "{}");
+      }
+      writeFileSync(join(script, "luke-host"), readFileSync(UNINSTALL_SCRIPT), { mode: 0o755 });
+
+      const answer = spawnSync("sh", [join(script, "luke-host"), "uninstall"], {
+        env: { PATH: `${bin}:${process.env.PATH}`, SUDO_USER: "mac", HOME: rootHome },
+        encoding: "utf8",
+      });
+
+      expect(answer.status).toBe(status);
+      expect(existsSync(join(home, ".luke/agents"))).toBe(kept);
+      expect(existsSync(join(home, ".luke/clones"))).toBe(true);
+      expect(existsSync(join(home, ".luke/keep"))).toBe(true);
+      expect(existsSync(join(rootHome, ".luke/agents"))).toBe(true);
+      expect(existsSync(join(rootHome, ".luke/clones"))).toBe(true);
+    },
+  );
 
   it("refuses a download whose SHA-256 is not the one carried, and accepts the one that is", () => {
     const download = join(folder(), "download.tar.gz");

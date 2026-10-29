@@ -86,7 +86,7 @@ export const agentSectionEntry = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    codingAgentId: uuid("coding_agent_id")
+    agentId: uuid("agent_id")
       .notNull()
       .references(() => agentTable.id, { onDelete: "cascade" }),
     sectionId: uuid("section_id")
@@ -97,9 +97,9 @@ export const agentSectionEntry = pgTable(
     addedAt: timestamptz("added_at").notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.userId, table.codingAgentId] }),
+    primaryKey({ columns: [table.userId, table.agentId] }),
     // An agent's delete cascades to its entries, found by the agent alone.
-    index("agent_section_entry_agent").on(table.codingAgentId),
+    index("agent_section_entry_agent").on(table.agentId),
     // A section's delete cascades to its entries, found by the section alone.
     index("agent_section_entry_section").on(table.sectionId),
   ],

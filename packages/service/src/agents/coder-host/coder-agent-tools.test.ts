@@ -2988,7 +2988,7 @@ test("update_agent renames a teammate's agent, moves it to a model the catalog o
           db
             .select({ userId: agentPin.userId })
             .from(agentPin)
-            .where(eq(agentPin.codingAgentId, agentId)),
+            .where(eq(agentPin.agentId, agentId)),
         ),
       )
     ).map((row) => row.userId);

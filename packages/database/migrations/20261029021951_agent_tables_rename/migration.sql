@@ -1,54 +1,94 @@
-DROP TRIGGER IF EXISTS "luke_sync_update" ON "turns";
+-- The four tables' locks are taken as GitLab's with_lock_retries takes them
+-- (https://docs.gitlab.com/development/migration_style_guide/#retry-mechanism-when-acquiring-database-locks):
+-- one LOCK in a fixed order, under a short lock_timeout of its own, and on a timeout the attempt's
+-- subtransaction rolls back, letting go of every lock it took, and waits out a growing backoff holding
+-- none before the next. Note that each attempt's timeout stays under Postgres's one-second
+-- deadlock_timeout, so a live transaction caught waiting behind it is never the one aborted: this
+-- attempt gives up first. Nothing else this migration does locks a table but these four.
+SET LOCAL statement_timeout = '150s';
 --> statement-breakpoint
-DROP TRIGGER IF EXISTS "luke_sync_write" ON "turns";
+DO $$
+DECLARE
+	attempt int := 0;
+	deadline timestamptz := clock_timestamp() + interval '2 minutes';
+BEGIN
+	LOOP
+		attempt := attempt + 1;
+		BEGIN
+			PERFORM set_config('lock_timeout', least(100 * attempt, 500) || 'ms', true);
+			LOCK TABLE "coding_agent", "coding_agent_delegation", "coding_agent_runner_lease", "coding_agent_wakeup" IN ACCESS EXCLUSIVE MODE;
+			RETURN;
+		EXCEPTION WHEN lock_not_available OR deadlock_detected THEN
+			IF clock_timestamp() > deadline THEN
+				RAISE;
+			END IF;
+		END;
+		PERFORM pg_sleep(least(0.2 * attempt, 3) * (0.5 + random()));
+	END LOOP;
+END
+$$;
 --> statement-breakpoint
-ALTER TABLE "coding_agent_delegation" RENAME TO "agent_delegation";--> statement-breakpoint
-ALTER TABLE "coding_agent" RENAME TO "agent";--> statement-breakpoint
-ALTER TABLE "coding_agent_runner_lease" RENAME TO "agent_runner_lease";--> statement-breakpoint
-ALTER TABLE "coding_agent_wakeup" RENAME TO "agent_wakeup";--> statement-breakpoint
-ALTER INDEX "coding_agent_user_idempotency" RENAME TO "agent_user_idempotency";--> statement-breakpoint
-ALTER INDEX "coding_agent_task_created" RENAME TO "agent_task_created";--> statement-breakpoint
-ALTER INDEX "coding_agent_conversation" RENAME TO "agent_conversation";--> statement-breakpoint
-ALTER INDEX "coding_agent_org_created" RENAME TO "agent_org_created";--> statement-breakpoint
-ALTER INDEX "coding_agent_org_taskless_created" RENAME TO "agent_org_taskless_created";--> statement-breakpoint
-ALTER INDEX "coding_agent_started_from_agent" RENAME TO "agent_started_from_agent";--> statement-breakpoint
-ALTER INDEX "coding_agent_runner_token_hash" RENAME TO "agent_runner_token_hash";--> statement-breakpoint
-ALTER INDEX "coding_agent_member_operator" RENAME TO "agent_member_operator";--> statement-breakpoint
-ALTER INDEX "coding_agent_wakeup_due" RENAME TO "agent_wakeup_due";--> statement-breakpoint
-ALTER INDEX "coding_agent_wakeup_agent" RENAME TO "agent_wakeup_agent";--> statement-breakpoint
-ALTER TABLE "agent_delegation" RENAME CONSTRAINT "coding_agent_delegation_child_conversation_id_conversations_id_" TO "agent_delegation_child_conversation_id_conversations_id_fkey";--> statement-breakpoint
-ALTER TABLE "agent" RENAME CONSTRAINT "coding_agent_automation_id_automation_id_fkey" TO "agent_automation_id_automation_id_fkey";--> statement-breakpoint
-ALTER TABLE "agent" RENAME CONSTRAINT "coding_agent_conversation_id_conversations_id_fk" TO "agent_conversation_id_conversations_id_fkey";--> statement-breakpoint
-ALTER TABLE "agent" RENAME CONSTRAINT "coding_agent_device_id_device_id_fkey" TO "agent_device_id_device_id_fkey";--> statement-breakpoint
-ALTER TABLE "agent" RENAME CONSTRAINT "coding_agent_organization_id_organization_id_fkey" TO "agent_organization_id_organization_id_fkey";--> statement-breakpoint
-ALTER TABLE "agent" RENAME CONSTRAINT "coding_agent_pkey" TO "agent_pkey";--> statement-breakpoint
-ALTER TABLE "agent" RENAME CONSTRAINT "coding_agent_plan_id_plan_id_fk" TO "agent_task_id_task_id_fkey";--> statement-breakpoint
-ALTER TABLE "agent" RENAME CONSTRAINT "coding_agent_started_by_agent_id_coding_agent_id_fkey" TO "agent_started_by_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "agent" RENAME CONSTRAINT "coding_agent_user_id_user_id_fk" TO "agent_user_id_user_id_fkey";--> statement-breakpoint
-ALTER TABLE "agent_delegation" RENAME CONSTRAINT "coding_agent_delegation_pkey" TO "agent_delegation_pkey";--> statement-breakpoint
-ALTER TABLE "agent_pin" RENAME CONSTRAINT "agent_pin_coding_agent_id_coding_agent_id_fkey" TO "agent_pin_coding_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "agent_runner_lease" RENAME CONSTRAINT "coding_agent_runner_lease_agent_id_coding_agent_id_fkey" TO "agent_runner_lease_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "agent_runner_lease" RENAME CONSTRAINT "coding_agent_runner_lease_pkey" TO "agent_runner_lease_pkey";--> statement-breakpoint
-ALTER TABLE "agent_section_entry" RENAME CONSTRAINT "agent_section_entry_coding_agent_id_coding_agent_id_fkey" TO "agent_section_entry_coding_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "agent_wakeup" RENAME CONSTRAINT "coding_agent_wakeup_agent_id_coding_agent_id_fkey" TO "agent_wakeup_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "agent_wakeup" RENAME CONSTRAINT "coding_agent_wakeup_pkey" TO "agent_wakeup_pkey";--> statement-breakpoint
-ALTER TABLE "automation" RENAME CONSTRAINT "automation_target_agent_id_coding_agent_id_fkey" TO "automation_target_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "automation_run" RENAME CONSTRAINT "automation_run_claimed_agent_id_coding_agent_id_fkey" TO "automation_run_claimed_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "automation_run" RENAME CONSTRAINT "automation_run_coding_agent_id_coding_agent_id_fkey" TO "automation_run_coding_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "device_agent_line" RENAME CONSTRAINT "device_agent_line_agent_id_coding_agent_id_fkey" TO "device_agent_line_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "device_agent_request" RENAME CONSTRAINT "device_agent_request_agent_id_coding_agent_id_fkey" TO "device_agent_request_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "inbox_item" RENAME CONSTRAINT "inbox_item_agent_id_coding_agent_id_fk" TO "inbox_item_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "operator_notice" RENAME CONSTRAINT "operator_notice_agent_id_coding_agent_id_fkey" TO "operator_notice_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "operator_notice" RENAME CONSTRAINT "operator_notice_operator_id_coding_agent_id_fkey" TO "operator_notice_operator_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "operator_wake" RENAME CONSTRAINT "operator_wake_agent_id_coding_agent_id_fkey" TO "operator_wake_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "operator_wake" RENAME CONSTRAINT "operator_wake_operator_id_coding_agent_id_fkey" TO "operator_wake_operator_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "plan_comment" RENAME CONSTRAINT "plan_comment_agent_id_coding_agent_id_fkey" TO "plan_comment_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "plan_comment" RENAME CONSTRAINT "plan_comment_asked_agent_id_coding_agent_id_fkey" TO "plan_comment_asked_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "plan_page_version" RENAME CONSTRAINT "plan_page_version_agent_id_coding_agent_id_fkey" TO "plan_page_version_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "plan_revision" RENAME CONSTRAINT "plan_revision_agent_id_coding_agent_id_fk" TO "plan_revision_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "runner_line" RENAME CONSTRAINT "runner_line_agent_id_coding_agent_id_fkey" TO "runner_line_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "task" RENAME CONSTRAINT "task_creator_agent_id_coding_agent_id_fkey" TO "task_creator_agent_id_agent_id_fkey";--> statement-breakpoint
-ALTER TABLE "token_pull_request_poll" RENAME CONSTRAINT "token_pull_request_poll_agent_id_coding_agent_id_fkey" TO "token_pull_request_poll_agent_id_agent_id_fkey";
+-- With the four locks held, no statement below waits on another; one that does gives up rather than
+-- queueing live traffic behind it.
+SET LOCAL lock_timeout = '5s';
+--> statement-breakpoint
+SET LOCAL statement_timeout = '30s';
+--> statement-breakpoint
+ALTER TABLE "coding_agent_delegation" RENAME TO "agent_delegation";
+--> statement-breakpoint
+ALTER TABLE "coding_agent" RENAME TO "agent";
+--> statement-breakpoint
+ALTER TABLE "coding_agent_runner_lease" RENAME TO "agent_runner_lease";
+--> statement-breakpoint
+ALTER TABLE "coding_agent_wakeup" RENAME TO "agent_wakeup";
+--> statement-breakpoint
+ALTER INDEX "coding_agent_user_idempotency" RENAME TO "agent_user_idempotency";
+--> statement-breakpoint
+ALTER INDEX "coding_agent_task_created" RENAME TO "agent_task_created";
+--> statement-breakpoint
+ALTER INDEX "coding_agent_conversation" RENAME TO "agent_conversation";
+--> statement-breakpoint
+ALTER INDEX "coding_agent_org_created" RENAME TO "agent_org_created";
+--> statement-breakpoint
+ALTER INDEX "coding_agent_org_taskless_created" RENAME TO "agent_org_taskless_created";
+--> statement-breakpoint
+ALTER INDEX "coding_agent_started_from_agent" RENAME TO "agent_started_from_agent";
+--> statement-breakpoint
+ALTER INDEX "coding_agent_runner_token_hash" RENAME TO "agent_runner_token_hash";
+--> statement-breakpoint
+ALTER INDEX "coding_agent_member_operator" RENAME TO "agent_member_operator";
+--> statement-breakpoint
+ALTER INDEX "coding_agent_wakeup_due" RENAME TO "agent_wakeup_due";
+--> statement-breakpoint
+ALTER INDEX "coding_agent_wakeup_agent" RENAME TO "agent_wakeup_agent";
+--> statement-breakpoint
+ALTER TABLE "agent_delegation" RENAME CONSTRAINT "coding_agent_delegation_child_conversation_id_conversations_id_" TO "agent_delegation_child_conversation_id_conversations_id_fkey";
+--> statement-breakpoint
+ALTER TABLE "agent" RENAME CONSTRAINT "coding_agent_automation_id_automation_id_fkey" TO "agent_automation_id_automation_id_fkey";
+--> statement-breakpoint
+ALTER TABLE "agent" RENAME CONSTRAINT "coding_agent_conversation_id_conversations_id_fk" TO "agent_conversation_id_conversations_id_fkey";
+--> statement-breakpoint
+ALTER TABLE "agent" RENAME CONSTRAINT "coding_agent_device_id_device_id_fkey" TO "agent_device_id_device_id_fkey";
+--> statement-breakpoint
+ALTER TABLE "agent" RENAME CONSTRAINT "coding_agent_organization_id_organization_id_fkey" TO "agent_organization_id_organization_id_fkey";
+--> statement-breakpoint
+ALTER TABLE "agent" RENAME CONSTRAINT "coding_agent_pkey" TO "agent_pkey";
+--> statement-breakpoint
+ALTER TABLE "agent" RENAME CONSTRAINT "coding_agent_plan_id_plan_id_fk" TO "agent_task_id_task_id_fkey";
+--> statement-breakpoint
+ALTER TABLE "agent" RENAME CONSTRAINT "coding_agent_started_by_agent_id_coding_agent_id_fkey" TO "agent_started_by_agent_id_agent_id_fkey";
+--> statement-breakpoint
+ALTER TABLE "agent" RENAME CONSTRAINT "coding_agent_user_id_user_id_fk" TO "agent_user_id_user_id_fkey";
+--> statement-breakpoint
+ALTER TABLE "agent_delegation" RENAME CONSTRAINT "coding_agent_delegation_pkey" TO "agent_delegation_pkey";
+--> statement-breakpoint
+ALTER TABLE "agent_runner_lease" RENAME CONSTRAINT "coding_agent_runner_lease_agent_id_coding_agent_id_fkey" TO "agent_runner_lease_agent_id_agent_id_fkey";
+--> statement-breakpoint
+ALTER TABLE "agent_runner_lease" RENAME CONSTRAINT "coding_agent_runner_lease_pkey" TO "agent_runner_lease_pkey";
+--> statement-breakpoint
+ALTER TABLE "agent_wakeup" RENAME CONSTRAINT "coding_agent_wakeup_agent_id_coding_agent_id_fkey" TO "agent_wakeup_agent_id_agent_id_fkey";
+--> statement-breakpoint
+ALTER TABLE "agent_wakeup" RENAME CONSTRAINT "coding_agent_wakeup_pkey" TO "agent_wakeup_pkey";
 --> statement-breakpoint
 DO $$
 DECLARE
@@ -74,13 +114,18 @@ DROP TRIGGER IF EXISTS "luke_sync_update" ON "agent_delegation";
 --> statement-breakpoint
 DROP TRIGGER IF EXISTS "luke_sync_write" ON "agent_delegation";
 --> statement-breakpoint
-DROP FUNCTION "luke_sync_coding_agent"();--> statement-breakpoint
-DROP FUNCTION "luke_sync_coding_agent_delegation"();--> statement-breakpoint
+DROP FUNCTION "luke_sync_coding_agent"();
+--> statement-breakpoint
+DROP FUNCTION "luke_sync_coding_agent_delegation"();
+--> statement-breakpoint
 -- The release before this one still names the old tables, for up to an hour after this deploy; each
 -- view is a plain one over its table, so Postgres writes through it, and a later migration drops them.
-CREATE VIEW "coding_agent" AS SELECT * FROM "agent";--> statement-breakpoint
-CREATE VIEW "coding_agent_delegation" AS SELECT * FROM "agent_delegation";--> statement-breakpoint
-CREATE VIEW "coding_agent_runner_lease" AS SELECT * FROM "agent_runner_lease";--> statement-breakpoint
+CREATE VIEW "coding_agent" AS SELECT * FROM "agent";
+--> statement-breakpoint
+CREATE VIEW "coding_agent_delegation" AS SELECT * FROM "agent_delegation";
+--> statement-breakpoint
+CREATE VIEW "coding_agent_runner_lease" AS SELECT * FROM "agent_runner_lease";
+--> statement-breakpoint
 CREATE VIEW "coding_agent_wakeup" AS SELECT * FROM "agent_wakeup";
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION "luke_sync_agent"() RETURNS trigger LANGUAGE plpgsql AS $luke_sync$
@@ -196,6 +241,6 @@ BEGIN
 END
 $luke_sync$;
 --> statement-breakpoint
-CREATE TRIGGER "luke_sync_write" AFTER INSERT OR DELETE ON "turns" FOR EACH ROW EXECUTE FUNCTION "luke_sync_turns"();
+RESET lock_timeout;
 --> statement-breakpoint
-CREATE TRIGGER "luke_sync_update" AFTER UPDATE ON "turns" FOR EACH ROW WHEN (OLD."id" IS DISTINCT FROM NEW."id" OR OLD."user_id" IS DISTINCT FROM NEW."user_id" OR OLD."conversation_id" IS DISTINCT FROM NEW."conversation_id" OR OLD."origin" IS DISTINCT FROM NEW."origin" OR OLD."status" IS DISTINCT FROM NEW."status" OR OLD."model" IS DISTINCT FROM NEW."model" OR OLD."reasoning_effort" IS DISTINCT FROM NEW."reasoning_effort" OR OLD."prompt_hash" IS DISTINCT FROM NEW."prompt_hash" OR OLD."tool_set_hash" IS DISTINCT FROM NEW."tool_set_hash" OR OLD."response_ids" IS DISTINCT FROM NEW."response_ids" OR OLD."usage" IS DISTINCT FROM NEW."usage" OR OLD."eve_turn_id" IS DISTINCT FROM NEW."eve_turn_id" OR OLD."queued_at" IS DISTINCT FROM NEW."queued_at" OR OLD."started_at" IS DISTINCT FROM NEW."started_at" OR OLD."settled_at" IS DISTINCT FROM NEW."settled_at" OR OLD."failure" IS DISTINCT FROM NEW."failure" OR OLD."failure_detail" IS DISTINCT FROM NEW."failure_detail" OR OLD."cancel_requested_at" IS DISTINCT FROM NEW."cancel_requested_at" OR OLD."cancel_request_key" IS DISTINCT FROM NEW."cancel_request_key" OR OLD."cancel_requested_by" IS DISTINCT FROM NEW."cancel_requested_by" OR OLD."fast_refused" IS DISTINCT FROM NEW."fast_refused") EXECUTE FUNCTION "luke_sync_turns"();
+RESET statement_timeout;

@@ -1,9 +1,10 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "148624d3-d436-4237-95ab-d4b435cd390c",
+  "id": "d7429f59-5434-420a-98fe-cdc638d819e1",
   "prevIds": [
-    "b523c992-3989-46cb-aa8e-8ee3c7aa6ded"
+    "8c1cb1e4-aa00-489a-9682-bac8c8efa42c",
+    "d4e16b4b-aa88-4052-bfb6-f5bc2f9f282e"
   ],
   "ddl": [
     {
@@ -13531,7 +13532,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "agent_pin_coding_agent_id_agent_id_fkey",
+      "name": "agent_pin_coding_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "agent_pin"
@@ -14041,7 +14042,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "automation_target_agent_id_agent_id_fkey",
+      "name": "automation_target_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "automation"
@@ -14092,7 +14093,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "automation_run_coding_agent_id_agent_id_fkey",
+      "name": "automation_run_coding_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "automation_run"
@@ -14109,7 +14110,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "automation_run_claimed_agent_id_agent_id_fkey",
+      "name": "automation_run_claimed_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "automation_run"
@@ -14211,7 +14212,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "device_agent_line_agent_id_agent_id_fkey",
+      "name": "device_agent_line_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "device_agent_line"
@@ -14262,7 +14263,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "device_agent_request_agent_id_agent_id_fkey",
+      "name": "device_agent_request_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "device_agent_request"
@@ -14517,7 +14518,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "inbox_item_agent_id_agent_id_fkey",
+      "name": "inbox_item_agent_id_coding_agent_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "inbox_item"
@@ -14976,7 +14977,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "operator_notice_operator_id_agent_id_fkey",
+      "name": "operator_notice_operator_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "operator_notice"
@@ -14993,7 +14994,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "operator_notice_agent_id_agent_id_fkey",
+      "name": "operator_notice_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "operator_notice"
@@ -15010,7 +15011,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "operator_wake_operator_id_agent_id_fkey",
+      "name": "operator_wake_operator_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "operator_wake"
@@ -15027,7 +15028,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "operator_wake_agent_id_agent_id_fkey",
+      "name": "operator_wake_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "operator_wake"
@@ -15129,7 +15130,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "plan_comment_agent_id_agent_id_fkey",
+      "name": "plan_comment_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "plan_comment"
@@ -15146,7 +15147,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "plan_comment_asked_agent_id_agent_id_fkey",
+      "name": "plan_comment_asked_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "plan_comment"
@@ -15197,7 +15198,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "plan_page_version_agent_id_agent_id_fkey",
+      "name": "plan_page_version_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "plan_page_version"
@@ -15248,7 +15249,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "plan_revision_agent_id_agent_id_fkey",
+      "name": "plan_revision_agent_id_coding_agent_id_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "plan_revision"
@@ -15333,7 +15334,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "runner_line_agent_id_agent_id_fkey",
+      "name": "runner_line_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "runner_line"
@@ -15588,7 +15589,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
-      "name": "task_creator_agent_id_agent_id_fkey",
+      "name": "task_creator_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "task"
@@ -15690,7 +15691,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "agent_section_entry_coding_agent_id_agent_id_fkey",
+      "name": "agent_section_entry_coding_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "agent_section_entry"
@@ -15809,7 +15810,7 @@
       ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "token_pull_request_poll_agent_id_agent_id_fkey",
+      "name": "token_pull_request_poll_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "token_pull_request_poll"
