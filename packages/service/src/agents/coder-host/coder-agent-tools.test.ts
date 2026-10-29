@@ -3553,7 +3553,7 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
   });
 });
 
-test("read_task names a grandchild's merge policy as its top task's, whatever the grandchild's own column holds", async () => {
+test("read_task names a grandchild's merge policy and running switch as its top task's, whatever the grandchild's own columns hold", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const { caller } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -3567,14 +3567,17 @@ test("read_task names a grandchild's merge policy as its top task's, whatever th
   );
   await database.run(
     Effect.flatMap(Database, (db) =>
-      db.update(task).set({ mergePolicy: MERGE_POLICY.HOLD }).where(eq(task.id, top.id)),
+      db
+        .update(task)
+        .set({ mergePolicy: MERGE_POLICY.HOLD, running: true })
+        .where(eq(task.id, top.id)),
     ),
   );
 
   const read = await call(CODER_TOOL.READ_TASK, { taskId: grandchild.id });
-  assert.equal(
-    isRecord(read.task) && read.task.topTaskMergePolicy,
-    MERGE_POLICY.HOLD,
+  assert.deepEqual(
+    isRecord(read.task) && [read.task.topTaskMergePolicy, read.task.topTaskRunning],
+    [MERGE_POLICY.HOLD, true],
     JSON.stringify(read),
   );
 });
