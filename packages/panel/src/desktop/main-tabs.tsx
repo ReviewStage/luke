@@ -25,7 +25,7 @@ import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
-import { agentName } from "../tasks/agent-model.js";
+import { agentName, startsOwnAgents } from "../tasks/agent-model.js";
 import { agentCardReading } from "../tasks/agent-ref.js";
 import { AgentTab, StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabCard } from "../tasks/agent-tab-card.js";
@@ -416,8 +416,8 @@ export function inboxEntries(agents: AgentsControl, onPick: () => void): AddEntr
 
 /**
  * The "+" menu's rows: New agent, unavailable with Start's own reason while
- * Start could not run, left out on an archived task, by itself under no
- * heading; then each of its agents under Agents (`agentEntries`).
+ * Start could not run, left out on an archived task and on a pilot task
+ * (`startsOwnAgents`), by itself under no heading; then each of its agents under Agents (`agentEntries`).
  */
 function addEntries(
   main: MainTabsControl,
@@ -435,7 +435,8 @@ function addEntries(
     onPick: () => main.onChoose({ draft: agents.onNewDraft() }),
   };
   const agentRows = agentEntries(main, agents, held);
-  const starts = agents.onUnarchive === undefined ? [newAgent] : [];
+  // A pilot task's agents are its pilot's to start, so its menu offers no New agent.
+  const starts = agents.onUnarchive === undefined && startsOwnAgents(agents.mode) ? [newAgent] : [];
   return [...starts, ...agentRows];
 }
 

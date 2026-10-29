@@ -1,9 +1,10 @@
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { INBOX_TOOLS } from "@luke/service/agents/coder-host/inbox";
+import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineDynamic, defineTool } from "eve/tools";
-import { runInboxTool, threadWords } from "../host.js";
+import { offeredStarterTools, runInboxTool, threadWords } from "../host.js";
 
 /**
  * post_thread.ts -- the agent posts a message, perhaps ending with an ask, on its thread under a key in one of its workspace's channels.
@@ -15,21 +16,24 @@ import { runInboxTool, threadWords } from "../host.js";
  * purposes (`threadWords`), for the agent to choose one by. A picture the
  * body draws by its path is read from the session's sandbox through the
  * same door eve hands every file tool, opened on first use, so a post with
- * no such picture opens none.
+ * no such picture opens none. It is offered to every agent but one under a
+ * pilot, which reports to that pilot instead (`starterToolsOf`).
  */
 export default defineDynamic({
   events: {
     "turn.started": async (_event, ctx) =>
-      defineTool({
-        description: await threadWords(ctx.session.auth, ctx.session.id),
-        inputSchema: emitJsonSchema(INBOX_TOOLS.POST.inputSchema),
-        execute: async (input, toolContext) =>
-          // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
-          runInboxTool(toolContext.session.auth, toolContext.session.id, {
-            tool: INBOX_TOOL.POST,
-            input: unparsedWire(input as WireBoundaryInput),
-            sandbox: () => toolContext.getSandbox(),
-          }),
-      }),
+      (await offeredStarterTools(ctx.session.auth, ctx.session.id)).has(CODER_TOOL.POST_THREAD)
+        ? defineTool({
+            description: await threadWords(ctx.session.auth, ctx.session.id),
+            inputSchema: emitJsonSchema(INBOX_TOOLS.POST.inputSchema),
+            execute: async (input, toolContext) =>
+              // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
+              runInboxTool(toolContext.session.auth, toolContext.session.id, {
+                tool: INBOX_TOOL.POST,
+                input: unparsedWire(input as WireBoundaryInput),
+                sandbox: () => toolContext.getSandbox(),
+              }),
+          })
+        : null,
   },
 });

@@ -35,7 +35,7 @@ import { FindScope } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { agentActor, agentName, type SentLine } from "../tasks/agent-model.js";
+import { agentActor, agentName, type SentLine, startsOwnAgents } from "../tasks/agent-model.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
@@ -917,8 +917,10 @@ function PlanDocument({
   }
   const { task } = region;
   const listed = listedOpen ?? task;
-  // The column has a tab on its way: the agents are still read, or, read, a draft opens in the task's empty column.
-  const columnComing = agents.agents === undefined ? !agents.listFailed : true;
+  // The column has a tab on its way: the agents are still read, or, read, a draft opens in the task's
+  // empty column, which a pilot task's never does (`startsOwnAgents`).
+  const columnComing =
+    agents.agents === undefined ? !agents.listFailed : startsOwnAgents(agents.mode);
   // The panel holds the keys while the focus went into it last, or while it
   // fills the window over this column; shut, it hands them back.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);

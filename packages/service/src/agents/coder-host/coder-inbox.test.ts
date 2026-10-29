@@ -10,7 +10,7 @@ import { user } from "@luke/database/schemas/auth";
 import { GENERAL_CHANNEL } from "@luke/database/schemas/channel";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { getTestDB, leaveWorkspace, openWorkspace, startTask } from "@luke/database/testing";
-import { AGENT_ATTACHMENT_TYPE, AGENT_BOUNDS } from "@luke/features/agent-wire";
+import { AGENT_ATTACHMENT_TYPE, AGENT_BOUNDS, AGENT_KIND } from "@luke/features/agent-wire";
 import { inboxAttachmentOf } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ASK,
@@ -79,10 +79,15 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** An agent the account starts on the task, in its repository. */
-const agentOn = (userId: string, task: { readonly id: string; readonly workspaceId: string }) =>
+/** An agent the account starts on the task, in its repository: a coder unless it says otherwise, started by the agent it names or by none. */
+const agentOn = (
+  userId: string,
+  task: { readonly id: string; readonly workspaceId: string },
+  as: { readonly kind?: typeof AGENT_KIND.PILOT; readonly startedByAgentId?: string } = {},
+) =>
   Effect.gen(function* () {
     const started = yield* createAgent(userId, {
+      ...as,
       taskId: task.id,
       idempotencyKey: randomUUID(),
       model: "anthropic/claude-opus-5.5",
@@ -945,6 +950,24 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         const refused = yield* post(agent, { key: SETTINGS.key, body: "Still here." });
 
         assert.equal(refusalOf(refused), INBOX_REFUSAL.NO_AGENT);
+      }),
+  );
+
+  it.effect(
+    "an agent a pilot started is refused post_thread and posts nothing, while one a coder started posts",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const pilot = yield* agentOn(userId, task, { kind: AGENT_KIND.PILOT });
+        const underPilot = yield* agentOn(userId, task, { startedByAgentId: pilot.agentId });
+        const underCoder = yield* agentOn(userId, task, { startedByAgentId: underPilot.agentId });
+
+        assert.equal(refusalOf(yield* post(underPilot, QUEUE)), INBOX_REFUSAL.UNDER_PILOT);
+        const posted = yield* post(underCoder, QUEUE);
+
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
+        assert.equal((yield* onlyItem(underCoder)).key, QUEUE.key);
       }),
   );
 
