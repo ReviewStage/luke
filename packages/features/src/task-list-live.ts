@@ -106,6 +106,8 @@ const taskLiveRowSchema = EffectSchema.Struct({
   parentTaskId: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   /** How the task is worked; absent from a service before modes. */
   mode: plan.mode,
+  /** What becomes of its agents' pull requests once their checks pass; absent from a service before it. */
+  mergePolicy: plan.mergePolicy,
 });
 
 /** Who archived an agent as its row holds it. */
@@ -376,6 +378,7 @@ function taskSummaryOf(
       ? undefined
       : { parentTaskId: row.parentTaskId }),
     ...(row.mode === undefined ? undefined : { mode: row.mode }),
+    ...(row.mergePolicy === undefined ? undefined : { mergePolicy: row.mergePolicy }),
     ...(agents === undefined ? undefined : { agents: agentsSummaryOf(agents, now) }),
   };
 }

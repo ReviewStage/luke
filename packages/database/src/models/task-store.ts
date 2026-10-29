@@ -11,6 +11,7 @@ import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
 import { type PlanAgentEdit, planAgentEditSchema } from "@luke/features/plan-template";
 import {
+  mergePolicySchema,
   PLAN_ACTOR,
   type PlanLastEdit,
   type PlanSectionEdit,
@@ -263,6 +264,7 @@ const TASK_SUMMARY_COLUMNS = {
   deviceId: task.deviceId,
   parentTaskId: task.parentTaskId,
   mode: task.mode,
+  mergePolicy: task.mergePolicy,
   completedAt: task.completedAt,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -293,6 +295,7 @@ const TaskSummaryRowSchema = Schema.Struct({
   deviceId: Schema.NullOr(Schema.String),
   parentTaskId: Schema.NullOr(Schema.String),
   mode: taskModeSchema,
+  mergePolicy: mergePolicySchema,
   completedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -645,6 +648,7 @@ function summaryOf(
     ...runsOnOf(row, names, devices),
     ...(row.parentTaskId === null ? undefined : { parentTaskId: row.parentTaskId }),
     mode: row.mode,
+    mergePolicy: row.mergePolicy,
   };
 }
 
