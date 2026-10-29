@@ -527,14 +527,16 @@ export function smolvmSandbox(options: SmolvmSandboxOptions): {
 
     deleted: (agentId) =>
       Effect.gen(function* () {
-        if (!AGENT_ID.test(agentId)) return;
+        if (!AGENT_ID.test(agentId)) return true;
         const name = machineOf(agentId);
         yield* ran(["machine", "stop", "--name", name], STOP_TIMEOUT);
-        yield* ran(["machine", "delete", "--name", name, "-f"], STOP_TIMEOUT);
+        const removed = yield* succeeded(["machine", "delete", "--name", name, "-f"], STOP_TIMEOUT);
         const fileSystem = yield* FileSystem.FileSystem;
         yield* Effect.ignore(
           fileSystem.remove(credentialsOf(agentId).folder, { recursive: true, force: true }),
         );
+        // Note that a delete smolvm refused for a machine it no longer has leaves nothing standing.
+        return removed || Option.isNone(yield* statusOf(agentId));
       }),
 
     githubToken: (agentId, token) =>

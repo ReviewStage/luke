@@ -70,9 +70,10 @@ const held = () => new Promise<Response>(() => {});
  * the device's record of the agents it made as its launch left it, its held
  * read answered once with the lines given and every line claimable, with the
  * folder, the record's file for the agent, the line ids it settled, and what
- * waits for the service to take the discard's settle.
+ * waits for the service to take the discard's settle. Where `vmLeft` says,
+ * the device is a host, whose agent runs in a VM smolvm will not delete.
  */
-const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
+const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script, vmLeft = false) =>
   Effect.gen(function* () {
     const root = yield* temporaryDirectoryScoped("luke-agent-lines-");
     const home = path.join(root, "home");
@@ -123,8 +124,10 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
       // Note that the agent's folder stands from before the record of how agents ran, so on This Mac it ran directly and is checked on the Mac.
       Layer.succeed(LocalAgentPlatform, {
         launch: () => ({ command: "/opt/luke/launch", args: [], env: {} }),
-        sandbox: fakeSandbox().sandbox,
-        formerlyDirect: true,
+        sandbox: vmLeft
+          ? { ...fakeSandbox().sandbox, deleted: () => Effect.succeed(false) }
+          : fakeSandbox().sandbox,
+        formerlyDirect: !vmLeft,
         runnerBundle: "/opt/luke/agent-runner.mjs",
         runnerEnv: {},
         deviceName: "Studio",
@@ -203,3 +206,23 @@ for (const [name, check, kept] of [
       ).pipe(Effect.provide(NodeFileSystem.layer)),
   );
 }
+
+it.effect(
+  "a discard whose VM smolvm would not delete removes the folder but keeps the agent in the device's record, so an uninstall deletes the VM yet",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { folder, owned, settled, discardSettled } = yield* following(
+          [DISCARD],
+          undefined,
+          true,
+        );
+        yield* discardSettled;
+
+        const fileSystem = yield* FileSystem.FileSystem;
+        assert.equal(yield* fileSystem.exists(folder), false);
+        assert.equal(yield* fileSystem.exists(owned), true);
+        assert.deepEqual(settled, [DISCARD.id]);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);

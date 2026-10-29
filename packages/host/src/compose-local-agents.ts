@@ -1006,21 +1006,22 @@ export function composeLocalAgents(
             const vm = yield* vmOf(agentId, layout.checkoutPath);
             const unsaved = yield* unsavedWork(agentId, layout, vm);
             // Note that the VM goes before the folder, so nothing in it is still writing there as it is removed, and a command's hold outlasting it stops nothing.
-            if (vm !== undefined) {
-              yield* vmLockOf(agentId).withPermit(
+            const vmGone =
+              vm === undefined ||
+              (yield* vmLockOf(agentId).withPermit(
                 Effect.andThen(
                   Effect.sync(() => vmHolds.delete(agentId)),
                   vm.deleted(agentId),
                 ),
-              );
-            }
+              ));
             if (Option.isSome(unsaved)) {
               return yield* Effect.sync(() =>
                 report(`a local agent's folder was kept, since ${unsaved.value}`),
               );
             }
             yield* fileSystem.remove(layout.folder, { recursive: true, force: true });
-            yield* forgetOwnedAgent(kernel.stateRoot, agentId);
+            // Note that a VM left standing keeps the agent in the record, so an uninstall deletes it yet.
+            if (vmGone) yield* forgetOwnedAgent(kernel.stateRoot, agentId);
             // Note that a folder kept keeps its record too, so the agent, launched again, runs the way it ran.
             if ((yield* Ref.get(state)).modes?.[agentId] !== undefined) yield* forgetMode(agentId);
           }).pipe(
