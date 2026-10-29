@@ -49,6 +49,8 @@ import { trimmedText } from "./text-schema.js";
  * by id.
  * A task is worked by its agents or by a pilot (`TASK_MODE`), which its
  * summary names.
+ * A task's agents' pull requests merge on green or wait for a member's go
+ * (`MERGE_POLICY`), which its summary names.
  * The starting account and the conversation a task resumes in are the
  * service's own and never travel here.
  *
@@ -144,11 +146,25 @@ export const TASK_MODE = {
 
 export type TaskMode = (typeof TASK_MODE)[keyof typeof TASK_MODE];
 
+/**
+ * What becomes of a pull request a task's agents open once its checks pass:
+ * merged on green, or held for a member's go. A task starts at merge on
+ * green.
+ */
+export const MERGE_POLICY = {
+  MERGE_ON_GREEN: "merge-on-green",
+  HOLD: "hold",
+} as const;
+
+export type MergePolicy = (typeof MERGE_POLICY)[keyof typeof MERGE_POLICY];
+
 export const taskStatusSchema = EffectSchema.Literals(Object.values(TASK_STATUS));
 
 export const taskPrioritySchema = EffectSchema.Literals(Object.values(TASK_PRIORITY));
 
 export const taskModeSchema = EffectSchema.Literals(Object.values(TASK_MODE));
+
+export const mergePolicySchema = EffectSchema.Literals(Object.values(MERGE_POLICY));
 
 /**
  * The member a task is assigned to, by their account's id, as a start or a
@@ -517,6 +533,8 @@ const taskSummaryFields = {
   parentTaskId: EffectSchema.optionalKey(wireUuidSchema),
   /** How the task is worked; absent from a service before modes, where every task is worked by its agents. */
   mode: EffectSchema.optionalKey(taskModeSchema),
+  /** What becomes of its agents' pull requests once their checks pass; absent from a service before it, where they merge on green. */
+  mergePolicy: EffectSchema.optionalKey(mergePolicySchema),
 };
 
 /** How much of a task's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */
