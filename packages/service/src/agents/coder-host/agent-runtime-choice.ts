@@ -536,7 +536,7 @@ export const messageCredentialMissing = /* @__PURE__ */ Effect.fnUntraced(functi
  * The providers none of whose models a Start of the account's would run,
  * since no credential of its pays for them, as `agentRuntimeChoice` decides
  * it; the menus mark those models rather than let a Start fail late, and the
- * account's preferences keep no default of theirs.
+ * account's default never moves to one of them.
  */
 export const unconnectedProviders = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,

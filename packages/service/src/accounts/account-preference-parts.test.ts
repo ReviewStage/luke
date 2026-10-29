@@ -46,9 +46,9 @@ import { accountProcedures } from "./account-procedures.js";
  * shared part a build that predates it writes back whole, and refused where
  * it names no choice. The chapters model: Haiku until the account chooses,
  * written on its own and read back, and refused where it names no model the
- * set offers. The agent default: refused on a model no credential of the
- * account's pays for, keeping what stood. The bearer names the account and
- * nothing else does.
+ * set offers. The agent default: an Effort kept on a model no credential of
+ * the account's pays for, and a move to another such model refused, keeping
+ * what stood. The bearer names the account and nothing else does.
  *
  * Synthetic accounts and bearers throughout.
  */
@@ -64,13 +64,6 @@ const OPUS: CatalogModel = {
 };
 
 const OPUS_FAST: CatalogModel = { ...OPUS, id: "anthropic/claude-opus-5.5-fast" };
-
-const SOL: CatalogModel = {
-  id: "openai/gpt-6.1-sol",
-  name: "GPT-6.1 Sol",
-  provider: MODEL_PROVIDER.OPENAI,
-  efforts: ["low", "medium", "high"],
-};
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: undefined,
@@ -127,7 +120,7 @@ const answer = (procedures: ReturnType<typeof accountProcedures>, request: Reque
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
       noNetwork,
-      modelCatalogOf([OPUS, OPUS_FAST, SOL]),
+      modelCatalogOf([OPUS, OPUS_FAST]),
       // Only a delete asks Connect anything, and this suite deletes nothing.
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
     );
@@ -286,13 +279,18 @@ it.layer(getTestDB())("the preferences snapshot's chapters model part", (it) => 
 
 it.layer(getTestDB())("the preferences snapshot's agent part", (it) => {
   it.effect(
-    "refuses a model whose provider nothing of the account's pays for, and keeps what stood",
+    "keeps an Effort on a model nothing pays for, and refuses moving to another such model",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts;
         yield* connectAgentApiKeys(owner, { providers: [PROVIDER_KEY_PROVIDER.OPENAI] });
-        const sol = { model: SOL.id, effort: "high" };
-        assert.deepEqual(partOf(yield* ask(request(owner, { agent: sol })), "agent"), sol);
+        // Note that the Claude default stands from before, as one saved while a Claude credential paid for it.
+        yield* writeAccountPreferences(owner, { agent: { model: OPUS.id, effort: "high" } });
+        const lowEffort = { model: OPUS.id, effort: "low" };
+        assert.deepEqual(
+          partOf(yield* ask(request(owner, { agent: lowEffort })), "agent"),
+          lowEffort,
+        );
 
         // Note that an account with no Anthropic key of its own is offered every fast version, so only the payer refuses this one.
         const opusFast = yield* ask(
@@ -302,7 +300,7 @@ it.layer(getTestDB())("the preferences snapshot's agent part", (it) => {
           status: HOSTED_HTTP_STATUS.BAD_REQUEST,
           body: { error: HOSTED_API_ERROR.INVALID_REQUEST },
         });
-        assert.deepEqual(partOf(yield* ask(request(owner)), "agent"), sol);
+        assert.deepEqual(partOf(yield* ask(request(owner)), "agent"), lowEffort);
       }),
   );
 });
