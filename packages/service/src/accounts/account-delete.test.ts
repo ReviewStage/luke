@@ -186,7 +186,7 @@ it.layer(getTestDB())("an account's deletion", (it) => {
         const eve = retiringEve();
         const { owner, other, stands, ask } = yield* openAccounts(eve);
         const mainSession = yield* sessionOf(owner, CONVERSATION_KIND.MAIN);
-        const agentSession = yield* sessionOf(owner, CONVERSATION_KIND.CODING_AGENT);
+        const agentSession = yield* sessionOf(owner, CONVERSATION_KIND.AGENT);
         yield* sessionOf(other, CONVERSATION_KIND.MAIN);
         const cookie = sessionCookieOf(owner);
 
@@ -212,8 +212,8 @@ it.layer(getTestDB())("an account's deletion", (it) => {
       Effect.gen(function* () {
         const eve = retiringEve();
         const { owner, other, stands, ask } = yield* openAccounts(eve);
-        const agentSession = yield* sessionOf(owner, CONVERSATION_KIND.CODING_AGENT);
-        yield* sessionOf(other, CONVERSATION_KIND.CODING_AGENT);
+        const agentSession = yield* sessionOf(owner, CONVERSATION_KIND.AGENT);
+        yield* sessionOf(other, CONVERSATION_KIND.AGENT);
 
         assert.deepEqual(
           yield* ask(

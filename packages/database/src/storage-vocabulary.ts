@@ -3,16 +3,16 @@ export const CONVERSATION_KIND = {
   MAIN: "main",
   OBSERVED: "observed",
   CHILD: "child",
-  /** An agent's transcript: its `messages` rows are what the agent tab shows and its latest turn is its status. */
+  /** An agent's transcript as a release before the rewrite to `agent` stored it, read beside `agent` until no release writes it. */
   CODING_AGENT: "coding_agent",
-  /** An agent's transcript as it is spelled once a migration rewrites the stored rows; read beside `coding_agent` until then. */
+  /** An agent's transcript: its `messages` rows are what the agent tab shows and its latest turn is its status. */
   AGENT: "agent",
 } as const;
 
 /**
  * Both spellings of an agent's conversation. Note that every reader takes
- * both, because the release that rewrites the stored rows to `agent` runs
- * its migration while this one still serves.
+ * both, because the release before this one still writes `coding_agent`
+ * while it serves beside this one, after the stored rows are rewritten.
  */
 export const AGENT_CONVERSATION_KINDS = [CONVERSATION_KIND.CODING_AGENT, CONVERSATION_KIND.AGENT];
 

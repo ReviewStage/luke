@@ -110,7 +110,7 @@ const openTarget = Effect.gen(function* () {
   const conversationId = randomUUID();
   yield* db
     .insert(conversations)
-    .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
+    .values({ id: conversationId, userId, kind: CONVERSATION_KIND.AGENT });
   return { userId, conversationId };
 });
 
@@ -251,7 +251,7 @@ it.layer(getTestDB())("the store writer's failed turns", (it) => {
     "a coding agent's failed turn keeps the words it formed beside its call, settled as an unknown outcome",
     () =>
       Effect.gen(function* () {
-        const parts = yield* failedTurnJournal(CONVERSATION_KIND.CODING_AGENT);
+        const parts = yield* failedTurnJournal(CONVERSATION_KIND.AGENT);
         const text = parts.find((part) => part.type === UI_PART_TYPE.TEXT);
         assert.equal(
           text !== undefined && "text" in text ? text.text : undefined,
@@ -270,7 +270,7 @@ it.layer(getTestDB())("the store writer's failed turns", (it) => {
     "a coding agent's failed turn keeps the words of the attempt it failed on, never those of an attempt eve ran again, however much longer",
     () =>
       Effect.gen(function* () {
-        const parts = yield* failedTurnJournal(CONVERSATION_KIND.CODING_AGENT, RETRIED_ATTEMPT);
+        const parts = yield* failedTurnJournal(CONVERSATION_KIND.AGENT, RETRIED_ATTEMPT);
         assert.deepEqual(
           parts.flatMap((part) =>
             part.type === UI_PART_TYPE.TEXT && "text" in part ? [part.text] : [],
@@ -397,7 +397,7 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
     "a send eve refused writes no row, so a retry under its key is handed to eve again, and a send repeated after it landed is answered as repeated without eve hearing it twice",
     () =>
       Effect.gen(function* () {
-        const target = yield* openConversation(CONVERSATION_KIND.CODING_AGENT);
+        const target = yield* openConversation(CONVERSATION_KIND.AGENT);
         const writer = yield* storeWriter({ tools: TOOLS });
         const handed = yield* Ref.make(0);
         const dispatch = (taken: boolean) =>
@@ -438,7 +438,7 @@ it.layer(getTestDB())("the store writer's awaiting lines", (it) => {
     "a line whose hand-over answered nothing reads nowhere and awaits nothing, and a turn eve later hands it to takes the row with the kind and sender it was sent with",
     () =>
       Effect.gen(function* () {
-        const target = yield* openConversation(CONVERSATION_KIND.CODING_AGENT);
+        const target = yield* openConversation(CONVERSATION_KIND.AGENT);
         const writer = yield* storeWriter({ tools: TOOLS });
         const text = "Check the deploy again.";
         const refused = yield* writer.writeAwaitingLine(

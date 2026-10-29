@@ -44,7 +44,7 @@ const setUp = Effect.gen(function* () {
   const conversationId = randomUUID();
   yield* db
     .insert(conversations)
-    .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
+    .values({ id: conversationId, userId, kind: CONVERSATION_KIND.AGENT });
   const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
   let at = yield* Clock.currentTimeMillis;
   const refusals: string[] = [];

@@ -655,7 +655,7 @@ const insertAgentConversation = SqlSchema.findOne({
         .insert(conversations)
         .values({
           userId,
-          kind: CONVERSATION_KIND.CODING_AGENT,
+          kind: CONVERSATION_KIND.AGENT,
           runtime,
           createdAt: now,
           lastActivityAt: now,

@@ -106,7 +106,7 @@ const endTurn = (
 
 const openAgent = (userId: string, organizationId: string, createdAt: Date) =>
   Effect.gen(function* () {
-    const conversationId = yield* openConversation(userId, CONVERSATION_KIND.CODING_AGENT);
+    const conversationId = yield* openConversation(userId, CONVERSATION_KIND.AGENT);
     yield* Database.use((db) =>
       db.insert(agentTable).values({
         organizationId,

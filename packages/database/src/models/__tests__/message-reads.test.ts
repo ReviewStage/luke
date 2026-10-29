@@ -67,7 +67,7 @@ const openAgentConversation = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = randomUUID();
-    yield* db.insert(conversations).values({ id, userId, kind: CONVERSATION_KIND.CODING_AGENT });
+    yield* db.insert(conversations).values({ id, userId, kind: CONVERSATION_KIND.AGENT });
     return id;
   });
 

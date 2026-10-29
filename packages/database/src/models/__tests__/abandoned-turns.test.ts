@@ -58,7 +58,7 @@ const openConversation = (
   });
 
 /** A coding agent's conversation of a new account. */
-const openAgentConversation = openConversation(CONVERSATION_KIND.CODING_AGENT);
+const openAgentConversation = openConversation(CONVERSATION_KIND.AGENT);
 
 /** A turn of the conversation's: queued, begun by eve, or begun and ended as it succeeded; answers its id. */
 const turnIn = (
@@ -159,8 +159,8 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         assert.equal(yield* lose(brain), 0);
         assert.deepEqual(yield* newestTurnOf(brain), [TURN_STATUS.RUNNING, null]);
 
-        // A conversation stored under the kind's new spelling is an agent's all the same.
-        const respelled = yield* openConversation(CONVERSATION_KIND.AGENT);
+        // A conversation still stored under the kind's old spelling is an agent's all the same.
+        const respelled = yield* openConversation(CONVERSATION_KIND.CODING_AGENT);
         yield* turnIn(writer, respelled, TURN_STATUS.RUNNING);
         assert.equal(yield* lose(respelled), 1);
       }),
@@ -207,7 +207,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
           settleEndedSession(writer, session, { now: STARTED_AT + 10 });
 
         const session = `wrun_${randomUUID()}`;
-        const agent = yield* openConversation(CONVERSATION_KIND.CODING_AGENT, session);
+        const agent = yield* openConversation(CONVERSATION_KIND.AGENT, session);
         yield* turnIn(writer, agent, TURN_STATUS.RUNNING);
         yield* turnIn(writer, agent, TURN_STATUS.QUEUED);
         assert.equal(yield* endOf(`wrun_${randomUUID()}`), 0, "an unknown session settles nothing");
@@ -217,13 +217,13 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         assert.deepEqual(yield* newestTurnOf(agent), ended);
 
         const idleSession = `wrun_${randomUUID()}`;
-        const idle = yield* openConversation(CONVERSATION_KIND.CODING_AGENT, idleSession);
+        const idle = yield* openConversation(CONVERSATION_KIND.AGENT, idleSession);
         yield* turnIn(writer, idle, TURN_STATUS.SETTLED);
         assert.equal(yield* endOf(idleSession), 0);
         assert.deepEqual(yield* newestTurnOf(idle), [TURN_STATUS.SETTLED, null]);
 
         const rotatedFrom = `wrun_${randomUUID()}`;
-        const rotated = yield* openConversation(CONVERSATION_KIND.CODING_AGENT, rotatedFrom);
+        const rotated = yield* openConversation(CONVERSATION_KIND.AGENT, rotatedFrom);
         yield* db
           .update(conversations)
           .set({ runtimeSessionId: `wrun_${randomUUID()}` })
@@ -251,7 +251,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         const writer = yield* storeWriter({ tools: {} });
 
         const stoppedSession = `wrun_${randomUUID()}`;
-        const stopped = yield* openConversation(CONVERSATION_KIND.CODING_AGENT, stoppedSession);
+        const stopped = yield* openConversation(CONVERSATION_KIND.AGENT, stoppedSession);
         const turnId = yield* turnIn(writer, stopped, TURN_STATUS.RUNNING);
         yield* writer.requestTurnCancel(stopped, { turnId, at: new Date(STARTED_AT + 5) });
         assert.equal(
@@ -261,7 +261,7 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
         assert.deepEqual(yield* newestTurnOf(stopped), [TURN_STATUS.CANCELLED, null]);
 
         const busySession = `wrun_${randomUUID()}`;
-        const busy = yield* openConversation(CONVERSATION_KIND.CODING_AGENT, busySession);
+        const busy = yield* openConversation(CONVERSATION_KIND.AGENT, busySession);
         yield* turnIn(writer, busy, TURN_STATUS.RUNNING);
         yield* turnIn(writer, busy, TURN_STATUS.QUEUED);
         yield* turnIn(writer, busy, TURN_STATUS.QUEUED);
