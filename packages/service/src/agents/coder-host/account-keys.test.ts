@@ -168,6 +168,22 @@ test("a step runs on the account's own key where it saved one, and is refused fo
   assert.deepEqual(openAi.keys, [], "no provider was reached on any key");
 });
 
+test("a step the provider refuses the account's own key for fails in the words naming that key, followed by the provider's status and words", async () => {
+  const userId = await accountWithKeys({
+    [PROVIDER_KEY_PROVIDER.ANTHROPIC]: ACCOUNT_KEY.ANTHROPIC,
+  });
+  const refusing = provider([
+    jsonResponse(
+      { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } },
+      401,
+    ),
+  ]);
+
+  const said = await step(await stepModel(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC, refusing.fetch));
+
+  assert.equal(said, `${CODER_REFUSAL.ACCOUNT_KEY_REFUSED} (401 invalid x-api-key)`);
+});
+
 /** The own key a call beside the account's agents spends on, preferring the provider given, as its provider and revealed key, on a deployment holding the ring named, or none for null. */
 async function ownKey(
   userId: string,

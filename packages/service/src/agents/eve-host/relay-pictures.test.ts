@@ -51,7 +51,7 @@ const refusals: string[] = [];
 const relay = new StreamRelay({
   writer,
   now: () => NOW,
-  report: (message) => refusals.push(message),
+  report: (message) => Effect.sync(() => void refusals.push(message)),
 });
 
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>

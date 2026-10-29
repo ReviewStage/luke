@@ -2,7 +2,8 @@
  * eve-sessions.ts -- the host's calls into eve's session routes, as effects on the edge's HttpClient.
  */
 
-import { failureKind } from "@luke/runtime/effect";
+import { redactCredentials } from "@luke/features/credential-redaction";
+import { failureKind, reportUnexpected } from "@luke/runtime/effect";
 import { readEither } from "@luke/wire/effect";
 import type { UserContent } from "ai";
 import { Data, Duration, Effect, Schema as EffectSchema, Redacted, Result, Schedule } from "effect";
@@ -450,6 +451,40 @@ function postToEve(
     );
 }
 
+/** How much of a body eve refused a call with a log line keeps. */
+const REFUSED_BODY_CHARS = 300;
+
+/** The kind a refusal eve answered with a server error is reported under. */
+const EVE_REFUSED = "eve_refused";
+
+/** The first server error status, from which eve's refusal is its own fault and no outcome a member asked for. */
+const SERVER_ERROR_STATUS = 500;
+
+/** The ids a call to eve holds, which its log lines carry. */
+interface EveCallIds {
+  readonly conversationId: string;
+  readonly sessionId?: string;
+}
+
+/**
+ * One line for a call eve did not take, with its status and its body
+ * redacted and cut, since the caller keeps only the status; a server error
+ * is reported too. Note that eve's body on a refusal is its own code and
+ * words (`not_owner`, `no_turn_kind`, a 413's limit), never the message.
+ */
+function refusalSaid({ status, body }: EveAnswer, ids: EveCallIds): Effect.Effect<void> {
+  // Redacted before the cut, so a cut never leaves the head of a credential standing.
+  const words = redactCredentials(JSON.stringify(body) ?? "no body").slice(0, REFUSED_BODY_CHARS);
+  return Effect.logError(`eve did not take a call: ${status} ${words}`).pipe(
+    Effect.andThen(
+      status >= SERVER_ERROR_STATUS
+        ? reportUnexpected(EVE_REFUSED, { ...ids, status, body: words })
+        : Effect.void,
+    ),
+    Effect.annotateLogs({ ...ids, reason: EVE_SEND_OUTCOME.FAILED }),
+  );
+}
+
 function readOpened({ status, body }: EveAnswer): EveOpened {
   const opened = readEither(openedSession, DROPPING_EXCESS)(body);
   if (status !== ACCEPTED_STATUS || Result.isFailure(opened)) {
@@ -516,26 +551,44 @@ function sessionsOver<Turn extends EveHostTurn>(
   });
   return {
     open: (message) =>
-      Effect.map(
+      Effect.flatMap(
         post(sessionsPath(mount), turnHeaders(message), {
           message: message.message,
           capabilities: SESSION_CAPABILITIES,
         }),
-        readOpened,
+        (answer): Effect.Effect<EveOpened> => {
+          const opened = readOpened(answer);
+          return opened.outcome === EVE_SEND_OUTCOME.FAILED
+            ? Effect.as(refusalSaid(answer, { conversationId: message.conversationId }), opened)
+            : Effect.succeed(opened);
+        },
       ),
     // The not-ready follow-up is tried again on the schedule above, and one still not ready past
     // its last wait is the not-ready the caller reads; an unreachable eve is retried nowhere.
-    send: (sessionId, message) =>
-      post(sessionPath(mount, sessionId), turnHeaders(message), { message: message.message }).pipe(
-        Effect.flatMap(readSent),
+    send: (sessionId, message) => {
+      const ids = { conversationId: message.conversationId, sessionId: sessionId };
+      return post(sessionPath(mount, sessionId), turnHeaders(message), {
+        message: message.message,
+      }).pipe(
+        Effect.flatMap((answer) =>
+          Effect.tap(readSent(answer), (sent) =>
+            sent.outcome === EVE_SEND_OUTCOME.FAILED ? refusalSaid(answer, ids) : Effect.void,
+          ),
+        ),
         Effect.retry({
           schedule: SESSION_NOT_READY_RETRY,
           while: (failure) => failure._tag === "EveSessionNotReady",
         }),
         Effect.catchTag("EveSessionNotReady", () =>
-          Effect.succeed({ outcome: EVE_SEND_OUTCOME.NOT_READY }),
+          Effect.as(
+            Effect.logError("eve's session was still not ready past the follow-up's retries").pipe(
+              Effect.annotateLogs({ ...ids, reason: EVE_SEND_OUTCOME.NOT_READY }),
+            ),
+            { outcome: EVE_SEND_OUTCOME.NOT_READY },
+          ),
         ),
-      ),
+      );
+    },
     cancel: (sessionId, eveTurnId) =>
       Effect.map(
         post(`${sessionPath(mount, sessionId)}/cancel`, {}, { turnId: eveTurnId }),

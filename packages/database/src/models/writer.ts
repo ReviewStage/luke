@@ -1818,9 +1818,14 @@ function coalescedRun<Row extends { readonly parts: Parts }>(
  * The dispatch run to its answer or its deadline, from inside the
  * uninterruptible write: the dispatch is forked as a root fiber of its own,
  * which is interruptible as the write is not, and a second fiber interrupts
- * it at the deadline; one interrupted that way answered nothing.
+ * it at the deadline; one interrupted that way answered nothing, which is
+ * logged under the conversation's id, since its sender is answered only that
+ * the service was unavailable.
  */
-function dispatchedWithinDeadline(dispatch: Effect.Effect<boolean>): Effect.Effect<boolean> {
+function dispatchedWithinDeadline(
+  dispatch: Effect.Effect<boolean>,
+  conversationId: string,
+): Effect.Effect<boolean> {
   return Effect.gen(function* () {
     const running = yield* Effect.forkDetach(dispatch);
     const deadline = yield* Effect.forkDetach(
@@ -1828,7 +1833,12 @@ function dispatchedWithinDeadline(dispatch: Effect.Effect<boolean>): Effect.Effe
     );
     const exit = yield* Fiber.await(running);
     yield* Fiber.interrupt(deadline);
-    if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) return false;
+    if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) {
+      yield* Effect.logError("a line's hand-over ran past its deadline and is read as not taken", {
+        deadline: Duration.format(AWAITING_LINE_DISPATCH_DEADLINE),
+      }).pipe(Effect.annotateLogs({ conversationId }));
+      return false;
+    }
     return yield* exit;
   });
 }
@@ -2178,7 +2188,7 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
       const written = claimed.success;
       if (!("claim" in written)) return Result.succeed(Option.some(written));
       // A hand-over that died says nothing of whether the runtime took the line, which is kept standing.
-      const taken = yield* dispatchedWithinDeadline(dispatch).pipe(
+      const taken = yield* dispatchedWithinDeadline(dispatch, target.conversationId).pipe(
         Effect.tapCause(() =>
           Effect.ignore(releaseDispatchClaim(target.conversationId, written.claim)),
         ),

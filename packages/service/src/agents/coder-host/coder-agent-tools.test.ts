@@ -2646,7 +2646,7 @@ function sessionEndsOf(host: CoderHost) {
       admits: CODER_DEPLOYMENT_TURNS,
       presents: CODER_DEPLOYMENT_PRESENCE,
     },
-    (sessionId) => database.run(host.sessionEnded(sessionId)),
+    (sessionId, failed) => database.run(host.sessionEnded(sessionId, failed)),
   );
   const failed = events?.["session.failed"];
   const completed = events?.["session.completed"];
@@ -2693,6 +2693,14 @@ test("an agent whose session eve says failed reads as failed for its session's e
 
   await ends.failed(agents.teammates.sessionId);
   assert.deepEqual(await standingAsRead(call, agents.teammates.id), failed);
+  const settled = await database.run(
+    latestTurnsOf(agents.teammates.userId, [agents.teammates.conversationId]),
+  );
+  assert.equal(
+    settled.get(agents.teammates.conversationId)?.failureDetail,
+    "WORKFLOW_EXECUTION_FAILED The run threw.",
+    "eve's code and message stand on the turn",
+  );
   await ends.failed(agents.teammates.sessionId);
   assert.deepEqual(
     await standingAsRead(call, agents.teammates.id),
