@@ -38,18 +38,18 @@ const DECLARED_TABLES = [
   "account_preference",
   "account_provider_key",
   "admin_favorite",
-  "agent",
   "agent_browser_tab",
-  "agent_delegation",
   "agent_pin",
-  "agent_runner_lease",
   "agent_section_entry",
-  "agent_wakeup",
   "attachment",
   "automation",
   "automation_run",
   "channel",
   "channel_look",
+  "coding_agent",
+  "coding_agent_delegation",
+  "coding_agent_runner_lease",
+  "coding_agent_wakeup",
   "conversations",
   "device",
   "device_agent_line",
@@ -117,8 +117,7 @@ async function publicTableNames(): Promise<readonly string[]> {
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       return yield* sql`
-        select table_name as name from information_schema.tables
-        where table_schema = 'public' and table_type = 'BASE TABLE'
+        select table_name as name from information_schema.tables where table_schema = 'public'
       `;
     }),
   );

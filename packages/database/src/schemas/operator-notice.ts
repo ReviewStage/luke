@@ -7,7 +7,7 @@ import { agentTable } from "./agent.js";
 /**
  * operator-notice.ts -- what an operator is told of its member's agents on its next turn, and when a failure last woke it.
  *
- * A member's operator (`agent.kind = operator`) watches the member's
+ * A member's operator (`coding_agent.kind = operator`) watches the member's
  * own agents of its workspace through notices rather than one wake per
  * event: a turn settled, a turn failed or abandoned, a pull request merged
  * or closed, a new ask in the member's inbox. One row per event kind and

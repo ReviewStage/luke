@@ -21,10 +21,7 @@ import { automationRun } from "@luke/database/schemas/automation";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { integrationConnection } from "@luke/database/schemas/integration";
 import { conversations, turns } from "@luke/database/schemas/storage";
-import {
-  AGENT_CONVERSATION_KINDS,
-  isAgentConversationKind,
-} from "@luke/database/storage-vocabulary";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import type {
   AdminAttentionAccount,
   AdminAttentionProblem,
@@ -199,7 +196,7 @@ const findAgentFailures = SqlSchema.findAll({
           and(
             gte(turns.settledAt, request.windowStart),
             eq(turns.status, TURN_STATUS.FAILED),
-            inArray(conversations.kind, AGENT_CONVERSATION_KINDS),
+            eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
             keptByScope(request.scope),
           ),
         )
@@ -402,8 +399,8 @@ const TURN_WORK = {
 type TurnWork = (typeof TURN_WORK)[keyof typeof TURN_WORK];
 
 function turnWorkOf(kind: string, parentKind: string | null): TurnWork {
-  if (isAgentConversationKind(kind)) return TURN_WORK.AGENT;
-  if (parentKind !== null && isAgentConversationKind(parentKind)) return TURN_WORK.AGENT_SUBAGENT;
+  if (kind === CONVERSATION_KIND.CODING_AGENT) return TURN_WORK.AGENT;
+  if (parentKind === CONVERSATION_KIND.CODING_AGENT) return TURN_WORK.AGENT_SUBAGENT;
   return TURN_WORK.LUKE;
 }
 

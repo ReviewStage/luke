@@ -1,7 +1,7 @@
 /**
  * starter-notices.ts -- the endings a coding agent's starter is due to hear of, read for the sweep that tells it.
  *
- * An agent another coding agent started (`agent.started_by_agent_id`)
+ * An agent another coding agent started (`coding_agent.started_by_agent_id`)
  * reports back to its starter by message on its own; one whose run ends
  * before it can would leave its starter waiting on a message that never
  * comes. So each ending within the window is due a line to the starter: a

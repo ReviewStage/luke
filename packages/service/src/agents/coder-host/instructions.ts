@@ -547,7 +547,7 @@ const EXAMPLE_REPOSITORY = "acme/app";
 
 /**
  * Where an agent works: its own sandbox, or, for a local agent, its
- * starter's Mac (`agent.machine`), directly or in a Linux VM of its
+ * starter's Mac (`coding_agent.machine`), directly or in a Linux VM of its
  * own there, with the checkout's path the machine reports either way
  * (`../machine/agent-machine.ts`'s `layout`).
  */

@@ -27,7 +27,7 @@ import { user } from "./auth.js";
  * `claude_executable`, and `codex_executable` follow the account's home
  * folder and the harnesses the app runs, which move with every update. A
  * local agent is pinned to one of these
- * (`agent.device_id`), and every line and request for it names the
+ * (`coding_agent.device_id`), and every line and request for it names the
  * same Mac (`./device-agent.ts`). The row belongs to the account and leaves
  * with it.
  *
