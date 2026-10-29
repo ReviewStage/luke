@@ -27,7 +27,9 @@ import { keptKey, useKept } from "../use-kept.js";
  * and the assignees' groups on the same terms, the tasks no one is assigned
  * to by null, so a repository's fold stands through a while grouped by
  * creator or assignee, and the
- * account's own sections, each by its id. A fixture run starts with every group open
+ * account's own sections, each by its id. A task's child tasks nested under
+ * its row stand folded until it is opened, so the tasks opened are kept,
+ * each by its id, under a key of their own. A fixture run starts with every group open
  * and keeps nothing, so its frames never wear a developer's folds. The
  * Inbox's task groups are kept on the same terms, each by its task's id,
  * and so are its view choices, the scope it shows, how it groups and sorts,
@@ -54,6 +56,7 @@ const STORAGE_KEY = {
   ASSIGNEES: "luke.sidebarFoldedAssignees",
   PINNED: "luke.sidebarPinnedFolded",
   SECTIONS: "luke.sidebarFoldedSections",
+  OPENED_TASKS: "luke.sidebarOpenedTasks",
   INBOX_TASKS: "luke.inboxFoldedTasks",
   /** Where the Inbox's task groups were kept before tasks had their name. */
   INBOX_TASKS_EARLIER: "luke.inboxFoldedPlans",
@@ -229,6 +232,7 @@ const KEPT = {
   FOLDED_ASSIGNEES: keptKey(STORAGE_KEY.ASSIGNEES, storedFolds),
   PINNED_FOLDED: keptKey(STORAGE_KEY.PINNED, storedFlag),
   FOLDED_SECTIONS: keptKey(STORAGE_KEY.SECTIONS, storedTasks),
+  OPENED_TASKS: keptKey(STORAGE_KEY.OPENED_TASKS, storedTasks),
   INBOX_TASKS: keptKey(STORAGE_KEY.INBOX_TASKS, storedTasks, STORAGE_KEY.INBOX_TASKS_EARLIER),
   INBOX_LIST_WIDTH: keptKey(STORAGE_KEY.INBOX_LIST_WIDTH, storedWidth),
   FILE_TREE_WIDTH: keptKey(STORAGE_KEY.FILE_TREE_WIDTH, storedWidth),
@@ -243,15 +247,24 @@ interface Folds {
   readonly pinned: boolean;
   /** The account's own sections folded, by id. */
   readonly sections: readonly string[];
+  /** The tasks whose child tasks stand open under them, by id. */
+  readonly openedTasks: readonly string[];
 }
 
 /** No Inbox task group folded. */
 const NO_FOLDED_TASKS: readonly string[] = [];
 
-const OPEN: Folds = { groups: [], creators: [], assignees: [], pinned: false, sections: [] };
+const OPEN: Folds = {
+  groups: [],
+  creators: [],
+  assignees: [],
+  pinned: false,
+  sections: [],
+  openedTasks: [],
+};
 
 /** The folds with `held` folded where it was open, and open where it was folded. */
-function toggled(folded: readonly (string | null)[], held: string | null): (string | null)[] {
+function toggled<K extends string | null>(folded: readonly K[], held: K): K[] {
   return folded.includes(held) ? folded.filter((each) => each !== held) : [...folded, held];
 }
 
@@ -270,6 +283,9 @@ export interface FoldedGroups {
   /** Whether one of the account's sections is folded, by its id. */
   sectionFolded: (sectionId: string) => boolean;
   toggleSection: (sectionId: string) => void;
+  /** Whether a task's child tasks stand open under its row, by its id; folded until first opened. */
+  taskOpened: (taskId: string) => boolean;
+  toggleTask: (taskId: string) => void;
 }
 
 /** The sidebar's folds, each kept as it is pressed, unless the run is `staged`. */
@@ -282,8 +298,11 @@ export function useFoldedGroups(staged: boolean): FoldedGroups {
   const [assignees, keepAssignees] = useKept(KEPT.FOLDED_ASSIGNEES, OPEN.assignees);
   const [pinned, keepPinned] = useKept(KEPT.PINNED_FOLDED, OPEN.pinned);
   const [sections, keepSections] = useKept(KEPT.FOLDED_SECTIONS, OPEN.sections);
+  const [openedTasks, keepOpenedTasks] = useKept(KEPT.OPENED_TASKS, OPEN.openedTasks);
   const [stagedFolds, setStagedFolds] = useState<Folds>(OPEN);
-  const folds = staged ? stagedFolds : { groups, creators, assignees, pinned, sections };
+  const folds = staged
+    ? stagedFolds
+    : { groups, creators, assignees, pinned, sections, openedTasks };
   const fold = (next: Partial<Folds>) => {
     if (staged) {
       setStagedFolds({ ...stagedFolds, ...next });
@@ -294,6 +313,7 @@ export function useFoldedGroups(staged: boolean): FoldedGroups {
     if (next.assignees !== undefined) keepAssignees(next.assignees);
     if (next.pinned !== undefined) keepPinned(next.pinned);
     if (next.sections !== undefined) keepSections(next.sections);
+    if (next.openedTasks !== undefined) keepOpenedTasks(next.openedTasks);
   };
   const toggle = (repository: string | null) => fold({ groups: toggled(folds.groups, repository) });
   const toggleCreator = (creatorId: string | undefined) =>
@@ -310,12 +330,9 @@ export function useFoldedGroups(staged: boolean): FoldedGroups {
     pinnedFolded: folds.pinned,
     togglePinned: () => fold({ pinned: !folds.pinned }),
     sectionFolded: (sectionId) => folds.sections.includes(sectionId),
-    toggleSection: (sectionId) =>
-      fold({
-        sections: folds.sections.includes(sectionId)
-          ? folds.sections.filter((held) => held !== sectionId)
-          : [...folds.sections, sectionId],
-      }),
+    toggleSection: (sectionId) => fold({ sections: toggled(folds.sections, sectionId) }),
+    taskOpened: (taskId) => folds.openedTasks.includes(taskId),
+    toggleTask: (taskId) => fold({ openedTasks: toggled(folds.openedTasks, taskId) }),
   };
 }
 

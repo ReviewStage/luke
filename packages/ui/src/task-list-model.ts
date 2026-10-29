@@ -398,3 +398,91 @@ export function assigneeGroups(
       latest(b.rows, order) - latest(a.rows, order),
   );
 }
+
+/** One row as a list nesting child tasks draws it: how deep it stands, and whether the child tasks under it stand open. */
+export interface DrawnTaskRow {
+  readonly row: TaskRow;
+  /** How deep it stands: 0 at the top, one more for each parent above it. */
+  readonly depth: number;
+  /** Whether its child tasks stand open under it; undefined where the list holds none of them. */
+  readonly open: boolean | undefined;
+}
+
+/** One row and the rows standing under it, each a tree of its own. */
+interface TaskRowNode {
+  readonly row: TaskRow;
+  readonly children: readonly TaskRowNode[];
+}
+
+/** The parent a row stands under where `rows` holds it: a task's parent task; none for an agent, a task at the top, or one naming itself. */
+function parentIn(row: TaskRow, held: ReadonlySet<string>): string | undefined {
+  if (row.kind !== TASK_ROW.TASK) return undefined;
+  const { id, parentTaskId } = row.task;
+  return parentTaskId !== undefined && parentTaskId !== id && held.has(parentTaskId)
+    ? parentTaskId
+    : undefined;
+}
+
+/**
+ * The rows as a tree, each in the order `rows` hands it. Note that a loop
+ * of parents, which nothing writes, is reached from no row at the top, so
+ * its first row is stood at the top, the loop cut where it closes, rather
+ * than the loop leaving the list.
+ */
+function taskRowTree(rows: readonly TaskRow[]): TaskRowNode[] {
+  const held = new Set(rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task.id] : [])));
+  const childrenOf = new Map<string, TaskRow[]>();
+  const tops: TaskRow[] = [];
+  for (const row of rows) {
+    const parent = parentIn(row, held);
+    if (parent === undefined) tops.push(row);
+    else childrenOf.set(parent, [...(childrenOf.get(parent) ?? []), row]);
+  }
+  const reached = new Set<string>();
+  const node = (row: TaskRow): TaskRowNode => {
+    reached.add(taskRowKey(row));
+    const children = row.kind === TASK_ROW.TASK ? (childrenOf.get(row.task.id) ?? []) : [];
+    return {
+      row,
+      children: children.filter((child) => !reached.has(taskRowKey(child))).map(node),
+    };
+  };
+  const tree = tops.map(node);
+  for (const row of rows) if (!reached.has(taskRowKey(row))) tree.push(node(row));
+  return tree;
+}
+
+/** Whether a row or any row under it is one `standing` keeps drawn. */
+function holdsStanding(node: TaskRowNode, standing: (row: TaskRow) => boolean): boolean {
+  return standing(node.row) || node.children.some((child) => holdsStanding(child, standing));
+}
+
+/**
+ * The rows as a list nesting child tasks draws them, in order: each row,
+ * then the child tasks under it while `opened` says it stands open, to any
+ * depth, each in the order `rows` hands it. A task stands under its parent
+ * only where `rows` holds that parent: a child whose parent the list leaves
+ * out, one the reader cannot see, the view filters out, a pin holds, or
+ * another group or section holds, stands at the top, so it is never out of
+ * reach, and no row stands twice. A row folded shut still draws the one
+ * `standing` keeps (the open task), and the rows between it and that one,
+ * so the task worked on never leaves the list, as a folded group keeps it.
+ */
+export function drawnTaskRows(
+  rows: readonly TaskRow[],
+  opened: (taskId: string) => boolean,
+  standing: (row: TaskRow) => boolean,
+): DrawnTaskRow[] {
+  const drawn: DrawnTaskRow[] = [];
+  const draw = (node: TaskRowNode, depth: number) => {
+    const { row, children } = node;
+    const open =
+      children.length === 0 || row.kind !== TASK_ROW.TASK ? undefined : opened(row.task.id);
+    drawn.push({ row, depth, open });
+    const under =
+      open === false ? children.filter((child) => holdsStanding(child, standing)) : children;
+    for (const child of under) draw(child, depth + 1);
+  };
+  for (const node of taskRowTree(rows)) draw(node, 0);
+  return drawn;
+}

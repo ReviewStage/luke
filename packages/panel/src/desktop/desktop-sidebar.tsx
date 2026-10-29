@@ -88,6 +88,7 @@ import {
   type CreatorGroup,
   creatorGroups,
   drawnGrouping,
+  drawnTaskRows,
   hiddenStatuses,
   orderTaskRows,
   type RepositoryGroup,
@@ -162,6 +163,7 @@ import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
+import { childTasksFold, useNestedRows } from "./nested-rows.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { FOR_YOU_NOUN, useChannelWaiting, useInboxWaiting } from "./places-waiting.js";
@@ -409,6 +411,19 @@ interface RowContext {
   readonly onCarried: (carried: boolean) => void;
   /** An agent's Move to section, as a task's menu offers it; none for an archived agent. */
   readonly sectionEntry: (agent: TasklessAgent) => MenuEntry | undefined;
+  /** Whether a task's child tasks stand open under its row, folded until first opened. */
+  readonly opened: (taskId: string) => boolean;
+  /** Opens a task's child tasks under its row where they stand folded, and folds them where they stand open. */
+  readonly onFoldTask: (taskId: string) => void;
+}
+
+/** The rows a list draws, child tasks nested under their parents and passed by under a fold, the open row still standing (`drawnTaskRows`). */
+function nestedRows(
+  rows: readonly TaskRow[],
+  folds: FoldedGroups,
+  current: (row: TaskRow) => boolean,
+): TaskRow[] {
+  return drawnTaskRows(rows, folds.taskOpened, current).map(({ row }) => row);
 }
 
 /** A repository's group's key, by which it leaves the list. */
@@ -445,6 +460,9 @@ function LeavingGroups<G>({
  * time the list's order chooses. A row says what its group does not: its
  * repository's name where `repository` names one, and the faces `faces`
  * lets it wear (`rowFaceOf`): under a group by creator, its assignee's alone.
+ * A task's child tasks among the rows stand nested under it, folded until
+ * its chevron opens them, to any depth; one whose parent the rows leave out
+ * stands among them at the top (`drawnTaskRows`).
  */
 function TaskRows({
   rows,
@@ -459,17 +477,18 @@ function TaskRows({
 }): React.JSX.Element {
   // Note that the rows keep the view's order, so a row is dragged only out of them, into a section or Pinned.
   const { dropOut } = context;
+  const nested = useNestedRows(rows, context.opened, context.currentRow);
   const drag = useRowDrag(undefined, {
     onDropOut:
       dropOut === undefined
         ? undefined
         : (from, zone, at) => {
-            const row = rows[from];
-            if (row !== undefined) dropOut(row, zone, at);
+            const held = nested[from];
+            if (held !== undefined) dropOut(held.row, zone, at);
           },
     onCarried: context.onCarried,
   });
-  const drawn = useLeaving(rows, taskRowKey);
+  const drawn = useLeaving(nested, ({ row }) => taskRowKey(row));
   return (
     <Stack
       as={LAYOUT_ELEMENT.UL}
@@ -478,8 +497,9 @@ function TaskRows({
       moves
       onPointerDown={drag}
     >
-      {drawn.map(({ value: row }) =>
-        row.kind === TASK_ROW.TASK ? (
+      {drawn.map(({ value: held }) => {
+        const { row } = held;
+        return row.kind === TASK_ROW.TASK ? (
           <SidebarTask
             key={row.task.id}
             tasks={context.tasks}
@@ -491,6 +511,8 @@ function TaskRows({
             at={taskRowTime(row, context.order)}
             repository={repository?.(row)}
             faces={faces}
+            depth={held.depth}
+            fold={childTasksFold(held, context.onFoldTask)}
             onOpen={() => context.onOpen(row.task.id)}
           />
         ) : (
@@ -510,8 +532,8 @@ function TaskRows({
             section={context.sectionEntry(row.agent)}
             onDeleted={context.onDeletedAgent(row.agent.id)}
           />
-        ),
-      )}
+        );
+      })}
     </Stack>
   );
 }
@@ -1238,7 +1260,7 @@ function drawnTasks(
   current: (row: TaskRow) => boolean,
 ): TaskRow[] {
   const under = (folded: boolean, rows: readonly TaskRow[]) =>
-    folded ? rows.filter(current) : rows;
+    nestedRows(folded ? rows.filter(current) : rows, folds, current);
   switch (sections.grouping) {
     case TASK_GROUPING.REPOSITORY:
       return sections.groups.flatMap((group) => under(folds.folded(group.repository), group.rows));
@@ -1251,7 +1273,7 @@ function drawnTasks(
         under(folds.creatorFolded(group.creatorId), group.rows),
       );
     case TASK_GROUPING.NONE:
-      return [...sections.rows];
+      return nestedRows(sections.rows, folds, current);
   }
 }
 
@@ -2060,6 +2082,8 @@ function SidebarColumn({
             sectionDialogs.askNew,
           )
         : undefined,
+    opened: folds.taskOpened,
+    onFoldTask: folds.toggleTask,
   };
   // A pinned tab is on show where its holder is open and its column shows it:
   // an agent's in the task's own column, any other in the side panel. The
@@ -2164,7 +2188,7 @@ function SidebarColumn({
   // the list still moves from it.
   const pinnedDrawn = pinnedTaskRows(pinnedSection);
   const sectionsDrawn = shownSections.flatMap(({ section, rows: held }) =>
-    folds.sectionFolded(section.id) ? held.filter(currentRow) : held,
+    nestedRows(folds.sectionFolded(section.id) ? held.filter(currentRow) : held, folds, currentRow),
   );
   const pinnedShownDrawn = folds.pinnedFolded ? pinnedDrawn.filter(currentRow) : pinnedDrawn;
   const drawn = [...pinnedShownDrawn, ...sectionsDrawn, ...drawnTasks(sections, folds, currentRow)];
@@ -2324,8 +2348,10 @@ function SidebarColumn({
                       inSight: overlay.inSight,
                       folded: folds.sectionFolded,
                       onToggle: folds.toggleSection,
-                      row: (row) =>
-                        row.kind === TASK_ROW.TASK ? (
+                      opened: folds.taskOpened,
+                      row: (held) => {
+                        const { row } = held;
+                        return row.kind === TASK_ROW.TASK ? (
                           <SidebarTask
                             key={row.task.id}
                             tasks={tasks}
@@ -2335,6 +2361,8 @@ function SidebarColumn({
                             unread={unread(row.task)}
                             now={now}
                             faces={context.faces}
+                            depth={held.depth}
+                            fold={childTasksFold(held, folds.toggleTask)}
                             onOpen={() => context.onOpen(row.task.id)}
                           />
                         ) : (
@@ -2353,7 +2381,8 @@ function SidebarColumn({
                             section={context.sectionEntry(row.agent)}
                             onDeleted={context.onDeletedAgent(row.agent.id)}
                           />
-                        ),
+                        );
+                      },
                       onDropRow: dropRow,
                       onCarried: setCarrying,
                     }}
