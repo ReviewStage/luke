@@ -888,7 +888,7 @@ export function SidebarTask({
                 )}
                 {worn === undefined ? null : <AssigneeFaceMark face={worn} heard={false} />}
                 {drafted ? <DraftMark /> : null}
-                {task.blocked === true ? <BlockedMark /> : null}
+                {task.blocked === true ? <BlockedMark aria-hidden="true" /> : null}
                 <TaskRowStatus task={task} />
                 <Time at={at} now={now} hint={false} />
               </span>
