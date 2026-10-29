@@ -354,8 +354,10 @@ const REPORT_TAG_ATTRIBUTES: ReadonlySet<string> = new Set([
   "conversationId",
   "turnId",
   "taskId",
+  "sessionId",
   "sandboxSessionId",
   "failure",
+  "reason",
 ]);
 
 /** The longest value Sentry keeps on a tag; a longer one is dropped from the event. */
