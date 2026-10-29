@@ -235,6 +235,7 @@ function runnerLostDetail(exit: ExitedRunner["exit"], stderr: string | undefined
 class RunnerLost extends Data.TaggedError("RunnerLost")<{
   readonly agentId: string;
   readonly conversationId: string;
+  readonly sessionId: string;
   readonly turnIds: readonly string[];
   readonly sandboxSessionId: string;
   readonly exitCode: string;
@@ -248,10 +249,12 @@ class RunnerLost extends Data.TaggedError("RunnerLost")<{
     agentId: this.agentId,
     conversationId: this.conversationId,
     turnIds: this.turnIds.join(","),
+    sessionId: this.sessionId,
     sandboxSessionId: this.sandboxSessionId,
     exitCode: this.exitCode,
     stderr: this.stderr,
     failure: TURN_FAILURE.MODEL,
+    reason: this._tag,
   };
 }
 
@@ -286,6 +289,7 @@ const settledLostRunner = (
       agentId: sandbox.agentId,
       conversationId,
       turnIds,
+      sessionId: sandbox.sessionId,
       sandboxSessionId: sandbox.running,
       exitCode: String(runner.exit),
       stderr: stderr === undefined ? "none" : redactCredentials(stderr),
@@ -295,8 +299,10 @@ const settledLostRunner = (
         agentId: sandbox.agentId,
         conversationId,
         turnId: turnIds.join(","),
+        sessionId: sandbox.sessionId,
         sandboxSessionId: sandbox.running,
         failure: TURN_FAILURE.MODEL,
+        reason: lost._tag,
         exitCode: lost.exitCode,
       }),
     );
