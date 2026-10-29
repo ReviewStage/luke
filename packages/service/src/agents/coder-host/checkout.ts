@@ -31,6 +31,7 @@ import {
   deepenRepository,
   markDeepened,
   REPOSITORY_REFUSAL,
+  type RepositoryRefusal,
   type RepositorySandbox,
   refreshRepository,
   runInSandbox,
@@ -102,9 +103,10 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * identity, only an empty working folder where the checkout would stand.
  */
 
-/** Why the checkout or a mint ran nothing, in the host's own words. */
+/** Why the checkout or a mint ran nothing, in the host's own words, and what the sandbox's run said where it threw (`RepositoryRefusal`'s `detail`). */
 export class CheckoutRefused extends Data.TaggedError("CheckoutRefused")<{
   readonly reason: CoderRefusal | string;
+  readonly detail?: string | undefined;
 }> {}
 
 /** What a mint or a checkout may reach: GitHub through the App, and the store for the workspace's installation. */
@@ -327,8 +329,8 @@ const identityOn = (
   );
 
 /** A refusal of the repository's shell, as the checkout's own. */
-function refusedWith(failure: { readonly reason: string }): CheckoutRefused {
-  return new CheckoutRefused({ reason: failure.reason });
+function refusedWith(failure: RepositoryRefusal): CheckoutRefused {
+  return new CheckoutRefused({ reason: failure.reason, detail: failure.detail });
 }
 
 /** The agent's repository as its workspace reaches it: the workspace, the repository as GitHub spells it, its default branch, and a read token with whose it is. */
@@ -466,7 +468,7 @@ export const openWorkingFolder = /* @__PURE__ */ Effect.fn("web/openWorkingFolde
     sandbox,
     { command: MAKE_WORKING_FOLDER, workingDirectory: REPOSITORY_SANDBOX_CONTRACT.PATH.WORKSPACE },
     REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE,
-  ).pipe(Effect.mapError((refused) => new CheckoutRefused({ reason: refused.reason })));
+  ).pipe(Effect.mapError(refusedWith));
   if (made.exitCode !== 0) {
     return yield* new CheckoutRefused({
       reason: `\`${MAKE_WORKING_FOLDER}\` exited ${made.exitCode}`,
@@ -610,7 +612,7 @@ export const checkoutBranch = /* @__PURE__ */ Effect.fn("web/checkoutBranch")(fu
     sandbox,
     { command: SHOW_BRANCH, workingDirectory: CODER.CHECKOUT_PATH },
     REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE,
-  ).pipe(Effect.mapError((refused) => new CheckoutRefused({ reason: refused.reason })));
+  ).pipe(Effect.mapError(refusedWith));
   if (shown.exitCode !== 0) {
     return yield* new CheckoutRefused({ reason: `\`${SHOW_BRANCH}\` exited ${shown.exitCode}` });
   }

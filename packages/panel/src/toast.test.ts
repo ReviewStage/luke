@@ -68,8 +68,10 @@ const TRACED: Pick<ShownFailureSentry, "getActiveSpan" | "getCurrentScope"> = {
 
 /** An agent's Stop that Luke never heard back on, the fetch beneath it naming a credential. */
 function unheardStop(): ToastNotice {
+  // A credential in the cause's code as well as its message, since a code is sent as a tag and grouped by.
   const unreached = Object.assign(new TypeError("fetch failed with token=fixture-secret"), {
     status: 503,
+    code: "sk-fixturecode01",
   });
   return {
     words: "The agent could not be stopped.",
@@ -298,10 +300,11 @@ test("a failure toast reports what failed: an unexpected one as an error line an
   const unexpected = {
     "failure.surface": "agent.stop",
     "failure.kind": "unexpected",
-    "failure.code": "TypeError",
+    "failure.code": "[redacted]",
     "error.name": "Error",
     "error.message": "Luke didn't hear back.",
     "error.root.name": "TypeError",
+    "error.root.code": "[redacted]",
     "error.root.status": 503,
     "error.root.message": "fetch failed with [redacted]",
     "agent.id": "agent-fixture",
@@ -311,7 +314,7 @@ test("a failure toast reports what failed: an unexpected one as an error line an
   assert.deepEqual(lines, [
     {
       level: "error",
-      message: "A failure was shown on agent.stop: TypeError",
+      message: "A failure was shown on agent.stop: [redacted]",
       attributes: unexpected,
     },
     {
@@ -335,10 +338,10 @@ test("a failure toast reports what failed: an unexpected one as an error line an
     mechanism: { type: "auto.luke.shown_failure", handled: true },
     captureContext: {
       level: "error",
-      fingerprint: ["shown-failure", "agent.stop", "TypeError"],
+      fingerprint: ["shown-failure", "agent.stop", "[redacted]"],
       tags: {
         "failure.surface": "agent.stop",
-        "failure.code": "TypeError",
+        "failure.code": "[redacted]",
         "agent.id": "agent-fixture",
       },
       contexts: { shown_failure: unexpected },
@@ -382,10 +385,11 @@ test("a failure toast's Copy details copies what its report sent, to paste as it
       "time: 2026-10-29T18:20:03.198Z",
       "failure.surface: agent.stop",
       "failure.kind: unexpected",
-      "failure.code: TypeError",
+      "failure.code: [redacted]",
       "error.name: Error",
       "error.message: Luke didn't hear back.",
       "error.root.name: TypeError",
+      "error.root.code: [redacted]",
       "error.root.status: 503",
       "error.root.message: fetch failed with [redacted]",
       "agent.id: agent-fixture",
