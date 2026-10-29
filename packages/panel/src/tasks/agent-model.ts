@@ -572,9 +572,9 @@ export function startsOwnAgents(mode: TaskMode | undefined): boolean {
  */
 export function offersContinue(
   mode: TaskMode | undefined,
-  agent: { readonly kind?: AgentKind | undefined },
+  agent: { readonly pilot?: true | undefined },
 ): boolean {
-  return startsOwnAgents(mode) || agent.kind === AGENT_KIND.PILOT;
+  return startsOwnAgents(mode) || agent.pilot === true;
 }
 
 /** Said under an agent's box when the model or effort its chip chose could not be changed. */

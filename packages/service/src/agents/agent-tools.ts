@@ -417,6 +417,10 @@ export const START_AGENT_REFUSAL = {
   SELF_CONTINUE:
     "Not started: an agent does not continue itself, since you are still here to go on; to try " +
     "another direction from one of your own messages, fork yourself at its messageId.",
+  PILOT_OFF:
+    "Not started: that task is worked in pilot mode and has no pilot, so this agent would be its " +
+    "pilot, and Pilot is off for the member you start for. Ask them to turn it on in Settings › " +
+    "Experimental.",
   SOURCE_RUNNING:
     "Not started: that agent is still starting or working, and a continue would take over work " +
     "it is still doing. Wait until it ends, message it, or fork it at a messageId to try another " +
@@ -1631,8 +1635,12 @@ function earlierContinuations(
   return earlier.length === 0 ? {} : { earlierContinuations: earlier.map((each) => ({ ...each })) };
 }
 
-/** A start's refusal in the model's words, said of the source where the start named one: one that is none of the caller's, or a message that is none of the source's. */
+/** A start's refusal in the model's words, said of the source where the start named one: one that is none of the caller's, or a message that is none of the source's; and of the pilot a fresh start would have made. */
 function startFromRefusalWords(refusal: HostedRefusal, from: AgentStartFrom | undefined): string {
+  // Note that a fresh start is refused as not permitted only where it would be a pilot task's pilot.
+  if (from === undefined && refusal.error === HOSTED_API_ERROR.NOT_PERMITTED) {
+    return START_AGENT_REFUSAL.PILOT_OFF;
+  }
   if (from !== undefined && refusal.error === HOSTED_API_ERROR.NOT_FOUND) {
     return START_AGENT_REFUSAL.NO_SOURCE;
   }

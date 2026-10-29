@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { type DatabaseServices, READ_CONCURRENCY } from "@luke/database/core/query";
-import { readAccountPreferences } from "@luke/database/models/account-store";
+import { accountExperimentOn, readAccountPreferences } from "@luke/database/models/account-store";
 import {
   type Agent,
   type AgentPlace,
@@ -10,6 +10,7 @@ import {
   nativeRuntimesOfReached,
   readAgentByKey,
   readAgentContext,
+  taskPilotStands,
 } from "@luke/database/models/agent-store";
 import type { HandedFile } from "@luke/database/models/attached-file-parts";
 import { devicesNamed } from "@luke/database/models/device-store";
@@ -63,8 +64,9 @@ import type { GitHubAccess } from "@luke/features/github-repositories-wire";
 import { agentName, automationRun } from "@luke/features/model-label";
 import { AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
-import type { Task } from "@luke/features/task-wire";
+import { TASK_MODE, type Task } from "@luke/features/task-wire";
 import { bothInOrder, failureKind } from "@luke/runtime/effect";
+import { EXPERIMENT } from "@luke/settings";
 import { MESSAGE_CHANNEL, START_LINE_BRIEF } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Effect, Option, Result } from "effect";
@@ -210,6 +212,11 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * stands, since no work was handed. It runs on the choice any Start does,
  * and on a task with no repository it works in none and asks nothing of
  * GitHub, where any other Start on such a task is refused.
+ * A fresh Start on a task worked in pilot mode (`TASK_MODE.PILOT`) where no
+ * pilot stands unarchived makes the task's pilot, whoever asks, a member or a
+ * coding agent's `start_agent`, which is how a pilot gives a child task its
+ * sub-pilot; every later one makes a coder, as every Start on any other task
+ * does. A pilot is refused for an account with the Pilot experiment off.
  * The member's operator is the one blank Start with no task: in a workspace
  * the account is a member of, on no repository, from no other agent and
  * with no prompt or note, and no other Start is an operator's. Every other
@@ -482,6 +489,32 @@ function operatorPlace(place: StartPlace, fitter: ReplayFitter | undefined): boo
   );
 }
 
+/**
+ * What a fresh Start on the task asks for: its pilot where the task is worked
+ * in pilot mode and no pilot of it stands unarchived, whoever started it,
+ * else a coder. A pilot is refused as not permitted for an account with the
+ * Pilot experiment off: the account the Start is made for, which for a coding
+ * agent's `start_agent` is its starter, so a sub-pilot is held to whoever
+ * started the pilot above it. Note that the store asks again under the task's
+ * lock (`createAgent`), so a Start that raced another to the task's pilot
+ * makes a coder.
+ */
+const freshKindOn = Effect.fnUntraced(function* (
+  userId: string,
+  task: Task,
+): Effect.fn.Return<
+  typeof AGENT_KIND.CODER | typeof AGENT_KIND.PILOT,
+  HostedRefusal,
+  DatabaseServices
+> {
+  if (task.mode !== TASK_MODE.PILOT) return AGENT_KIND.CODER;
+  if (yield* hostedStoreOrUnavailable(taskPilotStands(task.id))) return AGENT_KIND.CODER;
+  if (!(yield* hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.PILOT)))) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  }
+  return AGENT_KIND.PILOT;
+});
+
 /** The task read as the account, its repository required unless the Start is blank, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task or the member's operator. */
 const landingOf = Effect.fnUntraced(function* (
   userId: string,
@@ -541,6 +574,8 @@ const landingOf = Effect.fnUntraced(function* (
   if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { task, ownerId } = read.value;
   const mover = ownerId === userId ? userId : undefined;
+  // A Start from another agent goes its source's way; only a fresh one can make the task's pilot.
+  const kind = place.from === undefined ? yield* freshKindOn(userId, task) : AGENT_KIND.CODER;
   if (place.blank === true) {
     return {
       startedFrom: undefined,
@@ -548,7 +583,7 @@ const landingOf = Effect.fnUntraced(function* (
       repository: task.repository,
       task,
       mover,
-      place: { taskId: place.taskId, planSnapshot: null, prompt: null },
+      place: { taskId: place.taskId, planSnapshot: null, prompt: null, kind },
     };
   }
   if (task.repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
@@ -561,8 +596,8 @@ const landingOf = Effect.fnUntraced(function* (
     mover,
     place:
       brief === undefined
-        ? { taskId: place.taskId, planSnapshot: handed.text, prompt: null }
-        : { taskId: place.taskId, planSnapshot: null, prompt: handed.text },
+        ? { taskId: place.taskId, planSnapshot: handed.text, prompt: null, kind }
+        : { taskId: place.taskId, planSnapshot: null, prompt: handed.text, kind },
   };
 });
 

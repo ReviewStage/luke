@@ -575,7 +575,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
   );
 
   it.effect(
-    "a member's operator, with no repository, and a task's pilot are delivered and say their kind, as the held read reads them, while a coder says none",
+    "a member's operator, with no repository, says its kind and a task's pilot that it is one, as the held read reads them, while a coder says neither",
     () =>
       Effect.gen(function* () {
         const owner = yield* openUser;
@@ -621,7 +621,44 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           taskAgents.filter((agent) => agent.planId === plan.id),
           yield* heldTaskAgentsOf(owner, plan.id, NOW),
         );
-        assert.equal(taskAgents.find((agent) => agent.id === pilot.id)?.kind, AGENT_KIND.PILOT);
+        const listedPilot = taskAgents.find((agent) => agent.id === pilot.id);
+        assert.deepEqual([listedPilot?.pilot, listedPilot?.kind], [true, undefined]);
+      }),
+  );
+
+  it.effect(
+    "a task's pilot is delivered as a coder, so a desktop from before pilots still decodes the list",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const plan = yield* startTask(owner, { name: "Teammate invitations" });
+        Option.getOrThrow(
+          yield* createAgent(owner, {
+            taskId: plan.id,
+            planSnapshot: "# Invitations\n",
+            prompt: null,
+            kind: AGENT_KIND.PILOT,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "acme/relay",
+          }),
+        );
+        // The kinds a desktop from before pilots decodes; any other fails its whole agent list.
+        const beforePilots = Schema.Array(
+          Schema.Struct({
+            kind: Schema.optionalKey(Schema.Literals([AGENT_KIND.CODER, AGENT_KIND.OPERATOR])),
+          }),
+        );
+
+        const statements = Option.getOrThrow(taskListLiveStatements(owner));
+        const rows = yield* runLive(statements.agents);
+
+        const decoded = yield* Schema.decodeUnknownEffect(beforePilots)(rows);
+        assert.deepEqual(
+          decoded.map((row) => row.kind),
+          [AGENT_KIND.CODER],
+        );
       }),
   );
 

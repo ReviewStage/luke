@@ -27,7 +27,7 @@ import { eq } from "drizzle-orm";
 import { Clock, DateTime, Deferred, Effect, Fiber, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
-import { agentTable } from "../../schemas/agent.js";
+import { agentTable, type StoredStartedFrom } from "../../schemas/agent.js";
 import { agentPin } from "../../schemas/agent-pin.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
@@ -2720,6 +2720,46 @@ it.layer(getTestDB())("the coding-agent store's search of a workspace's agents",
         assert.equal((yield* found(owner, "  \t ")).length, 5);
         assert.deepEqual(yield* found(outsider, "invite"), []);
         assert.deepEqual(yield* found(outsider, "luke"), []);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's pilots", (it) => {
+  it.effect(
+    "a pilot asked of a task another member's pilot stands on is made a coder, but one continuing that pilot is a pilot",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const teammate = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, teammate);
+        const piloted = yield* createTask(owner, {
+          organizationId: workspace,
+          name: "Invitations",
+          repository: "acme/relay",
+        });
+        const pilotOn = (startedFrom?: StoredStartedFrom): NewAgent => ({
+          taskId: piloted.id,
+          planSnapshot: "# Invitations\n",
+          prompt: null,
+          kind: AGENT_KIND.PILOT,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          startedFrom,
+        });
+
+        const first = Option.getOrThrow(yield* createAgent(owner, pilotOn()));
+        const raced = Option.getOrThrow(yield* createAgent(teammate, pilotOn()));
+        const continued = Option.getOrThrow(
+          yield* createAgent(owner, pilotOn({ agentId: first.agent.id, steps: 0, totalSteps: 0 })),
+        );
+
+        assert.deepEqual(
+          [first.agent.kind, raced.agent.kind, continued.agent.kind],
+          [AGENT_KIND.PILOT, AGENT_KIND.CODER, AGENT_KIND.PILOT],
+        );
       }),
   );
 });

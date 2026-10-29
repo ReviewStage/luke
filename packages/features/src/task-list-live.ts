@@ -131,8 +131,10 @@ const agentLiveRowSchema = EffectSchema.Struct({
   effort: EffectSchema.String,
   contextWindow: EffectSchema.NullOr(EffectSchema.String),
   title: EffectSchema.NullOr(EffectSchema.String),
-  /** What kind of agent it is, a coder, a task's pilot, or a member's operator; absent from a statement before operators. */
+  /** What kind of agent it is, a member's operator or a coder, as which a task's pilot is delivered too; absent from a statement before operators. */
   kind: EffectSchema.optionalKey(agentKindSchema),
+  /** Whether the agent is its task's pilot; absent from a statement before pilots. */
+  pilot: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Whether the agent was handed a prompt rather than its plan. */
   /** What the agent was handed as its first message: the plan, the developer's prompt, or nothing, for one started blank. */
   brief: EffectSchema.Literals(Object.values(AGENT_BRIEF)),
@@ -474,7 +476,8 @@ function agentSummaryOf(row: AgentLiveRow, now: number, continued: Continuations
       : undefined),
     ...(runtime === undefined ? undefined : { runtime }),
     title: row.title,
-    ...(row.kind === undefined || row.kind === AGENT_KIND.CODER ? undefined : { kind: row.kind }),
+    ...(row.kind === AGENT_KIND.OPERATOR ? { kind: row.kind } : undefined),
+    ...(row.pilot === true ? { pilot: true } : undefined),
     ...(row.machine === AGENT_MACHINE.DEVICE ? { machine: AGENT_MACHINE.DEVICE } : undefined),
     ...(mac === undefined ? undefined : { mac }),
     createdAt: row.createdAt,

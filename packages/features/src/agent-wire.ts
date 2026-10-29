@@ -805,8 +805,15 @@ export const agentSummarySchema = EffectSchema.Struct({
   runtime: EffectSchema.optionalKey(EffectSchema.Literals(NATIVE_AGENT_RUNTIMES)),
   /** The agent's title as its tab shows it; null until one is generated, and after a rename cleared it, when the tab shows the model's name. */
   title: EffectSchema.NullOr(EffectSchema.String),
-  /** What kind of agent it is, said of a member's operator, which the panel draws as Luke in a row of his own, and of a task's pilot, which a breakdown's answer goes to; absent for a coder, and from a service before operators. */
+  /** What kind of agent it is, said only of a member's operator, which the panel draws as Luke in a row of his own; absent for a coder, and from a service before operators. */
   kind: EffectSchema.optionalKey(agentKindSchema),
+  /**
+   * True where the agent is its task's pilot, which a breakdown's answer goes
+   * to. Note that a pilot is said here rather than in `kind`, because a
+   * desktop from before pilots decodes `kind` as a coder or an operator alone
+   * and would read no summary that named one; absent for every other agent.
+   */
+  pilot: EffectSchema.optionalKey(EffectSchema.Literal(true)),
   /** Where its runner runs, said only of a local agent on its starter's device; absent for one in a sandbox, and from a service older than it. */
   machine: EffectSchema.optionalKey(EffectSchema.Literal(AGENT_MACHINE.DEVICE)),
   /**

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@luke/features/agent-view";
 import {
-  AGENT_KIND,
   AGENT_PAYER,
   AGENT_RUNTIME,
   type AgentPullRequest,
@@ -880,8 +879,8 @@ test("a message to a teammate's agent its starter's own key refused names the st
 });
 
 test("a pilot task offers no agent of the developer's own and Continue on its pilot alone, where any other task offers both", () => {
-  const pilot = { kind: AGENT_KIND.PILOT };
-  const coder = { kind: AGENT_KIND.CODER };
+  const pilot = { pilot: true } as const;
+  const coder = {};
 
   assert.deepEqual(
     [TASK_MODE.PILOT, TASK_MODE.AGENT, undefined].map((mode) => ({

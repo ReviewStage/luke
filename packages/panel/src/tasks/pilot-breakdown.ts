@@ -19,7 +19,7 @@
  * it opened has ended, or until a child the answer did not name waits too.
  */
 
-import { AGENT_KIND, type AgentSummary } from "@luke/features/agent-wire";
+import type { AgentSummary } from "@luke/features/agent-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
 import { TASK_MODE, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { agentStillWriting } from "./agent-model.js";
@@ -70,7 +70,7 @@ export function waitingChildTasks(
 /** The agent a pilot task's answer goes to: its newest pilot not archived; none while the task's agents are unread or no pilot stands. */
 export function taskPilot(agents: readonly AgentSummary[] | undefined): AgentSummary | undefined {
   return (agents ?? [])
-    .filter((agent) => agent.kind === AGENT_KIND.PILOT && agent.archivedAt === undefined)
+    .filter((agent) => agent.pilot === true && agent.archivedAt === undefined)
     .reduce<AgentSummary | undefined>(
       (newest, agent) =>
         newest === undefined || agent.createdAt > newest.createdAt ? agent : newest,

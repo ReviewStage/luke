@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { AGENT_KIND, AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
+import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import {
   TASK_MODE,
   TASK_STATUS,
@@ -38,7 +38,12 @@ function child(
   };
 }
 
-function agent(id: string, createdAt: number, extra: Partial<AgentSummary> = {}): AgentSummary {
+function agent(
+  id: string,
+  createdAt: number,
+  extra: Partial<AgentSummary> = {},
+  pilot = true,
+): AgentSummary {
   return {
     id,
     planId: PARENT,
@@ -46,7 +51,7 @@ function agent(id: string, createdAt: number, extra: Partial<AgentSummary> = {})
     effort: "high",
     title: null,
     createdAt,
-    kind: AGENT_KIND.PILOT,
+    ...(pilot ? { pilot: true } : undefined),
     status: AGENT_STATUS.COMPLETED,
     turnId: null,
     ...extra,
@@ -84,7 +89,7 @@ test("the answer goes to the task's pilot not archived, so neither a pilot taken
       agent("first", 10, { archivedAt: 30 }),
       continued,
       agent("archived", 40, { archivedAt: 50 }),
-      agent("coder", 60, { kind: AGENT_KIND.CODER }),
+      agent("coder", 60, {}, false),
     ]),
     continued,
   );
