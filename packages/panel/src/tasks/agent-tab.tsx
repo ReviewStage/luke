@@ -2704,8 +2704,11 @@ function AgentTabView({
                       composer.rewinding && startedAt !== undefined ? composer.rewoundAt : startedAt
                     }
                     ended={
-                      // Note that the end line waits for a page, so a stopped agent's tab never draws it over nothing, and gives way to a line on its way, which the working line stands for.
-                      transcript.pages === 0 || lineGoing
+                      // Note that the end line waits for a page that has itself ended, so a stopped agent's tab never draws it over nothing, nor a failure's words before the page that carries its reason, and gives way to a line on its way, which the working line stands for.
+                      transcript.pages === 0 ||
+                      transcript.pageStatus === undefined ||
+                      agentStillWriting(transcript.pageStatus) ||
+                      lineGoing
                         ? undefined
                         : endLineParts(
                             agent.status,

@@ -71,8 +71,8 @@
   --luke-color-sidebar-ink: light-dark(rgba(0, 0, 0, 0.68), rgba(255, 255, 255, 0.7));
   /* A sunk ground, a step off the window's: a code block's, a strip's, a well's. */
   --luke-color-well: light-dark(#f7f7f8, #121214);
-  /* The code on screen, in the ground of GitHub's own themes. */
-  --luke-color-code-ground: light-dark(#fff, #0d1117);
+  /* The code on screen: white in the light, the well's neutral in the dark, so a card of code is no bluer than the page around it. */
+  --luke-color-code-ground: light-dark(#fff, var(--luke-color-well));
   /* The code's own words, where its highlighter left a run uncoloured: GitHub's too. */
   --luke-color-code-text: light-dark(#1f2328, #e6edf3);
   --luke-color-fill-hover: light-dark(rgba(0, 0, 0, 0.035), rgba(255, 255, 255, 0.05));
@@ -313,7 +313,7 @@
   --luke-color-sidebar: #08090b;
   --luke-color-sidebar-ink: rgba(255, 255, 255, 0.7);
   --luke-color-well: #0e0f12;
-  --luke-color-code-ground: #0d1117;
+  --luke-color-code-ground: var(--luke-color-well);
   --luke-color-code-text: #e6edf3;
   --luke-color-fill-hover: rgba(255, 255, 255, 0.05);
   --luke-color-fill-strong: rgba(255, 255, 255, 0.09);

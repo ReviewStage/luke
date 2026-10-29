@@ -283,10 +283,11 @@ export function useDisclosureSummaryClick(
  * holder keeps its state says `open` and hears `onOpenChange`, because the
  * element's own `open` is drawn from the fold's state rather than set.
  */
-/** How a fold stands: bare among its lines, or as a card, on the hover's wash inside a hairline, clipped at its corner. */
+/** How a fold stands: bare among its lines, as a card, on the hover's wash inside a hairline, clipped at its corner, or as a dock, the same card on the surface a list's card stands on. */
 export const DISCLOSURE_LOOK = {
   PLAIN: "plain",
   CARD: "card",
+  DOCK: "dock",
 } as const;
 export type DisclosureLook = (typeof DISCLOSURE_LOOK)[keyof typeof DISCLOSURE_LOOK];
 
