@@ -210,16 +210,15 @@ export function claimDueAgentWakeups(
       Effect.gen(function* () {
         yield* deleteSpent({ maxAttempts });
         const claimed: ClaimedAgentWakeup[] = [];
-        // A held wakeup's next delivery moves past `now`, so the next batch reaches past it.
+        // Every row a batch locked moves past `now` before the next, so no batch locks it again.
         for (let round = 0; round < MAX_CLAIM_ROUNDS && claimed.length < limit; round++) {
           const due = yield* lockDue({ now, limit: limit - claimed.length });
           const held = yield* heldOf(due);
-          claimed.push(...due.filter((row) => !held.has(row.id)));
+          const taken = due.filter((row) => !held.has(row.id));
+          if (taken.length > 0) yield* writeNextDelivery({ ids: taken.map((row) => row.id), next });
+          claimed.push(...taken);
           if (held.size === 0) break;
           yield* holdDelivery({ ids: [...held], next });
-        }
-        if (claimed.length > 0) {
-          yield* writeNextDelivery({ ids: claimed.map((row) => row.id), next });
         }
         return claimed;
       }),

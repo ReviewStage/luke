@@ -173,6 +173,7 @@ it.layer(getTestDB())("the wakeups a released wait left", (it) => {
         // Note that these fall due long before any other test's, so a batch of one reaches only them.
         const heldAt = new Date("2000-01-01T00:00:00Z");
         const liveAt = new Date("2000-01-01T00:00:01Z");
+        const laterAt = new Date("2000-01-01T00:00:02Z");
         const now = new Date("2000-01-02T00:00:00Z");
         const owner = yield* openAccount;
         const stopped = yield* openAgent(owner);
@@ -189,13 +190,20 @@ it.layer(getTestDB())("the wakeups a released wait left", (it) => {
             .where(eq(task.id, Option.getOrThrow(Option.fromNullishOr(agent.taskId)))),
         );
         yield* replaceAgentWakeups(stopped, [{ at: heldAt, prompt: "Check CI on #42." }]);
-        yield* replaceAgentWakeups(live, [{ at: liveAt, prompt: "Check the deploy." }]);
+        yield* replaceAgentWakeups(live, [
+          { at: liveAt, prompt: "Check the deploy." },
+          { at: laterAt, prompt: "Remind me to push." },
+        ]);
 
-        const claimed = yield* claimDueAgentWakeups(now, NEXT, 1, MAX_ATTEMPTS);
+        // A batch of two locks the held one and the first live one, then refills once.
+        const claimed = yield* claimDueAgentWakeups(now, NEXT, 2, MAX_ATTEMPTS);
 
         assert.deepEqual(
           claimed.map(({ agentId, prompt }) => ({ agentId, prompt })),
-          [{ agentId: live, prompt: "Check the deploy." }],
+          [
+            { agentId: live, prompt: "Check the deploy." },
+            { agentId: live, prompt: "Remind me to push." },
+          ],
         );
       }),
   );
