@@ -116,20 +116,29 @@ export function installShownFailureReporter(installed: ShownFailureReporter): ()
   };
 }
 
-/** Hands one failure just shown to the window's reporter, with the app's state now; a window with none reports nothing. */
+/**
+ * Hands one failure just shown to the window's reporter, with the app's
+ * state now; a window with none reports nothing. Note that a report that
+ * throws is let go with a line on the console, because whoever showed the
+ * failure is showing it as this runs, and the person must still see it.
+ */
 export function reportShownFailure(failure: ShownFailure): void {
   if (reporter === undefined) return;
-  const state = appStateNow();
-  reporter({
-    surface: failure.surface,
-    kind: kindOf(failure),
-    cause: failure.cause,
-    about: failure.about ?? {},
-    act: failure.act,
-    state: {
-      online: state?.network.online ?? true,
-      account: state?.account.status ?? ACCOUNT_UNREAD,
-      live: failure.live,
-    },
-  });
+  try {
+    const state = appStateNow();
+    reporter({
+      surface: failure.surface,
+      kind: kindOf(failure),
+      cause: failure.cause,
+      about: failure.about ?? {},
+      act: failure.act,
+      state: {
+        online: state?.network.online ?? true,
+        account: state?.account.status ?? ACCOUNT_UNREAD,
+        live: failure.live,
+      },
+    });
+  } catch (error) {
+    console.error("A failure shown could not be reported.", error);
+  }
 }
