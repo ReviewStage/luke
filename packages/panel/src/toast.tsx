@@ -27,7 +27,8 @@
  * paste them to an agent to find the failure in Sentry and the logs. Its
  * glyph alone stands there, so the failure's words keep their room, and a
  * failure toast with nothing else to press takes the pointer for it, and so
- * pauses its hold under it, drains its bar, and may be dismissed.
+ * pauses its hold under it, drains its bar, and may be dismissed. A window
+ * with nothing to report through offers no copy (`reportShownFailure`).
  *
  * Each stands for its own hold, paused while the pointer is over it or focus
  * is in it, and leaves by itself once it runs out. Only one

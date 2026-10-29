@@ -54,7 +54,6 @@ export * from "./components/error-line/error-line.js";
 export * from "./components/error-state/error-state.js";
 export * from "./components/event-card/event-card.js";
 export * from "./components/facts/facts.js";
-export * from "./components/failure-copy/failure-copy.js";
 export * from "./components/failure-note/failure-note.js";
 export * from "./components/file-picker/file-picker.js";
 export * from "./components/file-text/file-text.js";

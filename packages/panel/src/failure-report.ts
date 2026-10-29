@@ -289,14 +289,16 @@ function sent(report: ShownFailureReport): ShownFailureSent | undefined {
 
 /**
  * Hands one failure just shown at `at` to the window's reporter, with the
- * app's state now, and answers the details a person may copy of it; a
- * window with no reporter reports nothing and answers them without what
- * Sentry would have answered. Note that a report or a reading that throws is
+ * app's state now, and answers the details a person may copy of it. A
+ * window with no reporter, such as the site's admin page, which installs no
+ * clipboard either, reports nothing and answers no details, so nothing there
+ * offers a copy that could only fail. Note that a report or a reading that throws is
  * let go with a line on the console, answering no details, because whoever
  * showed the failure is showing it as this runs, and the person must still
  * see it.
  */
 export function reportShownFailure(failure: ShownFailure, at: number): string | undefined {
+  if (reporter === undefined) return undefined;
   try {
     const state = appStateNow();
     const report: ShownFailureReport = {

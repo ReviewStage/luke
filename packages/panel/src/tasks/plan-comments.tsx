@@ -1078,10 +1078,13 @@ function ReplyField({
             : {
                 words: note,
                 failure:
-                  note === said
+                  note === refusal || (note === said && heard === undefined)
                     ? UNREPORTED.INPUT
                     : failureShown({
-                        surface: FAILURE_SURFACE.PLAN_COMMENT_SEND,
+                        surface:
+                          note === heard
+                            ? FAILURE_SURFACE.DICTATION
+                            : FAILURE_SURFACE.PLAN_COMMENT_SEND,
                         cause: FAILURE_CONDITION.REFUSED,
                         refused: true,
                       }),

@@ -28,7 +28,8 @@ export interface ReportedFailure {
   /**
    * Says the failure stands on screen: reports it where it was not yet
    * reported, and answers the details a person may copy of it, or nothing
-   * where they could not be read. Note that it is called each time a
+   * where they could not be read or there is nowhere to copy them, in which
+   * case no copy is offered. Note that it is called each time a
    * component showing it is drawn anew, so the app keeps whether it was
    * reported, not the component.
    */

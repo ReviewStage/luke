@@ -502,6 +502,8 @@ export function AgentComposer({
   // list carries the stop a moment after the answer.
   if (stopping && !stoppable) setStopping(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  // Whether the refusal standing is the files handed to the box checked, which is the person's input and no failure of the app's.
+  const [filesRefused, setFilesRefused] = useState(false);
   // Whether the last paste was cut to the room the box has left, until the words change again.
   const [cut, setCut] = useState(false);
   // Note that a move's retry is read through a ref, because it lands a while
@@ -514,7 +516,10 @@ export function AgentComposer({
   const files = useAttachedFiles({
     holder: { attachments: composer.attachments, update: composer.setAttachments },
     held,
-    onRefusal: setRefusal,
+    onRefusal: (words) => {
+      setRefusal(words);
+      setFilesRefused(words !== undefined);
+    },
   });
   const empty = !sendsEmpty && !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
@@ -580,7 +585,8 @@ export function AgentComposer({
   const noteFailure: ReportedFailure | Unreported | undefined =
     note === undefined
       ? undefined
-      : cut && words === pasteCutWords(maxLength)
+      : (cut && words === pasteCutWords(maxLength)) ||
+          (filesRefused && words !== undefined && words === refusal)
         ? UNREPORTED.INPUT
         : reloads
           ? unreadShown(FAILURE_SURFACE.BUNDLE_LOAD)
@@ -664,7 +670,10 @@ export function AgentComposer({
         handed: stoppable ? SERVER_HANDED.STEERS : SERVER_HANDED.OPENS,
       },
     },
-    onNote: setRefusal,
+    onNote: (words) => {
+      setRefusal(words);
+      setFilesRefused(false);
+    },
     onLeave,
     side: listSide,
   });

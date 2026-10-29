@@ -464,6 +464,8 @@ function AnswerCard({
 }: AnswerBoxProps & { statuses: IntegrationStatuses }): React.JSX.Element {
   const toast = useToast();
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  // Whether the refusal standing is the files handed to the box checked, which is the person's input and no failure of the app's.
+  const [filesRefused, setFilesRefused] = useState(false);
   // Whether the last paste was cut to the room the box has left, until the words change again.
   const [cut, setCut] = useState(false);
   const draft = control.draftOf(item);
@@ -483,7 +485,10 @@ function AnswerCard({
       attachments: draft.attachments,
       update: (next) => control.onAttachments(item, next),
     },
-    onRefusal: setRefusal,
+    onRefusal: (words) => {
+      setRefusal(words);
+      setFilesRefused(words !== undefined);
+    },
   });
   // Note that a notice opening acknowledges offers no Got it, since opening it was the nod (`useNodOnOpen`), save while its holder's held read has failed, when opening acknowledges nothing.
   const channels = useExperiment(EXPERIMENT.CHANNELS);
@@ -513,7 +518,10 @@ function AnswerCard({
     skills,
     keywords,
     statuses,
-    onNote: setRefusal,
+    onNote: (words) => {
+      setRefusal(words);
+      setFilesRefused(false);
+    },
   });
   const { editor, room, module } = field;
   const { dictating } = field.pickers;
@@ -524,9 +532,9 @@ function AnswerCard({
     refusal ??
     (cut ? pasteCutWords(INBOX_BOUNDS.MAX_MESSAGE_CHARS) : undefined) ??
     (field.failed ? EDITOR_LOAD_FAILED : undefined);
-  // Note that a cut paste is the person's input checked; every other note is the app's, reported as a refusal by its condition.
+  // Note that a cut paste and files refused are the person's input checked; every other note is the app's, reported as a refusal by its condition.
   const noteFailure =
-    noted === undefined && refusal === undefined && cut
+    noted === undefined && (refusal === undefined ? cut : filesRefused)
       ? UNREPORTED.INPUT
       : noted === undefined && refusal === undefined && field.failed
         ? unreadShown(FAILURE_SURFACE.BUNDLE_LOAD)
@@ -583,6 +591,7 @@ function AnswerCard({
         return;
       }
       setRefusal(refused);
+      setFilesRefused(false);
       if (emptyBox(standing.current)) control.onDraft(item, { ...standing.current, ...sent });
     });
   };

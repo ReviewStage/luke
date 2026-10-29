@@ -44,6 +44,30 @@ const NO_MARKS: SentLineMarks = {
 
 const MarksContext = createContext<SentLineMarks>(NO_MARKS);
 
+/** What a line that did not go is reported under: its condition, as its code, one for each line. */
+interface LineCause {
+  readonly code: typeof FAILURE_CONDITION.REFUSED | typeof FAILURE_CONDITION.NOT_KEPT;
+}
+
+/**
+ * Each line's cause by its id, refused for good or for now, so a line that
+ * did not go is a failure of its own and two such lines are two, while one
+ * line drawn again is the same.
+ */
+const LINE_CAUSES = {
+  [FAILURE_CONDITION.REFUSED]: new Map<string, LineCause>(),
+  [FAILURE_CONDITION.NOT_KEPT]: new Map<string, LineCause>(),
+} as const;
+
+/** The cause the line drawn under `messageId` is reported under, kept for it. */
+function lineCause(messageId: string, code: LineCause["code"]): LineCause {
+  const kept = LINE_CAUSES[code].get(messageId);
+  if (kept !== undefined) return kept;
+  const made = { code };
+  LINE_CAUSES[code].set(messageId, made);
+  return made;
+}
+
 /** Hands an agent's transcript the lines that did not go. */
 export const UndeliveredLines = MarksContext.Provider;
 
@@ -71,7 +95,7 @@ export function UndeliveredMark({ messageId }: { messageId: string }): ReactNode
       <FailureNote
         failure={failureShown({
           surface: FAILURE_SURFACE.AGENT_SEND,
-          cause: FAILURE_CONDITION.REFUSED,
+          cause: lineCause(messageId, FAILURE_CONDITION.REFUSED),
           refused: true,
         })}
       >
@@ -84,7 +108,7 @@ export function UndeliveredMark({ messageId }: { messageId: string }): ReactNode
     <FailureNote
       failure={failureShown({
         surface: FAILURE_SURFACE.AGENT_SEND,
-        cause: FAILURE_CONDITION.NOT_KEPT,
+        cause: lineCause(messageId, FAILURE_CONDITION.NOT_KEPT),
       })}
       onRetry={() => marks.retry(messageId)}
     >

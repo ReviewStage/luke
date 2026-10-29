@@ -11,13 +11,14 @@
  * it goes, never on every render: the failure's `shown` answers the same
  * details for as long as the app holds it to be the same failure, and
  * reports only the first time, which is the app's to keep
- * (`../../reported-failure.ts`). Until it has answered, the button stands
- * disabled in its place, so nothing beside it moves. Words that are no
- * failure of the app's (`UNREPORTED`) offer nothing to copy, and draw
+ * (`../../reported-failure.ts`). A failure whose details could not be read,
+ * as where the app has nothing to report through and no clipboard to copy
+ * to, offers nothing, rather than a copy that could only fail. Words that
+ * are no failure of the app's (`UNREPORTED`) offer nothing to copy, and draw
  * nothing.
  */
 
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { isReported, type ReportedFailure, type Unreported } from "../../reported-failure.js";
 import type { ButtonSize } from "../button/button.js";
 import { CopyButton } from "../copy-button/copy-button.js";
@@ -34,7 +35,8 @@ function useFailureDetails(failure: ReportedFailure | undefined): string | undef
     readonly of: ReportedFailure;
     readonly details: string | undefined;
   }>();
-  useEffect(() => {
+  // Note that it is said shown before the first paint, so a glyph that will stand is drawn at once and none flashes in.
+  useLayoutEffect(() => {
     if (failure === undefined) return undefined;
     setRead({ of: failure, details: failure.shown() });
     return () => failure.hidden();
@@ -52,13 +54,12 @@ export function FailureCopy({
 }): React.JSX.Element | null {
   const reported = isReported(failure) ? failure : undefined;
   const details = useFailureDetails(reported);
-  if (reported === undefined) return null;
+  if (reported === undefined || details === undefined) return null;
   return (
     <CopyButton
-      text={details ?? ""}
+      text={details}
       what={DETAILS_WHAT}
       copy={reported.copy}
-      disabled={details === undefined}
       {...(size === undefined ? {} : { size })}
     />
   );

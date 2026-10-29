@@ -1511,7 +1511,7 @@ function ManagedSentry({
             onChanged(now);
             return ACCEPTED;
           }, refusedWith),
-    confirmFailure(FAILURE_SURFACE.WORKSPACE_GITHUB_DISCONNECT),
+    confirmFailure(FAILURE_SURFACE.WORKSPACE_SENTRY_DISCONNECT),
   );
   const actions = [
     sentry.installations.map((installation) => ({
