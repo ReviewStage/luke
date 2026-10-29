@@ -18,11 +18,10 @@ import {
   useRef,
 } from "react";
 import { cssCustomProperties } from "../../css.js";
-import { ChevronRightIcon } from "../../face/glyphs.js";
+import { ChevronRightIcon, FoldChevronIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
 import { useClipped } from "../../use-clipped.js";
 import { BUTTON_SIZE } from "../button/button.js";
-import { FoldChevron } from "../disclosure/disclosure.js";
 import { motionKey, motionRows } from "../list-motion/list-motion.js";
 import { useLinkAddress } from "../menu/link-address.js";
 import { withContextMenu } from "../menu/menu.js";
@@ -783,7 +782,10 @@ export function ListRow({
           aria-expanded={fold.open}
           onClick={pulseOnPress(() => fold.onOpenChange(!fold.open), pressPulse)}
         >
-          <FoldChevron open={fold.open} />
+          {/* Note that the chevron turns on the one turn every fold makes (`disclosure.css`). */}
+          <span className="luke-disclosure-turn" data-open={fold.open}>
+            <FoldChevronIcon />
+          </span>
         </button>
       )}
       {press === undefined ? (

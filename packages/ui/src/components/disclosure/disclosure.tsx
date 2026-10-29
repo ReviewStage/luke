@@ -585,11 +585,6 @@ export function DisclosureFrame({
  */
 export function DisclosureChevron(): React.JSX.Element {
   const { open } = useDisclosureState();
-  return <FoldChevron open={open} />;
-}
-
-/** The chevron every fold turns, turned down while `open`, for a fold whose state its holder hands it rather than a disclosure's (a list row's child rows). */
-export function FoldChevron({ open }: { open: boolean }): React.JSX.Element {
   return (
     <span className="luke-disclosure-turn" data-open={open}>
       <FoldChevronIcon />

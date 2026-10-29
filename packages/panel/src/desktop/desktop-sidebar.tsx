@@ -163,7 +163,7 @@ import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
 import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
-import { childTasksFold, useNestedRows } from "./nested-rows.js";
+import { childTasksFold, storedSlot, useNestedRows } from "./nested-rows.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { FOR_YOU_NOUN, useChannelWaiting, useInboxWaiting } from "./places-waiting.js";
@@ -2005,6 +2005,13 @@ function SidebarColumn({
     sectionInView(drawn, statuses, createdBy, assignedTo),
   );
   const sectionDialogs = useSectionDialogs(tasks, tasks.shown && overlay.inSight);
+  // A slot a row is let go at in a section, counted among its rows as drawn, child tasks nested, read back in the section's own order.
+  const sectionSlot = (target: DrawnSection, at: number) => {
+    const held = folds.sectionFolded(target.section.id)
+      ? target.rows.filter(currentRow)
+      : target.rows;
+    return storedSlot(target.rows, drawnTaskRows(held, folds.taskOpened, currentRow), at);
+  };
   // Note that the sidebar draws a task in one place, so a row dragged into
   // Pinned leaves its section, and one dragged out of Pinned is unpinned and
   // stands where it was let go, under Tasks or in a section.
@@ -2022,7 +2029,9 @@ function SidebarColumn({
     }
     const target = shownSections.find((drawn) => drawn.section.id === zone);
     if (target === undefined) return;
-    tasks.onWriteSections(placeWrites(target.entries, member, zone, at, Date.now()));
+    tasks.onWriteSections(
+      placeWrites(target.entries, member, zone, sectionSlot(target, at), Date.now()),
+    );
   };
   // A tab pinned to the sidebar is no task, so it goes into no section, though Tasks unpins it as any pin.
   const dropPinned = (row: PinnedRow, zone: string, at: number) => {
@@ -2040,7 +2049,7 @@ function SidebarColumn({
     unpin(row, tasks);
     tasks.onWriteSections([
       ...leaveSection(tasks, member),
-      ...placeWrites(target.entries, member, zone, at, Date.now()),
+      ...placeWrites(target.entries, member, zone, sectionSlot(target, at), Date.now()),
     ]);
   };
   const { chosen } = overlay;
