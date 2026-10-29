@@ -1,5 +1,5 @@
 /**
- * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, keeping nothing past an agent's warm window: a saved folder let go of once its window ends and an unsaved one kept; a VM a run left deleted; an agent two answered reads in a row leave out removed whole where its state is saved, and kept where it is not; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a Mac's folder with unsaved work kept once and never checked again, and a pass that died never the last.
+ * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, keeping nothing past an agent's warm window: a saved folder let go of once its window ends and an unsaved one kept; a VM a run left deleted; an agent two answered reads in a row leave out removed whole where its state is saved, and kept where it is not, for a week; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a Mac's folder with unsaved work kept once and never checked again, and a pass that died never the last.
  *
  * The follower runs the real smolvm sandbox over a fake `smolvm` that keeps
  * its machines in a set, on a real temporary folder, against a fake service
@@ -48,6 +48,9 @@ const NOT_FOUND = {
 const ENDED_IN_WINDOW = Duration.toMillis(Duration.hours(1));
 /** When a saved agent's last turn ended, past its 15 minutes' window as the clock starts. */
 const ENDED_PAST_WINDOW = -Duration.toMillis(Duration.minutes(16));
+/** When a folder was first kept: half a pass short of a week as the second pass runs, five minutes in, and so half a pass past it as the third does. */
+const KEPT_A_WEEK_BY_THE_THIRD_PASS =
+  Duration.toMillis(Duration.minutes(7.5)) - Duration.toMillis(Duration.days(7));
 
 const AGENT = {
   ORPHAN: "6f1c2a4e-0b7d-4c55-9a3e-2d8f61b0c9a1",
@@ -100,7 +103,7 @@ interface Held {
  * prints, with what `held` lays out, every agent of it recorded as this
  * machine's but those `unowned` names, another install's, and each saved,
  * its last turn ended at `endedAt` says or within its window, but those
- * `unsaved` names; its live-agents read answering `reads` one after another,
+ * `unsaved` names, and kept since when `kept` says; its live-agents read answering `reads` one after another,
  * and smolvm refusing each delete `deleteFails` says, by the machine and how
  * many times it was asked to delete it. `launches` hands launch lines whose
  * runners run until the test ends, and `keptLaunches` are kept from a run
@@ -111,6 +114,7 @@ const following = (input: {
   readonly unowned?: readonly string[];
   readonly unsaved?: readonly string[];
   readonly endedAt?: Readonly<Record<string, number>>;
+  readonly kept?: Readonly<Record<string, number>>;
   readonly reads: readonly (readonly string[] | undefined)[];
   readonly unsavedWork?: string;
   readonly deleteFails?: (machine: string, attempt: number) => boolean;
@@ -160,6 +164,7 @@ const following = (input: {
         devices: { [USER_ID]: "device-1" },
         launches: (input.keptLaunches ?? []).map((launch) => ({ userId: USER_ID, ...launch })),
         saves,
+        ...(input.kept === undefined ? {} : { kept: input.kept }),
       }),
     );
 
@@ -313,7 +318,7 @@ const following = (input: {
     const machineCommands = (agentId: string) =>
       spawner.spawned.filter((each) => each.args.includes(`luke-${agentId}`)).length;
     const keptRecorded = () =>
-      JSON.parse(readFileSync(`${stateRoot}/local-agents.json`, "utf8")).kept ?? [];
+      Object.keys(JSON.parse(readFileSync(`${stateRoot}/local-agents.json`, "utf8")).kept ?? {});
 
     return {
       home,
@@ -514,6 +519,28 @@ it.effect(
         yield* device.passed(1);
 
         assert.deepEqual(device.holdsOf(AGENT.LIVE), { ...NOTHING, folder: true });
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a folder kept for work no save holds stays until a week after it was first kept, and then goes whole",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const device = yield* following({
+          held: { folderOnly: [AGENT.ORPHAN] },
+          unsaved: [AGENT.ORPHAN],
+          kept: { [AGENT.ORPHAN]: KEPT_A_WEEK_BY_THE_THIRD_PASS },
+          reads: [[], [], []],
+        });
+        yield* device.passed(2);
+
+        assert.equal(device.holdsOf(AGENT.ORPHAN).folder, true);
+        yield* device.passed(3);
+
+        assert.deepEqual(device.holdsOf(AGENT.ORPHAN), NOTHING);
+        assert.deepEqual(device.keptRecorded(), []);
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );

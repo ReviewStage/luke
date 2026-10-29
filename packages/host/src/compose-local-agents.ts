@@ -228,9 +228,10 @@ import type { RunMode } from "./run-mode.js";
  * `ORPHAN_AFTER` answered reads in a row left out is let go of as a
  * discard lets go of it, at most `ORPHANS_PER_PASS` a pass, its folder
  * saved first where it is not; one still not saved is kept, and recorded
- * so, where the platform's check finds work in it or cannot say, or the
- * platform names no check, so no work is deleted unsaved; and one whose VM
- * could not be deleted is tried again. A read that was not answered lets
+ * so with when, where the platform's check finds work in it or cannot say,
+ * or the platform names no check, so no work is deleted unsaved before
+ * `KEPT_FOR` has passed, and then let go of whole; and one whose VM could
+ * not be deleted is tried again. A read that was not answered lets
  * go of no agent whole, and a listing smolvm could not give changes
  * nothing. This is what catches every agent a discard line never reached:
  * archived while the device was away, whose line expired, discarded by a
@@ -285,6 +286,8 @@ const PASS_EVERY = Duration.minutes(5);
 const WARM_WINDOW = Duration.minutes(15);
 /** The share of its disk left free under which a saved agent's folder is let go of without waiting out its warm window. */
 const DISK_FREE_LEAST = 0.1;
+/** How long a folder kept for work no save holds stands after it was first kept, while its agent stays unlisted, before a pass lets go of it whole regardless. */
+const KEPT_FOR = Duration.days(7);
 /** How many successful reads in a row must leave an agent out before what the device holds of it is let go of. */
 const ORPHAN_AFTER = 2;
 /** How many agents one pass lets go of at most, so a backlog clears over a few passes rather than in one long one. */
@@ -294,6 +297,10 @@ const AGENT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 /** How a discard ended: everything removed, the folder kept for work in it, or a step that failed, which a later pass tries again. */
 const DISCARD_END = { REMOVED: "removed", KEPT: "kept", FAILED: "failed" } as const;
+
+/** What lets an agent go: its discard line, a sweep of it once the service no longer lists it, or a sweep of its folder kept `KEPT_FOR` since, which goes whatever it holds. */
+const LET_GO = { LINE: "line", SWEEP: "sweep", KEPT_PAST: "kept-past" } as const;
+type LetGo = (typeof LET_GO)[keyof typeof LET_GO];
 
 const VARIABLE = {
   HOME: "HOME",
@@ -1312,17 +1319,18 @@ export function composeLocalAgents(
          * wrote there; the shared clone the worktree was made from stays, and
          * the next worktree made of it prunes this one's record. A folder
          * whose state stands saved (`savedSince`), or that stands no more,
-         * holds nothing to lose and goes at once. Otherwise a device whose
+         * holds nothing to lose and goes at once, as does one kept
+         * `KEPT_FOR` since (`LET_GO.KEPT_PAST`). Otherwise a device whose
          * platform names a check of the worktree keeps the folder, and says
          * why, where the check finds work in it that is nowhere else, or
-         * cannot say, and a sweep (`sweeping`) keeps it on a device whose
-         * platform names none; either records it kept, so no later pass
-         * checks it again (`swept`), and its VM goes either way. A VM that
-         * could not be deleted keeps the agent in the record, and a step that
-         * fails is reported; either is tried again by a later pass, since the
-         * agent still holds something here.
+         * cannot say, and a sweep (`LET_GO.SWEEP`) keeps it on a device whose
+         * platform names none; either records it kept, with when it first
+         * was, so no later pass checks it again (`swept`), and its VM goes
+         * either way. A VM that could not be deleted keeps the agent in the
+         * record, and a step that fails is reported; either is tried again by
+         * a later pass, since the agent still holds something here.
          */
-        const discarded = (agentId: string, sweeping = false) =>
+        const discarded = (agentId: string, by: LetGo) =>
           Effect.gen(function* () {
             yield* stopped(agentId);
             const layout = deviceAgentLayout(folder, agentId);
@@ -1333,9 +1341,9 @@ export function composeLocalAgents(
               () => false,
             );
             const unsaved =
-              saved || !stands
+              saved || !stands || by === LET_GO.KEPT_PAST
                 ? Option.none<string>()
-                : sweeping && platform.unsavedWorkScript === undefined
+                : by === LET_GO.SWEEP && platform.unsavedWorkScript === undefined
                   ? Option.some(NOT_SAVED)
                   : yield* unsavedWork(agentId, layout, vm);
             // Note that the VM goes before the folder, so nothing in it is still writing there as it is removed, and a command's hold outlasting it stops nothing.
@@ -1349,9 +1357,10 @@ export function composeLocalAgents(
               ));
             if (Option.isSome(unsaved)) {
               report(`a local agent's folder was kept, since ${unsaved.value}: ${agentId}`);
+              const at = yield* Clock.currentTimeMillis;
               yield* updateState((current) => ({
                 ...current,
-                kept: [...new Set([...(current.kept ?? []), agentId])],
+                kept: { ...current.kept, [agentId]: current.kept?.[agentId] ?? at },
               }));
               return DISCARD_END.KEPT;
             }
@@ -1361,9 +1370,19 @@ export function composeLocalAgents(
             if (vmGone) yield* forgetOwnedAgent(kernel.stateRoot, agentId);
             // Note that a folder kept keeps its record too, so the agent, launched again, runs the way it ran.
             if ((yield* Ref.get(state)).modes?.[agentId] !== undefined) yield* forgetMode(agentId);
-            if (vmGone) return DISCARD_END.REMOVED;
-            report(`a local agent's VM could not be deleted: ${agentId}`);
-            return DISCARD_END.FAILED;
+            if (!vmGone) {
+              report(`a local agent's VM could not be deleted: ${agentId}`);
+              return DISCARD_END.FAILED;
+            }
+            if ((yield* Ref.get(state)).kept?.[agentId] !== undefined) {
+              yield* updateState(({ kept, ...current }) => ({
+                ...current,
+                kept: Object.fromEntries(
+                  Object.entries(kept ?? {}).filter(([id]) => id !== agentId),
+                ),
+              }));
+            }
+            return DISCARD_END.REMOVED;
           }).pipe(
             Effect.catch(() =>
               Effect.sync(() => {
@@ -1448,7 +1467,7 @@ export function composeLocalAgents(
                 yield* stopped(agentId);
                 break;
               case DEVICE_AGENT_LINE_KIND.DISCARD:
-                yield* discarded(agentId);
+                yield* discarded(agentId, LET_GO.LINE);
                 break;
             }
             yield* settle(line.id);
@@ -1808,9 +1827,10 @@ export function composeLocalAgents(
          * window let go of (`warmLetGo`), every one while the disk runs low;
          * and every agent left out of `ORPHAN_AFTER` answered reads in a row,
          * and not kept for work it holds, saved where it is not and let go of
-         * whole as a discard lets go of it, up to `ORPHANS_PER_PASS`, those
-         * tried longest ago first. A listing that failed changes nothing, and
-         * a read that was not answered lets go of no agent whole.
+         * whole as a discard lets go of it, as is one kept `KEPT_FOR` since,
+         * up to `ORPHANS_PER_PASS`, those tried longest ago first. A listing
+         * that failed changes nothing, and a read that was not answered lets
+         * go of no agent whole.
          */
         const swept = Effect.gen(function* () {
           passes += 1;
@@ -1846,30 +1866,49 @@ export function composeLocalAgents(
             if (!standing.has(id)) missedReads.set(id, (missedReads.get(id) ?? 0) + 1);
           }
           // Note that a kept folder whose agent is no longer this machine's, stands again, or has been saved since is forgotten, so the agent is tried anew while it is left out.
+          const stays = (id: string, latest: LocalAgentState) =>
+            mine.has(id) && !standing.has(id) && Option.isNone(savedSince(latest.saves?.[id]));
           const current = yield* Ref.get(state);
-          const wasKept = current.kept ?? [];
-          const kept = wasKept.filter(
-            (id) =>
-              mine.has(id) && !standing.has(id) && Option.isNone(savedSince(current.saves?.[id])),
-          );
-          if (kept.length !== wasKept.length) yield* updateState((latest) => ({ ...latest, kept }));
+          if (Object.keys(current.kept ?? {}).some((id) => !stays(id, current))) {
+            yield* updateState((latest) => ({
+              ...latest,
+              kept: Object.fromEntries(
+                Object.entries(latest.kept ?? {}).filter(([id]) => stays(id, latest)),
+              ),
+            }));
+          }
+          const keptAt = (yield* Ref.get(state)).kept ?? {};
+          const keptPast = (id: string) =>
+            keptAt[id] !== undefined && now - keptAt[id] >= Duration.toMillis(KEPT_FOR);
           const unlisted = [...missedReads]
-            .filter(([id, missed]) => missed >= ORPHAN_AFTER && !kept.includes(id))
+            .filter(
+              ([id, missed]) =>
+                missed >= ORPHAN_AFTER && (keptAt[id] === undefined || keptPast(id)),
+            )
             .map(([id]) => id)
             .sort((one, other) => (lastTried.get(one) ?? 0) - (lastTried.get(other) ?? 0));
           let tried = 0;
           for (const id of unlisted) {
             if (tried >= ORPHANS_PER_PASS) break;
-            const ended = yield* whileIdle(id, Effect.andThen(saveTried(id), discarded(id, true)));
+            const past = keptPast(id);
+            const ended = yield* whileIdle(
+              id,
+              past
+                ? discarded(id, LET_GO.KEPT_PAST)
+                : Effect.andThen(saveTried(id), discarded(id, LET_GO.SWEEP)),
+            );
             if (Option.isNone(ended)) continue;
             tried += 1;
             lastTried.set(id, passes);
             if (ended.value === DISCARD_END.FAILED) continue;
             lastTried.delete(id);
             missedReads.delete(id);
-            if (ended.value === DISCARD_END.REMOVED) {
-              report(`a local agent the service no longer lists here was removed: ${id}`);
-            }
+            if (ended.value !== DISCARD_END.REMOVED) continue;
+            report(
+              past
+                ? `a local agent's folder kept a week for work no save holds was removed: ${id}`
+                : `a local agent the service no longer lists here was removed: ${id}`,
+            );
           }
         });
 

@@ -527,7 +527,7 @@ its token from your Mac as soon as the archive reaches it, or within minutes
 of your Mac's next being online once our service no longer lists the agent;
 a folder whose save has not landed is saved first where it can be, and one
 that still is not is kept wherever the Mac's check finds work in it that no
-remote has, or cannot tell. Only the agents this copy of Luke started are
+remote has, or cannot tell, for seven days, and then deleted. Only the agents this copy of Luke started are
 ever touched, never another copy's sharing your Mac. To run them, the app
 downloads smolvm from its GitHub release once, keeps it in
 Luke's own folder on your Mac only once it matches the checksum Luke pins,
@@ -555,7 +555,8 @@ deletes the agent's folder 15 minutes after a turn whose save landed, or
 sooner while its disk is nearly full, and an archived or deleted agent's
 folder, machine, and token once the archive reaches it or our service no
 longer lists the agent; a folder whose save has not landed is saved first
-where it can be, and otherwise kept. The agent sees only a placeholder.
+where it can be, and otherwise kept for seven days, then deleted. The agent
+sees only a placeholder.
 Its `git` and
 `gh` send that placeholder, and smolvm, on the box, puts the real token in
 place of it only on HTTPS requests to GitHub. The token is never logged and
