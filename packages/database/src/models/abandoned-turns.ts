@@ -1,4 +1,5 @@
 import { RUN_EVENT, RUN_STATUS, TURN_FAILURE } from "@luke/features/turn-run";
+import { reportUnexpected } from "@luke/runtime/effect";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_STATUS } from "@luke/wire";
 import { and, asc, eq, inArray, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
@@ -72,14 +73,16 @@ const LostTurnSchema = Schema.Struct({
 const AbandonedTurnRowSchema = Schema.Struct({
   ...LostTurnSchema.fields,
   cancelRequestedAt: Schema.NullOr(Schema.Date),
+  startedAt: Schema.NullOr(Schema.Date),
 });
 
-/** What every read of turns to settle selects: a lost turn and when a Stop was asked of it. */
+/** What every read of turns to settle selects: a lost turn, when a Stop was asked of it, and when it started. */
 const ABANDONED_TURN_COLUMNS = {
   id: turns.id,
   userId: turns.userId,
   conversationId: turns.conversationId,
   cancelRequestedAt: turns.cancelRequestedAt,
+  startedAt: turns.startedAt,
 };
 
 /** A turn joined to the conversation it stands in. */
@@ -163,6 +166,7 @@ type LostTurnEnd =
   | {
       readonly status: typeof RUN_STATUS.FAILED;
       readonly failure: typeof TURN_FAILURE.ABANDONED | typeof TURN_FAILURE.SESSION_ENDED;
+      readonly failureDetail?: string;
     }
   | {
       readonly status: typeof RUN_STATUS.FAILED;
@@ -235,9 +239,28 @@ export interface AbandonedTurnSweepOptions {
 }
 
 /**
+ * One line, and one report, for a turn the sweep settled failed for
+ * abandonment, with how long it ran: an end that never came is no outcome a
+ * member asked for, so it is an issue as well as a line.
+ */
+function abandonedSaid(turn: LostTurn, startedAt: Date | null, now: number) {
+  const ranMs = startedAt === null ? undefined : now - startedAt.getTime();
+  const ids = { conversationId: turn.conversationId, turnId: turn.id };
+  return Effect.logError(`a turn ran past its bound with no end heard and was settled abandoned`, {
+    ranMs,
+  }).pipe(
+    Effect.andThen(
+      reportUnexpected(TURN_FAILURE.ABANDONED, { ...ids, failure: TURN_FAILURE.ABANDONED, ranMs }),
+    ),
+    Effect.annotateLogs({ ...ids, failure: TURN_FAILURE.ABANDONED }),
+  );
+}
+
+/**
  * Settles every running turn whose Stop went unconfirmed past its bound as
  * cancelled, and every other one started more than its kind's bound ago as
- * failed for abandonment; answers how many it settled. The turn a native
+ * failed for abandonment, each of those logged and reported; answers how many
+ * it settled. The turn a native
  * agent's projection holds is dropped with it, as a lost runner's is, so a
  * runner still posting opens a turn of its own rather than having every
  * event refused as one for a turn already ended.
@@ -254,7 +277,7 @@ export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("web/sweepAbandoned
   });
   let settled = 0;
   const cancelRequestedBefore = options.now - TURN_ABANDON.CANCEL_AFTER_MS;
-  for (const { cancelRequestedAt, ...turn } of turns) {
+  for (const { cancelRequestedAt, startedAt, ...turn } of turns) {
     // Note that a Stop past its bound wins over abandonment, because the turn ends as the developer asked.
     const cancelled =
       cancelRequestedAt !== null && cancelRequestedAt.getTime() < cancelRequestedBefore;
@@ -268,6 +291,7 @@ export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("web/sweepAbandoned
     );
     if (!written) continue;
     settled += 1;
+    if (!cancelled) yield* abandonedSaid(turn, startedAt, options.now);
     yield* dropNativeProjectionTurns(turn.conversationId, [turn.id]);
   }
   return settled;
@@ -297,6 +321,8 @@ export const settleEndedSessionTurn = /* @__PURE__ */ Effect.fn("web/settleEnded
 
 export interface EndedSessionOptions {
   readonly now: number;
+  /** Why eve said the session failed, redacted and bounded, kept on each turn failed for it; nothing for a session that only expired. */
+  readonly failureDetail?: string | undefined;
   /** The most turns one read takes; `TURN_ABANDON.LIMIT` otherwise. Reads go on until none is left. */
   readonly limit?: number | undefined;
 }
@@ -306,7 +332,8 @@ export interface EndedSessionOptions {
  * conversation that records the runtime session eve said ended; answers how
  * many this call settled. A turn a Stop was asked of is settled cancelled,
  * as the developer asked and as the sweep would settle it, and every other
- * one failed for its session's end. A session no standing coding agent's
+ * one failed for its session's end, keeping why eve said it failed where it
+ * said, and logged with its ids. A session no standing coding agent's
  * conversation records, such as an unknown one or one its conversation
  * rotated away from, settles nothing. Each turn is settled through the
  * relay's own end, so a turn that ended between the read and the write
@@ -328,17 +355,33 @@ export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSess
   for (;;) {
     const lost = yield* endedSessionTurns({ runtimeSessionId, limit });
     if (lost.every((turn) => read.has(turn.id))) return settled;
-    for (const { cancelRequestedAt, ...turn } of lost) {
+    for (const { cancelRequestedAt, startedAt: _startedAt, ...turn } of lost) {
       read.add(turn.id);
+      const { failureDetail } = options;
       const written = yield* settledLost(
         writer,
         turn,
         cancelRequestedAt === null
-          ? { status: RUN_STATUS.FAILED, failure: TURN_FAILURE.SESSION_ENDED }
+          ? {
+              status: RUN_STATUS.FAILED,
+              failure: TURN_FAILURE.SESSION_ENDED,
+              ...(failureDetail !== undefined ? { failureDetail } : undefined),
+            }
           : { status: RUN_STATUS.CANCELLED },
         options.now,
       );
-      if (written) settled += 1;
+      if (!written) continue;
+      settled += 1;
+      if (cancelRequestedAt !== null) continue;
+      yield* Effect.logError(
+        `a turn was settled failed for its session's end: ${failureDetail ?? "the session expired"}`,
+      ).pipe(
+        Effect.annotateLogs({
+          conversationId: turn.conversationId,
+          turnId: turn.id,
+          failure: TURN_FAILURE.SESSION_ENDED,
+        }),
+      );
     }
     if (lost.length < limit) return settled;
   }

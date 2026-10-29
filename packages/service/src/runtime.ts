@@ -41,7 +41,9 @@ const webConfigProvider = ConfigProvider.layer(Effect.sync(() => ConfigProvider.
  * whole active set of loggers rather than swapping one out of it, so the
  * tracer's logger is named beside the JSON one: it is what puts a line on the
  * span it was written under. The third sends every line to Sentry's logs
- * (`observability/sentry.ts`), which the runtime's edge starts.
+ * with its annotations (`observability/sentry.ts`), which the runtime's edge
+ * starts. An eve root's runtime is built over these services too, so its lines
+ * reach Sentry through the same logger.
  */
 const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryLogger]);
 
