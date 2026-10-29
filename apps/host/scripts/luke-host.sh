@@ -1,5 +1,5 @@
 #!/bin/sh
-# luke-host -- the host's one command: `uninstall` removes Luke's host as root, from a Linux box with the smolvm the install script put beside it and, with the luke-host user's home, smolvm's state and every machine left behind, or from a Mac for the user who runs it under sudo, with its LaunchAgent, its folder, its logs, and, where no Luke app profile runs agents for that user, its agents' machines and their folders under ~/.luke/agents; every other command is the daemon's own (lib/luke-host.mjs), run on the Node the release carries.
+# luke-host -- the host's one command: `uninstall` removes Luke's host as root, from a Linux box with the smolvm the install script put beside it and, with the luke-host user's home, smolvm's state and every machine left behind, or from a Mac for the user who runs it under sudo, with its LaunchAgent, its folder, its logs, and the machines and folders of the agents it made, by the record its daemon keeps of them; every other command is the daemon's own (lib/luke-host.mjs), run on the Node the release carries.
 #
 # Shipped as bin/luke-host in every release tarball, a Mac's among them
 # (scripts/package.ts), and linked from /usr/local/bin by the install script.
@@ -14,23 +14,23 @@ SMOLVM_DIR="/opt/luke-smolvm"
 MAC_LABEL="dev.reviewstage.luke.host.standalone"
 MAC_APP_FOLDER="Library/Application Support/Luke Host"
 MAC_LOG_FOLDER="Library/Logs/Luke Host"
-# Where each Luke app profile keeps its own state, in a folder named for it (Luke, Luke Dev, Luke Dev <instance>, Luke Test): a device.json in one means its This Mac runs agents for the user, in the ~/.luke/agents folder and smolvm store they all share with this install.
-MAC_APP_STATE_PREFIX="Library/Application Support/Luke"
+# The daemon's record of the agents whose folder and VM it made, an empty file named for each, under the install's folder (OWNED_FOLDER in packages/host/src/local-agent-state.ts).
+MAC_OWNED_AGENTS="state/owned-agents"
 
 # Removes a Mac's install for the user who ran the command under sudo: its
 # LaunchAgent booted out, which stops the daemon and every agent's VM with it,
-# then each agent's machine deleted, and its LaunchAgent, folder (the release
-# and the Mac's secret) and logs removed, with the agents' folders
-# (~/.luke/agents), which stand under the user's home rather than the install's
-# folder. Note that ~/.luke/clones and ~/.luke/worktrees stay, since every Luke
-# install on the Mac shares them, the desktop app's own repositories among them.
+# then each of its agents' machine deleted and folder (~/.luke/agents/<id>)
+# removed, and its LaunchAgent, folder (the release and the Mac's secret) and
+# logs removed. Note that ~/.luke/clones and ~/.luke/worktrees stay, since every
+# Luke install on the Mac shares them, the desktop app's own repositories among
+# them.
 # Note that the machines are smolvm's, kept in the user's own smolvm store rather than the
 # state, so each is deleted by name, with the smolvm the daemon fetched, before
 # the state goes; smolvm's cache of the sandbox image stays with that store.
-# Note that the store and the agents' folders are a Luke app's too, where its
-# This Mac runs beside this install, so both are left where any app profile's
-# state stands for this user, since nothing kept here tells this install's
-# agents from an app's.
+# Note that the store and ~/.luke/agents are shared with every Luke app profile
+# whose This Mac runs beside this install, so only the agents the daemon's
+# record names are removed, and ~/.luke/agents and ~/.luke only where nothing
+# else stands in them.
 uninstall_darwin() {
   if [ "$(id -u)" -ne 0 ]; then
     printf 'Run it as root: sudo luke-host uninstall\n' >&2
@@ -55,33 +55,21 @@ uninstall_darwin() {
     exit 1
   fi
   rm -f "$home/Library/LaunchAgents/$MAC_LABEL.plist"
-  app_runs_agents=false
-  for state in "$home/$MAC_APP_STATE_PREFIX"*; do
-    if [ "$state" != "$app" ] && [ -e "$state/device.json" ]; then
-      app_runs_agents=true
-    fi
-  done
-  if [ "$app_runs_agents" = false ]; then
+  for owned in "$app/$MAC_OWNED_AGENTS"/*; do
+    [ -e "$owned" ] || continue
+    id="${owned##*/}"
     for smolvm in "$app"/state/agent-tools/smolvm/*/smolvm; do
       [ -x "$smolvm" ] || continue
-      sudo -u "$user" -H "$smolvm" machine ls -q 2>/dev/null | while IFS= read -r machine; do
-        case "$machine" in
-          luke-*) sudo -u "$user" -H "$smolvm" machine delete --name "$machine" -f >/dev/null 2>&1 || true ;;
-        esac
-      done
+      sudo -u "$user" -H "$smolvm" machine delete --name "luke-$id" -f >/dev/null 2>&1 || true
     done
-  fi
+    rm -rf "${home:?}/.luke/agents/$id"
+  done
   # Note that the link is read as the install wrote it, before its target goes, since a link to nothing resolves to nothing.
   if [ "$(readlink /usr/local/bin/luke-host 2>/dev/null)" = "$app/luke-host/bin/luke-host" ]; then
     rm -f /usr/local/bin/luke-host
   fi
   rm -rf "$app" "$home/$MAC_LOG_FOLDER"
-  if [ "$app_runs_agents" = true ]; then
-    printf 'A Luke app runs agents on this Mac for %s too, so every agent machine and ~/.luke/agents were left in place.\n' "$user"
-  else
-    rm -rf "${home:?}/.luke/agents"
-    rmdir "$home/.luke" 2>/dev/null || true
-  fi
+  rmdir "$home/.luke/agents" "$home/.luke" 2>/dev/null || true
   printf 'Luke host is removed from this Mac for %s. Remove it in Settings › Hosts too, if it is still listed.\n' "$user"
 }
 

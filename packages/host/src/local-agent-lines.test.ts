@@ -66,10 +66,11 @@ const json = (body: unknown) =>
 const held = () => new Promise<Response>(() => {});
 
 /**
- * The follower on a device whose agent's folder holds a file, its held read
- * answered once with the lines given and every line claimable, with the
- * folder, the line ids it settled, and what waits for the service to take
- * the discard's settle.
+ * The follower on a device whose agent's folder holds a file, the agent in
+ * the device's record of the agents it made as its launch left it, its held
+ * read answered once with the lines given and every line claimable, with the
+ * folder, the record's file for the agent, the line ids it settled, and what
+ * waits for the service to take the discard's settle.
  */
 const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
   Effect.gen(function* () {
@@ -79,6 +80,9 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
     const folder = deviceAgentLayout(home, AGENT_ID).folder;
     yield* fileSystem.makeDirectory(path.join(folder, "repository"), { recursive: true });
     yield* fileSystem.writeFileString(path.join(folder, "repository", "notes.md"), "unpushed\n");
+    const owned = path.join(root, "state", "owned-agents", AGENT_ID);
+    yield* fileSystem.makeDirectory(path.dirname(owned), { recursive: true });
+    yield* fileSystem.writeFileString(owned, "");
 
     const settled: string[] = [];
     const discardSettled = Deferred.makeUnsafe<void>();
@@ -147,7 +151,7 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
       }),
     }).pipe(Effect.provide(services));
     yield* composer.lifetime;
-    return { folder, settled, discardSettled: Deferred.await(discardSettled) };
+    return { folder, owned, settled, discardSettled: Deferred.await(discardSettled) };
   });
 
 it.effect("a discard line removes the agent's folder from the device and is settled", () =>
@@ -184,15 +188,16 @@ for (const [name, check, kept] of [
   ["finds nothing", { exitCode: 0 }, false],
 ] as const) {
   it.effect(
-    `a discard where the platform's check ${name} ${kept ? "keeps" : "removes"} the folder and is settled`,
+    `a discard where the platform's check ${name} ${kept ? "keeps" : "removes"} the folder, and the device's record of it, and is settled`,
     () =>
       Effect.scoped(
         Effect.gen(function* () {
-          const { folder, settled, discardSettled } = yield* following([DISCARD], check);
+          const { folder, owned, settled, discardSettled } = yield* following([DISCARD], check);
           yield* discardSettled;
 
           const fileSystem = yield* FileSystem.FileSystem;
           assert.equal(yield* fileSystem.exists(folder), kept);
+          assert.equal(yield* fileSystem.exists(owned), kept);
           assert.deepEqual(settled, [DISCARD.id]);
         }),
       ).pipe(Effect.provide(NodeFileSystem.layer)),

@@ -26,8 +26,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import { SANDBOX_IMAGE, SMOLVM_LINUX_PIN } from "@luke/agent-runner/pins";
-import { resolveAppName } from "../app-identity.js";
-import { DARWIN_HOST } from "./host-os.js";
 
 const SCRIPT = join(import.meta.dirname, "../../../../apps/web/install/install.sh");
 const UNINSTALL_SCRIPT = join(import.meta.dirname, "../../../../apps/host/scripts/luke-host.sh");
@@ -546,30 +544,12 @@ describe("the host's install script", () => {
   );
 
   it.each([
-    { app: "none", stateOf: undefined, loaded: false, kept: false, status: 0 },
-    {
-      app: "release",
-      stateOf: (home: string) => DARWIN_HOST.stateRoot(home, { developerIdSigned: true }),
-      loaded: false,
-      kept: true,
-      status: 0,
-    },
-    {
-      app: "development",
-      stateOf: (home: string) =>
-        join(
-          home,
-          "Library/Application Support",
-          resolveAppName({ packaged: false, developerIdSigned: false }),
-        ),
-      loaded: false,
-      kept: true,
-      status: 0,
-    },
-    { app: "none", stateOf: undefined, loaded: true, kept: true, status: 1 },
+    { loaded: false, status: 0 },
+    { loaded: true, status: 1 },
   ])(
-    "a Mac's uninstall removes the agents' machines and folders under the installing user's home, never root's, and leaves the clones the desktop app shares, unless a Luke app profile's state is there or the LaunchAgent will not stop (app state: $app, still loaded: $loaded)",
-    ({ stateOf, loaded, kept, status }) => {
+    "a Mac's uninstall removes the machines and folders of the agents its daemon made, never another Luke install's or root's, and leaves the clones every install shares, unless the LaunchAgent will not stop (still loaded: $loaded)",
+    ({ loaded, status }) => {
+      const removed = status === 0;
       const bin = folder();
       const home = folder();
       const rootHome = folder();
@@ -585,26 +565,22 @@ describe("the host's install script", () => {
       })) {
         writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
       }
-      // Note that one smolvm store holds the app's agents' machines and this install's alike.
-      const smolvm = join(
-        home,
-        "Library/Application Support/Luke Host/state/agent-tools/smolvm/1/smolvm",
-      );
+      const app = join(home, "Library/Application Support/Luke Host");
+      // Note that one smolvm store holds every Luke install's agents' machines for the user, this one's among them.
+      const smolvm = join(app, "state/agent-tools/smolvm/1/smolvm");
       mkdirSync(join(smolvm, ".."), { recursive: true });
       writeFileSync(
         smolvm,
-        `#!/bin/sh\ncase "$1 $2" in\n  "machine ls") printf 'luke-one\\nother\\n' ;;\n  "machine delete") echo "$4" >> "${deletes}" ;;\nesac\n`,
+        `#!/bin/sh\n[ "$1 $2" != "machine delete" ] || echo "$4" >> "${deletes}"\n`,
         { mode: 0o755 },
       );
+      // Note that agent one is this install's, by its daemon's record, and agent two another Luke install's.
+      mkdirSync(join(app, "state/owned-agents"), { recursive: true });
+      writeFileSync(join(app, "state/owned-agents/one"), "");
       for (const place of [home, rootHome]) {
-        for (const each of ["agents/one", "clones/acme", "keep"]) {
+        for (const each of ["agents/one", "agents/two", "clones/acme", "keep"]) {
           mkdirSync(join(place, ".luke", each), { recursive: true });
         }
-      }
-      if (stateOf !== undefined) {
-        const appState = stateOf(home);
-        mkdirSync(appState, { recursive: true });
-        writeFileSync(join(appState, "device.json"), "{}");
       }
       writeFileSync(join(script, "luke-host"), readFileSync(UNINSTALL_SCRIPT), { mode: 0o755 });
 
@@ -614,13 +590,14 @@ describe("the host's install script", () => {
       });
 
       expect(answer.status).toBe(status);
-      expect(existsSync(join(home, ".luke/agents"))).toBe(kept);
       expect(existsSync(deletes) ? readFileSync(deletes, "utf8").trim().split("\n") : []).toEqual(
-        kept ? [] : ["luke-one"],
+        removed ? ["luke-one"] : [],
       );
+      expect(existsSync(join(home, ".luke/agents/one"))).toBe(!removed);
+      expect(existsSync(join(home, ".luke/agents/two"))).toBe(true);
       expect(existsSync(join(home, ".luke/clones"))).toBe(true);
       expect(existsSync(join(home, ".luke/keep"))).toBe(true);
-      expect(existsSync(join(rootHome, ".luke/agents"))).toBe(true);
+      expect(existsSync(join(rootHome, ".luke/agents/one"))).toBe(true);
       expect(existsSync(join(rootHome, ".luke/clones"))).toBe(true);
     },
   );
