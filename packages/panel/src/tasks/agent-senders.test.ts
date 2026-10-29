@@ -223,6 +223,9 @@ async function drawnFor(
   return drawn;
 }
 
+/** Where a line names its sender: over its bubble, or, for GitHub's card, on the line under it. */
+const SENDER = ":is(.luke-message-head-sender, .luke-message-line-sender)";
+
 /** Each of the developer's messages as `reader` sees the tab, by its id, where a sender is drawn with it. */
 async function sendersFor(
   reader: string,
@@ -231,7 +234,7 @@ async function sendersFor(
 ): Promise<readonly Seen[]> {
   const drawn = await drawnFor(reader, [], agent, messages);
   return drawn.flatMap((message, index): Seen[] => {
-    const sender = message.querySelector<HTMLElement>(".luke-message-line-sender [data-actor-ref]");
+    const sender = message.querySelector<HTMLElement>(`${SENDER} [data-actor-ref]`);
     if (sender === null) return [];
     const id = messages[index]?.id ?? "";
     const name = sender.querySelector(".luke-inline-ref-label")?.textContent ?? "";
@@ -283,7 +286,7 @@ test("another agent's message wears the mark of the harness its model runs in, a
   const drawn = await drawnFor(DEAN.userId);
   const harnessOf = (id: string) => {
     const sender = drawn[MESSAGES.findIndex((message) => message.id === id)]?.querySelector(
-      ".luke-message-line-sender .actor-mark",
+      `${SENDER} .actor-mark`,
     );
     const mark = sender?.querySelector(".luke-harness-mark");
     return mark?.getAttribute("data-provider") ?? undefined;
@@ -294,7 +297,7 @@ test("another agent's message wears the mark of the harness its model runs in, a
   fakeAppBridge({});
 });
 
-/** What a sent message draws, in the order a reader meets it: its words, its Copy, who sent it, and when. */
+/** What a sent message draws, in the order a reader meets it: who sent it, its words, when, and its Copy, in whatever order they stand. */
 function readingOrder(message: Element, words: string): readonly string[] {
   const walker = document.createTreeWalker(message, NodeFilter.SHOW_TEXT);
   let text: Node | null = walker.nextNode();
@@ -302,7 +305,7 @@ function readingOrder(message: Element, words: string): readonly string[] {
   const seen: [string, Node | null][] = [
     ["words", text],
     ["Copy", message.querySelector('button[aria-label="Copy message"]')],
-    ["sender", message.querySelector(".luke-message-line-sender")],
+    ["sender", message.querySelector(SENDER)],
     ["sent at", message.querySelector("time")],
   ];
   return seen
@@ -318,7 +321,7 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   const drawn = await drawnFor(DEAN.userId, opened);
   const sender = drawn[
     MESSAGES.findIndex((message) => message.id === "claude-agent")
-  ]?.querySelector<HTMLElement>(".luke-message-line-sender [data-actor-ref]");
+  ]?.querySelector<HTMLElement>(`${SENDER} [data-actor-ref]`);
   assert.ok(sender instanceof HTMLButtonElement, "the sender is a door");
 
   restOn(sender);
@@ -341,13 +344,13 @@ test("another agent named as a line's sender opens its tab on a press and hangs 
   fakeAppBridge({});
 });
 
-test("a sent message keeps its bubble on top, with its Copy, who sent it, and when on the line under it, the time at the right", async () => {
+test("a teammate's message names them over its bubble, with when and its Copy on the line under it, and the reader's own names nobody", async () => {
   const drawn = await drawnFor(DEAN.userId);
   const byId = (id: string) => drawn[MESSAGES.findIndex((each) => each.id === id)];
   const charles = byId("charles");
   const own = byId("dean");
   assert.ok(charles !== undefined && own !== undefined);
-  assert.deepEqual(readingOrder(charles, "Not five."), ["words", "Copy", "sender", "sent at"]);
+  assert.deepEqual(readingOrder(charles, "Not five."), ["sender", "words", "sent at", "Copy"]);
   assert.equal(
     charles.querySelector("time")?.getAttribute("datetime"),
     new Date(CHARLES_SENT_AT).toISOString(),

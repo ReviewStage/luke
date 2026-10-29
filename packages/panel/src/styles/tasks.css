@@ -1743,12 +1743,12 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   white-space: nowrap;
 }
 
-/* The line a finished turn ends on (`agent-tab.tsx`'s TurnFoot): how long
-   it worked, then its Copy and Copy link to the right of it, as a sent
-   message's line holds them under its bubble. Note that the room above is
-   the row's rather than the worked line's, because the buttons are taller
-   than the words and centring them would push the words down. */
-.agent-turn-foot > [data-worked] {
+/* The line a finished turn ends on (`agent-tab.tsx`'s TurnFoot), the line
+   under every message: how long it worked as its lead, then its Copy and
+   Copy link to the right of it. Note that the room above is the row's
+   rather than the worked line's, because the buttons are taller than the
+   words and centring them would push the words down. */
+.agent-turn-foot [data-worked] {
   min-width: 0;
   margin-top: 0;
 }

@@ -1182,6 +1182,25 @@ export function threadLineWords(text: string, event: ThreadLineMetadata["event"]
   return [did, rest.trim()].filter((part) => part !== "").join(PARAGRAPH);
 }
 
+/**
+ * The item's title a member's thread line names it by on its first line
+ * (`inboxThreadMessage`, `inboxAnswerMessage`), between its lead's opening
+ * quote and the key's last opening on that line, as `threadLineWords`
+ * finds the key; none where the line opens otherwise.
+ */
+export function threadLineTitle(
+  text: string,
+  event: ThreadLineMetadata["event"],
+): string | undefined {
+  const opens = `${THREAD_LINE_LEAD[event]} on "`;
+  const cut = text.indexOf(PARAGRAPH);
+  const head = cut === -1 ? text : text.slice(0, cut);
+  const key = head.lastIndexOf(KEY_OPENS);
+  if (!head.startsWith(opens) || key < opens.length) return undefined;
+  const title = head.slice(opens.length, key);
+  return title === "" ? undefined : title;
+}
+
 /** A field's value as words: a number as it prints, yes or no for a boolean. */
 export function fieldValueWords(value: InboxFieldValue): string {
   if (isWireBoolean(value)) return value ? "yes" : "no";

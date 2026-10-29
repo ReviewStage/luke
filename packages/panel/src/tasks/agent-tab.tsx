@@ -39,9 +39,11 @@ import {
   InlineRef,
   LineSummary,
   MESSAGE_LINE_ALIGN,
+  MessageHead,
   MessageLine,
   OneLine,
   STATUS_TONE,
+  SUBJECT_FIT,
   TaskStatusMark,
   TEXT_ELEMENT,
   TEXT_LINK_LOOK,
@@ -130,7 +132,6 @@ import {
   placedMessages,
   planPayerOf,
   providerOf,
-  receivedLine,
   SENT_LINE_STATE,
   type SentLine,
   settledPlanEdits,
@@ -444,10 +445,10 @@ function useLiveDoors(
 
 /**
  * Another coding agent's message, sent with `message_agent`, as its
- * sender's bubble at the column's left: its words as a person reads them,
- * without the lines that are the agent's alone (`agentMessageWords`), then
- * the sender by its own chip, which opens it, or by the name its row kept
- * where the sender is gone, when it arrived, and Copy and Copy link.
+ * sender's bubble at the column's left: the sender over it by its own chip,
+ * which opens it, or by the name its row kept where the sender is gone, its
+ * words as a person reads them, without the lines that are the agent's
+ * alone (`agentMessageWords`), then when it arrived, and Copy and Copy link.
  */
 function AgentMessageRow({ message }: { message: AgentTranscriptMessage }): ReactNode {
   const sent = agentMessageOf(message);
@@ -462,13 +463,7 @@ function AgentMessageRow({ message }: { message: AgentTranscriptMessage }): Reac
       data-agent-message=""
       data-message-id={message.id}
     >
-      {words === "" ? null : (
-        <MessageContent>
-          <TranscriptWords text={words} />
-        </MessageContent>
-      )}
-      <MessageLine
-        align={MESSAGE_LINE_ALIGN.START}
+      <MessageHead
         sender={
           sender?.kind === ACTOR_KIND.AGENT && sender.agentId !== undefined ? (
             <SendingAgent actor={sender} agentId={sender.agentId} />
@@ -478,6 +473,14 @@ function AgentMessageRow({ message }: { message: AgentTranscriptMessage }): Reac
             </Text>
           )
         }
+      />
+      {words === "" ? null : (
+        <MessageContent>
+          <TranscriptWords text={words} />
+        </MessageContent>
+      )}
+      <MessageLine
+        align={MESSAGE_LINE_ALIGN.START}
         at={message.sentAt}
         actions={<CopyMessageAction words={words} copyable={words !== ""} messageId={message.id} />}
       />
@@ -1286,30 +1289,27 @@ export interface ArrivedLine {
 const NO_ARRIVED: readonly ArrivedLine[] = [];
 
 /**
- * The line a finished turn ends on: how long it worked and when it ended,
- * then its Copy and Copy link beside it, set as a sent message's are under
- * its bubble rather than floated over the turn's corner. A turn still
- * running offers no Copy, because its words are not yet whole.
+ * The line a finished turn ends on, the line under every message
+ * (`MessageLine`): how long it worked and when it ended as its lead, then
+ * its Copy and Copy link beside it, set as any message's are under its
+ * bubble rather than floated over the turn's corner. A turn still running
+ * offers no Copy, because its words are not yet whole.
  */
 function TurnFoot({ workedFor, copy }: { workedFor: ReactNode; copy: ReactNode }): ReactNode {
   if (workedFor === null && copy === null) return null;
   return (
     // Note that the room above is the row's rather than the worked line's, because the buttons are taller than the words and centring them would push the words down.
-    <div
-      className="agent-turn-foot mt-tight-gap flex min-w-0 items-center gap-tight-gap"
-      data-turn-foot=""
-    >
-      {workedFor}
-      {copy}
+    <div className="agent-turn-foot mt-tight-gap" data-turn-foot="">
+      <MessageLine align={MESSAGE_LINE_ALIGN.START} sender={workedFor} actions={copy} />
     </div>
   );
 }
 
 /**
  * One message: the plan the agent was handed, as a card; a message the
- * developer sent it since, as the developer's bubble, with a quiet line
- * under it holding its Copy and Copy link and, at the bubble's edge, who
- * sent it and when; or one of the agent's own turns, ending once it has
+ * developer sent it since, as a bubble at the right where it is the
+ * reader's own, else at the left under who sent it, with a quiet line under
+ * it holding when and its Copy and Copy link; or one of the agent's own turns, ending once it has
  * finished on a line saying how long it worked and when it ended, with the
  * Copy and Copy link of its words beside it where it has any. A line that
  * reached a turn while it ran is drawn inside it, as its own bubble between
@@ -1442,8 +1442,12 @@ export function AgentMessage({
         </Message>
       );
     }
-    // A line Luke, GitHub, or another agent sent is the other side's, so it stands at the left as another agent's message does.
-    const received = receivedLine(message.sentBy);
+    // A line anyone but the reader sent (a teammate's, an automation's, Luke's) stands at the left under its sender, as another agent's message does, so the reader's own alone stands at the right.
+    const received = sender !== undefined;
+    const threadHead =
+      thread === undefined ? null : (
+        <ThreadLineHead line={thread} words={words} fit={received ? SUBJECT_FIT.OWN : undefined} />
+      );
     return (
       <Message
         from={received ? MESSAGE_ROLE.ASSISTANT : message.role}
@@ -1451,7 +1455,7 @@ export function AgentMessage({
         data-message-id={message.id}
         data-undelivered={marked ? "" : undefined}
       >
-        {thread === undefined ? null : <ThreadLineHead line={thread} />}
+        {received ? <MessageHead sender={named}>{threadHead}</MessageHead> : threadHead}
         <MessageFileChips message={message} sending={sending} />
         {shown === "" ? null : (
           <MessageContent>
@@ -1463,7 +1467,6 @@ export function AgentMessage({
         <UndeliveredMark messageId={message.id} />
         <MessageLine
           align={received ? MESSAGE_LINE_ALIGN.START : MESSAGE_LINE_ALIGN.END}
-          sender={named}
           at={sentAt}
           // Note that a line of no words, files alone, still offers its Copy link, though it has nothing to copy or edit.
           actions={

@@ -13,6 +13,7 @@ import { pageFrameUrl } from "@luke/features/page-frame";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { ProviderMark } from "@luke/ui";
+import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -1007,6 +1008,7 @@ function agentMessageDrawn(
   message: AgentTranscriptMessage,
   page?: TaskMentionsValue,
   agentId?: string,
+  sender?: Actor,
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -1020,6 +1022,7 @@ function agentMessageDrawn(
       lead: AGENT_LEAD,
       moving: false,
       delegation: { models: [] },
+      sender,
     }),
   });
   act(() =>
@@ -1047,7 +1050,7 @@ test("a message another agent sent draws as its sender's bubble at the left, nam
   assert.ok(bubble, "the message draws as its sender's bubble");
   assert.equal(bubble.dataset.messageId, "message", "a link to the line finds its bubble");
   assert.match(
-    bubble.querySelector(".luke-message-line-sender")?.textContent ?? "",
+    bubble.querySelector(".luke-message-head-sender")?.textContent ?? "",
     /Invite expiry/u,
   );
   assert.equal(
@@ -1059,7 +1062,7 @@ test("a message another agent sent draws as its sender's bubble at the left, nam
 test("a message from an agent the line keeps no chip of is named by the name its row keeps", () => {
   const bubble = agentMessageDrawn(AGENT_MESSAGE).querySelector("[data-agent-message]");
   assert.match(
-    bubble?.querySelector(".luke-message-line-sender")?.textContent ?? "",
+    bubble?.querySelector(".luke-message-head-sender")?.textContent ?? "",
     /Invite emails/u,
   );
 });
@@ -1080,7 +1083,7 @@ const TASK_PAGE: TaskMentionsValue = {
   },
 };
 
-test("a member's message on a thread is headed by what they did and the thread's chip, its words without the header that names the item to the agent, whatever its title spells", () => {
+test("a teammate's message on a thread is headed by who sent it, what they did and the thread's chip named by the thread's title, its words without the header that names the item to the agent, whatever its title spells", () => {
   fakeAppBridge({});
   const container = agentMessageDrawn(
     {
@@ -1100,10 +1103,20 @@ test("a member's message on a thread is headed by what they did and the thread's
     },
     TASK_PAGE,
     "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED, name: "Ada Lovelace" },
   );
   const head = container.querySelector<HTMLElement>("[data-thread-line]");
   assert.match(head?.textContent ?? "", /^Thread message/u);
-  assert.ok(head?.querySelector("[data-mention-ref]"), "the head wears the thread's chip");
+  assert.equal(
+    head?.querySelector("[data-mention-ref] .luke-inline-ref-label")?.textContent,
+    'Ship " (key fake): the invites?',
+    "the head wears the thread's chip, named by its title before the item is read",
+  );
+  assert.match(
+    container.querySelector("[data-message-id]")?.textContent ?? "",
+    /^Ada Lovelace\s*Thread message.*Which PRs first\?/u,
+    "who sent it heads the line, over its words",
+  );
   assert.equal(
     container.querySelector(".message-content")?.textContent?.trim(),
     "Which PRs first?",

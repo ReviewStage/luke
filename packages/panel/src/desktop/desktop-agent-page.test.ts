@@ -1379,7 +1379,7 @@ test("a teammate's message to an agent on its own page carries their sign-in pic
   await settle();
 
   const sender = page.querySelector(
-    ".is-user:not(.agent-origin) .luke-message-line-sender [data-actor-ref]",
+    ".is-received:not(.agent-origin) .luke-message-head-sender [data-actor-ref]",
   );
   assert.equal(sender?.querySelector(".luke-inline-ref-label")?.textContent, "Charles Pan");
   assert.equal(sender?.querySelector("img")?.getAttribute("src"), picture);
