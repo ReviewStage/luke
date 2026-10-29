@@ -26,8 +26,9 @@ const PILOT_NOTE_COPY = {
 
 /**
  * The quiet note in the box of an agent a pilot started, framed as the box
- * it replaces: Reports to and the pilot's chip, which opens it where the
- * window can (`pilotTarget`), then Stop while a turn still runs. The pilot
+ * it replaces: Reports to and the pilot's chip, which opens the pilot's tab,
+ * on whichever task it stands (`pilotTarget`), then Stop while a turn still
+ * runs. The pilot
  * is named as the task's list names it, else as the agent's summary does,
  * since a sub-pilot's pilot stands on another task.
  */

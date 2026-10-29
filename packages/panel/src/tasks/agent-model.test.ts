@@ -897,7 +897,7 @@ test("a pilot task offers no agent of the developer's own and Continue on its pi
   );
 });
 
-test("only an agent no pilot started keeps its composer, and the note on one a pilot started opens the pilot's tab on its own task, else the pilot's task", () => {
+test("only an agent no pilot started keeps its composer, and the note on one a pilot started opens the pilot's tab on its own task, else its tab on the pilot's task", () => {
   const pilot = {
     agentId: "pilot",
     taskId: "invitations",
@@ -911,7 +911,7 @@ test("only an agent no pilot started keeps its composer, and the note on one a p
   assert.deepEqual([topPilot, coderUnderPilot, subPilot, coderOnPlainTask].map(pilotTarget), [
     undefined,
     { kind: TOOL_TARGET.AGENT, agent: "pilot" },
-    { kind: TOOL_TARGET.TASK, task: "invitations" },
+    { kind: TOOL_TARGET.TASK, task: "invitations", agent: "pilot" },
     undefined,
   ]);
 });

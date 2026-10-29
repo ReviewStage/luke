@@ -476,7 +476,10 @@ export function DesktopAgentPage({
       sidePanel.onChoose(SIDE_PANEL_TAB.INBOX);
       setFocus(COLUMN.SIDE);
     }
-    if (target.kind === TOOL_TARGET.TASK) tasks.onShowTask(target.task);
+    if (target.kind === TOOL_TARGET.TASK) {
+      if (target.agent === undefined) tasks.onShowTask(target.task);
+      else tasks.onShowAgent(target.task, target.agent);
+    }
     // An agent's chip, such as one it was continued or forked to, opens that agent's own page.
     if (target.kind === TOOL_TARGET.AGENT) tasks.agentView.onOpen(target.agent);
     // A page the agent showed on itself opens in the panel beside it, as a task's opens beside its plan.

@@ -1182,7 +1182,7 @@ export function closesComposer(failure: AgentCallFailure): boolean {
 /**
  * Where the note in an agent's composer's place opens the pilot it reports
  * to: the pilot's tab, where it stands on the agent's own task, as a coding
- * agent's pilot does, else the pilot's task, as a sub-pilot's does. None for
+ * agent's pilot does, else its tab on the pilot's task, as a sub-pilot's does. None for
  * an agent no pilot started, which keeps its composer: a member talks to the
  * top pilot of a pilot tree alone, and to any agent outside one.
  */
@@ -1193,7 +1193,7 @@ export function pilotTarget(
   if (pilot === undefined) return undefined;
   return pilot.taskId === agent.planId
     ? { kind: TOOL_TARGET.AGENT, agent: pilot.agentId }
-    : { kind: TOOL_TARGET.TASK, task: pilot.taskId };
+    : { kind: TOOL_TARGET.TASK, task: pilot.taskId, agent: pilot.agentId };
 }
 
 /**
