@@ -15,6 +15,7 @@ import {
   type AgentInboxReadAllView,
   type AgentInboxReadStateView,
   type AgentListAnswer,
+  type AgentLukeToolsAnswerView,
   type AgentMessagesAnswerView,
   type AgentModelsAnswer,
   type AgentOperatorEnsureAnswerView,
@@ -193,6 +194,7 @@ export type AgentClient = Pick<
   | "changes"
   | "overviewPullRequest"
   | "reviewOptions"
+  | "lukeTools"
   | "overviewChecks"
   | "overviewConversation"
   | "githubImage"
@@ -846,6 +848,16 @@ function composed(
         );
         const answer = yield* asked(client.reviewOptions(agentId));
         return carried<AgentReviewOptionsAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.AGENTS_LUKE_TOOLS]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* readParams(
+          agentPullRequestParamsSchema,
+          params,
+          "reading an agent's Luke tools names one agent",
+        );
+        const answer = yield* asked(client.lukeTools(agentId));
+        return carried<AgentLukeToolsAnswerView>(answer);
       }),
     [GATEWAY_METHOD.AGENTS_OVERVIEW_CHECKS]: (params) =>
       Effect.gen(function* () {

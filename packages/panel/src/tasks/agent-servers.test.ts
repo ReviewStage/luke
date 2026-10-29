@@ -161,7 +161,7 @@ async function opened(standing: IntegrationStatuses = statuses) {
 
 /** Each section's heading and its rows' names, as drawn. */
 function sections(container: HTMLElement) {
-  return [...container.querySelectorAll(".agent-servers-list > ul")].map((group) => [
+  return [...container.querySelectorAll(".agent-servers-list ul")].map((group) => [
     group.getAttribute("aria-label"),
     [...group.querySelectorAll(".agent-servers-name")].map((name) => name.textContent),
   ]);

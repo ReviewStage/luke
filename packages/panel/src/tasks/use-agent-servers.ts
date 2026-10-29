@@ -30,9 +30,11 @@ interface Held {
 }
 
 export function useAgentServers(input: {
-  agent: Pick<AgentSummary, "id" | "disabledServers">;
+  agent: Pick<AgentSummary, "id" | "disabledServers" | "startedBy">;
   write: ServersWriter;
   onOpenSettings: () => void;
+  /** The reader's account, which says whether they started the agent and so whether this Mac's setting meets its commands. */
+  me: string | undefined;
 }): AgentServersControl {
   const { agent } = input;
   const [held, setHeld] = useState<Held>(() => ({ agentId: agent.id, pending: undefined }));
@@ -59,5 +61,9 @@ export function useAgentServers(input: {
     disabled: held.pending ?? agent.disabledServers ?? NONE_OFF,
     onSwitch,
     onOpenSettings: () => latest.current.onOpenSettings(),
+    luke: {
+      agentId: agent.id,
+      starterReading: input.me !== undefined && agent.startedBy?.userId === input.me,
+    },
   };
 }
