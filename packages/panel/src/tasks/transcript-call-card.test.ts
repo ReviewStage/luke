@@ -183,14 +183,26 @@ test.each([
   assert.equal(cardTitle(drawing, "[data-tool-input]"), "Input");
 });
 
-test("an output that only acknowledges the call is left out, and an empty one is a muted No output line", () => {
-  const acknowledged = openedCall({
-    kind: TOOL_BLOCK.JSON,
-    text: JSON.stringify({ status: "accepted", ok: true }),
-  });
-  assert.equal(acknowledged.querySelector("[data-tool-output]"), null);
-
-  const empty = openedRead("");
-  assert.equal(empty.querySelector("[data-tool-output]")?.textContent, "No output");
-  assert.equal(empty.querySelector("[data-tool-output] pre"), null, "no empty card");
+test.each([
+  {
+    reads: "an output that only acknowledges the call is left out",
+    output: { kind: TOOL_BLOCK.JSON, text: JSON.stringify({ status: "accepted", ok: true }) },
+    shown: undefined,
+  },
+  {
+    reads: "a true under a key of its own is an answer, not an acknowledgement",
+    output: { kind: TOOL_BLOCK.JSON, text: JSON.stringify({ exists: true }) },
+    shown: "exists: true",
+  },
+  {
+    reads: "an empty output is a muted No output line, with no empty card",
+    output: { kind: TOOL_BLOCK.TEXT, text: "" },
+    shown: "No output",
+  },
+])("$reads", ({ output, shown }) => {
+  const drawing = openedCall(output);
+  const drawn = drawing.querySelector("[data-tool-output]");
+  // Note that a card's words are its lines, without its header's.
+  const words = drawn?.querySelector("pre") ? cardLines(drawing).join("\n") : drawn?.textContent;
+  assert.equal(words, shown);
 });

@@ -100,8 +100,11 @@ const NO_OUTPUT = "No output";
 /** What an empty list reads as. */
 const NONE = "(none)";
 
-/** The answers that only acknowledge, which tell a reader nothing the row does not. */
-const ACKNOWLEDGEMENTS: ReadonlySet<unknown> = new Set(["accepted", "Done.", "done", "ok", true]);
+/** The words that only acknowledge a call, which tell a reader nothing the row does not. */
+const ACKNOWLEDGEMENTS: ReadonlySet<unknown> = new Set(["accepted", "Done.", "done", "ok"]);
+
+/** The keys whose `true` only acknowledges a call, as `{ "ok": true }` does; `true` under any other key is an answer. */
+const ACKNOWLEDGING_KEYS: ReadonlySet<string> = new Set(["ok", "success"]);
 
 /**
  * Whether a block says a call's subject whole, so the row previewing it
@@ -405,13 +408,23 @@ function readableBlock(block: ToolBlock): ToolBlock {
   return { kind: TOOL_BLOCK.TEXT, text: readableLines(value, "").join("\n") };
 }
 
-/** Whether a JSON answer only acknowledges the call, as "accepted" or `{ "ok": true }` does. */
+/**
+ * Whether a JSON answer only acknowledges the call, as "accepted",
+ * `{ "status": "accepted" }` or `{ "ok": true }` does. Note that `true`
+ * acknowledges only under `ok` or `success`, because `{ "exists": true }`
+ * is the call's answer.
+ */
 function acknowledges(block: ToolBlock): boolean {
   if (block.kind !== TOOL_BLOCK.JSON) return false;
   const value = blockValue(block);
   if (!isContainer(value) || Array.isArray(value)) return ACKNOWLEDGEMENTS.has(value);
-  const values = Object.values(value);
-  return values.length > 0 && values.every((item) => ACKNOWLEDGEMENTS.has(item));
+  const entries = Object.entries(value);
+  return (
+    entries.length > 0 &&
+    entries.every(
+      ([key, item]) => ACKNOWLEDGEMENTS.has(item) || (item === true && ACKNOWLEDGING_KEYS.has(key)),
+    )
+  );
 }
 
 /** The block an answer's card draws, read as words; nothing where the answer only acknowledges the call. */
