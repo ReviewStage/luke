@@ -1397,7 +1397,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const { agent } = readAnswer(agentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started);
         assert.equal(agent.model, SOL);
         assert.equal(agent.effort, "low");
-        assert.equal((yield* readAccountPreferences(owner))?.codingAgent, undefined);
+        assert.equal((yield* readAccountPreferences(owner))?.agent, undefined);
       }),
   );
 

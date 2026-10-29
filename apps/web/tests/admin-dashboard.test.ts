@@ -80,7 +80,7 @@ function overview(overrides: Partial<AdminOverview> = {}): AdminOverview {
       activeDevelopers: 12,
       features: [
         { feature: REACH_FEATURE.TASKS, developers: 12, share: 1 },
-        { feature: REACH_FEATURE.CODING_AGENTS, developers: 9, share: 0.75 },
+        { feature: REACH_FEATURE.AGENTS, developers: 9, share: 0.75 },
         { feature: REACH_FEATURE.INBOX, developers: 6, share: 0.5 },
         { feature: REACH_FEATURE.INTEGRATIONS, developers: 4, share: 1 / 3 },
         { feature: REACH_FEATURE.AUTOMATIONS, developers: 1, share: 1 / 12 },

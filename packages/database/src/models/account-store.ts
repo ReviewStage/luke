@@ -43,7 +43,7 @@ export interface AccountPreferencesRow {
   /** The settings every device shares, the link choice among them where the account made one. */
   preferences: AccountPreferences;
   /** What a click on Start runs on; the catalog's default until the account chooses. */
-  codingAgent: ModelChoice;
+  agent: ModelChoice;
   /** What a Generate chapters the account presses runs on; Haiku until the account chooses, and for a stored value no build lists any more. */
   chaptersModel: ChaptersModelId;
   /** Each experiment the account turned on or back off; one it never chose is absent, and off. */
@@ -68,7 +68,7 @@ export interface AccountPreferencesRow {
 export interface AccountPreferencesWrite {
   preferences?: AccountPreferences;
   linkOpen?: LinkOpen;
-  codingAgent?: ModelChoice;
+  agent?: ModelChoice;
   chaptersModel?: ChaptersModelId;
   experiments?: ExperimentChoices;
 }
@@ -164,7 +164,7 @@ type PreferenceRow = typeof PreferenceRowSchema.Type;
  */
 function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
   const standard = row.codingAgentContextWindow === CONTEXT_WINDOW.STANDARD;
-  const codingAgent: ModelChoice =
+  const agent: ModelChoice =
     row.codingAgentModel !== null && row.codingAgentEffort !== null
       ? {
           model: row.codingAgentModel,
@@ -174,7 +174,7 @@ function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
       : AGENT_DEFAULT_CHOICE;
   return {
     preferences: accountPreferencesFromStored(row.linkOpen ? { linkOpen: row.linkOpen } : {}) ?? {},
-    codingAgent,
+    agent,
     // Note that a stored model no build lists any more reads as Haiku, as a row never written does.
     chaptersModel: chaptersModelFrom(row.chaptersModel),
     // Note that a stored key no build lists any more reads as nothing, because the experiment it named graduated or went.
@@ -247,7 +247,7 @@ export function readAccountRole(
 const PreferenceWriteSchema = Schema.Struct({
   userId: Schema.String,
   linkOpen: Schema.optionalKey(Schema.Literals(LINK_OPEN_LIST)),
-  codingAgent: Schema.optionalKey(
+  agent: Schema.optionalKey(
     Schema.Struct({
       model: Schema.String,
       effort: Schema.String,
@@ -269,12 +269,12 @@ function writtenColumns(write: PreferenceWrite) {
     ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
     ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
     ...(write.updatedAt === undefined ? undefined : { updatedAt: write.updatedAt }),
-    ...(write.codingAgent === undefined
+    ...(write.agent === undefined
       ? undefined
       : {
-          codingAgentModel: write.codingAgent.model,
-          codingAgentEffort: write.codingAgent.effort,
-          codingAgentContextWindow: write.codingAgent.contextWindow ?? null,
+          codingAgentModel: write.agent.model,
+          codingAgentEffort: write.agent.effort,
+          codingAgentContextWindow: write.agent.contextWindow ?? null,
         }),
   };
 }
@@ -326,7 +326,7 @@ export function writeAccountPreferences(
       userId,
       ...(write.preferences === undefined ? undefined : { updatedAt }),
       ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
-      ...(write.codingAgent === undefined ? undefined : { codingAgent: write.codingAgent }),
+      ...(write.agent === undefined ? undefined : { agent: write.agent }),
       ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
       ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),
     };

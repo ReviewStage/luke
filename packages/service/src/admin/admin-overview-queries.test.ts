@@ -324,7 +324,7 @@ it.layer(getTestDB())("the overview's reads", (it) => {
         // Bob's own connected integration is not reach: he was not active this week.
         assert.deepEqual(Object.fromEntries(source.reach), {
           [REACH_FEATURE.TASKS]: 1,
-          [REACH_FEATURE.CODING_AGENTS]: 1,
+          [REACH_FEATURE.AGENTS]: 1,
           [REACH_FEATURE.INBOX]: 1,
           [REACH_FEATURE.INTEGRATIONS]: 1,
           [REACH_FEATURE.AUTOMATIONS]: 1,

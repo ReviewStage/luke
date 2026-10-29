@@ -170,7 +170,7 @@ test("the days are zero-filled and stacked by source, and the totals are folded 
         day: TODAY,
         userId: "a",
         model: MODEL.BASE,
-        source: COST_SOURCE.CODING_AGENTS,
+        source: COST_SOURCE.AGENTS,
         inputTokens: MILLION,
       }),
       tokens({ day: YESTERDAY, userId: "a", model: MODEL.BASE, outputTokens: MILLION }),
@@ -184,7 +184,7 @@ test("the days are zero-filled and stacked by source, and the totals are folded 
   assert.equal(cost.daily.at(-1)?.day, TODAY);
   assert.deepEqual(cost.daily.at(-1), {
     day: TODAY,
-    [COST_SOURCE.CODING_AGENTS]: 1,
+    [COST_SOURCE.AGENTS]: 1,
     [COST_SOURCE.LUKE]: 0,
     [COST_SOURCE.DICTATION]: 0.045,
   });

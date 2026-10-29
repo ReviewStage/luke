@@ -424,9 +424,7 @@ function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
  */
 function defaultOf(read: AccountPreferencesAnswerWire | Failed): AgentDefaultAnswer {
   if ("failure" in read) return read;
-  const choice = Option.getOrUndefined(
-    Schema.decodeUnknownOption(modelChoiceSchema)(read.codingAgent),
-  );
+  const choice = Option.getOrUndefined(Schema.decodeUnknownOption(modelChoiceSchema)(read.agent));
   return choice === undefined ? UNANSWERED : { choice };
 }
 
@@ -526,9 +524,7 @@ export class HostedAgentClient {
   writeDefault(
     choice: ModelChoice,
   ): Effect.Effect<AgentDefaultAnswer, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(
-      readEither(agentDefaultWriteSchema)({ codingAgent: choice }),
-    );
+    const admitted = Result.getOrUndefined(readEither(agentDefaultWriteSchema)({ agent: choice }));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return Effect.map(
       hostedAnswer(askHosted(this.#hosted.account.writePreferences, admitted), DEFAULT_REFUSALS),

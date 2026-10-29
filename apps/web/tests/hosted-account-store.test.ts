@@ -102,8 +102,8 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
   it.effect("each part of the snapshot is written on its own and leaves the other standing", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const chosen = yield* writeAccountPreferences(userId, { codingAgent: SONNET_AT_MAX });
-      assert.deepEqual(chosen.codingAgent, SONNET_AT_MAX);
+      const chosen = yield* writeAccountPreferences(userId, { agent: SONNET_AT_MAX });
+      assert.deepEqual(chosen.agent, SONNET_AT_MAX);
       assert.deepEqual(chosen.preferences, {});
       // No preferences were ever written, so there is no snapshot for a Mac to take.
       assert.equal(chosen.updatedAt, undefined);
@@ -111,13 +111,13 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
 
       yield* writeAccountPreferences(userId, { preferences: {} });
       const afterPreferences = yield* readAccountPreferences(userId);
-      assert.deepEqual(afterPreferences?.codingAgent, SONNET_AT_MAX);
+      assert.deepEqual(afterPreferences?.agent, SONNET_AT_MAX);
       assert.ok(afterPreferences?.updatedAt instanceof Date);
 
       yield* TestClock.adjust(Duration.minutes(1));
-      yield* writeAccountPreferences(userId, { codingAgent: AGENT_DEFAULT_CHOICE });
+      yield* writeAccountPreferences(userId, { agent: AGENT_DEFAULT_CHOICE });
       const afterChoice = yield* readAccountPreferences(userId);
-      assert.deepEqual(afterChoice?.codingAgent, AGENT_DEFAULT_CHOICE);
+      assert.deepEqual(afterChoice?.agent, AGENT_DEFAULT_CHOICE);
       // The instant is the preferences part's own, so a choice leaves it where it stood.
       assert.equal(afterChoice?.updatedAt?.getTime(), afterPreferences?.updatedAt?.getTime());
       assert.deepEqual(yield* countRows(userId), { preferences: 1, usage: 0 });

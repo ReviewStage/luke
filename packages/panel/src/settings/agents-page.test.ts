@@ -520,7 +520,7 @@ test("a default nothing pays for, as Claude on an OpenAI key alone, says it cann
   models = [{ ...OPUS, credentialMissing: true }, sonnet, gpt];
   const page = await mount();
   const claudeRow: SettingsLink = {
-    page: SETTINGS_VIEW.CODING_AGENTS,
+    page: SETTINGS_VIEW.AGENTS,
     section: SETTINGS_SECTION.CLAUDE,
   };
 

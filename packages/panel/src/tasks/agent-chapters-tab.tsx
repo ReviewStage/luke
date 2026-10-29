@@ -1040,7 +1040,7 @@ function chaptersState(
         </EmptyState>
       ) : (
         <EmptyState icon={<GLYPH.PULL_REQUEST_CHAPTERS />}>
-          {CHAPTERS_WORDS.unavailable(<SettingsPageLink page={SETTINGS_VIEW.CODING_AGENTS} />)}
+          {CHAPTERS_WORDS.unavailable(<SettingsPageLink page={SETTINGS_VIEW.AGENTS} />)}
         </EmptyState>
       );
     case CHAPTERS_SHOWN.GENERATING:

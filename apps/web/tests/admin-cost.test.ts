@@ -20,7 +20,7 @@ Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const DAY = {
   day: "2026-10-17",
-  "coding-agents": 12.5,
+  agents: 12.5,
   luke: 3,
   dictation: 0.01,
 };

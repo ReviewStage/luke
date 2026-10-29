@@ -268,7 +268,7 @@ function DefaultRows({
             )
           ) : undefined
         }
-        anchor={SETTINGS_SEARCH_ROW.CODING_AGENT_MODEL}
+        anchor={SETTINGS_SEARCH_ROW.AGENT_MODEL}
         disabled={busy}
         onPick={(id) => {
           // The pick keeps Fast where the model has a fast version, and drops it where it has none.
@@ -307,7 +307,7 @@ function DefaultRows({
             )
           }
           checked={read.fast}
-          anchor={SETTINGS_SEARCH_ROW.CODING_AGENT_FAST}
+          anchor={SETTINGS_SEARCH_ROW.AGENT_FAST}
           disabled={busy || base?.fast === undefined}
           onChange={(fast) =>
             base === undefined
@@ -333,7 +333,7 @@ function DefaultRows({
             value={choice.effort}
             look={CHOICE_BAR_LOOK.SEGMENTED}
             disabled={busy}
-            {...searchAnchorProps(SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT)}
+            {...searchAnchorProps(SETTINGS_SEARCH_ROW.AGENT_EFFORT)}
             onChange={(effort) => effortWrite.run({ ...choice, effort })}
           />
         )}

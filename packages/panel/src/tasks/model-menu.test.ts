@@ -48,7 +48,7 @@ const GPT: ModelChoice = { model: "openai/gpt-6.1", effort: "high" };
 
 /** Where Claude's Connect lands: its harness's row on Agents. */
 const CLAUDE_ROW: SettingsLink = {
-  page: SETTINGS_VIEW.CODING_AGENTS,
+  page: SETTINGS_VIEW.AGENTS,
   section: SETTINGS_SECTION.CLAUDE,
 };
 
