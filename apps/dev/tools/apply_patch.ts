@@ -1,4 +1,4 @@
-/** The code extension's `apply_patch`, its paths resolved from the agent's checkout (`packages/service/src/agents/coder-host/files.ts`), deepening the checkout first (`packages/service/src/agents/coder-host/deepen.ts`), and offered at each turn's start only to an agent working in a repository (`repositoryToolsOf`). */
+/** The code extension's `apply_patch`, its paths resolved from the agent's checkout (`packages/service/src/agents/coder-host/files.ts`), deepening the checkout first (`packages/service/src/agents/coder-host/deepen.ts`), and offered at each turn's start only to an agent working in a repository, never to a pilot (`repositoryToolsOf`). */
 import { CODER } from "@luke/service/agents/coder-host/bounds";
 import { deepeningFirst } from "@luke/service/agents/coder-host/deepen";
 import { applyPatchIn } from "@luke/service/agents/coder-host/files";
