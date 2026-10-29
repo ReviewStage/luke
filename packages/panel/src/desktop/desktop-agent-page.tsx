@@ -399,6 +399,8 @@ export function DesktopAgentPage({
     agentId,
     repository: null,
     listedAgents: tasks.liveAgents,
+    // An agent of a task, an archived one opened here among them, offers what that task's mode lets it.
+    modeOf: (planId) => tasks.tasks.find((each) => each.id === planId)?.mode,
     onOpenIntegrations: tasks.agents.onOpenIntegrations,
     onOpenApiKeys: tasks.agents.onOpenApiKeys,
     // An agent a Continue or a Fork started opens on its own page, as a Start's tab opens on a task.

@@ -129,6 +129,7 @@ import {
   holderAutomationId,
   holderName,
   INBOX_HOLDER,
+  INBOX_NOT_READ,
   type InboxDraft,
   type InboxHolder,
   type InboxKnownAsk,
@@ -220,9 +221,6 @@ import { type PendingInboxReply, pendingReplyOn, type TaskInboxControl } from ".
  * while a send is out, a dictation holds the box, or its editor is still
  * loading (`inbox-answer-box.tsx`).
  */
-
-/** What the thread says under its item where the task's inbox could not be read. */
-const INBOX_FAILED_LINE = "The inbox could not be read.";
 
 /** Where the way back from an item standing alone leads, as its hint names it. */
 const INBOX_PLACE = "inbox";
@@ -1508,7 +1506,7 @@ export function InboxPane({
               </Stack>
             </ItemWords>
             {control.failed ? (
-              <ErrorState onRetry={control.onRetry}>{INBOX_FAILED_LINE}</ErrorState>
+              <ErrorState onRetry={control.onRetry}>{INBOX_NOT_READ}</ErrorState>
             ) : null}
           </ConversationContent>
           <ConversationScrollButton />

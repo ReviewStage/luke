@@ -23,6 +23,8 @@ import {
   taskBrowserTabsFollowSchema,
   taskHistoryFollowSchema,
   taskPagesFollowSchema,
+  tasksBlockAnswerSchema,
+  tasksBlockParamsSchema,
   tasksBrowserTabOpenAnswerSchema,
   tasksBrowserTabOpenParamsSchema,
   tasksBrowserTabsParamsSchema,
@@ -143,6 +145,11 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_MOVE]: actProcedure("Could not move that task on this system.")
     .input(exactInput(tasksMoveParamsSchema))
     .output(EffectSchema.flip(tasksMoveAnswerSchema)),
+  [TASKS_ACT_KIND.TASKS_BLOCK]: actProcedure(
+    "Could not change what blocks that task on this system.",
+  )
+    .input(exactInput(tasksBlockParamsSchema))
+    .output(EffectSchema.flip(tasksBlockAnswerSchema)),
   [TASKS_ACT_KIND.TASKS_EDIT]: actProcedure("Could not save that edit on this system.")
     .input(exactInput(tasksEditParamsSchema))
     .output(EffectSchema.flip(tasksEditAnswerSchema)),

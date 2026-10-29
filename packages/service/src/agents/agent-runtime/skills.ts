@@ -198,26 +198,32 @@ export const installedSkills = /* @__PURE__ */ Effect.fn("web/installedSkills")(
 /**
  * The skills of every source as one session is offered them, in the order
  * the sources are given, earliest first: a name an earlier source offers is
- * left out of a later one, and none past `SESSION_SKILLS.MAX_SKILLS`, each
- * of which is logged.
+ * left out of a later one, which is logged for each, and none past
+ * `SESSION_SKILLS.MAX_SKILLS`, which is logged once for the session with how
+ * many were left out, since a member who installed past the cap loses the
+ * same skills at every start.
  */
 export const mergedSkills = /* @__PURE__ */ Effect.fn("web/mergedSkills")(function* (
   target: ConversationTarget,
   sources: readonly (readonly AgentSkill[])[],
 ): Effect.fn.Return<readonly AgentSkill[]> {
   const offered = new Map<string, AgentSkill>();
+  let pastCap = 0;
   for (const skill of sources.flat()) {
     if (offered.has(skill.name)) {
       yield* Effect.logInfo(
         `The skill ${skill.name} of conversation ${target.conversationId} is shadowed by an earlier source's of the same name and left out`,
       );
     } else if (offered.size >= SESSION_SKILLS.MAX_SKILLS) {
-      yield* Effect.logWarning(
-        `The skill ${skill.name} of conversation ${target.conversationId} is past the session's ${SESSION_SKILLS.MAX_SKILLS} and left out`,
-      );
+      pastCap += 1;
     } else {
       offered.set(skill.name, skill);
     }
+  }
+  if (pastCap > 0) {
+    yield* Effect.logWarning(
+      `${pastCap} skills of conversation ${target.conversationId} are past the session's ${SESSION_SKILLS.MAX_SKILLS} and left out`,
+    );
   }
   return [...offered.values()];
 });

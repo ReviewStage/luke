@@ -99,6 +99,7 @@ function endMoments(message: WireValue): readonly NativeMoment[] {
       ...(QUIET_ENDS.has(reason)
         ? undefined
         : { detail: redactCredentials(said).slice(0, FAILURE_CHARS) }),
+      ...(reason === RUNNER_END.FAILED ? { launchFailed: true } : undefined),
       ...(wakeups === undefined ? undefined : { wakeups }),
     },
   ];
@@ -126,7 +127,7 @@ export function runnerMoments(message: WireValue): Option.Option<readonly Native
       return Option.some([{ kind: NATIVE_MOMENT.WAITING }]);
     // The agent's turn is over, as a `turn_ended` END says, though the launch stays warm.
     case RUNNER_EVENT.IDLE:
-      return Option.some([{ kind: NATIVE_MOMENT.ENDED, ending: NATIVE_ENDING.DONE }]);
+      return Option.some([{ kind: NATIVE_MOMENT.ENDED, ending: NATIVE_ENDING.DONE, warm: true }]);
     case RUNNER_EVENT.END:
       return Option.some(endMoments(message));
     default:

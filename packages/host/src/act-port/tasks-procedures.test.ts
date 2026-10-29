@@ -328,6 +328,8 @@ function windowPort(
       ask(`move:${params.taskId}:${params.workspaceId}`, () => ({
         workspaceId: params.workspaceId,
       })),
+    tasksBlock: (params) =>
+      ask(`block:${params.taskId}:${params.block.taskId}`, () => ({ blockedBy: [], blocks: [] })),
     tasksEdit: (params) =>
       ask(
         `edit:${params.taskId}:${"document" in params.edit ? params.edit.document.value : ""}`,

@@ -3,10 +3,12 @@ import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { InboxIcon, ListTodoIcon } from "lucide-react";
 import { adminSection } from "../admin/routing.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { useInboxNarrowed } from "../tasks/use-channels.js";
 import { automationsTab, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { FOR_YOU_NOUN, useInboxWaiting } from "./places-waiting.js";
+import { useInboxWaiting } from "./places-waiting.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
+import { groupCount } from "./sidebar-fold.js";
 
 /**
  * mobile-bar.tsx -- a phone's way between the window's places: a bar at the
@@ -88,7 +90,7 @@ export function MobileBar({
       <BarItem
         icon={<InboxIcon />}
         current={inInbox && !narrowed}
-        count={{ value: waiting, noun: FOR_YOU_NOUN }}
+        count={groupCount(waiting, NEEDS_YOU.COUNT)}
         inert={drawerOpen}
         onPress={go(inboxView.onOpen)}
       >

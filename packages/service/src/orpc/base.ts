@@ -30,7 +30,7 @@ import { hostedContract } from "@luke/features/contract";
 import { middlewareGen, type WithEffectContext } from "@orpc/experimental-effect";
 import { implement } from "@orpc/server";
 import type { ResponseHeadersHandlerPluginContext } from "@orpc/server/plugins";
-import { Effect, Option, Result } from "effect";
+import { Context, Effect, Option, References, Result } from "effect";
 import {
   admittedHostVersion,
   hostCallerOf,
@@ -70,8 +70,27 @@ interface HostedSessionCaller extends HostedCaller {
   readonly sessionHeaders: Headers;
 }
 
+/**
+ * Every log line a procedure writes carries its path as `procedure`, so a
+ * store failure (`http/store-failure.ts`) names the route it was met on.
+ * Note that the annotation is set on the services handed to the handler, not
+ * with `Effect.annotateLogs` around `next()`, because `next` runs the handler
+ * as a fiber of its own, which an annotation of this one never reaches.
+ */
+const procedureAnnotated = middlewareGen<HostedContext, WithEffectContext<WebServices>>(function* ({
+  context,
+  path,
+  next,
+}) {
+  const annotated = Context.add(context["effect/context"], References.CurrentLogAnnotations, {
+    ...Context.get(context["effect/context"], References.CurrentLogAnnotations),
+    procedure: path.join("."),
+  });
+  return yield* next({ context: { "effect/context": annotated } });
+});
+
 /** The hosted contract to implement, every procedure taking the context above. */
-export const hosted = implement(hostedContract).$context<HostedContext>();
+export const hosted = implement(hostedContract).$context<HostedContext>().use(procedureAnnotated);
 
 /** The caller by its bearer, or with no `Authorization` at all, the browser's session cookie (`auth/bearer.ts`'s `resolveHostedUserId`). */
 export function accountMiddleware(resolveUserId: UserIdResolver) {

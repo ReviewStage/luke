@@ -40,6 +40,8 @@ export const GATEWAY_METHOD = {
   TASKS_SET_STANDING: "tasks.setStanding",
   /** One task moved to another of the account's workspaces on the service; the list and the open document take the task it answered without reading either again. */
   TASKS_MOVE: "tasks.move",
+  /** One block of a task added or taken away on the service; the open document takes the task it answered without reading it again. */
+  TASKS_BLOCK: "tasks.block",
   /** The developer's edit of a task's document saved on the service; the open document takes the task it answered, and a conflict leaves it unchanged. */
   TASKS_EDIT: "tasks.edit",
   /** A window of a file of one task's repository, read from GitHub through the service as it stands now and coloured here; answered to the caller, never held in the view. */

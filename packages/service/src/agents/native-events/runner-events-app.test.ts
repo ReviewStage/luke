@@ -792,6 +792,37 @@ it.layer(getTestDB())("the runner events route", (it) => {
       }),
   );
 
+  it.effect("a turn an API error ended keeps the error's status and words", () =>
+    Effect.gen(function* () {
+      const post = yield* standing;
+      const agent = yield* agentWithBearer;
+      const top = { parent_tool_use_id: null, session_id: SESSION };
+      const messagesOfTurn = [
+        { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+        {
+          type: "result",
+          subtype: "success",
+          is_error: true,
+          api_error_status: 529,
+          result: "API Error: 529 Overloaded",
+          ...top,
+        },
+        { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+      ];
+      // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+      yield* post(
+        agent.bearer,
+        messagesOfTurn.map((message, sequence) => ({ sequence, message }) as RunnerEvent),
+      );
+      const { turns: ended } = yield* transcriptOf(agent.target.conversationId);
+
+      assert.deepEqual(
+        ended.map((turn) => [turn.status, turn.failureDetail]),
+        [[TURN_STATUS.FAILED, "success 529: API Error: 529 Overloaded"]],
+      );
+    }),
+  );
+
   it.effect(
     "a released wait ends its turn as done and keeps its wakeups for Luke to deliver, and a later Stop deletes them",
     () =>
@@ -1552,6 +1583,30 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
       // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
       (message, index) => ({ sequence: from + index, message }) as RunnerEvent,
     );
+
+  it.effect("a launch Codex failed before its first turn fails a turn saying why", () =>
+    Effect.gen(function* () {
+      const post = yield* standing;
+      const agent = yield* agentOn(HARNESS.CODEX, ["Find the queue."]);
+      yield* post(agent.bearer, [
+        // SAFETY: the runner's END, written in its JSON shape.
+        {
+          sequence: 0,
+          message: {
+            type: RUNNER_EVENT.END,
+            reason: RUNNER_END.FAILED,
+            detail: "thread/start: app-server did not answer in time",
+          },
+        } as RunnerEvent,
+      ]);
+      const { turns: ended } = yield* transcriptOf(agent.target.conversationId);
+
+      assert.deepEqual(
+        ended.map((turn) => [turn.status, turn.failureDetail]),
+        [[TURN_STATUS.FAILED, "failed thread/start: app-server did not answer in time"]],
+      );
+    }),
+  );
 
   it.effect(
     "a ChatGPT plan's row takes how each turn found it: verified by P16's recorded turn, its limit reached with the reset Codex heard, then signed out, and a turn that ran never lifts a sign-in OpenAI refused",
