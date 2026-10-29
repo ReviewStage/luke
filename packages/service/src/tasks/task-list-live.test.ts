@@ -42,6 +42,7 @@ import {
 } from "@luke/features/agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import {
+  taskAgentPinsOfLiveRows,
   taskAgentsOfLiveRows,
   taskListLiveRowsSchema,
   taskListOfLiveRows,
@@ -306,6 +307,36 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         assert.ok(BigInt(assigned.txid) > BigInt(begun.txid), "the later write's transaction");
         assert.ok(Option.isNone(yield* beginTaskWorkCommitted(owner, plan.id)));
         assert.ok(Option.isNone(yield* assignUnassignedTaskCommitted(owner, plan.id)));
+      }),
+  );
+
+  it.effect(
+    "deliver a pin of an agent on a plan to the member who pinned it and to no one else",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const teammate = yield* openUser;
+        const outsider = yield* openUser;
+        yield* openWorkspace(outsider);
+        const plan = yield* startTask(owner, { name: "Teammate invitations" });
+        yield* joinWorkspace(plan.workspaceId, teammate);
+        const agent = yield* openAgent(owner, { taskId: plan.id }, 60_000);
+
+        yield* pinAgent(teammate, agent.id, true, "a1");
+
+        const pinsOf = (reader: string) =>
+          Effect.map(liveRowsOf(reader), (rows) =>
+            taskAgentPinsOfLiveRows(rows).map(({ agentId, taskId, pinPosition }) => ({
+              agentId,
+              taskId,
+              pinPosition,
+            })),
+          );
+        assert.deepEqual(yield* pinsOf(teammate), [
+          { agentId: agent.id, taskId: plan.id, pinPosition: "a1" },
+        ]);
+        assert.deepEqual(yield* pinsOf(owner), []);
+        assert.deepEqual(yield* pinsOf(outsider), []);
       }),
   );
 

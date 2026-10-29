@@ -69,7 +69,7 @@ import {
   openPullRequestsHere,
   useReadLinkOpener,
 } from "../tasks/use-open-link.js";
-import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
+import { type PinHolder, PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { useTaskInbox } from "../tasks/use-task-inbox.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
@@ -179,6 +179,19 @@ function listedAgent(tasks: TasksControl, agent: AgentSummary): TasklessAgent | 
   if (agent.planId !== null) return undefined;
   const { standing, archived } = tasks.listedAgents;
   return [...standing, ...archived].find((each) => each.id === agent.id);
+}
+
+/**
+ * What a tab of the agent's page is pinned on: the agent while the sidebar
+ * lists it standing, which is where the pin is drawn, or the task of an
+ * agent on one, whose panel holds the same tab; none for an archived agent,
+ * or one not read yet, which the sidebar draws no pin of.
+ */
+function pagePinOn(tasks: TasksControl, agent: AgentSummary | undefined): PinHolder | undefined {
+  if (agent === undefined || agent.archivedAt !== undefined) return undefined;
+  if (agent.planId !== null) return { task: agent.planId };
+  const standing = tasks.listedAgents.standing.some((each) => each.id === agent.id);
+  return standing ? { agent: agent.id } : undefined;
 }
 
 /**
@@ -817,6 +830,7 @@ export function DesktopAgentPage({
                           unread={NO_UNREAD}
                           holder={SIDE_PANEL_HOLDER.AGENT}
                           taskId={agentId}
+                          pinOn={pagePinOn(tasks, agent)}
                           repository={agentRepository ?? null}
                           repositoryPlace={repositoryPlace}
                           pages={tasks.agentView.pages}

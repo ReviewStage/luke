@@ -679,7 +679,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const scope = yield* Scope.make();
     const collections = yield* Scope.provide(scope)(
       taskListCollections({
-        draw: ({ list, taskAgents, taskPullRequests, pendingTasks }) => {
+        draw: ({ list, taskAgents, taskPullRequests, taskAgentPins, pendingTasks }) => {
           const { pendingTasks: _held, ...rest } = view;
           view = pendingTasks.length === 0 ? rest : { ...rest, pendingTasks };
           write({
@@ -687,6 +687,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             tasklessAgents: list.planlessAgents ?? [],
             taskAgents,
             taskPullRequests,
+            taskAgentPins,
           });
           if (view.activeTaskId !== undefined) heldAsListed(view.activeTaskId);
         },

@@ -1,5 +1,5 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
-import type { TasklessAgent } from "@luke/features/agent-wire";
+import type { AgentSummary, TasklessAgent } from "@luke/features/agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   inPinOrder,
@@ -9,7 +9,7 @@ import {
 } from "@luke/features/pin-order";
 import type { TaskSectionWrite } from "@luke/features/task-section-wire";
 import { isAgentEntry, type SectionMember } from "@luke/features/task-section-writes";
-import type { TaskStatus, TaskSummary } from "@luke/features/task-wire";
+import type { TaskAgentPin, TaskStatus, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import type { UpdateControl } from "@luke/settings/settings-controls";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
@@ -138,10 +138,18 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
+import { agentName } from "../tasks/agent-model.js";
 import { CHANNEL_SHOWN, channelShown } from "../tasks/channels-model.js";
 import { useChannelPlace, useChannels, useInboxNarrowed } from "../tasks/use-channels.js";
 import { useHeldOrder } from "../tasks/use-held-order.js";
-import { inColumn, type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
+import {
+  type AgentPin,
+  isAgentPin,
+  type PinnedTab,
+  SIDE_PANEL_TAB,
+  type SidebarPin,
+  samePin,
+} from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAdminAccess, useExperiment } from "../use-app-state.js";
@@ -373,7 +381,9 @@ interface RowContext {
   /** Whether a task is the one open, which a fold still leaves standing. */
   readonly current: (taskId: string) => boolean;
   /** Whether a row is the one the sidebar marks: the pin the open task was opened from, else the open task's own row. */
-  readonly marked: (taskId: string, pin: PinnedTab | undefined) => boolean;
+  readonly marked: (taskId: string, pin: SidebarPin | undefined) => boolean;
+  /** Whether a pin is the one the open place was opened from, which the sidebar marks in its holder's place. */
+  readonly markedPin: (pin: SidebarPin) => boolean;
   readonly onOpen: (taskId: string) => void;
   /** Whether a row is the one standing: the open plan's, or the agent's whose page stands. */
   readonly currentRow: (row: TaskRow) => boolean;
@@ -513,24 +523,61 @@ function pinOf(tasks: TasksControl, agent: TasklessAgent): ((pinned: boolean) =>
     : undefined;
 }
 
-/** One row under Pinned: a pinned plan, a tab pinned on a listed plan, or a pinned agent with no plan, and where its pin stands. */
+/**
+ * One row under Pinned and where its pin stands: a pinned plan, a tab
+ * pinned on a listed plan, or an agent pinned on it, drawn as its tab; or a
+ * pinned agent with no plan, or a tab pinned on its own page.
+ */
 type PinnedRow =
   | {
       readonly kind: typeof TASK_ROW.TASK;
       readonly task: TaskSummary;
-      readonly pin: PinnedTab | undefined;
+      readonly pin: SidebarPin | undefined;
       readonly place: PinPlace;
     }
   | {
       readonly kind: typeof TASK_ROW.AGENT;
       readonly agent: TasklessAgent;
+      readonly pin: PinnedTab | undefined;
       readonly place: PinPlace;
     };
 
-/** A row under Pinned's key: its agent's or its plan's id, or where a pinned tab's pin stands. */
+/** A row under Pinned's key: its plan's or its agent's id, an agent's drawn as its tab included, or where a pinned tab's pin stands. */
 function pinnedRowKey(row: PinnedRow): string {
-  if (row.kind === TASK_ROW.AGENT) return row.agent.id;
-  return row.pin === undefined ? row.task.id : String(row.pin.at);
+  const { pin } = row;
+  if (pin === undefined) return row.kind === TASK_ROW.AGENT ? row.agent.id : row.task.id;
+  return isAgentPin(pin) ? pin.tab.agent : String(pin.at);
+}
+
+/** The tab a row's pin keeps on this Mac; none for a plan's or an agent's, which the account keeps. */
+function localPinOf(row: PinnedRow): PinnedTab | undefined {
+  const { pin } = row;
+  return pin === undefined || isAgentPin(pin) ? undefined : pin;
+}
+
+/** The plan or agent a row's pin is on the account; none for a tab's, which this Mac keeps. */
+function accountPinOf(
+  row: PinnedRow,
+): { readonly agent: boolean; readonly id: string } | undefined {
+  const { pin } = row;
+  if (pin === undefined) {
+    return row.kind === TASK_ROW.AGENT
+      ? { agent: true, id: row.agent.id }
+      : { agent: false, id: row.task.id };
+  }
+  return isAgentPin(pin) ? { agent: true, id: pin.tab.agent } : undefined;
+}
+
+/** An agent on a plan the account pinned as its row under Pinned draws it: as its tab in the plan's column, named as the agent is. */
+function agentPinOf(pin: TaskAgentPin, agent: AgentSummary, tasks: TasksControl): AgentPin {
+  const drawn = {
+    task: pin.taskId,
+    tab: { agent: agent.id },
+    label: agentName(agent, tasks.agents.models),
+    at: pin.pinnedAt,
+    model: agent.model,
+  };
+  return pin.pinPosition === undefined ? drawn : { ...drawn, position: pin.pinPosition };
 }
 
 /** Where a row's pin stands, which `pin-order.ts` orders the section by. */
@@ -539,15 +586,17 @@ const placeOf = (row: PinnedRow): PinPlace => row.place;
 /**
  * The rows under Pinned in the order the developer dragged them to, a pin
  * not yet dragged on top, newest pinned first (`pin-order.ts`): the pinned
- * plans, the pinned agents with no plan among them, and the tabs pinned to
- * the sidebar on plans the list holds. A tab of an archived or deleted plan
- * is drawn nowhere, its plan being out of the list; nor is a Plan tab an
- * earlier version pinned, which is made its plan's own pin as soon as the
- * list names the plan (`use-tasks-tab.ts`).
+ * plans, the pinned agents among them, on a plan the list holds or with
+ * none, and the tabs pinned to the sidebar on plans and agents the list
+ * holds. A tab or an agent of an archived or deleted plan is drawn nowhere,
+ * its plan being out of the list; nor is a Plan tab an earlier version
+ * pinned, which is made its plan's own pin as soon as the list names the
+ * plan (`use-tasks-tab.ts`).
  */
 function pinnedRows(
   pinned: readonly TaskSummary[],
   agents: readonly TasklessAgent[],
+  standing: readonly TasklessAgent[],
   tasks: TasksControl,
 ): PinnedRow[] {
   const taskRows = pinned.map(
@@ -562,16 +611,31 @@ function pinnedRows(
     (agent): PinnedRow => ({
       kind: TASK_ROW.AGENT,
       agent,
+      pin: undefined,
       place: { position: agent.pinPosition, at: agent.pinnedAt ?? 0 },
     }),
   );
+  const taskAgentRows = tasks.taskAgentPins.flatMap((pin): PinnedRow[] => {
+    const task = tasks.listed.tasks.find((each) => each.id === pin.taskId);
+    const agent = tasks.taskAgents.find((each) => each.id === pin.agentId);
+    if (task === undefined || agent === undefined) return [];
+    const drawn = agentPinOf(pin, agent, tasks);
+    return [
+      { kind: TASK_ROW.TASK, task, pin: drawn, place: { position: drawn.position, at: drawn.at } },
+    ];
+  });
   const tabRows = tasks.sidePanel.pins.flatMap((pin): PinnedRow[] => {
+    const place = { position: pin.position, at: pin.at };
+    if ("agent" in pin) {
+      const agent = standing.find((each) => each.id === pin.agent);
+      return agent === undefined ? [] : [{ kind: TASK_ROW.AGENT, agent, pin, place }];
+    }
     const task = tasks.listed.tasks.find((each) => each.id === pin.task);
     return task === undefined || pin.tab === SIDE_PANEL_TAB.PLAN
       ? []
-      : [{ kind: TASK_ROW.TASK, task, pin, place: { position: pin.position, at: pin.at } }];
+      : [{ kind: TASK_ROW.TASK, task, pin, place }];
   });
-  return inPinOrder([...taskRows, ...agentRows, ...tabRows], placeOf);
+  return inPinOrder([...taskRows, ...agentRows, ...taskAgentRows, ...tabRows], placeOf);
 }
 
 /**
@@ -584,11 +648,14 @@ function placePins(positions: ReadonlyMap<PinnedRow, string>, tasks: TasksContro
   const tabs = new Map<number, string>();
   const before = new Map<number, string | undefined>();
   const moves = [...positions].flatMap(([row, position]) => {
-    if (row.kind === TASK_ROW.AGENT) return [{ agent: true, id: row.agent.id, position }];
-    if (row.pin === undefined) return [{ agent: false, id: row.task.id, position }];
-    tabs.set(row.pin.at, position);
-    before.set(row.pin.at, row.pin.position);
-    return [];
+    const local = localPinOf(row);
+    if (local !== undefined) {
+      tabs.set(local.at, position);
+      before.set(local.at, local.position);
+      return [];
+    }
+    const account = accountPinOf(row);
+    return account === undefined ? [] : [{ ...account, position }];
   });
   if (tabs.size > 0) tasks.sidePanel.onPlacePins(tabs);
   tasks.onMovePins(moves, () => tasks.sidePanel.onPlacePins(before));
@@ -614,7 +681,7 @@ function pinAt(rows: readonly PinnedRow[], row: TaskRow, at: number, tasks: Task
   const place: PinPlace = { at: Date.now() };
   const moving: PinnedRow =
     row.kind === TASK_ROW.AGENT
-      ? { kind: TASK_ROW.AGENT, agent: row.agent, place }
+      ? { kind: TASK_ROW.AGENT, agent: row.agent, pin: undefined, place }
       : { kind: TASK_ROW.TASK, task: row.task, pin: undefined, place };
   if (row.kind === TASK_ROW.AGENT) tasks.onPinAgent(row.agent.id, true);
   else tasks.onMarkTask(row.task.id, TASK_MARK.PIN);
@@ -623,9 +690,14 @@ function pinAt(rows: readonly PinnedRow[], row: TaskRow, at: number, tasks: Task
 
 /** Takes a row out of Pinned: a plan's or an agent's pin on the account, a tab's on this Mac. */
 function unpin(row: PinnedRow, tasks: TasksControl): void {
-  if (row.kind === TASK_ROW.AGENT) tasks.onPinAgent(row.agent.id, false);
-  else if (row.pin === undefined) tasks.onMarkTask(row.task.id, TASK_MARK.UNPIN);
-  else tasks.sidePanel.onUnpin(row.pin.task, row.pin.tab);
+  const local = localPinOf(row);
+  if (local !== undefined) {
+    tasks.sidePanel.onUnpin(local, local.tab);
+    return;
+  }
+  const account = accountPinOf(row);
+  if (account?.agent === true) tasks.onPinAgent(account.id, false);
+  else if (account !== undefined) tasks.onMarkTask(account.id, TASK_MARK.UNPIN);
 }
 
 /** The write that takes a task or an agent out of the section it is kept in, a pinned one's included; none where it is in none. */
@@ -633,11 +705,11 @@ function leaveSection(tasks: TasksControl, member: SectionMember): TaskSectionWr
   return memberSection(tasks.taskSections, member) === undefined ? [] : unplaceAllWrites([member]);
 }
 
-/** The rows of the list walked by ⌥↑ and ⌥↓ that Pinned holds: its plans and its agents, a pinned tab being its plan's. */
+/** The rows of the list walked by ⌥↑ and ⌥↓ that Pinned holds: its plans and its agents with no plan, a pinned tab, or an agent drawn as one, being its holder's. */
 function pinnedTaskRows(rows: readonly PinnedRow[]): TaskRow[] {
   return rows.flatMap((row): TaskRow[] => {
-    if (row.kind === TASK_ROW.AGENT) return [agentRow(row.agent)];
-    return row.pin === undefined ? [taskRow(row.task)] : [];
+    if (row.pin !== undefined) return [];
+    return [row.kind === TASK_ROW.AGENT ? agentRow(row.agent) : taskRow(row.task)];
   });
 }
 
@@ -655,7 +727,7 @@ function PinnedRows({
 }: {
   rows: readonly PinnedRow[];
   context: RowContext;
-  onOpenTab: (pin: PinnedTab) => void;
+  onOpenTab: (pin: SidebarPin) => void;
   /** Whether a row is dragged to another place among them, which a fold drawing only some of them forbids. */
   movable: boolean;
   /** Hears a row let go over a section or Tasks, while the account keeps sections; none while it does not. */
@@ -695,6 +767,23 @@ function PinnedRows({
       {...keys}
     >
       {drawn.map(({ key, value: row }) => {
+        if (row.kind === TASK_ROW.AGENT && row.pin !== undefined) {
+          const { agent, pin } = row;
+          return (
+            <RowPlaced key={key} place={placeOf(key)}>
+              <SidebarPinnedTab
+                tasks={context.tasks}
+                pin={pin}
+                on={{ agent }}
+                current={context.markedPin(pin)}
+                inSight={context.inSight}
+                onOpen={() => onOpenTab(pin)}
+                onOpenHolder={() => context.onOpenAgent(agent.id)}
+                onUnpin={() => unpin(row, context.tasks)}
+              />
+            </RowPlaced>
+          );
+        }
         if (row.kind === TASK_ROW.AGENT) {
           const { agent } = row;
           return (
@@ -732,11 +821,12 @@ function PinnedRows({
               <SidebarPinnedTab
                 tasks={context.tasks}
                 pin={pin}
-                task={task}
+                on={{ task }}
                 current={context.marked(task.id, pin)}
                 inSight={context.inSight}
                 onOpen={() => onOpenTab(pin)}
-                onOpenTask={() => context.onOpen(task.id)}
+                onOpenHolder={() => context.onOpen(task.id)}
+                onUnpin={() => unpin(row, context.tasks)}
               />
             )}
           </RowPlaced>
@@ -775,7 +865,7 @@ function PinnedSection({
   /** Whether a row is the plan open, the agent whose page stands, or the pinned tab on show, which a fold leaves standing. */
   shown: (row: PinnedRow) => boolean;
   context: RowContext;
-  onOpenTab: (pin: PinnedTab) => void;
+  onOpenTab: (pin: SidebarPin) => void;
   /** Hears a row let go over a section or Tasks, while the account keeps sections, which makes Pinned a drop zone too; none while it does not. */
   onDropOut: ((row: PinnedRow, zone: string, at: number) => void) | undefined;
   /** Whether a row is carried, which an empty Pinned stands for, as the slot it lands in. */
@@ -1788,7 +1878,7 @@ function SidebarColumn({
     showTasks();
     tasks.onNewTask();
   };
-  const openPinnedTab = (pin: PinnedTab) => {
+  const openPinnedTab = (pin: SidebarPin) => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.onOpenPinnedTab(pin);
   };
@@ -1866,20 +1956,19 @@ function SidebarColumn({
   };
   const pinned = tasks.listed.tasks.filter((task) => task.pinnedAt !== undefined);
   const pinnedAgents = listedAgents.standing.filter((agent) => agent.pinnedAt !== undefined);
-  const pinnedSection = pinnedRows(pinned, pinnedAgents, tasks);
+  const pinnedSection = pinnedRows(pinned, pinnedAgents, listedAgents.standing, tasks);
   // The pin the open task was opened from is marked in its task's place,
   // whichever of the task's tabs is shown, while its row still stands.
   const { chosenPin } = tasks;
-  const pinMarked = pinnedSection.find(
+  const holderOpen = (row: PinnedRow) =>
+    row.kind === TASK_ROW.TASK ? current(row.task.id) : row.agent.id === agentShown;
+  const markedPin = pinnedSection.find(
     (row) =>
-      row.kind === TASK_ROW.TASK &&
       row.pin !== undefined &&
       chosenPin !== undefined &&
-      current(row.task.id) &&
-      row.pin.task === chosenPin.task &&
-      row.pin.at === chosenPin.at,
-  );
-  const markedPin = pinMarked?.kind === TASK_ROW.TASK ? pinMarked.pin : undefined;
+      holderOpen(row) &&
+      samePin(row.pin, chosenPin),
+  )?.pin;
   // The account's own sections stand while a workspace is listed.
   const sectionsShown = tasks.signedIn && tasks.workspace !== undefined;
   const sectioned = sectionedTasks(
@@ -1916,11 +2005,9 @@ function SidebarColumn({
   // A tab pinned to the sidebar is no task, so it goes into no section, though Tasks unpins it as any pin.
   const dropPinned = (row: PinnedRow, zone: string, at: number) => {
     const member =
-      row.kind === TASK_ROW.AGENT
-        ? rowMember(agentRow(row.agent))
-        : row.pin === undefined
-          ? rowMember(taskRow(row.task))
-          : undefined;
+      row.pin !== undefined
+        ? undefined
+        : rowMember(row.kind === TASK_ROW.AGENT ? agentRow(row.agent) : taskRow(row.task));
     if (zone === TASKS_DROP_ZONE) {
       unpin(row, tasks);
       if (member !== undefined) tasks.onWriteSections(leaveSection(tasks, member));
@@ -1940,8 +2027,16 @@ function SidebarColumn({
     current,
     marked: (taskId, pin) =>
       markedPin === undefined ? pin === undefined && current(taskId) : pin === markedPin,
+    markedPin: (pin) => pin === markedPin,
     onOpen: chosen(openTask),
-    currentRow,
+    // An agent's page opened from a tab pinned on it is marked in the pin's place, as a task's is.
+    currentRow: (row) =>
+      row.kind === TASK_ROW.AGENT &&
+      markedPin !== undefined &&
+      "agent" in markedPin &&
+      markedPin.agent === row.agent.id
+        ? false
+        : currentRow(row),
     onOpenAgent: chosen(openAgent),
     onDeletedAgent: (agentId) => () => {
       if (tasks.agentView.agentId === agentId) tasks.agentView.onClose();
@@ -1966,22 +2061,21 @@ function SidebarColumn({
           )
         : undefined,
   };
-  // A pinned tab is on show where its task is open and its column shows it:
-  // an agent's or the Inbox in the task's own column, any other in the side panel. The
+  // A pinned tab is on show where its holder is open and its column shows it:
+  // an agent's in the task's own column, any other in the side panel. The
   // pin marked stands too, so a fold never hides the row the sidebar marks, and so
   // does a pinned agent while its page stands.
   const pinnedShown = (row: PinnedRow) => {
-    if (row.kind === TASK_ROW.AGENT) return row.agent.id === agentShown;
-    const { task, pin } = row;
+    const { pin } = row;
+    if (pin === undefined) return holderOpen(row);
     return (
-      (pin !== undefined && pin === markedPin) ||
-      (current(task.id) &&
-        (pin === undefined ||
-          (inColumn(pin.tab)
-            ? sameTab(tasks.mainTabs.tab, pin.tab)
-            : tasks.sidePanel.open &&
-              tasks.sidePanel.tab !== undefined &&
-              sameTab(tasks.sidePanel.tab, pin.tab))))
+      pin === markedPin ||
+      (holderOpen(row) &&
+        (isAgentPin(pin)
+          ? sameTab(tasks.mainTabs.tab, pin.tab)
+          : tasks.sidePanel.open &&
+            tasks.sidePanel.tab !== undefined &&
+            sameTab(tasks.sidePanel.tab, pin.tab)))
     );
   };
   // Note that the pins are never filtered, because a pin is already the

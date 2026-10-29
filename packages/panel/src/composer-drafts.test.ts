@@ -636,13 +636,20 @@ function answerMotion(): void {
 async function sidebarOn(open: typeof INVITES, pinned: boolean) {
   answerMotion();
   fakeAppBridge({});
-  const pin = { task: open.plan.id, tab: { agent: open.agent.id }, label: "Agent", at: 5 };
+  const pin = {
+    task: open.plan.id,
+    tab: { agent: open.agent.id },
+    label: "Agent",
+    at: 5,
+    model: open.agent.model,
+  };
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     tasks: [INVITES.plan, BILLING.plan],
     activeTaskId: open.plan.id,
     chosenPin: pinned ? pin : undefined,
-    sidePanel: { ...tasksControl().sidePanel, pins: pinned ? [pin] : [] },
+    taskAgentPins: pinned ? [{ agentId: open.agent.id, taskId: open.plan.id, pinnedAt: 5 }] : [],
+    taskAgents: [open.agent],
     mainTabs: {
       ...tasksControl().mainTabs,
       tabs: [pin.tab],

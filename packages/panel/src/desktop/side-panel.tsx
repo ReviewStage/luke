@@ -158,6 +158,7 @@ import {
   type FixedSidePanelTab,
   isPinnable,
   type OpenFile,
+  type PinHolder,
   PULL_REQUEST_VIEW,
   type PullRequestView,
   SIDE_PANEL_TAB,
@@ -165,6 +166,7 @@ import {
   SIDE_PANEL_WIDTH,
   type SidePanelControl,
   type SidePanelTab,
+  sameHolder,
 } from "../tasks/use-side-panel.js";
 import { useCapability } from "../use-app-state.js";
 import { useAgentTerminalDoors } from "./agent-actions.js";
@@ -279,8 +281,8 @@ const NO_PAGES: readonly PageLine[] = [];
  * What the panel stands beside: a plan's page, whose panel holds every kind
  * of tab, or an agent's own page, whose panel holds that agent's workers,
  * its Pull request, its Terminal, and its own Inbox, and no plan or comments,
- * which are a task's alone. A tab of an agent's page is no plan's to
- * pin, so none is offered. Beside the window's Inbox it stands for the
+ * which are a task's alone. A tab of an agent's page is pinned where the
+ * sidebar draws it, on the agent or on its task (`pinOn`). Beside the window's Inbox it stands for the
  * chosen item's task, holding what the item opened there, the task's
  * files, pages, and Pull requests, and none of the kinds its page draws
  * from what it holds, the fixed three and Terminal; nor is a tab of it
@@ -1146,6 +1148,7 @@ function PanelTabs({
   panel,
   holder,
   taskId,
+  pinOn,
   task,
   keys,
   unread,
@@ -1175,6 +1178,8 @@ function PanelTabs({
   holder: SidePanelHolder;
   /** The open task, which a tab's pin is of. */
   taskId: string;
+  /** What an agent's page's tab is pinned on; none where it offers no pin. */
+  pinOn: PinHolder | undefined;
   /** The task's name and status, which its Plan tab wears; none where they are not known. */
   task: PlanStanding | undefined;
   /** Whether the panel offers its keys: on screen, not on its way out, and holding the window's focus. */
@@ -1286,12 +1291,18 @@ function PanelTabs({
   useAppCommand(APP_COMMAND.OPEN_ON_GITHUB, openOnGitHub, FOCUSED_OFFER);
   // Note that the Plan tab offers no pin of its own: the task's Pin, in its document menu, is what pins the task to the sidebar.
   const pinOf = ({ tab, look }: DrawnTab): TabPin | undefined => {
-    if (holder !== SIDE_PANEL_HOLDER.TASK || tab === SIDE_PANEL_TAB.PLAN || !isPinnable(tab))
-      return undefined;
-    const pinned = panel.pins.some((pin) => pin.task === taskId && sameTab(pin.tab, tab));
+    // A task's page pins on the task; an agent's page pins where the sidebar draws the pin, as its page says; the Inbox's, nowhere.
+    const on: PinHolder | undefined =
+      holder === SIDE_PANEL_HOLDER.TASK
+        ? { task: taskId }
+        : holder === SIDE_PANEL_HOLDER.AGENT
+          ? pinOn
+          : undefined;
+    if (on === undefined || tab === SIDE_PANEL_TAB.PLAN || !isPinnable(tab)) return undefined;
+    const pinned = panel.pins.some((pin) => sameHolder(pin, on) && sameTab(pin.tab, tab));
     return {
       pinned,
-      onToggle: () => (pinned ? panel.onUnpin(taskId, tab) : panel.onPin(tab, look.label)),
+      onToggle: () => (pinned ? panel.onUnpin(on, tab) : panel.onPin(on, tab, look.label)),
     };
   };
   const doorsOf = (entry: DrawnTab, at: number): TabDoors => {
@@ -2263,6 +2274,7 @@ export function SidePanel({
   unread,
   holder,
   taskId,
+  pinOn,
   repository,
   repositoryPlace,
   pages,
@@ -2289,6 +2301,13 @@ export function SidePanel({
   holder: SidePanelHolder;
   /** The plan the panel stands beside, or the agent where it stands beside the agent's own page. */
   taskId: string;
+  /**
+   * What a tab of an agent's own page is pinned on: the agent while the
+   * sidebar lists it standing, where the pin is drawn, or the task of an
+   * agent on one; none for an archived agent, whose page offers no pin, and
+   * beside a task's page or the Inbox, whose holder decides it.
+   */
+  pinOn?: PinHolder | undefined;
   /** The task's repository, `owner/name`, or none before one is chosen. */
   repository: string | null;
   /** Where the panel stands for no task, an agent's page or an Inbox item of an agent on none: the workspace and repository its File tabs read through; none beside a task, or where no repository is known. */
@@ -2579,6 +2598,7 @@ export function SidePanel({
         <PanelTabs
           panel={panel}
           holder={holder}
+          pinOn={pinOn}
           taskId={taskId}
           keys={keys && focused}
           unread={unread}
