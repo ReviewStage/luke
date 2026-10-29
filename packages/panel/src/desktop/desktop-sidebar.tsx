@@ -2005,13 +2005,11 @@ function SidebarColumn({
     sectionInView(drawn, statuses, createdBy, assignedTo),
   );
   const sectionDialogs = useSectionDialogs(tasks, tasks.shown && overlay.inSight);
-  // A slot a row is let go at in a section, counted among its rows as drawn, child tasks nested, read back in the section's own order.
-  const sectionSlot = (target: DrawnSection, at: number) => {
-    const held = folds.sectionFolded(target.section.id)
-      ? target.rows.filter(currentRow)
-      : target.rows;
-    return storedSlot(target.rows, drawnTaskRows(held, folds.taskOpened, currentRow), at);
-  };
+  // A slot a row is let go at in an open section, counted among its rows as drawn, child tasks nested, read back in the section's own order; a folded one takes it on top, as it always has.
+  const sectionSlot = (target: DrawnSection, at: number) =>
+    folds.sectionFolded(target.section.id)
+      ? at
+      : storedSlot(target.rows, drawnTaskRows(target.rows, folds.taskOpened, currentRow), at);
   // Note that the sidebar draws a task in one place, so a row dragged into
   // Pinned leaves its section, and one dragged out of Pinned is unpinned and
   // stands where it was let go, under Tasks or in a section.
