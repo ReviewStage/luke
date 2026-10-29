@@ -60,7 +60,12 @@ import { SIDE_BUNDLES } from "../bundle-loader.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
-import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
+import {
+  AGENT_PAGE_HOLDS,
+  SIDE_PANEL_TAB,
+  type SidePanelControl,
+  useSidePanel,
+} from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   type AnyAct,
@@ -615,7 +620,14 @@ let drawnPanel: SidePanelControl | undefined;
 
 function PanelPage(): React.JSX.Element {
   const agents = [AGENT_ID];
-  const sidePanel = useSidePanel(undefined, { id: AGENT_ID, holds: {} }, agents, [], [], agents);
+  const sidePanel = useSidePanel(
+    undefined,
+    { id: AGENT_ID, holds: AGENT_PAGE_HOLDS },
+    agents,
+    [],
+    [],
+    agents,
+  );
   drawnPanel = sidePanel;
   return createElement(DesktopAgentPage, {
     tasks: { ...tasksControl({}), sidePanel },
@@ -628,7 +640,7 @@ function PhonePanelPage(): React.JSX.Element {
   const agents = [AGENT_ID];
   const sidePanel = useSidePanel(
     undefined,
-    { id: AGENT_ID, holds: {} },
+    { id: AGENT_ID, holds: AGENT_PAGE_HOLDS },
     agents,
     [],
     [],
@@ -647,7 +659,7 @@ function PhonePanelPage(): React.JSX.Element {
   );
 }
 
-test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers none of a task's Comments, Code, or Call", async () => {
+test("a delegation's row opens its worker in the side panel beside the agent's page, whose + offers the agent's own Inbox and none of a task's Plan or Comments", async () => {
   localStorage.clear();
   installScrollIntoView();
   transcript = {
@@ -694,9 +706,19 @@ test("a delegation's row opens its worker in the side panel beside the agent's p
     `the worker's tab stands in the panel: ${opened.join(", ")}`,
   );
   assert.deepEqual(
-    offered.filter((label) => /^(Comments|Code|Call)$/u.test(label ?? "")),
+    offered.filter((label) => /^(Plan|Comments)/u.test(label ?? "")),
     [],
     "no task's kind is offered",
+  );
+  const inbox =
+    [...document.querySelectorAll<HTMLElement>("[role='option']")].find((each) =>
+      (each.textContent ?? "").startsWith("Inbox"),
+    ) ?? assert.fail(`the agent's own Inbox is offered: ${offered.join(", ")}`);
+  act(() => inbox.click());
+  await settle();
+  assert.ok(
+    panel?.querySelector("[role='tabpanel'][aria-label='Inbox']"),
+    "the Inbox tab opens in the panel beside the agent's page",
   );
 });
 
@@ -714,7 +736,7 @@ function PagesPage(): React.JSX.Element {
   const agents = [AGENT_ID];
   const sidePanel = useSidePanel(
     undefined,
-    { id: AGENT_ID, holds: {} },
+    { id: AGENT_ID, holds: AGENT_PAGE_HOLDS },
     agents,
     [],
     [FUNNEL.id],
@@ -759,7 +781,7 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
   const well = panel.querySelector(".side-panel-no-tabs") ?? assert.fail("the empty panel offers");
   assert.deepEqual(
     [...well.querySelectorAll("ul")].map((each) => each.getAttribute("aria-label")),
-    ["Pages", "Terminal", "Browser"],
+    ["Open a tab", "Pages", "Terminal", "Browser"],
   );
   const row =
     [...well.querySelectorAll<HTMLButtonElement>("button")].find((each) =>
@@ -941,9 +963,10 @@ test("its last tab closed shuts the panel, and shown again it offers in place ev
     rows.map((each) => each.textContent),
     offered,
   );
+  // Note that the empty panel heads its kinds' rows, which the + lists first under no heading.
   assert.deepEqual(
     [...well.querySelectorAll("ul")].map((each) => each.getAttribute("aria-label")),
-    headings,
+    ["Open a tab", ...headings],
   );
   assert.deepEqual(headings, ["Pull requests", "Terminal", "Browser"]);
   const changes = rows.find((each) => (each.textContent ?? "").includes("#2911"));

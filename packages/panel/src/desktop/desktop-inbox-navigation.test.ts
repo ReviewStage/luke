@@ -653,6 +653,25 @@ test("an agent with no plan whose waiting items move, one answered on another Ma
   assert.ok(listed(page).includes("Skip the slow suite?"), listed(page).join(" | "));
 });
 
+test("an agent with no plan whose items are all settled stays listed under the automation that started it, as main lists it holding them", async () => {
+  const settled = { ...SECOND_ASK, status: INBOX_STATUS.ANSWERED };
+  world.agentInboxes = new Map([[SECOND_AGENT, [settled]]]);
+  const { id: _id, title: _title, postedAt: _postedAt, ...agent } = waitingTaskless(settled);
+  const { page } = mount([], {
+    windowRoot: true,
+    accountFeed: true,
+    agents: [{ ...agent, items: 1, toDo: 0 }],
+  });
+  await settle();
+
+  const rows = listed(page);
+  assert.equal(
+    rows[rows.indexOf("# Nightly flake sweep") + 1],
+    "Skip the slow suite?",
+    rows.join(" | "),
+  );
+});
+
 test("a read of an agent with no plan that fails is said with Retry, which reads it again though it was read before", async () => {
   world.agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK, THIRD_ASK]]]);
   const { page } = mount([QUARANTINE, SECOND_ASK, THIRD_ASK].map(waitingTaskless));

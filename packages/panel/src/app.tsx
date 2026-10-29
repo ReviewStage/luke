@@ -7,6 +7,7 @@ import type { ModelProvider } from "@luke/features/models-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  type AppInboxAgentHolding,
   type AppInboxTask,
   type AppInboxTaskHolding,
   type AppInboxTasklessItem,
@@ -90,6 +91,8 @@ const NOTHING_WAITING: readonly AppInboxTask[] = [];
 const NO_TASKS_HOLDING: readonly AppInboxTaskHolding[] = [];
 /** Nothing waiting from agents with no task, as one value across renders. */
 const NOTHING_TASKLESS: readonly AppInboxTasklessItem[] = [];
+/** No agent with no task holds an inbox item, as one value across renders. */
+const NO_AGENTS_HOLDING: readonly AppInboxAgentHolding[] = [];
 /** No automation's run failed, as one value across renders. */
 const NO_FAILED_RUNS: readonly AccountFailedRun[] = [];
 
@@ -348,6 +351,7 @@ function AppWindow(): React.JSX.Element {
     inboxWaiting: inbox?.waiting ?? NOTHING_WAITING,
     inboxTasks: inbox?.tasks ?? NO_TASKS_HOLDING,
     inboxTaskless: inbox?.taskless ?? NOTHING_TASKLESS,
+    inboxAgents: inbox?.agents ?? NO_AGENTS_HOLDING,
     failedRuns: inbox?.failedRuns ?? NO_FAILED_RUNS,
     onOpenSettings: openSettings,
     onOpenIntegrations: openIntegrations,

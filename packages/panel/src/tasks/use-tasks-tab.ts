@@ -35,7 +35,12 @@ import {
 import { managesWorkspace } from "@luke/features/workspace-role";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxTask, AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
+import type {
+  AppInboxAgentHolding,
+  AppInboxTask,
+  AppInboxTaskHolding,
+  AppInboxTasklessItem,
+} from "@luke/host/app-state";
 import { APP_SETTING_DEFAULTS, EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { STATUS_TONE } from "@luke/ui";
@@ -158,6 +163,7 @@ import {
   usePlanHistory,
 } from "./use-plan-history.js";
 import {
+  AGENT_PAGE_HOLDS,
   drawsChanges,
   drawsMacTerminal,
   drawsSubagent,
@@ -643,12 +649,14 @@ export interface TasksControl {
   onShowInbox: (taskId: string) => void;
   /** What waits on the developer across the account's tasks, as main's read last answered: each task with an open inbox item, and its items. */
   inbox: readonly AppInboxTask[];
-  /** The task whose Inbox is on screen, or none. */
+  /** The task whose Inbox is on screen, or the agent whose own page's Inbox tab is, or none. */
   inboxShown: string | null;
   /** Every task holding an inbox item, waiting or settled, the task whose item changed latest first: what the window's Inbox lists. */
   inboxTasks: readonly AppInboxTaskHolding[];
-  /** What waits on the developer from agents with no task, as main's read last answered: what the window's Inbox lists beside the tasks' and counts with them. */
+  /** What waits on the developer from agents with no task, as main's read last answered: what the window's Inbox counts beside the tasks'. */
   inboxTaskless: readonly AppInboxTasklessItem[];
+  /** Every agent with no task holding an inbox item, waiting or settled, the agent whose item changed latest first: what the window's Inbox lists beside the tasks. */
+  inboxAgents: readonly AppInboxAgentHolding[];
   /** The newest run of each of the account's own automations that failed to start lately, every workspace's, which marks the sidebar's Automations of the run's workspace until that automation is opened. */
   failedRuns: readonly AccountFailedRun[];
   /** The window's Inbox: whether it stands in the task's place, the task chosen in it, and its presses. */
@@ -944,7 +952,7 @@ const NO_PENDING_TASKS: readonly string[] = [];
 /** A task with no page, the same array every render, so the arrivals read no change in it. */
 const NO_PAGES: NonNullable<TasksView["pages"]> = [];
 
-/** What an agent's page holds of the plan's panel kinds: nothing, its tabs being the agent's own. */
+/** What the Inbox's bare panel holds of the plan's panel kinds: nothing, the task's page drawing what they show. */
 const NO_HOLDS: TaskHolds = {};
 
 /** No ids, the same array every render. */
@@ -1055,6 +1063,8 @@ export function useTasksTab(input: {
   inboxTasks: readonly AppInboxTaskHolding[];
   /** What main says waits on the developer from agents with no task. */
   inboxTaskless: readonly AppInboxTasklessItem[];
+  /** Every agent with no task main says holds an inbox item, waiting or settled. */
+  inboxAgents: readonly AppInboxAgentHolding[];
   /** The newest run of each of the account's own automations main says failed to start lately. */
   failedRuns: readonly AccountFailedRun[];
   /** Opens Settings on its Integrations page, where an agent's MCP server is connected. */
@@ -1399,7 +1409,7 @@ export function useTasksTab(input: {
         }
       : pageAgents === undefined
         ? { id: viewed.activeTaskId, holds: taskHolds(inboxHeld) }
-        : { id: pageAgent, holds: NO_HOLDS },
+        : { id: pageAgent, holds: AGENT_PAGE_HOLDS },
     inboxView !== undefined ? inboxAgents : (pageAgents ?? mainTabs.openAgents),
     NO_IDS,
     inboxView !== undefined ? inboxPageIds : pageAgents === undefined ? pages : agentPageIds,
@@ -1507,7 +1517,7 @@ export function useTasksTab(input: {
         : columnShown && mainTabs.tab !== undefined && isAgentTab(mainTabs.tab)
           ? mainTabs.tab.agent
           : null;
-  // The task's Inbox is the side panel's, on screen while the panel shows it beside the task.
+  // The task's Inbox is the side panel's, on screen while the panel shows it beside the task, or beside the agent on its own page.
   const panelShown =
     shown &&
     historyFor === undefined &&
@@ -1520,7 +1530,7 @@ export function useTasksTab(input: {
         ? inboxChosen.taskId
         : null
       : panelShown && sidePanel.tab === SIDE_PANEL_TAB.INBOX
-        ? (viewed.activeTaskId ?? null)
+        ? (pageAgent ?? viewed.activeTaskId ?? null)
         : null;
   // Main is told which agent's tab is on screen, whose end it marks unseen nowhere then.
   const reportedAgent = useRef<string | null | undefined>(undefined);
@@ -3103,6 +3113,7 @@ export function useTasksTab(input: {
     inboxShown: shownInbox,
     inboxTasks: input.inboxTasks,
     inboxTaskless: input.inboxTaskless,
+    inboxAgents: input.inboxAgents,
     failedRuns: input.failedRuns,
     // The window's Inbox stands over the task's place, so a version history there gives way.
     inboxView: {

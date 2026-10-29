@@ -7,6 +7,7 @@ import { FAILED_RUN_WINDOW_MILLIS } from "@luke/features/live-wire";
 import { Clock, Duration, Effect } from "effect";
 import { cursorOf, heldUntilMoved as heldOpen } from "../../http/held-read.js";
 import {
+  accountInboxAgents,
   accountInboxAutomations,
   accountInboxTasks,
   accountTasklessItems,
@@ -55,7 +56,10 @@ import { CODER } from "./bounds.js";
  * A reader that asks is listed the archived tasks holding items beside the
  * rest, though none of their items waits on it.
  * The open items of agents with no task, and the automations holding them,
- * ride beside the tasks' under keys of their own, and move the same cursor.
+ * ride beside the tasks' under keys of their own, and move the same cursor;
+ * each agent with no task holding an item, settled ones included, is
+ * listed as a task is, and its own settled items still unread are held as
+ * a task's are.
  * So does the newest run of each of the account's own automations that
  * failed to start in the last `FAILED_RUN_WINDOW`, which is no item, but
  * is what its owner is told of whichever plan is open; a run ageing out of
@@ -174,6 +178,7 @@ export function accountInboxPast(
     const tasks = yield* accountInboxTasks(userId);
     const tasklessRows = yield* accountTasklessItems(userId, repositoryless);
     const automations = yield* accountInboxAutomations(userId);
+    const agents = yield* accountInboxAgents(userId, repositoryless);
     const failedRuns = yield* failedRunsOf(userId);
     const items = rows.map(({ status: _status, ...entry }) => entry);
     const taskless = tasklessRows.map(({ status: _status, ...entry }) => entry);
@@ -182,6 +187,7 @@ export function accountInboxPast(
       plans: tasks,
       planless: taskless,
       automations,
+      agents,
       failedRuns,
       cursor,
       readAt,

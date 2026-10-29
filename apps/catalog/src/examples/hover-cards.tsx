@@ -9,6 +9,7 @@ import {
   HOVER_CARD_ROW_FOCUS,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
+  HoverCardFigures,
   HoverCardHead,
   HoverCardList,
   HoverCardNote,
@@ -34,9 +35,10 @@ import { CatalogSection } from "../section";
  * than counting the rest, each row a button the pointer crosses onto the
  * card to press, rows that open nothing yet hang a card of their own, each a
  * stop the keyboard rests on, and a long body that is no list scrolling the
- * same way; and
- * each card's skeleton beside it, its glyph or its mark in the loaded card's
- * slot, so its head stands still as what it says is read. Each card shows once the pointer rests on
+ * same way; and a card's figures under a rule, each label at the card's edge
+ * and its count at the other; and each card's skeleton beside it, its glyph or
+ * its mark in the loaded card's slot, so its head stands still as what it says
+ * is read. Each card shows once the pointer rests on
  * its control or the keyboard reaches it, and stands while the pointer is on
  * the control, on the card, or between them: the catalog's own stand-in for
  * the linger an app gives its cards.
@@ -269,6 +271,29 @@ function HoverCards(): React.JSX.Element {
                     </li>
                   ))}
                 </HoverCardList>
+              </HoverCard>
+            }
+          />
+          <Carded
+            label="Figures"
+            card={
+              <HoverCard>
+                <HoverCardHead
+                  name="Opus 5.5 High"
+                  sub="Today, 9:34 – 9:43 PM · 9m 12s"
+                  corner="Failed"
+                />
+                <HoverCardNote>Ran out of time.</HoverCardNote>
+                <HoverCardRule />
+                <HoverCardFigures
+                  label="Tokens"
+                  figures={[
+                    { label: "Input", figure: "12,408" },
+                    { label: "Output", figure: "3,921" },
+                    { label: "Cache read", figure: "184,233" },
+                    { label: "Cache write", figure: "9,870" },
+                  ]}
+                />
               </HoverCard>
             }
           />
