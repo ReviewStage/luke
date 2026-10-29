@@ -709,7 +709,7 @@ it.layer(
   );
 
   it.effect(
-    "the sweep deletes an agent's saved state, blob and row, seven days after its last save, archived or not",
+    "the sweep deletes an upload no commit named a day on, and an agent's saved state, blob and row, seven days after its last save",
     () =>
       Effect.gen(function* () {
         const owner = yield* account(true);
@@ -717,13 +717,16 @@ it.layer(
         const agentId = yield* agentOnHost(owner, host.deviceId);
         const kept = yield* savedState(host, agentId, null);
         const savedAt = yield* Clock.currentTimeMillis;
+        // A save whose upload never came to a commit, as when its host went away mid-save.
+        const abandoned: string = (yield* saveState(host, agentId, 1)).body.path;
 
         yield* sweepAgentStates(new Date(savedAt + 6 * DAY_MS));
         const afterSix = yield* newestAgentState(owner, agentId);
         const removedAfterSix = stateStore.removed.includes(kept.path);
         yield* sweepAgentStates(new Date(savedAt + 7 * DAY_MS));
 
-        assert.ok(Option.isSome(afterSix) && !removedAfterSix, "six days on, it stands");
+        assert.ok(stateStore.removed.includes(abandoned), "the abandoned upload is deleted");
+        assert.ok(Option.isSome(afterSix) && !removedAfterSix, "six days on, the state stands");
         assert.ok(stateStore.removed.includes(kept.path), "its blob is deleted");
         assert.ok(Option.isNone(yield* newestAgentState(owner, agentId)), "and then its row");
       }),

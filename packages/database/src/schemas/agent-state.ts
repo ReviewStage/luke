@@ -1,11 +1,11 @@
 import { sql } from "drizzle-orm";
-import { check, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { agentTable } from "./agent.js";
 import { device } from "./device.js";
 
 /**
- * agent-state.ts -- the generations of a device agent's saved state, and the sealed key each agent's bundles are encrypted with.
+ * agent-state.ts -- the generations of a device agent's saved state, the uploads its device was granted for the next, and the sealed key each agent's bundles are encrypted with.
  *
  * At the end of every turn a device agent's host packs what no one can
  * rebuild of it (its work, its harness's session files, its attachments),
@@ -26,6 +26,13 @@ import { device } from "./device.js";
  * state goes when its transcript goes. Every read and commit joins the
  * agent's row on its account, so a generation whose agent is gone is reached
  * by the sweep alone.
+ *
+ * A save is granted one upload to a fresh path before its device sends any
+ * bytes, and the grant is kept until a commit names its path: a commit
+ * names only a path granted for its agent, and the sweep deletes the blob
+ * of a grant no commit named a day on, then the grant. A grant names its
+ * agent by id with no foreign key, as a generation does, so it outlives the
+ * agent until its blob is deleted.
  *
  * The key is 32 random bytes made the first time the agent's state is asked
  * for, kept sealed under the deployment's key ring as
@@ -63,6 +70,22 @@ export const agentStateGeneration = pgTable(
     uniqueIndex("agent_state_generation_agent_generation").on(table.agentId, table.generation),
     // Lowercase hex, so a digest compares as the bytes it names.
     check("agent_state_generation_sha256_hex", sql`${table.sha256} ~ '^[0-9a-f]{64}$'`),
+  ],
+);
+
+export const agentStateUpload = pgTable(
+  "agent_state_upload",
+  {
+    /** The fresh path the upload goes to in the blob store, which no other grant names. */
+    path: text("path").primaryKey(),
+    /** The agent the upload was granted for; no foreign key, so the grant outlives the agent until the sweep deletes its blob. */
+    agentId: uuid("agent_id").notNull(),
+    /** When the upload was granted; a grant no commit named is swept a day on. */
+    grantedAt: timestamptz("granted_at").notNull(),
+  },
+  (table) => [
+    // The sweep reads the grants granted longest ago.
+    index("agent_state_upload_granted").on(table.grantedAt),
   ],
 );
 

@@ -88,7 +88,7 @@ interface MaintenanceSweeps {
   sweepImageTemplates: (now: number) => SweepRead<TemplateSweepOutcome>;
   /** Deletes the workspaces' repository snapshots past their age, or left unbuilt past their grace. */
   sweepRepositorySnapshots: (now: number) => SweepRead<RepositorySnapshotSweepOutcome>;
-  /** Deletes the device agents' saved state superseded, or of an agent gone or archived past its retention, blob then row, a sweep's worth. */
+  /** Deletes the device agents' saved state superseded, of an agent gone, or past its retention, and the uploads no commit named, blob then row, a sweep's worth. */
   sweepAgentStates: (now: number) => SweepRead<AgentStateSweepOutcome>;
 }
 

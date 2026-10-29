@@ -8,7 +8,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { commitAgentState, ensureAgentStateKey } from "@luke/database/models/agent-state-store";
+import {
+  commitAgentState,
+  ensureAgentStateKey,
+  grantAgentStateUpload,
+} from "@luke/database/models/agent-state-store";
 import {
   createAgent,
   hasRepository,
@@ -259,18 +263,25 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
           });
           const pathOf = (agentId: string) => `agent-state/${agentId}/${randomUUID()}`;
           const saved = (opened: Effect.Success<typeof openLocalAgent>, path: string) =>
-            commitAgentState(
-              opened.userId,
-              {
-                agentId: opened.agent.id,
-                fromGeneration: null,
-                path,
-                bytes: 749,
-                sha256: "c".repeat(64),
-                baseCommit: null,
-                deviceId: opened.deviceId,
-              },
-              new Date(0),
+            Effect.andThen(
+              grantAgentStateUpload(
+                opened.userId,
+                { agentId: opened.agent.id, deviceId: opened.deviceId, path },
+                new Date(0),
+              ),
+              commitAgentState(
+                opened.userId,
+                {
+                  agentId: opened.agent.id,
+                  fromGeneration: null,
+                  path,
+                  bytes: 749,
+                  sha256: "c".repeat(64),
+                  baseCommit: null,
+                  deviceId: opened.deviceId,
+                },
+                new Date(0),
+              ),
             );
           const capablePath = pathOf(capable.agent.id);
           yield* saved(capable, capablePath);

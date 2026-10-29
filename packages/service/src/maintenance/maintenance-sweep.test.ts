@@ -186,7 +186,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     sweepAgentStates: (now) =>
       Effect.sync(() => {
         recorded.agentStates.push(now);
-        return { deleted: 2, full: false };
+        return { deleted: 2, abandoned: 1, full: false };
       }),
     ...overrides,
   };
@@ -303,7 +303,7 @@ it.effect(
       assert.deepEqual(answer.body.tokenPullRequests, { polled: 2, told: 1 });
       assert.deepEqual(answer.body.imageTemplates, { current: "ready", deleted: 1 });
       assert.deepEqual(answer.body.repositorySnapshots, { listed: 3, deleted: 1 });
-      assert.deepEqual(answer.body.agentStates, { deleted: 2, full: false });
+      assert.deepEqual(answer.body.agentStates, { deleted: 2, abandoned: 1, full: false });
       const [instant] = recorded.terminals;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {

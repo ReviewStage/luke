@@ -25,10 +25,10 @@
  * those three when it moves.
  *
  * A path is `agent-state/<agent id>/<fresh uuid>` (`freshAgentStatePath`),
- * so a commit names a path of the agent it commits for or none
- * (`agentStatePathOf`), and no path says whose account it is. What a failure carries is the call, Vercel's
- * status and error code, and never a URL, a token, or a path; nothing of a
- * bundle passes through this module at all.
+ * and no path says whose account it is. What a failure carries is the call,
+ * Vercel's status and error code, or the kind of the cause where Vercel
+ * never answered, and never its words, a URL, a token, or a path; nothing
+ * of a bundle passes through this module at all.
  */
 
 import { createHmac, randomUUID } from "node:crypto";
@@ -235,9 +235,9 @@ function capped(text: string): string {
   return text.length <= DETAIL_CHARS ? text : `${text.slice(0, DETAIL_CHARS)}…`;
 }
 
-/** Why a call never reached the store, as its cause names itself: its kind and words, never what was sent. */
+/** Why a call never reached the store, as its cause's kind alone, since a transport's words may carry what was sent. */
 function causeDetail(cause: unknown): string {
-  return capped(cause instanceof Error ? `${cause.name}: ${cause.message}` : typeof cause);
+  return capped(cause instanceof Error ? cause.name : typeof cause);
 }
 
 /** A call's refusal: its status, and Vercel's error code where it wrote one. */
@@ -262,21 +262,6 @@ function succeeded(status: number): boolean {
 /** The path of a fresh bundle of the agent's, under its own folder. */
 export function freshAgentStatePath(agentId: string): string {
   return [AGENT_STATE_BLOBS.ROOT, agentId, randomUUID()].join("/");
-}
-
-/**
- * Whether a path is one of the agent's bundles, as `freshAgentStatePath` makes one:
- * under the agent's own folder, one segment that is a uuid. A commit naming
- * any other path, another agent's among them, is refused before it is kept.
- */
-export function agentStatePathOf(agentId: string, path: string): boolean {
-  const segments = path.split("/");
-  return (
-    segments.length === 3 &&
-    segments[0] === AGENT_STATE_BLOBS.ROOT &&
-    segments[1] === agentId &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(segments[2] ?? "")
-  );
 }
 
 /** The store named, asked on the client given under the token the read answers. */

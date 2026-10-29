@@ -40,16 +40,17 @@
  * Mac said of a row it claimed.
  *
  * A save of an agent's state (`POST /api/device-agents/state/save`) is
- * granted one upload to a fresh path of the store (`./agent-state-blobs.ts`)
- * and the agent's state key, minted where it has none, and its commit
- * (`POST /api/device-agents/state/commit`) keeps what the device uploaded as
- * the agent's next generation, through the model's check-and-set
+ * granted one upload to a fresh path of the store (`./agent-state-blobs.ts`),
+ * the grant kept, and the agent's state key, minted where it has none, and
+ * its commit (`POST /api/device-agents/state/commit`) keeps what the device
+ * uploaded as the agent's next generation, through the model's check-and-set
  * (`@luke/database/models/agent-state-store`), then deletes the blob of the
  * generation it replaced, which the sweep deletes in its stead where that
  * fails. Each answers not found for an agent not the account's or not
  * pinned to the device, and refuses as stale a save from a generation no
- * longer the agent's newest; a commit asked again after its answer was
- * lost is answered the generation it was kept as. A deployment without a
+ * longer the agent's newest; a commit naming a path no upload was granted
+ * for its agent is refused as invalid, and one asked again after its
+ * answer was lost is answered the generation it was kept as. A deployment without a
  * store or a key ring answers both unavailable. The key travels in the
  * save's answer alone, and no log names more of a save than its generation
  * and its size.
@@ -60,6 +61,7 @@ import {
   type AgentStateGeneration,
   commitAgentState,
   ensureAgentStateKey,
+  grantAgentStateUpload,
   newestAgentState,
   pinnedAgentState,
 } from "@luke/database/models/agent-state-store";
@@ -100,7 +102,7 @@ import {
   hosted,
   installTokenMiddleware,
 } from "../orpc/base.js";
-import { AgentStateBlobs, agentStatePathOf, freshAgentStatePath } from "./agent-state-blobs.js";
+import { AgentStateBlobs, freshAgentStatePath } from "./agent-state-blobs.js";
 import {
   claimedDeviceAgentLine,
   deviceAgentDeviceOf,
@@ -185,6 +187,9 @@ const committed = (userId: string, commit: typeof deviceAgentStateCommitRequestS
         ),
         Effect.catchTag("AgentStateUnreachable", () =>
           Effect.succeed<CommitOutcome>(Result.fail(HOSTED_REFUSAL.NOT_FOUND)),
+        ),
+        Effect.catchTag("AgentStateUngranted", () =>
+          Effect.succeed<CommitOutcome>(Result.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
         ),
       ),
     );
@@ -351,6 +356,12 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
         return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       }
       const path = freshAgentStatePath(agentId);
+      // Note that the grant is kept before the upload is minted, so no upload stands that the sweep could not find.
+      const now = new Date(yield* Clock.currentTimeMillis);
+      const grant = { agentId, deviceId: input.deviceId, path };
+      if (!(yield* hostedStoreOrUnavailable(grantAgentStateUpload(userId, grant, now)))) {
+        return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      }
       const upload = yield* blobs.mintUpload(path).pipe(
         Effect.tapError((failure) => Effect.logWarning(failure.message)),
         Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
@@ -370,9 +381,6 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       yield* followed(context, input.deviceId);
       const { userId } = context;
       const { agentId, fromGeneration, path } = input;
-      if (!agentStatePathOf(agentId, path)) {
-        return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-      }
       const blobs = yield* stateStore;
       // Note that the newest is read before the commit, because once it lands this read answers the commit itself.
       const replaced = yield* hostedStoreOrUnavailable(newestAgentState(userId, agentId));

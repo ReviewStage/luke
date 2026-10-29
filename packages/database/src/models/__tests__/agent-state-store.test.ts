@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { AGENT_MACHINE } from "@luke/features/agent-wire";
+import { DEVICE_AGENT_LINE_KIND } from "@luke/features/device-agent-wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, Redacted, Result } from "effect";
 import { Database } from "../../core/query.js";
@@ -11,13 +12,22 @@ import { DEVICE_LAYOUT, getTestDB, startTask } from "../../testing/index.js";
 import {
   type AgentStateCommit,
   AgentStateStale,
+  AgentStateUngranted,
   AgentStateUnreachable,
   commitAgentState,
+  deleteAgentStateUploads,
   ensureAgentStateKey,
+  grantAgentStateUpload,
   newestAgentState,
   sweepableAgentStates,
+  sweepableAgentStateUploads,
 } from "../agent-state-store.js";
 import { createAgent, deleteAgent } from "../agent-store.js";
+import {
+  claimDeviceAgentLine,
+  queueDeviceAgentLine,
+  settleDeviceAgentLine,
+} from "../device-agent-store.js";
 import { registerDevice } from "../device-store.js";
 import { type KeyRing, openAgentStateKey, parseKeyRing } from "../provider-key-seal.js";
 import { purgeClearedConversations } from "../soft-delete.js";
@@ -25,9 +35,11 @@ import { purgeClearedConversations } from "../soft-delete.js";
 /**
  * A device agent's saved state over a real dialect: a commit is a
  * check-and-set on the agent's newest generation, every read, commit, and
- * key is held to the account that started the agent, a deleted agent's
- * generations stand until its transcript is purged, and every generation,
- * the newest included, expires seven days after its commit. Synthetic accounts,
+ * key is held to the account that started the agent, a commit names only a
+ * path an upload was granted for its agent, a deleted agent's generations
+ * stand until its transcript is purged, every generation, the newest
+ * included, expires seven days after its commit unless its agent's launch
+ * is still open, and a grant no commit named is swept a day on. Synthetic accounts,
  * paths, and digests throughout; the ring is a throwaway of this file's.
  */
 
@@ -81,25 +93,32 @@ const saved = (
   deviceId,
 });
 
+/** A commit as a device makes one: its path granted first, under the same account and device. */
+const committed = (userId: string, commit: AgentStateCommit, now: Date) =>
+  Effect.andThen(
+    grantAgentStateUpload(
+      userId,
+      { agentId: commit.agentId, deviceId: commit.deviceId, path: commit.path },
+      now,
+    ),
+    commitAgentState(userId, commit, now),
+  );
+
 it.layer(getTestDB())("an agent's saved state", (it) => {
   it.effect("a commit from a generation no longer the newest is refused and writes nothing", () =>
     Effect.gen(function* () {
       const { userId, agentId, deviceId } = yield* openAccount;
-      const first = yield* commitAgentState(
-        userId,
-        saved(agentId, deviceId, null, "state/one"),
-        NOW,
-      );
+      const first = yield* committed(userId, saved(agentId, deviceId, null, "state/one"), NOW);
       assert.equal(first.generation, 1);
-      const second = yield* commitAgentState(userId, saved(agentId, deviceId, 1, "state/two"), NOW);
+      const second = yield* committed(userId, saved(agentId, deviceId, 1, "state/two"), NOW);
       assert.equal(second.generation, 2);
 
       const stale = yield* Effect.flip(
-        commitAgentState(userId, saved(agentId, deviceId, 1, "state/stale"), NOW),
+        committed(userId, saved(agentId, deviceId, 1, "state/stale"), NOW),
       );
       assert.deepEqual(stale, new AgentStateStale({ newest: 2 }));
       const fresh = yield* Effect.flip(
-        commitAgentState(userId, saved(agentId, deviceId, null, "state/fresh"), NOW),
+        committed(userId, saved(agentId, deviceId, null, "state/fresh"), NOW),
       );
       assert.deepEqual(fresh, new AgentStateStale({ newest: 2 }), "a first save over a save");
 
@@ -112,21 +131,13 @@ it.layer(getTestDB())("an agent's saved state", (it) => {
     Effect.gen(function* () {
       const owner = yield* openAccount;
       const outsider = yield* openAccount;
-      yield* commitAgentState(
-        owner.userId,
-        saved(owner.agentId, owner.deviceId, null, "state/one"),
-        NOW,
-      );
+      yield* committed(owner.userId, saved(owner.agentId, owner.deviceId, null, "state/one"), NOW);
       const key = Option.getOrThrow(yield* ensureAgentStateKey(RING, owner.userId, owner.agentId));
 
       assert.ok(Option.isNone(yield* newestAgentState(outsider.userId, owner.agentId)));
       assert.ok(Option.isNone(yield* ensureAgentStateKey(RING, outsider.userId, owner.agentId)));
       const refused = yield* Effect.flip(
-        commitAgentState(
-          outsider.userId,
-          saved(owner.agentId, outsider.deviceId, 1, "state/theirs"),
-          NOW,
-        ),
+        committed(outsider.userId, saved(owner.agentId, outsider.deviceId, 1, "state/theirs"), NOW),
       );
       assert.deepEqual(refused, new AgentStateUnreachable());
       assert.ok(
@@ -154,8 +165,8 @@ it.layer(getTestDB())("an agent's saved state", (it) => {
     () =>
       Effect.gen(function* () {
         const { userId, agentId, deviceId } = yield* openAccount;
-        yield* commitAgentState(userId, saved(agentId, deviceId, null, "state/one"), NOW);
-        yield* commitAgentState(userId, saved(agentId, deviceId, 1, "state/two"), NOW);
+        yield* committed(userId, saved(agentId, deviceId, null, "state/one"), NOW);
+        yield* committed(userId, saved(agentId, deviceId, 1, "state/two"), NOW);
         const pathsSwept = (at: Date) =>
           Effect.map(sweepableAgentStates(at, EVERY), (rows) =>
             rows
@@ -179,7 +190,7 @@ it.layer(getTestDB())("an agent's saved state", (it) => {
   it.effect("a generation, the newest included, is swept seven days after its commit", () =>
     Effect.gen(function* () {
       const { userId, agentId, deviceId } = yield* openAccount;
-      yield* commitAgentState(userId, saved(agentId, deviceId, null, "state/only"), NOW);
+      yield* committed(userId, saved(agentId, deviceId, null, "state/only"), NOW);
       const pathsSwept = (at: number) =>
         Effect.map(sweepableAgentStates(new Date(at), EVERY), (rows) =>
           rows.filter((row) => row.agentId === agentId).map((row) => row.path),
@@ -191,5 +202,76 @@ it.layer(getTestDB())("an agent's saved state", (it) => {
       assert.deepEqual(justShort, []);
       assert.deepEqual(sevenDaysOn, ["state/only"]);
     }),
+  );
+
+  it.effect(
+    "a commit naming a path never granted for its agent is refused and writes nothing, and a grant goes with the commit that names it",
+    () =>
+      Effect.gen(function* () {
+        const { userId, agentId, deviceId } = yield* openAccount;
+        const granted = `state/${randomUUID()}`;
+
+        const ungranted = yield* Effect.flip(
+          commitAgentState(userId, saved(agentId, deviceId, null, `state/${randomUUID()}`), NOW),
+        );
+        const kept = yield* committed(userId, saved(agentId, deviceId, null, granted), NOW);
+        const reused = yield* Effect.flip(
+          commitAgentState(userId, saved(agentId, deviceId, 1, granted), NOW),
+        );
+
+        assert.deepEqual(ungranted, new AgentStateUngranted());
+        assert.equal(kept.generation, 1);
+        assert.deepEqual(reused, new AgentStateUngranted(), "its grant went with its commit");
+        assert.equal(Option.getOrThrow(yield* newestAgentState(userId, agentId)).generation, 1);
+      }),
+  );
+
+  it.effect("a grant no commit named is swept a day after it was granted", () =>
+    Effect.gen(function* () {
+      const { userId, agentId, deviceId } = yield* openAccount;
+      const abandoned = `state/${randomUUID()}`;
+      yield* grantAgentStateUpload(userId, { agentId, deviceId, path: abandoned }, NOW);
+      const sweptAt = (at: number) =>
+        Effect.map(sweepableAgentStateUploads(new Date(at), EVERY), (grants) =>
+          grants.filter((grant) => grant.path === abandoned),
+        );
+
+      const justShort = yield* sweptAt(NOW.getTime() + DAY_MS - 1);
+      const aDayOn = yield* sweptAt(NOW.getTime() + DAY_MS);
+      const deleted = yield* deleteAgentStateUploads([abandoned]);
+
+      assert.deepEqual(justShort, []);
+      assert.deepEqual(aDayOn, [{ path: abandoned, committed: false }]);
+      assert.equal(deleted, 1);
+      assert.deepEqual(yield* sweptAt(NOW.getTime() + DAY_MS), []);
+    }),
+  );
+
+  it.effect(
+    "an open launch keeps its agent's newest generation past seven days, until it settles",
+    () =>
+      Effect.gen(function* () {
+        const { userId, agentId, deviceId } = yield* openAccount;
+        yield* committed(userId, saved(agentId, deviceId, null, "state/held"), NOW);
+        const launch = Option.getOrThrow(
+          yield* queueDeviceAgentLine(userId, {
+            agentId,
+            kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
+            payload: {},
+          }),
+        );
+        const pathsSwept = () =>
+          Effect.map(sweepableAgentStates(new Date(NOW.getTime() + 7 * DAY_MS), EVERY), (rows) =>
+            rows.filter((row) => row.agentId === agentId).map((row) => row.path),
+          );
+
+        const whileOpen = yield* pathsSwept();
+        yield* claimDeviceAgentLine(userId, deviceId, launch.id);
+        yield* settleDeviceAgentLine(userId, deviceId, launch.id, 0);
+        const settled = yield* pathsSwept();
+
+        assert.deepEqual(whileOpen, []);
+        assert.deepEqual(settled, ["state/held"]);
+      }),
   );
 });
