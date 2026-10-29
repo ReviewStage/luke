@@ -176,6 +176,7 @@ import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
 import { GitHubLineCard, ThreadLineHead, TranscriptAgent } from "./line-cards.js";
 import { linkChip } from "./mention-chip.js";
+import type { MentionHolder } from "./mention-holder.js";
 import {
   agentMessagePlace,
   MESSAGE_GONE,
@@ -404,6 +405,8 @@ export interface TranscriptCards {
   readonly agent?: ((agentId: string) => Actor | undefined) | undefined;
   /** The task whose plan an agent was handed, which its card's sender line names; none where the place knows no task. */
   readonly task?: BriefTask | undefined;
+  /** What the transcript stands on, its task or its agent on no task, under which the plan and a page a call made are linked where the place's mentions hold neither, as an agent's own page does not hold its task; none where the place does not say. */
+  readonly standsOn?: MentionHolder | undefined;
 }
 
 /** What a delegation's row draws from beyond its part: the catalog its pair is named from, the agent's own pair for a half the agent left to its own, when each running worker began, and the press that opens the worker's tab. */
@@ -874,36 +877,43 @@ function madeLabel(target: ToolTarget, subject: string | undefined, href: string
 }
 
 /**
- * A call that made or is about a page, the plan, a thread, a task, or a
- * pull request: a call's row that folds its input and answer open as any
- * call's does, naming that thing after its verb by the chip and hover card
- * the window draws for its link anywhere, whose press alone opens it. Note
- * that a place that cannot link it, one naming no workspace, draws any
- * call's row, because a row that looks like a fold must fold.
+ * A call's row, naming what the call made or is about, a page, the plan, a
+ * thread, a task, or a pull request, after its verb by the chip and hover
+ * card the window draws for its link anywhere, whose press alone opens it.
+ * Note that a call still running, one that made nothing, and one whose
+ * place cannot link what it made draw any call's row through this same
+ * view, so a row opened while it runs stays open as its answer lands.
  */
 function MadeCallView({
   part,
   target,
-  jobs,
+  doors,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
-  target: ToolTarget;
-  jobs: WorkerJobs | undefined;
+  /** What the call made or is about; none where it made nothing. */
+  target: ToolTarget | undefined;
+  doors: DelegationDoors | undefined;
 }): ReactNode {
-  const doors = useMentionDoors();
+  const mentions = useMentionDoors();
+  const standsOn = useLiveDoors(doors)?.cards?.standsOn;
   const agentId = useContext(TranscriptAgent);
   const { kind, subject } = toolCallView(part);
-  const href = targetLink(target, {
-    workspace: doors.place.workspace,
-    holder: doors.holder,
-    agentId,
-  });
+  const href =
+    target === undefined
+      ? undefined
+      : targetLink(target, {
+          workspace: mentions.place.workspace,
+          holder: mentions.holder ?? standsOn,
+          agentId,
+        });
   const chip =
-    href === undefined ? undefined : linkChip(href, madeLabel(target, subject, href), doors);
+    target === undefined || href === undefined
+      ? undefined
+      : linkChip(href, madeLabel(target, subject, href), mentions);
   return (
     <ToolCallView
       part={part}
-      jobs={jobs}
+      jobs={doors?.jobs}
       made={chip === undefined || !isMadeCallKind(kind) ? undefined : { kind, chip }}
     />
   );
@@ -990,7 +1000,7 @@ function AgentPartView({
       // A call that failed keeps its row, because the row is where its error is read.
       const target = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
       if (target !== undefined && target.kind !== TOOL_TARGET.AGENT) {
-        return <MadeCallView part={part} target={target} jobs={delegation?.jobs} />;
+        return <MadeCallView part={part} target={target} doors={delegation} />;
       }
       const openTarget = delegation?.onOpenTarget;
       if (target !== undefined && openTarget !== undefined) {
@@ -1017,7 +1027,7 @@ function AgentPartView({
         <LoadedSkillView part={part} />
       ) : // A call about an agent names it by the cards the window hands now (`LiveDoors`).
       calledAgent(part) === undefined ? (
-        <ToolCallView part={part} jobs={delegation?.jobs} />
+        <MadeCallView part={part} target={undefined} doors={delegation} />
       ) : (
         <AgentCallView part={part} jobs={delegation?.jobs} doors={delegation} />
       );

@@ -295,7 +295,6 @@ const MADE_CALL_WORDS = {
   [CALL_KIND.CREATE_TASK]: "Made",
   [CALL_KIND.READ_TASK]: "Read",
   [CALL_KIND.UPDATE_TASK]: "Updated",
-  [CALL_KIND.MOVE_TASK]: "Moved",
   [CALL_KIND.OPEN_PULL_REQUEST]: "Opened",
 } as const satisfies Partial<Record<CallKind, string>>;
 

@@ -94,7 +94,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { restOn } from "../testing/hint-rest.js";
+import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { bundleLanded } from "../testing/side-bundles.js";
@@ -799,6 +799,47 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
   assert.equal(
     panel.querySelector<HTMLIFrameElement>(".page-view iframe")?.getAttribute("src"),
     `luke-page://page/agent/${AGENT_ID}/${FUNNEL.id}/${FUNNEL.version}`,
+  );
+});
+
+test("the chip of a page an agent on a task showed hangs the page's card, read from the task the page stands on", async () => {
+  pages = [{ agent: { ...PAGE, planId: PAGE_TASK } }];
+  transcript = {
+    messages: [
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [
+          {
+            type: "tool-show_page",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { title: FUNNEL.title, path: "funnel.html" },
+            output: { status: "accepted", page: { id: FUNNEL.id, version: 2 } },
+          },
+        ],
+      },
+    ],
+    cursor: "1:0",
+    status: AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const page = mount();
+  await settle();
+
+  const chip =
+    page.querySelector<HTMLElement>('.desktop-agent [data-call-id="call-1"] [data-mention-ref]') ??
+    assert.fail("the call's row names the page it showed by its chip");
+  document.documentElement.dataset.keyboard = "true";
+  focusRestOn(chip);
+  await settle();
+
+  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, FUNNEL.title);
+  assert.equal(
+    card?.querySelector(".luke-page-thumb-frame")?.getAttribute("src"),
+    pageFrameUrl({ taskId: PAGE_TASK, pageId: FUNNEL.id, version: 2 }),
+    "the preview is the task's page",
   );
 });
 

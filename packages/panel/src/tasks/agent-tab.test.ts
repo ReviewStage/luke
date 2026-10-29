@@ -223,6 +223,41 @@ for (const call of OPENING_CALLS) {
   });
 }
 
+test("a call's row opened while it runs stays open as its answer lands and names what it made", () => {
+  fakeAppBridge({});
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const input = { title: "Pricing explorer", path: "pricing.html" };
+  const draw = (part: WireRecord) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(TaskMentions, {
+            value: TASK_PAGE,
+            children: createElement(AgentMessage, {
+              message: assistant([part]),
+              plan: false,
+              lead: AGENT_LEAD,
+              moving: true,
+              delegation: { models: [], onOpenTarget: () => undefined },
+            }),
+          }),
+        ),
+      ),
+    );
+  draw(toolPart("show_page", input));
+  const row = () =>
+    container.querySelector<HTMLElement>('[data-call-id="call-show_page"] summary') ??
+    assert.fail("the row is a fold's line");
+  act(() => row().click());
+  draw(toolPart("show_page", input, { status: "accepted", page: { id: "page-1", version: 1 } }));
+  assert.ok(row().querySelector("[data-mention-ref]"), "the row names the page by its chip");
+  assert.equal(row().getAttribute("aria-expanded"), "true", "the row stands open");
+});
+
 const SENT_CALLS: readonly {
   readonly name: string;
   readonly tool: string;
