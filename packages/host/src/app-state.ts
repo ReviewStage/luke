@@ -1,6 +1,6 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
-import type { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { AgentKind } from "@luke/features/agent-wire";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { LIVE_READ } from "@luke/features/live-wire";
@@ -263,10 +263,23 @@ export const UNREAD: AppHostRead<never> = {};
  * nothing of holds nothing now.
  */
 export type AppInboxItems = {
-  readonly [Kind in (typeof INBOX_SCOPE_KIND)[keyof typeof INBOX_SCOPE_KIND]]: Readonly<
-    Record<string, readonly InboxItem[]>
-  >;
+  readonly [Kind in InboxHolderKind]: Readonly<Record<string, readonly InboxItem[]>>;
 };
+
+/** The kind of holder an inbox item is on: a plan, or an agent with no task. */
+type InboxHolderKind = (typeof INBOX_SCOPE_KIND)[keyof typeof INBOX_SCOPE_KIND];
+
+/**
+ * What crosses to a window of the account's feed once it holds the feed's
+ * rows: each holder whose items moved since its last delivery, whole, and
+ * each holder gone, by kind. Note that a change crosses as the holders it
+ * moved rather than the whole feed, since the largest workspace's feed is
+ * megabytes and a change moves one task's list.
+ */
+export interface AppInboxHoldersPatch {
+  readonly moved: AppInboxItems;
+  readonly gone: { readonly [Kind in InboxHolderKind]: readonly string[] };
+}
 
 /** The rows of each read the host holds for the panel, by its name. */
 export interface AppHostReads {
@@ -420,6 +433,63 @@ export interface AppStateDelivery {
   readonly version: number;
   readonly entries: { readonly [Entry in AppStateEntry]?: AppStateSnapshot[Entry] };
   readonly gone?: readonly AppStateEntry[];
+  /** The account's feed as the holders that moved, in place of its entry, where the window held its rows and still does. */
+  readonly inboxHolders?: AppInboxHoldersPatch;
+}
+
+/**
+ * The holders of the account's feed that moved from `sent` to `next`, and
+ * those gone; none where either holds no rows, which crosses whole, or
+ * where no holder moved.
+ */
+function inboxHoldersPatch(
+  sent: AppHostRead<AppInboxItems> | undefined,
+  next: AppHostRead<AppInboxItems> | undefined,
+): AppInboxHoldersPatch | undefined {
+  const before = sent?.rows;
+  const after = next?.rows;
+  if (before === undefined || after === undefined || next?.failed !== sent?.failed) {
+    return undefined;
+  }
+  const ofKind = (kind: InboxHolderKind) => ({
+    moved: Object.fromEntries(
+      Object.entries(after[kind]).filter(([id, items]) => !Equal.equals(before[kind][id], items)),
+    ),
+    gone: Object.keys(before[kind]).filter((id) => !Object.hasOwn(after[kind], id)),
+  });
+  const plan = ofKind(INBOX_SCOPE_KIND.PLAN);
+  const agent = ofKind(INBOX_SCOPE_KIND.AGENT);
+  const moved = [plan, agent].some(
+    (kind) => Object.keys(kind.moved).length > 0 || kind.gone.length > 0,
+  );
+  if (!moved) return undefined;
+  return {
+    moved: { [INBOX_SCOPE_KIND.PLAN]: plan.moved, [INBOX_SCOPE_KIND.AGENT]: agent.moved },
+    gone: { [INBOX_SCOPE_KIND.PLAN]: plan.gone, [INBOX_SCOPE_KIND.AGENT]: agent.gone },
+  };
+}
+
+/** The account's feed a window holds once `patch` lands on it: each holder moved laid in, keeping what of it did not move, each gone dropped, and every other holder the very list held. */
+function withInboxHolders(
+  held: AppHostRead<AppInboxItems> | undefined,
+  patch: AppInboxHoldersPatch,
+): AppHostRead<AppInboxItems> {
+  const rows = held?.rows;
+  const ofKind = (kind: InboxHolderKind) => {
+    const next: Record<string, readonly InboxItem[]> = { ...rows?.[kind] };
+    for (const id of patch.gone[kind]) Reflect.deleteProperty(next, id);
+    for (const [id, items] of Object.entries(patch.moved[kind])) {
+      const was = rows?.[kind][id];
+      next[id] = was === undefined ? items : keepIdentity(was, items);
+    }
+    return next;
+  };
+  return {
+    rows: {
+      [INBOX_SCOPE_KIND.PLAN]: ofKind(INBOX_SCOPE_KIND.PLAN),
+      [INBOX_SCOPE_KIND.AGENT]: ofKind(INBOX_SCOPE_KIND.AGENT),
+    },
+  };
 }
 
 /**
@@ -436,15 +506,22 @@ export function appStateDelivery(
   const names = [...new Set([...Object.keys(sent ?? {}), ...Object.keys(next)])].filter(
     (name) => name !== "version",
   ) as AppStateEntry[];
-  const moved = names.filter((name) => sent === undefined || !Equal.equals(sent[name], next[name]));
+  const holders = inboxHoldersPatch(sent?.[LIVE_READ.INBOX_ITEMS], next[LIVE_READ.INBOX_ITEMS]);
+  // Note that the feed's entry is compared by its holders alone where it crosses as them, so its whole is never walked twice.
+  const moved = names.filter(
+    (name) =>
+      (holders === undefined || name !== LIVE_READ.INBOX_ITEMS) &&
+      (sent === undefined || !Equal.equals(sent[name], next[name])),
+  );
   const gone = moved.filter((name) => next[name] === undefined);
-  if (sent !== undefined && moved.length === 0) return undefined;
+  if (sent !== undefined && moved.length === 0 && holders === undefined) return undefined;
   return {
     version: next.version,
     entries: Object.fromEntries(
       moved.filter((name) => next[name] !== undefined).map((name) => [name, next[name]]),
     ),
     ...(gone.length === 0 ? undefined : { gone }),
+    ...(holders === undefined ? undefined : { inboxHolders: holders }),
   };
 }
 
@@ -465,7 +542,16 @@ export function withAppStateDelivery(
       keepIdentity(held[name as AppStateEntry], value),
     ]),
   );
-  const next: AppStateSnapshot = { ...held, ...entries, version: delivery.version };
+  const holders =
+    delivery.inboxHolders === undefined
+      ? undefined
+      : {
+          [LIVE_READ.INBOX_ITEMS]: withInboxHolders(
+            held[LIVE_READ.INBOX_ITEMS],
+            delivery.inboxHolders,
+          ),
+        };
+  const next: AppStateSnapshot = { ...held, ...entries, ...holders, version: delivery.version };
   // Note that an entry gone is held as no key at all, as the document holds it.
   for (const name of delivery.gone ?? []) Reflect.deleteProperty(next, name);
   return next;
