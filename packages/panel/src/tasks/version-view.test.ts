@@ -11,6 +11,8 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost, type ToastNotice, useToast } from "../toast.js";
 import { HISTORY_READ } from "./use-plan-history.js";
 import { sayRestored, useVersionRestore, VersionView } from "./version-view.js";
+import { FAILURE_CONDITION } from "@luke/features/shown-failure";
+import { KEPT, notKept } from "../act.js";
 
 /**
  * version-view.test.ts -- Restore this version restores at once, asking nothing, a refusal said in a toast; and a restored version is said in the window's toast: with an Undo where the history names the version that stood before, which restores that one and says so where it is refused. Synthetic throughout.
@@ -124,7 +126,7 @@ test("a restore with a version before it says so with an Undo, which restores th
   act(() =>
     sayRestored(toast, () => {
       undone.push("restored the version before");
-      return Promise.resolve(true);
+      return Promise.resolve(KEPT);
     }),
   );
   assert.ok(undoButton(), "the restore offers its Undo");
@@ -139,7 +141,7 @@ test("a restore with a version before it says so with an Undo, which restores th
 test("an Undo that is refused says the restore could not be undone", async () => {
   mount();
   const toast = show ?? assert.fail("the window shows toasts");
-  act(() => sayRestored(toast, () => Promise.resolve(false)));
+  act(() => sayRestored(toast, () => Promise.resolve(notKept(FAILURE_CONDITION.NOT_KEPT))));
 
   await act(async () => undoButton()?.click());
 

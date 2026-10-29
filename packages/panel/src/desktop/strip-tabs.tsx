@@ -34,6 +34,7 @@ import { useCopyToast } from "../copy-feedback.js";
 import type { HeldTranscript } from "../tasks/agent-tab-card.js";
 import {
   type CopiedTranscript,
+  type TranscriptUnread,
   type TranscriptCopy,
   transcriptMarkdown,
 } from "../tasks/transcript-copy.js";
@@ -631,8 +632,8 @@ export function AddTabButton({
   );
 }
 
-/** A transcript read on demand for a copy, nothing where it could not be read. */
-export type TranscriptRead = () => Promise<CopiedTranscript | undefined>;
+/** A transcript read on demand for a copy, or why it could not be read; nothing where no read says why. */
+export type TranscriptRead = () => Promise<CopiedTranscript | TranscriptUnread | undefined>;
 
 /** A copy of a transcript as the strips' tabs and the sidebar's pins offer it: read, then put on the clipboard as concise or full markdown. */
 export type TranscriptCopier = (read: TranscriptRead) => (copy: TranscriptCopy) => void;
@@ -650,10 +651,11 @@ export function useTranscriptCopier(): TranscriptCopier {
     });
   return (read) => (copy) => {
     read().then(
-      (transcript) =>
-        transcript === undefined
-          ? unread(FAILURE_CONDITION.UNREAD)
-          : copyWithToast(transcriptMarkdown(transcript, copy), TRANSCRIPT_COPIED_NOTE),
+      (transcript) => {
+        if (transcript === undefined) return unread(FAILURE_CONDITION.UNREAD);
+        if ("unread" in transcript) return unread(transcript.unread);
+        return copyWithToast(transcriptMarkdown(transcript, copy), TRANSCRIPT_COPIED_NOTE);
+      },
       unread,
     );
   };

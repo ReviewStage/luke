@@ -120,12 +120,19 @@ function takeLeft(registry: AtomRegistry.AtomRegistry, taskId: string): Document
   return kept;
 }
 
+/** A save's answer where it refused the words, for the toast to report; none where it saved them. */
+function failureOf(answered: object): object | undefined {
+  return "failure" in answered ? answered : undefined;
+}
+
 /**
  * The editor as its task was left, kept where its words still did not save,
  * and said in a toast that stands until dismissed, whose action saves them
  * again from what is kept then: a Retry, or a Keep mine over a conflict.
+ * `cause` is the answer or error the last save came to, which the toast
+ * reports.
  */
-function keepLeft(left: LeftTask, now: DocumentEditor, saving: symbol): void {
+function keepLeft(left: LeftTask, now: DocumentEditor, saving: symbol, cause?: unknown): void {
   const { taskId, registry } = left;
   const kept = editorLeft(now);
   const held = new Map(registry.get(leftUnsavedAtom));
@@ -156,7 +163,7 @@ function keepLeft(left: LeftTask, now: DocumentEditor, saving: symbol): void {
         }
       : {
           surface: FAILURE_SURFACE.PLAN_SAVE,
-          cause: FAILURE_CONDITION.NOT_KEPT,
+          cause: cause ?? FAILURE_CONDITION.NOT_KEPT,
           about: { taskId },
         },
   });
@@ -165,19 +172,26 @@ function keepLeft(left: LeftTask, now: DocumentEditor, saving: symbol): void {
 /**
  * Saves the words of a task left through its door, keeping them where that
  * save does not land; they are unsaved work under `saving`, its own mark,
- * until it answers.
+ * until it answers. `cause` is what the save before it came to, where one
+ * did, kept for the toast where there is nothing to send again.
  */
-function saveLeft(left: LeftTask, now: DocumentEditor, saving = Symbol(left.taskId)): void {
+function saveLeft(
+  left: LeftTask,
+  now: DocumentEditor,
+  saving = Symbol(left.taskId),
+  cause?: unknown,
+): void {
   mark(left.registry, savingLeftAtom, saving, true);
   const request = leavingSave(now);
   if (request === undefined) {
-    keepLeft(left, now, saving);
+    keepLeft(left, now, saving, cause);
     return;
   }
   const sent = editorSent(now, request);
   left.door(request).then(
-    (answered) => keepLeft(left, editorAnswered(sent, answered), saving),
-    (refused: Error) => keepLeft(left, editorRefused(sent, refused.message), saving),
+    (answered) =>
+      keepLeft(left, editorAnswered(sent, answered), saving, failureOf(answered)),
+    (refused: Error) => keepLeft(left, editorRefused(sent, refused.message), saving, refused),
   );
 }
 
@@ -392,8 +406,8 @@ export function usePlanEditing(
       const saving = Symbol(taskId);
       mark(registry, savingLeftAtom, saving, true);
       flight.current?.then(
-        (answered) => saveLeft(left, editorAnswered(held, answered), saving),
-        (refused: Error) => saveLeft(left, editorRefused(held, refused.message), saving),
+        (answered) => saveLeft(left, editorAnswered(held, answered), saving, failureOf(answered)),
+        (refused: Error) => saveLeft(left, editorRefused(held, refused.message), saving, refused),
       );
     };
   }, [taskId]);

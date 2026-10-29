@@ -1,4 +1,4 @@
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { dayAndTimeText, momentText } from "@luke/features/time-format";
 import { readFailedWords } from "@luke/features/words";
 import {
@@ -29,6 +29,7 @@ import { type MentionedTask, useMentionLink } from "./task-mentions.js";
 import { TextTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history.js";
+import type { Kept } from "../act.js";
 
 /**
  * version-view.tsx -- one version of a plan, drawn read-only with what it changed marked, under a bar with its restore.
@@ -291,7 +292,7 @@ export function useVersionRestore(
  */
 export function sayRestored(
   toast: (notice: ToastNotice) => void,
-  undo: (() => Promise<boolean>) | undefined,
+  undo: (() => Promise<Kept>) | undefined,
 ): void {
   if (undo === undefined) {
     toast({ words: VERSION_RESTORED_NOTE, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
@@ -300,10 +301,10 @@ export function sayRestored(
   toast(
     undoToast(VERSION_RESTORED_NOTE, () => {
       undo().then((undone) => {
-        if (undone) return;
+        if (undone.kept) return;
         toast({
           words: RESTORE_UNDO_REFUSED_NOTE,
-          failure: { surface: FAILURE_SURFACE.PLAN_RESTORE, cause: FAILURE_CONDITION.NOT_KEPT },
+          failure: { surface: FAILURE_SURFACE.PLAN_RESTORE, cause: undone.cause },
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
         });

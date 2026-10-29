@@ -246,6 +246,12 @@ function leaveArchived(
 }
 
 /** A workspace's channels and the writes on them, as `useChannels` hands them. */
+/** Why a thread did not move: the words the window says, and the answer or error that refused it, which a shown failure reports. */
+export interface MoveRefused {
+  readonly words: string;
+  readonly cause: unknown;
+}
+
 export interface ChannelsControl {
   /** The channels, none until first read. */
   readonly channels: readonly Channel[] | undefined;
@@ -264,8 +270,8 @@ export interface ChannelsControl {
   readonly onArchive: (channelId: string) => Promise<string | undefined>;
   /** Opens an archived channel again; what refused it, or none where it was opened. */
   readonly onUnarchive: (channelId: string) => Promise<string | undefined>;
-  /** Moves a thread into another open channel of the workspace; what refused it, or none where it moved. */
-  readonly onMove: (threadId: string, channelId: string) => Promise<string | undefined>;
+  /** Moves a thread into another open channel of the workspace; what refused it, in words and as the answer or error that said so, or none where it moved. */
+  readonly onMove: (threadId: string, channelId: string) => Promise<MoveRefused | undefined>;
   /** Stamps the reader's look at a channel, now. */
   readonly onLook: (channelId: string) => void;
 }
@@ -341,8 +347,8 @@ export function useChannels(workspaceId: string | undefined, shown: boolean): Ch
           : written(act(ACT_KIND.CHANNELS_UNARCHIVE, { workspaceId, channelId })),
       onMove: (threadId, channelId) =>
         act(ACT_KIND.CHANNELS_MOVE, { threadId, channelId }).then(
-          (view) => ("failure" in view ? REFUSAL_WORDS[view.failure] : undefined),
-          () => ACT_UNREACHED_WORDS,
+          (view) => ("failure" in view ? { words: REFUSAL_WORDS[view.failure], cause: view } : undefined),
+          (cause: unknown) => ({ words: ACT_UNREACHED_WORDS, cause }),
         ),
       onLook: (channelId) => {
         if (workspaceId === undefined) return;
