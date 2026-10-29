@@ -56,9 +56,7 @@ const until = (holds: () => boolean) =>
  * start where `off` says so, the account's device id already kept there, a
  * service that enrolls the Mac and lists the setup `setup` says until the
  * test lists another (none where it cannot answer), a login
- * item that refuses as many unregisters as `refusedUnregisters` says, and
- * the install command's standalone `luke-host` installed where
- * `standaloneInstalled` says; what
+ * item that refuses as many unregisters as `refusedUnregisters` says; what
  * each fake was asked, in the order it was asked.
  */
 const thisMac = (
@@ -67,7 +65,6 @@ const thisMac = (
     refusedUnregisters?: number;
     off?: boolean;
     setup?: Option.Option<ThisMacSetup>;
-    standaloneInstalled?: boolean;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -128,7 +125,6 @@ const thisMac = (
               platform: DEVICE_PLATFORM.DARWIN,
               arch: DEVICE_ARCH.ARM64,
             }),
-            standaloneInstalled: Effect.succeed(options.standaloneInstalled === true),
           }),
         ),
       ),
@@ -172,35 +168,6 @@ it.effect(
           deviceSecret: SECRET,
           serviceOrigin: SERVICE,
         });
-      }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
-    ),
-);
-
-it.effect(
-  "turning on beside the install command's luke-host fails saying how to remove it, and enrolls nothing",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const stateRoot = yield* temporaryDirectoryScoped("luke-this-mac-");
-        const { asked, call } = yield* thisMac(stateRoot, { standaloneInstalled: true });
-        let standing = yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
-        for (
-          let round = 0;
-          round < 20_000 && standing.standing !== THIS_MAC_HOST_STANDING.FAILED;
-          round += 1
-        ) {
-          yield* TestClock.adjust(Duration.millis(100));
-          yield* Effect.yieldNow;
-          standing = yield* call(GATEWAY_METHOD.THIS_MAC_HOST_READ);
-        }
-
-        assert.ok(
-          standing.standing === THIS_MAC_HOST_STANDING.FAILED &&
-            standing.reason.includes("sudo luke-host uninstall"),
-          "the turn-on failed, saying how to remove the install command's luke-host",
-        );
-        assert.deepEqual(asked, []);
-        assert.ok(Option.isNone(yield* readHostDevice(stateRoot)));
       }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
     ),
 );

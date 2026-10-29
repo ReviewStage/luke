@@ -34,20 +34,6 @@ export type HostSmolvmSource =
   | { readonly kind: typeof HOST_SMOLVM.PATH; readonly variable: string }
   | { readonly kind: typeof HOST_SMOLVM.PIN; readonly pin: AgentToolPin };
 
-/**
- * The LaunchAgent the install script (`apps/web/install/install.sh`) puts
- * down for a Mac's standalone `luke-host`, by its label, in the home of the
- * user it runs as. The desktop app refuses to turn This Mac on beside it, as
- * the script refuses beside the app's enrolled `luke-host`, so a user never
- * has two.
- */
-export const DARWIN_STANDALONE_LAUNCH_AGENT = "dev.reviewstage.luke.host.standalone";
-
-/** The standalone `luke-host`'s LaunchAgent file, for the home of the user it runs as. */
-export function darwinStandaloneLaunchAgentFile(home: string): string {
-  return path.join(home, "Library", "LaunchAgents", `${DARWIN_STANDALONE_LAUNCH_AGENT}.plist`);
-}
-
 /** The device a Linux box hands each agent's VM so it can boot VMs of its own, where the box has it. */
 const KVM = "/dev/kvm";
 

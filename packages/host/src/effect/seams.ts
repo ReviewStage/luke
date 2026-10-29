@@ -354,8 +354,6 @@ export interface ThisMacHostSeam {
     readonly platform: DevicePlatform;
     readonly arch: DeviceArch;
   }>;
-  /** Whether the install command's standalone `luke-host` is installed for this Mac's user, which This Mac is never turned on beside. */
-  readonly standaloneInstalled: Effect.Effect<boolean>;
 }
 
 export class ThisMacHost extends Context.Service<ThisMacHost, ThisMacHostSeam>()(

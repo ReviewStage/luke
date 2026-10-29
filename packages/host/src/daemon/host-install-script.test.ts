@@ -23,10 +23,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "@effect/vitest";
 import { SANDBOX_IMAGE, SMOLVM_LINUX_PIN } from "@luke/agent-runner/pins";
-import { DARWIN_HOST, DARWIN_STANDALONE_LAUNCH_AGENT } from "./host-os.js";
+import { DARWIN_HOST } from "./host-os.js";
 
 const SCRIPT = join(import.meta.dirname, "../../../../apps/web/install/install.sh");
 const UNINSTALL_SCRIPT = join(import.meta.dirname, "../../../../apps/host/scripts/luke-host.sh");
@@ -206,14 +206,6 @@ describe("the host's install script", () => {
     expect(carried("SANDBOX_IMAGE")).toBe(SANDBOX_IMAGE);
   });
 
-  it("names the LaunchAgent the desktop app refuses beside, and the app's own state folder", () => {
-    const home = "/Users/ada";
-    expect(carried("MAC_LABEL")).toBe(DARWIN_STANDALONE_LAUNCH_AGENT);
-    expect(carried("MAC_APP_STATE_FOLDER")).toBe(
-      relative(home, DARWIN_HOST.stateRoot(home, { developerIdSigned: true })),
-    );
-  });
-
   for (const [found, make] of [
     ["is missing", (root: string) => join(root, "kvm")],
     [
@@ -319,22 +311,6 @@ describe("the host's install script", () => {
     expect(answer.stderr).toContain("Run it with sudo from the Mac account");
   });
 
-  it("refuses a Mac the Luke app already runs agents on for that user, and lets one it does not through", () => {
-    const home = folder();
-    const check = () =>
-      sh(["-c", `. "${SCRIPT}"; require_no_app_host "${home}"`], {
-        LUKE_HOST_INSTALL_LIBRARY: "1",
-      });
-    expect(check().status).toBe(0);
-
-    const appState = join(home, "Library", "Application Support", "Luke");
-    mkdirSync(appState, { recursive: true });
-    writeFileSync(join(appState, "device.json"), "{}\n");
-    const refused = check();
-    expect(refused.status).toBe(1);
-    expect(refused.stderr).toContain("The Luke app already runs agents on this Mac");
-  });
-
   it("writes a LaunchAgent that runs the release at login on its own state, again after a crash only, logging under the user's Logs", () => {
     const plist = join(folder(), "agent.plist");
     const app = "/Users/ada/Library/Application Support/Luke Host";
@@ -354,7 +330,7 @@ describe("the host's install script", () => {
 
     const written = readFileSync(plist, "utf8").replace(/>\s+</gu, "><");
     for (const entry of [
-      `<key>Label</key><string>${DARWIN_STANDALONE_LAUNCH_AGENT}</string>`,
+      "<key>Label</key><string>dev.reviewstage.luke.host.standalone</string>",
       `<key>ProgramArguments</key><array><string>${app}/luke-host/bin/luke-host</string><string>run</string></array>`,
       `<key>EnvironmentVariables</key><dict><key>LUKE_HOST_STATE_ROOT</key><string>${app}/state</string></dict>`,
       "<key>RunAtLoad</key><true/>",
@@ -573,30 +549,43 @@ describe("the host's install script", () => {
     { appHost: true, loaded: false, kept: true, status: 0 },
     { appHost: false, loaded: true, kept: true, status: 1 },
   ])(
-    "a Mac's uninstall removes the agents' folders under the installing user's home, never root's, and leaves the clones the desktop app shares, unless the Luke app's state is there or the LaunchAgent will not stop (app state: $appHost, still loaded: $loaded)",
+    "a Mac's uninstall removes the agents' machines and folders under the installing user's home, never root's, and leaves the clones the desktop app shares, unless the Luke app's state is there or the LaunchAgent will not stop (app state: $appHost, still loaded: $loaded)",
     ({ appHost, loaded, kept, status }) => {
       const bin = folder();
       const home = folder();
       const rootHome = folder();
       const script = join(folder(), "bin");
+      const deletes = join(folder(), "deletes.log");
       mkdirSync(script);
       for (const [name, body] of Object.entries({
         uname: "echo Darwin",
         id: '[ "$1" = -u ] && { [ -n "$2" ] && echo 501 || echo 0; }',
         dscl: `echo "NFSHomeDirectory: ${home}"`,
         launchctl: `[ "$1" != print ] || exit ${loaded ? 0 : 1}`,
-        sudo: "exit 0",
+        sudo: 'shift 3; exec "$@"',
       })) {
         writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
       }
+      // Note that one smolvm store holds the app's agents' machines and this install's alike.
+      const smolvm = join(
+        home,
+        "Library/Application Support/Luke Host/state/agent-tools/smolvm/1/smolvm",
+      );
+      mkdirSync(join(smolvm, ".."), { recursive: true });
+      writeFileSync(
+        smolvm,
+        `#!/bin/sh\ncase "$1 $2" in\n  "machine ls") printf 'luke-one\\nother\\n' ;;\n  "machine delete") echo "$4" >> "${deletes}" ;;\nesac\n`,
+        { mode: 0o755 },
+      );
       for (const place of [home, rootHome]) {
         for (const each of ["agents/one", "clones/acme", "keep"]) {
           mkdirSync(join(place, ".luke", each), { recursive: true });
         }
       }
       if (appHost) {
-        mkdirSync(join(home, "Library/Application Support/Luke"), { recursive: true });
-        writeFileSync(join(home, "Library/Application Support/Luke/device.json"), "{}");
+        const appState = DARWIN_HOST.stateRoot(home, { developerIdSigned: true });
+        mkdirSync(appState, { recursive: true });
+        writeFileSync(join(appState, "device.json"), "{}");
       }
       writeFileSync(join(script, "luke-host"), readFileSync(UNINSTALL_SCRIPT), { mode: 0o755 });
 
@@ -607,6 +596,9 @@ describe("the host's install script", () => {
 
       expect(answer.status).toBe(status);
       expect(existsSync(join(home, ".luke/agents"))).toBe(kept);
+      expect(existsSync(deletes) ? readFileSync(deletes, "utf8").trim().split("\n") : []).toEqual(
+        kept ? [] : ["luke-one"],
+      );
       expect(existsSync(join(home, ".luke/clones"))).toBe(true);
       expect(existsSync(join(home, ".luke/keep"))).toBe(true);
       expect(existsSync(join(rootHome, ".luke/agents"))).toBe(true);
