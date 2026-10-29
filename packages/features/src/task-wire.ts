@@ -328,6 +328,7 @@ function updateNamesAChange(update: {
   priority?: TaskPriority;
   assigneeId?: string | null;
   mergePolicy?: MergePolicy;
+  running?: boolean;
   runsOn?: TaskRunsOnRequest;
 }): boolean {
   return Object.keys(update).length > 0;
@@ -344,7 +345,8 @@ function positionIsPinned(update: { pinned?: boolean; pinPosition?: string }): b
  * which comes only with `pinned: true` and pins a plan not yet pinned,
  * whether it is archived, the workspace it moves to, where it stands, how
  * much it matters, who it is assigned to, what becomes of its agents' pull
- * requests once their checks pass, or any of them at once. A rename is one of these; a repository is confirmed reachable by the
+ * requests once their checks pass, whether a pilot tree's agents may work
+ * (`running`, a top pilot task's alone), or any of them at once. A rename is one of these; a repository is confirmed reachable by the
  * workspace before it is kept, and null clears it. An assignee is confirmed a
  * member of the task's workspace before it is kept, and null clears it. A move is the task's
  * owner's alone, into a workspace they are a member of whose GitHub reaches
@@ -365,15 +367,16 @@ export const taskUpdateRequestSchema = EffectSchema.Struct({
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
   mergePolicy: EffectSchema.optionalKey(mergePolicySchema),
+  running: EffectSchema.optionalKey(EffectSchema.Boolean),
   runsOn: EffectSchema.optionalKey(taskRunsOnRequestSchema),
 }).check(EffectSchema.makeFilter(updateNamesAChange), EffectSchema.makeFilter(positionIsPinned));
 
 export type TaskUpdateRequest = typeof taskUpdateRequestSchema.Type;
 
-/** What a change of where a task stands names: its status, its priority, who it is assigned to (null for no one), its merge policy, or any of them. */
+/** What a change of where a task stands names: its status, its priority, who it is assigned to (null for no one), its merge policy, its running switch, or any of them. */
 export type TaskStanding = Pick<
   TaskUpdateRequest,
-  "status" | "priority" | "assigneeId" | "mergePolicy"
+  "status" | "priority" | "assigneeId" | "mergePolicy" | "running"
 >;
 
 /** Which side of a block the other task stands on, as the task a change names reads it: one it waits on, or one that waits on it. */

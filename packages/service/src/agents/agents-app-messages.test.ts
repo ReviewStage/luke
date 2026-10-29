@@ -93,7 +93,7 @@ import {
 } from "../core.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { postInboxThread } from "../inbox/inbox-store.js";
-import { MERGE_POLICY_NOTICE } from "../tasks/merge-policy-notice.js";
+import { MERGE_POLICY_NOTICE } from "../tasks/pilot-switch-notice.js";
 import {
   AGENT,
   AGENT_INBOX,
@@ -469,6 +469,48 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         // The same switch again moves nothing, so the pilot hears nothing more.
         yield* switched(MERGE_POLICY.HOLD);
         assert.equal(eve.sent.length, sends + 1);
+      }),
+  );
+
+  it.effect(
+    "a running switch is refused on a pilot task with a parent, and on a top pilot task is written and told to its pilot word for word, once per move",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, task, agent, sessionId, ask } = yield* startedAgent(eve, {
+          running: false,
+        });
+        const parent = yield* startTask(owner, { name: "Parent" });
+        const placed = (parentTaskId: string | null) =>
+          Database.use((db) =>
+            db
+              .update(taskTable)
+              .set({ mode: TASK_MODE.PILOT, parentTaskId })
+              .where(eq(taskTable.id, task.id)),
+          );
+        yield* Database.use((db) =>
+          db.update(agentTable).set({ kind: AGENT_KIND.PILOT }).where(eq(agentTable.id, agent.id)),
+        );
+        const switched = (running: boolean) =>
+          ask(request(TASK(task.id), owner, { method: "PATCH", body: { running } }));
+        const told = (from: number) =>
+          eve.sent
+            .slice(from)
+            .map((each) => [each.authorization, each.sessionId, each.message.message]);
+        yield* placed(parent.id);
+        assert.equal((yield* switched(true)).status, HOSTED_HTTP_STATUS.BAD_REQUEST);
+        yield* placed(null);
+        const sends = eve.sent.length;
+
+        const on = yield* switched(true);
+        assert.equal(on.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(on.body));
+        assert.equal(readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.OK, on).plan.running, true);
+        assert.deepEqual(told(sends), [[`Bearer ${owner}`, sessionId, "Running is now on."]]);
+        // The same switch again moves nothing, so the pilot hears nothing more.
+        yield* switched(true);
+        assert.equal(eve.sent.length, sends + 1);
+        yield* switched(false);
+        assert.deepEqual(told(sends + 1), [[`Bearer ${owner}`, sessionId, "Running is now off."]]);
       }),
   );
 
