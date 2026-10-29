@@ -43,6 +43,7 @@ import {
 import { calledId } from "./called-id.js";
 import { agentMadeRunsOn } from "./coder-host/agent-runtime-choice.js";
 import { assigneeIdOf, TASK_ASSIGNEE_INPUT } from "./task-assignee.js";
+import { taskBlockReadings } from "./task-block-changes.js";
 import { workspaceNamingOf, writtenMention } from "./written-mentions.js";
 
 /**
@@ -55,7 +56,8 @@ import { workspaceNamingOf, writtenMention } from "./written-mentions.js";
  * caller acts for could open it in the sidebar, read on that member's
  * standing now; a task of another workspace is none of the caller's, even
  * where the member is also in it. It answers the task as its row stands, the
- * brief the developer started it with, and its plan's saved text cut on a
+ * brief the developer started it with, the tasks it is blocked by and blocks
+ * that the member reaches, and its plan's saved text cut on a
  * line to a bound, so an agent reads another task's plan without its being
  * mentioned.
  *
@@ -101,8 +103,9 @@ export const READ_TASK_TOOL = {
     "Read one task of your workspace by its id, a teammate's included: its " +
     "key (such as ACME-42), name, where it stands (its status) and how much it matters (its " +
     "priority), repository, who started it, whether it is the task you " +
-    "work on, its mention, the brief the developer started it with (null for none), and its " +
-    `plan as last saved, cut on a line at ${PLAN_TEXT_READ_CHARS} characters with how many were ` +
+    "work on, its mention, the brief the developer started it with (null for none), the tasks " +
+    "it is blocked by and the tasks it blocks (each with its id, name, status, and mention), " +
+    `and its plan as last saved, cut on a line at ${PLAN_TEXT_READ_CHARS} characters with how many were ` +
     `left out. Read one before you start an agent on it, or to learn what another task is about; ` +
     `${AGENT_TOOL.LIST_AGENTS} with its taskId names the agents on it.`,
   inputSchema: READ_TASK_INPUT,
@@ -133,6 +136,7 @@ export function runReadTask(
       const { task, text, saved, brief } = stored.value;
       const { step, name } = yield* workspaceNamingOf(userId, workspace.value);
       const plan = cutOnLine(text, PLAN_TEXT_READ_CHARS);
+      const blocks = yield* taskBlockReadings(userId, task, step);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         task: {
@@ -144,6 +148,7 @@ export function runReadTask(
           isYourTask: task.id === callerTask(call.caller),
           mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
           brief: brief ?? null,
+          ...blocks,
         },
         plan: { text: plan.text, saved, leftOutChars: plan.leftOutChars },
       };
