@@ -19,6 +19,8 @@ import {
   callPlace,
   isAgentCallKind,
   isCommandKind,
+  type MadeCallKind,
+  madeCallLine,
   sameFieldsBy,
   sameTurnRow,
   TURN_ROW,
@@ -1114,6 +1116,8 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
     agent?: Actor | undefined;
     /** For a call about one coding agent, the agent's card, which its chip hangs; none where the place hangs none. */
     agentCard?: ReactNode;
+    /** For a call that made or is about a page, the plan, a thread, a task, or a pull request, that thing's chip, which the row names it by after its verb alone, its press alone opening it; none where the place cannot link it. */
+    made?: { readonly kind: MadeCallKind; readonly chip: ReactNode } | undefined;
     input: ToolBlock;
     /** Nothing while the call has not answered. */
     output: ToolBlock | undefined;
@@ -1128,7 +1132,9 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
  * preview, dropped once the body under it shows the command whole behind
  * its prompt, or by a find, which draws that body hidden, and so is any
  * subject the input says whole, a read's path or a search's pattern
- * (`blockSays`); a description stays, since the body does not say it.
+ * (`blockSays`); a description stays, since the body does not say it. A
+ * call that made something names it by its chip, as a call about an agent
+ * names the agent by its own.
  */
 export function TranscriptTool({
   state,
@@ -1139,6 +1145,7 @@ export function TranscriptTool({
   description,
   agent,
   agentCard,
+  made,
   input,
   output,
   errorText,
@@ -1146,7 +1153,10 @@ export function TranscriptTool({
   ...props
 }: TranscriptToolProps): ReactNode {
   const Icon = CALL_ICON[kind];
-  const { line, chip } = chippedLine(kind, subject, description, agent, undefined, agentCard);
+  const { line, chip } =
+    made === undefined
+      ? chippedLine(kind, subject, description, agent, undefined, agentCard)
+      : { line: madeCallLine(made.kind), chip: made.chip };
   const command = isCommandKind(kind);
   const macOwner = useContext(MacOwnerContext);
   return (
@@ -1196,7 +1206,7 @@ export function TranscriptTool({
 
 /**
  * A call whose subject stands in a tab of its own, as a coding agent's start
- * does once the agent began, or a page once shown: the
+ * does once the agent began, or a skill once loaded: the
  * call's line as a call's row draws it, its icon, what it did, and where it
  * stands, as the one button that opens that tab rather than folding its
  * input and answer open in place, its hover saying what it opens, or

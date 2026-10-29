@@ -32,6 +32,7 @@ import {
   integrationOfRemoteTool,
   integrationRemoteCallSchema,
 } from "@luke/features/integration-wire";
+import { LINK_PLACE, type LinkPlace, linkOf } from "@luke/features/link-grammar";
 import { linkLabels } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
@@ -56,6 +57,7 @@ import { INLINE_SPAN, readInline } from "../plan-editor/composer-markdown.js";
 import { fileRefText } from "./file-ref-model.js";
 import { shortCommit } from "./file-tab-model.js";
 import { askHeadWords } from "./inbox-ask-words.js";
+import { holderTaskId, type MentionHolder } from "./mention-holder.js";
 
 /**
  * tool-call-model.ts -- what a coding agent's tool call says on its one row, and what its body shows, decided from the part's own input and output.
@@ -1208,6 +1210,8 @@ export type ToolTarget =
       readonly kind: typeof TOOL_TARGET.INBOX;
       /** The key of the calling agent's thread the call posted on or withdrew, whose item the Inbox opens on; none for a read of the whole Inbox. */
       readonly key?: string;
+      /** The thread's id, as the call's answer names the thread under its key, which its chip is linked by; none where the answer names none. */
+      readonly item?: string;
     }
   | {
       readonly kind: typeof TOOL_TARGET.TASK;
@@ -1238,10 +1242,19 @@ interface TargetedCall {
 const TASK_TARGET: ToolTarget = { kind: TOOL_TARGET.PLAN };
 const INBOX_TARGET: ToolTarget = { kind: TOOL_TARGET.INBOX };
 
-/** The thread a call names by its key, a post's or a withdrawal's, whose item its row opens; the whole Inbox where it names none. */
+/** The thread a call names by its key, a post's or a withdrawal's, whose item its row opens, by the id its answer lists the thread under; the whole Inbox where it names none. */
 function namedThread(call: TargetedCall): ToolTarget {
   const key = stringAt(call.input, "key");
-  return key === undefined || key === "" ? INBOX_TARGET : { kind: TOOL_TARGET.INBOX, key };
+  if (key === undefined || key === "") return INBOX_TARGET;
+  const threads =
+    isRecord(call.output) && Array.isArray(call.output.inbox) ? call.output.inbox : [];
+  const item = stringAt(
+    threads.find((thread) => stringAt(thread, "key") === key),
+    "id",
+  );
+  return item === undefined
+    ? { kind: TOOL_TARGET.INBOX, key }
+    : { kind: TOOL_TARGET.INBOX, key, item };
 }
 
 /** The agent a call names in its input, as a read of or a message to one does. */
@@ -1363,6 +1376,51 @@ function refused(output: WireValue | undefined): boolean {
 export function toolTarget(call: TargetedCall): ToolTarget | undefined {
   if (call.output === undefined || refused(call.output)) return undefined;
   return TOOL_TARGETS.get(call.tool)?.(call);
+}
+
+/** Where a call's row stands, which the link of what the call made is read under: the workspace, the task, and the agent whose transcript it is. */
+export interface TargetPlace {
+  /** The workspace's slug; empty where the place names none. */
+  readonly workspace: string;
+  /** The task whose page draws the transcript, or the agent on no task whose own page does, which the plan and the pages stand on; none where the place holds neither. */
+  readonly holder: MentionHolder | undefined;
+  /** The agent whose transcript is drawn, whose threads a post names. */
+  readonly agentId: string | undefined;
+}
+
+/**
+ * The link of what a call made or is about, which its row's chip is drawn
+ * from as the window draws that link anywhere: a pull request by its
+ * address, another task by its plan, the task's own plan, a page on it or
+ * on the agent of no task, or the agent's thread by the id its answer named. Nothing for an agent,
+ * whose row names it by its own chip (`AgentCallChip`), for the whole
+ * Inbox, and where the place names no workspace or what the thing is on.
+ */
+export function targetLink(target: ToolTarget, place: TargetPlace): string | undefined {
+  if (target.kind === TOOL_TARGET.PULL_REQUEST) return target.url;
+  if (place.workspace === "") return undefined;
+  const linked = (at: LinkPlace) => linkOf(at, place.workspace);
+  switch (target.kind) {
+    case TOOL_TARGET.TASK:
+      return linked({ kind: LINK_PLACE.TASK, planId: target.task });
+    case TOOL_TARGET.PLAN: {
+      const taskId = holderTaskId(place.holder);
+      return taskId === undefined ? undefined : linked({ kind: LINK_PLACE.TASK, planId: taskId });
+    }
+    case TOOL_TARGET.PAGE: {
+      const holder = place.holder;
+      if (holder === undefined) return undefined;
+      return "taskId" in holder
+        ? linked({ kind: LINK_PLACE.PAGE, planId: holder.taskId, pageId: target.page })
+        : linked({ kind: LINK_PLACE.PAGE, agentId: holder.agentId, pageId: target.page });
+    }
+    case TOOL_TARGET.INBOX:
+      return target.item === undefined || place.agentId === undefined
+        ? undefined
+        : linked({ kind: LINK_PLACE.INBOX_ITEM, agentId: place.agentId, itemId: target.item });
+    case TOOL_TARGET.AGENT:
+      return undefined;
+  }
 }
 
 /** The tools whose call is about one coding agent, under every name one was made under, which a row names by the agent's chip. */

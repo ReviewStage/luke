@@ -20,7 +20,13 @@ import type { CatalogModel, ModelChoice, ModelProvider } from "@luke/features/mo
 import type { KnownNames } from "@luke/features/place-chip-model";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@luke/features/shown-failure";
 import type { TaskStatus } from "@luke/features/task-wire";
-import { CALL_KIND, CALL_WORDS, sameFieldsBy, sameShape } from "@luke/features/turn-rows";
+import {
+  CALL_KIND,
+  CALL_WORDS,
+  isMadeCallKind,
+  sameFieldsBy,
+  sameShape,
+} from "@luke/features/turn-rows";
 import { replyFromWords } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -198,6 +204,7 @@ import {
   TARGET_HINT,
   TOOL_TARGET,
   type ToolTarget,
+  targetLink,
   todoFocus,
   todosSummary,
   toolCallView,
@@ -214,6 +221,7 @@ import {
   TranscriptTodos,
   TranscriptTodosDock,
   TranscriptTool,
+  type TranscriptToolProps,
   TranscriptWords,
 } from "./transcript-blocks.js";
 import { drawnMessageWords, drawnRowsWords } from "./transcript-copy.js";
@@ -233,7 +241,6 @@ import { useAgentServers } from "./use-agent-servers.js";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript.js";
 import type { AgentsControl } from "./use-agents.js";
 import { useKnownNames, useTaskStatus } from "./use-known-names.js";
-import { useOpenLink } from "./use-open-link.js";
 import { type CutBody, useWholePart, useWholePartDoor, WholePartsProvider } from "./whole-parts.js";
 import { WorkedFor, WorkingLine } from "./working-time.js";
 
@@ -541,11 +548,14 @@ function ToolCallView({
   part,
   jobs,
   cards,
+  made,
   cut,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
   jobs?: WorkerJobs | undefined;
   cards?: TranscriptCards | undefined;
+  /** The chip of what the call made, which its row names it by (`MadeCallView`). */
+  made?: TranscriptToolProps["made"];
   cut?: CutBody | undefined;
 }): ReactNode {
   const view = toolCallView({ ...part, jobs });
@@ -569,6 +579,7 @@ function ToolCallView({
         description={view.description}
         agent={calledAgentActor(part, cards, known)}
         agentCard={agentCard}
+        made={made}
         input={view.input}
         output={view.output}
         errorText={part.errorText}
@@ -824,7 +835,10 @@ function OpeningCallView({
   );
 }
 
-/** A call about something a tab of its own draws, hanging that tab's card as the window draws it now (`LiveDoors`). */
+/** A call's target where it is an agent. */
+type AgentTarget = Extract<ToolTarget, { readonly kind: typeof TOOL_TARGET.AGENT }>;
+
+/** A call about an agent, whose tab of its own the row opens, hanging that tab's card as the window draws it now (`LiveDoors`). */
 function TargetCallView({
   part,
   target,
@@ -832,20 +846,65 @@ function TargetCallView({
   onOpen,
 }: {
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
-  target: ToolTarget;
+  target: AgentTarget;
   doors: DelegationDoors | undefined;
   onOpen: () => void;
 }): ReactNode {
   const cards = useLiveDoors(doors)?.cards;
-  const openLink = useOpenLink();
   return (
     <OpeningCallView
       part={part}
       hint={TARGET_HINT[target.kind]}
       card={cards?.target(target, toolCallView(part).subject)}
       cards={cards}
-      // Note that a pull request opens as a link to it does, in its Pull request tab where the place has one, so the row asks no window's `onOpenTarget`.
-      onOpen={target.kind === TOOL_TARGET.PULL_REQUEST ? () => openLink(target.url) : onOpen}
+      onOpen={onOpen}
+    />
+  );
+}
+
+/**
+ * What the chip of what a call made is labelled with until the window
+ * holds its name: the call's own title, a page's or a thread's or a task's;
+ * and the link bare for the plan and a pull request, which the chip then
+ * calls by the plan's name and the pull request's number.
+ */
+function madeLabel(target: ToolTarget, subject: string | undefined, href: string): string {
+  const bare = target.kind === TOOL_TARGET.PLAN || target.kind === TOOL_TARGET.PULL_REQUEST;
+  return bare || subject === undefined || subject === "" ? href : subject;
+}
+
+/**
+ * A call that made or is about a page, the plan, a thread, a task, or a
+ * pull request: a call's row that folds its input and answer open as any
+ * call's does, naming that thing after its verb by the chip and hover card
+ * the window draws for its link anywhere, whose press alone opens it. Note
+ * that a place that cannot link it, one naming no workspace, draws any
+ * call's row, because a row that looks like a fold must fold.
+ */
+function MadeCallView({
+  part,
+  target,
+  jobs,
+}: {
+  part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+  target: ToolTarget;
+  jobs: WorkerJobs | undefined;
+}): ReactNode {
+  const doors = useMentionDoors();
+  const agentId = useContext(TranscriptAgent);
+  const { kind, subject } = toolCallView(part);
+  const href = targetLink(target, {
+    workspace: doors.place.workspace,
+    holder: doors.holder,
+    agentId,
+  });
+  const chip =
+    href === undefined ? undefined : linkChip(href, madeLabel(target, subject, href), doors);
+  return (
+    <ToolCallView
+      part={part}
+      jobs={jobs}
+      made={chip === undefined || !isMadeCallKind(kind) ? undefined : { kind, chip }}
     />
   );
 }
@@ -930,6 +989,9 @@ function AgentPartView({
       if (delegates(part)) return <DelegationRow part={part} doors={delegation} />;
       // A call that failed keeps its row, because the row is where its error is read.
       const target = part.state === TOOL_STATE.OUTPUT_ERROR ? undefined : toolTarget(part);
+      if (target !== undefined && target.kind !== TOOL_TARGET.AGENT) {
+        return <MadeCallView part={part} target={target} jobs={delegation?.jobs} />;
+      }
       const openTarget = delegation?.onOpenTarget;
       if (target !== undefined && openTarget !== undefined) {
         return (

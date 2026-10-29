@@ -94,7 +94,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { focusRestOn, restOn } from "../testing/hint-rest.js";
+import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { bundleLanded } from "../testing/side-bundles.js";
@@ -799,86 +799,6 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
   assert.equal(
     panel.querySelector<HTMLIFrameElement>(".page-view iframe")?.getAttribute("src"),
     `luke-page://page/agent/${AGENT_ID}/${FUNNEL.id}/${FUNNEL.version}`,
-  );
-});
-
-test("the row of a page the agent showed opens it in the panel beside the agent's page", async () => {
-  transcript = {
-    messages: [
-      {
-        id: "answer",
-        role: MESSAGE_ROLE.ASSISTANT,
-        parts: [
-          {
-            type: "tool-show_page",
-            toolCallId: "call-1",
-            state: "output-available",
-            input: { title: FUNNEL.title, path: "funnel.html" },
-            output: { status: "accepted", page: { id: FUNNEL.id, version: 2 } },
-          },
-        ],
-      },
-    ],
-    cursor: "1:0",
-    status: AGENT_STATUS.COMPLETED,
-    title: null,
-  };
-  const chosen: unknown[] = [];
-  const tasks = tasksControl({});
-  const page = mount({
-    ...tasks,
-    sidePanel: { ...tasks.sidePanel, onChoose: (tab) => chosen.push(tab) },
-  });
-  await settle();
-
-  const row =
-    [...page.querySelectorAll<HTMLButtonElement>(".desktop-agent button")].find((each) =>
-      (each.textContent ?? "").includes(FUNNEL.title),
-    ) ?? assert.fail("the call's row names the page it showed");
-  act(() => row.click());
-
-  assert.deepEqual(chosen, [{ page: FUNNEL.id }]);
-});
-
-test("the row of a page an agent on a task showed hangs the page's card, read from the task the page stands on", async () => {
-  pages = [{ agent: { ...PAGE, planId: PAGE_TASK } }];
-  transcript = {
-    messages: [
-      {
-        id: "answer",
-        role: MESSAGE_ROLE.ASSISTANT,
-        parts: [
-          {
-            type: "tool-show_page",
-            toolCallId: "call-1",
-            state: "output-available",
-            input: { title: FUNNEL.title, path: "funnel.html" },
-            output: { status: "accepted", page: { id: FUNNEL.id, version: 2 } },
-          },
-        ],
-      },
-    ],
-    cursor: "1:0",
-    status: AGENT_STATUS.COMPLETED,
-    title: null,
-  };
-  const page = mount();
-  await settle();
-
-  const row =
-    [...page.querySelectorAll<HTMLButtonElement>(".desktop-agent button")].find((each) =>
-      (each.textContent ?? "").includes(FUNNEL.title),
-    ) ?? assert.fail("the call's row names the page it showed");
-  document.documentElement.dataset.keyboard = "true";
-  focusRestOn(row);
-  await settle();
-
-  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, FUNNEL.title);
-  assert.equal(
-    card?.querySelector(".luke-page-thumb-frame")?.getAttribute("src"),
-    pageFrameUrl({ taskId: PAGE_TASK, pageId: FUNNEL.id, version: 2 }),
-    "the preview is the task's page",
   );
 });
 
