@@ -16,7 +16,7 @@ import { agentTable } from "./agent.js";
  * holder was killed before it let go. The row names an agent, a holder's
  * random id, and an instant alone, and goes with its agent.
  */
-export const agentRunnerLeaseTable = pgTable("agent_runner_lease", {
+export const agentRunnerLeaseTable = pgTable("coding_agent_runner_lease", {
   agentId: uuid("agent_id")
     .primaryKey()
     .references(() => agentTable.id, { onDelete: "cascade" }),

@@ -173,7 +173,7 @@ const nativeSessionOf = (owner: string, agent: Agent) =>
 
 /** Whether the message's own transaction wrote or locked the row: its xmin or xmax is this transaction's id. */
 const heldHere = (
-  table: "agent" | "conversations",
+  table: "coding_agent" | "conversations",
   column: "conversation_id" | "id",
   id: string,
 ) =>
@@ -204,7 +204,7 @@ const serversOfConversation = (conversationId: string) =>
 const launchMeets = (conversationId: string) =>
   Effect.gen(function* () {
     const held = {
-      agent: yield* heldHere("agent", "conversation_id", conversationId),
+      agent: yield* heldHere("coding_agent", "conversation_id", conversationId),
       conversation: yield* heldHere("conversations", "id", conversationId),
     };
     const servers = yield* serversOfConversation(conversationId);

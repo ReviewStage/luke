@@ -4,7 +4,7 @@
  * Dean's Steward policy for the member's operator (`coder-host/operator.ts`):
  * unasked, it steers, stops, archives, and continues its member's own agents,
  * the ones its member started, by hand or through any of their agents, the
- * operator among them, which is whose the row is (`agent.user_id`),
+ * operator among them, which is whose the row is (`coding_agent.user_id`),
  * and continues one once: a second continuation of the same agent is
  * refused, since a continuation that failed too is the member's to weigh. A
  * teammate's agent it may read and message, and nothing more: its stop, its
