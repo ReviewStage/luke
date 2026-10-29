@@ -108,6 +108,7 @@ import {
   markdownStep,
   TRANSCRIPT_REMARK_STEPS,
 } from "@luke/ui/markdown";
+import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { UNREPORTED } from "@luke/ui/reported-failure";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
@@ -1281,7 +1282,8 @@ const UNNAMED_AGENT: Actor = {
  * input, its line's preview giving way while they are shown. The agent is
  * reached from its chip (`AgentCallChip`), whose press opens its tab and
  * whose hover hangs its card, so the row keeps one press, the fold, and
- * wears no toggle of its own at its end. Note that an agent the place knows
+ * wears no toggle of its own at its end. What it sent is drawn as the
+ * transcript's own quote, as a quote in an agent's words is. Note that an agent the place knows
  * by no name yet still gets its chip, named as its card names it, because
  * the chip is the row's one way to the agent.
  */
@@ -1315,17 +1317,19 @@ function SentCall({
         subjectIsCode={line.code}
         subjectInBody
       />
-      <ToolContent name="tool-sent-words">
+      <ToolContent name="tool-sent-words" bare>
         {sent.words === undefined ? null : (
-          <div className="px-list-inset py-row-inset">
+          <blockquote className={QUOTE_CLASS}>
             <TranscriptWords text={sent.words} />
-          </div>
+          </blockquote>
         )}
         {sent.note === undefined ? null : (
-          <div className="px-list-inset py-row-inset">
-            <div className="text-caption-inline text-muted-foreground">{SENT_WORDS.NOTE}</div>
+          <blockquote className={QUOTE_CLASS}>
+            <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {SENT_WORDS.NOTE}
+            </Text>
             <TranscriptWords text={sent.note} />
-          </div>
+          </blockquote>
         )}
       </ToolContent>
     </Tool>
