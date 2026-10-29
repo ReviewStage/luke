@@ -23,12 +23,12 @@ class UnexpectedFailure extends Data.TaggedError("UnexpectedFailure")<{
   override readonly [ErrorReporter.attributes] = this.details;
 }
 
-/** Reports one unexpected failure of the kind named, with what it holds as the report's attributes. */
+/** Reports one unexpected failure of the kind named, with what it holds as the report's attributes and the kind as its `failure`. */
 export function reportUnexpected(
   kind: string,
   attributes: ReportedAttributes,
 ): Effect.Effect<void> {
   return ErrorReporter.report(
-    Cause.fail(new UnexpectedFailure({ message: kind, details: attributes })),
+    Cause.fail(new UnexpectedFailure({ message: kind, details: { ...attributes, failure: kind } })),
   );
 }
