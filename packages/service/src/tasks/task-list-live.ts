@@ -126,9 +126,9 @@ function issuesStatement() {
  * its own presence read. Note too that the kind is answered as a coder for
  * every agent but an operator, a task's pilot among them, because a desktop
  * from before pilots decodes a kind it does not know as no list at all, and
- * only an operator is drawn apart from a coder; it goes with the minimum
- * supported desktop version, as `archivedAt` above does, once that version
- * reads an unknown kind as a coder (`agentKindSchema`).
+ * a pilot is said by a column of its own, which such a desktop ignores; it
+ * goes with the minimum supported desktop version, as `archivedAt` above
+ * does, once that version reads an unknown kind as a coder (`agentKindSchema`).
  */
 function agentsStatement(userId: string) {
   const latest = latestTurnOf(agentTable.conversationId, "latest_turn");
@@ -169,6 +169,7 @@ function agentsStatement(userId: string) {
           cancelRequested: isNotNull(latest.cancelRequestedAt),
           turnSessionEnded: sessionEndedOf(latest),
           quietTurn: quietTurnOf(agentTable.kind, agentTable.conversationId, latest),
+          pilot: sql<boolean>`${agentTable.kind} = ${AGENT_KIND.PILOT}`,
         },
         {
           archivedAt: agentTable.archivedAt,
