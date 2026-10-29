@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { GAP, LAYOUT_ELEMENT, Stack } from "../layout/layout.js";
 import { useLinkAddress } from "../menu/link-address.js";
@@ -31,7 +31,9 @@ import { Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
  * the subject lives or who made it; a row of a list under a rule (`LINE`)
  * names one of the things the subject holds. Either is a button where a
  * press opens what it names and text where nothing does, in the same place
- * either way, washed under the pointer as a menu row is. A list names every
+ * either way, washed under the pointer as a menu row is; text that hangs a
+ * card of its own is still a stop the keyboard rests on, so the card opens on
+ * focus as it does from a control (`HOVER_CARD_ROW_FOCUS`). A list names every
  * thing it holds, never a count of the rest: past a few rows' height it
  * scrolls within the card, fading at the edge where more stands
  * (`HoverCardScroll`), so whatever the subject holds can be reached.
@@ -84,7 +86,8 @@ const RULE = "luke-hover-card-rule m-0 h-px w-full flex-none border-0 bg-border"
 const ROW =
   "luke-hover-card-row group/row -mx-2 box-border flex h-menu-row w-[calc(100%+--spacing(4))] min-w-0 items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-2 py-0 text-left text-body leading-[inherit] text-foreground transition-colors duration-(--luke-duration-hover) ease-motion-exit data-[look=detail]:text-caption data-[look=detail]:leading-[inherit] data-[look=detail]:text-muted-foreground";
 const ROW_PRESS =
-  "[font-family:inherit] [font-style:inherit] [font-weight:inherit] cursor-press hover:bg-fill-strong focus-visible:bg-fill-strong focus-visible:outline-none";
+  "[font-family:inherit] [font-style:inherit] [font-weight:inherit] cursor-press hover:bg-fill-strong";
+const ROW_FOCUS = "focus-visible:bg-fill-strong focus-visible:outline-none";
 const ROW_GLYPH =
   "luke-hover-card-row-glyph inline-flex w-menu-glyph flex-none justify-center [&>:not(.luke-avatar,:has(.luke-avatar))]:size-menu-glyph group-data-[look=detail]/row:[&>img]:size-hover-card-glyph";
 const ROW_LABEL = "luke-hover-card-row-label min-w-0 flex-1 overflow-hidden whitespace-nowrap";
@@ -121,6 +124,25 @@ export const HOVER_CARD_ROW_LOOK = {
 } as const;
 
 export type HoverCardRowLook = (typeof HOVER_CARD_ROW_LOOK)[keyof typeof HOVER_CARD_ROW_LOOK];
+
+/**
+ * Whether a row that opens nothing takes the keyboard's focus: text Tab
+ * walks past, or a stop Tab rests on, washed as a pressed row is under the
+ * keyboard, so a card hung from it (`Tooltip`) opens on focus as it does
+ * from a control. A row with a press is a button and takes focus either way.
+ */
+export const HOVER_CARD_ROW_FOCUS = {
+  NONE: "none",
+  STOP: "stop",
+} as const;
+
+export type HoverCardRowFocus = (typeof HOVER_CARD_ROW_FOCUS)[keyof typeof HOVER_CARD_ROW_FOCUS];
+
+/** What a row hands on to a hint hung from it, its handlers and its description among them. */
+type HoverCardRowAnchor = Omit<
+  HTMLAttributes<HTMLElement>,
+  "className" | "style" | "children" | "role" | "tabIndex"
+>;
 
 /** A card's root: its parts in a column, one gap apart. */
 export function HoverCard({
@@ -274,16 +296,25 @@ export function HoverCardFigures({
   );
 }
 
-/** A row of a card: its glyph, its words on one line, and what stands at its end; a button where a press opens what it names. */
+/**
+ * A row of a card: its glyph, its words on one line, and what stands at its
+ * end; a button where a press opens what it names, and otherwise text, which
+ * `focus` makes a stop the keyboard rests on. What else it is handed, a hint's
+ * handlers and description, it hands on to the row.
+ */
 export function HoverCardRow({
   look = HOVER_CARD_ROW_LOOK.LINE,
+  focus = HOVER_CARD_ROW_FOCUS.NONE,
   glyph,
   label,
   end,
   onPress,
   linkHref,
+  ...anchor
 }: {
   look?: HoverCardRowLook;
+  /** Whether a row that opens nothing takes the keyboard's focus, so a card hung from it opens on focus. */
+  focus?: HoverCardRowFocus;
   glyph: ReactNode;
   label: ReactNode;
   /** What stands muted at the row's end: a size, a time, or a mark. */
@@ -292,7 +323,7 @@ export function HoverCardRow({
   onPress?: (() => void) | undefined;
   /** The address its press opens, where it opens one, which a right-click offers as a link's (`useLinkAddress`). */
   linkHref?: string | undefined;
-}): React.JSX.Element {
+} & HoverCardRowAnchor): React.JSX.Element {
   const linkAddress = useLinkAddress(linkHref);
   const row = (
     <>
@@ -303,14 +334,23 @@ export function HoverCardRow({
       {end === undefined ? null : <span className={ROW_END}>{end}</span>}
     </>
   );
+  if (onPress === undefined && focus === HOVER_CARD_ROW_FOCUS.STOP) {
+    return (
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: the row's words hang a card, which the keyboard opens only from a stop it rests on, as a tooltip's trigger takes focus.
+      <span {...anchor} className={`${ROW} ${ROW_FOCUS}`} data-look={look} tabIndex={0}>
+        {row}
+      </span>
+    );
+  }
   return onPress === undefined ? (
-    <span className={ROW} data-look={look}>
+    <span {...anchor} className={ROW} data-look={look}>
       {row}
     </span>
   ) : (
     <button
+      {...anchor}
       type="button"
-      className={`${ROW} ${ROW_PRESS}`}
+      className={`${ROW} ${ROW_PRESS} ${ROW_FOCUS}`}
       data-look={look}
       ref={linkAddress}
       onClick={pulseOnPress(onPress, PRESS_PULSE.QUIET)}

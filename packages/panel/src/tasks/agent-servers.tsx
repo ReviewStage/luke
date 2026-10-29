@@ -159,7 +159,7 @@ const SERVER_COUNT_CLASS =
   "agent-servers-count flex-none whitespace-nowrap text-caption-inline text-muted-foreground tabular-nums";
 
 /** What stands at a server's row's end: its switch, or Connect, as Settings › Integrations draws them. */
-export const SERVER_END_CLASS = "ml-auto flex flex-none items-center gap-tight-gap";
+const SERVER_END_CLASS = "ml-auto flex flex-none items-center gap-tight-gap";
 
 /**
  * A page's head in the popover's place: back, folded to its glyph, its mark
@@ -254,11 +254,11 @@ function problemHint(problem: string, said: string | undefined): OneLineHint {
 }
 
 /**
- * What a server's row says between its mark and its end, here and on the
- * card a mention of the server hangs (`server-card.tsx`): its name, how many
- * tools it offers, and where its sign-in or its server stands.
+ * What a server's row says between its mark and its end: its name, how
+ * many tools it offers, and where its sign-in or its server stands, as the
+ * card a mention of the server hangs says them too (`server-card.tsx`).
  */
-export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
+function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
   return (
     // Note that the words stand in a line of their own, because a list row's
     // title would otherwise clip the reason behind a long name.

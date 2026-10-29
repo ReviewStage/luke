@@ -270,11 +270,11 @@ beforeEach(() => {
         );
       }
       told.push(request);
-      if (request.kind === ACT_KIND.CODING_AGENTS_TRANSCRIPT) {
+      if (request.kind === ACT_KIND.AGENTS_TRANSCRIPT) {
         const pages = transcript === undefined ? [] : [transcript];
         // SAFETY: the window reads oRPC's stream as an async iterator alone, which a generator is.
         const value = streamOf(pages) as unknown as PortActResult<
-          typeof ACT_KIND.CODING_AGENTS_TRANSCRIPT
+          typeof ACT_KIND.AGENTS_TRANSCRIPT
         >;
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
@@ -295,7 +295,7 @@ beforeEach(() => {
         };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_ARCHIVE) {
+      if (request.kind === ACT_KIND.AGENTS_ARCHIVE) {
         archives.push(request.payload);
         // The agent answered is the one the page read, archived or brought back as asked.
         const shown = pages[0] !== undefined && "agent" in pages[0] ? pages[0].agent : PAGE;
@@ -308,29 +308,29 @@ beforeEach(() => {
           : { agent: answered };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_DELETE) {
+      if (request.kind === ACT_KIND.AGENTS_DELETE) {
         deletes.push(request.payload.agentId);
         const value =
           deleteRefused === undefined ? { deleted: true as const } : { failure: deleteRefused };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_RENAME) {
+      if (request.kind === ACT_KIND.AGENTS_RENAME) {
         const shown = pages[0] !== undefined && "agent" in pages[0] ? pages[0].agent : PAGE;
         const value = { agent: { ...shown, title: request.payload.title } };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_MESSAGES && transcript !== undefined) {
+      if (request.kind === ACT_KIND.AGENTS_MESSAGES && transcript !== undefined) {
         // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
         const value = transcript;
         transcript = { failure: AGENT_CALL_FAILURE.UNANSWERED };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION && earlier > 0) {
+      if (request.kind === ACT_KIND.AGENTS_OVERVIEW_CONVERSATION && earlier > 0) {
         const value = { pullRequest: { reviewers: [], conversation: [], earlier } };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (
-        request.kind === ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST &&
+        request.kind === ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST &&
         published?.pullRequest != null
       ) {
         // Note that the overview is read from what the agent published, as the service reads both from one pull request.
@@ -353,7 +353,7 @@ beforeEach(() => {
         };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST && published !== undefined) {
+      if (request.kind === ACT_KIND.AGENTS_PULL_REQUEST && published !== undefined) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: published });
       }
       // Note that main starts and ends a run of this Mac's without a word back.
@@ -373,13 +373,13 @@ beforeEach(() => {
         const value = held === undefined ? null : { number, author: "octo-dev", ...held };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_START) {
+      if (request.kind === ACT_KIND.AGENTS_START) {
         const value = {
           agent: { ...PAGE, id: STARTED_ID, status: AGENT_STATUS.STARTING },
         };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+      if (request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: workspace } });
       }
       // Only the task the agents here stand on holds a page; an agent's own pages hold none.
@@ -390,7 +390,7 @@ beforeEach(() => {
           value: { pages: onTask ? [FUNNEL] : [] },
         });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
+      if (request.kind === ACT_KIND.AGENTS_PAGE) {
         read.push(request.payload.agentId);
         const value = pages.length > 1 ? pages.shift() : pages[0];
         if (holdPage) {
@@ -521,7 +521,7 @@ test("Fork to new agent on the page's agent opens the page's draft in its place,
   pressInComposer(draft, "Enter");
   await settle();
 
-  const starts = told.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_START);
+  const starts = told.filter((each) => each.kind === ACT_KIND.AGENTS_START);
   assert.equal(starts.length, 1);
   const payload = starts[0]?.payload;
   assert.ok(payload !== undefined && !("taskId" in payload), "the Start names no task");
@@ -2076,7 +2076,7 @@ test("Rename on the page's ⋯ turns the title into its name's field, and the na
   await settle();
 
   assert.deepEqual(
-    told.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_RENAME).map((each) => each.payload),
+    told.filter((each) => each.kind === ACT_KIND.AGENTS_RENAME).map((each) => each.payload),
     [{ agentId: AGENT_ID, title: "Sweep the slow tests" }],
   );
   assert.equal(page.querySelector("h1")?.textContent, "Sweep the slow tests");

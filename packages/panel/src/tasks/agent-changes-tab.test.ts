@@ -1292,7 +1292,7 @@ function answerImages(refusing: Set<string> = new Set()): string[] {
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
-    [ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: ({ src }) => {
+    [ACT_KIND.AGENTS_GITHUB_IMAGE]: ({ src }) => {
       asked.push(src);
       if (refusing.has(src)) return Promise.reject(refusedOnPort("Unreachable."));
       return Promise.resolve({ contentType: "image/png", base64: btoa(src) });
@@ -1567,7 +1567,7 @@ function answerMarks(answer: () => PullRequestWriteAnswer): PullRequestActionReq
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
-    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
+    [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
       asked.push(request);
       return Promise.resolve(answer());
     },
@@ -1839,7 +1839,7 @@ function holdMarks(): Array<{
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
-    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
+    [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
       const answered = Promise.withResolvers<PullRequestWriteAnswer>();
       held.push({ request, answer: answered.resolve });
       return answered.promise;

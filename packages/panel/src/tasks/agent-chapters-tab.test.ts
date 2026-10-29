@@ -298,7 +298,7 @@ beforeEach(() => {
   marked = [];
   fakeAppPlatform(DESKTOP_LINKS);
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
+    [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
       marked.push(request);
       return Promise.resolve({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE });
     },

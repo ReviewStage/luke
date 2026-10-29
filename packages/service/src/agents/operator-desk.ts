@@ -60,8 +60,8 @@ import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "@
 import { Clock, DateTime, Effect, Schema } from "effect";
 import type { StoreFailure } from "../http/store-failure.js";
 import { type MemberOpenAsk, memberOpenAsks } from "../inbox/inbox-store.js";
-import { codingAgentFailureOf, codingAgentStatusOf, startedBlank } from "./coder-host/status.js";
-import { agentToolRejected, type CodingAgentCall, orStoreRefusal } from "./coding-agent-tools.js";
+import { type AgentCall, agentToolRejected, orStoreRefusal } from "./agent-tools.js";
+import { agentFailureOf, agentStatusOf, startedBlank } from "./coder-host/status.js";
 import { isOperator } from "./steward.js";
 import { workspaceStepOf, writtenMention } from "./written-mentions.js";
 
@@ -193,13 +193,13 @@ const memberAgentsOf = (operator: Agent) =>
     const now = yield* Clock.currentTimeMillis;
     return agents.map(({ agent, published }) => {
       const turn = turns.get(agent.conversationId);
-      const status = codingAgentStatusOf(turn, {
+      const status = agentStatusOf(turn, {
         createdAt: agent.createdAt,
         now,
         awaitingLineAt: awaiting.get(agent.conversationId),
         blank: startedBlank(agent),
       });
-      const failure = status === AGENT_STATUS.FAILED ? codingAgentFailureOf(turn) : undefined;
+      const failure = status === AGENT_STATUS.FAILED ? agentFailureOf(turn) : undefined;
       return { agent, published, status, failure };
     });
   });
@@ -362,7 +362,7 @@ function askWords(text: string | null): string | null {
  * nothing, since the tool takes none, so an extra field asks nothing.
  */
 export function runListOpenAsks(
-  call: CodingAgentCall,
+  call: AgentCall,
   _input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   const { caller } = call;

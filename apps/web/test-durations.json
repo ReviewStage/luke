@@ -27,7 +27,7 @@
   "tests/changelog-feed.test.ts": 113,
   "tests/changelog-hydration.test.ts": 925,
   "tests/changelog-releases.test.ts": 2593,
-  "tests/coding-agent-store.test.ts": 3561,
+  "tests/agent-store.test.ts": 3561,
   "tests/connect-github.test.ts": 3533,
   "tests/connect-tab.test.ts": 32,
   "tests/cookie-session.test.ts": 5553,

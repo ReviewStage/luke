@@ -6,6 +6,7 @@ import {
   DocumentIcon,
   FolderIcon,
   GAP,
+  HOVER_CARD_ROW_FOCUS,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardFigures,
@@ -18,6 +19,7 @@ import {
   HoverCardSkeleton,
   Inline,
   PinIcon,
+  Tooltip,
   TooltipCard,
   UserIcon,
 } from "@luke/ui";
@@ -31,11 +33,12 @@ import { CatalogSection } from "../section";
  * end; quieter rows under the name, one a press and one text; and a rule
  * before the rows it lists, every one, scrolling and fading past a few rather
  * than counting the rest, each row a button the pointer crosses onto the
- * card to press, and a long body that is no list scrolling the same way; and
- * a card's figures under a rule, each label at the card's edge and its count
- * at the other; and each card's skeleton beside it, its glyph or its mark in
- * the loaded card's slot, so its head stands still as what it says is read.
- * Each card shows once the pointer rests on
+ * card to press, rows that open nothing yet hang a card of their own, each a
+ * stop the keyboard rests on, and a long body that is no list scrolling the
+ * same way; and a card's figures under a rule, each label at the card's edge
+ * and its count at the other; and each card's skeleton beside it, its glyph or
+ * its mark in the loaded card's slot, so its head stands still as what it says
+ * is read. Each card shows once the pointer rests on
  * its control or the keyboard reaches it, and stands while the pointer is on
  * the control, on the card, or between them: the catalog's own stand-in for
  * the linger an app gives its cards.
@@ -50,6 +53,13 @@ const CATALOG_AGENTS = [
   "Self-hosting guide",
   "Migrate auth SDK",
   "Old onboarding copy",
+] as const;
+
+/** A server's tools, each hanging what it does from a row that opens nothing. */
+const CATALOG_TOOLS = [
+  { title: "List issues", summary: "List the team's issues." },
+  { title: "Read an issue", summary: "Read one issue." },
+  { title: "Comment", summary: "Comment on an issue." },
 ] as const;
 
 /** Whether the point `x`, `y` stands within the box spanning both rectangles, the gap between them included. */
@@ -284,6 +294,37 @@ function HoverCards(): React.JSX.Element {
                     { label: "Cache write", figure: "9,870" },
                   ]}
                 />
+              </HoverCard>
+            }
+          />
+          <Carded
+            label="Tools"
+            card={
+              <HoverCard>
+                <HoverCardHead glyph={<PinIcon />} name="Linear" sub="3 tools" />
+                <HoverCardRule />
+                {/* Note that each row opens nothing yet hangs a card, so it is a stop Tab rests on, washed as a pressed row is under the keyboard. */}
+                <HoverCardList label="Linear tools">
+                  {CATALOG_TOOLS.map(({ title, summary }) => (
+                    <li key={title}>
+                      <Tooltip
+                        label={title}
+                        card={
+                          <HoverCard>
+                            <HoverCardHead name={title} />
+                            <HoverCardNote>{summary}</HoverCardNote>
+                          </HoverCard>
+                        }
+                      >
+                        <HoverCardRow
+                          focus={HOVER_CARD_ROW_FOCUS.STOP}
+                          glyph={null}
+                          label={title}
+                        />
+                      </Tooltip>
+                    </li>
+                  ))}
+                </HoverCardList>
               </HoverCard>
             }
           />

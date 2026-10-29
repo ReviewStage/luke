@@ -221,7 +221,7 @@ test("a stream that opens only after its tab let it go is closed at once", async
   };
   // SAFETY: the follower calls this one procedure, and reads what it answers as an async iterator alone.
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_TRANSCRIPT]: () =>
+    [ACT_KIND.AGENTS_TRANSCRIPT]: () =>
       new Promise((resolve) => {
         open = resolve;
       }),
@@ -247,7 +247,7 @@ test("a page a read already out hands over after the tab let go of its stream is
   };
   // SAFETY: the follower calls this one procedure, and reads what it answers as an async iterator alone.
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_TRANSCRIPT]: () => Promise.resolve(stream),
+    [ACT_KIND.AGENTS_TRANSCRIPT]: () => Promise.resolve(stream),
   } as unknown as Parameters<typeof fakeActPort>[0]);
   const heard: AgentTranscriptPage[] = [];
 

@@ -232,7 +232,7 @@ export function useMentionAgentsReader(
   const read = useCallback<MentionAgentsReader>(
     (words) => {
       if (workspaceId === undefined) return Promise.resolve(NO_AGENTS);
-      return act(ACT_KIND.CODING_AGENTS_WORKSPACE_LIST, {
+      return act(ACT_KIND.AGENTS_WORKSPACE_LIST, {
         workspaceId,
         ...(words === undefined ? undefined : { words, includeArchived: true }),
       }).then((answer) => {

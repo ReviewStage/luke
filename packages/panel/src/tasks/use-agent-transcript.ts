@@ -27,7 +27,7 @@ import { type AgentRun, agentStillWriting } from "./coding-agent-model.js";
  * use-agent-transcript.ts -- one agent's transcript, or one of its workers', or a task's planning worker's, as its tab draws it, pushed to the window page by page while the tab is on screen.
  *
  * The tab holds its transcript's stream open on the act port while it is
- * shown (`codingAgents.transcript`) and closes it when it is not; the host
+ * shown (`agents.transcript`) and closes it when it is not; the host
  * follows the transcript and pushes every page down that stream, so nothing
  * here follows a cursor or keeps a loop. The first page is the
  * transcript's newest, which names where the page older than it is read
@@ -35,7 +35,7 @@ import { type AgentRun, agentStillWriting } from "./coding-agent-model.js";
  * messages held by id. A newest page that does not meet what is held, as
  * one pushed after the tab was away while more was written than a page
  * holds, takes its place. Older pages are read one at a time as the reader
- * asks for them (`loadOlder`, `codingAgents.transcriptOlder`), each put
+ * asks for them (`loadOlder`, `agents.transcriptOlder`), each put
  * before the messages held in a transition, which a page landing meanwhile
  * goes ahead of. Each page's status is
  * the agent's as the page was read, with why where its turn failed, which
@@ -69,13 +69,13 @@ export type TranscriptOlderReader = (
 
 /** The window's own older read, through the act door. */
 const windowTranscriptOlder: TranscriptOlderReader = (params) =>
-  askAct(ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER, params);
+  askAct(ACT_KIND.AGENTS_TRANSCRIPT_OLDER, params);
 
 /** The window's own follower: the transcript's stream, opened through the act door. */
 export const windowTranscriptFollower: TranscriptFollower = (transcript, hear) => {
   let stopped = false;
   let stream: AsyncIteratorObject<AgentTranscriptPage> | undefined;
-  const following = askAct(ACT_KIND.CODING_AGENTS_TRANSCRIPT, transcript).then(async (opened) => {
+  const following = askAct(ACT_KIND.AGENTS_TRANSCRIPT, transcript).then(async (opened) => {
     stream = opened;
     // A stream that opened only after the tab let it go is closed at once.
     if (stopped) {

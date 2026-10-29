@@ -1148,7 +1148,7 @@ const REFUSED_ON_PORT: readonly string[] = Object.values({
   ...TASKS_ACT_KIND,
   ...UPDATE_ACT_KIND,
   ...WINDOW_SURFACE_ACT_KIND,
-}).filter((kind) => kind !== AGENT_ACT_KIND.CODING_AGENTS_SHOWN);
+}).filter((kind) => kind !== AGENT_ACT_KIND.AGENTS_SHOWN);
 
 /**
  * The bridge as the window meets it, every act written down, and the chunks

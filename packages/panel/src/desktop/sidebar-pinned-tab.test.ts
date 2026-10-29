@@ -57,7 +57,7 @@ beforeEach(() => {
   refusing = 0;
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST) {
+      if (request.kind === ACT_KIND.AGENTS_PULL_REQUEST) {
         reads.push(request.payload.agentId);
         if (refusing > 0) {
           refusing -= 1;

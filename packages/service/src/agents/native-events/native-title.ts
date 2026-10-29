@@ -8,7 +8,7 @@ import { HostedEnvironment } from "../../environment.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import { ownKeyOf } from "../coder-host/account-keys.js";
 import { titleModel } from "../coder-host/model.js";
-import { titleCodingAgent } from "../coder-host/title.js";
+import { titleAgent } from "../coder-host/title.js";
 
 /**
  * native-title.ts -- a native agent's title, asked for as its runner's turns start and end, as eve's relay asks for an eve agent's.
@@ -34,7 +34,7 @@ export function titleNativeAgent(
     const preferred = providerModelOf(agent.model)?.provider ?? MODEL_PROVIDER.ANTHROPIC;
     yield* ownKeyOf(target.userId, preferred, environment.providerKeyEncryptionKeys).pipe(
       Effect.flatMap((own) =>
-        titleCodingAgent(own === undefined ? undefined : titleModel(own), target, agent),
+        titleAgent(own === undefined ? undefined : titleModel(own), target, agent),
       ),
       Effect.catch((failure) =>
         Effect.logWarning(`The agent's title was not written: ${failureKind(failure)}`),

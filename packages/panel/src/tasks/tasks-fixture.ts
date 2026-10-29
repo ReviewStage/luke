@@ -623,7 +623,7 @@ export function fixtureSidePanel(run: {
 function emptyTaskAnswer(
   kind: PortActKind,
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
-  if (kind === ACT_KIND.CODING_AGENTS_LIST) return { answer: { agents: [] } };
+  if (kind === ACT_KIND.AGENTS_LIST) return { answer: { agents: [] } };
   return undefined;
 }
 

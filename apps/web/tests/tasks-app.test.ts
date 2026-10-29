@@ -150,7 +150,7 @@ function deploymentFor(account: string): string {
  * eve as a task's delete reaches it: each retire written down with who asked
  * it, over the request's bearer or as the deployment acting for an account;
  * a task here has no coding agent, so its delete asks eve nothing else, and
- * `coding-agents-app.test.ts` deletes one that has.
+ * `agents-app.test.ts` deletes one that has.
  */
 function retiringEve() {
   const retired: (readonly [string, string])[] = [];

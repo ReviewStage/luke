@@ -9,12 +9,11 @@ import { HoverCard, HoverCardHead, HoverCardNote, Time, useMinute } from "@luke/
 import { GLYPH } from "@luke/ui/icons";
 import { type ReactNode, useMemo } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { InboxItemCard, inboxLineGlyph } from "./inbox-item-parts.js";
+import { InboxItemCard, inboxItemGlyph } from "./inbox-item-parts.js";
 import {
   agentHolder,
   type InboxListed,
   inboxAgentOf,
-  inboxLineKind,
   NEEDS_YOU,
   type TasklessInboxAgent,
   taskHolder,
@@ -160,8 +159,7 @@ export function useInboxItemTitle(place: InboxItemPlace): string | undefined {
  */
 export function InboxItemChipGlyph({ place }: { place: InboxItemPlace }): ReactNode {
   const listed = useLinkedItem(place);
-  const asked = listed === undefined ? null : inboxLineGlyph(inboxLineKind(listed.item));
-  return asked ?? <GLYPH.THREAD />;
+  return listed === undefined ? <GLYPH.THREAD /> : inboxItemGlyph(listed.item);
 }
 
 /** An item's card on its chip: the card its Inbox row hangs, whether it waits or not; while its inbox is read, or where that failed, the brief card of an item still waiting; else `fallback`. */

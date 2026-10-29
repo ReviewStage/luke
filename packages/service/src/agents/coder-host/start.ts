@@ -130,7 +130,7 @@ import {
   withinWindow,
 } from "./replay-summary.js";
 import { failedCallRefusal } from "./runtime-sessions.js";
-import { codingAgentSummary, summaryAccounts, summaryDevices } from "./status.js";
+import { agentSummary, summaryAccounts, summaryDevices } from "./status.js";
 import { agentLineSender } from "./steer.js";
 import { cancelledTurn, summaryOf } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -274,7 +274,7 @@ export interface StartReach {
 }
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
-export interface CodingAgentStart {
+export interface AgentStarted {
   readonly agent: Agent;
   readonly created: boolean;
   /** The transaction the agent's row was written in, where this Start wrote it. */
@@ -978,7 +978,7 @@ const machineOfStart = Effect.fnUntraced(function* (
 });
 
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
-export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
+export const startAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
   eve: Effect.Effect<
     AgentSessions<EveTypedTurn>,
     HostedRefusal,
@@ -986,7 +986,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   >,
   userId: string,
   ask: StartAsk,
-): Effect.fn.Return<CodingAgentStart, HostedRefusal | ModelChoiceRefused, StartServices> {
+): Effect.fn.Return<AgentStarted, HostedRefusal | ModelChoiceRefused, StartServices> {
   // Note that a fresh Start's retry is answered with the agent its key made before where it runs is
   // decided, because its task may run elsewhere since, or its device be away, and the agent stands.
   if (ask.from === undefined) {
@@ -1229,7 +1229,7 @@ export interface RequestedStart {
 
 /**
  * The account's agent started on the task, or in the workspace with no
- * task, as a request asks it, through `startCodingAgent`: the agent's own
+ * task, as a request asks it, through `startAgent`: the agent's own
  * Start (`POST /api/plans/{id}/agents`), a Start from an agent in its own
  * place (`POST /api/agents/{id}/agents`), and a task's start that names an
  * agent (`POST /api/plans`) all take it, so they refuse and answer alike.
@@ -1275,7 +1275,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<RequestedStart, HostedRefusal, StartServices> {
   const { note } = request;
   const choice = yield* requestedChoice(request);
-  const { agent, created, txid } = yield* startCodingAgent(eve, userId, {
+  const { agent, created, txid } = yield* startAgent(eve, userId, {
     ...whereOf(where),
     idempotencyKey: request.idempotencyKey,
     choice,
@@ -1302,7 +1302,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     ),
   );
   return {
-    agent: codingAgentSummary(
+    agent: agentSummary(
       agent,
       {
         turn: undefined,

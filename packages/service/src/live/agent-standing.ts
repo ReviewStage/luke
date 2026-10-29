@@ -12,7 +12,7 @@ import { TURN_FAILURE, TURN_STATUS } from "../core.js";
  *
  * Each is the same rule the held reads read an agent by
  * (`message-reads.ts`'s `findLatestTurns` and `awaitingLinesOfReached`, and
- * `coder-host/status.ts`'s `codingAgentFailureOf`), as a fragment a live
+ * `coder-host/status.ts`'s `agentFailureOf`), as a fragment a live
  * statement joins or selects beside the agent's own row. Nothing here reads
  * the clock: the status itself, which turns on it, is the reader's to read
  * (`@luke/features/agent-status`). The failure is named here, in
@@ -100,7 +100,7 @@ export function sessionEndedOf(latest: LatestTurn): SQL<boolean | null> {
 
 /**
  * Why the agent would read as failed, in the wire's word, as
- * `codingAgentFailureOf` names it: a session that never started where no
+ * `agentFailureOf` names it: a session that never started where no
  * turn stands, the sweep's word or the host's refusal a failed turn
  * carries, and none for a turn that did not fail. The reader says it only
  * where the status it reads is failed.

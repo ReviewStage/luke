@@ -606,12 +606,12 @@ const NO_AUTOMATIONS: AutomationListView = { automations: [] };
  * (`settings-fixture.ts`), and the page names the account by its tasks meanwhile.
  */
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
-  [ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: ({ id }) => {
+  [ACT_KIND.AGENTS_INBOX_FOLLOW]: ({ id }) => {
     const pushed: AgentInboxChanged["inbox"] = { items: INBOXES.get(id) ?? [] };
     return pushedOnce(pushed);
   },
   // The account's feed of every item, which the window's Inbox draws from, each staged task's items whole.
-  [ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
+  [ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
     const scopes = [...INBOXES].map(([id, items]) => ({
       scope: { kind: INBOX_SCOPE_KIND.PLAN, id },
       items,
@@ -619,15 +619,15 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     const pushed: AgentAccountItems = { whole: true, scopes };
     return pushedOnce(pushed);
   },
-  [ACT_KIND.CODING_AGENTS_LIST]: ({ taskId }) => {
+  [ACT_KIND.AGENTS_LIST]: ({ taskId }) => {
     const agent = AGENTS.get(taskId);
     return { agents: agent === undefined ? [] : [agent] };
   },
   [ACT_KIND.AUTOMATIONS_FOLLOW]: (follow) =>
     pushedOnce(follow.kind === AUTOMATION_FOLLOW.WORKSPACE ? NO_AUTOMATIONS : { runs: [] }),
   // Note that a mark is taken as the service takes one, the item's state echoed, though nothing here moves, so its dot stays as staged: the host draws a mark, and none stands behind a fixture run's act door.
-  [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => ({ id: itemId, unread }),
-  [ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]: () => ({
+  [ACT_KIND.AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => ({ id: itemId, unread }),
+  [ACT_KIND.AGENTS_INBOX_READ_ALL]: () => ({
     marked: [...INBOXES.values()].flat().filter(({ unread }) => unread === true).length,
   }),
 };

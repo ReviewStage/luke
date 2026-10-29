@@ -12,7 +12,7 @@
  * nothing changed since the reader's cursor, by the holds they always had
  * (`agents/coder-host/inbox-page.ts`), and answer as one JSON body when the
  * inbox moves or the hold ends. An item's attachment is bytes, not JSON, and
- * stays on the agents' group (`agents/coding-agents-app.ts`).
+ * stays on the agents' group (`agents/agents-app.ts`).
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
@@ -51,7 +51,7 @@ import {
   taskInboxPast,
 } from "../agents/coder-host/inbox-page.js";
 import { titleModel } from "../agents/coder-host/model.js";
-import { steerCodingAgent } from "../agents/coder-host/steer.js";
+import { steerAgent } from "../agents/coder-host/steer.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import { titleInboxThread } from "../agents/coder-host/title.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -213,7 +213,7 @@ const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
     const agent = yield* hostedStoreOrUnavailable(readAgent(userId, agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
     const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
-    yield* steerCodingAgent(eve, writer, userId, agent.value, {
+    yield* steerAgent(eve, writer, userId, agent.value, {
       text,
       attachments,
       clientKey,
@@ -424,7 +424,7 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
     const agent = yield* hostedStoreOrUnavailable(readAgent(userId, taken.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
     const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
-    yield* steerCodingAgent(eve, writer, userId, agent.value, {
+    yield* steerAgent(eve, writer, userId, agent.value, {
       text: inboxClosedMessage(taken),
       attachments: [],
       clientKey,
@@ -508,7 +508,7 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
     const agent = yield* hostedStoreOrUnavailable(readAgent(userId, item.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
     const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
-    yield* steerCodingAgent(eve, writer, userId, agent.value, {
+    yield* steerAgent(eve, writer, userId, agent.value, {
       text: inboxThreadMessage(item, text),
       attachments,
       clientKey,
@@ -572,7 +572,7 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
       : Effect.void;
   const handedOver = Effect.gen(function* () {
     const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
-    yield* steerCodingAgent(eve, writer, userId, agent.value, {
+    yield* steerAgent(eve, writer, userId, agent.value, {
       text: inboxThreadMessage(item, text),
       attachments,
       clientKey,

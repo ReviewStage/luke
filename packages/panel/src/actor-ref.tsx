@@ -17,18 +17,15 @@ import {
   type CommentAuthor,
   cn,
   FiringGlyph,
-  GAP,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
+  HoverCardList,
   HoverCardNote,
   HoverCardRow,
   HoverCardRule,
-  HoverCardScroll,
   INLINE_REF_LOOK,
   InlineRef,
-  LAYOUT_ELEMENT,
-  Stack,
   TEXT_BUTTON_LINES,
   TextButton,
   TIME_LOOK,
@@ -997,50 +994,55 @@ function CardedFace({
   );
 }
 
-/** What a row of the count's card says of an actor: their name, a bot's badge after it, then what their face would say, wrapping within the card. */
-function MoreFaceWords({ actor, face }: { actor: Actor; face: StackFace }): React.JSX.Element {
+/** An actor's name as a row of the count's card says it, a bot's badge after it held to its line. */
+function MoreFaceName({ actor }: { actor: Actor }): React.JSX.Element {
   return (
-    <span className="actor-more-words min-w-0 wrap-anywhere [&_.actor-bot]:inline [&_.actor-bot]:whitespace-nowrap">
+    <>
       {faceName(actor, {})}
-      {/* Note that a no-break space holds the badge to its name's line however the row wraps. */}
+      {/* Note that a no-break space holds the badge to its name's line. */}
       {githubBot(actor) ? "\u00a0" : null}
       <BotBadge actor={actor} />
-      {face.says === undefined ? null : ` · ${face.says}`}
-    </span>
+    </>
   );
 }
 
 /**
  * The count past a pile's last face, which hangs a card naming each actor
  * it counts by their mark and what their face would say, so nobody the pile
- * leaves out is left unnamed, and is read to a screen reader as that list.
+ * leaves out is left unnamed, each a row of the card's list: their face,
+ * their name, and what their face says at its end. A screen reader hears
+ * the count as that list.
  */
 function MoreFaces({
   actors,
   faces,
   more,
+  label,
   spacing,
 }: {
   actors: readonly Actor[];
   faces: readonly StackFace[];
   more: string;
+  /** What the pile is, which names the card's list: "Reviewers". */
+  label: string;
   /** How far it stands from the face before it (`pileSpacing`). */
   spacing: string;
 }): React.JSX.Element {
   const names = actors.map((actor, index) => faceName(actor, faces[index] ?? {}));
   const card = (
     <HoverCard data-actor-card="more">
-      <HoverCardScroll>
-        <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM} className="actor-more-list">
-          {actors.map((actor, index) => (
-            // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
-            <li key={index} className="actor-more-row flex items-center gap-control-gap">
-              <ActorMark actor={actor} size={ACTOR_SIZE.STACK} />
-              <MoreFaceWords actor={actor} face={faces[index] ?? {}} />
-            </li>
-          ))}
-        </Stack>
-      </HoverCardScroll>
+      <HoverCardList label={label}>
+        {actors.map((actor, index) => (
+          // Note that the rest stand in the pile's own order, so each is keyed by where it stands.
+          <li key={index} data-actor-more="">
+            <HoverCardRow
+              glyph={<ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />}
+              label={<MoreFaceName actor={actor} />}
+              end={faces[index]?.says}
+            />
+          </li>
+        ))}
+      </HoverCardList>
     </HoverCard>
   );
   return (
@@ -1051,6 +1053,9 @@ function MoreFaces({
     </Tooltip>
   );
 }
+
+/** What the count's card names its list where the pile names itself nothing. */
+const MORE_FACES_LABEL = "Everyone else";
 
 /**
  * How many more a pile holds, in a pill of a face's height on the tile,
@@ -1146,6 +1151,7 @@ export function ActorStack({
           actors={actors.slice(drawn)}
           faces={faces.slice(drawn)}
           more={`+${rest}`}
+          label={label ?? MORE_FACES_LABEL}
           spacing={pileSpacing(shown.length, apart)}
         />
       ) : null}

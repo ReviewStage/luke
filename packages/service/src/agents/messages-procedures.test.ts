@@ -9,7 +9,7 @@
  * message has, as invalid; a body past its cap is too large; and a path
  * the router serves under another method is refused as such. The held
  * reads themselves, answered when something moves and let go at the hold,
- * are `coding-agents-app.test.ts`'s, over a real dialect.
+ * are `agents-app.test.ts`'s, over a real dialect.
  */
 
 import assert from "node:assert/strict";

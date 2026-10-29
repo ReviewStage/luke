@@ -60,7 +60,7 @@ import { sentLineId } from "@luke/wire/host-ids";
 import { eq, inArray } from "drizzle-orm";
 import { Clock, Duration, Effect, Layer, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
-import { steerCodingAgent } from "../agents/coder-host/steer.js";
+import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   type AgentSessions,
@@ -717,7 +717,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           "wrun_other",
           new Date("2026-10-15T12:00:00Z"),
         );
-        yield* steerCodingAgent(
+        yield* steerAgent(
           yield* eve.eveFor(owner),
           storeWriter({ tools: CODER_TOOL_SET }),
           owner,

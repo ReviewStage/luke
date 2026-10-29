@@ -464,12 +464,12 @@ beforeEach(() => {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: world.members });
       }
       const done = (value: AgentListAnswer) => Promise.resolve({ status: FAKE_ANSWER.DONE, value });
-      if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
+      if (request.kind === ACT_KIND.AGENTS_LIST) {
         return world.agentListHeld
           ? Promise.withResolvers<never>().promise
           : done({ agents: world.listedAgents });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
+      if (request.kind === ACT_KIND.AGENTS_PAGE) {
         const agent = world.pageAgents.get(request.payload.agentId);
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,
@@ -539,7 +539,7 @@ beforeEach(() => {
           },
         });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_STATE) {
+      if (request.kind === ACT_KIND.AGENTS_INBOX_READ_STATE) {
         const { itemId, unread } = request.payload;
         world.readMarks.push(`${unread ? "unread" : "read"}:${itemId}`);
         // Note that the host draws a mark into every inbox it follows as it is asked, and takes it back where the service refused it.
@@ -551,12 +551,12 @@ beforeEach(() => {
             : { id: itemId, unread },
         });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_ALL) {
+      if (request.kind === ACT_KIND.AGENTS_INBOX_READ_ALL) {
         world.readMarks.push(`all:${request.payload.workspaceId ?? "every workspace"}`);
         marked(new Set(request.payload.itemIds), false);
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { marked: 2 } });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) {
+      if (request.kind === ACT_KIND.AGENTS_INBOX_ATTACHMENT) {
         const read = Promise.withResolvers<FakeActAnswer>();
         world.imageReads.push(() =>
           read.resolve({
@@ -604,11 +604,8 @@ const MAIN_WAITING: readonly AppInboxTask[] = [
 ];
 
 /** The account's feed of every item, as the host streams it: each task's items whole, then nothing more until the window lets it go. */
-const ACCOUNT_FEED: Pick<
-  FakeActPort,
-  typeof AGENT_INBOX_ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW
-> = {
-  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
+const ACCOUNT_FEED: Pick<FakeActPort, typeof AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW> = {
+  [AGENT_INBOX_ACT_KIND.AGENTS_ACCOUNT_ITEMS_FOLLOW]: () => {
     let sent = false;
     const closed = Promise.withResolvers<void>();
     const next = async (): Promise<IteratorResult<AgentAccountItems, undefined>> => {
@@ -909,7 +906,7 @@ export function takenCloses(): { itemId: string; revision: number }[] {
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_CLOSE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_CLOSE) return previous(request);
       sent.push({ itemId: request.payload.itemId, revision: request.payload.revision });
       const asked = [...world.inboxes.values()]
         .flat()
@@ -1261,7 +1258,7 @@ export function heldMessages(
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       sent.push(request.payload);
       const value = answer(request.payload);
       // Note that the host lands the item as the service answered it in every inbox it follows before the message answers.
@@ -1359,7 +1356,7 @@ export function gatedAnswers(): GatedAnswers {
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      if (request.kind !== ACT_KIND.AGENTS_INBOX_MESSAGE) return previous(request);
       sent.push(request.payload);
       const { itemId, clientKey: key, text, answers } = request.payload;
       const before = [...world.inboxes.values(), ...world.agentInboxes.values()]

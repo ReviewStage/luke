@@ -37,8 +37,8 @@ import type * as HttpClient from "effect/http/HttpClient";
 import { acceptedAgentChoice } from "../agents/coder-host/start.js";
 import {
   type AgentTurnStanding,
-  codingAgentFailureOf,
-  codingAgentStatusOf,
+  agentFailureOf,
+  agentStatusOf,
 } from "../agents/coder-host/status.js";
 import { standingsOf } from "../agents/coder-host/stop.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
@@ -117,13 +117,12 @@ function agentOf(
   standing: AgentTurnStanding,
   now: number,
 ): NonNullable<AutomationRunSummary["agent"]> {
-  const status = codingAgentStatusOf(standing.turn, {
+  const status = agentStatusOf(standing.turn, {
     createdAt,
     now,
     awaitingLineAt: standing.awaitingLineAt,
   });
-  const failureReason =
-    status === AGENT_STATUS.FAILED ? codingAgentFailureOf(standing.turn) : undefined;
+  const failureReason = status === AGENT_STATUS.FAILED ? agentFailureOf(standing.turn) : undefined;
   return {
     id,
     title,

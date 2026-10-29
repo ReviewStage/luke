@@ -51,9 +51,9 @@ import { failureKind } from "@luke/runtime/effect";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { type StartServices, startCodingAgent } from "../agents/coder-host/start.js";
-import { codingAgentStatusOf } from "../agents/coder-host/status.js";
-import { steerCodingAgent } from "../agents/coder-host/steer.js";
+import { type StartServices, startAgent } from "../agents/coder-host/start.js";
+import { agentStatusOf } from "../agents/coder-host/status.js";
+import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import type { AgentSessions, EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
 import { fenceable } from "../agents/fenced-text.js";
@@ -420,7 +420,7 @@ const steerClaimed = Effect.fnUntraced(function* (
   const eve = yield* Effect.result(eveFor(automation.userId));
   if (Result.isFailure(eve)) return yield* failedRun(run, reasonOfSteerRefusal(eve.failure));
   const sent = yield* Effect.result(
-    steerCodingAgent(
+    steerAgent(
       eve.success,
       storeWriter({ tools: CODER_TOOL_SET }),
       automation.userId,
@@ -475,7 +475,7 @@ const workingAgents = Effect.fnUntraced(function* (automation: Automation, now: 
   const awaiting = yield* awaitingLinesOfReached(conversations);
   return agents.filter((agent) =>
     WORKING.has(
-      codingAgentStatusOf(turns.get(agent.conversationId), {
+      agentStatusOf(turns.get(agent.conversationId), {
         createdAt: agent.createdAt,
         now,
         awaitingLineAt: awaiting.get(agent.conversationId),
@@ -628,7 +628,7 @@ const startClaimed = Effect.fnUntraced(function* (
   }
   const handed = automationStart(automation, run);
   const start = yield* Effect.result(
-    startCodingAgent(eveFor(automation.userId), automation.userId, {
+    startAgent(eveFor(automation.userId), automation.userId, {
       taskId: null,
       organizationId,
       repository,

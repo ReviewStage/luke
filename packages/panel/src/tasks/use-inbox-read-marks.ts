@@ -77,7 +77,7 @@ export function useInboxReadMarks({
   );
   const onMark = useCallback(
     (item: InboxItem, unread: boolean, saying?: MarkSaying): Promise<boolean> =>
-      act(ACT_KIND.CODING_AGENTS_INBOX_READ_STATE, { itemId: item.id, unread })
+      act(ACT_KIND.AGENTS_INBOX_READ_STATE, { itemId: item.id, unread })
         .catch(() => UNANSWERED)
         .then((answer) => {
           if (!("failure" in answer)) return true;
@@ -90,7 +90,7 @@ export function useInboxReadMarks({
     (items: readonly InboxItem[]) => {
       const itemIds = items.filter(isUnread).map((item) => item.id);
       if (itemIds.length === 0) return;
-      act(ACT_KIND.CODING_AGENTS_INBOX_READ_ALL, {
+      act(ACT_KIND.AGENTS_INBOX_READ_ALL, {
         ...(workspaceId === undefined ? undefined : { workspaceId }),
         itemIds,
       })
