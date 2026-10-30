@@ -18,7 +18,7 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { INBOX_COLUMNS, type InboxColumnsShown, useInboxRowPresses } from "./inbox-columns.js";
 import { InboxList } from "./inbox-list.js";
-import { INBOX_GROUPING, INBOX_HOLDER, type InboxListView } from "./inbox-model.js";
+import { INBOX_HOLDER, type InboxListView } from "./inbox-model.js";
 
 /**
  * inbox-list-menu.test.ts -- an Inbox item's row offers its menu the one way
@@ -77,7 +77,6 @@ function item(number: number): InboxItem {
 
 const VIEW: InboxListView = {
   readerId: undefined,
-  grouping: INBOX_GROUPING.NONE,
   items: [1, 2].map((number) => ({
     holder: { kind: INBOX_HOLDER.TASK, task: TASK },
     item: item(number),
