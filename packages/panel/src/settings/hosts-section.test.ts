@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { DEVICE_PLATFORM, DEVICE_SETUP } from "@luke/features/device-agent-wire";
+import { DEVICE_ARCH, DEVICE_PLATFORM, DEVICE_SETUP } from "@luke/features/device-agent-wire";
 import type { Host } from "@luke/features/host-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { THIS_MAC_HOST_STANDING, type ThisMacHostStanding } from "@luke/host/contract";
@@ -11,19 +11,21 @@ import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
-import { act, createElement } from "react";
+import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
+import { useOpenHostConnect } from "./host-connect-dialog.js";
 import { HostsSection } from "./hosts-section.js";
 
 /**
  * hosts-section.test.ts -- Settings › Hosts: Add hosts shows the public
- * install command and follows each host that joins while it stands, a host
- * that joins is listed, and This Mac stands first. Synthetic ids and
+ * install command and follows each host that joins while it stands, one
+ * approved from its link in the same window among them, a host that joins
+ * is listed, and This Mac stands first. Synthetic ids, codes, and
  * addresses.
  */
 
@@ -164,6 +166,55 @@ it.effect(
       assert.ok(failed.includes("Couldn't set up: Claude Code could not be installed"), failed);
     }),
 );
+
+/** What a pairing's link does as it lands in the window: opens its dialog for the code. */
+function OpenLink({ code }: { code: string }): null {
+  const open = useOpenHostConnect();
+  useEffect(() => open(code), [open, code]);
+  return null;
+}
+
+test("a code approved from its link in the same window lets Add hosts, open beneath it, name the host and move on", async () => {
+  const hosts: Host[] = [];
+  fakeActPort({
+    [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
+    [ACT_KIND.HOSTS_PRESENCE]: () => Promise.resolve({ devices: [] }),
+    [ACT_KIND.HOSTS_PAIRING_READ]: () =>
+      Promise.resolve({
+        name: "hel-02",
+        platform: DEVICE_PLATFORM.LINUX,
+        arch: DEVICE_ARCH.X64,
+        ip: "203.0.113.7",
+        expiresAt: 1_800_000_000_000,
+      }),
+    [ACT_KIND.HOSTS_PAIRING_APPROVE]: () => {
+      const id = "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31";
+      hosts.push({
+        id,
+        name: "hel-02",
+        seenAt: 0,
+        version: "0.1.0",
+        upgradeNeeded: false,
+        calledIn: false,
+      });
+      return Promise.resolve({ deviceId: id });
+    },
+  });
+  const registry = AtomRegistry.make();
+  drawHosts(registry);
+  await settle();
+  await press("Add hosts");
+
+  const link = document.createElement("div");
+  document.body.append(link);
+  const root = createRoot(link);
+  roots.push(root);
+  act(() => root.render(onRegistry(registry, createElement(OpenLink, { code: "BCDFGHJK" }))));
+  await settle();
+  await press("Connect");
+
+  assert.ok(dialogText().includes("hel-02") && dialogText().includes("Connecting…"), dialogText());
+});
 
 it.effect(
   "a server or a Mac that enrolls while Settings stays open is listed within a minute",
