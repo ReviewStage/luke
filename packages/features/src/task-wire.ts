@@ -385,6 +385,57 @@ export const taskBlockRequestSchema = EffectSchema.Struct({
 export type TaskBlockRequest = typeof taskBlockRequestSchema.Type;
 
 /**
+ * Setting the parent of the task the path names (POST), or clearing it with
+ * null: the parent, a task of the same workspace the caller reaches and
+ * working in the task's own repository
+ * (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), and neither the task nor one
+ * of its descendants (`HOSTED_API_ERROR.TASK_PARENT_CYCLE`). Where the
+ * task's agents run stays its own. A parent that stands so already changes
+ * nothing, and clearing always lands.
+ */
+export const taskParentRequestSchema = EffectSchema.Struct({
+  parentTaskId: EffectSchema.NullOr(wireUuidSchema),
+});
+
+export type TaskParentRequest = typeof taskParentRequestSchema.Type;
+
+/**
+ * How another task stands to the task a change names: one it waits on, one
+ * that waits on it, its sub-task (a child of it), or its parent. The first
+ * two are a block's sides (`TASK_BLOCK_RELATION`), spelled the same.
+ */
+export const TASK_RELATION_KIND = {
+  ...TASK_BLOCK_RELATION,
+  SUB_TASK: "sub-task",
+  PARENT: "parent",
+} as const;
+
+export type TaskRelationKind = (typeof TASK_RELATION_KIND)[keyof typeof TASK_RELATION_KIND];
+
+/** A relation's kind change names two kinds, since one moved to where it stands is no change. */
+function kindsDiffer(change: { readonly from: TaskRelationKind; readonly to: TaskRelationKind }) {
+  return change.from !== change.to;
+}
+
+/**
+ * One relation of the task the path names moved to another kind (POST): the
+ * other task, the kind it stood in, and the kind it moves to, in one
+ * transaction, so taking the old away and adding the new either both land
+ * or neither does. A block added keeps the blocks' rules
+ * (`HOSTED_API_ERROR.TASK_BLOCK_CYCLE`), and a parent set, the other's or the
+ * task's own, keeps the parent's (`taskParentRequestSchema`). A relation that
+ * did not stand in the kind it leaves is left alone, and the new one is
+ * added still.
+ */
+export const taskRelationChangeRequestSchema = EffectSchema.Struct({
+  taskId: wireUuidSchema,
+  from: EffectSchema.Literals(Object.values(TASK_RELATION_KIND)),
+  to: EffectSchema.Literals(Object.values(TASK_RELATION_KIND)),
+}).check(EffectSchema.makeFilter(kindsDiffer));
+
+export type TaskRelationChangeRequest = typeof taskRelationChangeRequestSchema.Type;
+
+/**
  * A repository the account pinned in the sidebar, and the instant it was
  * pinned: a pinned repository's group of tasks stands above the others,
  * newest pinned first. A pin is the account's, so it follows it to every
