@@ -270,16 +270,17 @@ export function useSkillPicker({
     if (!inWord) setClosedAt(undefined);
   }, [inWord]);
 
-  // The skills are read the first time a `/` word is typed and kept; a read
-  // that failed is asked again as the next `/` word opens the list.
+  // The skills are read as a `/` word opens the list, and again each time
+  // another `/` word opens it, the skills last read drawn meanwhile, so a
+  // skill added on GitHub is offered the next time the list opens.
   const start = open ? mention.start : undefined;
-  // Note that a failed read waits for a `/` word other than the one it was
-  // read for to open the list, or another opening of an `@` list, never for
-  // a list to close or the caret to move.
+  // Note that a read waits for a `/` word other than the one it was read
+  // for to open the list, or, while none is open, for another opening of an
+  // `@` list where it failed, never for a list to close or the caret to move.
   const settled =
     read !== undefined &&
     read.source === source &&
-    ("skills" in read.read || (start === undefined ? read.asked === asked : read.start === start));
+    (start !== undefined ? read.start === start : "skills" in read.read || read.asked === asked);
   useEffect(() => {
     if (source === undefined || (!open && !wantsSkills) || settled) return;
     let live = true;

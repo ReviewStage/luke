@@ -3023,37 +3023,46 @@ it.effect(
 );
 
 it.effect(
-  "a plan's skills are read once for the session, asked again from what was read, read again where the service did not answer, and read anew after a sign-out",
+  "a plan's skills are answered at once from what was read and read again behind the answer, so a skill added lands on the next ask; a read that does not answer keeps them, and a sign-out lets them go",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
-      const review: TaskSkillsAnswer = {
+      const skillsNamed = (...names: string[]): TaskSkillsAnswer => ({
         skills: {
           repository: "acme/relay",
           branch: "main",
-          skills: [
-            {
-              name: "review",
-              description: "",
-              source: TASK_SKILL_SOURCE.REPOSITORY,
-              path: ".agents/skills/review/SKILL.md",
-            },
-          ],
+          skills: names.map((name) => ({
+            name,
+            description: "",
+            source: TASK_SKILL_SOURCE.REPOSITORY,
+            path: `.agents/skills/${name}/SKILL.md`,
+          })),
         },
-      };
-      const { tasks, call } = yield* subject(service);
+      });
+      const { tasks, call, settled } = yield* subject(service);
       const asked = () => call(GATEWAY_METHOD.TASKS_SKILLS, { planId: INVITES });
-      const reads = () => service.reads.filter((read) => read.startsWith("skills:")).length;
 
       assert.deepEqual(yield* asked(), { failure: TASK_CALL_FAILURE.UNANSWERED });
-      service.skills[INVITES] = review;
-      assert.deepEqual(yield* asked(), review);
-      assert.deepEqual(yield* asked(), review);
-      assert.equal(reads(), 2, "the skills read once are answered again from what was read");
+      service.skills[INVITES] = skillsNamed("review");
+      assert.deepEqual(yield* asked(), skillsNamed("review"), "none held, the read is waited on");
+
+      // A skill added on GitHub: the next ask answers what is held, and the one after what was read behind it.
+      service.skills[INVITES] = skillsNamed("review", "release");
+      assert.deepEqual(yield* asked(), skillsNamed("review"));
+      yield* settled;
+      assert.deepEqual(yield* asked(), skillsNamed("review", "release"));
+
+      Reflect.deleteProperty(service.skills, INVITES);
+      yield* asked();
+      yield* settled;
+      assert.deepEqual(
+        yield* asked(),
+        skillsNamed("review", "release"),
+        "kept past a read unanswered",
+      );
 
       yield* tasks.reset;
-      assert.deepEqual(yield* asked(), review);
-      assert.equal(reads(), 3, "a sign-out lets what was read go");
+      assert.deepEqual(yield* asked(), { failure: TASK_CALL_FAILURE.UNANSWERED });
     }),
 );
 

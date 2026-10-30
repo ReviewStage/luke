@@ -130,10 +130,12 @@ import {
   Data,
   Duration,
   Effect,
+  Equal,
   Exit,
   Fiber,
   FiberHandle,
   FiberMap,
+  MutableHashMap,
   Option,
   Queue,
   Schedule,
@@ -264,9 +266,6 @@ function linkReadKept(exit: Exit.Exit<unknown>): Duration.Duration {
 /** A call on a task's Browser tabs behind a closed gate, or of a service that did not answer. */
 const BROWSER_TABS_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
-/** How many holders' skills a session keeps, the least asked lately let go first past it. */
-const SKILLS_KEPT = 256;
-
 /** A plan's skills, by its id and the repository the list names it on, so a plan moved to another repository is another key. */
 class PlanSkillsKey extends Data.Class<{
   readonly planId: string;
@@ -279,12 +278,8 @@ class RepositorySkillsKey extends Data.Class<{
   readonly repository: string | undefined;
 }> {}
 
-/** How long a holder's skills are kept: the session, where the service read them; no time where it refused or did not answer, so the next ask reads again. */
-function skillsKept(exit: Exit.Exit<TaskSkillsAnswer | undefined>): Duration.Duration {
-  return Exit.isSuccess(exit) && exit.value !== undefined && "skills" in exit.value
-    ? Duration.infinity
-    : Duration.zero;
-}
+/** Whose skills: a plan's, or a workspace's repository's no plan names. */
+type SkillsKey = PlanSkillsKey | RepositorySkillsKey;
 
 /** Whose pages: one task's, or one agent's on no task, by what they stand on and then its id. */
 class PageOwnerKey extends Data.Class<{
@@ -489,27 +484,47 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     { capacity: LINK_READ_KEPT.CAPACITY, timeToLive: linkReadKept },
   );
   /**
-   * Each plan's skills, and each repository's no plan names, read once for
-   * the session: a `/` in a box, a chip naming a skill, and a choice of the
-   * plan again in the Inbox ask these, never the service; a read already out
-   * is joined, never asked twice. A skill added on GitHub is offered once the
-   * session starts again.
+   * Each plan's skills, and each repository's no plan names, as the service
+   * last read them: answered at once each time they are asked, a `/` opening
+   * or a holder chosen, and read again behind the answer, so a skill added on
+   * GitHub is offered the next time they are asked. A read that is refused or
+   * not answered leaves what is held, and one answering what is held already
+   * leaves it as it stood.
    */
-  const planSkills = yield* Cache.makeWith(
-    (key: PlanSkillsKey) => served(client.readSkills(key.planId)),
-    { capacity: SKILLS_KEPT, timeToLive: skillsKept },
-  );
-  const repositorySkills = yield* Cache.makeWith(
-    (key: RepositorySkillsKey) =>
+  const heldSkills = MutableHashMap.empty<SkillsKey, TaskSkillsAnswer>();
+  /** Each holder's read of the service out now, one at a time, every ask meanwhile joining it. */
+  const skillsReads = yield* FiberMap.make<SkillsKey, TaskSkillsAnswer | undefined, never>();
+
+  /** Reads `key`'s skills of the service, holding what it read where it read skills that differ from those held. */
+  function readSkillsOf(key: SkillsKey) {
+    return Effect.map(
       served(
-        client.readRepositorySkills(
-          key.repository === undefined
-            ? { workspaceId: key.workspaceId }
-            : { workspaceId: key.workspaceId, repository: key.repository },
-        ),
+        key instanceof PlanSkillsKey
+          ? client.readSkills(key.planId)
+          : client.readRepositorySkills(
+              key.repository === undefined
+                ? { workspaceId: key.workspaceId }
+                : { workspaceId: key.workspaceId, repository: key.repository },
+            ),
       ),
-    { capacity: SKILLS_KEPT, timeToLive: skillsKept },
-  );
+      (answer) => {
+        const held = MutableHashMap.get(heldSkills, key);
+        if (answer === undefined || !("skills" in answer)) return answer;
+        if (Option.isSome(held) && Equal.equals(held.value, answer)) return held.value;
+        MutableHashMap.set(heldSkills, key, answer);
+        return answer;
+      },
+    );
+  }
+
+  /** The read of `key`'s skills out now, or one started, which every ask meanwhile joins. */
+  const skillsRead = (key: SkillsKey) =>
+    Effect.gen(function* () {
+      const out = yield* FiberMap.get(skillsReads, key);
+      return Option.isSome(out)
+        ? out.value
+        : yield* FiberMap.run(skillsReads, key, readSkillsOf(key));
+    });
   const issueReads = yield* Cache.makeWith(
     (key: LinkReadKey) =>
       served(
@@ -1746,9 +1761,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         return carried<TasksTreeAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
-    // The repository's skills are kept for every window for the session
-    // (`planSkills`, `repositorySkills`), a plan's under the repository the
-    // list names it on, so a plan moved to another repository reads that one's.
+    // The repository's skills are held for every window and read again behind
+    // each answer (`heldSkills`), a plan's under the repository the list
+    // names it on, so a plan moved to another repository reads that one's.
     [GATEWAY_METHOD.TASKS_SKILLS]: (params) =>
       Effect.gen(function* () {
         const asked = yield* readParams(
@@ -1759,22 +1774,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) {
           return carried<TasksSkillsAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const answer = yield* "planId" in asked
-          ? Cache.get(
-              planSkills,
-              new PlanSkillsKey({
+        const key: SkillsKey =
+          "planId" in asked
+            ? new PlanSkillsKey({
                 planId: asked.planId,
                 repository:
                   view.tasks.find((each) => each.id === asked.planId)?.repository ?? undefined,
-              }),
-            )
-          : Cache.get(
-              repositorySkills,
-              new RepositorySkillsKey({
+              })
+            : new RepositorySkillsKey({
                 workspaceId: asked.workspaceId,
                 repository: asked.repository,
-              }),
-            );
+              });
+        // Note that skills held are answered as they stood when asked, the read behind them landing for the next ask.
+        const held = MutableHashMap.get(heldSkills, key);
+        const read = yield* skillsRead(key);
+        const answer = Option.isSome(held) ? held.value : yield* Fiber.join(read);
         return carried<TasksSkillsAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
     // A pull request is answered to the link that asked, and kept for every
@@ -2879,8 +2893,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     reset: Effect.gen(function* () {
       yield* Cache.invalidateAll(pullRequestReads);
       yield* Cache.invalidateAll(issueReads);
-      yield* Cache.invalidateAll(planSkills);
-      yield* Cache.invalidateAll(repositorySkills);
+      yield* FiberMap.clear(skillsReads);
+      MutableHashMap.clear(heldSkills);
       yield* FiberHandle.clear(openedRead);
       // Note that the windows' holds on pages stand through a sign-out, so a session signing in follows them anew (`open`).
       yield* heldPageReads.end;
