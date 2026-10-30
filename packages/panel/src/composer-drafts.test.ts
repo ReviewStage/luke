@@ -856,7 +856,8 @@ async function columnOn(
   await settle();
   const pencil = `[role="img"][aria-label="${DRAFT_WORD}"]`;
   return {
-    rowDrafted: () => container.querySelector(`ul > li > button ${pencil}`) !== null,
+    // Note that the task's row is the one in the list drawn first, since the column's Inbox draws rows of its own that may wear a pencil.
+    rowDrafted: () => container.querySelector(`:scope > ul > li > button ${pencil}`) !== null,
     tabDrafted: (label: string) =>
       (
         [...container.querySelectorAll<HTMLElement>(".luke-tab")].find(
