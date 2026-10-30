@@ -292,6 +292,7 @@ const MESSAGE = {
   ask: qualified(inboxMessage, inboxMessage.ask),
   answers: qualified(inboxMessage, inboxMessage.answers),
   addresseeId: qualified(inboxMessage, inboxMessage.addresseeId),
+  clientKey: qualified(inboxMessage, inboxMessage.clientKey),
   createdAt: qualified(inboxMessage, inboxMessage.createdAt),
 };
 
@@ -320,11 +321,11 @@ const THREAD_MESSAGES = messagesAs(
  * Messages oldest first, each with its author, the member's name as their
  * account holds it now, its words, its files, the ask it ends with and the
  * answer it carries as they were kept, the member an agent's message was
- * addressed to and their name, and when it was written in epoch
- * milliseconds.
+ * addressed to and their name, the key a member's was sent under, and
+ * when it was written in epoch milliseconds.
  */
 function messagesOf(source: SQL): SQL<unknown> {
-  return sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('id', ${MESSAGE.id}, 'author', ${MESSAGE.author}, 'userId', ${MESSAGE.userId}, 'name', (select "name" from ${user} where ${user.id} = ${MESSAGE.userId}), 'text', ${MESSAGE.text}, 'files', ${MESSAGE_FILES}, 'ask', ${MESSAGE.ask}, 'answers', ${MESSAGE.answers}, 'addresseeId', ${MESSAGE.addresseeId}, 'addresseeName', (select "name" from ${user} where ${user.id} = ${MESSAGE.addresseeId}), 'createdAt', floor(extract(epoch from ${MESSAGE.createdAt}) * 1000)::bigint) order by ${MESSAGE.createdAt}, ${MESSAGE.id}), '[]'::jsonb) from ${source})`;
+  return sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('id', ${MESSAGE.id}, 'author', ${MESSAGE.author}, 'userId', ${MESSAGE.userId}, 'name', (select "name" from ${user} where ${user.id} = ${MESSAGE.userId}), 'text', ${MESSAGE.text}, 'files', ${MESSAGE_FILES}, 'ask', ${MESSAGE.ask}, 'answers', ${MESSAGE.answers}, 'addresseeId', ${MESSAGE.addresseeId}, 'addresseeName', (select "name" from ${user} where ${user.id} = ${MESSAGE.addresseeId}), 'clientKey', ${MESSAGE.clientKey}, 'createdAt', floor(extract(epoch from ${MESSAGE.createdAt}) * 1000)::bigint) order by ${MESSAGE.createdAt}, ${MESSAGE.id}), '[]'::jsonb) from ${source})`;
 }
 
 /** Whether the item is settled: answered, or closed by its agent. */
@@ -452,13 +453,18 @@ const MessageRowSchema = Schema.Struct({
   answers: Schema.NullOr(inboxAnswersSchema),
   addresseeId: Schema.NullOr(Schema.String),
   addresseeName: Schema.NullOr(Schema.String),
+  clientKey: Schema.NullOr(Schema.String),
   createdAt: Schema.Number,
 });
 
 type MessageRow = typeof MessageRowSchema.Type;
 
-/** A message as the wire carries it: the member named where their account stands, no files where it carried none, its ask as it stands on the item, and whom it was addressed to where their account stands. */
-function storedMessage(row: MessageRow, item: InboxAskStanding): InboxMessage {
+/** A message as the wire carries it: the member named where their account stands, no files where it carried none, its ask as it stands on the item, whom it was addressed to where their account stands, and the key it was sent under where `keysFor` names the member who sent it. */
+function storedMessage(
+  row: MessageRow,
+  item: InboxAskStanding,
+  keysFor: string | undefined,
+): InboxMessage {
   return {
     id: row.id,
     author: row.author,
@@ -472,6 +478,9 @@ function storedMessage(row: MessageRow, item: InboxAskStanding): InboxMessage {
     ...(row.addresseeId === null || row.addresseeName === null
       ? undefined
       : { addressedTo: { userId: row.addresseeId, name: row.addresseeName } }),
+    ...(keysFor === undefined || row.userId !== keysFor || row.clientKey === null
+      ? undefined
+      : { clientKey: row.clientKey }),
     createdAt: row.createdAt,
   };
 }
@@ -507,9 +516,14 @@ const InboxRowSchema = Schema.Struct({
 
 type InboxRow = typeof InboxRowSchema.Type;
 
-/** A row as the wire carries it, each absent field left out rather than null. */
-function storedItem(row: InboxRow): StoredInboxItem {
-  const message = (each: MessageRow) => storedMessage(each, row);
+/**
+ * A row as the wire carries it, each absent field left out rather than
+ * null. Note that a member's message carries the key it was sent under to
+ * that member alone, named by `keysFor` on a read answering their own
+ * write, so no other member, and no agent, is ever handed one.
+ */
+function storedItem(row: InboxRow, keysFor?: string): StoredInboxItem {
+  const message = (each: MessageRow) => storedMessage(each, row, keysFor);
   return {
     item: {
       id: row.id,
@@ -1680,6 +1694,8 @@ function itemsLiveStatements(
             text: MESSAGE.text,
             ask: MESSAGE.ask,
             answers: MESSAGE.answers,
+            // The key a member's message was sent under, to that member alone, as `storedItem` hands it.
+            clientKey: sql`case when ${MESSAGE.userId} = ${readerId} then ${MESSAGE.clientKey} end`,
           },
           { createdAt: MESSAGE.createdAt },
         ),
@@ -1783,16 +1799,17 @@ export function memberAgentInboxLiveStatements(
   return scopeLiveStatements({ userId, scope: INBOX_SCOPE.AGENT_OF_WORKSPACE, id: agentId });
 }
 
-/** The scope's items: every open one, then the latest settled ones up to the limit, the two read at once. */
+/** The scope's items: every open one, then the latest settled ones up to the limit, the two read at once, each of the member `keysFor` names carrying the key it was sent under (`storedItem`). */
 function scopeItems(
   scope: InboxScope,
   settledLimit: number,
+  keysFor?: string,
 ): InboxStoreEffect<readonly InboxItem[]> {
   return Effect.map(
     Effect.all([findOpenItems(scope), findSettledItems({ ...scope, limit: settledLimit })], {
       concurrency: 2,
     }),
-    ([open, settled]) => [...open, ...settled].map((row) => storedItem(row).item),
+    ([open, settled]) => [...open, ...settled].map((row) => storedItem(row, keysFor).item),
   );
 }
 
@@ -2059,11 +2076,15 @@ const acknowledgeNotice = SqlSchema.findOneOption({
 });
 
 /** The item as the reader named reads it, by its id alone, where the caller has just written it, so a missing row is a broken contract. */
-function itemAsWritten(readerId: string, itemId: string): InboxStoreEffect<InboxItem> {
+function itemAsWritten(
+  readerId: string,
+  itemId: string,
+  keysFor?: string,
+): InboxStoreEffect<InboxItem> {
   return findItemOf({ readerId, itemId }).pipe(
     Effect.flatMap(Effect.fromOption),
     Effect.catchTag("NoSuchElementError", Effect.die),
-    Effect.map((row) => storedItem(row).item),
+    Effect.map((row) => storedItem(row, keysFor).item),
   );
 }
 
@@ -2610,6 +2631,7 @@ export function closeInboxItem(
 export function agentInboxItems(
   agent: Pick<InboxAgent, "userId" | "agentId">,
 ): InboxStoreEffect<readonly InboxItem[]> {
+  // Note that the agent's own read names no member, so it is handed no member's key.
   return scopeItems(
     { userId: agent.userId, scope: INBOX_SCOPE.AGENT, id: agent.agentId },
     INBOX_BOUNDS.MAX_SETTLED_TOLD,
@@ -2626,7 +2648,11 @@ export function taskInboxItems(
   userId: string,
   taskId: string,
 ): InboxStoreEffect<readonly InboxItem[]> {
-  return scopeItems({ userId, scope: INBOX_SCOPE.TASK, id: taskId }, INBOX_BOUNDS.MAX_ITEMS_READ);
+  return scopeItems(
+    { userId, scope: INBOX_SCOPE.TASK, id: taskId },
+    INBOX_BOUNDS.MAX_ITEMS_READ,
+    userId,
+  );
 }
 
 /** One agent's items as any member of its workspace reads them, an agent with no task as much as one on a task: every open one, then the latest settled. */
@@ -2637,6 +2663,7 @@ export function memberAgentInboxItems(
   return scopeItems(
     { userId, scope: INBOX_SCOPE.AGENT_OF_WORKSPACE, id: agentId },
     INBOX_BOUNDS.MAX_ITEMS_READ,
+    userId,
   );
 }
 
@@ -3036,7 +3063,10 @@ export function readInboxItem(
   userId: string,
   itemId: string,
 ): InboxStoreEffect<Option.Option<StoredInboxItem>> {
-  return Effect.map(findItem({ userId, itemId }), Option.map(storedItem));
+  return Effect.map(
+    findItem({ userId, itemId }),
+    Option.map((row) => storedItem(row, userId)),
+  );
 }
 
 /**
@@ -3160,7 +3190,10 @@ export function withdrawInboxAnswer(
         }
         // The answer taken back is the member's own, so it leaves the item read for them as the answer did.
         yield* upsertRead({ userId, itemId });
-        return Option.map(yield* findItem({ userId, itemId }), (row) => storedItem(row).item);
+        return Option.map(
+          yield* findItem({ userId, itemId }),
+          (row) => storedItem(row, userId).item,
+        );
       }),
     ),
   );
@@ -3197,7 +3230,7 @@ export function closeInboxItemAsMember(
         yield* upsertRead({ userId, itemId });
         const { txid } = closed.value;
         return Option.map(yield* findItem({ userId, itemId }), (row) => ({
-          ...storedItem(row).item,
+          ...storedItem(row, userId).item,
           txid,
         }));
       }),
@@ -3297,7 +3330,10 @@ export function withdrawInboxClose(
           });
         }
         yield* upsertRead({ userId, itemId });
-        return Option.map(yield* findItem({ userId, itemId }), (row) => storedItem(row).item);
+        return Option.map(
+          yield* findItem({ userId, itemId }),
+          (row) => storedItem(row, userId).item,
+        );
       }),
     ),
   );
@@ -3411,7 +3447,7 @@ export function acknowledgeInboxItem(
         yield* upsertRead({ userId, itemId });
         const { txid } = nodded.value;
         return Option.map(yield* findItem({ userId, itemId }), (row) => ({
-          ...storedItem(row).item,
+          ...storedItem(row, userId).item,
           txid,
         }));
       }),
@@ -3477,7 +3513,7 @@ export function answerInboxAsk(
         if (Option.isNone(found)) return Option.none();
         const standing = (outcome: InboxAskAnswer, refusal?: string) =>
           Option.some({
-            item: storedItem(found.value).item,
+            item: storedItem(found.value, userId).item,
             outcome,
             ...(refusal === undefined ? undefined : { refusal }),
           });
@@ -3531,7 +3567,7 @@ export function answerInboxAsk(
           answers: sent.answers,
           now,
         });
-        const item = yield* itemAsWritten(userId, itemId);
+        const item = yield* itemAsWritten(userId, itemId, userId);
         return Option.some({
           item,
           outcome: INBOX_ASK_ANSWER.TAKEN,
@@ -3719,7 +3755,10 @@ function writeInboxMessage(
           ? INBOX_MESSAGE_OUTCOME.WRITTEN
           : yield* repeatOutcome(itemId, member, text, files);
         const found = yield* findItemOf({ readerId, itemId });
-        return Option.map(found, (row) => ({ item: storedItem(row).item, outcome }));
+        return Option.map(found, (row) => ({
+          item: storedItem(row, member?.userId).item,
+          outcome,
+        }));
       }),
     ),
   );
@@ -3959,7 +3998,7 @@ export function startInboxThread(
         }));
         const started = yield* findStartedThread({ userId, agentId: agent.agentId, clientKey });
         if (Option.isSome(started)) {
-          const item = yield* itemAsWritten(userId, started.value.id);
+          const item = yield* itemAsWritten(userId, started.value.id, userId);
           const first = yield* findKeyedMessage({ itemId: item.id, clientKey });
           // Note that other words or files under a key taken are refused, so the agent never hears what the thread does not show; the subject is not compared, since the agent may retitle the thread and the agent hears it as the thread stands.
           const same = Option.isSome(first) && sameMessage(first.value, { userId, text, files });
@@ -4004,7 +4043,7 @@ export function startInboxThread(
           }),
         );
         yield* upsertRead({ userId, itemId });
-        const item = yield* itemAsWritten(userId, itemId);
+        const item = yield* itemAsWritten(userId, itemId, userId);
         return Option.some({ item, outcome: INBOX_MESSAGE_OUTCOME.WRITTEN });
       }),
     ),
