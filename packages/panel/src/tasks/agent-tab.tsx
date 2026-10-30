@@ -120,6 +120,7 @@ import {
   agentRows,
   agentStillWriting,
   agentWorkingPhase,
+  agentWorkingSince,
   archivedByReading,
   CONTINUE_AGAIN_LABEL,
   CONTINUE_LABEL,
@@ -242,6 +243,7 @@ import {
   useLineMarked,
   useLineSending,
   useUndeliveredLines,
+  useUnsentLines,
 } from "./undelivered-mark.js";
 import { type HeldComposer, useAgentComposer } from "./use-agent-composer.js";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model.js";
@@ -2120,6 +2122,7 @@ function transcriptPlacing(
   messages: readonly AgentTranscriptMessage[],
   working: boolean,
   undelivered: ReadonlySet<string>,
+  unsent: ReadonlySet<string>,
   replayed: boolean,
   quietReplies: boolean,
 ) {
@@ -2133,7 +2136,11 @@ function transcriptPlacing(
   // An agent started from another opens on the brief as its source's did, then the replay's card, then the note.
   const opening = !replayed || first === undefined ? undefined : replayOpening(first);
   // A line that reached a turn while it ran is drawn inside that turn, where it arrived.
-  const placed = placedMessages(messages, quietReplies);
+  const placed = placedMessages(
+    messages,
+    quietReplies,
+    (id) => undelivered.has(id) || unsent.has(id),
+  );
   const open = openReply(messages, working);
   return { todos, first, opening, placed, open };
 }
@@ -2239,13 +2246,14 @@ function AgentTranscriptView({
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
   const undelivered = useUndeliveredLines();
+  const unsent = useUnsentLines();
   useTurnEndSaid(ended, pageRuns);
   // Whether a replay opens the transcript is all its placing reads; the place itself is handed anew on every draw.
   const replayed = replay !== undefined;
   // Read through once for the messages held, so a draw that brings no page reads none of them again.
   const placing = useMemo(
-    () => transcriptPlacing(messages, working, undelivered, replayed, quietReplies),
-    [messages, working, undelivered, replayed, quietReplies],
+    () => transcriptPlacing(messages, working, undelivered, unsent, replayed, quietReplies),
+    [messages, working, undelivered, unsent, replayed, quietReplies],
   );
   // Each line that reached a turn, with who sent it, kept from draw to draw while neither moved.
   const arrivals = useArrivals(placing.placed, readerId, members, former);
@@ -2504,6 +2512,7 @@ function AgentTabView({
   published,
   doors,
   startedAt,
+  counts,
   delegationStarts,
   onStop,
   onUnarchive,
@@ -2546,8 +2555,10 @@ function AgentTabView({
   /** What the agent published, once the service has said; nothing before. */
   published: AgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
-  /** When the agent's run began, as the working line counts from it; none while the tab is off screen, so nothing counts unseen. */
+  /** When the agent's run began, as its summary says, which the working line counts from where its lines say nothing. */
   startedAt: number | undefined;
+  /** Whether the working line counts: false while the tab is off screen, so nothing counts unseen. */
+  counts: boolean;
   /** When each of its running workers began, as their rows count from it; none while the tab is off screen. */
   delegationStarts: ReadonlyMap<string, number> | undefined;
   onStop: () => Promise<boolean>;
@@ -2763,9 +2774,13 @@ function AgentTabView({
                     pageRuns={pageRuns}
                     rewindOut={composer.rewindOut}
                     sessionStarting={agent.status === AGENT_STATUS.STARTING}
-                    // Note that while a rewind goes the line counts from its press, never from the run before it, which is the agent's start until a new turn begins.
+                    // Note that the line counts from the lines themselves, from the press of the line that opened the turn, and while a rewind goes from its press, never from the task list's run, which a line sent does not wake.
                     startedAt={
-                      composer.rewinding && startedAt !== undefined ? composer.rewoundAt : startedAt
+                      !counts
+                        ? undefined
+                        : composer.rewinding
+                          ? composer.rewoundAt
+                          : (agentWorkingSince(lines) ?? startedAt)
                     }
                     ended={
                       // Note that the end line waits for a page that has itself ended, so a stopped agent's tab never draws it over nothing, nor a failure's words before the page that carries its reason, and gives way to a line on its way, which the working line stands for.
@@ -2939,6 +2954,8 @@ export function StartingAgentTab({ line }: { line?: SentLine | undefined }): Rea
         failed={false}
         working
         sessionStarting
+        // Note that the line counts from the press, as the agent's own tab goes on counting once the start answers.
+        startedAt={line?.sentAt}
         onRetry={NO_RETRY}
         overComposer
       />
@@ -3164,7 +3181,8 @@ function AgentTabBody({
           copy: copyWithToast,
           openPullRequest: onOpenPullRequest,
         }}
-        startedAt={shown ? agent.runStartedAt : undefined}
+        startedAt={agent.runStartedAt}
+        counts={shown}
         delegationStarts={shown ? transcript.delegations : undefined}
         onStop={() => control.onStop(agent.id)}
         onUnarchive={control.onUnarchive}
