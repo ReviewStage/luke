@@ -1,7 +1,12 @@
-import { PULL_REQUEST_STATE, type PullRequestState } from "@luke/features/agent-wire";
+import { PULL_REQUEST_STATE } from "@luke/features/agent-wire";
 import { TASK_AGENTS_STATUS, taskAgentsStatus } from "@luke/features/task-agents-model";
 import type { TaskAgentsSummary } from "@luke/features/task-wire";
-import { PULL_REQUEST_GLYPH } from "../../marks/pull-request-glyph.js";
+import {
+  PULL_REQUEST_GLYPH,
+  PULL_REQUEST_MARK_QUEUED,
+  type PullRequestMarkState,
+  pullRequestMarkState,
+} from "../../marks/pull-request-glyph.js";
 import { FailedMark } from "../row-mark/row-mark.js";
 import { WorkingMark } from "../working-mark/working-mark.js";
 
@@ -11,7 +16,9 @@ import { WorkingMark } from "../working-mark/working-mark.js";
  * An agent that failed wears the failed mark every failure wears; an
  * agent at work, the working mark; and else the pull request they left, in GitHub's
  * glyph and colour for where it stands: open in the success green, a draft
- * in the muted ink, merged in the merged purple, closed in the danger red.
+ * in the muted ink, merged in the merged purple, closed in the danger red,
+ * and an open one in the merge queue the merge's glyph in the attention
+ * orange, as every other mark of a pull request draws it.
  * Which one stands is `taskAgentsStatus`'s answer, and a task with none of
  * them wears nothing. Every icon is named in a fixed phrase, so nothing a
  * task holds rides it, and is drawn in the one seat its `size` sets, so a
@@ -38,7 +45,8 @@ const PULL_REQUEST_WORDS = {
   [PULL_REQUEST_STATE.DRAFT]: "Pull request draft",
   [PULL_REQUEST_STATE.MERGED]: "Pull request merged",
   [PULL_REQUEST_STATE.CLOSED]: "Pull request closed",
-} as const satisfies Record<PullRequestState, string>;
+  [PULL_REQUEST_MARK_QUEUED]: "Pull request queued",
+} as const satisfies Record<PullRequestMarkState, string>;
 
 /** GitHub's colour for where a pull request stands. */
 const PULL_REQUEST_INK = {
@@ -46,7 +54,8 @@ const PULL_REQUEST_INK = {
   [PULL_REQUEST_STATE.DRAFT]: "text-muted-foreground",
   [PULL_REQUEST_STATE.MERGED]: "text-merged",
   [PULL_REQUEST_STATE.CLOSED]: "text-destructive",
-} as const satisfies Record<PullRequestState, string>;
+  [PULL_REQUEST_MARK_QUEUED]: "text-attention",
+} as const satisfies Record<PullRequestMarkState, string>;
 
 /** The icon at the end of a task's row for how its agents stand; nothing where none of them failed, works, or left a pull request. */
 export function TaskAgentsMark({
@@ -75,7 +84,7 @@ export function TaskAgentsMark({
         </span>
       );
     case TASK_AGENTS_STATUS.PULL_REQUEST: {
-      const { state } = status.pullRequest;
+      const state = pullRequestMarkState(status.pullRequest);
       const Glyph = PULL_REQUEST_GLYPH[state];
       return (
         <span
