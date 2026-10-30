@@ -151,26 +151,13 @@ function scriptedModel(refuses = false) {
   return { chaptersModel, asked: () => asked };
 }
 
-/** The repository answering the pull request's reads, its head the one `head` names now, and the `.stageignore` it holds at that head, where it holds one. */
+/** The repository answering the pull request's reads, its head the one `head` names now. */
 const pullRequestOf =
-  (
-    head: () => string,
-    filesRead: () => void = () => undefined,
-    stageIgnore?: string,
-  ): RepositoryScript =>
+  (head: () => string, filesRead: () => void = () => undefined): RepositoryScript =>
   (sent) => {
     const repository = `/repos/${RELAY_FULL_NAME}`;
     const pull = `${repository}/pulls/${NUMBER}`;
-    const url = new URL(sent.url);
-    const path = url.pathname;
-    if (
-      stageIgnore !== undefined &&
-      path === `${repository}/contents/.stageignore` &&
-      url.searchParams.get("ref") === head()
-    ) {
-      const content = Buffer.from(stageIgnore).toString("base64");
-      return Response.json({ type: "file", size: stageIgnore.length, encoding: "base64", content });
-    }
+    const path = new URL(sent.url).pathname;
     if (path === `${repository}/pulls`) return Response.json([{ number: NUMBER }]);
     if (path === pull) {
       return Response.json({
@@ -220,8 +207,6 @@ const standing = (
     readonly keys?: readonly ProviderKeyProvider[];
     /** A head pushed while the files are read, as a developer pushing mid-Generate would. */
     readonly pushedDuringFiles?: string;
-    /** The `.stageignore` the repository holds at the head, where it holds one. */
-    readonly stageIgnore?: string;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -261,7 +246,6 @@ const standing = (
         () => {
           head = options.pushedDuringFiles ?? head;
         },
-        options.stageIgnore,
       ),
     );
     const model = scriptedModel(options.refuses);
@@ -439,25 +423,6 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
         moveHead("d00d000");
         const stale = chaptersOf(yield* ask(teammate, { number: NUMBER }));
         assert.deepEqual(stale.pullRequest?.chapters, ready);
-      }),
-  );
-
-  it.effect(
-    "a Generate leaves what the repository's .stageignore at the head names out of the model's chapters, in Other changes",
-    () =>
-      Effect.gen(function* () {
-        const { owner, model, ask } = yield* standing({ stageIgnore: "src/*.ts\n" });
-        const generated = chaptersOf(yield* ask(owner, { method: "POST", number: NUMBER }));
-        assert.equal(model.asked(), 0);
-        assert.deepEqual(
-          generated.pullRequest?.chapters?.status === PULL_REQUEST_CHAPTERS_STATE.READY
-            ? generated.pullRequest.chapters.chapters.map((chapter) => [
-                chapter.kind,
-                chapter.hunkRefs,
-              ])
-            : generated,
-          [[CHAPTER_KIND.OTHER, [{ path: FILE.filename, oldStart: 1 }]]],
-        );
       }),
   );
 

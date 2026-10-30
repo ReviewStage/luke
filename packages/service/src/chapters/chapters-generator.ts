@@ -45,8 +45,7 @@ import {
  * chapters-generator.ts -- a pull request's changed files and words told as chapters, in one structured model call on the presser's own API key, held to the diff in code.
  *
  * The changed files are split into the hunks a model is shown and those it
- * never sees: the files a reader reads past (`ignoredForChapters`, the
- * defaults and the repository's own `.stageignore`) and every
+ * never sees: the files a reader reads past (`ignoredForChapters`) and every
  * file with no hunk to read, a pure rename, a binary file, or one whose
  * patch was left out. The shown hunks and the pull request's words are told
  * against an input cap first (`CHAPTERS_BOUNDS.MAX_INPUT_TOKENS`, estimated
@@ -123,13 +122,12 @@ export interface ChaptersModel {
   readonly model: LanguageModel;
 }
 
-/** What a generation reads: the pull request's changed files, its title and body, its commit messages where the caller has them, and the repository's `.stageignore` where it has one. */
+/** What a generation reads: the pull request's changed files, its title and body, and its commit messages where the caller has them. */
 export interface ChaptersInput {
   readonly files: readonly AgentChangedFile[];
   readonly title: string;
   readonly body: string | null;
   readonly commitMessages?: readonly string[];
-  readonly stageIgnore?: string | null;
 }
 
 /** The chapters told, in reading order with "Other changes" last where it holds anything, and the model that told them. */
@@ -399,10 +397,9 @@ function statusesOf(files: readonly AgentChangedFile[]): (path: string) => strin
   return (path) => byPath.get(path) ?? "modified";
 }
 
-/** Whether a hunk is one a model never sees: a file a reader reads past, as the defaults and the repository's `.stageignore` name them, or a file with no hunk to read. */
-function unseenOf(stageIgnore: string | null): (each: ChapterHunk) => boolean {
-  const ignored = ignoredForChapters(stageIgnore);
-  return (each) => each.hunk === null || ignored(each.ref.path);
+/** Whether a hunk is one a model never sees: a file a reader reads past, or a file with no hunk to read. */
+function unseen(each: ChapterHunk): boolean {
+  return each.hunk === null || ignoredForChapters(each.ref.path);
 }
 
 /**
@@ -441,7 +438,6 @@ export function generateChapters(
   input: ChaptersInput,
 ): Effect.Effect<GeneratedChapters, ChaptersFailure> {
   const all = chapterHunks(input.files);
-  const unseen = unseenOf(input.stageIgnore ?? null);
   const shown = all.filter((each) => !unseen(each));
   const statusOf = statusesOf(input.files);
   const prompt = chaptersPrompt({

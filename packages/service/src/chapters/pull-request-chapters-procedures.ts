@@ -20,8 +20,7 @@
  * changed read of the same tab is about: the one the agent published, from
  * the instance's kept answers, or the one of its repository the `number`
  * query names (`askedPullRequest`). It reads the pull request's files,
- * title, description, and commit messages, and the repository's
- * `.stageignore` at its head, claims the
+ * title, description, and commit messages, claims the
  * generation for its head, and tells the chapters in one model call on
  * the API key the member who pressed it saved, never Luke's
  * (`chapters-generator.ts`), on the Claude model they chose in Settings
@@ -59,7 +58,7 @@ import {
 } from "@luke/database/pull-request-chapters-vocabulary";
 import { CHAPTERS_MODEL_DEFAULT, type ChaptersModelId } from "@luke/features/chapters-model-choice";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { chapterSchema, STAGE_IGNORE_PATH } from "@luke/features/pull-request-chapters";
+import { chapterSchema } from "@luke/features/pull-request-chapters";
 import {
   PULL_REQUEST_CHAPTERS_STATE,
   type PullRequestChaptersAnswer,
@@ -94,7 +93,6 @@ import {
   pullRequestCommitMessages,
   pullRequestFiles,
 } from "../github/pull-requests.js";
-import { readRepositoryFile } from "../github/repository-file.js";
 import { agentWorkspace } from "../github/workspace-repository.js";
 import {
   HOSTED_REFUSAL,
@@ -311,7 +309,7 @@ const generated = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly title: string;
     readonly body: string | null;
     readonly truncated: boolean;
-  } & Pick<Parameters<typeof generateChapters>[1], "files" | "commitMessages" | "stageIgnore">,
+  } & Pick<Parameters<typeof generateChapters>[1], "files" | "commitMessages">,
 ) {
   const started = yield* Clock.currentTimeMillis;
   const settle = (outcome: PullRequestChaptersEffect<boolean>, counted: GenerationCounts) =>
@@ -362,27 +360,7 @@ const generated = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
-/**
- * The repository's `.stageignore` at the pull request's head, as stage-cli
- * reads it from the working tree, so a pull request may add patterns of its
- * own; none where the head holds no such file. Note that the file only
- * narrows what the model is shown, so a read of it that fails tells the
- * chapters on the defaults alone.
- */
-const stageIgnoreOf = (subject: ChaptersSubject) =>
-  readRepositoryFile(
-    subject.token,
-    { fullName: subject.agent.repository },
-    subject.pullRequest.headSha,
-    STAGE_IGNORE_PATH,
-  ).pipe(
-    Effect.map((file) =>
-      file.regular && file.content !== undefined ? new TextDecoder().decode(file.content) : null,
-    ),
-    Effect.orElseSucceed(() => null),
-  );
-
-/** The pull request's files, words, commit messages, and the repository's `.stageignore`, as a generation reads them. */
+/** The pull request's files, words, and commit messages, as a generation reads them. */
 const generationInput = (subject: ChaptersSubject) => {
   const { token, agent, pullRequest } = subject;
   return githubReadRefusal(
@@ -394,18 +372,16 @@ const generationInput = (subject: ChaptersSubject) => {
           pullRequestCommitMessages(token, agent.repository, pullRequest.number),
           (): readonly string[] => [],
         ),
-        stageIgnoreOf(subject),
       ],
       { concurrency: "unbounded" },
     ),
   ).pipe(
-    Effect.map(([files, commitMessages, stageIgnore]) => ({
+    Effect.map(([files, commitMessages]) => ({
       files: files.files,
       truncated: files.truncated,
       title: pullRequest.title,
       body: pullRequest.body ?? null,
       commitMessages,
-      stageIgnore,
     })),
   );
 };

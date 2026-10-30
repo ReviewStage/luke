@@ -1,4 +1,0 @@
-# .stageignore -- files a pull request's chapters leave out of the model's story and list under "Other changes", as .gitignore patterns over the defaults.
-
-# Drizzle's generated schema snapshot beside each migration.
-packages/database/migrations/*/snapshot.json
