@@ -45,8 +45,9 @@ import { useTaskInboxShow } from "./folded-groups.js";
  * side-inbox-tab.tsx -- the Inbox tab of a page's side panel: a task's, gathering its agents' items, or an agent's own page's, its one agent's.
  *
  * Both read through `use-task-inbox.ts`, a task's by its plan's scope and
- * an agent's by its own (`INBOX_SCOPE_KIND.AGENT`), and draw the window's
- * Inbox's list and pane over what they read.
+ * an agent's by its own (`INBOX_SCOPE_KIND.AGENT`), drawing the account's
+ * feed's items in their first frame and the holder's own read as it lands,
+ * and draw the window's Inbox's list and pane over what they read.
  */
 
 /** A panel's own Inbox lists one holder's items in one run, so nothing in it folds. */
@@ -236,11 +237,11 @@ export function SideInboxTab({
             >
               {listed.length === 0 ? INBOX_NOT_READ : REFRESH_FAILED_WORDS}
             </ErrorState>
-          ) : inbox.read && searched !== undefined && listed.length === 0 ? (
+          ) : inbox.drawn && searched !== undefined && listed.length === 0 ? (
             <SearchEmpty searched={searched} />
-          ) : inbox.read && filteredOut ? (
+          ) : inbox.drawn && filteredOut ? (
             <ShowEmpty show={show} counts={counts} onList={columns.onList} />
-          ) : inbox.read && listed.length === 0 && columns.shown !== INBOX_COLUMNS.BOTH ? (
+          ) : inbox.drawn && listed.length === 0 && columns.shown !== INBOX_COLUMNS.BOTH ? (
             // Note that the list standing alone says what the hidden pane would, as the pane says it.
             <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
           ) : null
@@ -254,7 +255,7 @@ export function SideInboxTab({
           {/* The empty pane keeps a bar the list's head's height, as the window's Inbox does. */}
           <Toolbar />
           {/* Note that the list says what its tab or its search left out, so the pane beside it stands bare. */}
-          {inbox.read && !filteredOut && searched === undefined ? (
+          {inbox.drawn && !filteredOut && searched === undefined ? (
             <InboxPaneEmpty listed={listed.length} />
           ) : null}
         </section>

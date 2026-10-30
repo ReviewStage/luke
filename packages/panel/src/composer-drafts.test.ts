@@ -13,6 +13,7 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import type { Task } from "@luke/features/task-wire";
+import type { AppHostRead, AppInboxItems } from "@luke/host/app-state";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { Clock, Context, Effect } from "effect";
@@ -48,6 +49,7 @@ import { NO_LOOKS } from "./tasks/use-task-looks.js";
 import type { TasksControl } from "./tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
+import { handInboxItems } from "./testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -57,7 +59,6 @@ import {
 } from "./testing/composer.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { sidebarProps } from "./testing/desktop-sidebar.js";
-import { followedInboxes } from "./testing/followed-inboxes.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "./testing/tasks-control.js";
 
@@ -774,6 +775,11 @@ test("words left in New task's card mark its sidebar row with the Draft pencil w
 /** The key the Teammate invitations task's draft agent starts under. */
 const DRAFT_KEY = "draft-invites";
 
+/** The account's feed holding each plan's items as given, which the window's inboxes draw first. */
+function feedOf(plans: Record<string, readonly InboxItem[]>): AppHostRead<AppInboxItems> {
+  return { rows: { [INBOX_SCOPE_KIND.PLAN]: plans, [INBOX_SCOPE_KIND.AGENT]: {} } };
+}
+
 /** The side panel shown on `tab`, its Plan and Inbox standing. */
 function inboxPanel(tab: SidePanelTab): TasksControl["sidePanel"] {
   const tabs = [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX];
@@ -794,6 +800,7 @@ async function columnOn(
   side: SidePanelTab | undefined = undefined,
   opening = "",
 ) {
+  handInboxItems(feedOf({ [INVITES.plan.id]: [approval(1)] }));
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     tasks: [INVITES.plan],
@@ -809,11 +816,7 @@ async function columnOn(
     },
     ...(side === undefined ? undefined : { sidePanel: inboxPanel(side) }),
     agents: {
-      ...agentsControl({
-        agents: [agent],
-        agentIds: [agent.id],
-        inboxFollower: followedInboxes(() => ({ items: [approval(1)] })).follower,
-      }),
+      ...agentsControl({ agents: [agent], agentIds: [agent.id] }),
       draft: {
         id: DRAFT_KEY,
         prompt: opening,
@@ -985,7 +988,7 @@ function approval(revision: number): InboxItem {
  */
 async function inboxOn(item: InboxItem) {
   answerMotion();
-  const main = followedInboxes(() => ({ items: [item] }));
+  handInboxItems(feedOf({ [INVITES.plan.id]: [item] }));
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -995,11 +998,7 @@ async function inboxOn(item: InboxItem) {
     activeTaskId: INVITES.plan.id,
     region: { kind: DOCUMENT_REGION.READY, task: INVITES.plan },
     sidePanel: inboxPanel(SIDE_PANEL_TAB.INBOX),
-    agents: agentsControl({
-      agents: [INVITES.agent],
-      agentIds: [INVITES.agent.id],
-      inboxFollower: main.follower,
-    }),
+    agents: agentsControl({ agents: [INVITES.agent], agentIds: [INVITES.agent.id] }),
   });
   await act(async () =>
     root.render(
@@ -1080,7 +1079,9 @@ function tasklessItem(agentId: string, id: string, revision: number): InboxItem 
 async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
   // Another window opening takes the focus from those before it.
   leaveWindow();
-  const main = followedInboxes(() => ({ items }));
+  handInboxItems({
+    rows: { [INBOX_SCOPE_KIND.PLAN]: {}, [INBOX_SCOPE_KIND.AGENT]: { [agentId]: items } },
+  });
   let control: TaskInboxControl | undefined;
   function Probe(): null {
     useDraftsOwner(undefined);
@@ -1092,7 +1093,6 @@ async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
       readerId: undefined,
       agents: {
         heldIds: [agentId],
-        inboxFollower: main.follower,
         answerInbox: () => new Promise(() => undefined),
         messageInbox: () => new Promise(() => undefined),
         readInboxImage: () => new Promise(() => undefined),

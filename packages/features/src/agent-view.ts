@@ -49,7 +49,6 @@ import {
   inboxAnsweredSchema,
   inboxAnswerSchema,
   inboxCloseRequestSchema,
-  inboxItemSchema,
   inboxMessagedSchema,
   inboxMessageRequestSchema,
   inboxReadAllRequestSchema,
@@ -654,17 +653,6 @@ export const agentInboxScopeSchema = EffectSchema.Struct({
 });
 
 export type AgentInboxScope = typeof agentInboxScopeSchema.Type;
-
-/** A followed inbox as it now stands, as the window hears it pushed: its items whole, or why there are none. */
-export const agentInboxChangedSchema = EffectSchema.Struct({
-  scope: agentInboxScopeSchema,
-  inbox: EffectSchema.Union([
-    EffectSchema.Struct({ items: EffectSchema.Array(inboxItemSchema) }),
-    failed,
-  ]),
-});
-
-export type AgentInboxChanged = typeof agentInboxChangedSchema.Type;
 
 /** The task's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
 const agentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);

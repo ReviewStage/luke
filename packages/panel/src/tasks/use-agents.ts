@@ -84,7 +84,6 @@ import {
   type TranscriptReader,
   windowTranscriptFollower,
 } from "./use-agent-transcript.js";
-import { type InboxFollower, windowInboxFollower } from "./use-followed-inboxes.js";
 import type {
   InboxAnswerer,
   InboxImageReader,
@@ -414,8 +413,6 @@ export interface AgentsControl {
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a repository. */
   readSkills: SkillSource | undefined;
-  /** How a task's or an agent's inbox is followed, and heard pushed, as the Inbox tab draws it. */
-  inboxFollower: InboxFollower;
   /** One answer to an inbox item, as a card sends it. */
   answerInbox: InboxAnswerer;
   /** One message on an inbox item's thread, as its box sends it. */
@@ -1515,8 +1512,6 @@ export function useAgents(input: {
     [act],
   );
 
-  const inboxFollower = windowInboxFollower;
-
   const answerInbox = useCallback<InboxAnswerer>(
     (params) => act(ACT_KIND.AGENTS_INBOX_ANSWER, params),
     [act],
@@ -1636,7 +1631,6 @@ export function useAgents(input: {
     readPullRequestViewed,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,
-    inboxFollower,
     answerInbox,
     messageInbox,
     startInboxThread,

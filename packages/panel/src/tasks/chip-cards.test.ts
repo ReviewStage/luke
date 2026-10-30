@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import { AGENT_STATUS } from "@luke/features/agent-wire";
 import {
   AUTOMATION_ACTION,
@@ -21,6 +21,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
+import { LIVE_READ } from "@luke/features/live-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
@@ -32,7 +33,7 @@ import {
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import type { AppHostRead, AppInboxItems, AppStateSnapshot } from "@luke/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
@@ -44,7 +45,6 @@ import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.j
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { followedInboxes } from "../testing/followed-inboxes.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { ChipCards, type TaskFocus } from "./chip-cards.js";
@@ -333,21 +333,8 @@ const SWEPT: InboxItem = {
   title: "Quarantine the flaky test?",
 };
 
-/** Whether the host refuses the inbox streams, as it does while the service cannot be reached. */
-let inboxRefused = false;
-
 /** Whether the read of the workspace's open channels is refused, as a service that cannot answer it does. */
 let openChannelsRefused = false;
-
-/** The host's side of the inbox streams: the plan's items and the agent on no task's, each followed as a chip's glyph or card reads them. */
-const inboxes = followedInboxes((scope) => {
-  if (inboxRefused) return { failure: AGENT_CALL_FAILURE.UNANSWERED };
-  if (scope.kind === INBOX_SCOPE_KIND.PLAN && scope.id === TASK_ID) {
-    return { items: [WAITING, ANSWERED] };
-  }
-  if (scope.kind === INBOX_SCOPE_KIND.AGENT && scope.id === SWEEP_AGENT) return { items: [SWEPT] };
-  return undefined;
-});
 
 /** Every act the panel told the main process, in order. */
 const told: AnyAct[] = [];
@@ -369,7 +356,6 @@ afterEach(() => {
   told.length = 0;
   automationReads.length = 0;
   agentPageReads.length = 0;
-  inboxRefused = false;
   openChannelsRefused = false;
   vi.useRealTimers();
 });
@@ -404,18 +390,23 @@ const PAGE: TaskMentionsValue = {
   },
 };
 
-/** The words drawn as a transcript draws them on a plan's page, the plan's own unless another is given, in a window holding `STATE`. */
+/** The words drawn as a transcript draws them on a plan's page, the plan's own unless another is given, in a window holding `STATE`, whose feed holds the plan's items and the agent on no task's, which a chip's glyph and card read, unless another is given. */
 async function drawn(
   text: string,
   page: TaskMentionsValue = PAGE,
   state: AppStateSnapshot = STATE,
+  feed: AppHostRead<AppInboxItems> = {
+    rows: {
+      [INBOX_SCOPE_KIND.PLAN]: { [TASK_ID]: [WAITING, ANSWERED] },
+      [INBOX_SCOPE_KIND.AGENT]: { [SWEEP_AGENT]: [SWEPT] },
+    },
+  },
 ): Promise<HTMLElement> {
   fakeAppBridge({
     onAppState: () => () => undefined,
-    requestAppState: () => Promise.resolve(state),
+    requestAppState: () => Promise.resolve({ ...state, [LIVE_READ.INBOX_ITEMS]: feed }),
   });
   fakeActPort({
-    ...inboxes.procedures,
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: ({ workspaceId }) =>
       Promise.resolve(workspaceId === BETA.id ? BETA_MEMBERS : MEMBERS),
     [ACT_KIND.CHANNELS_LIST]: () =>
@@ -744,13 +735,15 @@ test("an Inbox item's labelled chip is called by the item's title, whether it wa
   );
 });
 
-test("an Inbox item's chip whose inbox could not be read keeps the card main's brief makes of a waiting item, and the chip's own for an item it does not hold", async () => {
-  inboxRefused = true;
+test("an Inbox item's chip whose feed could not be read keeps the card main's brief makes of a waiting item, and the chip's own for an item it does not hold", async () => {
   const container = await drawn(
     [
       `[waiting](${HOME}/plan/${TASK_ID}/inbox/${ITEM_ID})`,
       `[answered](${HOME}/plan/${TASK_ID}/inbox/${ANSWERED_ITEM})`,
     ].join(" "),
+    PAGE,
+    STATE,
+    { failed: true },
   );
   const [waiting, answered] = chipsOf(container);
 

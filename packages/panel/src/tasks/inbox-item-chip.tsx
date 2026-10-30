@@ -1,6 +1,9 @@
 import { INBOX_SCOPE_KIND } from "@luke/features/agent-view";
 import type { TasklessAgent } from "@luke/features/agent-wire";
+import type { InboxItem } from "@luke/features/inbox-wire";
+import { LIVE_READ } from "@luke/features/live-wire";
 import type {
+  AppInboxItems,
   AppInboxSlice,
   AppInboxTasklessItem,
   AppInboxWaitingItem,
@@ -9,6 +12,7 @@ import { HoverCard, HoverCardHead, HoverCardNote, Time, useMinute } from "@luke/
 import { GLYPH } from "@luke/ui/icons";
 import { type ReactNode, useMemo } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { useHostRead } from "../use-host-read.js";
 import { InboxItemCard, inboxItemGlyph } from "./inbox-item-parts.js";
 import {
   agentHolder,
@@ -19,23 +23,22 @@ import {
   taskHolder,
   waitsOnReader,
 } from "./inbox-model.js";
-import { useAgentTaskRead, useMentionedPlace } from "./mentioned-agent-card.js";
-import { useFollowedInboxes, windowInboxFollower } from "./use-followed-inboxes.js";
+import { useMentionedPlace } from "./mentioned-agent-card.js";
 
 /**
  * inbox-item-chip.tsx -- a chip of an Inbox item: what it asks as its glyph and its Inbox row's own card, whatever the item's standing.
  *
  * A link to an item names the task, or the agent with no task, that holds it
- * and the item. Main's document holds only what waits, in brief, so the one
- * inbox the link names is followed while its chip stands (`use-followed-inboxes.ts`),
- * and the item is drawn as the Inbox draws it: the glyph its row's second
- * line leads with for what it asks (`inboxLineGlyph`), never its agent's
- * tile, which would draw it as a chip of the agent, and the card its row
- * hangs (`InboxItemCard`), waiting or answered. Until the inbox is read, or
- * where the window holds nothing of the task or agent, the chip draws the
- * thread's glyph, and the card main's brief makes of an item still
- * waiting, else its own card. An inbox whose follow failed is followed
- * again each time the card is hung.
+ * and the item. Main's document holds only what waits, in brief, so the
+ * item is drawn from the account's feed of every item (`use-host-read.ts`),
+ * which the host holds for the session, as the Inbox draws it: the glyph
+ * its row's second line leads with for what it asks (`inboxLineGlyph`),
+ * never its agent's tile, which would draw it as a chip of the agent, and
+ * the card its row hangs (`InboxItemCard`), waiting or answered. Until the
+ * feed is read, where it holds nothing of the item, as of one settled past
+ * its bound, or where the window holds neither the task nor the agent, the
+ * chip draws the thread's glyph, and the card main's brief makes of an item
+ * still waiting, else its own card.
  */
 
 /** Where a link to an item says it stands: under a task, or under an agent with no task. */
@@ -60,30 +63,53 @@ function waitingTaskOf(inbox: AppInboxSlice | undefined, itemId: string): string
   return inbox?.waiting.find((task) => task.items.some((each) => each.id === itemId))?.taskId;
 }
 
+/** The item a link names as the feed holds it, and the plan the feed holds it under where the link named its agent alone; none where the feed holds no such item. */
+function fedItemOf(
+  fed: AppInboxItems | undefined,
+  place: InboxItemPlace,
+): { readonly item: InboxItem; readonly planId: string | undefined } | undefined {
+  if (fed === undefined) return undefined;
+  const byId = (item: InboxItem) => item.id === place.itemId;
+  if ("planId" in place) {
+    const item = fed[INBOX_SCOPE_KIND.PLAN][place.planId]?.find(byId);
+    return item === undefined ? undefined : { item, planId: place.planId };
+  }
+  const own = fed[INBOX_SCOPE_KIND.AGENT][place.agentId]?.find(byId);
+  if (own !== undefined) return { item: own, planId: undefined };
+  // Note that an agent on a plan posts under the plan, so its item is looked for among every plan's.
+  for (const [planId, items] of Object.entries(fed[INBOX_SCOPE_KIND.PLAN])) {
+    const item = items.find((each) => each.agentId === place.agentId && byId(each));
+    if (item !== undefined) return { item, planId };
+  }
+  return undefined;
+}
+
 /**
  * The item a link names as the Inbox lists it, its holder named as its
- * group's header is; none until its inbox is read, where that read failed,
- * or where the window holds neither its task nor its agent. Note that a
- * link under its agent leaves its task to be found: by main's brief while
- * it waits, else by the window's agents with no task, else by reading the
- * agent, once its inbox holds it.
+ * group's header is; none until the feed is read, where it holds no such
+ * item, or where the window holds neither its task nor its agent. Note that
+ * a link under its agent leaves its task to be found: by the plan the feed
+ * holds the item under, else by main's brief while it waits, else by the
+ * window's agents with no task.
  */
 function useLinkedItem(place: InboxItemPlace): InboxListed | undefined {
   const planId = "planId" in place ? place.planId : undefined;
   const agentId = "agentId" in place ? place.agentId : undefined;
-  const followed = planId ?? agentId;
-  const read = useFollowedInboxes(
-    planId === undefined ? INBOX_SCOPE_KIND.AGENT : INBOX_SCOPE_KIND.PLAN,
-    followed === undefined ? [] : [followed],
-    windowInboxFollower,
-  );
-  const { items } = read;
+  const { itemId } = place;
+  const fed = useHostRead(LIVE_READ.INBOX_ITEMS).rows;
   const tasks = useAppSlice(APP_SLICE.TASKS);
   const inbox = useAppSlice(APP_SLICE.INBOX);
-  const held = followed === undefined ? undefined : items.get(followed);
-  const item = held?.find((each) => each.id === place.itemId);
+  const found = useMemo(
+    () =>
+      fedItemOf(
+        fed,
+        planId === undefined ? { agentId: agentId ?? "", itemId } : { planId, itemId },
+      ),
+    [fed, planId, agentId, itemId],
+  );
+  const item = found?.item;
   const linkedTask =
-    planId ?? (agentId === undefined ? undefined : waitingTaskOf(inbox, place.itemId));
+    planId ?? found?.planId ?? (agentId === undefined ? undefined : waitingTaskOf(inbox, itemId));
   const taskless = useMemo(
     () =>
       agentId === undefined || linkedTask !== undefined
@@ -91,9 +117,7 @@ function useLinkedItem(place: InboxItemPlace): InboxListed | undefined {
         : tasklessAgentOf(agentId, inbox?.taskless ?? [], tasks?.tasklessAgents ?? []),
     [agentId, linkedTask, inbox, tasks],
   );
-  const unplaced = item !== undefined && linkedTask === undefined && taskless === undefined;
-  const readTask = useAgentTaskRead(unplaced ? agentId : undefined);
-  const taskId = linkedTask ?? readTask ?? undefined;
+  const taskId = linkedTask;
   return useMemo(() => {
     if (item === undefined) return undefined;
     if (taskId !== undefined) {

@@ -726,6 +726,8 @@ export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
 export const LIVE_READ = {
   /** Every inbox item the account reaches. */
   INBOX_ITEMS: "inboxItems",
+  /** One plan's inbox, or one agent's, by its holder: the service's `taskInbox` or `agentInbox` query, by the holder's kind, held for the windows that chose it and a few they chose lately. */
+  HOLDER_INBOX: "holderInbox",
 } as const;
 
 export type LiveRead = (typeof LIVE_READ)[keyof typeof LIVE_READ];

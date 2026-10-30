@@ -8,6 +8,7 @@ import type { WireValue } from "@luke/wire";
 import { RPCSerializer } from "@orpc/client";
 import { describe, test } from "vitest";
 import {
+  type AppHolderInboxes,
   type AppInboxItems,
   type AppStateDelivery,
   type AppStateSnapshot,
@@ -156,5 +157,43 @@ describe("a delivery that crosses the wire", () => {
     const plans = adopted[LIVE_READ.INBOX_ITEMS].rows?.[INBOX_SCOPE_KIND.PLAN];
     assert.equal(plans?.quiet, held[LIVE_READ.INBOX_ITEMS].rows?.[INBOX_SCOPE_KIND.PLAN].quiet);
     assert.deepEqual(plans, { quiet, moved: [item("moved", "Ship tonight?")], emptied: [] });
+  });
+
+  test("crosses a change to the held inboxes as the holders it moved alone, one let go as gone, every other holder's read kept the very one the window held", () => {
+    const item = (id: string): InboxItem => ({
+      id,
+      agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+      key: id,
+      revision: 1,
+      version: INBOX_WIRE_VERSION,
+      title: "Ship?",
+      needsReply: true,
+      status: INBOX_STATUS.OPEN,
+      postedAt: 1,
+      updatedAt: 1,
+    });
+    const quiet = { rows: [item("quiet")] };
+    const held = (plans: AppHolderInboxes["plan"]): AppStateSnapshot => ({
+      ...document,
+      [LIVE_READ.HOLDER_INBOX]: { [INBOX_SCOPE_KIND.PLAN]: plans, [INBOX_SCOPE_KIND.AGENT]: {} },
+    });
+    const before = { quiet, moved: { rows: [item("moved")] }, gone: { failed: true as const } };
+    const window = withAppStateDelivery(
+      held({}),
+      acrossTheWire(appStateDelivery(undefined, held(before))),
+    );
+    const next = { ...held({ quiet, moved: { rows: [] } }), version: 2 };
+
+    const delivered = acrossTheWire(appStateDelivery(held(before), next));
+    const adopted = withAppStateDelivery(window, delivered);
+
+    assert.deepEqual(Object.keys(delivered.entries), []);
+    assert.deepEqual(delivered.holderInboxes?.[INBOX_SCOPE_KIND.PLAN], {
+      moved: { rows: [] },
+      gone: null,
+    });
+    const plans = adopted[LIVE_READ.HOLDER_INBOX][INBOX_SCOPE_KIND.PLAN];
+    assert.equal(plans.quiet, window[LIVE_READ.HOLDER_INBOX][INBOX_SCOPE_KIND.PLAN].quiet);
+    assert.deepEqual(plans, { quiet, moved: { rows: [] } });
   });
 });
