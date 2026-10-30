@@ -131,6 +131,7 @@ test("a local agent's summary names its Mac and when it last beat; an agent in a
     organizationId: "workspace-1",
     automationId: null,
     automationName: null,
+    automationRunId: null,
     startedFrom: null,
     startedByAgentId: null,
     conversationId: "conversation-1",

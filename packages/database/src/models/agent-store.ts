@@ -179,6 +179,8 @@ export interface Agent {
   readonly automationId: string | null;
   /** The run of an automation that started the agent, as it stood then, kept once that automation is deleted; null for one started by hand. */
   readonly automationOrigin: StoredAutomationOrigin | null;
+  /** The automation run the agent belongs to: the run that started it, or the run whose agent started it on no task; null for one no run owns, and once that run is deleted. */
+  readonly automationRunId: string | null;
   /** The agent of the same plan this one was started from, with its replay's counts; null for one started afresh. */
   readonly startedFrom: StoredStartedFrom | null;
   /** The account's coding agent whose `start_agent` started this one; null for any other starter, and once that agent's row is gone. */
@@ -310,6 +312,8 @@ export type NewAgent = AgentPlace & {
   readonly automationId?: string | undefined;
   /** That automation's run as it starts the agent; none for one started by hand. */
   readonly automationOrigin?: StoredAutomationOrigin | undefined;
+  /** The automation run the agent belongs to; none for one no run owns. */
+  readonly automationRunId?: string | undefined;
   /** The agent of the same plan this one is started from, with its replay's counts; none for one started afresh. */
   readonly startedFrom?: StoredStartedFrom | undefined;
   /** The coding agent whose `start_agent` starts this one; none for a Start by a member, Luke, or an automation. */
@@ -366,6 +370,7 @@ const AGENT_COLUMNS = {
   organizationId: AGENT_WORKSPACE,
   automationId: agentTable.automationId,
   automationOrigin: agentTable.automationOrigin,
+  automationRunId: agentTable.automationRunId,
   startedFrom: agentTable.startedFrom,
   startedByAgentId: agentTable.startedByAgentId,
   conversationId: agentTable.conversationId,
@@ -404,6 +409,7 @@ const AGENT_LINE_COLUMNS = {
   organizationId: AGENT_WORKSPACE,
   automationId: agentTable.automationId,
   automationName: agentAutomationNameSql(agentTable),
+  automationRunId: agentTable.automationRunId,
   startedFrom: agentTable.startedFrom,
   startedByAgentId: agentTable.startedByAgentId,
   conversationId: agentTable.conversationId,
@@ -512,6 +518,7 @@ const AgentRowSchema = Schema.Struct({
   organizationId: Schema.String,
   automationId: Schema.NullOr(Schema.String),
   automationOrigin: AutomationOriginColumnSchema,
+  automationRunId: Schema.NullOr(Schema.String),
   startedFrom: StartedFromColumnSchema,
   startedByAgentId: Schema.NullOr(Schema.String),
   conversationId: Schema.String,
@@ -845,6 +852,7 @@ const insertAgent = SqlSchema.findOneOption({
     organizationId: Schema.String,
     automationId: Schema.NullOr(Schema.String),
     automationOrigin: AutomationOriginColumnSchema,
+    automationRunId: Schema.NullOr(Schema.String),
     startedFrom: StartedFromColumnSchema,
     startedByAgentId: Schema.NullOr(Schema.String),
     title: Schema.NullOr(Schema.String),
@@ -876,6 +884,7 @@ const insertAgent = SqlSchema.findOneOption({
           organizationId: write.organizationId,
           automationId: write.automationId,
           automationOrigin: write.automationOrigin,
+          automationRunId: write.automationRunId,
           startedFrom: write.startedFrom,
           startedByAgentId: write.startedByAgentId,
           title: write.title,
@@ -2236,6 +2245,7 @@ export function createAgent(
           organizationId,
           automationId: started.automationId ?? null,
           automationOrigin: started.automationOrigin ?? null,
+          automationRunId: started.automationRunId ?? null,
           startedFrom: started.startedFrom ?? null,
           startedByAgentId: yield* ownStarterOf(userId, started.startedByAgentId),
           title: started.title ?? null,

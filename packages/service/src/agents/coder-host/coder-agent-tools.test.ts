@@ -17,6 +17,7 @@ import {
   readAgent,
   recordAgentPublished,
 } from "@luke/database/models/agent-store";
+import { createAutomation, recordAutomationRun } from "@luke/database/models/automation-store";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
 import { deviceAgentLinesWaiting } from "@luke/database/models/device-agent-store";
 import { registerDevice } from "@luke/database/models/device-store";
@@ -68,7 +69,12 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
 } from "@luke/features/agent-wire";
-import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
+  AUTOMATION_TRIGGER,
+} from "@luke/features/automation-wire";
 import { DEVICE_AGENT_LINE_KIND, DEVICE_CAPABILITY } from "@luke/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_ASK } from "@luke/features/inbox-wire";
@@ -290,8 +296,12 @@ async function agentOn(userId: string, taskId: string): Promise<StartedAgent> {
   });
 }
 
-/** An agent started by the account in the workspace on no task, as an automation's run starts one, its session recorded. */
-async function tasklessAgentOn(userId: string, workspaceId: string): Promise<StartedAgent> {
+/** An agent started by the account in the workspace on no task, as an automation's run starts one, its session recorded; it belongs to the run named, or to none. */
+async function tasklessAgentOn(
+  userId: string,
+  workspaceId: string,
+  automationRunId?: string,
+): Promise<StartedAgent> {
   return claimed(userId, {
     ...AGENT_CHOICE,
     idempotencyKey: randomUUID(),
@@ -299,7 +309,32 @@ async function tasklessAgentOn(userId: string, workspaceId: string): Promise<Sta
     organizationId: workspaceId,
     planSnapshot: null,
     prompt: "Sweep the flaky tests.",
+    automationRunId,
   });
+}
+
+/** The id of a run, fired by hand, of an automation the account makes in the workspace. */
+async function automationRunIn(userId: string, workspaceId: string): Promise<string> {
+  const made = await database.run(
+    createAutomation(userId, {
+      organizationId: workspaceId,
+      repositories: [RELAY_FULL_NAME],
+      name: "Flaky-test sweep",
+      trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 2 * * *", timezone: "UTC" },
+      action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Sweep the flaky tests." },
+      guards: AUTOMATION_DEFAULT_GUARDS,
+      nextRunAt: null,
+      webhookSecretHash: null,
+    }),
+  );
+  const run = await database.run(
+    recordAutomationRun(Option.getOrThrow(made), {
+      dedupeKey: randomUUID(),
+      firing: { kind: AUTOMATION_FIRING.MANUAL },
+      firedAt: new Date(NOW),
+    }),
+  );
+  return Option.getOrThrow(run).id;
 }
 
 /** The agent the start made, its eve session recorded as the store hook records it. */
@@ -1632,7 +1667,7 @@ test("start_agent from a source whose transcript does not fit the new agent's wi
   assert.ok(words.includes("Step 29."), "the newest steps are kept whole");
 });
 
-test("list_tasks names the open tasks of the caller's workspace, each with the mention it is named by, its own marked, and none of another's; start_agent starts on another of them by its taskId, refuses one of another workspace, and an agent on no task names its task or is refused", async () => {
+test("list_tasks names the open tasks of the caller's workspace, each with the mention it is named by, its own marked, and none of another's; start_agent starts on another of them by its taskId, refuses one of another workspace, and an agent on no task names its task or is refused, one a run's agent starts beside itself belonging to that run", async () => {
   const { workspaceId, elsewhere, plans: taskIds, agents } = await openWorkspaces();
   const { caller } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -1732,18 +1767,20 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
   assert.equal(eve.sent.length, 1, "a task of another workspace starts nothing");
 
   // An agent on no task starts one beside itself, in its own workspace and repository, or in none
-  // where it names none, and on a task only where it names one.
-  const sweeper = await tasklessAgentOn(caller.userId, workspaceId);
+  // where it names none, and on a task only where it names one. A run's agent starts one beside
+  // itself that belongs to its run, and one on a task that the task alone owns.
+  const run = await automationRunIn(caller.userId, workspaceId);
+  const sweeper = await tasklessAgentOn(caller.userId, workspaceId, run);
   const fromNoTask = await peerCaller(hostOf(true), sweeper, eve.services);
   const placeOf = async (answer: WireRecord) => {
     assert.equal(answer.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(answer));
     assert.ok(isRecord(answer.agent) && isWireString(answer.agent.id));
     const made = Option.getOrThrow(await database.run(readAgent(caller.userId, answer.agent.id)));
-    return [made.taskId, made.organizationId, made.repository];
+    return [made.taskId, made.organizationId, made.repository, made.automationRunId];
   };
   assert.deepEqual(
     await placeOf(await fromNoTask(CODER_TOOL.START_AGENT, { prompt: "Sweep." }, "call-none")),
-    [null, workspaceId, RELAY_FULL_NAME],
+    [null, workspaceId, RELAY_FULL_NAME, run],
   );
   assert.deepEqual(
     await placeOf(
@@ -1753,7 +1790,7 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
         "call-bare",
       ),
     ),
-    [null, workspaceId, null],
+    [null, workspaceId, null, run],
   );
   assert.deepEqual(
     await fromNoTask(
@@ -1771,7 +1808,12 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
     { taskId: taskIds.invitations, prompt: "Sweep the invitation tests." },
     "call-task",
   );
-  assert.equal(onTask.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(onTask));
+  assert.deepEqual(await placeOf(onTask), [
+    taskIds.invitations,
+    workspaceId,
+    RELAY_FULL_NAME,
+    null,
+  ]);
   assert.equal(eve.sent.length, 4);
 });
 

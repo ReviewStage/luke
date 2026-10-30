@@ -285,6 +285,8 @@ export type StartAsk = StartPlace & {
   readonly automationId?: string | undefined;
   /** That automation's run as it starts the agent, which the agent keeps; none for a Start by hand. */
   readonly automationOrigin?: StoredAutomationOrigin | undefined;
+  /** The automation run the agent belongs to: the run that starts it, or the run of the coding agent whose `start_agent` starts it on no task; none for an agent no run owns. */
+  readonly automationRunId?: string | undefined;
   /** The coding agent whose `start_agent` asks, which the first line names as its sender and the agent's row keeps as its starter; none for a Start by a member or an automation. */
   readonly startedBy?: Agent | undefined;
   /** The agent's title from the start, a run's fixed name, which no model is asked for; none for a Start the model names. */
@@ -1241,6 +1243,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       ...place,
       automationId: ask.automationId,
       automationOrigin: ask.automationOrigin,
+      automationRunId: ask.automationRunId,
       startedFrom: landing.startedFrom,
       startedByAgentId: ask.startedBy?.id ?? pilotStarter,
       takesOverFrom: takesOver?.id,
