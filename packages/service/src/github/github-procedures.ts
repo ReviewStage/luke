@@ -155,7 +155,7 @@ interface RepositoryPlace {
 }
 
 /** The place the query names, where the account is a member of its workspace; one not a member of is not found. */
-const memberPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
+export const memberPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   place: Omit<RepositoryPlace, "member">,
 ): Effect.fn.Return<RepositoryPlace, HostedRefusal, DatabaseServices> {

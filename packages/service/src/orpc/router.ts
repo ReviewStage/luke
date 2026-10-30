@@ -70,6 +70,10 @@ import {
   type RepositoryPinsProcedureSeams,
   repositoryPinsProcedures,
 } from "../github/repository-pins-procedures.js";
+import {
+  type RepositoryPullRequestProcedureSeams,
+  repositoryPullRequestProcedures,
+} from "../github/repository-pull-request-procedures.js";
 import { type InboxProcedureSeams, inboxProcedures } from "../inbox/inbox-procedures.js";
 import {
   type InstalledSkillsProcedureSeams,
@@ -124,6 +128,7 @@ export type HostedRouterSeams = AccountProcedureSeams &
   PlanCommentsProcedureSeams &
   PullRequestChaptersProcedureSeams &
   RepositoryPinsProcedureSeams &
+  RepositoryPullRequestProcedureSeams &
   TaskFilesProcedureSeams &
   TaskSectionsProcedureSeams &
   TasksProcedureSeams &
@@ -161,6 +166,7 @@ export function hostedRouter(seams: HostedRouterSeams) {
     planComments: planCommentsProcedures(seams),
     plans: tasksProcedures(seams),
     pullRequestChapters: pullRequestChaptersProcedures(published),
+    pullRequests: repositoryPullRequestProcedures(seams),
     repositoryPins: repositoryPinsProcedures(seams),
     taskFiles: taskFilesProcedures(seams),
     taskSections: taskSectionsProcedures(seams),

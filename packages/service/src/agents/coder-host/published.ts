@@ -139,13 +139,13 @@ function wirePullRequestOf(
  */
 function queuedOf(
   token: Redacted.Redacted,
-  agent: WithRepository<Agent>,
+  repository: string,
   found: GitHubPullRequest,
   kept: StoredPullRequest | null,
 ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
   if (found.state !== PULL_REQUEST_STATE.OPEN) return Effect.succeed(false);
   const keptQueued = kept !== null && kept.number === found.number && kept.queued === true;
-  return pullRequestQueued(token, agent.repository, found.number).pipe(
+  return pullRequestQueued(token, repository, found.number).pipe(
     Effect.catch(() => Effect.succeed(keptQueued)),
   );
 }
@@ -159,7 +159,7 @@ function withChecks(
 ): Effect.Effect<Published, PullRequestReadFailure, HttpClient.HttpClient> {
   const read = Effect.all([
     checkSummaryOf(token, agent.repository, found.headSha),
-    queuedOf(token, agent, found, kept),
+    queuedOf(token, agent.repository, found, kept),
   ]);
   return Effect.map(read, ([checks, queued]) => {
     const pullRequest = wirePullRequestOf(found, checks, queued);
@@ -281,12 +281,37 @@ export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(fu
 });
 
 /**
- * Another pull request of the agent's repository by its number, as GitHub
- * holds it now, with its head's checks: one the agent opened from a branch
- * it has since left, or one no agent opened, which a Pull request tab shows
- * by its number; none where the repository holds no such one. Note that it
- * is read afresh on each ask and never written on the agent's row, which
- * keeps the pull request of the branch the agent stands on.
+ * A pull request of a repository by its number, as GitHub holds it now, on
+ * a token already minted for the repository, with its head's checks and
+ * whether the merge queue holds it; none where the repository holds no
+ * such one. Note that it is read afresh on each ask and written nowhere.
+ */
+export const pullRequestOfNumber = /* @__PURE__ */ Effect.fnUntraced(function* (
+  token: Redacted.Redacted,
+  repository: string,
+  number: number,
+): Effect.fn.Return<
+  Option.Option<{ readonly branch: string; readonly pullRequest: AgentPullRequest }>,
+  PullRequestReadFailure,
+  HttpClient.HttpClient
+> {
+  const found = yield* pullRequestByNumber(token, repository, number);
+  if (Option.isNone(found)) return Option.none();
+  const checks = yield* checkSummaryOf(token, repository, found.value.headSha);
+  const queued = yield* queuedOf(token, repository, found.value, null);
+  return Option.some({
+    branch: found.value.headRef,
+    pullRequest: wirePullRequestOf(found.value, checks, queued),
+  });
+});
+
+/**
+ * Another pull request of the agent's repository by its number
+ * (`pullRequestOfNumber`): one the agent opened from a branch it has since
+ * left, or one no agent opened, which a Pull request tab shows by its
+ * number; none where the repository holds no such one. Note that it is
+ * never written on the agent's row, which keeps the pull request of the
+ * branch the agent stands on.
  */
 export const agentPullRequestOfNumber = /* @__PURE__ */ Effect.fn("web/agentPullRequestOfNumber")(
   function* (
@@ -296,15 +321,9 @@ export const agentPullRequestOfNumber = /* @__PURE__ */ Effect.fn("web/agentPull
   ): Effect.fn.Return<AgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
     if (!hasRepository(agent)) return nothing(agent).answer;
     const { token } = yield* agentPullRequestReach(userId, agent);
-    const found = yield* pullRequestByNumber(token, agent.repository, number);
+    const found = yield* pullRequestOfNumber(token, agent.repository, number);
     if (Option.isNone(found)) return nothing(agent).answer;
-    const checks = yield* checkSummaryOf(token, agent.repository, found.value.headSha);
-    const queued = yield* queuedOf(token, agent, found.value, null);
-    return {
-      repository: agent.repository,
-      branch: found.value.headRef,
-      pullRequest: wirePullRequestOf(found.value, checks, queued),
-    };
+    return { repository: agent.repository, ...found.value };
   },
 );
 
