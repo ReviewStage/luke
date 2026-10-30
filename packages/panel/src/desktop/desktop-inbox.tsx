@@ -38,7 +38,7 @@ import {
   INBOX_VIEW_ITEMS,
   useInboxColumns,
 } from "../tasks/inbox-columns.js";
-import { InboxList, InboxListNote, InboxPaneEmpty } from "../tasks/inbox-list.js";
+import { InboxList, InboxListNote, InboxPaneEmpty, NOTHING_HERE } from "../tasks/inbox-list.js";
 import {
   anyUnread,
   holderAutomationId,
@@ -143,8 +143,10 @@ import { taskCardOf } from "./task-card.js";
  *
  * With Channels on, a channel chosen from the sidebar narrows the page to
  * its own items, the same list, reading pane, and keys, under the channel's
- * name and purpose (`channel-head.tsx`), on a scope of the channel's own
- * that opens on All of everyone's (`use-inbox-listing.ts`); leaving it stamps the
+ * name and purpose (`channel-head.tsx`), every one of its items listed with no
+ * view's menu (`use-inbox-listing.ts`), and "Nothing here" where it holds
+ * none; Mark all as read, which ⌘K and a phone's ⋯ offer, marks its items
+ * alone; leaving it stamps the
  * reader's look at it; and a row's ⋯ moves its thread to another channel
  * (`move-thread-dialog.tsx`). An item opened into a channel from a link
  * narrows the page to its own channel once read, and a channel archived or
@@ -288,6 +290,10 @@ export const DesktopInbox = memo(function DesktopInbox({
   // Every item standing, which Mark all as read marks and a thread is moved among.
   const standingItems = useMemo(() => standing.flatMap(({ items }) => items), [standing]);
   const unread = useMemo(() => anyUnread(standing), [standing]);
+  // Mark all as read marks the listed workspace's items, or a channel's alone, each on its own, since the service marks a workspace's whole.
+  const { onMarkAll, onMarkEach } = marks;
+  const markAll = () => (channel === undefined ? onMarkAll : onMarkEach)(standingItems);
+  useAppCommand(APP_COMMAND.MARK_INBOX_READ, tasks.shown && unread ? markAll : undefined);
   // An item's ⋯, its row's and its thread bar's, moves its thread to another open channel, which the channels' counts are read again for.
   const move = useMoveThreadDialog({
     channels: channels.channels ?? NO_CHANNELS,
@@ -651,16 +657,14 @@ export const DesktopInbox = memo(function DesktopInbox({
                     rows={columns.rows}
                     head={{
                       shown: tasks.shown,
-                      show: choices,
-                      view: { choices },
-                      readAll: {
-                        unread,
-                        onMarkAll: () => marks.onMarkAll(standingItems),
-                      },
+                      view: choices,
                       search,
                       phone:
                         room === SHELL_ROOM.NARROW
-                          ? { start: <NewTaskButton tasks={tasks} /> }
+                          ? {
+                              start: <NewTaskButton tasks={tasks} />,
+                              readAll: { unread, onMarkAll: markAll },
+                            }
                           : undefined,
                       channel: channel === undefined ? undefined : channelHead,
                     }}
@@ -678,7 +682,8 @@ export const DesktopInbox = memo(function DesktopInbox({
                         onList={columns.onList}
                         onRetry={onRetry}
                         searched={searched}
-                        onNewTask={newTask}
+                        onNewTask={channel === undefined ? newTask : undefined}
+                        none={channel === undefined ? undefined : NOTHING_HERE}
                       />
                     }
                     onChoose={open}
@@ -717,7 +722,11 @@ export const DesktopInbox = memo(function DesktopInbox({
                       </ErrorState>
                     ) : failed || reading || filteredOut || searched !== undefined ? null : (
                       // Note that the list says the read failed, or what the filter or its search left out, so the pane beside it stands bare.
-                      <InboxPaneEmpty listed={listedRows.length} newTask={newTask} />
+                      <InboxPaneEmpty
+                        listed={listedRows.length}
+                        newTask={channel === undefined ? newTask : undefined}
+                        none={channel === undefined ? undefined : NOTHING_HERE}
+                      />
                     )}
                   </section>
                 ) : (

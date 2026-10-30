@@ -13,7 +13,6 @@ import {
   useInboxListWidth,
   useInboxViewChoices,
   useRunsPanel,
-  useTaskInboxShow,
 } from "./desktop/folded-groups.js";
 import { SIDEBAR_WIDTH, useSidebarCollapse } from "./desktop/sidebar-collapse.js";
 import { useTaskListView } from "./desktop/task-list-view.js";
@@ -130,11 +129,7 @@ test("the Inbox's scope is read from a tab, or a button's press, kept before the
 test("an Inbox scope kept as null reads the Needs you press kept beside it, as it did before", () => {
   keep("luke.inboxShow", "null");
   keep("luke.inboxWaitingOnly", "false");
-  keep("luke.taskInboxShow", "null");
-  keep("luke.taskInboxWaitingOnly", "false");
-  const shown = draw(() => ({ window: useInboxViewChoices(), task: useTaskInboxShow() }));
-  expect(shown.now().window.show).toBe("all");
-  expect(shown.now().task.show).toBe("all");
+  expect(draw(() => useInboxViewChoices()).now().show).toBe("all");
 });
 
 test("the Inbox's choices are read as they were kept", () => {
@@ -145,12 +140,6 @@ test("the Inbox's choices are read as they were kept", () => {
   expect(choices.now().whose).toEqual({ kind: "person", userId: "u1", name: "Ana" });
   act(() => choices.now().onShow("to-do"));
   expect(kept("luke.inboxShow")).toBe('"to-do"');
-});
-
-test("a task's own Inbox keeps its scope apart from the window's", () => {
-  keep("luke.taskInboxShow", '"all"');
-  keep("luke.inboxShow", '"to-do"');
-  expect(draw(() => useTaskInboxShow()).now().show).toBe("all");
 });
 
 test("the list, the file tree and the Runs panel stand at the widths they were kept at, held to their bounds", () => {

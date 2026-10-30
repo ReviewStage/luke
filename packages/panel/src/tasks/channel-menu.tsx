@@ -17,7 +17,8 @@ import type { ChannelsControl } from "./use-channels.js";
  *
  * The menu offers Copy link, the channel's own link (`channelPlace`); Mark
  * as read, which stamps the reader's look at it now and stands only while
- * something in it is unread, never dimmed; Edit, which asks for its name and
+ * something in it is unread, never dimmed; Mark all as read, which marks its
+ * threads read, where the surface hands it one (`sidebar-read-all.tsx`); Edit, which asks for its name and
  * purpose, #general's purpose alone, since no member renames it; and, last
  * and alone, on any channel but #general, which is never archived, Archive,
  * whose words end in no "…" because it only asks to be sure. Archiving asks first, in
@@ -34,7 +35,8 @@ const CHANNEL_MENU_WORDS = {
 
 /** A channel's menu as a surface holds it: each channel's groups, and the question to draw beside them. */
 interface ChannelMenu {
-  readonly groups: (channel: Channel) => MenuAction[][];
+  /** A channel's groups, `markAll` after Mark as read where one is handed. */
+  readonly groups: (channel: Channel, markAll?: MenuAction) => MenuAction[][];
   readonly dialog: React.JSX.Element;
 }
 
@@ -68,7 +70,7 @@ export function useChannelMenu({
         : channels.onArchive(doomed.channel.id).then(answered),
     confirmFailure(FAILURE_SURFACE.CHANNEL_ARCHIVE),
   );
-  const groups = (channel: Channel): MenuAction[][] => {
+  const groups = (channel: Channel, markAll?: MenuAction): MenuAction[][] => {
     const copyLink = copyLinkItem(channelPlace(channel.id));
     const read = channelUnread(channel)
       ? [commandAction(PANEL_COMMAND.MARK_READ, () => channels.onLook(channel.id), false)]
@@ -87,7 +89,11 @@ export function useChannelMenu({
       },
     };
     return [
-      [...(copyLink === undefined ? [] : [copyLink]), ...read],
+      [
+        ...(copyLink === undefined ? [] : [copyLink]),
+        ...read,
+        ...(markAll === undefined ? [] : [markAll]),
+      ],
       [edit],
       channelEditable(channel) ? [archiveItem] : [],
     ].filter((group) => group.length > 0);

@@ -27,6 +27,7 @@ import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { useArchivedChannelsDialog } from "./archived-channels-dialog.js";
 import { useChannelDialog } from "./channel-dialog.js";
 import { groupCount } from "./sidebar-fold.js";
+import { ReadAllMenu, type SidebarReadAll } from "./sidebar-read-all.js";
 
 /**
  * sidebar-channels.tsx -- the channels under the sidebar's Inbox row while Channels is on, each a filter of the Inbox, and the questions that make, edit, and archive one (STAG-547).
@@ -46,8 +47,9 @@ import { groupCount } from "./sidebar-fold.js";
  * few rows' blocks stand in their place (`SidebarChannelRowsSkeleton`), and
  * where that read failed, it says so with Retry. The ⋯ a hovered row wears,
  * and a right-click anywhere on it, offer the channel's menu
- * (`channel-menu.tsx`): Copy link, and Mark as read while it is unread;
- * Edit on every channel, #general's name staying as it is; and last and
+ * (`channel-menu.tsx`): Copy link, Mark as read while it is unread, and
+ * Mark all as read, which marks its threads read and stands disabled while
+ * none is unread (`sidebar-read-all.tsx`); Edit on every channel, #general's name staying as it is; and last and
  * alone, Archive on any but #general, which is never archived. Making and editing ask through
  * `channel-dialog.tsx`; archiving the channel shown moves the window to
  * #general (`use-channels.ts`). Every answer waits on the service, and a
@@ -77,6 +79,7 @@ function ChannelRow({
   current,
   shown,
   groups,
+  readAll,
   onOpen,
 }: {
   channel: Channel;
@@ -85,7 +88,9 @@ function ChannelRow({
   workspaceId: string | undefined;
   current: boolean;
   shown: boolean;
-  groups: MenuAction[][];
+  /** Its menu's groups, Mark all as read among them where it is handed. */
+  groups: (markAll?: MenuAction) => MenuAction[][];
+  readAll: SidebarReadAll;
   onOpen: () => void;
 }): React.JSX.Element {
   const menu = useMenu(shown);
@@ -107,7 +112,7 @@ function ChannelRow({
           }}
           contextMenu={menu.contextMenu(ellipsis)}
           actions={
-            groups.length === 0 ? null : (
+            groups().length === 0 ? null : (
               <MoreButton
                 ref={ellipsis}
                 thing="Channel"
@@ -122,7 +127,9 @@ function ChannelRow({
         </NavItem>
       </Tooltip>
       {menu.drawn === undefined ? null : (
-        <ActionMenu
+        <ReadAllMenu
+          readAll={readAll}
+          channelId={channel.id}
           label={`#${channel.name} actions`}
           menu={menu.drawn}
           groups={groups}
@@ -188,6 +195,7 @@ export function SidebarChannels({
   waiting,
   currentId,
   shown,
+  readAll,
   onOpen,
 }: {
   workspaceId: string | undefined;
@@ -198,6 +206,8 @@ export function SidebarChannels({
   currentId: string | undefined;
   /** Whether the sidebar is in sight, which its menus and questions close with. */
   shown: boolean;
+  /** What each channel's Mark all as read marks with. */
+  readAll: SidebarReadAll;
   /** Narrows the Inbox to a channel, one just made among them. */
   onOpen: (channelId: string) => void;
 }): React.JSX.Element {
@@ -229,7 +239,8 @@ export function SidebarChannels({
             workspaceId={workspaceId}
             current={channel.id === currentId}
             shown={shown}
-            groups={menu.groups(channel)}
+            groups={(markAll) => menu.groups(channel, markAll)}
+            readAll={readAll}
             onOpen={() => onOpen(channel.id)}
           />
         ))
