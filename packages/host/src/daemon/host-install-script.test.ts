@@ -631,16 +631,17 @@ describe("the host's install script", () => {
     { os: "Darwin", stops: true },
     { os: "Darwin", stops: false },
   ])(
-    "the account install's uninstall, run with no sudo on $os, stops its service through the account's own manager, warns of unpushed work, and removes the folders of the agents its daemon made, its state, its releases and its link, in that order, leaving another install's agents and the clones, unless its service will not stop (stops: $stops)",
+    "the account install's uninstall, run with no sudo on $os, stops its service through the account's own manager, warns of unpushed work, and removes the folders of the agents its daemon made, its state, its releases and its link, in that order, leaving another install's agents, the clones and a Linux account's lingering, said, unless its service will not stop (stops: $stops)",
     ({ os, stops }) => {
       const bin = folder();
       const home = folder();
       const asked = join(folder(), "asked.log");
-      // Note that systemctl answers is-active as systemd does, and launchctl print finds the agent while it is loaded.
+      // Note that systemctl answers is-active as systemd does, launchctl print finds the agent while it is loaded, and loginctl says the account lingers.
       for (const [name, body] of Object.entries({
         uname: `echo ${os}`,
         systemctl: `printf '%s\\n' "$*" >>"${asked}"\n[ "$2" != is-active ] || echo ${stops ? "inactive" : "active"}`,
         launchctl: `printf '%s\\n' "$*" >>"${asked}"\n[ "$1" != print ] || exit ${stops ? 1 : 0}`,
+        loginctl: "echo yes",
       })) {
         writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
       }
@@ -676,6 +677,7 @@ describe("the host's install script", () => {
 
       expect(answer.status).toBe(stops ? 0 : 1);
       expect(answer.stderr).toContain("Work in them that was not pushed goes with them.");
+      expect(answer.stdout.includes("Left lingering on")).toBe(stops && os === "Linux");
       const commands = readFileSync(asked, "utf8").trim().split("\n");
       const uid = spawnSync("id", ["-u"], { encoding: "utf8" }).stdout.trim();
       expect(commands).toContain(

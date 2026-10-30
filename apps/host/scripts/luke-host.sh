@@ -103,7 +103,8 @@ remove_launch_agent() {
 # Note that ~/.luke/clones stays, since every Luke install for the account
 # shares it, and so does an install that came before, under /opt or a Mac's
 # Application Support, which is removed with its own sudo luke-host
-# uninstall, said where one stands.
+# uninstall, said where one stands, and so does a Linux account's lingering,
+# said where it is on.
 uninstall_account() {
   home="$1"
   if [ "$(readlink -f "${HOME:-/}")" != "$home" ]; then
@@ -129,7 +130,8 @@ uninstall_account() {
       esac
     fi
   fi
-  case "$(uname -s)" in
+  kernel="$(uname -s)"
+  case "$kernel" in
     Darwin) remove_launch_agent ;;
     *) remove_user_unit ;;
   esac
@@ -162,6 +164,10 @@ uninstall_account() {
   fi
   if [ -e "$HOME/$MAC_APP_FOLDER" ]; then
     printf "Left the install of Luke host in %s as it stands. Remove it with: sudo '%s' uninstall\n" "$HOME/$MAC_APP_FOLDER" "$HOME/$MAC_APP_FOLDER/luke-host/bin/luke-host"
+  fi
+  # Note that lingering is left on, since another service of the account may need it to run while no one is logged in.
+  if [ "$kernel" != Darwin ] && [ "$(loginctl show-user "$(id -un)" --property=Linger --value 2>/dev/null)" = yes ]; then
+    printf 'Left lingering on for %s, since other services of this account may need it. Turn it off with: loginctl disable-linger\n' "$(id -un)"
   fi
   printf 'Luke host is removed from this account. Remove it in Settings › Hosts too, if it is still listed.\n'
 }
