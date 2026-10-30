@@ -1,3 +1,10 @@
+export {
+  AGENT_ENTER,
+  AGENT_ENTER_LABEL,
+  AGENT_ENTER_LIST,
+  type AgentEnter,
+  isAgentEnter,
+} from "./agent-enter.js";
 export { HOST_CAPABILITY, type HostCapability } from "./capabilities.js";
 export { EXPERIMENT_COUNTED_AS, SETTINGS_VIEW_COUNTED_AS } from "./counted.js";
 export {
@@ -51,7 +58,7 @@ export {
   describedSettings,
   isAppSettingField,
   isSettingsResetScope,
-  linkOpenFromWire,
+  ownPreferenceFromWire,
   SETTING_KEEP,
   type SettingKeep,
   type SettingsRowsInput,

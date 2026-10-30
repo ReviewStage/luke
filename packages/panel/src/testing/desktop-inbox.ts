@@ -108,9 +108,8 @@ const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 /** Where the window's Inbox keeps the scope it shows. */
 export const SHOW_KEY = "luke.inboxShow";
 
-/** Where the window's Inbox keeps how it sorts, and how it groups. */
-export const SORT_KEY = "luke.inboxSort";
-export const GROUPING_KEY = "luke.inboxGrouping";
+/** Where the window's Inbox keeps whom the items it lists are addressed to. */
+export const WHOSE_KEY = "luke.inboxWhose";
 
 export const AGENT: AgentSummary = {
   id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
@@ -551,12 +550,11 @@ beforeEach(() => {
   installScrollIntoView();
   holdFrames();
   window.localStorage.clear();
-  // Note that the Inbox opens on All here, so the tests of what an item shows meet settled
-  // items too; the tests of the scopes clear it to meet the Inbox as a fresh profile opens it.
+  // Note that the Inbox opens on All addressed to anyone here, so the tests of what an item shows
+  // meet settled items and a teammate's too; the tests of the scopes clear it to meet the Inbox as
+  // a fresh profile opens it.
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
-  // Note that it groups by task here too, so the tests of a task's group meet its header; a
-  // fresh profile groups by nothing.
-  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("plan"));
+  window.localStorage.setItem(WHOSE_KEY, JSON.stringify({ kind: "everyone" }));
   world.inboxes = new Map([
     [BILLING.id, [THRESHOLD, RETRY]],
     [INVITES.id, [EXPIRY]],
@@ -979,22 +977,14 @@ export function needsYouMark(row: HTMLElement): string {
   return said ? "*" : "";
 }
 
-/** The first of a button's words a reader hears: a row's or a fold's name, before its count and its chord. */
-export function heardName(button: Element): string {
-  const heard = [...button.children].find((part) => part.getAttribute("aria-hidden") !== "true");
-  return heard?.textContent ?? "";
-}
-
-/** The list as a reader hears it: each group's name, then its rows, `▸ ` where chosen and `*` where marked as needing the developer. */
+/** The list as a reader hears it: its rows, `▸ ` where chosen and `*` where marked as needing the developer. */
 export function listed(page: HTMLElement): string[] {
   const list = page.querySelector(".inbox-tasks");
   assert.ok(list, "the list is drawn");
-  const fold = ".luke-group-header-head button[aria-expanded]:not([aria-haspopup])";
-  return [...list.querySelectorAll(`${fold}, li button.luke-list-row-main`)].map((node) => {
-    if (node.matches(fold) || !(node instanceof HTMLButtonElement)) return `# ${heardName(node)}`;
-    const name = titleOf(node);
-    return `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${needsYouMark(node)}${name}`;
-  });
+  return [...list.querySelectorAll<HTMLButtonElement>("li button.luke-list-row-main")].map(
+    (node) =>
+      `${node.getAttribute("aria-current") === "page" ? "▸ " : ""}${needsYouMark(node)}${titleOf(node)}`,
+  );
 }
 
 /** What an element says to a reader, the discs beside the names in it left out; nothing for no element. */
@@ -1022,7 +1012,7 @@ export function openViewOptions(page: HTMLElement): void {
 }
 
 /** The scopes the view's menu may offer, in their order, and Archived, which it offered while tasks were archived, so a menu offering it again is heard. */
-export const SCOPE_NAMES = ["Needs you", "All", "Archived"] as const;
+export const SCOPE_NAMES = ["Open", "Needs you", "All", "Archived"] as const;
 
 /** The Inbox's name as the list's head says it. */
 export function headTitle(page: HTMLElement): string | null | undefined {
@@ -1351,17 +1341,6 @@ export const BUMP: InboxItem = {
   agentId: STRAY_AGENT,
 };
 
-/** The header of a group in the list, by its name. */
-export function headerNamed(page: HTMLElement, name: string): HTMLButtonElement {
-  const header = [
-    ...page.querySelectorAll<HTMLButtonElement>(
-      ".inbox-tasks .luke-group-header-head button[aria-expanded]:not([aria-haspopup])",
-    ),
-  ].find((each) => heardName(each) === name);
-  assert.ok(header, `no header for ${name}`);
-  return header;
-}
-
 /** Hovers a control as a resting pointer does, and answers the words of the card it hangs, its discs left out. */
 export function hoveredCard(control: Element, card: string): string | null {
   restOn(control);
@@ -1546,21 +1525,6 @@ export function gatedAnswers(): GatedAnswers {
     },
   });
   return { sent, answer: (view) => waiting.shift()?.(view) };
-}
-
-/** Each plan's header as the list folds it: its name and what in it needs you. */
-export function foldedCounts(page: HTMLElement): (string | null)[] {
-  const headers = () => [
-    ...page.querySelectorAll<HTMLButtonElement>(
-      ".inbox-tasks .luke-group-header-head button[aria-expanded]:not([aria-haspopup])",
-    ),
-  ];
-  for (const header of headers()) {
-    if (header.getAttribute("aria-expanded") === "true") act(() => header.click());
-  }
-  const counts = headers().map((header) => header.textContent);
-  for (const header of headers()) act(() => header.click());
-  return counts;
 }
 
 /** Sends a reply from the open item's box carrying its first option as its answer, with the words given. */

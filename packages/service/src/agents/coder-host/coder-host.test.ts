@@ -23,7 +23,7 @@ import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { unreadOperatorNotices, writeOperatorNotice } from "@luke/database/models/operator-notices";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
-import { readTask, updateTask } from "@luke/database/models/task-store";
+import { createTask, readTask, updateTask } from "@luke/database/models/task-store";
 import {
   type ConversationTarget,
   type LineSender,
@@ -35,7 +35,13 @@ import {
   MESSAGE_SENDER,
   OPERATOR_NOTICE_KIND,
 } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
+import {
+  getTestDB,
+  joinWorkspace,
+  leaveWorkspace,
+  openWorkspace,
+  startTask,
+} from "@luke/database/testing";
 import {
   AGENT_ATTACHMENT_TYPE,
   AGENT_CURSOR_START,
@@ -98,6 +104,7 @@ import { memoryRelayState } from "../eve-host/relay.js";
 import { runRemember } from "../memory-tools.js";
 import { DESK_LEAD } from "../operator-desk.js";
 import type { RepositorySandbox } from "../repository-shell.js";
+import { STEWARD_ACT } from "../steward.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 import { contextWindowOf } from "./context.js";
 import { type CoderHost, coderHost } from "./host.js";
@@ -1388,7 +1395,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
 
           const answer = yield* host.editPlan(
             admitted,
-            unparsedWire({ notes: [note] }),
+            unparsedWire({ taskId: agent.taskId, notes: [note] }),
             0,
             noSandbox,
           );
@@ -1423,6 +1430,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           const missed = yield* host.editPlan(
             admitted,
             unparsedWire({
+              taskId: agent.taskId,
               notes: [
                 ...notes,
                 { kind: "replace", find: "a phrase the plan never held", text: "x" },
@@ -1442,7 +1450,12 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           assert.equal(untouched.text, before.text);
           assert.deepEqual(untouched.agentEdits, []);
 
-          const answer = yield* host.editPlan(admitted, unparsedWire({ notes }), 0, noSandbox);
+          const answer = yield* host.editPlan(
+            admitted,
+            unparsedWire({ taskId: agent.taskId, notes }),
+            0,
+            noSandbox,
+          );
 
           assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 2 });
           const stored = Option.getOrThrow(yield* readTask(userId, agent.taskId));
@@ -1464,6 +1477,101 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             stored.agentEdits.map((edit) => edit.notes.map((note) => note.kind)),
             [["add", "add"]],
           );
+        }),
+    );
+
+    it.effect(
+      "an agent takes notes on another task of its workspace by its id, the plan naming the agent as its tab names it even once the task moves to another workspace",
+      () =>
+        Effect.gen(function* () {
+          const host = yield* hostOverStore();
+          const { userId, agent, admitted } = yield* openAgent(host);
+          const sibling = yield* startTask(userId, { name: "Seat billing" });
+          const note = { kind: "add", section: "Approach", text: "- Bill by seat." };
+
+          const answer = yield* host.editPlan(
+            admitted,
+            unparsedWire({ taskId: sibling.id, notes: [note] }),
+            0,
+            noSandbox,
+          );
+          yield* updateTask(userId, sibling.id, { organizationId: yield* openWorkspace(userId) });
+
+          assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 1 });
+          const stored = Option.getOrThrow(yield* readTask(userId, sibling.id));
+          assert.ok(stored.text.includes("- Bill by seat."));
+          assert.deepEqual(
+            stored.task.agentEdits?.map((edit) => edit.label),
+            [agent.title ?? "Opus 5.5"],
+          );
+        }),
+    );
+
+    it.effect(
+      "an operator takes notes on its member's own task, and its notes on a teammate's task are refused and save nothing",
+      () =>
+        Effect.gen(function* () {
+          const host = yield* hostOverStore();
+          const userId = yield* openGithubUser();
+          const teammate = yield* openGithubUser();
+          const own = yield* startTask(userId, { name: "Seat billing" });
+          yield* joinWorkspace(own.workspaceId, teammate);
+          const theirs = yield* createTask(teammate, {
+            name: "Teammate's invites",
+            organizationId: own.workspaceId,
+          });
+          const operator = yield* openOperator(host, userId, own.workspaceId);
+          const before = Option.getOrThrow(yield* readTask(teammate, theirs.id));
+          const notes = [{ kind: "add", section: "Approach", text: "- Ship it." }];
+          const edit = (taskId: string) =>
+            host.editPlan(operator.admitted, unparsedWire({ taskId, notes }), 0, noSandbox);
+
+          const onOwn = yield* edit(own.id);
+          const onTheirs = yield* edit(theirs.id);
+
+          assert.deepEqual(onOwn, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 1 });
+          assert.equal(onTheirs.status, ACTION_RESULT_STATUS.REJECTED);
+          assert.ok(
+            onTheirs.status === ACTION_RESULT_STATUS.REJECTED &&
+              onTheirs.reason.startsWith(STEWARD_ACT.CHANGE),
+          );
+          const after = Option.getOrThrow(yield* readTask(teammate, theirs.id));
+          assert.equal(after.text, before.text);
+        }),
+    );
+
+    it.effect(
+      "an agent's notes naming no task, or a task of another workspace its member is also in, are refused and save nothing",
+      () =>
+        Effect.gen(function* () {
+          const host = yield* hostOverStore();
+          const { userId, admitted } = yield* openAgent(host);
+          const elsewhere = yield* openWorkspace(userId);
+          const other = yield* createTask(userId, {
+            name: "Side project",
+            organizationId: elsewhere,
+          });
+          const before = Option.getOrThrow(yield* readTask(userId, other.id));
+          const notes = [{ kind: "add", section: "Approach", text: "- Ship it." }];
+
+          const unnamed = yield* host.editPlan(admitted, unparsedWire({ notes }), 0, noSandbox);
+          const outside = yield* host.editPlan(
+            admitted,
+            unparsedWire({ taskId: other.id, notes }),
+            0,
+            noSandbox,
+          );
+
+          assert.deepEqual(unnamed, {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: PLAN_EDIT_REFUSAL.NO_TASK_NAMED,
+          });
+          assert.deepEqual(outside, {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: PLAN_EDIT_REFUSAL.NO_TASK,
+          });
+          const after = Option.getOrThrow(yield* readTask(userId, other.id));
+          assert.equal(after.text, before.text);
         }),
     );
 
@@ -2382,7 +2490,12 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             );
           const agentNotes = (notes: Parameters<typeof saveNotes>[1]) =>
             Effect.map(
-              host.editPlan(admitted, unparsedWire({ notes }), 0, noSandbox),
+              host.editPlan(
+                admitted,
+                unparsedWire({ taskId: binding.taskId, notes }),
+                0,
+                noSandbox,
+              ),
               (answer) => answer.status,
             );
 

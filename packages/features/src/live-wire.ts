@@ -406,6 +406,8 @@ export const agentTranscriptLiveAnswerSchema = EffectSchema.Struct({
     workers: sealedLiveQuerySchema,
     window: sealedLiveQuerySchema,
     windowParts: sealedLiveQuerySchema,
+    /** The agent's queue as its revision, which every change to the queue moves on; absent from a service older than the queue. */
+    queueRevision: EffectSchema.optionalKey(sealedLiveQuerySchema),
   }),
 });
 
@@ -443,6 +445,10 @@ export const agentTranscriptLiveRowsSchema = EffectSchema.Struct({
   ),
   window: EffectSchema.Array(transcriptWindowRowSchema),
   windowParts: EffectSchema.Array(transcriptWindowPartRowSchema),
+  /** The agent's queue as its revision, a row at most, none before its first change and from a service older than the queue. */
+  queueRevision: EffectSchema.optionalKey(
+    EffectSchema.Array(EffectSchema.Struct({ revision: countedNumber })),
+  ),
 });
 
 /** The query a transcript read is asked at once by rather than held, and the one word it takes. */

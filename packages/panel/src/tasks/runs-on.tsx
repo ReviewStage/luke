@@ -25,6 +25,7 @@ import { GLYPH } from "@luke/ui/icons";
 import { Schema } from "effect";
 import { devicePlatformOf } from "../device-platform.js";
 import { type PresenceBook, presenceStanding, useDevicePresence } from "../device-presence.js";
+import { DEVICE_SETUP_WORDS } from "../device-setup.js";
 import { Picker } from "../settings/picker-row.js";
 import { keptKey, useKept } from "../use-kept.js";
 
@@ -69,8 +70,6 @@ const RUNS_ON_WORDS = {
   OFFLINE: "Offline",
   UNKNOWN: "Can't check status",
   CHECKING: "Checking",
-  GETTING_READY: "Getting ready…",
-  SETUP_FAILED: "Couldn't set up",
   REMOVED: "Removed device",
   NO_MATCH: "No devices match",
   LOCKED_HINT: "Set when the task was created.",
@@ -135,9 +134,15 @@ function offerUnready(
     return { words: RUNS_ON_WORDS.OFFLINE, tone: STANDING_TONE[DEVICE_STANDING.OFFLINE] };
   switch (device.setup) {
     case DEVICE_SETUP.PREPARING:
-      return { words: RUNS_ON_WORDS.GETTING_READY, tone: SETUP_TONE[DEVICE_SETUP.PREPARING] };
+      return {
+        words: DEVICE_SETUP_WORDS[DEVICE_SETUP.PREPARING],
+        tone: SETUP_TONE[DEVICE_SETUP.PREPARING],
+      };
     case DEVICE_SETUP.FAILED:
-      return { words: RUNS_ON_WORDS.SETUP_FAILED, tone: SETUP_TONE[DEVICE_SETUP.FAILED] };
+      return {
+        words: DEVICE_SETUP_WORDS[DEVICE_SETUP.FAILED],
+        tone: SETUP_TONE[DEVICE_SETUP.FAILED],
+      };
     case undefined:
       return undefined;
   }

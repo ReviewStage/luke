@@ -14,6 +14,8 @@ import {
   BUTTON_VARIANT,
   Button,
   GAP,
+  PauseIcon,
+  PlayIcon,
   STATUS_TONE,
   Stack,
   TEXT_TONE,
@@ -58,6 +60,16 @@ function Looks(): React.JSX.Element {
           }
         >
           <Text>Sam archived this agent: superseded by the new flow</Text>
+        </Banner>
+      </div>
+      <div className="catalog-frame">
+        <Banner
+          look={BANNER_LOOK.INSET}
+          tone={STATUS_TONE.DANGER}
+          glyph={<PauseIcon />}
+          actions={<Button icon={<PlayIcon />}>Resume</Button>}
+        >
+          Queue paused: the next message could not be sent
         </Banner>
       </div>
     </Stack>

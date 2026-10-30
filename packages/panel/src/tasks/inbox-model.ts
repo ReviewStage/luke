@@ -33,7 +33,6 @@ import {
   type InboxFormValue,
   type InboxItem,
   type InboxMessage,
-  type InboxPerson,
   type InboxReadAsk,
   type InboxReply,
   type InboxReplyKind,
@@ -1198,10 +1197,7 @@ export function inboxAgentOf(agent: {
 
 /**
  * What holds an item: the task its agent works on, or the agent itself
- * where it works on none. Note that an agent is never grouped as a holder
- * of its own: the list stands every agent under the group `holderKey`
- * names, the automation that started it, Luke's for the member's operator,
- * or one for the agents no automation the reader may read names.
+ * where it works on none.
  */
 export type InboxHolder =
   | { readonly kind: typeof INBOX_HOLDER.TASK; readonly task: TaskSummary }
@@ -1234,13 +1230,6 @@ export function operatorHolder(holder: InboxHolder): boolean {
 export function holderAutomationId(holder: InboxHolder): string | null {
   if (holder.kind === INBOX_HOLDER.TASK || operatorHolder(holder)) return null;
   return holder.agent.automationId;
-}
-
-/** The key a holder's group is folded and drawn by: the task's id, the automation's, Luke's, or one key for the agents no automation names. */
-function holderKey(holder: InboxHolder): string {
-  if (holder.kind === INBOX_HOLDER.TASK) return holder.task.id;
-  if (operatorHolder(holder)) return OPERATOR_KEY;
-  return holder.agent.automationId ?? NO_AUTOMATION_KEY;
 }
 
 /** A task as the holder of its items, kept as an agent's is (`keptHolders`). */
@@ -1325,14 +1314,8 @@ function searchedItem(holder: InboxHolder, item: InboxItem, search: readonly str
   );
 }
 
-/** What one group of agents no readable automation started is keyed by. */
-const NO_AUTOMATION_KEY = "no-automation";
-
 /** What the group of agents no automation the reader may read started is called. */
 const NO_AUTOMATION_NAME = "Other agents";
-
-/** What the member's operator's group, Luke's, is keyed by. */
-const OPERATOR_KEY = "operator";
 
 /**
  * Whether a waiting item of an agent with no task is listed in the workspace
@@ -1372,43 +1355,22 @@ export function agentGroups(
 }
 
 /**
- * How the window's Inbox groups its items: under each task, under each
- * person, under where each stands, or in one list with no groups. Note that
- * None keeps the value "Newest first" was kept by, so a list kept that way
- * stays so.
- */
-export const INBOX_GROUPING = {
-  TASK: "plan",
-  PERSON: "person",
-  STATUS: "status",
-  NONE: "newest",
-} as const;
-
-export type InboxGrouping = (typeof INBOX_GROUPING)[keyof typeof INBOX_GROUPING];
-
-/**
- * Which items an Inbox lists, as its view's menu chooses: To do, the
- * reader's own items not done with (`toDo`), or All, every item, open and
- * settled. Note that no scope asks where the item's task stands: an item
- * of a task done or canceled is listed and counted as any other, the
- * Inbox being a feed of what the agents got done.
+ * Which items an Inbox lists, as its view's menu chooses: Open, every
+ * thread still open, a question not yet answered or a notice nobody has
+ * opened yet, which Addressed to then narrows; or All, every item, open and
+ * settled. Note that Open keeps the value To do was kept by, so a scope
+ * kept before it reads as Open. Note too that no scope asks where the
+ * item's task stands: an item of a task done or canceled is listed and
+ * counted as any other, the Inbox being a feed of what the agents got done.
  */
 export const INBOX_SHOW = {
-  TO_DO: "to-do",
+  OPEN: "to-do",
   ALL: "all",
 } as const;
 
 export type InboxShow = (typeof INBOX_SHOW)[keyof typeof INBOX_SHOW];
 
-/** How the window's Inbox orders its items: the latest changed first, or the oldest changed first. */
-export const INBOX_SORT = {
-  LATEST: "latest",
-  OLDEST: "oldest",
-} as const;
-
-export type InboxSort = (typeof INBOX_SORT)[keyof typeof INBOX_SORT];
-
-/** Whose items the window's Inbox lists: everyone's, the reader's own, or one teammate's, by their account and the name they had when chosen, which names them once they leave. */
+/** Whom the window's Inbox lists items addressed to: anyone, the reader, or one teammate, by their account and the name they had when chosen, which names them once they leave. */
 export const INBOX_WHOSE = {
   EVERYONE: "everyone",
   MINE: "mine",
@@ -1420,34 +1382,15 @@ export type InboxWhose =
   | { readonly kind: typeof INBOX_WHOSE.MINE }
   | { readonly kind: typeof INBOX_WHOSE.PERSON; readonly userId: string; readonly name: string };
 
-/** Everyone's items, as an Inbox lists them until told otherwise. */
+/** Anyone's items, as a channel lists them until told otherwise. */
 export const EVERYONES: InboxWhose = { kind: INBOX_WHOSE.EVERYONE };
 
-/**
- * Where an item stands, as a list grouped by status heads it: needing the
- * reader, waiting on the teammate whose agent asks it, answered, or closed
- * with no answer, its ask withdrawn by its agent or resolved by a member.
- */
-export const INBOX_STATUS_GROUP = {
-  NEEDS_YOU: "needs-you",
-  WAITING: "waiting",
-  ANSWERED: "answered",
-  CLOSED: "closed",
-} as const;
-
-export type InboxStatusGroupKind = (typeof INBOX_STATUS_GROUP)[keyof typeof INBOX_STATUS_GROUP];
-
-/** What each status group is folded by, apart from any task's, automation's, or person's key, in the order the groups stand. */
-const STATUS_KEY = {
-  [INBOX_STATUS_GROUP.NEEDS_YOU]: "status:needs-you",
-  [INBOX_STATUS_GROUP.WAITING]: "status:waiting",
-  [INBOX_STATUS_GROUP.ANSWERED]: "status:answered",
-  [INBOX_STATUS_GROUP.CLOSED]: "status:closed",
-} as const satisfies Record<InboxStatusGroupKind, string>;
+/** The reader's own items, as the window's Inbox lists them until told otherwise. */
+export const MINE: InboxWhose = { kind: INBOX_WHOSE.MINE };
 
 /** How many items each scope lists, filtered out by the scope shown or not. */
 export interface InboxCounts {
-  readonly [INBOX_SHOW.TO_DO]: number;
+  readonly [INBOX_SHOW.OPEN]: number;
   readonly [INBOX_SHOW.ALL]: number;
 }
 
@@ -1500,56 +1443,14 @@ function inboxListed(holder: InboxHolder, item: InboxItem): InboxListed {
 }
 
 /**
- * One group of items as a list grouped by task draws it: a task's, or the
- * agents' with no task that stand under one automation, or under Luke, or
- * with no automation the reader may read (`holderKey`), headed as its first
- * holder names it, each item with its own holder.
- */
-interface InboxHolderGroup {
-  /** What the group is folded by (`holderKey`). */
-  readonly key: string;
-  /** The holder its header names, the first of its holders. */
-  readonly holder: InboxHolder;
-  readonly items: readonly InboxListed[];
-}
-
-/** One person's items, by whoever they wait on (`inboxWaitsOn`); the reader's own where `person` is none. */
-export interface InboxPersonGroup {
-  /** What the group is folded by, apart from any plan's or automation's key. */
-  readonly key: string;
-  readonly person: InboxPerson | undefined;
-  readonly items: readonly InboxListed[];
-}
-
-/** One status's items, as a list grouped by status heads them. */
-export interface InboxStatusGroup {
-  /** What the group is folded by. */
-  readonly key: string;
-  readonly status: InboxStatusGroupKind;
-  readonly items: readonly InboxListed[];
-}
-
-/**
- * The list as it is drawn: a group for each task holding an item it shows,
- * one for each person items wait on, one for each status, or every
- * item in one run; and the reader it was drawn for, whose items alone need
+ * The list as it is drawn: every item it shows in one run, the latest
+ * changed first; and the reader it was drawn for, whose items alone need
  * them.
  */
-export type InboxListView = { readonly readerId: string | undefined } & (
-  | {
-      readonly grouping: typeof INBOX_GROUPING.TASK;
-      readonly groups: readonly InboxHolderGroup[];
-    }
-  | { readonly grouping: typeof INBOX_GROUPING.NONE; readonly items: readonly InboxListed[] }
-  | {
-      readonly grouping: typeof INBOX_GROUPING.PERSON;
-      readonly groups: readonly InboxPersonGroup[];
-    }
-  | {
-      readonly grouping: typeof INBOX_GROUPING.STATUS;
-      readonly groups: readonly InboxStatusGroup[];
-    }
-);
+export interface InboxListView {
+  readonly readerId: string | undefined;
+  readonly items: readonly InboxListed[];
+}
 
 /**
  * Whether an item is the reader's: it waits on them (`inboxWaitsOn`), or on
@@ -1658,82 +1559,28 @@ export function openItems(groups: readonly InboxGroup[]): readonly InboxListed[]
     .toSorted((a, b) => newestFirst(a.item, b.item));
 }
 
-/** What a person's group is folded by: their account's id, or one key for the reader's own. */
-const PERSON_KEY = { PREFIX: "person:", YOU: "person:you" } as const;
-
-/**
- * The items, in the order given, grouped by who they wait on: the
- * reader's own first, then each teammate's, the one whose first item stands
- * first, each group's items in the order given.
- */
-function personGroups(
-  items: readonly InboxListed[],
-  readerId: string | undefined,
-): readonly InboxPersonGroup[] {
-  const groups = new Map<
-    string,
-    { key: string; person: InboxPerson | undefined; items: InboxListed[] }
-  >();
-  for (const listed of items) {
-    const person = readersItem(listed.item, readerId) ? undefined : inboxWaitsOn(listed.item);
-    const key = person === undefined ? PERSON_KEY.YOU : `${PERSON_KEY.PREFIX}${person.userId}`;
-    const held = groups.get(key);
-    if (held === undefined) groups.set(key, { key, person, items: [listed] });
-    else held.items.push(listed);
-  }
-  // Note that the groups stand in the order their first item does, which a stable sort keeps behind the reader's own.
-  return [...groups.values()].toSorted(
-    (a, b) => Number(a.person !== undefined) - Number(b.person !== undefined),
-  );
-}
-
 /** The latest change first. */
 function newestFirst(a: InboxItem, b: InboxItem): number {
   return b.updatedAt - a.updatedAt;
 }
 
-/** The order a sort lists items in, by when each changed: the latest first, or the oldest first. */
-const SORT_ORDER = {
-  [INBOX_SORT.LATEST]: (a: number, b: number) => b - a,
-  [INBOX_SORT.OLDEST]: (a: number, b: number) => a - b,
-} as const satisfies Record<InboxSort, (a: number, b: number) => number>;
-
-/** Where an item stands for the reader, as a list grouped by status heads it. */
-function statusOf(item: InboxItem, readerId: string | undefined): InboxStatusGroupKind {
-  if (item.status === INBOX_STATUS.ANSWERED) return INBOX_STATUS_GROUP.ANSWERED;
-  if (item.status === INBOX_STATUS.CLOSED) return INBOX_STATUS_GROUP.CLOSED;
-  return readersItem(item, readerId) ? INBOX_STATUS_GROUP.NEEDS_YOU : INBOX_STATUS_GROUP.WAITING;
-}
-
 /**
- * Where a listed item stands in a list's order: when it changed and the
- * status it is grouped under, as the list first drew them. A list held
- * still while it is shown is drawn from these rather than from the item as
- * it is now, so an answer, which changes both, moves no row (`inboxPlaces`).
+ * Where a listed item stands in a list's order: when it changed, as the
+ * list first drew it. A list held still while it is shown is drawn from
+ * this rather than from the item as it is now, so an answer, which changes
+ * it, moves no row (`inboxPlaces`).
  */
 export interface InboxPlace {
   readonly at: number;
-  readonly status: InboxStatusGroupKind;
 }
 
 /** No item's place held: every item stands where it is now. */
 export const NO_PLACES: ReadonlyMap<string, InboxPlace> = new Map();
 
-/** The items, in the order given, under where each stands: what needs the reader, what waits on others, what is answered, and what closed with no answer, a status with nothing in it left out. */
-function statusGroups(
-  items: readonly InboxListed[],
-  statusOfItem: (item: InboxItem) => InboxStatusGroupKind,
-): readonly InboxStatusGroup[] {
-  return Object.values(INBOX_STATUS_GROUP).flatMap((status) => {
-    const held = items.filter(({ item }) => statusOfItem(item) === status);
-    return held.length === 0 ? [] : [{ key: STATUS_KEY[status], status, items: held }];
-  });
-}
-
 /** No search: every item answers it. */
 const NO_SEARCH: readonly string[] = [];
 
-/** Whether an item is one the Whose choice lists: anyone's, the reader's own (`readersItem`), or one that waits on the teammate (`inboxWaitsOn`). */
+/** Whether an item is one Addressed to lists: anyone's, the reader's own (`readersItem`), or one that waits on the teammate (`inboxWaitsOn`). */
 function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefined): boolean {
   switch (whose.kind) {
     case INBOX_WHOSE.EVERYONE:
@@ -1746,12 +1593,10 @@ function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefi
 }
 
 /**
- * The list from every task's items: each item in the sort's order, the
- * latest changed first or the oldest changed first, under its plan,
- * under the person it waits on, under where it stands, or in one
- * run, the tasks and the people in the order their first item stands and
- * the statuses in theirs. The scope shown lists only the items it takes
- * (`showsItem`) of the people Whose names that its search finds (`searchedItem`), and the item chosen where one is given. Note that the rows a list draws are given
+ * The list from every task's items, in one run, the latest changed first.
+ * The scope shown lists only the items it takes (`showsItem`) addressed to
+ * whom Addressed to names that its search finds (`searchedItem`), and the
+ * item chosen where one is given. Note that the rows a list draws are given
  * only the chosen item they drew already, kept while it stays chosen
  * (`use-held-inbox-list.ts`), so a settled item leaves a list filtered to
  * exclude it once another is chosen, while the steps through the list are
@@ -1762,14 +1607,11 @@ function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefi
 export function inboxList(
   tasks: readonly InboxGroup[],
   view: {
-    readonly grouping: InboxGrouping;
     readonly show: InboxShow;
     readonly chosen: string | undefined;
     /** The signed-in account's id, whose own open items alone need them; none counts every item as theirs. */
     readonly readerId: string | undefined;
-    /** The order the items stand in; the latest changed first where none is given. */
-    readonly sort?: InboxSort | undefined;
-    /** Whose items are listed; everyone's where none is given. */
+    /** Whom the items listed are addressed to; anyone where none is given. */
     readonly whose?: InboxWhose | undefined;
     /** The words of the list's search (`searchTokens`), each somewhere in every item listed; none narrows nothing. */
     readonly search?: readonly string[] | undefined;
@@ -1777,56 +1619,22 @@ export function inboxList(
     readonly places?: ReadonlyMap<string, InboxPlace> | undefined;
   },
 ): InboxListView {
-  const {
-    readerId,
-    sort = INBOX_SORT.LATEST,
-    whose = EVERYONES,
-    search = NO_SEARCH,
-    places = NO_PLACES,
-  } = view;
-  const placed = (item: InboxItem): InboxPlace =>
-    places.get(item.id) ?? { at: item.updatedAt, status: statusOf(item, readerId) };
-  const order = (a: InboxItem, b: InboxItem) => SORT_ORDER[sort](placed(a).at, placed(b).at);
-  const shows = (holder: InboxHolder) => (item: InboxItem) =>
-    (showsItem(view.show, { holder, item }, readerId) &&
-      whoseItem(whose, item, readerId) &&
-      searchedItem(holder, item, search)) ||
-    item.id === view.chosen;
-  const groups = tasks
-    .map(({ holder, items }) => ({ holder, items: items.filter(shows(holder)).toSorted(order) }))
-    .filter((group) => group.items.length > 0)
-    .toSorted((a, b) => firstOrder(a.items[0], b.items[0], order));
-  const items = groups
-    .flatMap(({ holder, items }) => items.map((item) => inboxListed(holder, item)))
-    .toSorted((a, b) => order(a.item, b.item));
-  if (view.grouping === INBOX_GROUPING.TASK) {
-    return { grouping: INBOX_GROUPING.TASK, groups: holderGroups(items), readerId };
-  }
-  if (view.grouping === INBOX_GROUPING.NONE) {
-    return { grouping: INBOX_GROUPING.NONE, items, readerId };
-  }
-  if (view.grouping === INBOX_GROUPING.STATUS) {
-    const groups = statusGroups(items, (item) => placed(item).status);
-    return { grouping: INBOX_GROUPING.STATUS, groups, readerId };
-  }
-  return { grouping: INBOX_GROUPING.PERSON, groups: personGroups(items, readerId), readerId };
-}
-
-/**
- * The items, in the order given, grouped by what holds them (`holderKey`):
- * each task's alone, and the agents' with no task under their automation,
- * Luke, or none, the group whose first item stands first, each group's
- * items in the order given.
- */
-function holderGroups(items: readonly InboxListed[]): readonly InboxHolderGroup[] {
-  const groups = new Map<string, { key: string; holder: InboxHolder; items: InboxListed[] }>();
-  for (const listed of items) {
-    const key = holderKey(listed.holder);
-    const group = groups.get(key) ?? { key, holder: listed.holder, items: [] };
-    group.items.push(listed);
-    groups.set(key, group);
-  }
-  return [...groups.values()];
+  const { readerId, whose = EVERYONES, search = NO_SEARCH, places = NO_PLACES } = view;
+  const at = (item: InboxItem): number => places.get(item.id)?.at ?? item.updatedAt;
+  const items = tasks
+    .flatMap(({ holder, items }) =>
+      items
+        .filter(
+          (item) =>
+            (showsItem(view.show, item) &&
+              whoseItem(whose, item, readerId) &&
+              searchedItem(holder, item, search)) ||
+            item.id === view.chosen,
+        )
+        .map((item) => inboxListed(holder, item)),
+    )
+    .toSorted((a, b) => at(b.item) - at(a.item));
+  return { items, readerId };
 }
 
 /**
@@ -1840,21 +1648,8 @@ export function inboxPlaces(
   held: ReadonlyMap<string, InboxPlace>,
 ): ReadonlyMap<string, InboxPlace> {
   return new Map(
-    listedItems(view).map(({ item }) => [
-      item.id,
-      held.get(item.id) ?? { at: item.updatedAt, status: statusOf(item, view.readerId) },
-    ]),
+    view.items.map(({ item }) => [item.id, held.get(item.id) ?? { at: item.updatedAt }]),
   );
-}
-
-/** Two groups in the order their first items stand; a group with none, which the list never draws, last. */
-function firstOrder(
-  a: InboxItem | undefined,
-  b: InboxItem | undefined,
-  order: (a: InboxItem, b: InboxItem) => number,
-): number {
-  if (a === undefined || b === undefined) return Number(a === undefined) - Number(b === undefined);
-  return order(a, b);
 }
 
 /** Whether an item is unread for the reader: changed since they last read it, or marked unread; an item from a service before read state reads as read. */
@@ -1868,22 +1663,23 @@ export function isDone(item: InboxItem): boolean {
 }
 
 /**
- * Whether a scope lists the item: To do what needs the reader (`needsYou`),
- * the open threads that wait on them, a question or an update not yet
- * opened, which are what the sidebar's Inbox row counts
- * (`places-waiting.ts`), and All all of them. Note that a thread of theirs
- * settled and unread is left to All, because main counts no settled item.
+/**
+ * Whether a scope lists the item: Open every open thread, a question or an
+ * update not yet opened, which narrowed to the reader's own (`needsYou`)
+ * are what the sidebar's Inbox row counts (`places-waiting.ts`), and All
+ * all of them. Note that a thread of theirs settled and unread is left to
+ * All, because main counts no settled item.
  */
-function showsItem(show: InboxShow, listed: InboxListed, readerId: string | undefined): boolean {
+function showsItem(show: InboxShow, item: InboxItem): boolean {
   switch (show) {
-    case INBOX_SHOW.TO_DO:
-      return needsYou(listed, readerId);
+    case INBOX_SHOW.OPEN:
+      return item.status === INBOX_STATUS.OPEN;
     case INBOX_SHOW.ALL:
       return true;
   }
 }
 
-/** How many of every task's items each scope lists, of the people Whose names. */
+/** How many of every task's items each scope lists, of those addressed to whom Addressed to names. */
 export function inboxCounts(
   tasks: readonly InboxGroup[],
   readerId: string | undefined,
@@ -1892,10 +1688,9 @@ export function inboxCounts(
   const items = tasks
     .flatMap(({ holder, items }) => items.map((item) => inboxListed(holder, item)))
     .filter(({ item }) => whoseItem(whose, item, readerId));
-  const count = (show: InboxShow) =>
-    items.filter((listed) => showsItem(show, listed, readerId)).length;
+  const count = (show: InboxShow) => items.filter(({ item }) => showsItem(show, item)).length;
   return {
-    [INBOX_SHOW.TO_DO]: count(INBOX_SHOW.TO_DO),
+    [INBOX_SHOW.OPEN]: count(INBOX_SHOW.OPEN),
     [INBOX_SHOW.ALL]: count(INBOX_SHOW.ALL),
   };
 }
@@ -1907,8 +1702,7 @@ export function anyUnread(tasks: readonly InboxGroup[]): boolean {
 
 /** Every item the list draws, in the order it draws them. */
 export function listedItems(view: InboxListView): readonly InboxListed[] {
-  if (view.grouping === INBOX_GROUPING.NONE) return view.items;
-  return view.groups.flatMap(({ items }) => items);
+  return view.items;
 }
 
 /** Where the chosen item stands among those listed, counted from one, and the items either side of it in the list's order. */
@@ -1919,45 +1713,23 @@ export interface InboxSteps {
   readonly next: InboxListed | undefined;
 }
 
-/**
- * The items a reader steps through, in the list's order: every one listed
- * but a folded group's, though the chosen item keeps its place where its
- * group folds, since it stays open, so the steps from it still reach the
- * rows either side.
- */
-function rowedItems(
-  view: InboxListView,
-  folded: (key: string) => boolean,
-  chosen: string | undefined,
-): readonly InboxListed[] {
-  if (view.grouping === INBOX_GROUPING.NONE) return view.items;
-  const keyed: readonly { readonly key: string; readonly items: readonly InboxListed[] }[] =
-    view.groups;
-  return keyed.flatMap(({ key, items }) =>
-    folded(key) ? items.filter(({ item }) => item.id === chosen) : items,
-  );
-}
-
-/** The chosen item's place among the rows, in the list's own order, its grouping and filter as drawn and a folded group's other items left out; none where the list does not hold it. */
+/** The chosen item's place among the rows, in the list's own order and filter as drawn; none where the list does not hold it. */
 export function inboxSteps(
   view: InboxListView,
   chosen: string | undefined,
-  folded: (key: string) => boolean,
 ): InboxSteps | undefined {
-  const rowed = rowedItems(view, folded, chosen);
+  const rowed = view.items;
   const at = rowed.findIndex(({ item }) => item.id === chosen);
   if (at < 0) return undefined;
   return { at: at + 1, total: rowed.length, previous: rowed[at - 1], next: rowed[at + 1] };
 }
 
-/** The list's first and last rows, in its own order, its grouping and filter as drawn and a folded group's items left out; none where it draws no row. */
+/** The list's first and last rows, in its own order and filter as drawn; none where it draws no row. */
 export function inboxEnds(
   view: InboxListView,
-  folded: (key: string) => boolean,
 ): { readonly first: InboxListed; readonly last: InboxListed } | undefined {
-  const rowed = rowedItems(view, folded, undefined);
-  const first = rowed[0];
-  const last = rowed.at(-1);
+  const first = view.items[0];
+  const last = view.items.at(-1);
   return first === undefined || last === undefined ? undefined : { first, last };
 }
 
@@ -1971,7 +1743,7 @@ export type InboxDirection = (typeof INBOX_DIRECTION)[keyof typeof INBOX_DIRECTI
 
 /**
  * The nearest row past the chosen one, the way the reader is moving, whose
- * item the reader is not done with (`toDo`), a folded group's left out;
+ * item the reader is not done with (`toDo`);
  * none where nothing else is. Down it reads the rows below and wraps round
  * to the list's top; up, the rows above, nearest first, and wraps round
  * from the list's foot.
@@ -1979,10 +1751,9 @@ export type InboxDirection = (typeof INBOX_DIRECTION)[keyof typeof INBOX_DIRECTI
 export function nextNeedingYou(
   view: InboxListView,
   chosen: string | undefined,
-  folded: (key: string) => boolean,
   direction: InboxDirection = INBOX_DIRECTION.DOWN,
 ): InboxListed | undefined {
-  const listed = rowedItems(view, folded, chosen);
+  const listed = view.items;
   const at = listed.findIndex(({ item }) => item.id === chosen);
   const below = listed.slice(at + 1);
   const above = listed.slice(0, Math.max(at, 0));

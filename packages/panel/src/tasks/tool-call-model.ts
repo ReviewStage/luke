@@ -1316,6 +1316,12 @@ function changedAgent(call: TargetedCall): ToolTarget | undefined {
   return agentUpdateKind(call.input) === CALL_KIND.ARCHIVE_AGENT ? undefined : namedAgent(call);
 }
 
+/** The plan an edit named by its task, which its row opens; the task's own plan for an edit made before every edit named one. */
+function editedPlan(call: TargetedCall): ToolTarget {
+  const task = stringAt(call.input, "taskId");
+  return task === undefined ? TASK_TARGET : { kind: TOOL_TARGET.TASK, task };
+}
+
 /** The task a change answered, which its row opens as the sidebar opens it. */
 function answeredTask(call: TargetedCall): ToolTarget | undefined {
   const answer = isRecord(call.output) ? call.output.task : undefined;
@@ -1372,7 +1378,7 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [RETIRED_TOOL.READ_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.MESSAGE_CODING_AGENT, namedAgent],
   [RETIRED_TOOL.START_CODING_AGENT, startedAgent],
-  [AGENT_TOOL.EDIT_PLAN, () => TASK_TARGET],
+  [AGENT_TOOL.EDIT_PLAN, editedPlan],
   [AGENT_TOOL.LOOK_AT_PICTURE, () => TASK_TARGET],
   [AGENT_TOOL.OPEN_PULL_REQUEST, openedPullRequest],
   [AGENT_TOOL.POST_THREAD, namedThread],

@@ -150,6 +150,7 @@ export const AGENT_ACT_KIND = {
   AGENTS_CHOOSE: "agents.choose",
   AGENTS_RENAME: "agents.rename",
   AGENTS_SERVERS: "agents.servers",
+  AGENTS_QUEUE: "agents.queue",
   AGENTS_STOP: "agents.stop",
   AGENTS_REWIND: "agents.rewind",
   AGENTS_ARCHIVE: "agents.archive",

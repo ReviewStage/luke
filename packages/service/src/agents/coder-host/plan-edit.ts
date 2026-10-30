@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { readTaskHeader } from "@luke/database/models/task-store";
 import { workspaceOf } from "@luke/database/models/workspace-store";
+import { AGENT_TOOL } from "@luke/features/agent-tools";
 import { PICTURE_BOUNDS, type Picture } from "@luke/features/picture-wire";
 import { planAttachmentAddress, taskPictureMarkdown } from "@luke/features/plan-attachment-link";
 import { PLAN_ATTACHMENT_BOUNDS } from "@luke/features/plan-attachment-wire";
@@ -16,7 +17,13 @@ import { PLAN_ACTOR } from "@luke/features/task-wire";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Data, Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import { ACTION_RESULT_STATUS, isRecord, type UnparsedWireValue } from "../../core.js";
+import {
+  ACTION_RESULT_STATUS,
+  EXCESS_KEYS,
+  isRecord,
+  type UnparsedWireValue,
+  wireUuidSchema,
+} from "../../core.js";
 import { logStoreFailure, type StoreFailure } from "../../http/store-failure.js";
 import {
   PLAN_SAVE_REFUSAL,
@@ -29,14 +36,17 @@ import { CODER } from "./bounds.js";
 import { type InboxSandboxDoor, readSandboxMedia } from "./inbox-image.js";
 
 /**
- * plan-edit.ts -- the coding agent's `edit_plan` tool: the notetaker's own notes, taken into the agent's plan, and pictures from its sandbox added to it.
+ * plan-edit.ts -- the coding agent's `edit_plan` tool: the notetaker's own notes, taken into the plan of the task it names, and pictures from its sandbox added to it.
  *
  * An agent that meets something the plan does not settle, verifies a fact
  * the plan has wrong, or makes a decision the plan left open does not stop
  * and does not keep it to itself: it takes notes on the plan through the
  * plan's one write (`plan-notes.ts`), which journals the save under the
  * agent's id, so the developer and the other agents read them and see which
- * agent wrote what. A call's notes
+ * agent wrote what. Every call names the task whose plan it edits, its own
+ * or any other of its workspace, as a pilot fixes a child task's plan, so
+ * an agent on no task edits one too; the store writes only a task the
+ * member whose turn it is reaches (`agent-doors.ts`). A call's notes
  * may land anywhere in the plan, its headings among it, and land together or
  * not at all: one naming what the plan does not hold exactly once answers the
  * plan as it stands, so the agent retries from it rather than from the text
@@ -100,8 +110,18 @@ const picturesSchema = Schema.Array(pictureSchema).check(
 
 const readPictures = readEither(picturesSchema);
 
-/** What a call carries: the notetaker's notes, and the pictures only an agent adds. */
+/** The task a call names, whose plan it edits. */
+const editedTaskSchema = Schema.Struct({ taskId: wireUuidSchema });
+
+// The call's notes and pictures stand beside its task, and are read on their own.
+const readEditedTask = readEither(editedTaskSchema, { excess: EXCESS_KEYS.DROP });
+
+/** What a call carries: the task whose plan it edits, the notetaker's notes, and the pictures only an agent adds. */
 const EDIT_PLAN_INPUT = Schema.Struct({
+  taskId: describeWire(
+    wireUuidSchema,
+    `The task whose plan to edit, your own or another of your workspace, by the id ${AGENT_TOOL.LIST_TASKS} answered or a mention of it names.`,
+  ),
   ...planNotesSchema.fields,
   pictures: Schema.optionalKey(
     describeWire(
@@ -115,7 +135,8 @@ const EDIT_PLAN_INPUT = Schema.Struct({
 export const EDIT_PLAN_TOOL = {
   name: "edit_plan",
   description:
-    "Take notes on the plan this conversation implements, as its notetaker does: add a point " +
+    "Take notes on the plan of the task taskId names, your own task or any other of your " +
+    `workspace, which ${AGENT_TOOL.READ_TASK} reads first, as its notetaker does: add a point ` +
     "under one of its headings, or replace text copied exactly from the saved plan, as much as " +
     "names one place, headings and whole sections included, with what it becomes, or with " +
     "nothing to delete it. A note's text may open headings of its own, so you can rename, " +
@@ -139,7 +160,8 @@ export const PLAN_EDIT_REFUSAL = {
   UNREADABLE: "Not saved: the notes do not read under the notes' schema.",
   TOO_MANY: `Not saved: a turn may take at most ${PLAN_EDIT.MAX_NOTES_PER_TURN} notes on the plan. Go on, and name what you would have noted in your message.`,
   UNAVAILABLE: "Not saved: the service could not reach its store.",
-  NO_TASK: "Not saved: you work on no task, so there is no plan of yours to update.",
+  NO_TASK_NAMED: `Not saved: name the task whose plan to edit as taskId, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
+  NO_TASK: `Not saved: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
   NO_TURN:
     "Not saved: Luke has not recorded your turn yet, so its notes cannot be counted. Try again in a moment.",
   TOO_MANY_PICTURES: `Not saved: the plan holds ${PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN} pictures, as many as a plan may. Leave the pictures out.`,
@@ -190,6 +212,12 @@ export function settleNotes(
   saved: number,
 ): NotesTaken {
   return { turnId, count: Math.max(0, takenInTurn(taken, turnId) - requested + saved) };
+}
+
+/** The task a call names, or nothing where it names none that reads, which refuses it whole. */
+export function editedTaskOf(input: UnparsedWireValue): string | undefined {
+  const read = readEditedTask(input);
+  return Result.isSuccess(read) ? read.success.taskId : undefined;
 }
 
 /**

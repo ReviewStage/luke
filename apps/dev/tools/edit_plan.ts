@@ -14,8 +14,8 @@ import { editPlanNotes, offeredTaskTools } from "../host.js";
 import { planNotesTaken } from "../session-prompt.js";
 
 /**
- * Luke's own `edit_plan`: the notetaker's notes, taken into the agent's plan
- * (`packages/service/src/agents/coder-host/plan-edit.ts`). The call reaches the store
+ * Luke's own `edit_plan`: the notetaker's notes, taken into the plan of the
+ * task the call names (`packages/service/src/agents/coder-host/plan-edit.ts`). The call reaches the store
  * through the host's door (`../host.ts`), as the delegation does, and the
  * turn's count of notes is the session's own state, pinned before anything
  * awaits (`packages/service/src/agents/eve-host/pinned-state.ts`). Note that the call's
@@ -24,9 +24,8 @@ import { planNotesTaken } from "../session-prompt.js";
  * once, and each must see the other's reservation. A picture's file is
  * read from the session's sandbox through the same door eve hands every
  * file tool, opened on first use, so notes alone open none. It is offered at each
- * turn's start only to an agent on a task (`taskToolsOf`), whether it was
- * handed the plan or a prompt, so one on no plan is never offered a tool it
- * would be refused.
+ * turn's start to every agent (`taskToolsOf`), one on no task among them,
+ * since every call names the task whose plan it edits.
  */
 export default defineDynamic({
   events: {

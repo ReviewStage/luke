@@ -4,6 +4,7 @@ export * from "./account-provider-key.js";
 export * from "./agent.js";
 export * from "./agent-browser-tab.js";
 export * from "./agent-pin.js";
+export * from "./agent-queue.js";
 export * from "./agent-runner-lease.js";
 export * from "./agent-state.js";
 export * from "./agent-wakeup.js";

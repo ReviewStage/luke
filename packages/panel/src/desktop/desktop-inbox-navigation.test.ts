@@ -58,9 +58,7 @@ import {
   columnsShown,
   EXPIRY,
   GENERAL,
-  headerNamed,
   headTitle,
-  heardName,
   hoveredCard,
   INVITES,
   item,
@@ -72,7 +70,6 @@ import {
   mount,
   noticeOf,
   ON_THRESHOLD,
-  openings,
   pagerOf,
   pressKey,
   pushAgain,
@@ -287,9 +284,18 @@ test("one column wide, the item's bar says where it stands in the list, and its 
   await settle();
   const keys = standKeymap();
   layOut(page, 800);
-  assert.deepEqual([readTitle(page), pagerOf(page)], ["Alert at 80%?", "2 of 3"]);
+  assert.deepEqual([readTitle(page), pagerOf(page)], ["Alert at 80%?", "3 of 3"]);
+  assert.equal(
+    arrowNamed(page, "Next item").getAttribute("aria-disabled"),
+    "true",
+    "nothing below the last, the arrow keeping the keyboard",
+  );
+  pressKey("j");
+  assert.equal(readTitle(page), "Alert at 80%?");
 
   act(() => arrowNamed(page, "Previous item").click());
+  assert.deepEqual([readTitle(page), pagerOf(page)], ["Expire after 7 days?", "2 of 3"]);
+  pressKey("k");
   assert.deepEqual([readTitle(page), pagerOf(page)], ["How is a failed email retried?", "1 of 3"]);
   assert.equal(
     arrowNamed(page, "Previous item").getAttribute("aria-disabled"),
@@ -300,16 +306,7 @@ test("one column wide, the item's bar says where it stands in the list, and its 
   assert.equal(readTitle(page), "How is a failed email retried?");
 
   pressKey("j");
-  assert.deepEqual([readTitle(page), pagerOf(page)], ["Alert at 80%?", "2 of 3"]);
-  act(() => arrowNamed(page, "Next item").click());
-  assert.deepEqual([readTitle(page), pagerOf(page)], ["Expire after 7 days?", "3 of 3"]);
-  assert.equal(
-    arrowNamed(page, "Next item").getAttribute("aria-disabled"),
-    "true",
-    "nothing below the last, the arrow keeping the keyboard",
-  );
-  pressKey("j");
-  assert.equal(readTitle(page), "Expire after 7 days?");
+  assert.deepEqual([readTitle(page), pagerOf(page)], ["Expire after 7 days?", "2 of 3"]);
   act(() => keys.unmount());
 });
 
@@ -336,7 +333,7 @@ test("a chosen item whose plan leaves the account's list, deleted on another Mac
     world.setHolding([{ taskId: INVITES.id, items: 1, updatedAt: 4_000 }]);
   });
   await settle();
-  assert.deepEqual(listed(page), ["# Invites", "*Expire after 7 days?"]);
+  assert.deepEqual(listed(page), ["*Expire after 7 days?"]);
   assert.equal(page.querySelector(".inbox-view-items [data-inbox-title]"), null);
   assert.equal(
     page.querySelector(".inbox-view-items")?.textContent,
@@ -344,7 +341,7 @@ test("a chosen item whose plan leaves the account's list, deleted on another Mac
   );
 });
 
-test("an item of an agent with no plan stands under the automation that started it, and opens on its agent's own read under the automation's crumb", async () => {
+test("an item of an agent with no plan is listed, and opens on its agent's own read under the crumb of the automation that started it", async () => {
   world.agentInboxes = new Map([[SWEEP_AGENT, [QUARANTINE]]]);
   const { page, asked } = mount([
     {
@@ -363,8 +360,7 @@ test("an item of an agent with no plan stands under the automation that started 
   await settle();
 
   const rows = listed(page);
-  assert.ok(rows.includes("# Nightly flake sweep"), rows.join(" | "));
-  assert.equal(rows[rows.indexOf("# Nightly flake sweep") + 1], "*Quarantine the flaky test?");
+  assert.ok(rows.includes("*Quarantine the flaky test?"), rows.join(" | "));
 
   act(() => rowNamed(page, "Quarantine the flaky test?").click());
   await settle();
@@ -462,16 +458,6 @@ const SWEEP: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
-test("a task's group header hangs the task's card, as the automation's does its own", async () => {
-  const { page } = mount();
-  await settle();
-  const header = headerNamed(page, "Invites");
-  restOn(header);
-  // Note that this window stands no chip cards, so the header hangs the card's fallback: the task's head.
-  const name = document.querySelector(".luke-tooltip-card .luke-hover-card-name");
-  assert.equal(name?.textContent, "Invites", "the header hangs a card named for its task");
-});
-
 const LUKE_AGENT = "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e";
 const DOMAIN: InboxItem = {
   ...item("a1b2c3d4-0000-4000-8000-00000000000d", "Name a domain?", 1_200),
@@ -496,7 +482,7 @@ function lukeTaskless(asked: InboxItem): AppInboxTasklessItem {
   };
 }
 
-test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor; the member's operator stands under Luke, by his face", async () => {
+test("an agent's row hangs a card naming the agent and the automation that started it; its crumb wears the automation's clock tile and hangs its card, opening its page; the agents no automation names stand under no actor; the member's operator stands under Luke, by his face", async () => {
   handState({});
   world.listedWorkspace = {
     id: "workspace-acme",
@@ -516,28 +502,6 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     lukeTaskless(DOMAIN),
   ]);
   await settle();
-
-  const sweep = headerNamed(page, "Nightly flake sweep");
-  assert.ok(
-    sweep.querySelector(':scope > [aria-hidden="true"] .actor-mark[data-kind="automation"]'),
-    "the automation's group wears its clock tile",
-  );
-  assert.match(hoveredCard(sweep, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
-  assert.deepEqual(openings('[data-actor-card="automation"]'), [], "no Open automation");
-  const name = document.querySelector<HTMLButtonElement>(
-    '.luke-tooltip-card [data-actor-card="automation"] .luke-hover-card-name button',
-  );
-  assert.equal(name?.textContent, "Nightly flake sweep", "the card's name is a button");
-  act(() => name?.click());
-  assert.deepEqual(asked.shownAutomations, [SWEEP.id]);
-  assert.equal(sweep.getAttribute("aria-expanded"), "true", "the header itself still only folds");
-
-  const others = headerNamed(page, "Other agents");
-  assert.ok(others.querySelector(".actor-mark") === null, "a group of agents names no actor");
-  assert.ok(
-    others.querySelector(':scope > [aria-hidden="true"] .lucide-zap'),
-    "a group of agents wears the automation glyph, naming no one actor",
-  );
 
   const mark = rowNamed(page, "Quarantine the flaky test?");
   assert.equal(
@@ -565,7 +529,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     "the crumb's card offers nothing to press, since the crumb opens the automation",
   );
   act(() => crumb.click());
-  assert.deepEqual(asked.shownAutomations, [SWEEP.id, SWEEP.id]);
+  assert.deepEqual(asked.shownAutomations, [SWEEP.id]);
 
   act(() => rowNamed(page, "Bump the Node image?").click());
   await settle();
@@ -582,9 +546,6 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     "it wears the automation glyph, as its group does",
   );
 
-  const luke = headerNamed(page, "Luke");
-  assert.ok(luke.querySelector(".luke-face"), "Luke's group wears his face");
-  assert.ok(luke.querySelector(".lucide-zap") === null, "and no automation glyph");
   act(() => rowNamed(page, "Name a domain?").click());
   await settle();
   // Note that the title joins the path only once the heading scrolls away, so his own crumb stands alone.
@@ -680,7 +641,7 @@ test("an agent with no plan whose waiting items move, one answered on another Ma
   assert.ok(listed(page).includes("Skip the slow suite?"), listed(page).join(" | "));
 });
 
-test("an agent with no plan whose items are all settled stays listed under the automation that started it, as main lists it holding them", async () => {
+test("an agent with no plan whose items are all settled stays listed, as main lists it holding them", async () => {
   const settled = { ...SECOND_ASK, status: INBOX_STATUS.ANSWERED };
   world.agentInboxes = new Map([[SECOND_AGENT, [settled]]]);
   const { id: _id, title: _title, postedAt: _postedAt, ...agent } = waitingTaskless(settled);
@@ -688,11 +649,7 @@ test("an agent with no plan whose items are all settled stays listed under the a
   await settle();
 
   const rows = listed(page);
-  assert.equal(
-    rows[rows.indexOf("# Nightly flake sweep") + 1],
-    "Skip the slow suite?",
-    rows.join(" | "),
-  );
+  assert.ok(rows.includes("Skip the slow suite?"), rows.join(" | "));
 });
 
 test("an item chosen by a notification's click, in an Inbox showing its list alone, is shown itself, and Back stands on the list again, the notification's ask taken once", async () => {
@@ -1004,48 +961,23 @@ test("an item a link names under an agent nothing waits on any more, read before
   assert.match(page.querySelector(".inbox-view-items")?.textContent ?? "", /Not found/u);
 });
 
-test("a teammate's open item of an agent with no plan is listed under the automation that started it, wearing the teammate's face with no attention mark; To do leaves it out, and Group by person lists it under the teammate, whose header hangs their card", async () => {
+test("a teammate's open item of an agent with no plan is listed, wearing the teammate's face with no attention mark; Needs you leaves it out", async () => {
   world.agentInboxes = new Map([[SWEEP_AGENT, [{ ...QUARANTINE, startedBy: TEAMMATE }]]]);
   const { page } = mount([{ ...waitingTaskless(QUARANTINE), startedBy: TEAMMATE.userId }]);
   await settle();
   const rows = listed(page);
-  assert.equal(
-    rows[rows.indexOf("# Nightly flake sweep") + 1],
-    "Quarantine the flaky test?",
-    rows.join(" | "),
-  );
+  assert.ok(rows.includes("Quarantine the flaky test?"), rows.join(" | "));
   const meta = rowNamed(page, "Quarantine the flaky test?").querySelector(".luke-list-row-meta");
   assert.equal(meta?.querySelector(".attention-mark"), null);
   assert.equal(meta?.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
   assert.equal(meta?.querySelector(".luke-visually-hidden")?.textContent, "Waiting on Charles Pan");
 
-  showScope(page, "Needs you");
+  showScope(page, "Open");
+  chooseView(page, "Addressed to", "Me");
   assert.equal(
     listed(page).includes("Quarantine the flaky test?"),
     false,
     listed(page).join(" | "),
-  );
-
-  showScope(page, "All");
-  chooseView(page, "Group by", "Person");
-  const byPerson = listed(page);
-  assert.equal(
-    byPerson[byPerson.indexOf("# Charles Pan") + 1],
-    "Quarantine the flaky test?",
-    byPerson.join(" | "),
-  );
-  const header = [
-    ...page.querySelectorAll<HTMLButtonElement>(
-      ".inbox-tasks .luke-group-header-head button[aria-expanded]:not([aria-haspopup])",
-    ),
-  ].find((each) => heardName(each) === "Charles Pan");
-  assert.ok(header, "Charles Pan heads a group");
-  restOn(header);
-  assert.equal(
-    document.querySelector(".luke-tooltip-card [data-actor-card='person'] .luke-hover-card-name")
-      ?.textContent,
-    "Charles Pan",
-    "a person's group header hangs their card",
   );
 });
 
@@ -1368,21 +1300,22 @@ test("a scope turned in one channel stands in every channel, and when the reader
   ]);
   const { page } = mount([], { channels: true });
   await settle();
-  showScope(page, "Needs you");
+  showScope(page, "Open");
+  chooseView(page, "Addressed to", "Me");
   await settle();
-  assert.deepEqual(rowTitles(page), [], "Needs you leaves out the teammate's thread");
+  assert.deepEqual(rowTitles(page), [], "Open addressed to Me leaves out the teammate's thread");
 
   act(() => chooseChannel(APP_CHANNEL.id));
   await settle();
-  assert.equal(headTitle(page), `#${APP_CHANNEL.name} · Needs you`);
-  assert.deepEqual(rowTitles(page), [], "another channel opens on Needs you too");
+  assert.equal(headTitle(page), `#${APP_CHANNEL.name} · Open`);
+  assert.deepEqual(rowTitles(page), [], "another channel opens on it too");
 
   act(() => leaveChannel());
   await settle();
   act(() => chooseChannel(GENERAL.id));
   await settle();
-  assert.equal(headTitle(page), "#general · Needs you");
-  assert.deepEqual(rowTitles(page), [], "#general is still on Needs you");
+  assert.equal(headTitle(page), "#general · Open");
+  assert.deepEqual(rowTitles(page), [], "#general is still on it");
 });
 
 test("a channel chosen while the workspace's channels could not be read says so with Retry", async () => {

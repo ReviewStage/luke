@@ -26,6 +26,7 @@ import {
   DEVICE_PLATFORM,
   type DeviceArch,
   type DevicePlatform,
+  deviceSetupSchema,
 } from "@luke/features/device-agent-wire";
 import { and, asc, eq, exists, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { Data, DateTime, Duration, Effect, Option, Schema } from "effect";
@@ -57,13 +58,16 @@ const HostCallerSchema = Schema.Struct({
 
 export type HostCaller = typeof HostCallerSchema.Type;
 
-/** One of the account's enrolled machines, as Settings lists it. */
+/** One of the account's enrolled machines, as Settings lists it: beside its name and beat, its home folder, none before it first registered, and where its setup stands and why it failed, none once it is ready. */
 const HostRowSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   platform: Schema.Literals(Object.values(DEVICE_PLATFORM)),
   lastSeenAt: Schema.Date,
   version: Schema.NullOr(Schema.String),
+  home: Schema.NullOr(Schema.String),
+  setup: Schema.NullOr(deviceSetupSchema),
+  setupFailure: Schema.NullOr(Schema.String),
 });
 
 export type HostRow = typeof HostRowSchema.Type;
@@ -352,6 +356,9 @@ const findHosts = SqlSchema.findAll({
           platform: device.platform,
           lastSeenAt: device.lastSeenAt,
           version: device.version,
+          home: device.home,
+          setup: device.setup,
+          setupFailure: device.setupFailure,
         })
         .from(device)
         .where(and(eq(device.userId, userId), listed()))

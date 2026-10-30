@@ -6,12 +6,19 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Database } from "@luke/database/core/query";
 import { readAgent } from "@luke/database/models/agent-store";
+import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { savePlanText } from "@luke/database/models/task-store";
+import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { conversations, messages } from "@luke/database/schemas/storage";
 import { fakeWorkspaceSeams, startTask } from "@luke/database/testing";
 import { firstMessageParts } from "@luke/features/agent-replay";
-import { type AgentTranscriptMessage, agentAnswerSchema } from "@luke/features/agent-wire";
+import {
+  type AgentTranscriptMessage,
+  agentAnswerSchema,
+  agentMessageAnswerSchema,
+  agentMessagesAnswerSchema,
+} from "@luke/features/agent-wire";
 import { INBOX_ASK_STATUS, INBOX_IMAGE_TYPE, type InboxItem } from "@luke/features/inbox-wire";
 import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
@@ -39,6 +46,7 @@ import { agentsProcedures } from "../agents/agents-procedures.js";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { instancePublishedCache } from "../agents/coder-host/published.js";
 import type { SummaryModelOf } from "../agents/coder-host/replay-summary.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
@@ -56,12 +64,18 @@ import {
   isWireString,
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
+  RUN_EVENT,
+  RUN_STATUS,
+  RUN_TURN_ORIGIN,
+  sessionKey,
+  TURN_ORIGIN,
   TURN_TRIGGER,
   userMetadataOf,
 } from "../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { recordingProductAnalytics } from "../events/server-events.js";
 import { LINK_OUTCOME } from "../github/github-installations.js";
+import type { AfterResponse } from "../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { type InboxTitleModelOf, inboxProcedures } from "../inbox/inbox-procedures.js";
 import type { postInboxThread } from "../inbox/inbox-store.js";
@@ -236,6 +250,8 @@ export function fakeEve(
     readonly cancelsTogether?: number;
     /** What eve looks at as it is asked to retire a session, written down beside the retire. */
     readonly resetSees?: Effect.Effect<boolean>;
+    /** What happens while a cancel is out, before eve answers it, as a turn's end racing the Stop does. */
+    readonly cancelling?: Effect.Effect<void>;
   } = {},
 ) {
   const together = Latch.makeUnsafe(options.cancelsTogether === undefined);
@@ -297,7 +313,7 @@ export function fakeEve(
         cancelledAs.push(authorization);
         if (cancelled.length >= (options.cancelsTogether ?? 0)) together.openUnsafe();
         return Effect.as(
-          together.await,
+          Effect.andThen(together.await, options.cancelling ?? Effect.void),
           options.cancels === false
             ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
             : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED },
@@ -358,6 +374,7 @@ const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/agents/agent", (id: string) => `/api/agents/${id}`],
   ["/api/agents/calls", (id: string) => `/api/agents/${id}/calls`],
   ["/api/agents/stop", (id: string) => `/api/agents/${id}/stop`],
+  ["/api/agents/queue", (id: string) => `/api/agents/${id}/queue`],
   ["/api/agents/agents", (id: string) => `/api/agents/${id}/agents`],
   ["/api/workspaces/agents", (id: string) => `/api/workspaces/${id}/agents`],
   ["/api/agents/messages-newest", (id: string) => `/api/agents/${id}/messages/newest`],
@@ -394,10 +411,12 @@ export const standing = (
   summaryModel: SummaryModelOf = () => Effect.succeed(undefined),
   sessionSandboxes: SandboxStopReach["sessionSandboxes"] = sessionSandboxesLayer,
   titleModel: InboxTitleModelOf = () => Effect.succeed(undefined),
+  afterResponse: Layer.Layer<AfterResponse> | Layer.Layer<never> = Layer.empty,
 ) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
     const services = Layer.mergeAll(
+      afterResponse,
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
@@ -616,6 +635,8 @@ export const openTask = (
     readonly sessionSandboxes?: SandboxStopReach["sessionSandboxes"];
     /** The model an untitled inbox thread's title is generated on; none unless a test names one. */
     readonly titleModel?: InboxTitleModelOf;
+    /** Where a request's after-response work goes; run inline, before the answer is read, unless a test keeps it (`keptAfterResponse`). */
+    readonly afterResponse?: Layer.Layer<AfterResponse>;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -647,6 +668,7 @@ export const openTask = (
       options.summaryModel,
       options.sessionSandboxes,
       options.titleModel,
+      options.afterResponse,
     );
     return { owner, other, task, installation, eve, github, ask, fetch };
   });
@@ -886,3 +908,88 @@ export function openedParts(eve: ReturnType<typeof fakeEve>) {
   }
   return { text: message, parts: firstMessageParts(message) };
 }
+
+/** An agent started on the owner's task, its session claimed, and its first turn where asked. */
+export const messagedAgent = (
+  eve: ReturnType<typeof fakeEve>,
+  turn: { readonly running: boolean } | undefined,
+  sessionSandboxes?: SandboxStopReach["sessionSandboxes"],
+  afterResponse?: Layer.Layer<AfterResponse>,
+) =>
+  Effect.flatMap(
+    openTask({
+      eve,
+      ...(sessionSandboxes === undefined ? undefined : { sessionSandboxes }),
+      ...(afterResponse === undefined ? undefined : { afterResponse }),
+    }),
+    (opened) => agentStartedOn(opened, eve, turn),
+  );
+
+/** Another agent the owner starts on the task opened, its turn running or ended as `turn` says, as `messagedAgent` starts the first. */
+export const agentStartedOn = (
+  opened: Effect.Success<ReturnType<typeof openTask>>,
+  eve: ReturnType<typeof fakeEve>,
+  turn: { readonly running: boolean } | undefined,
+) =>
+  Effect.gen(function* () {
+    const agent = readAnswer(
+      agentAnswerSchema,
+      HOSTED_HTTP_STATUS.CREATED,
+      yield* opened.ask(startAs(opened.owner, opened.task.id, { idempotencyKey: randomUUID() })),
+    ).agent;
+    const stored = yield* readAgent(opened.owner, agent.id);
+    assert.ok(Option.isSome(stored));
+    const target = { userId: opened.owner, conversationId: stored.value.conversationId };
+    const sessionId = eve.opened.at(-1)?.sessionId ?? "";
+    assert.equal(yield* claimRuntimeSession(target, sessionId, new Date()), true);
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    const turnId = randomUUID();
+    if (turn !== undefined) {
+      yield* writer.enqueueTurn(target, {
+        turnId,
+        origin: TURN_ORIGIN.TYPED,
+        eveTurnId: "turn_0",
+      });
+      yield* writer.consume(target, {
+        kind: RUN_EVENT.TURN_STARTED,
+        conversationId: sessionKey(target.conversationId),
+        turnId,
+        sequence: 1,
+        origin: RUN_TURN_ORIGIN.TYPED,
+        trigger: TURN_TRIGGER.ASK,
+        at: 0,
+      });
+      // eve's receipt of the Start's first message takes the line the Start wrote into the turn, as the relay does.
+      const taken = yield* writer.takeAwaitingLine(target, { text: SNAPSHOT, turnId });
+      assert.equal(Result.getOrUndefined(taken)?.length, 1);
+      if (!turn.running) {
+        yield* writer.consume(target, {
+          kind: RUN_EVENT.TURN_ENDED,
+          conversationId: sessionKey(target.conversationId),
+          turnId,
+          sequence: 2,
+          status: RUN_STATUS.SUCCEEDED,
+          responseIds: [],
+          at: 0,
+        });
+      }
+    }
+    /** The transcript as the owner reads it now: the developer's lines, and the status. */
+    const transcript = () =>
+      Effect.map(
+        opened.ask(request(AGENT_MESSAGES, opened.owner, { id: agent.id })),
+        (answered) => {
+          const page = readAnswer(agentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered);
+          return { lines: userTexts(page), status: page.status };
+        },
+      );
+    /** A message of the owner's under the key given, or one minted, answered as the wire declares a message taken. */
+    const sent = (text: string, clientKey = randomUUID()) =>
+      Effect.map(opened.ask(messageAs(opened.owner, agent.id, { text, clientKey })), (answered) =>
+        readAnswer(agentMessageAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, answered),
+      );
+    return { ...opened, agent, target, sessionId, writer, turnId, transcript, sent };
+  });
+
+/** Where an agent's Stop lands. */
+export const AGENT_STOP = "/api/agents/stop";

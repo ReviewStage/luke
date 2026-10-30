@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { AGENT_STATUS } from "@luke/features/agent-wire";
-import { TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
+import { TASK_STATUS, type TaskStatus, type TaskSummary } from "@luke/features/task-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -318,15 +318,17 @@ test("a pinned parent's child tasks stand under it in Pinned, folded until opene
   assert.deepEqual(rowNames(sidebar, "Tasks"), []);
 });
 
-test("a Done parent the view hides takes its child tasks out of the sidebar with it", () => {
-  const sidebar = mountSidebar(
+test("a Done parent stays in the sidebar while a child task under it is open, and leaves with the last of them", () => {
+  const listed = (childStatus: TaskStatus) =>
     tasksControl({
       tasks: [
         family("Shipped", undefined, { status: TASK_STATUS.DONE }),
-        family("Follow-up", "Shipped", { status: TASK_STATUS.IN_PROGRESS }),
+        family("Follow-up", "Shipped", { status: childStatus }),
         family("Other", undefined, { status: TASK_STATUS.IN_PROGRESS }),
       ],
-    }),
-  );
-  assert.deepEqual(rowNames(sidebar, "Tasks"), ["Other"]);
+    });
+  const open = mountSidebar(listed(TASK_STATUS.IN_PROGRESS));
+  act(() => childFold(open, "Shipped").click());
+  assert.deepEqual(rowNames(open, "Tasks"), ["Shipped", "Follow-up", "Other"]);
+  assert.deepEqual(rowNames(mountSidebar(listed(TASK_STATUS.CANCELED)), "Tasks"), ["Other"]);
 });

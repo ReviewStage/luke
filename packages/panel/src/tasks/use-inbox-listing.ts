@@ -8,7 +8,6 @@ import { afterPaint } from "../after-paint.js";
 import {
   type InboxViewChoices,
   useChannelScope,
-  useInboxTaskFolds,
   useInboxViewChoices,
 } from "../desktop/folded-groups.js";
 import { useInboxCloser } from "./inbox-close.js";
@@ -68,8 +67,7 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  * apart from the Inbox's: All of everyone's until the reader turns it,
  * since a channel is everyone's threads on one topic, and then whatever
  * they turned it to, in every channel and across a launch
- * (`useChannelScope`). Its grouping, its order, and the rest of its view
- * are the Inbox's own.
+ * (`useChannelScope`). Its order, the latest first, is the Inbox's own.
  */
 
 /**
@@ -176,7 +174,6 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
   const view = tasks.inboxView;
   const { act } = useAct();
   const choices = useScopedChoices(channelId);
-  const folds = useInboxTaskFolds();
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   // Note that the Inbox reads the automations whenever it stands, because the items of agents with no task it lists are every one an automation's.
   const openAutomation = useCallback(
@@ -329,12 +326,9 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
   const [query, setQuery] = useState("");
   const search = useMemo(() => searchTokens(query), [query]);
   const me = tasks.me;
-  const { grouping, show, sort, whose } = choices;
+  const { show, whose } = choices;
   const counts = useMemo(() => inboxCounts(standing, me, whose), [standing, me, whose]);
-  const filter = useMemo(
-    () => ({ grouping, show, sort, whose, search, readerId: me }),
-    [grouping, show, sort, whose, search, me],
-  );
+  const filter = useMemo(() => ({ show, whose, search, readerId: me }), [show, whose, search, me]);
   // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its place,
   // both held still while the page stands: every row while the pointer is over the list, and the chosen row while it stays chosen.
   const { list, steps, onPointing } = useHeldInboxList(
@@ -421,7 +415,6 @@ export function useInboxListing(tasks: TasksControl, channelId?: string) {
     view,
     act,
     choices,
-    folds,
     openAutomation,
     read,
     asked,

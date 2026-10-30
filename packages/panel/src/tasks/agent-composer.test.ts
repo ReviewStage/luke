@@ -941,3 +941,39 @@ test("a message refused because the agent's host was removed closes the box on t
     "no Retry, since no retry reaches a removed host",
   );
 });
+
+test("while the agent's turn is starting, its status not yet running, a box that queues on Enter offers Queue in Send's place", async () => {
+  /** The box while a turn starts: the tab says it works, as a line the box sent still on its way does, while the agent's status still reads the turn before. */
+  function Starting(): ReactNode {
+    const composer = useAgentComposer({
+      agentId: "agent-1",
+      taskId: "plan-1",
+      messages: [],
+      send: () => new Promise(ignore),
+    });
+    return createElement(AgentComposer, {
+      ...QUIET_COMPOSER,
+      composer,
+      queueing: {
+        working: true,
+        enterQueues: true,
+        onQueue: ignore,
+        editing: false,
+        onSave: ignore,
+        onSteer: ignore,
+        onCancel: ignore,
+      },
+    });
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Starting))));
+  await settle();
+
+  typeInComposer(container, "Then open the pull request.");
+  await settle();
+
+  assert.ok(container.querySelector('button[aria-label="Queue"]'), "Send reads Queue");
+});

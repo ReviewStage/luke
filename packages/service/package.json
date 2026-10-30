@@ -47,6 +47,7 @@
     "./agents/browser/browser-tool": "./src/agents/browser/browser-tool.js",
     "./agents/browser/sandbox-browser": "./src/agents/browser/sandbox-browser.js",
     "./agents/coder-host/agent-message": "./src/agents/coder-host/agent-message.js",
+    "./agents/coder-host/agent-queue": "./src/agents/coder-host/agent-queue.js",
     "./agents/coder-host/account-keys": "./src/agents/coder-host/account-keys.js",
     "./agents/coder-host/bounds": "./src/agents/coder-host/bounds.js",
     "./agents/coder-host/channel": "./src/agents/coder-host/channel.js",

@@ -58,9 +58,7 @@ import {
   EXPIRY,
   EXPIRY_ASK,
   faceKind,
-  foldedCounts,
   footWords,
-  GROUPING_KEY,
   gatedAnswers,
   heldMessages,
   hoveredCard,
@@ -89,7 +87,6 @@ import {
   rowMenu,
   rowNamed,
   SHOW_KEY,
-  SORT_KEY,
   sendHeld,
   sendWords,
   settle,
@@ -101,6 +98,7 @@ import {
   takenCloses,
   threadItem,
   threadMessage,
+  WHOSE_KEY,
   wordsOf,
   world,
   writtenOn,
@@ -323,7 +321,7 @@ test("a waiting choice wears a Recommended badge at the head of the option its a
   assert.deepEqual(optionHeads(again.page), ["Retry 3 times over an hour1", "Retry once2"]);
 });
 
-test("a waiting choice of one is a radio list, each option led by its radio and numbered at its right: a number key picks its option from the list's row and takes the keyboard there, Space picks the focused one, a number typed in the box picks nothing, and J still steps the list", async () => {
+test("a waiting choice of one is a radio list, each option led by its radio and numbered at its right: a number key picks its option from the list's row and takes the keyboard there, Space picks the focused one, a number typed in the box picks nothing, and K still steps the list", async () => {
   const keys = standKeymap();
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
@@ -360,7 +358,7 @@ test("a waiting choice of one is a radio list, each option led by its radio and 
   );
 
   act(() => first.focus());
-  pressKey("j", first);
+  pressKey("k", first);
   assert.equal(readTitle(page), "Expire after 7 days?");
   act(() => keys.unmount());
 });
@@ -713,40 +711,30 @@ const THRESHOLD_ANSWERED: InboxItem = {
   updatedAt: 6_000,
 };
 
-test("an answer leaves Needs you the moment it is sent, its row staying where it stood and its plan's count dropping with it", async () => {
+test("an answer leaves Needs you the moment it is sent, its row staying where it stood", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const { sent } = gatedAnswers();
-  assert.deepEqual(foldedCounts(page), ["Billing usage alerts1 needs you", "Invites1 needs you"]);
 
   answerWithNote(page, "Use 90%");
   await settle();
   assert.equal(sent.length, 1, "the answer is on its way, the service not answering yet");
   assert.deepEqual(
     listed(page),
-    [
-      "# Billing usage alerts",
-      "How is a failed email retried?",
-      "▸ Alert at 80%?",
-      "# Invites",
-      "*Expire after 7 days?",
-    ],
+    ["How is a failed email retried?", "*Expire after 7 days?", "▸ Alert at 80%?"],
     "the answered row stays where it stood",
   );
   assert.deepEqual(subjectOf(page), ["Alert at 80%?"]);
-  assert.deepEqual(foldedCounts(page), ["Billing usage alerts", "Invites1 needs you"]);
 });
 
-/** The list as drawn, each row by its title alone and each group by its name, what marks a row and what a group counts left out, so a row that moves or changes group is told from one that only changes its marks. */
+/** The list as drawn, each row by its title alone, what marks a row left out, so a row that moves is told from one that only changes its marks. */
 function placesOf(page: HTMLElement): string[] {
-  return listed(page).map((line) =>
-    line.startsWith("# ") ? line.replace(/\d+ needs? you$/u, "") : line.replace(/^(▸ )?\*?/u, ""),
-  );
+  return listed(page).map((line) => line.replace(/^(▸ )?\*?/u, ""));
 }
 
 test("on To do, answering the chosen item draws its row gray where it stood, and choosing another row clears it", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
-  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
+  window.localStorage.removeItem(WHOSE_KEY);
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   const { answer } = gatedAnswers();
@@ -779,7 +767,7 @@ test("on To do, answering the chosen item draws its row gray where it stood, and
 
 test("on To do, the chosen row is let go once the Inbox is left, so an item answered while it was hidden is gone when it is come back to", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
-  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("newest"));
+  window.localStorage.removeItem(WHOSE_KEY);
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   assert.deepEqual(listed(page), ["▸ Expire after 7 days?", "Alert at 80%?"]);
@@ -802,38 +790,27 @@ test("on To do, the chosen row is let go once the Inbox is left, so an item answ
   );
 });
 
-// One test per grouping and sort, each mounting the Inbox once, so a loaded shard times a
-// quarter-second mount rather than the eight of them together.
-const ANSWER_VIEWS = ["plan", "person", "status", "newest"].flatMap((grouping) =>
-  ["latest", "oldest"].map((sort) => ({ grouping, sort })),
-);
+test("an answer moves no row while the list is shown, and the list sorts anew once the Inbox is left and come back to", async () => {
+  window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
+  const { page } = mount();
+  await settle();
+  const { answer } = gatedAnswers();
+  act(() => rowNamed(page, "Alert at 80%?").click());
+  await settle();
+  const before = placesOf(page);
 
-test.for(ANSWER_VIEWS)(
-  "an answer moves no row while the list is shown, under $grouping grouping and $sort sort, and the list sorts anew once the Inbox is left and come back to",
-  async ({ grouping, sort }) => {
-    window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
-    window.localStorage.setItem(GROUPING_KEY, JSON.stringify(grouping));
-    window.localStorage.setItem(SORT_KEY, JSON.stringify(sort));
-    const { page } = mount();
-    await settle();
-    const { answer } = gatedAnswers();
-    act(() => rowNamed(page, "Alert at 80%?").click());
-    await settle();
-    const before = placesOf(page);
+  answerWithNote(page, "Use 90%");
+  await settle();
+  assert.deepEqual(placesOf(page), before, "as the answer is sent");
+  await act(async () => answer({ item: THRESHOLD_ANSWERED }));
+  await settle();
+  assert.deepEqual(placesOf(page), before, "once it is taken");
 
-    answerWithNote(page, "Use 90%");
-    await settle();
-    assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: as the answer is sent`);
-    await act(async () => answer({ item: THRESHOLD_ANSWERED }));
-    await settle();
-    assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: once it is taken`);
-
-    act(() => world.setInboxOpen(false));
-    act(() => world.setInboxOpen(true));
-    await settle();
-    assert.notDeepEqual(placesOf(page), before, `${grouping}, ${sort}: sorted anew`);
-  },
-);
+  act(() => world.setInboxOpen(false));
+  act(() => world.setInboxOpen(true));
+  await settle();
+  assert.notDeepEqual(placesOf(page), before, "sorted anew");
+});
 
 test("an answer the service refuses brings its item back as it was, needing you, with its box's words and why it did not go", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
@@ -847,7 +824,6 @@ test("an answer the service refuses brings its item back as it was, needing you,
   await settle();
   const pane = itemPane(page);
   assert.equal(needsYouMark(rowNamed(page, "Alert at 80%?")), "*");
-  assert.deepEqual(foldedCounts(page), ["Billing usage alerts1 needs you", "Invites1 needs you"]);
   assert.equal(composerEditor(pane).textContent, "Use 90%", "the box keeps its words");
   assert.ok(
     pane.querySelector('.agent-composer [role="alert"]')?.textContent,

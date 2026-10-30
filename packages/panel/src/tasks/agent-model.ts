@@ -662,9 +662,9 @@ const UNNAMED_DEVICE = "Your device";
 /** The way out every device refusal ends on, since the cloud takes any agent. */
 const RUN_IN_CLOUD = "or set this task to run in the cloud";
 
-/** How a device that went quiet is brought back, by its platform: a Mac's app opened, or a Linux server's own Luke started. */
+/** How a device that went quiet is brought back, by its platform: a Mac woken and logged in on, since its host runs in its user's login session, or a Linux server's own Luke started. */
 const DEVICE_WAKE = {
-  [DEVICE_PLATFORM.DARWIN]: "Open Luke on it",
+  [DEVICE_PLATFORM.DARWIN]: "Wake it and log in on it",
   [DEVICE_PLATFORM.LINUX]: "Start Luke on that host",
 } as const satisfies Record<DevicePlatform, string>;
 

@@ -13,7 +13,7 @@ import { STATUS_TONE, type StatusTone } from "../status-tone.js";
  * - `Alert` is a `<section>` with no `role="alert"`, because a banner is a
  *   region named by its own words (`aria-labelledby`), which a reader finds
  *   rather than hears announced the moment it mounts. Its `variant`
- *   (`default`, `destructive`) is Luke's `look` (`strip`, `card`, `row`) and
+ *   (`default`, `destructive`) is Luke's `look` (`strip`, `card`, `row`, `inset`) and
  *   a status `tone` (`../status-tone.ts`), each kept on the section as
  *   `data-look`/`data-tone` too, so the tone's ink and tint
  *   (`tokens/status-tone.css`) reach its strip's mix and its card's disc.
@@ -45,6 +45,7 @@ const alertVariants = cva("luke-banner flex-none @container/luke-banner", {
         "border-b border-banner-strip-edge bg-banner-strip py-banner-strip-block pr-banner-strip-end pl-banner-strip-start",
       card: "box-border rounded-dialog border border-border-strong bg-well p-banner-card pl-banner-card-start",
       row: "",
+      inset: "py-banner-strip-block pr-banner-strip-end pl-banner-strip-start",
     },
   },
 });
@@ -58,6 +59,7 @@ const alertRowVariants = cva("luke-banner-row flex", {
       strip: "min-h-control items-center gap-icon-gap",
       card: "items-center gap-banner-card",
       row: "items-start gap-icon-gap",
+      inset: "min-h-control items-center gap-icon-gap",
     },
   },
 });
@@ -70,6 +72,7 @@ const alertGlyphVariants = cva(
         strip: "text-muted-foreground",
         card: "size-banner-disc rounded-full",
         row: "h-control text-muted-foreground",
+        inset: "",
       },
       // Note that a neutral card's disc is the strong fill, and any other tone's is its tint in its ink.
       neutral: {
@@ -80,6 +83,9 @@ const alertGlyphVariants = cva(
     compoundVariants: [
       { look: "card", neutral: true, class: "bg-secondary text-muted-foreground" },
       { look: "card", neutral: false, class: "bg-tone-tint text-tone-ink" },
+      // An inset line has no fill to tint, so its tone is its glyph's ink, and its words'.
+      { look: "inset", neutral: true, class: "text-muted-foreground" },
+      { look: "inset", neutral: false, class: "text-tone-ink" },
     ],
   },
 );
@@ -90,8 +96,17 @@ const alertDescriptionVariants = cva("luke-banner-words min-w-0 flex-1", {
       strip: "block overflow-hidden text-body text-body-foreground",
       card: "flex flex-col gap-banner-words-gap",
       row: "flex flex-col gap-banner-words-gap py-banner-row-inset",
+      inset: "block text-body",
+    },
+    neutral: {
+      true: "",
+      false: "",
     },
   },
+  compoundVariants: [
+    { look: "inset", neutral: true, class: "text-body-foreground" },
+    { look: "inset", neutral: false, class: "text-tone-ink" },
+  ],
 });
 
 function Alert({
@@ -130,9 +145,17 @@ function AlertGlyph({
   );
 }
 
-function AlertDescription({ look, ...props }: React.ComponentProps<"div"> & { look: AlertLook }) {
+function AlertDescription({
+  look,
+  tone,
+  ...props
+}: React.ComponentProps<"div"> & { look: AlertLook; tone: AlertTone }) {
   return (
-    <div data-slot="alert-description" className={alertDescriptionVariants({ look })} {...props} />
+    <div
+      data-slot="alert-description"
+      className={alertDescriptionVariants({ look, neutral: tone === STATUS_TONE.NEUTRAL })}
+      {...props}
+    />
   );
 }
 

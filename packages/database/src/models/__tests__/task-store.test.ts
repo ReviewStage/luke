@@ -451,6 +451,7 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           runsOn: TASK_RUNS_IN_CLOUD,
           parentTaskId: null,
           mode: TASK_MODE.AGENT,
+          assigneeId: null,
         };
 
         assert.deepEqual(yield* readTaskHeader(dean, taskId), Option.some(started));
@@ -460,7 +461,8 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
 
         yield* updateTask(dean, taskId, { status: TASK_STATUS.IN_PROGRESS });
         const header = Option.getOrThrow(yield* readTaskHeader(charles, taskId));
-        assert.deepEqual(header, { ...started, status: TASK_STATUS.IN_PROGRESS });
+        // Starting a task assigns it to whoever started it.
+        assert.deepEqual(header, { ...started, status: TASK_STATUS.IN_PROGRESS, assigneeId: dean });
         // The header agrees with the whole read on everything it answers.
         const whole = Option.getOrThrow(yield* readTask(charles, taskId));
         assert.deepEqual(header, {
@@ -472,6 +474,7 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           runsOn: TASK_RUNS_IN_CLOUD,
           parentTaskId: null,
           mode: whole.task.mode,
+          assigneeId: whole.task.assignee?.userId ?? null,
         });
       }),
   );
