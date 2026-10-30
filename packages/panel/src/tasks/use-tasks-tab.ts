@@ -118,6 +118,7 @@ import {
   PANEL_SPAN_ATTRIBUTE,
   recordPanelSpan,
 } from "../panel-spans.js";
+import { ADDRESS, HERE, ROUTE, route } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
@@ -329,6 +330,13 @@ type AgentPlaceKind =
 type AgentPlaceOf<K extends AgentPlaceKind> = Extract<LinkPlace, { readonly kind: K }>;
 
 type AgentPlace = AgentPlaceOf<AgentPlaceKind>;
+
+/** A place of a task's own that its side panel draws as a tab, named under the task. */
+type TaskTabPlace =
+  | (AgentPlaceOf<
+      typeof LINK_PLACE.WORKER | typeof LINK_PLACE.CHANGES | typeof LINK_PLACE.PULL_REQUEST_THREAD
+    > & { readonly planId: string })
+  | Extract<LinkPlace, { readonly kind: typeof LINK_PLACE.PAGE; readonly planId: string }>;
 
 /** What may stand in the task's place, the window's own rather than the task's. */
 const STAND_IN = {
@@ -1456,7 +1464,7 @@ export function useTasksTab(input: {
     inboxChosen !== undefined && "taskId" in inboxChosen ? inboxChosen.taskId : undefined;
   const inboxAgent =
     inboxChosen !== undefined && "agentId" in inboxChosen ? inboxChosen.agentId : undefined;
-  // Note that an item of an agent on no task opens that agent's own pages beside it (`inbox-panel-link.ts`).
+  // Note that an item of an agent on no task opens that agent's own pages beside it (`route.ts`).
   const inboxPages = useInboxPages(
     inboxView === undefined
       ? undefined
@@ -2691,11 +2699,15 @@ export function useTasksTab(input: {
   };
   // A link to a tab of the task standing opens it as the panel's preview, as
   // any link pressed there does; one to another task's goes there and opens
-  // it as a tab of its own.
-  const linkPanelTab = (taskId: string, tab: SidePanelTab) => {
-    const here = taskId === tasks.activeTaskId && standIn === undefined && historyFor === undefined;
-    if (here) sidePanel.onPreview(tab);
-    else showPanelTab(taskId, tab);
+  // it as a tab of its own (`route.ts`).
+  const linkPanelTab = (place: TaskTabPlace, tab: SidePanelTab) => {
+    const standing = standIn === undefined && historyFor === undefined;
+    const routed = route(
+      { kind: ADDRESS.PLACE, link: { workspace: "", place } },
+      { kind: HERE.TASKS_TAB, taskId: standing ? tasks.activeTaskId : undefined },
+    );
+    if (routed.kind === ROUTE.PREVIEW) sidePanel.onPreview(tab);
+    else showPanelTab(place.planId, tab);
   };
 
   // Note that a pull request two of the open task's agents share opens in the tab already open on it, whichever agent it stands under, as the panel's own door picks it (`changesTabOf`), so a link never stands a second tab on one pull request.
@@ -2770,19 +2782,19 @@ export function useTasksTab(input: {
     switch (place.kind) {
       case LINK_PLACE.WORKER:
         showColumnTab(planId, { agent: place.agentId });
-        linkPanelTab(planId, {
-          subagent: place.callId,
-          delegation: { agent: place.agentId, task: "" },
-        });
+        linkPanelTab(
+          { ...place, planId },
+          { subagent: place.callId, delegation: { agent: place.agentId, task: "" } },
+        );
         return;
       case LINK_PLACE.CHANGES:
-        linkPanelTab(planId, { changes: sharedChangesAgent(planId, place.agentId) });
+        linkPanelTab({ ...place, planId }, { changes: sharedChangesAgent(planId, place.agentId) });
         return;
       // A review thread opens its agent's Pull request tab on the view the link names.
       case LINK_PLACE.PULL_REQUEST_THREAD: {
         const changes = sharedChangesAgent(planId, place.agentId);
         sidePanel.onPullRequestView({ changes }, place.view);
-        linkPanelTab(planId, { changes });
+        linkPanelTab({ ...place, planId }, { changes });
         revealThread(changes, place);
         return;
       }
@@ -2937,7 +2949,7 @@ export function useTasksTab(input: {
           sidePanel.onShow(place.agentId, { page: place.pageId });
           return;
         }
-        linkPanelTab(place.planId, { page: place.pageId });
+        linkPanelTab(place, { page: place.pageId });
         return;
       case LINK_PLACE.WORKER:
       case LINK_PLACE.CHANGES:
