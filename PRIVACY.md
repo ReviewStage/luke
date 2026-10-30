@@ -544,8 +544,8 @@ checksums again before each use, and pulls the public sandbox image our hosts
 run. An agent that ran directly on your Mac before this is not started again;
 continue it into a new agent.
 
-**A local agent on a host.** A host is your own Linux server that you add
-to Luke to run your agents, as This Mac does. It has no git login of yours, so
+**A local agent on a host.** A host is a Linux machine or Mac of your own
+that you add to Luke to run your agents, as This Mac does. It has no git login of yours, so
 for each agent on it that works in a repository, our service hands the host a
 short-lived GitHub token over HTTPS. It is a Luke GitHub App installation
 token cut to that one repository, good for an hour and renewed every 50

@@ -15,7 +15,8 @@
  * removed is refused at once on its secret (`auth/device-secret.ts`), and its
  * agents' running turns are settled lost with it; a token
  * revoked enrolls no box again and touches none it already enrolled. Each
- * host is listed with whether its daemon is below the floor, and every
+ * host is listed with whether its daemon is below the floor, where its
+ * setup stands, and, for a Mac, the user it runs as, and every
  * answer names the install script on the service's own origin, which the
  * install and upgrade commands name (`@luke/features/host-wire`).
  */
@@ -30,6 +31,7 @@ import {
   revokeHostInstallToken,
 } from "@luke/database/models/host-store";
 import { storeWriter } from "@luke/database/models/writer";
+import { DEVICE_PLATFORM, type DevicePlatform } from "@luke/features/device-agent-wire";
 import { HOST_WIRE, hostVersionMeets } from "@luke/features/host-wire";
 import { Clock, Effect } from "effect";
 import { HOST_VERSION } from "../auth/device-secret.js";
@@ -48,9 +50,21 @@ export interface HostsProcedureSeams {
 
 const DONE = { done: true } as const;
 
+/** Where a Mac keeps its users' home folders, each named for its user. */
+const MAC_HOMES = "/Users/";
+
 /** The install script's address on the origin the request reached, so a Preview's command names its own. */
 function installScriptUrlOf(request: Request): string {
   return new URL(HOST_WIRE.INSTALL_SCRIPT_PATH, new URL(request.url).origin).href;
+}
+
+/** The user a Mac's host runs as, by its home folder's name under `/Users`; none for a Linux machine, or a home that names no one there. */
+function loginNameOf(platform: DevicePlatform, home: string | null): string | undefined {
+  if (platform !== DEVICE_PLATFORM.DARWIN || home === null || !home.startsWith(MAC_HOMES)) {
+    return undefined;
+  }
+  const name = home.slice(MAC_HOMES.length).replace(/\/+$/u, "");
+  return name === "" || name.includes("/") ? undefined : name;
 }
 
 /** Why a removed host's agents' turns read as failed. */
@@ -98,14 +112,21 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
     list: hosts.list.effect(function* ({ context }) {
       const rows = yield* hostedStoreOrUnavailable(hostsOf(context.userId));
       return {
-        hosts: rows.map((row) => ({
-          id: row.id,
-          name: row.name,
-          platform: row.platform,
-          seenAt: row.lastSeenAt.getTime(),
-          version: row.version,
-          upgradeNeeded: row.version === null || !hostVersionMeets(row.version, HOST_VERSION.FLOOR),
-        })),
+        hosts: rows.map((row) => {
+          const loginName = loginNameOf(row.platform, row.home);
+          return {
+            id: row.id,
+            name: row.name,
+            platform: row.platform,
+            seenAt: row.lastSeenAt.getTime(),
+            version: row.version,
+            upgradeNeeded:
+              row.version === null || !hostVersionMeets(row.version, HOST_VERSION.FLOOR),
+            ...(row.setup === null ? undefined : { setup: row.setup }),
+            ...(row.setupFailure === null ? undefined : { setupFailure: row.setupFailure }),
+            ...(loginName === undefined ? undefined : { loginName }),
+          };
+        }),
         installScriptUrl: installScriptUrlOf(context.request),
       };
     }),

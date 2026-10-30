@@ -1,3 +1,4 @@
+import { DEVICE_SETUP, type DeviceSetup } from "@luke/features/device-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { THIS_MAC_HOST_STANDING, type ThisMacHostStanding } from "@luke/host/contract";
 import {
@@ -11,9 +12,15 @@ import {
 } from "@luke/ui";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
+import { deviceSetupWords } from "../device-setup.js";
 
 /**
  * this-mac-host-row.tsx -- where This Mac's `luke-host` stands, as Settings › Hosts draws it: nothing beyond the machine's own line while it runs, and otherwise not turned on with Turn on, getting ready, not running yet, waiting for approval in Login Items, removed from Luke with Turn on again, or a turn-on or setup that failed with why and Retry.
+ *
+ * A setup is said in the words every host's row says it in
+ * (`setupLineOf`), so This Mac getting ready or failing to set up reads as
+ * any other host does, with Retry beside it here alone, since only This
+ * Mac's own app can ask its host to try again.
  *
  * The host keeps where it stands (`@luke/host`'s `compose-this-mac-host.ts`)
  * and Hosts reads it every `READ_EVERY_MS` while it is drawn, so a Mac
@@ -28,15 +35,23 @@ import { useAct } from "../act.js";
 /** How often Hosts reads where `luke-host` stands while it is drawn. */
 const READ_EVERY_MS = 5_000;
 
-/** What a row says for each standing, its tint, and the act it offers where it offers one. */
-export interface ThisMacLine {
+/** What a host's row says of where it stands, its tint, and the act it offers where it offers one. */
+export interface HostLine {
   readonly words: string;
   readonly state: SettingsRowState;
   readonly act?: string;
 }
 
+/** What a host's row says of its setup: getting ready, plain, or couldn't set up and why, tinted. */
+export function setupLineOf(setup: DeviceSetup, failure: string | undefined): HostLine {
+  return {
+    words: deviceSetupWords(setup, failure),
+    state: setup === DEVICE_SETUP.FAILED ? SETTINGS_ROW_STATE.ATTENTION : SETTINGS_ROW_STATE.PLAIN,
+  };
+}
+
 /** What This Mac's row says for a standing; nothing where there is nothing to draw, a running Mac among them, whose machine line already reads online. */
-function lineOf(standing: ThisMacHostStanding): ThisMacLine | null {
+function lineOf(standing: ThisMacHostStanding): HostLine | null {
   switch (standing.standing) {
     case THIS_MAC_HOST_STANDING.OFF:
     case THIS_MAC_HOST_STANDING.RUNNING:
@@ -52,7 +67,7 @@ function lineOf(standing: ThisMacHostStanding): ThisMacLine | null {
     case THIS_MAC_HOST_STANDING.TURNING_ON:
       return { words: "Turning on…", state: SETTINGS_ROW_STATE.PLAIN };
     case THIS_MAC_HOST_STANDING.GETTING_READY:
-      return { words: "Getting ready…", state: SETTINGS_ROW_STATE.PLAIN };
+      return setupLineOf(DEVICE_SETUP.PREPARING, undefined);
     case THIS_MAC_HOST_STANDING.NOT_RUNNING:
       return { words: "Not running yet.", state: SETTINGS_ROW_STATE.PLAIN };
     case THIS_MAC_HOST_STANDING.REQUIRES_APPROVAL:
@@ -69,11 +84,7 @@ function lineOf(standing: ThisMacHostStanding): ThisMacLine | null {
     case THIS_MAC_HOST_STANDING.FAILED:
       return { words: standing.reason, state: SETTINGS_ROW_STATE.ATTENTION, act: "Retry" };
     case THIS_MAC_HOST_STANDING.SETUP_FAILED:
-      return {
-        words: `Setup failed: ${standing.reason}`,
-        state: SETTINGS_ROW_STATE.ATTENTION,
-        act: "Retry",
-      };
+      return { ...setupLineOf(DEVICE_SETUP.FAILED, standing.reason), act: "Retry" };
     case THIS_MAC_HOST_STANDING.OTHER_ACCOUNT:
       return { words: "Used by another Luke account.", state: SETTINGS_ROW_STATE.PLAIN };
   }
@@ -82,7 +93,7 @@ function lineOf(standing: ThisMacHostStanding): ThisMacLine | null {
 /** This Mac as Hosts draws it: where it stands and the line for it, none before the first read or in a browser tab, and the member's own Turn on, Turn on again, or Retry. */
 export interface ThisMacHost {
   readonly standing: ThisMacHostStanding | undefined;
-  readonly line: ThisMacLine | null;
+  readonly line: HostLine | null;
   readonly turnOn: () => void;
   readonly turningOn: boolean;
 }
@@ -129,8 +140,8 @@ export function useThisMacHost(reading: boolean): ThisMacHost {
   };
 }
 
-/** The line under a This Mac row: where it stands, tinted. */
-export function ThisMacStateLine({ line }: { line: ThisMacLine }): React.JSX.Element {
+/** A line under a host's row: where it stands, tinted. */
+export function HostStateLine({ line }: { line: HostLine }): React.JSX.Element {
   return (
     <SettingsRowStateLine state={line.state} block>
       {line.words}
@@ -160,10 +171,10 @@ export function ThisMacHostRow({
   line,
 }: {
   thisMac: ThisMacHost;
-  line: ThisMacLine;
+  line: HostLine;
 }): React.JSX.Element {
   return (
-    <SettingsRow label="This Mac" description={<ThisMacStateLine line={line} />}>
+    <SettingsRow label="This Mac" description={<HostStateLine line={line} />}>
       {line.act === undefined ? undefined : () => <ThisMacAct thisMac={thisMac} />}
     </SettingsRow>
   );
