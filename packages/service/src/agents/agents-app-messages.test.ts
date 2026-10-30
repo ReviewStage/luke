@@ -29,7 +29,7 @@ import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { conversations } from "@luke/database/schemas/storage";
 import { task as taskTable } from "@luke/database/schemas/task";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
@@ -92,6 +92,7 @@ import {
   TURN_ORIGIN,
   TURN_TRIGGER,
 } from "../core.js";
+import { SERVER_EVENT } from "../events/server-events.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { postInboxThread } from "../inbox/inbox-store.js";
 import { MERGE_POLICY_NOTICE } from "../tasks/pilot-switch-notice.js";
@@ -101,6 +102,7 @@ import {
   AGENT_LUKE_TOOLS,
   AGENT_MESSAGES,
   AGENT_PICTURE,
+  countedWith,
   deploymentFor,
   fakeEve,
   messageAs,
@@ -257,6 +259,13 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             [`Bearer ${owner}`, sessionId, "And drop the old one."],
           ],
         );
+        const counted = {
+          runtime: CONVERSATION_RUNTIME.EVE,
+          machine: AGENT_MACHINE.VERCEL,
+          agent_kind: AGENT_KIND.CODER,
+          turn_running: false,
+        };
+        assert.deepEqual(countedWith(owner, SERVER_EVENT.MESSAGE_SEND), [counted, counted]);
       }),
   );
 
@@ -309,6 +318,18 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           HOSTED_HTTP_STATUS.ACCEPTED,
         );
         assert.equal(eve.sent.length, sends, "a repeat reaches eve no second time");
+        assert.deepEqual(
+          countedWith(owner, SERVER_EVENT.MESSAGE_SEND),
+          [
+            {
+              runtime: CONVERSATION_RUNTIME.EVE,
+              machine: AGENT_MACHINE.VERCEL,
+              agent_kind: AGENT_KIND.CODER,
+              turn_running: true,
+            },
+          ],
+          "a repeat is counted no second time",
+        );
         yield* ask(
           messageAs(owner, agent.id, { ...body, text: "Again.", clientKey: randomUUID() }),
         );
@@ -418,6 +439,17 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.notEqual(
           Option.getOrThrow(yield* readAgent(archived.owner, archived.agent.id)).archivedAt,
           null,
+        );
+        assert.deepEqual(countedWith(stopped.owner, SERVER_EVENT.AGENT_STOP), [
+          { agent_kind: AGENT_KIND.CODER, stopped_tree: false },
+        ]);
+        assert.deepEqual(countedWith(archived.owner, SERVER_EVENT.AGENT_ARCHIVE), [
+          { agent_kind: AGENT_KIND.CODER },
+        ]);
+        assert.deepEqual(
+          countedWith(archived.owner, SERVER_EVENT.AGENT_STOP),
+          [],
+          "an archive's stop is no Stop",
         );
       }),
   );
@@ -596,6 +628,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual(cancelledSessions(), new Set([coder.sessionId, top.sessionId]));
         assert.equal(yield* switched(top.other, false), HOSTED_HTTP_STATUS.OK);
         assert.equal(eve.cancelled.length, 2);
+        assert.deepEqual(countedWith(top.other, SERVER_EVENT.AGENT_STOP), [
+          { agent_kind: AGENT_KIND.PILOT, stopped_tree: true },
+        ]);
         assert.deepEqual(toldPilot(offAt), [], "Running off tells the pilot nothing");
         yield* top.sent("Split the invite email out.");
         assert.deepEqual(toldPilot(offAt), ["Split the invite email out."]);

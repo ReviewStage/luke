@@ -25,6 +25,7 @@ import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import {
+  AGENT_KIND,
   AGENT_PAYER,
   type AgentPayer,
   CHECK_SUMMARY,
@@ -45,6 +46,12 @@ import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import {
+  recordingProductAnalytics,
+  SERVER_EVENT,
+  SERVER_TURN_DURATION,
+  SERVER_TURN_OUTCOME,
+} from "../../events/server-events.js";
 import { type AfterResponse, keptAfterResponse } from "../../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
@@ -77,6 +84,9 @@ const ORIGIN = "https://luke.test";
 const SESSION = "00000000-0000-4000-8000-000000000001";
 const NONCE = "a1b2c3d4e5f6";
 
+/** What the route counted, across the file; a test reads its own account's. */
+const ANALYTICS = recordingProductAnalytics();
+
 /** The route's group over the test's database, as a fetch. */
 const standingWith = (
   options: RunnerEventsOptions,
@@ -87,6 +97,7 @@ const standingWith = (
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
+      ANALYTICS.layer,
       after,
     );
     const web = HttpRouter.toWebHandler(
@@ -366,6 +377,20 @@ it.layer(getTestDB())("the runner events route", (it) => {
         ]);
         const routing = yield* readAgentRouting(agent.userId, agent.agentId);
         assert.equal(Option.getOrThrow(routing).nativeSession, SESSION);
+        assert.deepEqual(
+          ANALYTICS.recorded
+            .filter(
+              (event) => event.userId === agent.userId && event.name === SERVER_EVENT.TURN_END,
+            )
+            .map((event) => event.properties),
+          [
+            {
+              outcome: SERVER_TURN_OUTCOME.COMPLETED,
+              duration: SERVER_TURN_DURATION.UNDER_1M,
+              agent_kind: AGENT_KIND.CODER,
+            },
+          ],
+        );
       }),
   );
 

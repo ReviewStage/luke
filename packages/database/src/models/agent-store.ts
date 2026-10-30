@@ -1831,6 +1831,21 @@ const findAgentPublished = SqlSchema.findOneOption({
     ),
 });
 
+/** The pull request the agent's row keeps, under the row's lock, as a write of a new one reads it. */
+const lockAgentPublished = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ published: Schema.NullOr(PublishedColumnSchema) }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ published: agentTable.published })
+        .from(agentTable)
+        .where(reachableAgent(userId, agentId))
+        .limit(1)
+        .for("update", { of: agentTable }),
+    ),
+});
+
 const findAgentsOfTasks = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -2540,14 +2555,36 @@ export function continuationsOf(
   });
 }
 
-/** The pull request from the agent's branch as GitHub just answered, or null where it answered none, with the read that found it where one is named; nothing written for an agent of a workspace the account is not in. */
+/** Whether a pull request is a merge the row did not already keep as that pull request merged. */
+function newlyMerged(kept: StoredPullRequest | null, published: StoredPullRequest | null): boolean {
+  if (published?.state !== PULL_REQUEST_STATE.MERGED) return false;
+  return kept?.number !== published.number || kept.state !== PULL_REQUEST_STATE.MERGED;
+}
+
+/**
+ * The pull request from the agent's branch as GitHub just answered, or null
+ * where it answered none, with the read that found it where one is named;
+ * nothing written for an agent of a workspace the account is not in.
+ * Answers whether this write is the one that first kept it merged: the row
+ * is locked as it is read, so of two reads that find the same merge at once
+ * (the webhook's and the sweep's) only the first to write says so.
+ */
 export function recordAgentPublished(
   userId: string,
   agentId: string,
   published: StoredPullRequest | null,
   read?: StoredPublishedRead,
-): AgentStoreEffect<void> {
-  return updateAgentPublished({ userId, agentId, published, publishedRead: read ?? null });
+): AgentStoreEffect<boolean> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const kept = yield* lockAgentPublished({ userId, agentId });
+        if (Option.isNone(kept)) return false;
+        yield* updateAgentPublished({ userId, agentId, published, publishedRead: read ?? null });
+        return newlyMerged(kept.value.published, published);
+      }),
+    ),
+  );
 }
 
 /** The row's read of GitHub let go, so its pull request is no longer answered in GitHub's place; nothing written for an agent of a workspace the account is not in. */
@@ -3091,18 +3128,46 @@ export function restoreOperatorAgent(
   );
 }
 
-/** The agent archived or brought back, as `archiveAgent` does it, and the transaction its row was written in. */
+/** An archive's or a bring-back's write: the agent as it then stands, and whether this write archived one that stood unarchived. */
+export interface AgentArchiveCommitted extends AgentCommitted {
+  readonly archivedNow: boolean;
+}
+
+/** The agent's archive stamp under its row's lock, as an archive reads it before it writes its own. */
+const lockAgentArchivedAt = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ archivedAt: Schema.NullOr(InstantColumnSchema) }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ archivedAt: agentTable.archivedAt })
+        .from(agentTable)
+        .where(reachableAgent(userId, agentId))
+        .limit(1)
+        .for("update", { of: agentTable }),
+    ),
+});
+
+/**
+ * The agent archived or brought back, as `archiveAgent` does it, and the
+ * transaction its row was written in; an archive reads the row under its
+ * lock first, so of two archives at once only the first answers that it
+ * archived the agent.
+ */
 export function archiveAgentCommitted(
   userId: string,
   agentId: string,
   archived: boolean,
   archivedBy: StoredArchive = { by: AGENT_ARCHIVER.MEMBER, userId },
-): AgentStoreEffect<Option.Option<AgentCommitted>> {
+): AgentStoreEffect<Option.Option<AgentArchiveCommitted>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const now = yield* DateTime.nowAsDate;
         if (!archived) yield* lockAgentTask(agentId);
+        const archivedBefore = archived
+          ? Option.getOrUndefined(yield* lockAgentArchivedAt({ userId, agentId }))?.archivedAt
+          : undefined;
         // The archive standing before the write, whose stamp names the items it settled.
         const standing = archived ? Option.none() : yield* findAgent({ userId, agentId });
         const written = yield* updateAgentArchived({
@@ -3119,7 +3184,7 @@ export function archiveAgentCommitted(
           yield* reopenAgentInboxItems(agentId, standingArchive);
         }
         const { txid, ...agent } = written.value;
-        return Option.some({ agent, txid });
+        return Option.some({ agent, txid, archivedNow: archived && archivedBefore === null });
       }),
     ),
   );
@@ -3309,6 +3374,37 @@ export function agentConversation(
   agentId: string,
 ): AgentStoreEffect<Option.Option<ConversationTarget>> {
   return findAgentConversation(agentId);
+}
+
+const findSettledTurnAgentKind = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ kind: Schema.Literals(Object.values(AGENT_KIND)) }),
+  execute: (turnId) =>
+    Database.use((db) =>
+      db
+        .select({ kind: agentTable.kind })
+        .from(turns)
+        .innerJoin(agentTable, eq(agentTable.conversationId, turns.conversationId))
+        .where(
+          and(
+            eq(turns.id, turnId),
+            inArray(turns.status, [TURN_STATUS.SETTLED, TURN_STATUS.CANCELLED, TURN_STATUS.FAILED]),
+          ),
+        ),
+    ),
+});
+
+/**
+ * What the agent whose turn this is is, where the turn stands ended;
+ * nothing where no agent stands on its conversation or the turn's end was
+ * rolled back with the transaction that wrote it. Only for a turn the
+ * service settled itself, because it reads past any account's gate.
+ */
+export function settledTurnAgentKind(turnId: string): AgentStoreEffect<Option.Option<AgentKind>> {
+  return Effect.map(
+    findSettledTurnAgentKind(turnId),
+    Option.map((row) => row.kind),
+  );
 }
 
 /**

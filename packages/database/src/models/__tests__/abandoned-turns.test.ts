@@ -12,7 +12,7 @@ import { sessionKey } from "@luke/runtime/vocabulary";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { eq } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations, messages } from "../../schemas/storage.js";
@@ -28,7 +28,13 @@ import {
   TURN_ABANDON,
 } from "../abandoned-turns.js";
 import { latestTurnsOfReached } from "../agent-store.js";
-import { type ConversationTarget, type StoreWriter, storeWriter } from "../writer.js";
+import {
+  type ConversationTarget,
+  type SettledAgentTurn,
+  SettledTurnListener,
+  type StoreWriter,
+  storeWriter,
+} from "../writer.js";
 
 /**
  * How a coding agent's turn whose end is never coming is settled, over a
@@ -272,21 +278,36 @@ it.layer(getTestDB())("a turn whose end is not coming", (it) => {
   );
 
   it.effect(
-    "the sweep settles a coding agent's turn as abandoned only once it ran past its day's bound",
-    () =>
-      Effect.gen(function* () {
+    "the sweep settles a coding agent's turn as abandoned only once it ran past its day's bound, and its listener hears of it once",
+    () => {
+      const heard: SettledAgentTurn[] = [];
+      const listening = Layer.succeed(SettledTurnListener, {
+        heard: (turn) => Effect.sync(() => void heard.push(turn)),
+      });
+      return Effect.gen(function* () {
         const writer = yield* storeWriter({ tools: {} });
         const target = yield* openAgentConversation;
-        yield* turnIn(writer, target, TURN_STATUS.RUNNING);
+        const turnId = yield* turnIn(writer, target, TURN_STATUS.RUNNING);
 
         yield* sweepAbandonedTurns({ writer }, { now: STARTED_AT + TURN_ABANDON.AFTER_MS + 1 });
         assert.deepEqual(yield* newestTurnOf(target), [TURN_STATUS.RUNNING, null]);
-        yield* sweepAbandonedTurns(
-          { writer },
-          { now: STARTED_AT + TURN_ABANDON.AGENT_AFTER_MS + 1 },
-        );
+        const pastBound = STARTED_AT + TURN_ABANDON.AGENT_AFTER_MS + 1;
+        yield* sweepAbandonedTurns({ writer }, { now: pastBound });
         assert.deepEqual(yield* newestTurnOf(target), [TURN_STATUS.FAILED, TURN_FAILURE.ABANDONED]);
-      }),
+        yield* sweepAbandonedTurns({ writer }, { now: pastBound + 1 });
+        // The file's database holds other tests' turns, which the sweep settles too.
+        const heardOfTarget = heard.filter((turn) => turn.conversationId === target.conversationId);
+        assert.deepEqual(heardOfTarget, [
+          {
+            ...target,
+            turnId,
+            status: TURN_STATUS.FAILED,
+            failure: TURN_FAILURE.ABANDONED,
+            ranMs: TURN_ABANDON.AGENT_AFTER_MS + 1,
+          },
+        ]);
+      }).pipe(Effect.provide(listening));
+    },
   );
 
   it.effect(
