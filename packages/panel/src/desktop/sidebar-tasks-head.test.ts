@@ -14,10 +14,9 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
 /**
- * sidebar-tasks-head.test.ts -- the Tasks head's Filter says the list is
- * filtered once the reader chose other statuses than to do and in progress,
- * and says nothing of it while the list shows those two. Synthetic
- * throughout.
+ * sidebar-tasks-head.test.ts -- the Tasks head carries View options alone,
+ * and offers New section on a right-click, which asks for the section's
+ * title. Synthetic throughout.
  */
 
 const WORKSPACE: Workspace = {
@@ -61,14 +60,8 @@ function task(id: string, name: string): TaskSummary {
   };
 }
 
-/** The Tasks head's Filter, drawn over the view the reader kept, if any. */
-function filterButton(view?: object): HTMLButtonElement {
-  if (view !== undefined) {
-    window.localStorage.setItem(
-      "luke.sidebarTaskViews",
-      JSON.stringify({ [WORKSPACE.id]: { grouping: "none", order: "updated", ...view } }),
-    );
-  }
+/** The Tasks section, drawn over one task. */
+function mountTasks(): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -81,18 +74,28 @@ function filterButton(view?: object): HTMLButtonElement {
   );
   act(() => root.render(onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, props))));
   return (
-    container.querySelector<HTMLButtonElement>(
-      'nav[aria-label="Tasks"] button[aria-label="Filter"]',
-    ) ?? assert.fail("no Filter on the Tasks head")
+    container.querySelector<HTMLElement>('nav[aria-label="Tasks"]') ??
+    assert.fail("no Tasks section")
   );
 }
 
-test("Filter says the list is filtered once other statuses are chosen, and nothing while it shows to do and in progress", () => {
-  assert.equal(filterButton().getAttribute("aria-description"), null);
-  assert.equal(
-    filterButton({
-      statuses: [TASK_STATUS.BACKLOG, TASK_STATUS.TODO, TASK_STATUS.IN_PROGRESS],
-    }).getAttribute("aria-description"),
-    "Filtered",
+test("the Tasks head carries View options alone, and its right-click offers New section, which asks for a title", () => {
+  const tasks = mountTasks();
+  const head =
+    tasks.querySelector<HTMLElement>(".luke-group-header-head") ?? assert.fail("no head");
+  assert.deepEqual(
+    [...head.querySelectorAll("button[aria-label]")].map((each) => each.getAttribute("aria-label")),
+    ["View options"],
   );
+
+  act(() => {
+    head.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+  });
+  const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+  assert.deepEqual(
+    items.map((each) => each.textContent),
+    ["New section…"],
+  );
+  act(() => items[0]?.click());
+  assert.ok(document.querySelector('[role="dialog"] input'), "the section dialog asks for a title");
 });

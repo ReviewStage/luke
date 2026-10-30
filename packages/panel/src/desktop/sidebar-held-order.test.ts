@@ -6,12 +6,11 @@ import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, onTestFinished, test } from "vitest";
+import { afterEach, beforeEach, test } from "vitest";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
-import { playListMotions } from "../testing/pane-motion.js";
 import { pointerCross } from "../testing/pointer-cross.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
@@ -21,8 +20,7 @@ import { DesktopSidebar } from "./desktop-sidebar.js";
  * were first drawn in while the pointer is over the sidebar, so an update
  * that would sort a task elsewhere moves nothing under the reader's hand;
  * once the pointer leaves, or the sidebar is folded away and back, the list
- * is sorted anew, and a task the reader renamed themselves moves at once.
- * Synthetic throughout.
+ * is sorted anew. Synthetic throughout.
  */
 
 const WORKSPACE: Workspace = {
@@ -147,160 +145,6 @@ test("a task newly listed stands where it sorts, those drawn already holding the
   ]);
 
   assert.deepEqual(names(container), ["Billing export", "Invite expiry", "Retry audit"]);
-});
-
-test("ordered by name, the reader's own rename moves its task at once, though a teammate's holds", () => {
-  window.localStorage.setItem(
-    "luke.sidebarTaskViews",
-    JSON.stringify({ [WORKSPACE.id]: { grouping: "none", order: "name" } }),
-  );
-  const { container, draw } = mountSidebar([
-    task("t-1", "Invite expiry", 3),
-    task("t-2", "Retry audit", 2),
-    task("t-3", "Usage report", 1),
-  ]);
-  assert.deepEqual(names(container), ["Invite expiry", "Retry audit", "Usage report"]);
-
-  draw([
-    task("t-1", "Invite expiry", 3),
-    task("t-2", "Retry audit", 2),
-    task("t-3", "Audit log", 1),
-  ]);
-  assert.deepEqual(names(container), ["Invite expiry", "Retry audit", "Audit log"]);
-
-  const renamed = [
-    task("t-1", "Invite expiry", 3),
-    task("t-2", "Zero downtime", 2),
-    task("t-3", "Audit log", 1),
-  ];
-  draw(renamed, { pendingTasks: new Set(["t-2"]) });
-  assert.deepEqual(names(container), ["Invite expiry", "Audit log", "Zero downtime"]);
-
-  // Once the view carries the name, the task stands where the rename put it.
-  draw(renamed);
-  assert.deepEqual(names(container), ["Invite expiry", "Audit log", "Zero downtime"]);
-});
-
-/** Each group under Tasks, by the name its fold reads, with its tasks' names in the order drawn. */
-function groups(sidebar: HTMLElement): [string, string[]][] {
-  const region = sidebar.querySelector('nav[aria-label="Tasks"]');
-  return [...(region?.querySelectorAll<HTMLElement>(".sidebar-repository") ?? [])].map((group) => {
-    const fold = group.querySelector("button[aria-expanded]");
-    const heard = [...(fold?.children ?? [])].find(
-      (part) => part.getAttribute("aria-hidden") !== "true",
-    );
-    const titles = [...group.querySelectorAll(".luke-list-row-title")];
-    return [heard?.textContent ?? "", titles.map((name) => name.firstChild?.textContent ?? "")];
-  });
-}
-
-test("grouped by assignee, a task given to someone else moves to their group at once, its old header still naming who it named", () => {
-  const shared = { ...WORKSPACE, memberCount: 2 };
-  window.localStorage.setItem(
-    "luke.sidebarTaskViews",
-    JSON.stringify({ [WORKSPACE.id]: { grouping: "assignee", order: "updated" } }),
-  );
-  const ada = { userId: "user-ada", name: "Ada Lovelace" };
-  const grace = { userId: "user-grace", name: "Grace Hopper" };
-  const rest = { workspace: shared, workspaces: [shared] };
-  const { container, draw } = mountSidebar([]);
-  draw(
-    [
-      { ...task("t-1", "Invite expiry", 3), assignee: ada },
-      { ...task("t-2", "Retry audit", 2), assignee: ada },
-      { ...task("t-3", "Usage report", 1), assignee: grace },
-    ],
-    rest,
-  );
-
-  draw(
-    [
-      { ...task("t-1", "Invite expiry", 3), assignee: grace },
-      { ...task("t-2", "Retry audit", 2), assignee: ada },
-      { ...task("t-3", "Usage report", 1), assignee: grace },
-    ],
-    rest,
-  );
-
-  assert.deepEqual(groups(container), [
-    ["Ada Lovelace", ["Retry audit"]],
-    ["Grace Hopper", ["Invite expiry", "Usage report"]],
-  ]);
-});
-
-test("grouped by assignee, a group whose last task is given away slides out where it stood, out of reach, the groups that stay holding their order, and leaves once its exit has played", () => {
-  const motions = playListMotions();
-  onTestFinished(motions.remove);
-  const shared = { ...WORKSPACE, memberCount: 2 };
-  window.localStorage.setItem(
-    "luke.sidebarTaskViews",
-    JSON.stringify({ [WORKSPACE.id]: { grouping: "assignee", order: "updated" } }),
-  );
-  const ada = { userId: "user-ada", name: "Ada Lovelace" };
-  const grace = { userId: "user-grace", name: "Grace Hopper" };
-  const rest = { workspace: shared, workspaces: [shared] };
-  const { container, draw } = mountSidebar([]);
-  draw(
-    [
-      { ...task("t-1", "Invite expiry", 3), assignee: ada },
-      { ...task("t-2", "Retry audit", 2), assignee: ada },
-      { ...task("t-3", "Usage report", 1), assignee: grace },
-    ],
-    rest,
-  );
-
-  draw(
-    [
-      { ...task("t-1", "Invite expiry", 3), assignee: ada },
-      { ...task("t-2", "Retry audit", 2), assignee: ada },
-      { ...task("t-3", "Usage report", 1), assignee: ada },
-    ],
-    rest,
-  );
-
-  const leaving = container.querySelector<HTMLElement>(".sidebar-repository[data-leaving]");
-  assert.match(leaving?.textContent ?? "", /Grace Hopper/u, "its group is drawn on");
-  assert.equal(leaving?.hasAttribute("inert"), true, "out of reach while it goes");
-  const out = motions.played.find((each) => each.element === leaving);
-  assert.deepEqual(
-    [
-      ...container.querySelectorAll(".sidebar-repository:not([data-leaving]) .luke-list-row-title"),
-    ].map((name) => name.firstChild?.textContent),
-    ["Invite expiry", "Retry audit", "Usage report"],
-    "the rows that stay keep the order they held",
-  );
-
-  act(() => out?.finish());
-  assert.equal(container.querySelector("[data-leaving]"), null);
-  assert.deepEqual(
-    groups(container).map(([heard]) => heard),
-    ["Ada Lovelace"],
-  );
-});
-
-test("grouped by assignee, a child task stands under its parent in the parent's group, never in its own assignee's", () => {
-  const shared = { ...WORKSPACE, memberCount: 2 };
-  window.localStorage.setItem(
-    "luke.sidebarTaskViews",
-    JSON.stringify({ [WORKSPACE.id]: { grouping: "assignee", order: "updated" } }),
-  );
-  const ada = { userId: "user-ada", name: "Ada Lovelace" };
-  const grace = { userId: "user-grace", name: "Grace Hopper" };
-  const { container, draw } = mountSidebar([]);
-  draw(
-    [
-      { ...task("t-1", "Cleanup", 2), assignee: ada },
-      { ...task("t-2", "Probe", 1), assignee: grace, parentTaskId: "t-1" },
-    ],
-    { workspace: shared, workspaces: [shared] },
-  );
-  assert.deepEqual(groups(container), [["Ada Lovelace", ["Cleanup"]]]);
-
-  const fold = container.querySelector<HTMLButtonElement>(
-    'button[aria-label="Child tasks of Cleanup"]',
-  );
-  act(() => fold?.click());
-  assert.deepEqual(groups(container), [["Ada Lovelace", ["Cleanup", "Probe"]]]);
 });
 
 test("a chosen child task whose parent the view comes to hide is no longer chosen, so a menu on another chosen row acts on that row alone", () => {

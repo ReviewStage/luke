@@ -8,51 +8,38 @@ import {
 } from "@luke/features/task-wire";
 
 /**
- * task-list-model.ts -- how the sidebar's task list is grouped, ordered, and filtered: the view a workspace keeps, the groups it draws, and the time each row shows.
+ * task-list-model.ts -- how the sidebar's task list is grouped and filtered: the view a workspace keeps, the groups it draws, and the time each row shows.
  *
- * The list is one section of the sidebar, its tasks drawn under the groups
- * the view chooses: by repository, by who they are assigned to, by who
- * created them, or in one run.
- * Home's Recent and ⌘K order tasks by the same last activity (`taskTime`). The
- * order chosen orders the rows within a group and the groups themselves,
- * and is the time each row shows, so the order and the label never
- * disagree.
+ * The list is one section of the sidebar, the work under way, its tasks
+ * drawn by repository or in one run, newest updated first, browsing left
+ * to the Tasks page. Home's Recent and ⌘K order tasks by the same last
+ * activity (`taskTime`), which is the time each row shows, so the order
+ * and the label never disagree.
  *
  * A row of the sidebar's list is a task, or an agent an automation started
  * with no task, which stands among the tasks by the same rules rather than
- * in a group of its own: under its repository, under whoever started it, as
- * its creator and as its assignee alike, and
- * in the order chosen, a task's row timed as the task is (`taskTime`).
+ * in a group of its own: under its repository, as the reader's where the
+ * reader started it, and in the order of its last activity.
  *
- * The list holds the tasks of the statuses the view shows, to do and in
- * progress until the reader chooses otherwise, so a filed backlog and the
- * settled tasks stay out of the way of the work under way; an agent with no
- * task, and a task from a service before statuses, has no status to leave
- * it out by and always stands. The Tasks page lays the same tasks out its
- * own way (`tasks-page-model.ts`).
+ * The list holds the reader's own tasks until they choose Anyone or a
+ * teammate (`ASSIGNED_TO`): those assigned to them, and those no one is on
+ * that they created, so a task of theirs nobody picked up never leaves it.
+ * It holds the tasks to do and in progress alone (`SHOWN_STATUSES`), so a
+ * filed backlog and the settled tasks stay out of the way of the work under
+ * way; an agent with no task, and a task from a service before statuses,
+ * has no status to leave it out by and always stands. The Tasks page lays
+ * the same tasks out its own way (`tasks-page-model.ts`).
  */
 
 /** How the list groups its tasks. */
 export const TASK_GROUPING = {
   REPOSITORY: "repository",
-  ASSIGNEE: "assignee",
-  CREATOR: "creator",
   NONE: "none",
 } as const;
 
 export type TaskGrouping = (typeof TASK_GROUPING)[keyof typeof TASK_GROUPING];
 
-/**
- * The grouping a list is drawn by: the one its view keeps, but a grouping
- * by person, assignee or creator, kept for a workspace nobody shares now,
- * which has no people to group by, is drawn by repository.
- */
-export function drawnGrouping(grouping: TaskGrouping, shared: boolean): TaskGrouping {
-  const byPerson = grouping === TASK_GROUPING.ASSIGNEE || grouping === TASK_GROUPING.CREATOR;
-  return byPerson && !shared ? TASK_GROUPING.REPOSITORY : grouping;
-}
-
-/** How the list orders its tasks, and its groups by them. */
+/** How the Tasks page and a row's time order tasks; the sidebar orders by last update alone. */
 export const TASK_ORDER = {
   UPDATED: "updated",
   CREATED: "created",
@@ -61,24 +48,31 @@ export const TASK_ORDER = {
 
 export type TaskOrder = (typeof TASK_ORDER)[keyof typeof TASK_ORDER];
 
-/** How a workspace's list is drawn: today's, by repository and last update, everyone's, until it is changed. */
+/** Whose tasks the list holds: the reader's, anyone's, or one teammate's. */
+export const ASSIGNED_TO = {
+  ME: "me",
+  ANYONE: "anyone",
+  MEMBER: "member",
+} as const;
+
+/** Whose tasks the list holds, a teammate by account id. */
+export type AssignedTo =
+  | { readonly kind: typeof ASSIGNED_TO.ME }
+  | { readonly kind: typeof ASSIGNED_TO.ANYONE }
+  | { readonly kind: typeof ASSIGNED_TO.MEMBER; readonly userId: string };
+
+/** How a workspace's list is drawn: by repository, the reader's own tasks, until it is changed. */
 export interface TaskListView {
   readonly grouping: TaskGrouping;
-  readonly order: TaskOrder;
-  /** Whose tasks the list holds: one member's by account id, or everyone's where absent. */
-  readonly createdBy?: string;
-  /** Who the tasks the list holds are assigned to: one member by account id, or anyone, no one included, where absent. */
-  readonly assignedTo?: string;
-  /** The statuses whose tasks the list holds, in `TASK_STATUS_ORDER`; `DEFAULT_SHOWN_STATUSES` where absent. */
-  readonly statuses?: readonly TaskStatus[];
+  readonly assignedTo: AssignedTo;
 }
 
-/** The statuses a list shows until its reader chooses: the work to do and under way, the backlog and the settled left out. */
-const DEFAULT_SHOWN_STATUSES: readonly TaskStatus[] = [TASK_STATUS.TODO, TASK_STATUS.IN_PROGRESS];
+/** The statuses the list shows: the work to do and under way, the backlog and the settled left out. */
+export const SHOWN_STATUSES: readonly TaskStatus[] = [TASK_STATUS.TODO, TASK_STATUS.IN_PROGRESS];
 
 export const DEFAULT_TASK_LIST_VIEW: TaskListView = {
   grouping: TASK_GROUPING.REPOSITORY,
-  order: TASK_ORDER.UPDATED,
+  assignedTo: { kind: ASSIGNED_TO.ME },
 };
 
 /** What a row of the list stands for: a task, or an agent with no task. */
@@ -95,18 +89,6 @@ export type TaskRow =
 /** The rows of one repository, as the sidebar groups them under its header; null is the rows with none. */
 export interface RepositoryGroup {
   readonly repository: string | null;
-  readonly rows: readonly TaskRow[];
-}
-
-/** One creator's rows, by their account id; undefined is the rows nobody is named for. */
-export interface CreatorGroup {
-  readonly creatorId: string | undefined;
-  readonly rows: readonly TaskRow[];
-}
-
-/** One assignee's rows, by their account id; undefined is the rows no one is assigned to. */
-export interface AssigneeGroup {
-  readonly assigneeId: string | undefined;
   readonly rows: readonly TaskRow[];
 }
 
@@ -159,25 +141,14 @@ export function taskTime(task: TaskSummary, order: TaskOrder): number {
   return Math.max(task.updatedAt, task.agents?.activityAt ?? 0);
 }
 
-/** The time a row shows and is ordered by: its task's (`taskTime`), or its agent's start under Created and its last activity otherwise. */
-export function taskRowTime(row: TaskRow, order: TaskOrder): number {
-  if (row.kind === TASK_ROW.TASK) return taskTime(row.task, order);
-  return order === TASK_ORDER.CREATED ? row.agent.createdAt : row.agent.activityAt;
+/** The time a row shows and is ordered by: its task's last activity (`taskTime`), or its agent's. */
+export function taskRowTime(row: TaskRow): number {
+  return row.kind === TASK_ROW.TASK ? taskTime(row.task, TASK_ORDER.UPDATED) : row.agent.activityAt;
 }
 
-/** Two rows in the order chosen; a tie in name falls to the later activity. */
-function byOrder(order: TaskOrder): (a: TaskRow, b: TaskRow) => number {
-  if (order === TASK_ORDER.NAME) {
-    return (a, b) =>
-      taskRowName(a).localeCompare(taskRowName(b)) ||
-      taskRowTime(b, TASK_ORDER.UPDATED) - taskRowTime(a, TASK_ORDER.UPDATED);
-  }
-  return (a, b) => taskRowTime(b, order) - taskRowTime(a, order);
-}
-
-/** The rows in the order chosen. */
-export function orderTaskRows(rows: readonly TaskRow[], order: TaskOrder): TaskRow[] {
-  return rows.toSorted(byOrder(order));
+/** The rows newest active first. */
+export function orderTaskRows(rows: readonly TaskRow[]): TaskRow[] {
+  return rows.toSorted((a, b) => taskRowTime(b) - taskRowTime(a));
 }
 
 /** The rows split by a key, each run kept in the order it was handed. */
@@ -192,9 +163,9 @@ function grouped<K>(rows: readonly TaskRow[], keyOf: (row: TaskRow) => K): Map<K
   return groups;
 }
 
-/** The latest time among a group's rows, under the order chosen. */
-function latest(rows: readonly TaskRow[], order: TaskOrder): number {
-  return Math.max(...rows.map((row) => taskRowTime(row, order)));
+/** The latest time among a group's rows. */
+function latest(rows: readonly TaskRow[]): number {
+  return Math.max(...rows.map(taskRowTime));
 }
 
 /** A repository's name without its owner: `relay` of `acme/relay`. */
@@ -203,25 +174,19 @@ function nameOf(repository: string): string {
 }
 
 /**
- * The rows grouped by their repository, in the order chosen: under Last
- * updated or Created the group holding the latest row first, under Name
- * the repositories by name. The rows with none stand last whatever their
- * age or name.
+ * The rows grouped by their repository, newest updated first: the group
+ * holding the latest row first, and the rows with none last whatever their
+ * age.
  */
-export function repositoryGroups(
-  rows: readonly TaskRow[],
-  order: TaskOrder = TASK_ORDER.UPDATED,
-): readonly RepositoryGroup[] {
-  const groups = [...grouped(orderTaskRows(rows, order), taskRowRepository)].map(
+export function repositoryGroups(rows: readonly TaskRow[]): readonly RepositoryGroup[] {
+  const groups = [...grouped(orderTaskRows(rows), taskRowRepository)].map(
     ([repository, members]) => ({ repository, rows: members }),
   );
   return groups.sort((a, b) => {
     if (a.repository === null || b.repository === null) {
       return Number(a.repository === null) - Number(b.repository === null);
     }
-    return order === TASK_ORDER.NAME
-      ? nameOf(a.repository).localeCompare(nameOf(b.repository))
-      : latest(b.rows, order) - latest(a.rows, order);
+    return latest(b.rows) - latest(a.rows);
   });
 }
 
@@ -252,54 +217,38 @@ export function createdByOnly(
   return createdBy === undefined ? tasks : tasks.filter((task) => creatorIdOf(task) === createdBy);
 }
 
-/** The rows one member created, or every row where the view names nobody. */
-export function taskRowsCreatedBy(
-  rows: readonly TaskRow[],
-  createdBy: string | undefined,
-): readonly TaskRow[] {
-  return createdBy === undefined ? rows : rows.filter((row) => taskRowCreatorId(row) === createdBy);
-}
-
 /**
  * Who the row is assigned to, by account id: a task's assignee, none for a
  * task no one is on, or whoever started an agent with no task, which is
- * theirs as it is theirs by Created by.
+ * theirs.
  */
 function taskRowAssigneeId(row: TaskRow): string | undefined {
   return row.kind === TASK_ROW.TASK ? row.task.assignee?.userId : row.agent.startedBy?.userId;
 }
 
-/** The rows assigned to one member, or every row where the view names nobody. */
+/**
+ * The rows the view's Assigned to holds: every row for Anyone; one
+ * teammate's (`taskRowAssigneeId`); and for Me the reader's, and the tasks
+ * no one is on that the reader created, so their own unassigned work never
+ * leaves the list. A reader not yet known filters nothing.
+ */
 export function taskRowsAssignedTo(
   rows: readonly TaskRow[],
-  assignedTo: string | undefined,
+  assignedTo: AssignedTo,
+  readerId: string | undefined,
 ): readonly TaskRow[] {
-  return assignedTo === undefined
-    ? rows
-    : rows.filter((row) => taskRowAssigneeId(row) === assignedTo);
-}
-
-/** The statuses a view shows, in `TASK_STATUS_ORDER`. */
-export function shownStatuses(view: TaskListView): readonly TaskStatus[] {
-  return view.statuses ?? DEFAULT_SHOWN_STATUSES;
-}
-
-/** Whether the view shows other statuses than a list shows until its reader chooses, which is a status filter on. */
-export function statusesFiltered(view: TaskListView): boolean {
-  const shown = shownStatuses(view);
-  return (
-    shown.length !== DEFAULT_SHOWN_STATUSES.length ||
-    !DEFAULT_SHOWN_STATUSES.every((status) => shown.includes(status))
-  );
-}
-
-/** The statuses shown with one turned on or off, kept in `TASK_STATUS_ORDER`. */
-export function toggledStatus(
-  statuses: readonly TaskStatus[],
-  status: TaskStatus,
-): readonly TaskStatus[] {
-  const on = !statuses.includes(status);
-  return TASK_STATUS_ORDER.filter((each) => (each === status ? on : statuses.includes(each)));
+  switch (assignedTo.kind) {
+    case ASSIGNED_TO.ANYONE:
+      return rows;
+    case ASSIGNED_TO.MEMBER:
+      return rows.filter((row) => taskRowAssigneeId(row) === assignedTo.userId);
+    case ASSIGNED_TO.ME:
+      if (readerId === undefined) return rows;
+      return rows.filter((row) => {
+        const assignee = taskRowAssigneeId(row);
+        return assignee === undefined ? taskRowCreatorId(row) === readerId : assignee === readerId;
+      });
+  }
 }
 
 /** The status a row is left out by: its task's, or none for an agent with no task or a task from a service before statuses. */
@@ -334,69 +283,6 @@ export function hiddenStatuses(
     const count = rows.filter((row) => taskRowStatus(row) === status).length;
     return count === 0 ? [] : [{ status, count }];
   });
-}
-
-/**
- * The rows grouped by who created them, in the order chosen: the reader's
- * own first, then each teammate's, under Last updated or Created the one
- * holding the latest row first, under Name by the creator's name as
- * `nameOf` says it, the name the group's header says, and the rows nobody
- * is named for last.
- */
-export function creatorGroups(
-  rows: readonly TaskRow[],
-  order: TaskOrder,
-  readerId: string | undefined,
-  nameOf: (row: TaskRow) => string,
-): readonly CreatorGroup[] {
-  const groups = [...grouped(orderTaskRows(rows, order), taskRowCreatorId)].map(
-    ([creatorId, members]) => ({
-      creatorId,
-      rows: members,
-    }),
-  );
-  const rank = (group: CreatorGroup) =>
-    group.creatorId === undefined ? 2 : group.creatorId === readerId ? 0 : 1;
-  const nameIn = (group: CreatorGroup) => {
-    const first = group.rows[0];
-    return first === undefined ? "" : nameOf(first);
-  };
-  return groups.sort(
-    (a, b) =>
-      rank(a) - rank(b) ||
-      (order === TASK_ORDER.NAME
-        ? nameIn(a).localeCompare(nameIn(b))
-        : latest(b.rows, order) - latest(a.rows, order)),
-  );
-}
-
-/**
- * The rows grouped by who they are assigned to (`taskRowAssigneeId`): the
- * reader's own first, then each teammate's by their name as `nameOf` says
- * it, the name the group's header says, and the rows no one is assigned to
- * last. The rows within each group stand in the order chosen.
- */
-export function assigneeGroups(
-  rows: readonly TaskRow[],
-  order: TaskOrder,
-  readerId: string | undefined,
-  nameOf: (row: TaskRow) => string,
-): readonly AssigneeGroup[] {
-  const groups = [...grouped(orderTaskRows(rows, order), taskRowAssigneeId)].map(
-    ([assigneeId, members]) => ({ assigneeId, rows: members }),
-  );
-  const rank = (group: AssigneeGroup) =>
-    group.assigneeId === undefined ? 2 : group.assigneeId === readerId ? 0 : 1;
-  const nameIn = (group: AssigneeGroup) => {
-    const first = group.rows[0];
-    return first === undefined ? "" : nameOf(first);
-  };
-  return groups.sort(
-    (a, b) =>
-      rank(a) - rank(b) ||
-      nameIn(a).localeCompare(nameIn(b)) ||
-      latest(b.rows, order) - latest(a.rows, order),
-  );
 }
 
 /** One row as a list nesting child tasks draws it: how deep it stands, and whether the child tasks under it stand open. */
