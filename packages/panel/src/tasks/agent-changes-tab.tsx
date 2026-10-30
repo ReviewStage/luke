@@ -57,6 +57,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { useDraft } from "../composer-drafts.js";
@@ -132,6 +133,7 @@ import {
   gitHubAction,
   paneToggleAction,
   type TreeShown,
+  TreeToggle,
   usePaneRoom,
   useTreeEdge,
 } from "./file-view.js";
@@ -178,7 +180,11 @@ import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
  * settings, every one stage-cli offers in a popover (`view-settings.tsx`),
  * Collapse all or Expand all, the ⋯ (the pull request's patch copied or
  * saved, and the changes read again), and the tree's toggle, which shows
- * and hides the tree for every File and Changes tab alike. The tree is a File
+ * and hides the tree for every File and Changes tab alike. A view a host
+ * draws inside its own page, as a chapter is (`agent-chapters-tab.tsx`),
+ * draws no bar of its own: the host's bar holds its diff settings,
+ * Collapse all, and the tree's toggle (`ChangesBarHost`), and nothing that
+ * acts on the whole pull request, and its closed tree leaves no strip. The tree is a File
  * tab's own pane (`file-tree-pane.tsx`) narrowed to the changed files,
  * every folder open, each row lettered A, M, D, or R, and ending, as
  * stage-cli's do, in how many review threads stand on its file, the lines
@@ -1770,6 +1776,20 @@ export interface FileReveal {
   readonly lines?: DiffLineSpan | undefined;
 }
 
+/**
+ * A bar of the host's that draws the view's tools in place of its own
+ * (`FileViewBar`), as a chapter's header does: its diff settings, Collapse
+ * all, and the tree's toggle, drawn into `tools`; the view's count of files
+ * viewed, its pull request on GitHub, and its ⋯ over the whole pull request
+ * left to the host, and no strip standing in the closed tree's place.
+ */
+export interface ChangesBarHost {
+  /** The box in the host's bar the tools are drawn into; none until it is drawn. */
+  readonly tools: HTMLElement | null;
+  /** The host's view, which holds that bar and the list alike and resizes with the panel, the tree's toggles read in it; none until it is drawn. */
+  readonly view: HTMLElement | null;
+}
+
 export function AgentChangesTab({
   agentId,
   control,
@@ -1783,6 +1803,7 @@ export function AgentChangesTab({
   files,
   fileReveal,
   overscroll,
+  host,
 }: {
   agentId: string;
   control: AgentsControl;
@@ -1806,9 +1827,11 @@ export function AgentChangesTab({
   fileReveal?: FileReveal | undefined;
   /** Whether a swipe past the list's end is handed on to the box the tab stands in, as a chapter's is to the Pull request tab; it stops at the end where none is named. */
   overscroll?: ScrollOverscroll | undefined;
+  /** The host's bar the view's tools are drawn into in place of its own; none draws its own. */
+  host?: ChangesBarHost | undefined;
 }): React.JSX.Element {
   const { answer, refreshFailed, out, ask, pullRequest, viewedFiles } = reads;
-  const room = usePaneRoom(tree);
+  const room = usePaneRoom(tree, host?.view);
   const edge = useTreeEdge(tree);
   const [diffBox, setDiffBox] = useState<HTMLDivElement | null>(null);
   const roomy = useSplitRoom(diffBox);
@@ -1874,27 +1897,30 @@ export function AgentChangesTab({
   };
   const changesMenu = useChangesMenu({ pullRequest });
   const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy });
-  // A phone draws no bar over the diffs: the task's header's ⋯ offers every control of it while the view is shown, the count of files viewed said under Show files.
+  // A phone draws no bar over the diffs: the task's header's ⋯ offers every control of it while the view is shown, the count of files viewed said under Show files;
+  // a host's own bar says its count, and offers nothing that acts on the whole pull request.
   const phone = usePhoneRoom();
   const url = pullRequest?.url;
   useTabActions(
     phone && shown && url !== undefined && shownFileOf(changed.files, list.current) !== undefined
-      ? [
-          [
-            paneToggleAction(
-              room,
-              undefined,
-              viewedOf(changed.files, list.viewed, pullRequest?.truncated === true).words,
-            ),
-            {
-              ...gitHubAction(() => appPlatform().openGitHub(`${url}/files`)),
-              label: OPEN_FILES_ON_GITHUB,
-            },
-            settings.action,
-            foldAllAction(list),
-          ],
-          ...barMenuItems(changesMenu),
-        ]
+      ? host === undefined
+        ? [
+            [
+              paneToggleAction(
+                room,
+                undefined,
+                viewedOf(changed.files, list.viewed, pullRequest?.truncated === true).words,
+              ),
+              {
+                ...gitHubAction(() => appPlatform().openGitHub(`${url}/files`)),
+                label: OPEN_FILES_ON_GITHUB,
+              },
+              settings.action,
+              foldAllAction(list),
+            ],
+            ...barMenuItems(changesMenu),
+          ]
+        : [[paneToggleAction(room), settings.action, foldAllAction(list)]]
       : undefined,
   );
   const taskId = control.agents?.find((each) => each.id === agentId)?.planId ?? null;
@@ -1957,6 +1983,17 @@ export function AgentChangesTab({
     >
       {phone ? (
         settings.sheet
+      ) : host !== undefined ? (
+        host.tools === null ? null : (
+          createPortal(
+            <>
+              <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy }} />
+              <FoldAllButton list={list} />
+              <TreeToggle toggles={room.toggles} />
+            </>,
+            host.tools,
+          )
+        )
       ) : (
         <FileViewBar
           lead={
@@ -2025,7 +2062,7 @@ export function AgentChangesTab({
           width={tree.width?.width}
           edge={edge}
         />
-        {tree.open ? null : (
+        {tree.open || host !== undefined ? null : (
           <ChangesStrip
             files={changed.ordered}
             current={shownFile.path}

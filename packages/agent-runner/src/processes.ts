@@ -26,11 +26,10 @@
  * until it is matched here too. The relays each sandboxed command starts end
  * with that command, so none stands while the agent waits.
  *
- * In a VM of its own (`processTable`'s `uid`), as a host runs every runner,
- * nothing empties the bounding set, and nothing needs to: the runner and
- * everything of the agent's run as one user, the device's, and every
- * process of the machine's own as root, so a process running as the
- * runner's own user marks it the agent's instead.
+ * On a host, where the runner runs straight on the box beside the host's
+ * own processes and every other agent's, nothing empties the bounding set,
+ * and every process runs as one user, so the agent's are told apart by
+ * descent and process group instead (`host-processes.ts`).
  *
  * Where `/proc` cannot be read, the answer is that one runs, so a wait is
  * never released on a guess; so is a process whose command line cannot be
@@ -56,11 +55,10 @@ const HARNESS_BRIDGE = {
   LISTEN: /^UNIX-LISTEN:\/tmp\/claude-http-[0-9a-f]+\.sock(,|$)/,
 } as const;
 
-/** One process as its `status` names it: its parent, whether its bounding set is empty, and its real user. */
+/** One process as its `status` names it: its parent, and whether its bounding set is empty. */
 interface Status {
   readonly parent: number;
   readonly emptied: boolean;
-  readonly uid: number | undefined;
 }
 
 /** A process's `status` read, or none where it ended before its read. */
@@ -73,13 +71,8 @@ function statusOf(root: string, pid: string): Status | undefined {
   }
   const parent = /^PPid:\s+(\d+)$/m.exec(text)?.[1];
   const bounding = /^CapBnd:\s+([0-9a-f]+)$/m.exec(text)?.[1];
-  const uid = /^Uid:\s+(\d+)/m.exec(text)?.[1];
   if (parent === undefined || bounding === undefined) return undefined;
-  return {
-    parent: Number(parent),
-    emptied: /^0+$/.test(bounding),
-    uid: uid === undefined ? undefined : Number(uid),
-  };
+  return { parent: Number(parent), emptied: /^0+$/.test(bounding) };
 }
 
 /** Whether a process's command line, read from its `cmdline`, is the bridge's; no where it cannot be read. */
@@ -102,10 +95,9 @@ function runsBridge(root: string, pid: number): boolean {
 /**
  * Whether a process of the agent's runs under `root`, a `/proc`, beside the
  * runner (`self`), the processes it spawned, and the harness's bridge: one
- * with an emptied bounding set, or in a VM one running as `uid`; yes where
- * no process at all could be read.
+ * with an emptied bounding set; yes where no process at all could be read.
  */
-function agentProcessRunsUnder(root: string, self: number, uid: number | undefined): boolean {
+function agentProcessRunsUnder(root: string, self: number): boolean {
   let pids: string[];
   try {
     pids = readdirSync(root).filter((name) => /^\d+$/.test(name));
@@ -119,8 +111,7 @@ function agentProcessRunsUnder(root: string, self: number, uid: number | undefin
   }
   if (statuses.size === 0) return true;
   for (const [pid, status] of statuses) {
-    const agents = uid === undefined ? status.emptied : status.uid === uid;
-    if (!agents || pid === self || status.parent === self) continue;
+    if (!status.emptied || pid === self || status.parent === self) continue;
     // Note that the bridge is the harness's only where the harness, a child of the runner, spawned it.
     if (statuses.get(status.parent)?.parent === self && runsBridge(root, pid)) continue;
     return true;
@@ -130,11 +121,10 @@ function agentProcessRunsUnder(root: string, self: number, uid: number | undefin
 
 /**
  * The processes under `root`, a `/proc`, as the runner `self` reads them:
- * the sandbox's own `/proc` and the runner's pid in production, and in a VM
- * the runner's own user (`uid`), whose processes are the agent's there.
+ * the sandbox's own `/proc` and the runner's pid in production.
  */
-export function processTable(root: string, self: number, uid?: number): Layer.Layer<ProcessTable> {
+export function processTable(root: string, self: number): Layer.Layer<ProcessTable> {
   return Layer.succeed(ProcessTable, {
-    agentProcessRuns: Effect.sync(() => agentProcessRunsUnder(root, self, uid)),
+    agentProcessRuns: Effect.sync(() => agentProcessRunsUnder(root, self)),
   });
 }

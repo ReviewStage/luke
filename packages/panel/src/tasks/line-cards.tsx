@@ -47,8 +47,8 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * the thread's chip, which opens it. What GitHub said on the agent's pull
  * request reaches the agent as a prompt fenced and closed with what to do
  * about it; the transcript draws it as its own folding card, the one a
- * plan, a continue, and a fork are drawn in (`ai-elements/plan.tsx`), open
- * as it lands, since the agent acts on it. Its head says who did what to
+ * plan, a continue, and a fork are drawn in (`ai-elements/plan.tsx`), closed
+ * as it lands, since its head already says what happened. Its head says who did what to
  * which pull request, by the verdict's own badge from the Pull request
  * tab, or a check event's status, in the icon's seat; its body holds their
  * words as the transcript draws markdown and each inline comment as GitHub
@@ -281,7 +281,6 @@ export function GitHubLineCard({
   return (
     <Plan
       data-github-line={line.event}
-      defaultOpen={folds}
       // Note that a card that is its head alone holds its fold shut, since a press would open it onto nothing.
       open={folds ? undefined : false}
       fill={DISCLOSURE_FILL.ACTIONS}

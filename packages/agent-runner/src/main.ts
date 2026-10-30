@@ -9,10 +9,6 @@
  * Started as `node <bundle> codex-token <tokenUrl>` by app-server
  * (`codex-token.ts`), it prints the token Luke answers on stdout and exits
  * 0, or says why not on stderr and exits 1.
- *
- * Started as `node <bundle> state pack|verify|restore <agent folder> <pack
- * file>` (`state.ts`), it packs, verifies or restores the agent's state and
- * exits as `STATE_EXIT` says.
  */
 
 import { createInterface } from "node:readline";
@@ -21,17 +17,16 @@ import {
   NodeFileSystem,
   NodePath,
   NodeRuntime,
-  NodeServices,
 } from "@effect/platform-node";
 import { Effect, Exit, Layer, Stream } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { claudeCodeLive } from "./claude-code.js";
 import { askCodexToken } from "./codex-token.js";
+import { hostProcessTable, MAC_PS } from "./host-processes.js";
 import { runsOnHost } from "./launch.js";
 import { processTable } from "./processes.js";
-import { CODEX_TOKEN_COMMAND, RUNNER_END, STATE_COMMAND } from "./protocol.js";
+import { CODEX_TOKEN_COMMAND, RUNNER_END } from "./protocol.js";
 import { runAgent } from "./runner.js";
-import { stateCommand } from "./state.js";
 
 const EXIT = { ENDED: 0, FAILED: 1 } as const;
 
@@ -47,8 +42,7 @@ const stdinLines = Stream.fromAsyncIterable(stdin, () => undefined).pipe(
   Stream.catch(() => Stream.empty),
 );
 
-const [, script, mode, ...commandArgs] = process.argv;
-const [tokenUrl] = commandArgs;
+const [, script, mode, tokenUrl] = process.argv;
 
 const launch = runAgent({
   lines: stdinLines,
@@ -65,8 +59,10 @@ const launch = runAgent({
       claudeCodeLive,
       FetchHttpClient.layer,
       // The machine's own processes, read beside the runner's, for a wait's release (runner.ts):
-      // the sandbox's `/proc`, or a local agent's VM's, keyed on the runner's own user.
-      processTable("/proc", process.pid, runsOnHost(process.env) ? process.getuid?.() : undefined),
+      // the sandbox's `/proc`, or on a host the box's, the agent's told apart by descent and group.
+      runsOnHost(process.env)
+        ? hostProcessTable(process.pid, { proc: "/proc", ps: MAC_PS })
+        : processTable("/proc", process.pid),
       // Codex's app-server, spawned as the runner's own child (codex.ts).
       NodeChildProcessSpawner.layer.pipe(
         Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
@@ -92,10 +88,7 @@ const token = Effect.gen(function* () {
   Effect.provide(FetchHttpClient.layer),
 );
 
-// The state command keeps nothing of what it carries in its output: sizes and digests alone.
-const state = stateCommand(commandArgs).pipe(Effect.provide(NodeServices.layer));
-
-const main = mode === CODEX_TOKEN_COMMAND ? token : mode === STATE_COMMAND ? state : launch;
+const main = mode === CODEX_TOKEN_COMMAND ? token : launch;
 
 // Note that we exit explicitly, even on success, where `runMain` would leave
 // the process to drain, because stdin, which Luke may hold open, would keep

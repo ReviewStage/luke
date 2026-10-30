@@ -23,7 +23,7 @@ import { type DrawnTaskRow, drawnTaskRows, TASK_ROW, type TaskRow } from "@luke/
 import { useRef } from "react";
 
 /** The words a parent's fold is named by, before its name. */
-const CHILD_TASKS_OF = "Child tasks of";
+const CHILD_TASKS_OF = "Sub-tasks of";
 
 /** Whether two drawings stand every row alike: the same row, at the same depth, folded the same way. */
 function sameDrawn(was: readonly DrawnTaskRow[], now: readonly DrawnTaskRow[]): boolean {

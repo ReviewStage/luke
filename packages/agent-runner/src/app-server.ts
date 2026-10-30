@@ -61,6 +61,13 @@ export interface AppServerCommand {
   readonly args: readonly string[];
   readonly cwd: string;
   readonly env: Readonly<Record<string, string | undefined>>;
+  /**
+   * Whether app-server stays in the runner's own process group rather than
+   * leading one of its own: on a host, where stopping the agent signals the
+   * runner's group alone, and kills it once its grace has passed, which
+   * would otherwise leave app-server and its commands running.
+   */
+  readonly inRunnerGroup?: boolean;
 }
 
 /** A request method the pinned protocol defines, and the params it takes. */
@@ -138,6 +145,7 @@ export const spawnAppServer = Effect.fn("agent-runner/spawnAppServer")(function*
         stdin: { stream: Stream.fromQueue(stdin), endOnDone: true },
         killSignal: APP_SERVER_KILL.SIGNAL,
         forceKillAfter: APP_SERVER_KILL.GRACE,
+        ...(command.inRunnerGroup === true ? { detached: false } : {}),
       }),
     )
     .pipe(

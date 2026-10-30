@@ -194,11 +194,14 @@ export function chapterThreadCount(
   return threads.filter((thread) => threadInChapter(thread, chapter, hunks)).length;
 }
 
-/** Lines a key change points at, as its row names them: the file's path, then the line or the lines. */
+/** The line or the lines a key change points at, as its pill names them after its file. */
+export function lineRefLines(ref: LineRef): string {
+  return ref.startLine === ref.endLine ? `L${ref.startLine}` : `L${ref.startLine}–${ref.endLine}`;
+}
+
+/** Lines a key change points at, named whole: the file's path, then the line or the lines. */
 export function lineRefLabel(ref: LineRef): string {
-  const lines =
-    ref.startLine === ref.endLine ? `L${ref.startLine}` : `L${ref.startLine}–${ref.endLine}`;
-  return `${ref.path} · ${lines}`;
+  return `${ref.path} · ${lineRefLines(ref)}`;
 }
 
 /** Where a line ref stands among others of its file at the same line: a removed line before an added one, as a unified diff draws them. */

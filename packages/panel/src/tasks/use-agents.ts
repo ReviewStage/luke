@@ -177,6 +177,8 @@ interface StartedWords {
   readonly key: string;
   readonly prompt: string;
   readonly attachments: readonly AgentAttachment[];
+  /** When Start was pressed, which the agent's first line is stamped with. */
+  readonly sentAt: number;
 }
 
 /** The line an agent was started on, by the agent. */

@@ -42,6 +42,7 @@ import {
   RUNNER_LINES,
   RUNNER_PLACE,
   RUNNER_RELEASE,
+  RUNNER_UNANSWERED,
   RUNNER_WARM,
   type RunnerConfig,
   type RunnerEvent,
@@ -58,6 +59,9 @@ import {
   SHORT_TURN,
   STOPPED_COMMAND,
   STOPPED_TURN,
+  STRAY_RESULT,
+  STRAY_RESULT_THEN_SILENCE,
+  STRAY_RESULT_THEN_TURN,
   type Step,
   TURN_DONE,
   WAKEUP,
@@ -143,7 +147,6 @@ function launch(
   env: Record<string, string> = ENV,
   proc: string = UNREAD_PROC,
   chain: readonly string[] = [],
-  uid?: number,
   answering = true,
 ) {
   return Effect.gen(function* () {
@@ -158,7 +161,7 @@ function launch(
           cli.layer,
           luke.layer,
           fakeAppServer([]).layer,
-          processTable(proc, RUNNER_PID, uid),
+          processTable(proc, RUNNER_PID),
         ),
       ),
       Effect.forkScoped,
@@ -294,7 +297,6 @@ it.effect(
         ENV,
         UNREAD_PROC,
         [],
-        undefined,
         false,
       );
       yield* write(CONFIG);
@@ -359,6 +361,44 @@ it.effect("keeps the CLI up for a message sent during a turn until a turn answer
       RUNNER_EVENT.END,
     ]);
   }),
+);
+
+it.effect(
+  "keeps the CLI up past a result that names no prompt until the turn that answers Luke's message",
+  () =>
+    Effect.gen(function* () {
+      const luke = fakeLuke();
+      const { write, run } = yield* launch(STRAY_RESULT_THEN_TURN, luke);
+      yield* write(CONFIG);
+      yield* write(FIRST_MESSAGE);
+
+      assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+      assert.deepEqual(kinds(luke.applied), [
+        "system/init",
+        "result/success",
+        "assistant",
+        "result/success",
+        RUNNER_EVENT.END,
+      ]);
+    }),
+);
+
+it.effect(
+  "ends as failed a launch whose CLI says nothing of the message a stray result left, once its bound passes",
+  () =>
+    Effect.gen(function* () {
+      const luke = fakeLuke([], STRAY_RESULT.uuid);
+      const { cli, write, run } = yield* launch(STRAY_RESULT_THEN_SILENCE, luke);
+      yield* write(CONFIG);
+      yield* write(FIRST_MESSAGE);
+      yield* luke.seen;
+
+      yield* TestClock.adjust(RUNNER_UNANSWERED.SILENCE_MS - 1);
+      assert.equal(run.pollUnsafe(), undefined);
+      yield* TestClock.adjust(1);
+      assert.equal(yield* Fiber.join(run), RUNNER_END.FAILED);
+      assert.equal(cli.closed, true);
+    }),
 );
 
 /** How many IDLE events Luke has taken. */
@@ -1298,33 +1338,6 @@ it.effect.each([
       yield* TestClock.adjust(RUNNER_RELEASE.SETTLE_MS + 10 * RUNNER_RELEASE.RECHECK_MS);
       assert.equal(run.pollUnsafe(), undefined);
       rmSync(join(proc, String(process.pid)), { recursive: true });
-      yield* TestClock.adjust(RUNNER_RELEASE.RECHECK_MS);
-      assert.equal(yield* Fiber.join(run), RUNNER_END.RELEASED);
-    }),
-);
-
-it.effect(
-  "in a VM, holds a wait while a process of the runner's own user runs, never for the machine's own, and releases it once that process ends",
-  () =>
-    Effect.gen(function* () {
-      const agent = 1000;
-      // Note that nothing in a VM empties a bounding set: the machine's own run as root, and everything of the agent's as the device's user.
-      const proc = yield* fakeProc([
-        { pid: 1, parent: 0, emptied: false },
-        { pid: 2, parent: 1, emptied: false, argv: ["sleep", "3600"] },
-        { pid: RUNNER_PID, parent: 1, emptied: false, uid: agent },
-        { pid: RUNNER_PID + 1, parent: RUNNER_PID, emptied: false, uid: agent },
-        { ...DEV_SERVER, emptied: false, uid: agent },
-      ]);
-      const luke = fakeLuke([], WAKEUP.prompt);
-      const { write, run } = yield* launch(WAKEUP_WAIT, luke, ENV, proc, [], agent);
-      yield* write(CONFIG);
-      yield* write(FIRST_MESSAGE);
-      yield* luke.seen;
-
-      yield* TestClock.adjust(RUNNER_RELEASE.SETTLE_MS + 10 * RUNNER_RELEASE.RECHECK_MS);
-      assert.equal(run.pollUnsafe(), undefined);
-      rmSync(join(proc, String(DEV_SERVER.pid)), { recursive: true });
       yield* TestClock.adjust(RUNNER_RELEASE.RECHECK_MS);
       assert.equal(yield* Fiber.join(run), RUNNER_END.RELEASED);
     }),

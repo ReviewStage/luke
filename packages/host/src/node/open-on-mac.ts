@@ -384,12 +384,7 @@ export function openOnMacScript(input: {
  * its commits and trees only, then pointed at GitHub, which every blob it
  * lacks is had from as it is needed, through the VM's own credential inside
  * it. Nothing of the shared clone, nor of another agent's work in it, is
- * copied in beyond that head's history. A launch that restores the agent's
- * saved state names the commit its work was saved on (`base`), which the
- * repository is made at in the branch's place, fetched from GitHub by its id
- * into a ref of its own, as the state's own verify makes the repository it
- * restores into (`@luke/agent-runner`'s `scratchRepository`), so the next
- * save reckons its base from the same refs. A repository already made is left
+ * copied in beyond that head's history. A repository already made is left
  * as it stands, since it holds the agent's work, and one left half made is
  * taken away, so the next launch makes it again. It ends with its failure
  * where a step fails, having said which.
@@ -401,8 +396,6 @@ export function agentWorktreeScript(input: {
   readonly worktree: string;
   /** The branch the agent starts from; none for GitHub's default branch. */
   readonly branch: string | null;
-  /** The commit the repository is made at in the branch's place, where a launch restores the agent's saved state onto it. */
-  readonly base?: string | undefined;
   /** Where the repository is cloned from, by protocol; GitHub's own unless a test names its own. */
   readonly remotes?: { readonly https: string; readonly ssh: string } | undefined;
 }): string {
@@ -417,17 +410,13 @@ export function agentWorktreeScript(input: {
     `clone=${shellQuoted(input.clone)}`,
     `worktree=${shellQuoted(input.worktree)}`,
     `branch=${shellQuoted(input.branch ?? "")}`,
-    `base=${shellQuoted(input.base ?? "")}`,
     `https=${shellQuoted(remotes.https)}`,
     `ssh=${shellQuoted(remotes.ssh)}`,
     ...SHARED_CLONE,
     "brought_in() {",
     "  cloned || return 1",
     '  cd "$clone" || return 1',
-    '  if [ -n "$base" ]; then',
-    '    git fetch origin "+$base:refs/luke/base" || return 1',
-    '    fetched="refs/luke/base"',
-    '  elif [ -n "$branch" ]; then',
+    '  if [ -n "$branch" ]; then',
     '    git fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch" || return 1',
     '    fetched="refs/remotes/origin/$branch"',
     "  else",
@@ -447,7 +436,7 @@ export function agentWorktreeScript(input: {
     ...OWN_REPOSITORY,
     '[ -e "$worktree/.git" ] && exit 0',
     "if ! ( opened ); then",
-    '  echo "▸ Could not make the agent\'s worktree of ${base:-${branch:-the default branch}}." >&2',
+    '  echo "▸ Could not make the agent\'s worktree of ${branch:-the default branch}." >&2',
     "  exit 1",
     "fi",
     "",
@@ -458,12 +447,15 @@ export function agentWorktreeScript(input: {
  * The script, its path quoted, that says what a discard would lose from a
  * local agent's worktree (`@luke/host`'s `compose-local-agents.ts`): it
  * prints one line, and exits 0, when the worktree holds work that is nowhere
- * else, changes `git status --porcelain` shows, or commits its upstream does
+ * else, changes `git status --porcelain` shows, commits its upstream does
  * not hold, or, with no upstream, commits on no remote branch of Luke's
- * shared clone nor a head it fetched, or files in a folder with no
+ * shared clone nor a head it fetched, a local branch, checked out or not,
+ * with commits on no such branch or head, a stash, or files in a folder with no
  * repository. It prints nothing and exits 0 for a worktree with nothing to
  * lose, or none at all, and exits 1 where Git could
- * not say, which the caller takes as work to keep.
+ * not say, which the caller takes as work to keep. Note that it fetches
+ * nothing, so a remote branch is read as the worktree last knew it, which
+ * at worst keeps work GitHub already has.
  */
 export function agentUnsavedWorkScript(input: { readonly worktree: string }): string {
   return [
@@ -488,11 +480,26 @@ export function agentUnsavedWorkScript(input: { readonly worktree: string }): st
     // Note that the upstream is asked for quietly, since a branch with none is the common case and no failure.
     "if git rev-parse --verify --quiet '@{upstream}' >/dev/null; then",
     `  ahead="$(git rev-list --max-count=1 HEAD --not '@{upstream}')" || exit 1`,
-    '  [ -z "$ahead" ] || echo "it has commits its upstream does not"',
+    '  if [ -n "$ahead" ]; then',
+    '    echo "it has commits its upstream does not"',
+    "    exit 0",
+    "  fi",
     "else",
     // Note that the heads Luke fetched into refs/luke are GitHub's too, which the agent's own commits are not.
     `  ahead="$(git rev-list --max-count=1 HEAD --not --remotes --glob='refs/luke/*')" || exit 1`,
-    '  [ -z "$ahead" ] || echo "it has commits on no remote branch"',
+    '  if [ -n "$ahead" ]; then',
+    '    echo "it has commits on no remote branch"',
+    "    exit 0",
+    "  fi",
+    "fi",
+    // Note that a branch the agent left for another holds its commits as surely as the one checked out.
+    `ahead="$(git rev-list --max-count=1 --branches --not --remotes --glob='refs/luke/*')" || exit 1`,
+    'if [ -n "$ahead" ]; then',
+    '  echo "it has a branch with commits on no remote branch"',
+    "  exit 0",
+    "fi",
+    "if git rev-parse --verify --quiet refs/stash >/dev/null; then",
+    '  echo "it has changes stashed"',
     "fi",
     "exit 0",
     "",

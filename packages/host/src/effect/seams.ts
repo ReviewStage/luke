@@ -167,7 +167,10 @@ export interface LocalAgentSandboxCommand {
 /**
  * The VM each of a sandboxed device's agents runs a turn in
  * (`@luke/host/node`'s `smolvmSandbox`), beside the launch that starts the
- * runner in it. A VM lives for one turn: it is made fresh and started
+ * runner in it. A device whose agents run straight on it
+ * (`DEVICE_ISOLATION.DIRECT`), as every host's do now, starts none, and
+ * asks only for the machines its agents' runs from before left standing
+ * (`machines`) and deletes them (`deleted`). A VM lives for one turn: it is made fresh and started
  * before a runner starts, each of the agent's processes in it is signalled
  * before the runner's process is killed, since killing a command run in a
  * VM ends what it runs at once with no signal, and it is deleted once its
@@ -232,12 +235,12 @@ export interface LocalAgentSandbox {
   /**
    * The agents smolvm keeps a machine for, by id, whoever made it; none
    * where it could not list its machines, so no agent is taken as holding
-   * none where it may.
+   * none where it may. A device with no `smolvm` at all holds none.
    */
   readonly machines: Effect.Effect<
     Option.Option<ReadonlySet<string>>,
     never,
-    ChildProcessSpawner.ChildProcessSpawner
+    ChildProcessSpawner.ChildProcessSpawner | FileSystem
   >;
   /** The agent's GitHub token written where its VM's bindings read it, replacing the last, so a renewal needs no restart. */
   readonly githubToken: (
@@ -253,8 +256,8 @@ export interface LocalAgentSandbox {
  * `localAgentClis`): Claude Code, Codex, and GitHub's CLI, each the pinned
  * build for the box, fetched under its state and checked before it is kept.
  * The device has them before it registers ready, as its readiness step
- * asks, while its agents still run in VMs on the image's own; once they run
- * on the box itself, `paths` is what it registers and launches from.
+ * asks, and its agents run on them straight on the box: `paths` is what it
+ * registers and launches from.
  */
 export interface LocalAgentClis {
   /** Where each is kept under the device's state, named before it is fetched. */
@@ -285,21 +288,12 @@ export class LocalAgentSandboxUnavailable extends Data.TaggedError("LocalAgentSa
   readonly detail: string;
 }> {}
 
-/** Why an agent's packed state could not be sealed, in words naming no path, key, or byte of it. */
-export class LocalAgentStateUnsealed extends Data.TaggedError("LocalAgentStateUnsealed")<{
-  readonly detail: string;
-}> {}
-
-/** Why a bundle of an agent's saved state could not be opened into its pack, in words naming no path, key, or byte of it. */
-export class LocalAgentStateUnopened extends Data.TaggedError("LocalAgentStateUnopened")<{
-  readonly detail: string;
-}> {}
-
 /**
  * What a local agent's runner is started with on this device
- * (`compose-local-agents.ts`): the VM each agent runs in (`sandbox`), how
- * every runner is started in it (`launch`), the runner's bundle, and what
- * the start adds to its environment; the name, platform, and architecture
+ * (`compose-local-agents.ts`): how every runner is started (`launch`),
+ * straight on the box as a host's are, on what (`tools`), the runner's
+ * bundle, and what the start adds to its environment; the VMs its agents'
+ * runs from before left (`sandbox`); the name, platform, and architecture
  * the device is offered under at Start; and the scripts that make an
  * agent's own repository and check it for unsaved work
  * (`node/open-on-mac.ts`'s `agentWorktreeScript` and `agentUnsavedWorkScript`).
@@ -309,15 +303,17 @@ export class LocalAgentStateUnopened extends Data.TaggedError("LocalAgentStateUn
  * `luke-host` runs it (`@luke/host/daemon`'s `hostPlatform`).
  */
 export interface LocalAgentPlatformSeam {
-  /** The process a runner is started as, given what it runs and the environment made for it: `smolvm machine exec` into the agent's VM. */
+  /** The process a runner is started as, given what it runs and the environment made for it: straight on the box in the agent's folder (`local-agent-box.ts`'s `agentOnBox`), or, on a sandboxed device, `smolvm machine exec` into the agent's VM. */
   readonly launch: (runner: LocalAgentRunner) => LocalAgentCommand;
+  /** What every runner runs on, which the device registers: the host's own Node and the CLIs it keeps (`clis.paths`), or, on a sandboxed device, the VM image's. */
+  readonly tools: { readonly node: string; readonly claude: string; readonly codex: string };
   readonly runnerBundle: string;
   readonly runnerEnv: Readonly<Record<string, string>>;
   readonly deviceName: string;
   /** The platform and architecture the device registers as. */
   readonly devicePlatform: DevicePlatform;
   readonly deviceArch: DeviceArch;
-  /** How the launcher runs each agent, which the device registers as: in a VM of its own. */
+  /** How the launcher runs each agent, which the device registers as: straight on the box (`DEVICE_ISOLATION.DIRECT`), as every host's does, or in a VM of its own. */
   readonly deviceIsolation: DeviceIsolation;
   /**
    * The lines beyond the first the device registers it takes
@@ -331,69 +327,33 @@ export interface LocalAgentPlatformSeam {
     readonly repository: string;
     readonly worktree: string;
     readonly branch: string | null;
-    /** The commit the repository is made at, where a launch restores the agent's saved state onto it; none for the head of `branch`. */
-    readonly base?: string | undefined;
   }) => string;
   /**
    * The script that says what a discard would lose from the agent's worktree
    * (`node/open-on-mac.ts`'s `agentUnsavedWorkScript`): it prints a line naming
    * the work at risk, nothing where there is none, and exits non-zero where it
    * could not tell, which keeps the folder. A discard on a device that names
-   * none removes the folder unconditionally, as a host's does, whose folder
-   * never holds the only copy of the developer's work.
+   * none removes the folder unconditionally.
    */
   readonly unsavedWorkScript?: ((input: { readonly worktree: string }) => string) | undefined;
   /**
-   * The VM each agent runs a turn in: `launch` starts the runner inside it,
-   * and the follower makes it fresh for each turn and deletes it as the
-   * turn ends, keeps the agent's GitHub token out of its folder, and checks
-   * the folder for unsaved work in a VM made for the check rather than on
-   * the device.
+   * The VM each agent runs a turn in on a sandboxed device: `launch` starts
+   * the runner inside it, and the follower makes it fresh for each turn and
+   * deletes it as the turn ends, keeps the agent's GitHub token out of its
+   * folder, and checks the folder for unsaved work in a VM made for the
+   * check rather than on the device. On a device whose agents run straight
+   * on it, only the machines its agents' runs from before left standing.
    */
   readonly sandbox: LocalAgentSandbox;
   /** The agent CLIs the device keeps of its own, had before it registers ready (`LocalAgentClis`). */
   readonly clis: LocalAgentClis;
   /**
-   * The agent's packed state at `from`, which must be a plain file standing
-   * in the folder `within` by its real path, sealed under the agent's state
-   * key (standard base64 of its 32 bytes) into a bundle at `to`, outside
-   * every folder a VM mounts (`node/agent-state-seal.ts`): its size and
-   * SHA-256 in hex, which the save's commit names.
-   */
-  readonly stateSealed: (input: {
-    readonly from: string;
-    readonly within: string;
-    readonly to: string;
-    readonly key: string;
-  }) => Effect.Effect<{ readonly bytes: number; readonly sha256: string }, LocalAgentStateUnsealed>;
-  /**
-   * A bundle of the agent's saved state at `from`, as Luke's store answered
-   * it, opened under the agent's state key into its pack at `to`, which
-   * must stand in the folder `within` by its real path
-   * (`node/agent-state-seal.ts`): its size and SHA-256 checked against the
-   * ones its save committed before a byte of it is decrypted, and the pack
-   * kept only once GCM's tag checks.
-   */
-  readonly stateOpened: (input: {
-    readonly from: string;
-    readonly to: string;
-    readonly within: string;
-    readonly key: string;
-    readonly bytes: number;
-    readonly sha256: string;
-  }) => Effect.Effect<void, LocalAgentStateUnopened>;
-  /**
-   * The share of the disk holding the folder given that stands free, from 0
-   * to 1; none where it could not be read. A sweep lets a saved agent's
-   * folder go before its warm window ends where it runs low.
-   */
-  readonly diskFree: (folder: string) => Effect.Effect<Option.Option<number>>;
-  /**
-   * Whether agents on this device may have run directly on it, before every
-   * agent ran in a VM: This Mac's did, a host's never. On such a device the
-   * follower keeps how each agent ran, takes an agent from before that
-   * record with a checkout as one that ran directly, never starts it in a
-   * VM, and checks its folder on the device before a discard.
+   * Whether agents on this device may have run on the developer's own logins
+   * before Luke gave each agent a folder of its own
+   * (`DEVICE_ISOLATION.BARE`): This Mac's did, a host's never. On such a
+   * device the follower keeps how each agent ran, takes an agent from before
+   * that record with a checkout as one that ran so, never starts it again,
+   * and checks its folder on the device before a discard.
    */
   readonly formerlyDirect: boolean;
   /**

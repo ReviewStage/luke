@@ -1,31 +1,35 @@
 /**
- * host-install-script.test.ts -- the host's install script (`apps/web/install/install.sh`) as a shell runs it: the smolvm release, sandbox image and Mac paths it carries are the ones the daemon and the desktop app name, a computer it does not run on (an Intel Mac, an old macOS, WSL1, another kernel) is refused by name while an Apple silicon Mac and WSL2 are let through, a box without a usable `/dev/kvm` or systemd is refused with how to fix it, said for WSL under WSL alone, a download whose SHA-256 is not the one carried is refused, the boot check makes, starts, runs and always removes one throwaway VM, failing with smolvm's own words, and a Mac's install refuses a missing sudo user and a Mac the Luke app already runs agents on, writes its LaunchAgent, and starts it only where its user is logged in.
+ * host-install-script.test.ts -- the host's install script (`apps/web/install/install.sh`) as a shell runs it: a computer it does not run on (an Intel Mac, an old macOS, WSL1, another kernel) is refused by name while an Apple silicon Mac and WSL2 are let through, a box without systemd or whose user manager cannot be reached is refused with how to fix it, a run under sudo from another account and an install that came before are refused, lingering is turned on with sudo only where the account may not turn it on itself, a download whose SHA-256 is not the one carried is refused, a Mac's LaunchAgent is written and started only where its user is logged in, and a whole run installs the release into the account, starts its service only once the box is connected, in the layout `luke-host uninstall` removes, and keeps the pairing when run again. Beside it, the host's own `luke-host uninstall` (`apps/host/scripts/luke-host.sh`) as an account install and a Mac's earlier install run it.
  *
  * The script is run by `sh` in a temporary folder; `LUKE_HOST_INSTALL_LIBRARY`
  * has it stop after it defines what it carries and its functions, which the
- * tests call, `LUKE_HOST_KVM_DEVICE` points its KVM check at a path the
- * test made, and `LUKE_HOST_SYSTEMD_RUN_DIR` its systemd check. A fake `uname`,
- * `sysctl`, `sw_vers` or `launchctl` put first on its PATH answers as the
- * computer a test means. The boot check runs a fake `smolvm` that writes down
- * what it was asked, through a fake `runuser`. It never gets as far as
- * touching the box or the network.
+ * tests call, and `LUKE_HOST_SYSTEMD_RUN_DIR` points its systemd check at a
+ * folder the test made. A fake `uname`, `sysctl`, `sw_vers`, `systemctl`,
+ * `loginctl`, `sudo`, `launchctl` or `curl` put first on its PATH answers as
+ * the computer a test means, and writes down what it was asked. A whole run is
+ * handed the script with a release written in, as the route that serves it
+ * writes one, whose tarball the fake `curl` copies from the test's folder: the
+ * host's real launcher over a fake Node that answers `connect`. It never gets
+ * as far as touching the box or the network.
  */
 
-import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
-  createReadStream,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "@effect/vitest";
-import { SANDBOX_IMAGE, SMOLVM_LINUX_PIN, SMOLVM_SEED_CAP } from "@luke/agent-runner/pins";
 
 const SCRIPT = join(import.meta.dirname, "../../../../apps/web/install/install.sh");
 const UNINSTALL_SCRIPT = join(import.meta.dirname, "../../../../apps/host/scripts/luke-host.sh");
@@ -41,17 +45,44 @@ const WSL1_PROC_VERSION =
 /** /proc/version as a Linux box that is not WSL writes it. */
 const LINUX_PROC_VERSION = "Linux version 6.8.0-45-generic (buildd@ubuntu)";
 
-/** The last line smolvm prints where a VM will not boot, as the fake smolvm prints it. */
-const SMOLVM_FAILURE = "Error: failed to start machine: KVM_CREATE_VM: Operation not permitted";
-
 /**
- * The origin a run of the whole script is handed, since the script as it
- * stands here leaves its own to the route that serves it (`@@ORIGIN@@`).
+ * The origin a run is handed, since the script as it stands here leaves its
+ * own to the route that serves it (`@@ORIGIN@@`).
  */
-const ORIGIN_ARGS = ["--origin", "https://luke.test"] as const;
+const ORIGIN = "https://luke.test";
+const ORIGIN_ARGS = ["--origin", ORIGIN] as const;
 
 /** The SHA-256 of the three bytes "abc", from FIPS 180-2's own examples. */
 const ABC_SHA256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+
+/** The SHA-256 of no bytes at all. */
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+/** A Mac's LaunchAgent, by its label. */
+const LABEL = "dev.reviewstage.luke.host.standalone";
+
+const OS = { LINUX: "Linux", DARWIN: "Darwin" } as const;
+
+type Os = (typeof OS)[keyof typeof OS];
+
+/**
+ * The Node a release's launcher runs its bundle on, faked: it writes down
+ * each command, and answers `connect` as the daemon does, at once where the
+ * box's record stands, with the denial where `FAKE_CONNECT_EXIT` names a
+ * code, and otherwise by writing `FAKE_PAIRING` as the record.
+ */
+const FAKE_NODE = [
+  "#!/bin/sh",
+  "shift",
+  `printf 'luke-host %s\\n' "$*" >>"$FAKE_ASKED"`,
+  '[ "$1" = connect ] || exit 0',
+  'if [ -f "$LUKE_HOST_STATE_ROOT/device.json" ]; then echo "This box is already connected."; exit 0; fi',
+  'if [ -n "$FAKE_CONNECT_EXIT" ]; then echo "The code was denied in Luke, so this box was not connected." >&2; exit "$FAKE_CONNECT_EXIT"; fi',
+  'mkdir -p "$LUKE_HOST_STATE_ROOT"',
+  `printf '%s' "$FAKE_PAIRING" >"$LUKE_HOST_STATE_ROOT/device.json"`,
+  "echo 'Connected as box.'",
+  "",
+].join("\n");
 
 const folders: string[] = [];
 
@@ -74,39 +105,30 @@ const sh = (args: readonly string[], env: Readonly<Record<string, string>>) =>
     encoding: "utf8",
   });
 
-/**
- * A folder holding a `uname` that answers as an x64 Linux box, put first on
- * the script's PATH so its own refusal of other computers lets a test that
- * means to reach the KVM check through on a developer's Mac too.
- */
-const linuxUname = () => {
-  const bin = folder();
-  writeFileSync(
-    join(bin, "uname"),
-    '#!/bin/sh\ncase "$1" in\n  -m) echo x86_64 ;;\n  *) echo Linux ;;\nesac\n',
-    { mode: 0o755 },
-  );
-  return bin;
+/** A folder holding a command for each body given, by its name, to put first on a PATH. */
+const bin = (commands: Readonly<Record<string, string>>) => {
+  const made = folder();
+  for (const [name, body] of Object.entries(commands)) {
+    writeFileSync(join(made, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+  }
+  return made;
 };
+
+/** A `uname` that answers as the OS given on the machine given. */
+const uname = (os: Os, machine: string) =>
+  `case "$1" in\n  -m) echo ${machine} ;;\n  *) echo ${os} ;;\nesac`;
 
 /**
  * A folder holding a `uname`, `sysctl` and `sw_vers` that answer as a Mac of
  * the machine given (`arm64` for Apple silicon) running the macOS given, put
  * first on the script's PATH.
  */
-const macBin = (machine: string, macos: string) => {
-  const bin = folder();
-  writeFileSync(
-    join(bin, "uname"),
-    `#!/bin/sh\ncase "$1" in\n  -m) echo ${machine} ;;\n  *) echo Darwin ;;\nesac\n`,
-    { mode: 0o755 },
-  );
-  writeFileSync(join(bin, "sysctl"), `#!/bin/sh\necho ${machine === "arm64" ? 1 : 0}\n`, {
-    mode: 0o755,
+const macBin = (machine: string, macos: string) =>
+  bin({
+    uname: uname(OS.DARWIN, machine),
+    sysctl: `echo ${machine === "arm64" ? 1 : 0}`,
+    sw_vers: `echo ${macos}`,
   });
-  writeFileSync(join(bin, "sw_vers"), `#!/bin/sh\necho ${macos}\n`, { mode: 0o755 });
-  return bin;
-};
 
 /** The script sourced as a library on a box whose /proc/version is the one given, then the statements given. */
 const onBox = (
@@ -119,127 +141,137 @@ const onBox = (
     ...env,
   });
 
+/** Whether anything stands at the path given, a link to nothing among it. */
+const stands = (place: string) => lstatSync(place, { throwIfNoEntry: false }) !== undefined;
+
+/** The name of the account the tests run as. */
+const accountName = () => spawnSync("id", ["-un"], { encoding: "utf8" }).stdout.trim();
+
 /**
- * The boot check run against a fake `smolvm` that writes each command it is
- * given to a file and fails the subcommand named, saying why on its last line
- * after a line of progress, through a fake `runuser` that runs what it is
- * handed as the test's own user, on a box enrolled before. Where asked, the
- * run stopped a running service first, whose unit and fake `systemctl` (failing where asked) stand
- * in the test's folder. Answers what the shell printed and exited with, the
- * commands smolvm was given, and those systemctl was.
+ * Packs a release of the version given into the folder given, as CI packs one
+ * under a `luke-host` folder, with the host's real launcher over the fake
+ * Node, and answers the script with that release written in, its tarball at
+ * one address for every target, as the route that serves it writes one.
  */
-const bootCheck = (
-  failAt: string,
-  service: { readonly stopped: boolean; readonly restartFails?: boolean } = { stopped: false },
+function servedScript(served: string, version: string): string {
+  const packed = folder();
+  const top = join(packed, "luke-host");
+  for (const each of ["bin", "node/bin", "lib"]) mkdirSync(join(top, each), { recursive: true });
+  writeFileSync(join(top, "bin/luke-host"), readFileSync(UNINSTALL_SCRIPT), { mode: 0o755 });
+  writeFileSync(join(top, "node/bin/node"), FAKE_NODE, { mode: 0o755 });
+  writeFileSync(join(top, "lib/luke-host.mjs"), "");
+  const tarball = join(served, `luke-host-${version}.tar.gz`);
+  execFileSync("tar", ["-czf", tarball, "-C", packed, "luke-host"]);
+  const sha256 = createHash("sha256").update(readFileSync(tarball)).digest("hex");
+  const url = `https://releases.test/luke-host-${version}.tar.gz`;
+  let script = readFileSync(SCRIPT, "utf8");
+  for (const [placeholder, value] of Object.entries({
+    "@@VERSION@@": version,
+    "@@SHA256_X64@@": sha256,
+    "@@SHA256_ARM64@@": sha256,
+    "@@SHA256_DARWIN_ARM64@@": sha256,
+    "@@URL_X64@@": url,
+    "@@URL_ARM64@@": url,
+    "@@URL_DARWIN_ARM64@@": url,
+    "@@ORIGIN@@": ORIGIN,
+  })) {
+    script = script.replaceAll(placeholder, value);
+  }
+  const file = join(folder(), "install.sh");
+  writeFileSync(file, script);
+  return file;
+}
+
+/**
+ * A computer of the OS given for whole runs of the script: a home of its own,
+ * and fakes first on its PATH that answer as that OS, keep what they were
+ * asked in one log, and serve a release's tarball from the folder the box
+ * keeps them in. The account lingers unless asked otherwise; where it does
+ * not, `loginctl` turns lingering on only where the account may itself, or
+ * under `sudo`, which refuses where asked. Where asked, `id` answers that the
+ * run is root's; and where a run says `FAKE_STOP_REFUSED`, `systemctl stop`
+ * leaves the service running.
+ */
+const box = (
+  os: Os,
+  options: {
+    readonly lingers?: boolean;
+    readonly selfLinger?: boolean;
+    readonly sudoRefused?: boolean;
+    readonly root?: boolean;
+  } = {},
 ) => {
-  const bin = linuxUname();
+  const home = folder();
   const root = folder();
-  const log = join(root, "smolvm.log");
-  const kvm = join(root, "kvm");
-  writeFileSync(kvm, "");
-  const systemctlLog = join(root, "systemctl.log");
-  writeFileSync(systemctlLog, "");
-  writeFileSync(join(bin, "runuser"), '#!/bin/sh\nshift 3\nexec "$@"\n', { mode: 0o755 });
-  writeFileSync(
-    join(bin, "systemctl"),
-    `#!/bin/sh\nprintf '%s\\n' "$*" >>"$SYSTEMCTL_LOG"\n${service.restartFails ? '[ "$1" != restart ]\n' : ""}`,
-    { mode: 0o755 },
-  );
-  writeFileSync(
-    join(bin, "smolvm"),
-    [
-      "#!/bin/sh",
-      'printf \'%s\\n\' "$*" >>"$SMOLVM_LOG"',
-      'if [ "$2" = "$SMOLVM_FAIL_AT" ]; then',
-      "  echo 'Pulling layers...' >&2",
-      `  echo '${SMOLVM_FAILURE}' >&2`,
-      "  exit 1",
-      "fi",
-      "",
+  const served = folder();
+  const asked = join(root, "asked.log");
+  writeFileSync(asked, "");
+  if (options.lingers ?? true) writeFileSync(join(root, "lingering"), "");
+  const fakes = bin({
+    uname: uname(os, os === OS.LINUX ? "x86_64" : "arm64"),
+    sysctl: "echo 1",
+    sw_vers: "echo 14.5",
+    curl: 'while [ "$#" -gt 1 ]; do\n  [ "$1" != -o ] || out="$2"\n  shift\ndone\ncp "$FAKE_SERVED/$(basename "$1")" "$out"',
+    systemctl: [
+      `printf 'systemctl %s\\n' "$*" >>"$FAKE_ASKED"`,
+      'case "$2" in',
+      '  start | restart) echo active >"$FAKE_ROOT/unit" ;;',
+      '  stop) [ -n "$FAKE_STOP_REFUSED" ] || echo inactive >"$FAKE_ROOT/unit" ;;',
+      '  disable) echo inactive >"$FAKE_ROOT/unit" ;;',
+      '  is-active) cat "$FAKE_ROOT/unit" 2>/dev/null || echo inactive ;;',
+      "esac",
     ].join("\n"),
-    { mode: 0o755 },
-  );
-  // Note that the box is enrolled, its unit written, whether or not its service ran.
-  const unitFile = join(root, "luke-host.service");
-  writeFileSync(unitFile, "");
-  mkdirSync(join(root, "state"));
-  writeFileSync(join(root, "state", "device.json"), "{}");
-  const work = folder();
-  const tmp = folder();
-  const answer = sh(
-    [
-      "-c",
-      `. "${SCRIPT}"; HOST_HOME="${root}"; HOST_USER="$(id -un)"; SMOLVM="${join(bin, "smolvm")}"; UNIT_FILE="${unitFile}"; STOPPED_SERVICE=${service.stopped}; work="${work}"; require_vm_boots`,
-    ],
-    {
-      LUKE_HOST_INSTALL_LIBRARY: "1",
-      LUKE_HOST_KVM_DEVICE: kvm,
-      PATH: `${bin}:${process.env.PATH}`,
-      SMOLVM_LOG: log,
-      SMOLVM_FAIL_AT: failAt,
-      SYSTEMCTL_LOG: systemctlLog,
-      TMPDIR: tmp,
-    },
-  );
-  const ids = sh(["-c", 'printf "%s:%s" "$(id -u)" "$(id -g)"'], {});
+    loginctl: [
+      `printf 'loginctl %s\\n' "$*" >>"$FAKE_ASKED"`,
+      'case "$*" in',
+      '  show-user*) if [ -e "$FAKE_ROOT/lingering" ]; then echo yes; else echo no; fi ;;',
+      '  *enable-linger*) [ -n "$FAKE_AS_ROOT" ] || [ -n "$FAKE_SELF_LINGER" ] || exit 1; touch "$FAKE_ROOT/lingering" ;;',
+      "esac",
+    ].join("\n"),
+    sudo: `printf 'sudo %s\\n' "$*" >>"$FAKE_ASKED"\n[ -z "$FAKE_SUDO_REFUSED" ] || exit 1\nFAKE_AS_ROOT=1 exec "$@"`,
+    ...(options.root
+      ? { id: 'if [ "$*" = -u ]; then echo 0; else exec /usr/bin/id "$@"; fi' }
+      : {}),
+    launchctl: [
+      `printf 'launchctl %s\\n' "$*" >>"$FAKE_ASKED"`,
+      'case "$1" in',
+      '  bootstrap) touch "$FAKE_ROOT/loaded" ;;',
+      '  bootout) rm -f "$FAKE_ROOT/loaded" ;;',
+      '  print) case "$2" in */*/*) [ -e "$FAKE_ROOT/loaded" ] ;; esac ;;',
+      "esac",
+    ].join("\n"),
+  });
+  const env: Record<string, string> = {
+    PATH: `${fakes}:${process.env.PATH}`,
+    HOME: home,
+    LUKE_HOST_SYSTEMD_RUN_DIR: root,
+    FAKE_ASKED: asked,
+    FAKE_ROOT: root,
+    FAKE_SERVED: served,
+    FAKE_PAIRING: "paired",
+    ...(options.selfLinger ? { FAKE_SELF_LINGER: "1" } : {}),
+    ...(options.sudoRefused ? { FAKE_SUDO_REFUSED: "1" } : {}),
+  };
+  const run = (args: readonly string[], extra: Readonly<Record<string, string>> = {}) =>
+    spawnSync("sh", [...args], { cwd: folder(), env: { ...env, ...extra }, encoding: "utf8" });
   return {
-    answer,
-    user: ids.stdout,
-    work,
-    tmp,
-    asked: readFileSync(log, "utf8").trim().split("\n"),
-    systemctl: readFileSync(systemctlLog, "utf8").trim().split("\n").filter(Boolean),
+    home,
+    releases: join(home, ".local/share/luke-host"),
+    link: join(home, ".local/bin/luke-host"),
+    state: join(home, ".local/state/luke-host"),
+    service:
+      os === OS.LINUX
+        ? join(home, ".config/systemd/user/luke-host.service")
+        : join(home, `Library/LaunchAgents/${LABEL}.plist`),
+    run,
+    /** Serves the release of the version given, and runs the script it is written into. */
+    install: (version: string, extra: Readonly<Record<string, string>> = {}) =>
+      run([servedScript(served, version)], extra),
+    asked: () => readFileSync(asked, "utf8").trim().split("\n").filter(Boolean),
   };
 };
 
-/** What the script carries after it is sourced as a library, by name. */
-const carried = (name: string) => {
-  const answer = sh(["-c", `. "${SCRIPT}"; printf '%s' "$${name}"`], {
-    LUKE_HOST_INSTALL_LIBRARY: "1",
-  });
-  expect(answer.status).toBe(0);
-  return answer.stdout;
-};
-
 describe("the host's install script", () => {
-  it("carries the smolvm release and sandbox image the daemon pins", () => {
-    expect(carried("SMOLVM_VERSION")).toBe(SMOLVM_LINUX_PIN.VERSION);
-    expect(carried("SMOLVM_URL_X64")).toBe(SMOLVM_LINUX_PIN.ARCHIVE.x64);
-    expect(carried("SMOLVM_URL_ARM64")).toBe(SMOLVM_LINUX_PIN.ARCHIVE.arm64);
-    expect(carried("SMOLVM_SHA256_X64")).toBe(SMOLVM_LINUX_PIN.SHA256.x64);
-    expect(carried("SMOLVM_SHA256_ARM64")).toBe(SMOLVM_LINUX_PIN.SHA256.arm64);
-    expect(carried("SANDBOX_IMAGE")).toBe(SANDBOX_IMAGE);
-    expect(carried("SMOLVM_SEED_MAX_BYTES")).toBe(String(SMOLVM_SEED_CAP.BYTES));
-  });
-
-  for (const [found, make] of [
-    ["is missing", (root: string) => join(root, "kvm")],
-    [
-      "exists but cannot be opened",
-      (root: string) => {
-        const directory = join(root, "kvm");
-        mkdirSync(directory);
-        return directory;
-      },
-    ],
-  ] as const) {
-    it(`refuses a box whose /dev/kvm ${found}, saying how to check it, before anything is changed`, () => {
-      const root = folder();
-      const answer = sh([SCRIPT, "--token", "lkh_fixture", ...ORIGIN_ARGS], {
-        LUKE_HOST_KVM_DEVICE: make(root),
-        PATH: `${linuxUname()}:${process.env.PATH}`,
-      });
-      expect(answer.status).toBe(1);
-      expect(answer.stdout).toBe("");
-      expect(answer.stderr).toContain(found);
-      expect(answer.stderr).toContain("hardware virtualization (KVM)");
-      expect(answer.stderr).toContain("ls -l /dev/kvm");
-      expect(answer.stderr).toContain("nested virtualization");
-      expect(answer.stderr).toContain("no bare mode");
-      expect(answer.stderr).toContain("nothing was installed");
-    });
-  }
-
   for (const [computer, kernel, machine, procVersion, words] of [
     [
       "WSL1, saying how to upgrade it",
@@ -266,17 +298,11 @@ describe("the host's install script", () => {
     ["an Intel Mac", "0", "x86_64"],
   ] as const) {
     it(`reads ${shell} as ${expected}`, () => {
-      const bin = folder();
       const machine = shell.startsWith("a native") ? "arm64" : "x86_64";
-      writeFileSync(
-        join(bin, "uname"),
-        `#!/bin/sh\ncase "$1" in\n  -m) echo ${machine} ;;\n  *) echo Darwin ;;\nesac\n`,
-        { mode: 0o755 },
-      );
-      writeFileSync(join(bin, "sysctl"), `#!/bin/sh\necho ${arm64}\n`, { mode: 0o755 });
+      const fakes = bin({ uname: uname(OS.DARWIN, machine), sysctl: `echo ${arm64}` });
       const answer = sh(["-c", `. "${SCRIPT}"; hardware_machine`], {
         LUKE_HOST_INSTALL_LIBRARY: "1",
-        PATH: `${bin}:${process.env.PATH}`,
+        PATH: `${fakes}:${process.env.PATH}`,
       });
       expect(answer.status).toBe(0);
       expect(answer.stdout.trim()).toBe(expected);
@@ -294,106 +320,68 @@ describe("the host's install script", () => {
     ["an Intel Mac", "x86_64", "14.5", "Luke does not run agents on Intel Macs."],
   ] as const) {
     it(`${refusal === undefined ? "lets" : "refuses"} ${computer} ${refusal === undefined ? "through, past every check of the computer" : "by name"}, before anything is changed`, () => {
-      const answer = sh([SCRIPT, "--token", "lkh_fixture", ...ORIGIN_ARGS], {
+      // Note that the run has no home, which the next check refuses, so a Mac let through goes no further.
+      const answer = sh([SCRIPT, ...ORIGIN_ARGS], {
         PATH: `${macBin(machine, macos)}:${process.env.PATH}`,
       });
       expect(answer.status).toBe(1);
       expect(answer.stdout).toBe("");
       if (refusal === undefined) {
-        // Note that the next word is about who runs it: root, or with sudo from a Mac account.
-        expect(answer.stderr).toContain("sudo sh -s -- --token <token>");
-        expect(answer.stderr).not.toMatch(/Intel|macOS|kvm/u);
+        expect(answer.stderr).toContain("This account has no home folder");
+        expect(answer.stderr).not.toMatch(/Intel|macOS/u);
       } else {
         expect(answer.stderr).toContain(refusal);
       }
     });
   }
 
-  it("refuses a Mac's install with no sudo user to install for", () => {
-    const answer = sh(["-c", `. "${SCRIPT}"; require_mac_user`], {
-      LUKE_HOST_INSTALL_LIBRARY: "1",
-    });
-    expect(answer.status).toBe(1);
-    expect(answer.stderr).toContain("Run it with sudo from the Mac account");
-  });
-
-  it("writes a LaunchAgent that runs the release at login on its own state, again after a crash only, logging under the user's Logs", () => {
-    const plist = join(folder(), "agent.plist");
-    const app = "/Users/ada/Library/Application Support/Luke Host";
-    const log = "/Users/ada/Library/Logs/Luke Host/luke-host.log";
-    const answer = sh(
-      [
-        "-c",
-        `. "${SCRIPT}"; write_launch_agent "$1" "$2/luke-host" "$2/state" "$3"`,
-        "sh",
-        plist,
-        app,
-        log,
-      ],
-      { LUKE_HOST_INSTALL_LIBRARY: "1" },
-    );
-    expect(answer.status).toBe(0);
-
-    const written = readFileSync(plist, "utf8").replace(/>\s+</gu, "><");
-    for (const entry of [
-      "<key>Label</key><string>dev.reviewstage.luke.host.standalone</string>",
-      `<key>ProgramArguments</key><array><string>${app}/luke-host/bin/luke-host</string><string>run</string></array>`,
-      `<key>EnvironmentVariables</key><dict><key>LUKE_HOST_STATE_ROOT</key><string>${app}/state</string></dict>`,
-      "<key>RunAtLoad</key><true/>",
-      "<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>",
-      `<key>StandardOutPath</key><string>${log}</string>`,
-      `<key>StandardErrorPath</key><string>${log}</string>`,
-    ]) {
-      expect(written).toContain(entry);
-    }
-  });
-
-  it("refuses a Mac's install, before it swaps anything, while the running LaunchAgent will not stop", () => {
-    const bin = folder();
-    writeFileSync(join(bin, "launchctl"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
-    const answer = sh(["-c", `. "${SCRIPT}"; stop_launch_agent 501`], {
-      LUKE_HOST_INSTALL_LIBRARY: "1",
-      LUKE_HOST_MAC_STOP_WAIT_SECONDS: "0",
-      PATH: `${bin}:${process.env.PATH}`,
-    });
+  it("refuses a run as root under sudo from another account, naming the command without sudo, before anything is changed", () => {
+    const computer = box(OS.LINUX, { root: true });
+    const answer = computer.install("0.3.0", { SUDO_USER: "someone-else" });
 
     expect(answer.status).toBe(1);
+    expect(answer.stdout).toBe("");
     expect(answer.stderr).toContain(
-      "Could not stop Luke host for this account, so nothing was changed",
+      `Run it without sudo, as the account whose agents Luke host should run: curl -fsSL ${ORIGIN}/install.sh | sh`,
     );
+    expect(existsSync(computer.releases)).toBe(false);
   });
 
-  for (const [user, session, started] of [
-    ["logged in", 0, true],
-    ["logged out", 113, false],
-  ] as const) {
-    it(`starts the LaunchAgent in the session of a user who is ${user}${started ? "" : ", and says it starts at their next login"}`, () => {
-      const bin = folder();
-      const asked = join(bin, "asked");
-      writeFileSync(
-        join(bin, "launchctl"),
-        `#!/bin/sh\nprintf '%s\\n' "$*" >>"${asked}"\n[ "$1" != print ] || exit ${session}\n`,
-        { mode: 0o755 },
+  it.each([
+    { os: OS.LINUX, earlier: (root: string) => join(root, "opt/luke-host") },
+    {
+      os: OS.DARWIN,
+      earlier: (home: string) => join(home, "Library/Application Support/Luke Host"),
+    },
+  ])(
+    "refuses to install over an install that came before on $os, naming that install's own uninstall command",
+    ({ os, earlier }) => {
+      const home = folder();
+      const made = earlier(home);
+      mkdirSync(made, { recursive: true });
+      const answer = sh(
+        ["-c", `. "${SCRIPT}"; EARLIER_INSTALL_DIR="$1"; require_no_earlier_install`, "sh", made],
+        {
+          LUKE_HOST_INSTALL_LIBRARY: "1",
+          HOME: home,
+          PATH: `${bin({ uname: uname(os, "arm64") })}:${process.env.PATH}`,
+        },
       );
-      const answer = sh(["-c", `. "${SCRIPT}"; start_launch_agent 501 /fixture/agent.plist`], {
-        LUKE_HOST_INSTALL_LIBRARY: "1",
-        PATH: `${bin}:${process.env.PATH}`,
-      });
 
-      expect(answer.status).toBe(started ? 0 : 1);
-      const bootstrapped = readFileSync(asked, "utf8").includes(
-        "bootstrap gui/501 /fixture/agent.plist",
+      expect(answer.status).toBe(1);
+      expect(answer.stderr).toContain(
+        os === OS.LINUX
+          ? `Remove it first with: sudo ${made}/bin/luke-host uninstall`
+          : `Remove it first with: sudo '${made}/luke-host/bin/luke-host' uninstall`,
       );
-      expect(bootstrapped).toBe(started);
-      expect(answer.stdout).toContain(started ? "Started" : "starts at this account's next login");
-    });
-  }
+    },
+  );
 
-  for (const [box, procVersion] of [
+  for (const [computer, procVersion] of [
     ["a Linux box that is not WSL", LINUX_PROC_VERSION],
     ["WSL2", WSL2_PROC_VERSION],
   ] as const) {
-    it(`lets ${box} through`, () => {
+    it(`lets ${computer} through`, () => {
       const answer = onBox(procVersion, "true");
       expect(answer.status).toBe(0);
       expect(answer.stderr).toBe("");
@@ -402,8 +390,8 @@ describe("the host's install script", () => {
 
   it("says how to turn systemd on under WSL, and only there", () => {
     const env = { LUKE_HOST_SYSTEMD_RUN_DIR: join(folder(), "missing") };
-    const wsl = onBox(WSL2_PROC_VERSION, "require_systemd", env);
-    const linux = onBox(LINUX_PROC_VERSION, "require_systemd", env);
+    const wsl = onBox(WSL2_PROC_VERSION, "require_user_manager", env);
+    const linux = onBox(LINUX_PROC_VERSION, "require_user_manager", env);
 
     expect(wsl.status).toBe(1);
     expect(wsl.stderr).toContain("[boot] systemd=true in /etc/wsl.conf");
@@ -413,157 +401,200 @@ describe("the host's install script", () => {
     expect(linux.stderr).not.toContain("wsl");
   });
 
-  it("says how to turn nested virtualization on under WSL when /dev/kvm is missing, and only there", () => {
-    const env = { LUKE_HOST_KVM_DEVICE: join(folder(), "kvm") };
-    const wsl = onBox(WSL2_PROC_VERSION, "require_kvm", env);
-    const linux = onBox(LINUX_PROC_VERSION, "require_kvm", env);
+  it("refuses a box whose systemd user manager for the account cannot be reached, saying to run it from a login of that account", () => {
+    const answer = onBox(LINUX_PROC_VERSION, "require_user_manager", {
+      LUKE_HOST_SYSTEMD_RUN_DIR: folder(),
+      PATH: `${bin({ systemctl: "exit 1" })}:${process.env.PATH}`,
+    });
 
-    expect(wsl.status).toBe(1);
-    expect(wsl.stderr).toContain("[wsl2] nestedVirtualization=true in %UserProfile%\\.wslconfig");
-    expect(wsl.stderr).not.toContain("BIOS");
-    expect(linux.status).toBe(1);
-    expect(linux.stderr).toContain("BIOS or UEFI");
-    expect(linux.stderr).not.toContain("wslconfig");
-  });
-
-  it("boots one throwaway VM as the daemon makes an agent's, runs true in it, and removes it", () => {
-    const { answer, user, asked } = bootCheck("");
-    expect(answer.status).toBe(0);
-    expect(answer.stdout).toContain("Booted a VM from the sandbox image");
-    expect(asked).toEqual([
-      "machine stop --name install-boot-check",
-      "machine delete --name install-boot-check -f",
-      `machine create --name install-boot-check --image ${SANDBOX_IMAGE} --net --user 0:0 --nested -- sh -c while true; do sleep 3600; done`,
-      "machine start --name install-boot-check",
-      `machine exec --name install-boot-check --user ${user} -- true`,
-      "machine stop --name install-boot-check",
-      "machine delete --name install-boot-check -f",
-    ]);
-  });
-
-  it("fails a VM that will not boot with smolvm's last line, leaving a service it did not stop stopped", () => {
-    const { answer, systemctl } = bootCheck("start");
     expect(answer.status).toBe(1);
-    expect(answer.stdout).not.toContain("Booted");
-    expect(answer.stderr).toContain(`smolvm machine start: ${SMOLVM_FAILURE}`);
-    expect(answer.stderr).toContain("Luke host was not started");
-    expect(systemctl).toEqual([]);
+    expect(answer.stderr).toContain("Could not reach the systemd user manager");
+    expect(answer.stderr).toContain("rather than through su or sudo");
   });
 
-  it("starts again the service this run stopped when its VM will not boot", () => {
-    const { answer, systemctl } = bootCheck("start", { stopped: true });
-    expect(answer.status).toBe(1);
-    expect(answer.stderr).toContain(`smolvm machine start: ${SMOLVM_FAILURE}`);
-    expect(answer.stderr).toContain(
-      "luke-host.service was restarted on this box's existing enrollment",
-    );
-    expect(systemctl).toContain("restart luke-host.service");
-  });
+  it.each([
+    { case: "lingers already", lingers: true, selfLinger: false, sudoRefused: false },
+    { case: "may turn lingering on itself", lingers: false, selfLinger: true, sudoRefused: false },
+    { case: "may not, through sudo", lingers: false, selfLinger: false, sudoRefused: false },
+    { case: "may not, and sudo is refused", lingers: false, selfLinger: false, sudoRefused: true },
+  ])(
+    "a Linux account that $case asks sudo for nothing but lingering, only where it may not turn lingering on itself, and installs nothing without it",
+    ({ lingers, selfLinger, sudoRefused }) => {
+      const computer = box(OS.LINUX, { lingers, selfLinger, sudoRefused });
+      const answer = computer.install("0.3.0");
 
-  it("says so when the service it stopped will not start again", () => {
-    const { answer } = bootCheck("start", { stopped: true, restartFails: true });
-    expect(answer.status).toBe(1);
-    expect(answer.stderr).toContain(`smolvm machine start: ${SMOLVM_FAILURE}`);
-    expect(answer.stderr).toContain("luke-host.service could not be started again either");
-    expect(answer.stderr).not.toContain("was restarted");
-  });
-
-  it("fails a VM that booted but could not be deleted, rather than leave it behind", () => {
-    const { answer } = bootCheck("delete");
-    expect(answer.status).toBe(1);
-    expect(answer.stdout).not.toContain("Booted");
-    expect(answer.stderr).toContain(`could not delete it`);
-    expect(answer.stderr).toContain(SMOLVM_FAILURE);
-  });
-
-  it("removes the throwaway VM when a command in it fails", () => {
-    const { answer, asked } = bootCheck("exec");
-    expect(answer.status).toBe(1);
-    expect(asked.slice(-2)).toEqual([
-      "machine stop --name install-boot-check",
-      "machine delete --name install-boot-check -f",
-    ]);
-  });
-
-  it("keeps the boot check's temporary files in its work folder, never in the system's", () => {
-    const { answer, work, tmp } = bootCheck("start");
-    expect(answer.status).toBe(1);
-    expect(readdirSync(work).sort()).toEqual(["boot-removal", "boot-said"]);
-    expect(readdirSync(tmp)).toEqual([]);
-  });
-
-  it.each(["SIGINT", "SIGTERM"] as const)(
-    "deletes the throwaway VM when %s interrupts the boot check, and ends the step in flight",
-    async (signal) => {
-      const bin = linuxUname();
-      const root = folder();
-      const log = join(root, "smolvm.log");
-      const started = join(root, "started");
-      execFileSync("mkfifo", [started]);
-      const kvm = join(root, "kvm");
-      writeFileSync(kvm, "");
-      writeFileSync(join(bin, "runuser"), '#!/bin/sh\nshift 3\nexec "$@"\n', { mode: 0o755 });
-      // Note that the fake VM's start hangs, as one that will not boot does, until the script ends it.
-      writeFileSync(
-        join(bin, "smolvm"),
-        [
-          "#!/bin/sh",
-          'printf \'%s\\n\' "$*" >>"$SMOLVM_LOG"',
-          'if [ "$2" = start ]; then',
-          '  echo started >"$SMOLVM_STARTED"',
-          "  exec sleep 30",
-          "fi",
-          "",
-        ].join("\n"),
-        { mode: 0o755 },
+      const needsSudo = !lingers && !selfLinger;
+      expect(answer.status).toBe(sudoRefused ? 1 : 0);
+      expect(computer.asked().filter((line) => line.startsWith("sudo "))).toEqual(
+        needsSudo ? [`sudo loginctl enable-linger ${accountName()}`] : [],
       );
-      const unitFile = join(root, "luke-host.service");
-      writeFileSync(unitFile, "");
-      const work = folder();
-      const script = spawn(
-        "sh",
-        [
-          "-c",
-          `. "${SCRIPT}"; HOST_HOME="${root}"; HOST_USER="$(id -un)"; SMOLVM="${join(bin, "smolvm")}"; UNIT_FILE="${unitFile}"; STOPPED_SERVICE=false; work="${work}"; require_vm_boots`,
-        ],
-        {
-          env: {
-            PATH: `${bin}:${process.env.PATH}`,
-            LUKE_HOST_INSTALL_LIBRARY: "1",
-            LUKE_HOST_KVM_DEVICE: kvm,
-            SMOLVM_LOG: log,
-            SMOLVM_STARTED: started,
-          },
-          stdio: "ignore",
-        },
+      expect(answer.stdout.includes("which this account may not turn on by itself")).toBe(
+        needsSudo,
       );
-      const ended = new Promise<number | null>((resolve) => script.on("exit", resolve));
-      try {
-        // Note that the fake VM's start writes to a pipe only once the test reads it, so the signal is sent as the start is under way, with no waiting on the clock.
-        await new Promise<void>((resolve, reject) => {
-          const reader = createReadStream(started);
-          reader.once("data", () => {
-            reader.destroy();
-            resolve();
-          });
-          reader.once("error", reject);
-          script.once("exit", () => reject(new Error("the boot check ended before its start")));
-        });
-
-        script.kill(signal);
-      } catch (failure) {
-        // Note that a script a failed test left running is ended, so it holds nothing open.
-        script.kill("SIGKILL");
-        throw failure;
-      }
-
-      expect(await ended).toBe(1);
-      expect(readFileSync(log, "utf8").trim().split("\n").slice(-2)).toEqual([
-        "machine stop --name install-boot-check",
-        "machine delete --name install-boot-check -f",
-      ]);
+      expect(existsSync(computer.releases)).toBe(!sudoRefused);
+      if (sudoRefused) expect(answer.stderr).toContain("so nothing was installed");
     },
   );
+
+  it.each([OS.LINUX, OS.DARWIN])(
+    "a whole run on %s installs the release into the account, starts its service before connect and restarts it once connect has connected the box, and leaves the layout luke-host uninstall removes",
+    (os) => {
+      const computer = box(os);
+      const answer = computer.install("0.3.0");
+
+      expect(answer.status, answer.stderr).toBe(0);
+      expect(answer.stdout).toContain("Connected.");
+      expect(readlinkSync(join(computer.releases, "current"))).toBe("versions/0.3.0");
+      expect(readlinkSync(computer.link)).toBe(join(computer.releases, "current/bin/luke-host"));
+      expect(readFileSync(computer.service, "utf8")).toContain(
+        `${computer.releases}/current/bin/luke-host`,
+      );
+      expect(readFileSync(join(computer.state, "device.json"), "utf8")).toBe("paired");
+      const asked = computer.asked();
+      const connected = asked.indexOf(`luke-host connect --origin ${ORIGIN}`);
+      const starts = asked.flatMap((line, at) =>
+        line === "systemctl --user start luke-host.service" ||
+        line === "systemctl --user restart luke-host.service" ||
+        line.startsWith("launchctl bootstrap gui/")
+          ? [at]
+          : [],
+      );
+      expect(connected).toBeGreaterThanOrEqual(0);
+      expect(starts.some((at) => at < connected)).toBe(true);
+      expect(starts.some((at) => at > connected)).toBe(true);
+
+      const removed = computer.run([computer.link, "uninstall"]);
+      expect(removed.status, removed.stderr).toBe(0);
+      for (const place of [computer.releases, computer.state, computer.service, computer.link]) {
+        expect(stands(place)).toBe(false);
+      }
+    },
+  );
+
+  it("ends a run whose code is denied with connect's words and the connect to run by hand, its service left waiting for it", () => {
+    const computer = box(OS.LINUX);
+    const answer = computer.install("0.3.0", { FAKE_CONNECT_EXIT: "2" });
+
+    expect(answer.status).toBe(2);
+    expect(answer.stderr).toContain("The code was denied in Luke");
+    expect(answer.stderr).toContain(
+      `For a new code, run: ${computer.link} connect --origin ${ORIGIN}`,
+    );
+    const asked = computer.asked();
+    expect(asked).toContain("systemctl --user enable luke-host.service");
+    expect(asked).toContain("systemctl --user start luke-host.service");
+    expect(asked).not.toContain("systemctl --user restart luke-host.service");
+  });
+
+  it("run again on a connected box, upgrades in place: keeps its pairing, moves current to the new release, removes the old one, and restarts the service", () => {
+    const computer = box(OS.LINUX);
+    expect(computer.install("0.2.9").status).toBe(0);
+    const before = computer.asked().length;
+
+    // Note that a pairing made again would be written as this one, so a run that lost the box's would show.
+    const answer = computer.install("0.3.0", { FAKE_PAIRING: "paired again" });
+
+    expect(answer.status, answer.stderr).toBe(0);
+    expect(answer.stdout).toContain("This box is already connected.");
+    expect(readFileSync(join(computer.state, "device.json"), "utf8")).toBe("paired");
+    expect(readlinkSync(join(computer.releases, "current"))).toBe("versions/0.3.0");
+    expect(readdirSync(join(computer.releases, "versions"))).toEqual(["0.3.0"]);
+    expect(readdirSync(computer.releases).sort()).toEqual(["current", "versions"]);
+    expect(computer.asked().slice(before)).toContain("systemctl --user restart luke-host.service");
+  });
+
+  it("refuses to swap a release for the same version's while its service will not stop, leaving the release it runs as it stands", () => {
+    const computer = box(OS.LINUX);
+    expect(computer.install("0.3.0").status).toBe(0);
+    const release = join(computer.releases, "versions/0.3.0/bin/luke-host");
+
+    const answer = computer.install("0.3.0", { FAKE_STOP_REFUSED: "1" });
+
+    expect(answer.status).toBe(1);
+    expect(answer.stderr).toContain("Could not stop luke-host.service, so nothing was changed");
+    expect(existsSync(release)).toBe(true);
+  });
+
+  it("writes a unit that runs the release through current with the user manager, again a minute after any exit, a clean one among them", () => {
+    const home = folder();
+    const answer = sh(["-c", `. "${SCRIPT}"; account_paths; write_unit; cat "$UNIT_FILE"`], {
+      LUKE_HOST_INSTALL_LIBRARY: "1",
+      HOME: home,
+    });
+
+    expect(answer.status).toBe(0);
+    for (const line of [
+      `ExecStart=${home}/.local/share/luke-host/current/bin/luke-host run`,
+      "Restart=always",
+      "RestartSec=60",
+      "WantedBy=default.target",
+    ]) {
+      expect(answer.stdout.split("\n")).toContain(line);
+    }
+  });
+
+  it("writes a LaunchAgent that runs the release through current at login, again a minute after any exit, logging where it is told", () => {
+    const home = folder();
+    const plist = join(folder(), "agent.plist");
+    const log = join(home, "Library/Logs/Luke Host/luke-host.log");
+    const answer = sh(
+      ["-c", `. "${SCRIPT}"; account_paths; write_launch_agent "$1" "$2"`, "sh", plist, log],
+      { LUKE_HOST_INSTALL_LIBRARY: "1", HOME: home },
+    );
+    expect(answer.status).toBe(0);
+
+    const written = readFileSync(plist, "utf8").replace(/>\s+</gu, "><");
+    for (const entry of [
+      `<key>Label</key><string>${LABEL}</string>`,
+      `<key>ProgramArguments</key><array><string>${home}/.local/share/luke-host/current/bin/luke-host</string><string>run</string></array>`,
+      "<key>RunAtLoad</key><true/>",
+      "<key>KeepAlive</key><true/>",
+      "<key>ThrottleInterval</key><integer>60</integer>",
+      `<key>StandardOutPath</key><string>${log}</string>`,
+      `<key>StandardErrorPath</key><string>${log}</string>`,
+    ]) {
+      expect(written).toContain(entry);
+    }
+  });
+
+  it("refuses a Mac's install, before it swaps anything, while the running LaunchAgent will not stop", () => {
+    const answer = sh(["-c", `. "${SCRIPT}"; stop_launch_agent 501`], {
+      LUKE_HOST_INSTALL_LIBRARY: "1",
+      LUKE_HOST_MAC_STOP_WAIT_SECONDS: "0",
+      PATH: `${bin({ launchctl: "exit 0" })}:${process.env.PATH}`,
+    });
+
+    expect(answer.status).toBe(1);
+    expect(answer.stderr).toContain(
+      "Could not stop Luke host for this account, so nothing was changed",
+    );
+  });
+
+  for (const [user, session, bootstrap, words] of [
+    ["logged in", 0, 0, "Started"],
+    ["logged in, where launchd will not start it from here", 0, 5, "could not start"],
+    ["logged out", 113, 0, "starts at this account's next login"],
+  ] as const) {
+    it(`starts the LaunchAgent in the session of a user who is ${user}, or says it starts at their next login`, () => {
+      const fakes = folder();
+      const asked = join(fakes, "asked");
+      writeFileSync(
+        join(fakes, "launchctl"),
+        `#!/bin/sh\nprintf '%s\\n' "$*" >>"${asked}"\n[ "$1" != print ] || exit ${session}\n[ "$1" != bootstrap ] || exit ${bootstrap}\n`,
+        { mode: 0o755 },
+      );
+      const answer = sh(["-c", `. "${SCRIPT}"; start_launch_agent 501 /fixture/agent.plist`], {
+        LUKE_HOST_INSTALL_LIBRARY: "1",
+        PATH: `${fakes}:${process.env.PATH}`,
+      });
+
+      expect(answer.status).toBe(session === 0 && bootstrap === 0 ? 0 : 1);
+      expect(readFileSync(asked, "utf8").includes("bootstrap gui/501 /fixture/agent.plist")).toBe(
+        session === 0,
+      );
+      expect(answer.stdout).toContain(words);
+    });
+  }
 
   it.each([
     { loaded: false, status: 0 },
@@ -572,7 +603,7 @@ describe("the host's install script", () => {
     "a Mac's uninstall removes the machines and folders of the agents its daemon made, never another Luke install's or root's, and leaves the clones every install shares, unless the LaunchAgent will not stop (still loaded: $loaded)",
     ({ loaded, status }) => {
       const removed = status === 0;
-      const bin = folder();
+      const fakes = folder();
       const home = folder();
       const rootHome = folder();
       const script = join(folder(), "bin");
@@ -585,7 +616,7 @@ describe("the host's install script", () => {
         launchctl: `[ "$1" != print ] || exit ${loaded ? 0 : 1}`,
         sudo: 'shift 3; exec "$@"',
       })) {
-        writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+        writeFileSync(join(fakes, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
       }
       const app = join(home, "Library/Application Support/Luke Host");
       // Note that one smolvm store holds every Luke install's agents' machines for the user, this one's among them.
@@ -607,7 +638,7 @@ describe("the host's install script", () => {
       writeFileSync(join(script, "luke-host"), readFileSync(UNINSTALL_SCRIPT), { mode: 0o755 });
 
       const answer = spawnSync("sh", [join(script, "luke-host"), "uninstall"], {
-        env: { PATH: `${bin}:${process.env.PATH}`, SUDO_USER: "mac", HOME: rootHome },
+        env: { PATH: `${fakes}:${process.env.PATH}`, SUDO_USER: "mac", HOME: rootHome },
         encoding: "utf8",
       });
 
@@ -624,6 +655,90 @@ describe("the host's install script", () => {
     },
   );
 
+  it.each([
+    { os: "Linux", stops: true },
+    { os: "Linux", stops: false },
+    { os: "Darwin", stops: true },
+    { os: "Darwin", stops: false },
+  ])(
+    "the account install's uninstall, run with no sudo on $os, stops its service through the account's own manager, warns of unpushed work, and removes the folders of the agents its daemon made, its state, its releases and its link, in that order, leaving another install's agents, the clones and a Linux account's lingering, said, unless its service will not stop (stops: $stops)",
+    ({ os, stops }) => {
+      const fakes = folder();
+      const home = folder();
+      const asked = join(folder(), "asked.log");
+      // Note that systemctl answers is-active as systemd does, launchctl print finds the agent while it is loaded, and loginctl says the account lingers.
+      for (const [name, body] of Object.entries({
+        uname: `echo ${os}`,
+        systemctl: `printf '%s\\n' "$*" >>"${asked}"\n[ "$2" != is-active ] || echo ${stops ? "inactive" : "active"}`,
+        launchctl: `printf '%s\\n' "$*" >>"${asked}"\n[ "$1" != print ] || exit ${stops ? 1 : 0}`,
+        loginctl: "echo yes",
+      })) {
+        writeFileSync(join(fakes, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+      }
+      const releases = join(home, ".local/share/luke-host");
+      const release = join(releases, "versions/0.3.0");
+      mkdirSync(join(release, "bin"), { recursive: true });
+      writeFileSync(join(release, "bin/luke-host"), readFileSync(UNINSTALL_SCRIPT), {
+        mode: 0o755,
+      });
+      symlinkSync(release, join(releases, "current"));
+      const link = join(home, ".local/bin/luke-host");
+      mkdirSync(join(link, ".."), { recursive: true });
+      symlinkSync(join(releases, "current/bin/luke-host"), link);
+      const state = join(home, ".local/state/luke-host");
+      mkdirSync(join(state, "owned-agents"), { recursive: true });
+      writeFileSync(join(state, "owned-agents/one"), "");
+      writeFileSync(join(state, "device.json"), "{}");
+      // Note that agent one is this install's, by its daemon's record, and agent two another Luke install's.
+      for (const each of ["agents/one", "agents/two", "clones/acme"]) {
+        mkdirSync(join(home, ".luke", each), { recursive: true });
+      }
+      const service =
+        os === "Linux"
+          ? join(home, ".config/systemd/user/luke-host.service")
+          : join(home, "Library/LaunchAgents/dev.reviewstage.luke.host.standalone.plist");
+      mkdirSync(join(service, ".."), { recursive: true });
+      writeFileSync(service, `<string>${releases}/current/bin/luke-host</string>\n`);
+
+      const answer = spawnSync("sh", [link, "uninstall"], {
+        env: { PATH: `${fakes}:${process.env.PATH}`, HOME: home },
+        encoding: "utf8",
+      });
+
+      expect(answer.status).toBe(stops ? 0 : 1);
+      expect(answer.stderr).toContain("Work in them that was not pushed goes with them.");
+      expect(answer.stdout.includes("Left lingering on")).toBe(stops && os === "Linux");
+      const commands = readFileSync(asked, "utf8").trim().split("\n");
+      const uid = spawnSync("id", ["-u"], { encoding: "utf8" }).stdout.trim();
+      expect(commands).toContain(
+        os === "Linux"
+          ? "--user disable --now luke-host.service"
+          : `bootout gui/${uid}/dev.reviewstage.luke.host.standalone`,
+      );
+      expect(answer.stdout.split("\n").filter((line) => line.startsWith("Removed "))).toEqual(
+        stops
+          ? [
+              `Removed ${join(home, ".luke/agents/one")}.`,
+              `Removed ${state}.`,
+              `Removed ${releases}.`,
+              `Removed ${link}.`,
+            ]
+          : [],
+      );
+      for (const [place, kept] of [
+        [service, !stops],
+        [join(home, ".luke/agents/one"), !stops],
+        [state, !stops],
+        [releases, !stops],
+        [link, !stops],
+        [join(home, ".luke/agents/two"), true],
+        [join(home, ".luke/clones/acme"), true],
+      ] as const) {
+        expect(existsSync(place)).toBe(kept);
+      }
+    },
+  );
+
   it("refuses a download whose SHA-256 is not the one carried, and accepts the one that is", () => {
     const download = join(folder(), "download.tar.gz");
     writeFileSync(download, "abc");
@@ -633,11 +748,9 @@ describe("the host's install script", () => {
       });
 
     expect(check(ABC_SHA256).status).toBe(0);
-    const refused = check(SMOLVM_LINUX_PIN.SHA256.x64);
+    const refused = check(EMPTY_SHA256);
     expect(refused.status).toBe(1);
-    expect(refused.stderr).toContain(
-      `checksum is ${ABC_SHA256}, not ${SMOLVM_LINUX_PIN.SHA256.x64}`,
-    );
+    expect(refused.stderr).toContain(`checksum is ${ABC_SHA256}, not ${EMPTY_SHA256}`);
     expect(refused.stderr).toContain("Nothing was installed");
   });
 });

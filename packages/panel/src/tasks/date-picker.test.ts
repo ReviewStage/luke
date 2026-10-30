@@ -819,7 +819,7 @@ test("a date chip in a plan that takes no change opens no picker", () => {
   assert.equal(picker(container), null);
 });
 
-test("Pick a date… in the @ list narrowed to dates opens the picker, and the day picked is written in the word's place", async () => {
+test("Pick a date in the @ list narrowed to dates opens the picker, and the day picked is written in the word's place", async () => {
   const { container, editor } = await opened();
 
   act(() => {
@@ -845,7 +845,7 @@ test("Pick a date… in the @ list narrowed to dates opens the picker, and the d
   pickDay(dialog, "Thursday, October 29, 2026");
   await pressKey(dialog, "Escape");
 
-  assert.deepEqual(rows, ["Today", "Tomorrow", "Oct 26", "Pick a date…"]);
+  assert.deepEqual(rows, ["Today", "Tomorrow", "Oct 26", "Pick a date"]);
   assert.equal(picker(container), null);
   assert.deepEqual(mentionsIn(editor), [
     { name: "Oct 23, 2026", target: "luke://date/2026-10-23" },

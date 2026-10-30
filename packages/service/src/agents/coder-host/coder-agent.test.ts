@@ -8,6 +8,7 @@ import {
   type AgentKind,
   OPERATOR_QUIET_REPLY,
 } from "@luke/features/agent-wire";
+import { DEVICE_ISOLATION } from "@luke/features/device-agent-wire";
 import { Duration, Redacted, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
@@ -298,7 +299,7 @@ test("a Claude Code or Codex agent is told of its browser, which Luke's MCP serv
 test("a local agent is told its folders on the Mac, its own harness's sandbox, and no browser", () => {
   const MAC = {
     local: true,
-    sandboxed: false,
+    isolation: DEVICE_ISOLATION.BARE,
     checkoutPath: "/Users/dev/.luke/agents/a1/repository",
     installedSkills: "/Users/dev/.luke/agents/a1/installed-skills",
     sharedFiles: "/Users/dev/.luke/agents/a1/tmp",
@@ -346,40 +347,53 @@ test("a local agent is told its folders on the Mac, its own harness's sandbox, a
   assert.ok(codex.includes(`\`${MAC.installedSkills}/`));
 });
 
-test("a local agent in a VM on its device is told its tools and logins there are out of reach, and to save pages where its device reads them", () => {
-  const VM = {
-    local: true,
-    sandboxed: true,
-    checkoutPath: "/home/luke-host/.luke/agents/a1/repository",
-    installedSkills: "/home/luke-host/.luke/agents/a1/installed-skills",
-    sharedFiles: "/home/luke-host/.luke/agents/a1/tmp",
-  };
-  for (const repository of ["Acme/Relay", null]) {
-    const words = coderInstructions(
-      repository,
-      AGENT_BRIEF.PROMPT,
-      true,
-      TASK_ADDRESS,
-      undefined,
-      null,
-      false,
-      CODER_HARNESS.CLAUDE_CODE,
-      undefined,
-      false,
-      VM,
-    );
-    const label = repository ?? "no repository";
-    assert.ok(words.includes("Linux virtual machine of your own"), label);
-    assert.ok(words.includes("out of your reach"), label);
-    assert.ok(!words.includes("their installed tools"), label);
-    assert.ok(!words.includes("the developer's own git credentials"), label);
-    assert.ok(!words.includes("## Your browser"), label);
-    if (repository !== null) assert.ok(words.includes(`\`${VM.checkoutPath}\``), label);
-    // The device reads back only inside the agent's folder, never the VM's own `/tmp`.
-    assert.ok(words.includes(`under \`${VM.sharedFiles}/\``), label);
-    assert.ok(!words.includes("/tmp/luke"), label);
-  }
-});
+test.each([
+  {
+    isolation: DEVICE_ISOLATION.SANDBOX,
+    told: ["Linux virtual machine of your own", "out of your reach"],
+    untold: ["their installed tools"],
+  },
+  {
+    isolation: DEVICE_ISOLATION.DIRECT,
+    told: ["straight on one of the developer's own machines", "full access"],
+    untold: ["Linux virtual machine of your own", "Claude Code's own sandbox"],
+  },
+])(
+  "a local agent run on Luke's sign-ins on its device ($isolation) is told where it runs and what it reaches, and to save pages where its device reads them",
+  ({ isolation, told, untold }) => {
+    const VM = {
+      local: true,
+      isolation,
+      checkoutPath: "/home/luke-host/.luke/agents/a1/repository",
+      installedSkills: "/home/luke-host/.luke/agents/a1/installed-skills",
+      sharedFiles: "/home/luke-host/.luke/agents/a1/tmp",
+    };
+    for (const repository of ["Acme/Relay", null]) {
+      const words = coderInstructions(
+        repository,
+        AGENT_BRIEF.PROMPT,
+        true,
+        TASK_ADDRESS,
+        undefined,
+        null,
+        false,
+        CODER_HARNESS.CLAUDE_CODE,
+        undefined,
+        false,
+        VM,
+      );
+      const label = repository ?? "no repository";
+      for (const each of told) assert.ok(words.includes(each), `${label}: ${each}`);
+      for (const each of untold) assert.ok(!words.includes(each), `${label}: ${each}`);
+      assert.ok(!words.includes("the developer's own git credentials"), label);
+      assert.ok(!words.includes("## Your browser"), label);
+      if (repository !== null) assert.ok(words.includes(`\`${VM.checkoutPath}\``), label);
+      // The device reads back only inside the agent's folder, never the VM's own `/tmp`.
+      assert.ok(words.includes(`under \`${VM.sharedFiles}/\``), label);
+      assert.ok(!words.includes("/tmp/luke"), label);
+    }
+  },
+);
 
 test("a Codex agent is told of Codex's own tools and never of Luke's it is not offered, nor of Claude Code's", () => {
   // Luke's tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.

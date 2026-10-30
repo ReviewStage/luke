@@ -4149,6 +4149,26 @@ test("an open pull request GitHub holds in its merge queue says Queued and its p
   assert.deepEqual(offered(open), ["Convert to draft", "Close pull request"]);
 });
 
+test("a pull request published as queued says Queued in the pill while its own read is out, and its place once it lands", async () => {
+  const pullRequest = held<AgentOverviewPullRequestAnswerView>();
+  const tab = await draw({
+    ...controlAnswering({ pullRequest: pullRequest.read }),
+    pullRequests: new Map([[AGENT.id, { ...published(PULL_REQUEST_STATE.OPEN), queued: true }]]),
+  });
+  assert.equal(standing(tab), "Queued");
+
+  await act(async () =>
+    pullRequest.answer({
+      pullRequest: {
+        ...PULL_REQUEST,
+        merging: { ...MERGING, queue: true, queued: { position: 2 } },
+      },
+    }),
+  );
+  await settle();
+  assert.equal(standing(tab), "Queued #2");
+});
+
 /** The title's field, opened by its pencil. */
 function editTitle(tab: HTMLElement): HTMLInputElement {
   act(() =>

@@ -36,11 +36,9 @@ import {
 } from "@luke/features/device-agent-wire";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { ConfigProvider, Duration, Effect, Layer, Option, Result } from "effect";
+import { ConfigProvider, Duration, Effect, Layer, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "../compose-local-agents.js";
-import { LINUX_HOST } from "../daemon/host-os.js";
-import { hostPlatform } from "../daemon/host-platform.js";
 import { Environment, LocalAgentPlatform, Reporter } from "../effect/seams.js";
 import { fakeClis } from "../testing/fake-sandbox.js";
 import { type ScriptedSpawner, scriptedSpawner } from "../testing/scripted-spawner.js";
@@ -209,9 +207,6 @@ const following = (input: {
           asked.push(agentId);
           return `ghs_fixture_${asked.length}`;
         }),
-
-      saveState: () => Effect.succeed(undefined),
-      commitState: () => Effect.succeed(undefined),
     };
     const vm = smolvmSandbox({
       smolvm: SMOLVM,
@@ -229,6 +224,7 @@ const following = (input: {
       Layer.succeed(Reporter, { report: () => undefined }),
       Layer.succeed(LocalAgentPlatform, {
         launch: vm.launch,
+        tools: vm.sandbox.tools,
         sandbox: vm.sandbox,
         clis: fakeClis(),
         runnerBundle: RUNNER_BUNDLE,
@@ -242,9 +238,6 @@ const following = (input: {
         deviceCapabilities: [],
         worktreeScript: () => "exit 0",
         unsavedWorkScript: input.checksUnsavedWork === true ? () => UNSAVED_WORK_SCRIPT : undefined,
-        stateSealed: () => Effect.die("this device saves no state"),
-        stateOpened: () => Effect.die("this device restores no state"),
-        diskFree: () => Effect.succeed(Option.none()),
       }),
     );
     const composer = yield* composeLocalAgents({
@@ -737,17 +730,15 @@ it.effect(
         if (program !== SMOLVM) return undefined;
         return isSmolvm("status")({ program, args }) ? { exitCode: 1 } : { exitCode: 0 };
       });
-      const platform = hostPlatform({
-        os: LINUX_HOST,
-        installFolder: "/opt/luke-host",
-        runnerFolder: spaced,
-        arch: DEVICE_ARCH.ARM64,
-        stateRoot: `${root}/state`,
+      const vm = smolvmSandbox({
         smolvm: SMOLVM,
+        stateRoot: `${root}/state`,
+        runnerFolder: spaced,
         user: USER,
+        nested: false,
       });
 
-      yield* platform.sandbox
+      yield* vm.sandbox
         .started({ agentId: AGENT_ID, folder, github: false })
         .pipe(Effect.provide(spawner.layer));
 
@@ -756,6 +747,6 @@ it.effect(
         `${folder}:${folder}`,
         `${spaced}:/opt/luke-runner:ro`,
       ]);
-      assert.equal(platform.runnerBundle, "/opt/luke-runner/agent-runner.mjs");
+      assert.equal(vm.runnerFolder, "/opt/luke-runner");
     }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
 );

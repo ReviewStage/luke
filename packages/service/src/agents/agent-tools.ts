@@ -34,8 +34,10 @@ import {
   readTask,
   type StoredTask,
   setTaskParent,
+  type TaskArchivedAgent,
   type TaskChanges,
-  updateTask,
+  taskHoldsOpenQuestion,
+  updateTaskCommitted,
 } from "@luke/database/models/task-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import type { StoredArchive } from "@luke/database/schemas/agent";
@@ -137,7 +139,11 @@ import {
   lineAwaitsTurn,
   startedBlank,
 } from "./coder-host/status.js";
-import { cancelledTurn, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
+import {
+  cancelledTurn,
+  idleStandingAgents,
+  standingsOf as turnStandingsOf,
+} from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { discardedOrLogged } from "./device-discard.js";
 import type { AgentSessions } from "./eve-host/eve-sessions.js";
@@ -319,6 +325,12 @@ export const UPDATE_TASK_REFUSAL = {
   NO_TASK:
     "Not run: no task of your workspace has that id, so it is none you can change; " +
     `${AGENT_TOOL.LIST_TASKS} names them.`,
+  OPEN_ASK:
+    "Not run: a thread of that task still holds an ask open for the developer, which marking " +
+    `it done would withdraw. Withdraw each ask of yours it no longer needs with ${AGENT_TOOL.WITHDRAW_ASK} ` +
+    `(${AGENT_TOOL.READ_THREADS} lists them), then mark it done; or leave it as it stands until ` +
+    "they are answered: Luke then marks a task whose pull request merged done by itself, and " +
+    "you mark any other done once the answer reaches you.",
   NOT_MEMBER:
     "Not run: that assignee is no member of the task's workspace, or names no person; name a " +
     `member by the mention link ${AGENT_TOOL.LIST_TASKS} hands you, or null for no one.`,
@@ -492,9 +504,9 @@ const LOCAL_AGENT_REFUSAL_WORDS = {
   [LOCAL_AGENT_REFUSAL.NO_HARNESS]:
     "Not started: the device this task runs its agents on cannot run this model. Start on another model, or ask the member to change where the task runs.",
   [LOCAL_AGENT_REFUSAL.PREPARING]:
-    "Not started: the device this task runs its agents on is still getting ready for local agents, downloading its sandbox. Try again in a few minutes.",
+    "Not started: the device this task runs its agents on is still getting ready for local agents, downloading Claude Code, Codex, and GitHub's CLI. Try again in a few minutes.",
   [LOCAL_AGENT_REFUSAL.SETUP_FAILED]:
-    "Not started: the device this task runs its agents on couldn't set up local agents, since its sandbox download failed. Ask the member to choose Retry under This Mac in Settings › Hosts on that Mac, or to restart luke-host on that Linux server, to try again, or to change where the task runs.",
+    "Not started: the device this task runs its agents on couldn't set up local agents, since its download of Claude Code, Codex, or GitHub's CLI failed. Ask the member to choose Retry under This Mac in Settings › Hosts on that Mac, or to restart luke-host on that Linux server, to try again, or to change where the task runs.",
 } as const satisfies Record<
   Exclude<LocalAgentRefusal, typeof LOCAL_AGENT_REFUSAL.NOT_OWNER>,
   string
@@ -2115,7 +2127,10 @@ export const reachedRepository = (
  * that member's standing, both to hold it to the caller's workspace and to
  * tell a change already standing, which the store keeps as it stood; that an
  * operator is refused a teammate's task under Steward (`../steward.ts`); and
- * that the caller never archives the task it works on.
+ * that the caller never archives the task it works on. A move to Done
+ * archives the task's idle agents with it as the caller, for its member, and
+ * lets each go on its device; one still at work, the caller among them where
+ * the task is its own, is archived as its turn ends (`tasks/task-finish.ts`).
  */
 export function runUpdateTask(
   call: AgentCall,
@@ -2194,6 +2209,14 @@ export function runUpdateTask(
               read.value.task.status ?? TASK_STATUS.TODO,
               archived,
             );
+      // Note that an agent's Done waits on the task's open asks, as Luke's own finish does, because a Done withdraws them (`inbox-settle.ts`).
+      if (
+        status === TASK_STATUS.DONE &&
+        read.value.task.status !== TASK_STATUS.DONE &&
+        (yield* taskHoldsOpenQuestion(taskId))
+      ) {
+        return agentToolRejected(UPDATE_TASK_REFUSAL.OPEN_ASK);
+      }
       // A repository is compared as GitHub spells it, which is how the task holds it.
       const asWritten = {
         ...changes,
@@ -2215,10 +2238,15 @@ export function runUpdateTask(
       // refused, its section deleted meanwhile, a parent refused, or a block refused takes the change back with it.
       const writing = Effect.gen(function* () {
         if (locking.length > 0) yield* lockTasksForBlocks(userId, locking);
-        const task =
+        // A move to Done archives the task's idle agents with it, as this agent for its member.
+        const updated =
           Object.keys(asWritten).length === 0
-            ? Option.some(read.value.task)
-            : yield* updateTask(userId, taskId, asWritten);
+            ? Option.some({ task: read.value.task, archived: [] })
+            : yield* updateTaskCommitted(userId, taskId, asWritten, undefined, {
+                archivedBy: archiverOf(caller, undefined),
+                idle: idleStandingAgents,
+              });
+        const task = Option.map(updated, (written) => written.task);
         if (Option.isSome(task) && placing !== undefined && !placing.success.stands) {
           // The sidebar's own write puts it in the section named, or in none, as the developer's drag does.
           const placed = yield* writeTaskSections(userId, {
@@ -2244,6 +2272,10 @@ export function runUpdateTask(
           task: parented === undefined ? task : Option.map(parented, (written) => written.task),
           parentChanged: parented !== undefined && Option.getOrThrow(parented).txid !== undefined,
           blocksChanged,
+          doneArchived: Option.match(updated, {
+            onNone: () => [],
+            onSome: (written) => written.archived,
+          }),
         };
       });
       const changed = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -2257,6 +2289,7 @@ export function runUpdateTask(
               task: Option.Option<StoredTask["task"]>;
               parentChanged: boolean;
               blocksChanged: boolean;
+              doneArchived: readonly TaskArchivedAgent[];
             },
             string
           > => Result.succeed(written),
@@ -2285,7 +2318,9 @@ export function runUpdateTask(
         ),
       );
       if (Result.isFailure(changed)) return agentToolRejected(changed.failure);
-      const { task, parentChanged, blocksChanged } = changed.success;
+      const { task, parentChanged, blocksChanged, doneArchived } = changed.success;
+      // The agents its Done archived are let go of on their devices once it commits, as an agent's archive lets one go.
+      yield* Effect.forEach(doneArchived, discardedOrLogged, { discard: true });
       if (Option.isNone(task)) return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
       return yield* taskUpdateAnswer(userId, task.value, {
         already: stands && !parentChanged && !blocksChanged,

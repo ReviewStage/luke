@@ -18,7 +18,8 @@ import { user } from "./auth.js";
  *
  * A device is a member's machine running the host program, a Mac or a
  * Linux box alike, and says which platform and architecture it runs on, whether it runs each
- * agent in a VM of its own or directly on the machine (`DEVICE_ISOLATION`),
+ * agent in a VM of its own, straight on the machine on Luke's sign-ins, or on
+ * the developer's own logins (`DEVICE_ISOLATION`),
  * and which lines beyond the first its follower takes (`DEVICE_CAPABILITY`).
  * The desktop mints the id once and keeps it, and registers it under the account it is signed in to;
  * an id another account registered first is never moved onto this one. While the desktop runs local agents it beats

@@ -14,9 +14,9 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 
 /**
- * sidebar-tasks-head.test.ts -- the Tasks head carries its ⋯ and View
- * options, and offers New section from the ⋯ and on a right-click, which
- * asks for the section's title. Synthetic throughout.
+ * sidebar-tasks-head.test.ts -- the Tasks head carries New section and View
+ * options, and offers New section on a right-click too, each asking for the
+ * section's title. Synthetic throughout.
  */
 
 const WORKSPACE: Workspace = {
@@ -79,36 +79,36 @@ function mountTasks(): HTMLElement {
   );
 }
 
-test("the Tasks head carries its ⋯ and View options, and its ⋯, a right-click, and the keyboard's press on the ⋯ all offer New section, which asks for a title", () => {
+test("the Tasks head carries New section and View options, and its button and a right-click both ask for a section's title", () => {
   const tasks = mountTasks();
   const head =
     tasks.querySelector<HTMLElement>(".luke-group-header-head") ?? assert.fail("no head");
   assert.deepEqual(
     [...head.querySelectorAll("button[aria-label]")].map((each) => each.getAttribute("aria-label")),
-    ["Tasks actions", "View options"],
+    ["New section", "View options"],
   );
   const offered = () =>
     [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(
       (each) => each.textContent,
     );
-  const closeMenu = () =>
-    act(() => {
-      document.activeElement?.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
-      );
-    });
+  const asked = () => document.querySelector('[role="dialog"] input');
 
   act(() => {
     head.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
   });
-  assert.deepEqual(offered(), ["New section…"]);
-  closeMenu();
-
-  const more =
-    head.querySelector<HTMLButtonElement>('button[aria-label="Tasks actions"]') ??
-    assert.fail("no ⋯");
-  act(() => more.click());
-  assert.deepEqual(offered(), ["New section…"]);
+  assert.deepEqual(offered(), ["New section"]);
   act(() => document.querySelector<HTMLElement>('[role="menuitem"]')?.click());
-  assert.ok(document.querySelector('[role="dialog"] input'), "the section dialog asks for a title");
+  assert.ok(asked(), "the right-click's New section asks for a title");
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  assert.equal(asked(), null);
+
+  const button =
+    head.querySelector<HTMLButtonElement>('button[aria-label="New section"]') ??
+    assert.fail("no New section");
+  act(() => button.click());
+  assert.ok(asked(), "the button asks for a title at once");
 });

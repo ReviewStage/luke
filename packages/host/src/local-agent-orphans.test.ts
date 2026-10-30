@@ -1,5 +1,5 @@
 /**
- * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, keeping nothing past an agent's warm window: a saved folder let go of once its window ends and an unsaved one kept; a VM a run left deleted; an agent two answered reads in a row leave out removed whole where its state is saved, and kept where it is not, for a week; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a Mac's folder with unsaved work kept once and never checked again, and a pass that died never the last; and a listed agent's folder no save holds saved, then let go of after its window, one whose save fails kept without holding back the next, and one that ran directly on the Mac left as it is; and the agents an install ran before it kept its record of them taken as its own as the gate opens, a Mac's by its own state alone and never by the store it shares, a Linux host's by its folders and machines.
+ * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, its agents run straight on the box and their folders kept between turns: a VM a run from before left deleted; an agent two answered reads in a row leave out removed whole, but kept, for a week, where the box's check finds work in its folder; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a folder with unsaved work kept once and never checked again, a box with no smolvm never held up by it, and a pass that died never the last; an idle agent's folder cleared a week after its last use where its work is all on GitHub, the agent kept as this machine's, one from before the stamp not until a week after the start that stamps it, and never a busy agent's, nor one with unpushed work, which is checked once while its agent stays idle; and the agents an install ran before it kept its record of them taken as its own as the gate opens, a Mac's by its own state alone and never by the store it shares, a Linux host's by its folders and machines.
  *
  * The follower runs the real smolvm sandbox over a fake `smolvm` that keeps
  * its machines in a set, on a real temporary folder, against a fake service
@@ -12,7 +12,14 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
@@ -27,37 +34,32 @@ import {
 } from "@luke/features/device-agent-wire";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { ConfigProvider, Deferred, Duration, Effect, Exit, Layer, Option } from "effect";
+import { ConfigProvider, Deferred, Duration, Effect, Exit, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents } from "./compose-local-agents.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
-import { sealAgentState } from "./node/agent-state-seal.js";
 import { smolvmSandbox } from "./node/smolvm-sandbox.js";
 import { fakeClis } from "./testing/fake-sandbox.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
 const SMOLVM = "/usr/local/bin/smolvm";
 const RUNNER_FOLDER = "/opt/luke-host/lib";
+/** The runner's own start on the box, as the platform launches it. */
+const RUNNER = "/opt/luke-host/node/bin/node";
 const USER_ID = "user-fixture";
-/** The platform's check of a worktree, named so the fake smolvm answers it. */
+/** The platform's check of a worktree, named so the scripted spawner answers it, the worktree after it. */
 const UNSAVED_WORK_SCRIPT = "check-for-unsaved-work";
-/** The agents' state key as the service answers it: 32 bytes, in standard base64. */
-const STATE_KEY = Buffer.alloc(32, 7).toString("base64");
-/** Why a pack over its cap is refused, as the runner bundle's state command says it. */
-const OVER_CAP = "the agent's state holds 612.0 MB, over the 500.0 MB a pack may hold.";
 /** What smolvm answers a delete of a machine it has no record of. */
 const NOT_FOUND = {
   exitCode: 1,
   stderr: '{"error":{"code":"NOT_FOUND","message":"vm not found"}}\n',
 };
 
-/** When a saved agent's last turn ended, the clock starting at 0: late enough that no test outlasts its window. */
-const ENDED_IN_WINDOW = Duration.toMillis(Duration.hours(1));
-/** When a saved agent's last turn ended, past its 15 minutes' window as the clock starts. */
-const ENDED_PAST_WINDOW = -Duration.toMillis(Duration.minutes(16));
-/** When a folder was first kept: half a pass short of a week as the second pass runs, five minutes in, and so half a pass past it as the third does. */
-const KEPT_A_WEEK_BY_THE_THIRD_PASS =
+/** Half a pass short of a week before the second pass runs, five minutes in, and so half a pass past a week before the third: when a folder was first kept, or an agent last used. */
+const A_WEEK_BY_THE_THIRD_PASS =
   Duration.toMillis(Duration.minutes(7.5)) - Duration.toMillis(Duration.days(7));
+/** When an agent unused for over a week as the clock starts was last used. */
+const USED_OVER_A_WEEK_AGO = -Duration.toMillis(Duration.days(8));
 
 const AGENT = {
   ORPHAN: "6f1c2a4e-0b7d-4c55-9a3e-2d8f61b0c9a1",
@@ -66,10 +68,7 @@ const AGENT = {
   LAUNCH_KEPT: "2c3d4e5f-6071-4829-8b3c-4d5e6f7a8b9c",
   UNSAVED: "3d4e5f60-7182-4930-9c4d-5e6f7a8b9c0d",
   OTHER_INSTALL: "4e5f6071-8293-4a41-8d5e-6f7a8b9c0d1e",
-  RECENT: "5f607182-93a4-4b52-9e6f-7a8b9c0d1e2f",
   FROM_BEFORE: "607182a3-a4b5-4c63-8f70-8b9c0d1e2f30",
-  RAN_DIRECTLY: "0a1b2c3d-4e5f-4061-8728-394a5b6c7d8e",
-  OVER_CAP: "0b1c2d3e-4f50-4172-8839-4a5b6c7d8e9f",
 } as const;
 
 /** How many turns in a row must find nothing asked of the disk unanswered before the follower is taken to wait on the clock alone. */
@@ -98,7 +97,7 @@ const agentNumbered = (index: number) =>
 
 /** The agents a device holds things for, as a test lays them out before the follower starts. */
 interface Held {
-  /** Agents with a VM, its credentials, and a folder holding a worktree. */
+  /** Agents with a VM a run from before left, its credentials, and a folder holding a worktree. */
   readonly whole?: readonly string[];
   /** Agents with a VM and nothing else. */
   readonly vmOnly?: readonly string[];
@@ -109,45 +108,42 @@ interface Held {
 }
 
 /**
- * The follower on a host, or a Mac where `unsavedWork` names what its check
- * prints, with what `held` lays out, every agent of it recorded as this
- * machine's but those `unowned` names, another install's, and those
+ * The follower on a Linux host, or This Mac where `mac` says, whose agents
+ * run straight on it, with what `held` lays out, every agent of it recorded
+ * as this machine's but those `unowned` names, another install's, and those
  * `madeBeforeRecord` names, which this machine made before it kept that
  * record, in a folder and smolvm store shared with another install, as a
  * Mac's are, or its own alone where `storesOwned` says, as a Linux host's
- * are; and each saved,
- * its last turn ended at `endedAt` says or within its window, but those
- * `unsaved` names, and those `fromBefore` and `ranDirectly` name, which
- * have no record of a save, and kept since when `kept` says; its live-agents read answering `reads` one after another,
- * and smolvm refusing each delete `deleteFails` says, by the machine and how
- * many times it was asked to delete it. `launches` hands launch lines whose
+ * are; with each folder kept since when `kept` says; each agent last used
+ * when `used` says, and each folder from before that record last
+ * changed when `changedAt` says; its check of a
+ * worktree printing what `unsavedWork` names for its agent, and nothing for
+ * any other; its live-agents read answering `reads` one after another; and
+ * smolvm, where the box has it, as it does but where `noSmolvm` says,
+ * refusing each delete `deleteFails` says, by the machine and how many
+ * times it was asked to delete it. `launches` hands launch lines whose
  * runners run until the test ends, and `keptLaunches` are kept from a run
- * that ended, whose settles the service refuses. Where `saving` says, the
- * device saves its agents' state: each pack in a VM writes a pack and
- * names no base, but those over their cap `tooLarge` names, and the service
- * grants every save and commits it as the generation after the one it
- * started from. Where `ranDirectly` names agents, the device is a Mac whose
- * agents once ran directly on it, those with no record of how they ran,
- * and every other agent recorded as run in a VM.
+ * that ended, whose settles the service refuses.
  */
 const following = (input: {
   readonly held: Held;
   readonly unowned?: readonly string[];
   readonly madeBeforeRecord?: readonly string[];
   readonly storesOwned?: boolean;
-  readonly unsaved?: readonly string[];
-  readonly endedAt?: Readonly<Record<string, number>>;
+  readonly mac?: boolean;
   readonly kept?: Readonly<Record<string, number>>;
+  readonly used?: Readonly<Record<string, number>>;
+  readonly changedAt?: Readonly<Record<string, number>>;
   readonly reads: readonly (readonly string[] | undefined)[];
-  readonly unsavedWork?: string;
+  readonly unsavedWork?: Readonly<Record<string, string>>;
+  readonly noSmolvm?: boolean;
+  /** The box's smolvm answers its listing of machines with a failure. */
+  readonly listingFails?: boolean;
   readonly deleteFails?: (machine: string, attempt: number) => boolean;
   readonly launches?: (home: string) => readonly DeviceAgentClaimedLine[];
   readonly keptLaunches?: readonly { readonly id: string; readonly agentId: string }[];
   /** The first listing of what the VMs hold dies, as a bug would. */
   readonly firstListingDies?: boolean;
-  readonly fromBefore?: readonly string[];
-  readonly ranDirectly?: readonly string[];
-  readonly saving?: { readonly tooLarge?: readonly string[] };
 }) =>
   Effect.gen(function* () {
     const root = yield* temporaryDirectoryScoped("luke-agent-orphans-");
@@ -166,6 +162,9 @@ const following = (input: {
     for (const agentId of [...(input.held.whole ?? []), ...(input.held.folderOnly ?? [])]) {
       mkdirSync(deviceAgentLayout(home, agentId).checkoutPath, { recursive: true });
     }
+    for (const [agentId, at] of Object.entries(input.changedAt ?? {})) {
+      utimesSync(deviceAgentLayout(home, agentId).folder, new Date(at), new Date(at));
+    }
     const owned = [
       ...(input.held.whole ?? []),
       ...(input.held.vmOnly ?? []),
@@ -175,83 +174,59 @@ const following = (input: {
     for (const agentId of owned.filter((each) => !(input.madeBeforeRecord ?? []).includes(each))) {
       writeFileSync(`${stateRoot}/owned-agents/${agentId}`, "");
     }
-    const unrecorded = [...(input.fromBefore ?? []), ...(input.ranDirectly ?? [])];
-    const inVms = owned.filter((agentId) => !(input.ranDirectly ?? []).includes(agentId));
-    const saves = Object.fromEntries(
-      owned
-        .filter((agentId) => !unrecorded.includes(agentId))
-        .map((agentId) => [
-          agentId,
-          {
-            userId: USER_ID,
-            generation: 1,
-            endedAt: input.endedAt?.[agentId] ?? ENDED_IN_WINDOW,
-            ...((input.unsaved ?? []).includes(agentId) ? { unsaved: {} } : {}),
-          },
-        ]),
-    );
     writeFileSync(
       `${stateRoot}/local-agents.json`,
       JSON.stringify({
         devices: { [USER_ID]: "device-1" },
         launches: (input.keptLaunches ?? []).map((launch) => ({ userId: USER_ID, ...launch })),
-        saves,
         ...(input.kept === undefined ? {} : { kept: input.kept }),
-        ...(input.ranDirectly === undefined
-          ? {}
-          : {
+        ...(input.used === undefined ? {} : { lastUsed: input.used }),
+        // Note that This Mac records how each of its agents ran, these in VMs before they ran on the box.
+        ...(input.mac === true
+          ? {
               modes: Object.fromEntries(
-                inVms.map((agentId) => [agentId, DEVICE_ISOLATION.SANDBOX]),
+                owned.map((agentId) => [agentId, DEVICE_ISOLATION.SANDBOX]),
               ),
-            }),
+            }
+          : {}),
       }),
     );
 
     const deletes = new Map<string, number>();
-    const signalled = Deferred.makeUnsafe<void>();
+    const killed = Deferred.makeUnsafe<void>();
     const spawner = scriptedSpawner((program, args) => {
       if (program === "/bin/bash" && args[0] === "-l")
         return { stdout: "/usr/bin:/bin", exitCode: 0 };
+      const [check, worktree] = (args[1] ?? "").split(" ");
+      if (program === "/bin/bash" && check === UNSAVED_WORK_SCRIPT) {
+        const agentId = Object.keys(input.unsavedWork ?? {}).find(
+          (each) => worktree === deviceAgentLayout(home, each).checkoutPath,
+        );
+        return {
+          stdout: agentId === undefined ? "" : (input.unsavedWork?.[agentId] ?? ""),
+          exitCode: 0,
+        };
+      }
       if (program === "/bin/bash") return { exitCode: 0 };
-      if (program !== SMOLVM || args[0] !== "machine") return undefined;
+      // Note that a runner runs until its process group is killed, as the test's scope closes.
+      if (program === RUNNER) {
+        return {
+          exitCode: 143,
+          until: Deferred.await(killed),
+          killed: Deferred.succeed(killed, undefined),
+        };
+      }
+      // Note that a smolvm the box does not have never starts, as a missing program does not.
+      if (program !== SMOLVM || input.noSmolvm === true || args[0] !== "machine") return undefined;
       const name = args[args.indexOf("--name") + 1] ?? "";
       switch (args[1]) {
         case "ls":
+          if (input.listingFails === true) return { exitCode: 1 };
           return { stdout: [...machines].map((each) => `${each}\n`).join(""), exitCode: 0 };
-        case "create":
-          machines.add(name);
-          return { exitCode: 0 };
-        case "start":
-          return machines.has(name)
-            ? { exitCode: 0 }
-            : { exitCode: 1, stderr: '{"error":{"code":"NOT_FOUND","message":"no machine"}}\n' };
         case "delete":
           deletes.set(name, (deletes.get(name) ?? 0) + 1);
           if (input.deleteFails?.(name, deletes.get(name) ?? 0) === true) return { exitCode: 1 };
           return machines.delete(name) ? { exitCode: 0 } : NOT_FOUND;
-        case "exec":
-          if (args.includes(UNSAVED_WORK_SCRIPT)) {
-            return { stdout: input.unsavedWork ?? "", exitCode: 0 };
-          }
-          if (args[args.indexOf(`${RUNNER_FOLDER}/agent-runner.mjs`) + 1] === "state") {
-            if (!args.includes("pack")) return { exitCode: 0 };
-            if ((input.saving?.tooLarge ?? []).includes(name.slice("luke-".length))) {
-              return { stderr: `agent-runner state: ${OVER_CAP}\n`, exitCode: 3 };
-            }
-            return {
-              stdout: "agent-runner state pack: base none\n",
-              exitCode: 0,
-              until: Effect.sync(() => writeFileSync(args.at(-1) ?? "", "a pack\n")),
-            };
-          }
-          // Note that a runner runs until its processes are signalled in its VM, as the test's scope closes.
-          if (args.some((each) => each.includes("process.kill"))) {
-            Deferred.doneUnsafe(signalled, Exit.void);
-            return { exitCode: 0 };
-          }
-          return args.includes(`${RUNNER_FOLDER}/agent-runner.mjs`)
-            ? { exitCode: 143, until: Deferred.await(signalled) }
-            : { exitCode: 0 };
         default:
           return { exitCode: 0 };
       }
@@ -277,23 +252,6 @@ const following = (input: {
       claimRequest: () => Effect.succeed({ claimed: false as const }),
       answerRequest: () => Effect.succeed(true),
       githubToken: () => Effect.succeed(undefined),
-      saveState: (_deviceId: string, agentId: string) =>
-        Effect.succeed(
-          input.saving === undefined
-            ? undefined
-            : {
-                path: `agent-state/${agentId}/grant`,
-                upload: {
-                  url: `https://store.test/upload/${agentId}`,
-                  headers: {},
-                  expiresAt: Date.UTC(2026, 9, 30),
-                  maxBytes: 500 * 1024 * 1024,
-                },
-                key: STATE_KEY,
-              },
-        ),
-      commitState: (_deviceId: string, commit: { readonly fromGeneration: number | null }) =>
-        Effect.succeed(input.saving === undefined ? undefined : (commit.fromGeneration ?? 0) + 1),
       liveAgents: () =>
         Effect.suspend(() => {
           const index = reads;
@@ -305,7 +263,7 @@ const following = (input: {
         }),
     };
     const vm = smolvmSandbox({
-      smolvm: SMOLVM,
+      smolvm: input.noSmolvm === true ? undefined : SMOLVM,
       stateRoot,
       runnerFolder: RUNNER_FOLDER,
       user: { uid: 990, gid: 991 },
@@ -321,41 +279,30 @@ const following = (input: {
       ),
     };
     const reported: string[] = [];
+    const clis = fakeClis();
     const services = Layer.mergeAll(
       spawner.layer,
       NodePath.layer,
       NodeFileSystem.layer,
-      // Note that the store takes every upload, and nothing else is fetched.
-      fakeHttpClientLayer(async (url, init) => {
-        if (input.saving === undefined || new URL(url).host !== "store.test") {
-          throw new Error("this test fetches nothing but uploads");
-        }
-        await new Response(init.body).arrayBuffer();
-        return new Response(null, { status: 200 });
-      }),
+      fakeHttpClientLayer(() => Promise.reject(new Error("this test fetches nothing"))),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME: home, SHELL: "/bin/bash" })),
       Layer.succeed(Reporter, { report: (line) => reported.push(line) }),
       Layer.succeed(LocalAgentPlatform, {
-        launch: vm.launch,
+        launch: ({ node, env }) => ({ command: node, args: [], env }),
+        tools: { node: RUNNER, claude: clis.paths.claude, codex: clis.paths.codex },
         sandbox,
-        clis: fakeClis(),
+        clis,
         runnerBundle: `${RUNNER_FOLDER}/agent-runner.mjs`,
         runnerEnv: {},
-        formerlyDirect: input.ranDirectly !== undefined,
+        formerlyDirect: input.mac === true,
         storesOwned: input.storesOwned === true,
         deviceName: "rack-1",
-        devicePlatform: DEVICE_PLATFORM.LINUX,
-        deviceArch: DEVICE_ARCH.X64,
-        deviceIsolation: DEVICE_ISOLATION.SANDBOX,
-        deviceCapabilities: input.saving === undefined ? [] : [DEVICE_CAPABILITY.AGENT_STATE],
+        devicePlatform: input.mac === true ? DEVICE_PLATFORM.DARWIN : DEVICE_PLATFORM.LINUX,
+        deviceArch: input.mac === true ? DEVICE_ARCH.ARM64 : DEVICE_ARCH.X64,
+        deviceIsolation: DEVICE_ISOLATION.DIRECT,
+        deviceCapabilities: [DEVICE_CAPABILITY.DISCARD],
         worktreeScript: () => "exit 0",
-        unsavedWorkScript: input.unsavedWork === undefined ? undefined : () => UNSAVED_WORK_SCRIPT,
-        stateSealed:
-          input.saving === undefined
-            ? () => Effect.die("this device saves no state")
-            : sealAgentState,
-        stateOpened: () => Effect.die("this device restores no state"),
-        diskFree: () => Effect.succeed(Option.none()),
+        unsavedWorkScript: ({ worktree }) => `${UNSAVED_WORK_SCRIPT} ${worktree}`,
       }),
     );
     const composer = yield* composeLocalAgents({
@@ -391,18 +338,12 @@ const following = (input: {
     });
 
     const checksRun = () =>
-      spawner.spawned.filter((each) => each.args.includes(UNSAVED_WORK_SCRIPT)).length;
+      spawner.spawned.filter((each) => (each.args[1] ?? "").startsWith(UNSAVED_WORK_SCRIPT)).length;
     const machineCommands = (agentId: string) =>
       spawner.spawned.filter((each) => each.args.includes(`luke-${agentId}`)).length;
     const keptRecorded = () =>
       Object.keys(JSON.parse(readFileSync(`${stateRoot}/local-agents.json`, "utf8")).kept ?? {});
     const ownedRecorded = () => readdirSync(`${stateRoot}/owned-agents`).sort();
-    const saveOf = (agentId: string) =>
-      JSON.parse(readFileSync(`${stateRoot}/local-agents.json`, "utf8")).saves?.[agentId];
-    const packsOf = (agentId: string) =>
-      spawner.spawned.filter(
-        (each) => each.args.includes(`luke-${agentId}`) && each.args.includes("pack"),
-      ).length;
 
     return {
       home,
@@ -415,8 +356,6 @@ const following = (input: {
       machineCommands,
       keptRecorded,
       ownedRecorded,
-      saveOf,
-      packsOf,
     };
   });
 
@@ -424,13 +363,13 @@ const NOTHING = { vm: false, credentials: false, folder: false };
 const EVERYTHING = { vm: true, credentials: true, folder: true };
 
 it.effect(
-  "an agent left out of two reads in a row is removed whole, but not after one, while a listed agent stays and one whose state is not saved keeps its folder",
+  "an agent left out of two reads in a row is removed whole, but not after one, while a listed agent stays and one whose check finds work keeps its folder",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const device = yield* following({
           held: { whole: [AGENT.ORPHAN, AGENT.LIVE], folderOnly: [AGENT.UNSAVED] },
-          unsaved: [AGENT.UNSAVED],
+          unsavedWork: { [AGENT.UNSAVED]: "it has changes not committed\n" },
           reads: [[AGENT.LIVE], [AGENT.LIVE]],
         });
         yield* device.passed(1);
@@ -493,35 +432,32 @@ it.effect("an agent whose runner runs, or whose launch is still kept, is left be
       yield* device.passed(2);
 
       assert.deepEqual(device.holdsOf(AGENT.ORPHAN), NOTHING, "the pass never ran");
-      assert.equal(device.holdsOf(AGENT.RUNNING).vm, true);
-      // Note that a kept launch's VM goes as the gate opens, its turn let go of, and its folder stays.
-      assert.equal(device.holdsOf(AGENT.LAUNCH_KEPT).folder, true);
+      assert.equal(device.holdsOf(AGENT.RUNNING).folder, true);
+      // Note that a kept launch's VM from before goes as the gate opens, its turn let go of, and its folder stays.
+      assert.deepEqual(device.holdsOf(AGENT.LAUNCH_KEPT), { ...NOTHING, folder: true });
     }),
   ).pipe(Effect.provide(NodeFileSystem.layer)),
 );
 
 it.effect(
-  "a Mac's folder whose state is not saved and whose check finds unsaved work is kept, recorded, and never checked again",
+  "a folder whose check finds unsaved work is kept, recorded, and never checked again",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const device = yield* following({
           held: { whole: [AGENT.ORPHAN] },
-          unsaved: [AGENT.ORPHAN],
           reads: [[], [], [], []],
-          unsavedWork: "it has changes not committed\n",
+          unsavedWork: { [AGENT.ORPHAN]: "it has changes not committed\n" },
         });
         yield* device.passed(2);
 
         assert.deepEqual(device.holdsOf(AGENT.ORPHAN), { ...NOTHING, folder: true });
         assert.deepEqual(device.keptRecorded(), [AGENT.ORPHAN]);
         assert.equal(device.checksRun(), 1);
-        const before = device.machineCommands(AGENT.ORPHAN);
         // Note that two more reads leave it out, as two did before it was kept.
         yield* device.passed(4);
 
         assert.equal(device.checksRun(), 1);
-        assert.equal(device.machineCommands(AGENT.ORPHAN), before, "its VM was woken again");
         assert.equal(device.holdsOf(AGENT.ORPHAN).folder, true);
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
@@ -568,31 +504,6 @@ it.effect(
 );
 
 it.effect(
-  "a saved folder whose last turn ended over the window before is let go of, while one within it and an unsaved one stay",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const listed = [AGENT.ORPHAN, AGENT.RECENT, AGENT.UNSAVED];
-        const device = yield* following({
-          held: { folderOnly: listed },
-          unsaved: [AGENT.UNSAVED],
-          endedAt: {
-            [AGENT.ORPHAN]: ENDED_PAST_WINDOW,
-            [AGENT.UNSAVED]: ENDED_PAST_WINDOW,
-            [AGENT.RECENT]: 0,
-          },
-          reads: [listed],
-        });
-        yield* device.passed(1);
-
-        assert.equal(device.holdsOf(AGENT.ORPHAN).folder, false);
-        assert.equal(device.holdsOf(AGENT.RECENT).folder, true);
-        assert.equal(device.holdsOf(AGENT.UNSAVED).folder, true);
-      }),
-    ).pipe(Effect.provide(NodeFileSystem.layer)),
-);
-
-it.effect(
   "a listed agent's VM a run left standing is deleted by a pass, and its folder stays",
   () =>
     Effect.scoped(
@@ -611,14 +522,32 @@ it.effect(
 );
 
 it.effect(
-  "a folder kept for work no save holds stays until a week after it was first kept, and then goes whole",
+  "a discard on the box deletes a VM a run from before left, which the deletes before it could not, before it lets the agent go",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        // Note that the delete as the gate opens and those of the two passes' leftover sweeps fail, so only the second pass's discard can delete it.
+        const device = yield* following({
+          held: { whole: [AGENT.ORPHAN] },
+          reads: [[], []],
+          deleteFails: (_machine, attempt) => attempt <= 3,
+        });
+        yield* device.passed(2);
+
+        assert.deepEqual(device.holdsOf(AGENT.ORPHAN), NOTHING);
+        assert.deepEqual(device.ownedRecorded(), []);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a folder kept for work nowhere else stays until a week after it was first kept, and then goes whole",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const device = yield* following({
           held: { folderOnly: [AGENT.ORPHAN] },
-          unsaved: [AGENT.ORPHAN],
-          kept: { [AGENT.ORPHAN]: KEPT_A_WEEK_BY_THE_THIRD_PASS },
+          kept: { [AGENT.ORPHAN]: A_WEEK_BY_THE_THIRD_PASS },
           reads: [[], [], []],
         });
         yield* device.passed(2);
@@ -650,85 +579,6 @@ it.effect("a pass that died is reported, and the passes after it still run", () 
 );
 
 it.effect(
-  "this machine's folder no save holds, as an agent's from before saves, is saved once by a pass and let go of after its warm window, while another install's is left be",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const listed = [AGENT.FROM_BEFORE, AGENT.OTHER_INSTALL];
-        const device = yield* following({
-          held: { folderOnly: listed },
-          unowned: [AGENT.OTHER_INSTALL],
-          fromBefore: [AGENT.FROM_BEFORE],
-          saving: {},
-          reads: Array.from({ length: 5 }, () => listed),
-        });
-        yield* device.passed(1);
-
-        assert.equal(device.saveOf(AGENT.FROM_BEFORE)?.generation, 1);
-        assert.deepEqual(device.holdsOf(AGENT.FROM_BEFORE), { ...NOTHING, folder: true });
-        // Note that the window counts from the save, and passes stand five minutes apart.
-        yield* device.passed(5);
-
-        assert.deepEqual(device.holdsOf(AGENT.FROM_BEFORE), NOTHING);
-        assert.equal(device.packsOf(AGENT.FROM_BEFORE), 1);
-        assert.equal(device.holdsOf(AGENT.OTHER_INSTALL).folder, true);
-        assert.equal(device.machineCommands(AGENT.OTHER_INSTALL), 0);
-      }),
-    ).pipe(Effect.provide(NodeFileSystem.layer)),
-);
-
-it.effect(
-  "a folder whose save fails, as a pack over its cap does, is kept and recorded unsaved, and the next pass saves another rather than trying it again at once",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const listed = [AGENT.OVER_CAP, AGENT.FROM_BEFORE];
-        const device = yield* following({
-          held: { folderOnly: listed },
-          fromBefore: listed,
-          saving: { tooLarge: [AGENT.OVER_CAP] },
-          reads: [listed, listed],
-        });
-        yield* device.passed(1);
-
-        assert.deepEqual(device.saveOf(AGENT.OVER_CAP), {
-          userId: USER_ID,
-          unsaved: { why: OVER_CAP },
-        });
-        assert.equal(device.saveOf(AGENT.FROM_BEFORE), undefined);
-        yield* device.passed(2);
-
-        assert.equal(device.saveOf(AGENT.FROM_BEFORE)?.generation, 1);
-        assert.equal(device.packsOf(AGENT.OVER_CAP), 1);
-        assert.equal(device.holdsOf(AGENT.OVER_CAP).folder, true);
-      }),
-    ).pipe(Effect.provide(NodeFileSystem.layer)),
-);
-
-it.effect(
-  "an agent that ran directly on the Mac is left as it is, while the pass saves the one beside it that ran in a VM",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const listed = [AGENT.RAN_DIRECTLY, AGENT.FROM_BEFORE];
-        const device = yield* following({
-          held: { folderOnly: listed },
-          ranDirectly: [AGENT.RAN_DIRECTLY],
-          fromBefore: [AGENT.FROM_BEFORE],
-          saving: {},
-          reads: [listed],
-        });
-        yield* device.passed(1);
-
-        assert.equal(device.saveOf(AGENT.FROM_BEFORE)?.generation, 1);
-        assert.equal(device.saveOf(AGENT.RAN_DIRECTLY), undefined);
-        assert.equal(device.packsOf(AGENT.RAN_DIRECTLY), 0);
-        assert.equal(device.holdsOf(AGENT.RAN_DIRECTLY).folder, true);
-      }),
-    ).pipe(Effect.provide(NodeFileSystem.layer)),
-);
-
-it.effect(
   "a Mac takes as its own, as its gate opens, an agent its state says it ran but never recorded, deleting its VM, and never one only the store it shares holds",
   () =>
     Effect.scoped(
@@ -737,8 +587,7 @@ it.effect(
           held: { whole: [AGENT.FROM_BEFORE, AGENT.OTHER_INSTALL] },
           madeBeforeRecord: [AGENT.FROM_BEFORE],
           unowned: [AGENT.OTHER_INSTALL],
-          // Note that the device is a Mac, whose state records how each of its agents ran, none of them directly.
-          ranDirectly: [],
+          mac: true,
           reads: [[AGENT.FROM_BEFORE, AGENT.OTHER_INSTALL]],
         });
         yield* device.passed(1);
@@ -769,6 +618,81 @@ it.effect(
         assert.deepEqual(device.holdsOf(whole), { ...NOTHING, folder: true });
         assert.deepEqual(device.holdsOf(vmOnly), NOTHING);
         assert.deepEqual(device.holdsOf(folderOnly), { ...NOTHING, folder: true });
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect.each([
+  { case: "names no smolvm", noSmolvm: true, listingFails: false },
+  { case: "names a smolvm that cannot list its machines", noSmolvm: false, listingFails: true },
+])(
+  "a box whose service $case holds up none of its passes, so an agent left out is removed whole, its record let go of",
+  ({ noSmolvm, listingFails }) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const device = yield* following({
+          held: { folderOnly: [AGENT.ORPHAN] },
+          noSmolvm,
+          listingFails,
+          reads: [[], []],
+        });
+        yield* device.passed(2);
+
+        assert.deepEqual(device.holdsOf(AGENT.ORPHAN), NOTHING);
+        assert.deepEqual(device.ownedRecorded(), []);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a pass clears an idle agent's folder a week after its last use, its work all on GitHub and its agent still this machine's, but one from before the stamp not until a week after the start that stamps it",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const [used, fromBefore] = [agentNumbered(1), agentNumbered(2)];
+        const listed = [used, fromBefore];
+        const device = yield* following({
+          held: { folderOnly: listed },
+          used: { [used]: A_WEEK_BY_THE_THIRD_PASS },
+          // Note that its folder last changed long before the clock starts, which dates nothing.
+          changedAt: { [fromBefore]: USED_OVER_A_WEEK_AGO },
+          reads: [listed, listed, listed],
+        });
+        yield* device.passed(2);
+
+        assert.equal(device.holdsOf(used).folder, true);
+        yield* device.passed(3);
+
+        assert.deepEqual(device.holdsOf(used), NOTHING);
+        assert.equal(device.holdsOf(fromBefore).folder, true);
+        assert.deepEqual(device.ownedRecorded(), listed);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "a pass never clears the folder of an agent unused for a week whose launch is still kept, nor one with unpushed work, which it checks once while that agent stays idle",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const listed = [AGENT.LAUNCH_KEPT, AGENT.UNSAVED];
+        const device = yield* following({
+          held: { folderOnly: listed },
+          used: {
+            [AGENT.LAUNCH_KEPT]: USED_OVER_A_WEEK_AGO,
+            [AGENT.UNSAVED]: USED_OVER_A_WEEK_AGO,
+          },
+          keptLaunches: [
+            { id: "4d5e6f70-8192-4a3b-8c4d-5e6f7a8b9c0d", agentId: AGENT.LAUNCH_KEPT },
+          ],
+          unsavedWork: { [AGENT.UNSAVED]: "it has commits on no remote branch\n" },
+          reads: [listed, listed],
+        });
+        yield* device.passed(2);
+
+        assert.equal(device.holdsOf(AGENT.LAUNCH_KEPT).folder, true);
+        assert.equal(device.holdsOf(AGENT.UNSAVED).folder, true);
+        assert.equal(device.checksRun(), 1);
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),
 );

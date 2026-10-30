@@ -987,7 +987,7 @@ const ITEM_THING = "Inbox item";
  * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
  * agent's tab end theirs, offering what the item's row's menu offers in the
  * same order (`inbox-item-actions.tsx`): Copy link, the item's link under its
- * agent; Mark as read or unread, naming U; Move to channel…; and, while the
+ * agent; Mark as read or unread, naming U; Move to channel; and, while the
  * item is open, Resolve without answering, asked first. It is keyed by its
  * item where it is drawn, so a question asked on one item never closes the
  * next, and the menu and the question go with the pane once it is hidden.

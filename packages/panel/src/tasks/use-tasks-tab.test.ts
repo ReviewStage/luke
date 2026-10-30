@@ -2821,7 +2821,7 @@ async function startAgentTask(tab: ReturnType<typeof mount>) {
   return { choice, prompt, note, starts };
 }
 
-test("New child task on the open task the list has not read opens New task under that task", () => {
+test("New sub-task on the open task the list has not read opens New task under that task", () => {
   const tab = mount({ shown: true, tasks: OPEN });
 
   act(() => tab.control().onNewChildTask(TASK.id));

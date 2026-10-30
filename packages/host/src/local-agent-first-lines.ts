@@ -12,25 +12,21 @@ import { Option, Schema } from "effect";
  * A device's launch carries the runner's first lines in its secrets, the
  * config and then the first message (`@luke/agent-runner/protocol`), which
  * the device writes to the runner's stdin. What only the device knows, that
- * the agent's folder was restored onto a machine that held none of it, that
- * its saved state expired, and where an unfinished restore was set aside, or
- * that its last turn's work could not be saved, it says here, as a text block ahead of that message's own, so both
- * harnesses read it as the agent's turn opens and neither runner's handling
- * of its lines changes. A launch whose saved state expired still names the
- * session it continued, which no longer stands anywhere, so its config is
- * written without it, and the harness starts a session afresh. Every other
- * key of each line is written back as it came, so one a newer service added
- * reaches the runner untouched.
+ * the agent's folder was cleared since its last turn, it says here, as a
+ * text block ahead of that message's own, so both harnesses read it as the
+ * agent's turn opens and neither runner's handling of its lines changes. A
+ * launch whose folder was cleared still names the session it continued,
+ * which no longer stands anywhere, so its config is written without it, and
+ * the harness starts a session afresh. Every other key of each line is
+ * written back as it came, so one a newer service added reaches the runner
+ * untouched.
  */
 
 /** What the device tells the agent of the machine its turn starts on, each as the paragraph it reads. */
 export const LAUNCH_NOTE = {
-  /** The agent's folder was restored from its saved state onto a machine that held none of it. */
-  RESTORED:
-    "This turn starts on a fresh machine. Luke brought back your work and your conversation as they were saved at your last turn's end: your commits, branches and stashes, your staged, unstaged and untracked changes, your session, and your attachments. Nothing else came back: whatever Git ignores, such as installed dependencies, build output and local environment files, is gone, so reinstall or rebuild what you need before you rely on it.",
-  /** The agent's saved state expired before this launch, so it starts afresh. */
-  EXPIRED:
-    "Your saved work and your session from earlier turns expired: Luke keeps an agent's saved state for 7 days after its last save. This turn starts on a fresh machine with none of your earlier work but what you pushed, and with no memory of the conversation before it. Its transcript is still in Luke.",
+  /** The agent's folder on the device was cleared since its last turn, so it starts afresh from what it pushed. */
+  CLEARED:
+    "Your folder on this machine was cleared since your last turn, so this turn starts in a fresh one, with none of your earlier work but what you pushed to GitHub, and with no memory of the conversation before it. Fetch your branch to carry on from what you pushed. Your transcript is still in Luke.",
 } as const;
 
 /** What leads the device's notes, so the agent reads them as Luke's rather than the developer's. */
@@ -55,16 +51,6 @@ const isMessage = Schema.is(
   }),
 );
 
-/** The paragraph telling the agent why its last turn's work could not be saved, in the words its record kept. */
-export function unsavedNote(why: string): string {
-  return `Your last turn's work couldn't be saved off this machine: ${why.trim().replace(/\.$/u, "")}. Fix it so it saves.`;
-}
-
-/** The paragraph telling the agent where what a restore that never finished brought back was set aside, its checkout being fresh. */
-export function unrestoredNote(folder: string): string {
-  return `A restore of your saved work never finished before it expired. What it brought back is set aside, and may be incomplete, in ${folder}; your checkout is fresh.`;
-}
-
 /** Whether the first lines' config continues a harness's session. */
 export function sessionResumed(stdin: string): boolean {
   const config = readLine(stdin.split("\n")[0] ?? "");
@@ -74,15 +60,11 @@ export function sessionResumed(stdin: string): boolean {
 /**
  * The first lines given with the notes ahead of the first message's own
  * content, under one lead, and where `fresh`, the config without the keys
- * that continue a session; and whether a message carried the notes. Lines
- * it cannot read are written back as they came.
+ * that continue a session. Lines it cannot read are written back as they
+ * came.
  */
-export function notedFirstLines(
-  stdin: string,
-  notes: readonly string[],
-  fresh: boolean,
-): { readonly stdin: string; readonly said: boolean } {
-  if (notes.length === 0 && !fresh) return { stdin, said: true };
+export function notedFirstLines(stdin: string, notes: readonly string[], fresh: boolean): string {
+  if (notes.length === 0 && !fresh) return stdin;
   let said = notes.length === 0;
   const lines = stdin.split("\n").map((text, at) => {
     const line = readLine(text);
@@ -100,5 +82,5 @@ export function notedFirstLines(
     const note: ContentBlock = { type: "text", text: [NOTES_LEAD, ...notes].join("\n\n") };
     return writeLine({ ...line.value, content: [note, ...line.value.content] });
   });
-  return { stdin: lines.join("\n"), said };
+  return lines.join("\n");
 }

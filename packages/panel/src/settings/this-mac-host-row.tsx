@@ -59,8 +59,8 @@ function lineOf(standing: ThisMacHostStanding): HostLine | null {
     case THIS_MAC_HOST_STANDING.NOT_TURNED_ON:
       return {
         words:
-          "Run agents here, each in a VM of its own. Turning on downloads what they run on " +
-          "and starts Luke's host at login.",
+          "Run agents here, straight on this Mac, each in a folder of its own. Turning on downloads " +
+          "Claude Code, Codex, and GitHub's CLI and starts Luke's host at login.",
         state: SETTINGS_ROW_STATE.PLAIN,
         act: "Turn on",
       };

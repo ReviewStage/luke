@@ -79,7 +79,7 @@ interface Asked {
 }
 
 /** A pinned effort row with its submenu, and a press of its own. */
-function footOf(said: string[]): FootRow[] {
+function footOf(said: string[], stays = false): FootRow[] {
   return [
     {
       id: "effort",
@@ -92,6 +92,7 @@ function footOf(said: string[]): FootRow[] {
         ],
         value: "high",
         onPick: (id) => said.push(`effort ${id}`),
+        stays,
       },
     },
     { id: "github", label: "Open on GitHub", onPress: () => said.push("github") },
@@ -103,6 +104,8 @@ function mount(
   options: {
     placeholder?: string;
     foot?: boolean;
+    /** The effort submenu leaves the menu standing after a pick. */
+    staying?: boolean;
     room?: boolean;
     rows?: readonly MenuRow[];
     note?: React.ReactNode;
@@ -134,7 +137,7 @@ function mount(
         onPick: (id) => asked.said.push(`pick ${id}`),
         onClose: () => asked.said.push("close"),
         onLeave: () => asked.left.push("leave"),
-        foot: options.foot === true ? footOf(asked.said) : undefined,
+        foot: options.foot === true ? footOf(asked.said, options.staying === true) : undefined,
         ...(options.embedded === true
           ? { layer: SEARCHABLE_MENU_LAYER.EMBEDDED }
           : { align: POPOVER_ALIGN.START, bounds: options.bounds }),
@@ -688,6 +691,18 @@ test("in a sheet a pinned row's submenu stands in its place with a way back, and
   assert.equal(holder, "Effort");
   assert.deepEqual(back, ["Model"]);
   assert.deepEqual(asked.said, ["close", "effort low"]);
+});
+
+test("in a sheet a pick in a submenu that stays is handed on and puts the list back, the sheet left standing", () => {
+  inPhoneLayout();
+  const asked = mount({ placeholder: "Search models", foot: true, staying: true });
+  pressNamed("Effort");
+  const low =
+    sheet().querySelector<HTMLElement>('[role="option"]') ?? assert.fail("Effort lists Low");
+  act(() => low.click());
+
+  assert.deepEqual(asked.said, ["effort low"]);
+  assert.deepEqual(sheetLists(), ["Model"]);
 });
 
 test("a finger dragging the sheet from its field types rather than swiping it away", () => {

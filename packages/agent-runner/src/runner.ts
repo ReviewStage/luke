@@ -18,7 +18,9 @@
  * `session_crons`), so the agent's turn is over at a `result` only when
  * the last Stop hook reported none, and otherwise the runner posts a WAITING
  * event and keeps the CLI up. Nor is it over while a message Luke sent during
- * a turn is still unanswered: the CLI runs it as its next turn. A turn that
+ * a turn is still unanswered: the CLI runs it as its next turn, and where a
+ * `result` that named no prompt left the message, the launch fails once the
+ * CLI has said nothing for `RUNNER_UNANSWERED`. A turn that
  * is over ends the launch, or, where the config asks it to stay `warm`,
  * posts IDLE and keeps the CLI up (`RUNNER_WARM`) for Luke's next message,
  * until Luke retires it or its cap ends it. A `result` after a stop
@@ -83,6 +85,7 @@ import {
   RUNNER_EVENT,
   RUNNER_HARNESS,
   RUNNER_RELEASE,
+  RUNNER_UNANSWERED,
   RUNNER_WARM,
   RunnerConfigSchema,
   type RunnerEnd,
@@ -180,7 +183,7 @@ const resumePointOf = Effect.fn("agent-runner/resumePointOf")(function* (
 /**
  * The command sandbox every command the agent runs is under in the cloud's
  * sandbox: bubblewrap, the network on, and the credentials denied. A local
- * agent's VM runs none (`RUNNER_PLACE.HOST`).
+ * agent on a host runs none (`RUNNER_PLACE.HOST`).
  */
 function commandSandbox(config: ClaudeCodeConfig): NonNullable<Options["sandbox"]> {
   return {
@@ -204,8 +207,8 @@ function commandSandbox(config: ClaudeCodeConfig): NonNullable<Options["sandbox"
 
 /**
  * The documented options a launch runs `query()` with (the plan's P05), the
- * same wherever the runner runs but for the command sandbox: a local agent's
- * VM runs none (`RUNNER_PLACE.HOST`). Note that nothing else may follow the
+ * same wherever the runner runs but for the command sandbox: a local agent
+ * on a host runs none (`RUNNER_PLACE.HOST`). Note that nothing else may follow the
  * place, because the CLI decides its permission mode from more than
  * `permissionMode`: 2.1.304 forces `default` under
  * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`, which a host launch once set and which
@@ -284,6 +287,8 @@ interface Launch {
   readonly turnRunning: Ref.Ref<boolean>;
   /** The messages Luke sent that no `result` has answered yet, by their uuid. */
   readonly unanswered: Ref.Ref<ReadonlySet<string>>;
+  /** How many messages of turn output the CLI has put out, so a held message's bound sees whether the CLI has said anything since. */
+  readonly heard: Ref.Ref<number>;
   readonly stopping: Ref.Ref<boolean>;
   /** How many waits the launch has posted, so a wait's release is dropped once a newer one began. */
   readonly waits: Ref.Ref<number>;
@@ -411,22 +416,28 @@ const TURN_OUTPUT: ReadonlySet<SDKMessage["type"]> = new Set([
   SDK_MESSAGE.USER,
 ]);
 
-/**
- * The messages Luke sent that a `result` leaves unanswered. A result names
- * every prompt its turn consumed, folded ones included; one that names none
- * (a delivery failure, or an older CLI) is taken to answer them all, so a
- * launch never outwaits a prompt the CLI will not answer.
- */
-function stillUnanswered(
-  sent: ReadonlySet<string>,
-  result: Extract<SDKMessage, { type: typeof SDK_MESSAGE.RESULT }>,
-): ReadonlySet<string> {
-  const answered =
+type SdkResult = Extract<SDKMessage, { type: typeof SDK_MESSAGE.RESULT }>;
+
+/** The prompts a `result` names as its turn's, folded ones included; none where it names none. */
+function promptsOf(result: SdkResult): readonly string[] | undefined {
+  return (
     result.user_message_uuids ??
-    (result.user_message_uuid === undefined ? undefined : [result.user_message_uuid]);
-  if (answered === undefined) return new Set();
+    (result.user_message_uuid === undefined ? undefined : [result.user_message_uuid])
+  );
+}
+
+/**
+ * The messages Luke sent that a `result` leaves unanswered: all but those it
+ * names, since a result names every prompt its turn consumed, folded ones
+ * included, and the CLI runs a message left as its next turn. Note that we
+ * take a result naming no prompt as answering nothing, because the CLI runs
+ * turns of its own, such as a wakeup's or the one it puts out after reopening
+ * a session a Stop cut off mid-command, and taking those as answers dropped
+ * the user's next message unanswered (`watchUnheard` bounds the wait).
+ */
+function stillUnanswered(sent: ReadonlySet<string>, result: SdkResult): ReadonlySet<string> {
   const left = new Set(sent);
-  for (const uuid of answered) left.delete(uuid);
+  for (const uuid of promptsOf(result) ?? []) left.delete(uuid);
   return left;
 }
 
@@ -439,7 +450,10 @@ const takeMessage = Effect.fn("agent-runner/takeMessage")(function* (
   // takes, so a wait is not released once the CLI has begun a turn of its own.
   if (TURN_OUTPUT.has(message.type)) {
     yield* launch.admission.withPermit(
-      Effect.andThen(Ref.set(launch.turnRunning, true), Ref.set(launch.warm, false)),
+      Ref.set(launch.turnRunning, true).pipe(
+        Effect.andThen(Ref.set(launch.warm, false)),
+        Effect.andThen(Ref.update(launch.heard, (count) => count + 1)),
+      ),
     );
   }
   yield* launch.sink.emit(message);
@@ -448,11 +462,17 @@ const takeMessage = Effect.fn("agent-runner/takeMessage")(function* (
   if (yield* Ref.get(launch.stopping)) {
     return yield* Deferred.succeed(launch.ended, RUNNER_END.STOPPED);
   }
-  // A message Luke sent during the turn that the turn did not take runs as
-  // the CLI's next turn, so the launch goes on until it is answered.
+  // A message Luke sent that the turn did not take runs as the CLI's next
+  // turn, so the launch goes on until it is answered; bounded where the
+  // `result` took none, since nothing then says the CLI will take it up.
   const left = stillUnanswered(yield* Ref.get(launch.unanswered), message);
   yield* Ref.set(launch.unanswered, left);
-  if (left.size > 0) return;
+  if (left.size > 0) {
+    if (promptsOf(message) === undefined) {
+      yield* Effect.forkScoped(watchUnheard(launch, left, yield* Ref.get(launch.heard)));
+    }
+    return;
+  }
   const waiting =
     inFlight !== undefined &&
     (inFlight.background_tasks.length > 0 || inFlight.session_crons.length > 0);
@@ -509,6 +529,32 @@ const watchWarm = Effect.fn("agent-runner/watchWarm")(function* (launch: Launch,
     Effect.gen(function* () {
       if ((yield* Ref.get(launch.waits)) !== wait || !(yield* stillWarm(launch))) return;
       yield* Deferred.succeed(launch.ended, RUNNER_END.IDLED);
+    }),
+  );
+});
+
+/**
+ * The bound on the messages a `result` naming no prompt left unanswered,
+ * `heardAt` being the launch's turn output when it came: once
+ * `RUNNER_UNANSWERED.SILENCE_MS` has passed with the CLI putting out no turn
+ * output since and one of them still unanswered, the launch ends as
+ * `FAILED`, so the turn shows as failed rather than answered and the next
+ * message relaunches the CLI. Decided under the admission, as a turn's
+ * output is marked.
+ */
+const watchUnheard = Effect.fn("agent-runner/watchUnheard")(function* (
+  launch: Launch,
+  held: ReadonlySet<string>,
+  heardAt: number,
+) {
+  yield* Effect.sleep(Duration.millis(RUNNER_UNANSWERED.SILENCE_MS));
+  yield* launch.admission.withPermit(
+    Effect.gen(function* () {
+      if ((yield* Ref.get(launch.heard)) !== heardAt) return;
+      const unanswered = yield* Ref.get(launch.unanswered);
+      if (![...held].some((uuid) => unanswered.has(uuid))) return;
+      yield* Effect.logWarning("agent-runner: the CLI never took up a message a result left");
+      yield* Deferred.succeed(launch.ended, RUNNER_END.FAILED);
     }),
   );
 });
@@ -613,6 +659,7 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
     inFlight,
     turnRunning: yield* Ref.make(false),
     unanswered: yield* Ref.make<ReadonlySet<string>>(new Set()),
+    heard: yield* Ref.make(0),
     stopping: yield* Ref.make(false),
     waits: yield* Ref.make(0),
     warmable: config.warm === true,

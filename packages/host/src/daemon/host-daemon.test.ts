@@ -3,9 +3,18 @@ import { describe, expect, it } from "@effect/vitest";
 import { SMOLVM_MAC_PIN } from "@luke/agent-runner/pins";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import { DEVICE_AGENT_LINE_KIND, DEVICE_ARCH } from "@luke/features/device-agent-wire";
-import { HOST_WIRE } from "@luke/features/host-wire";
+import {
+  HOST_PAIRING_POLL_STATUS,
+  HOST_WIRE,
+  type HostPairingStartAnswer,
+} from "@luke/features/host-wire";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { jsonResponse, type RecordedRequest, recordingHttpClient } from "@luke/wire/testing";
+import {
+  jsonResponse,
+  type RecordedRequest,
+  type RecordingHttpClient,
+  recordingHttpClient,
+} from "@luke/wire/testing";
 import { ConfigProvider, Duration, Effect, Fiber, Layer, Option } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
@@ -16,6 +25,7 @@ import { scriptedSpawner } from "../testing/scripted-spawner.js";
 import { hostDaemon } from "./host-daemon.js";
 import { enrollHostDevice } from "./host-device.js";
 import { DARWIN_HOST, type HostOs, hostRuntime, LINUX_HOST } from "./host-os.js";
+import { connectHostDevice, HOST_CONNECT_OUTCOME, type HostPairingCode } from "./host-pairing.js";
 import { hostPlatform } from "./host-platform.js";
 
 const SERVICE = "https://luke.test";
@@ -25,9 +35,22 @@ const AGENT_ID = "0b6f9a4e-1c1d-4d2e-9f3a-5b7c8d9e0f12";
 const LINE_ID = "d1c2b3a4-0000-4000-8000-000000000001";
 const INSTALL_TOKEN = `lkh_${"b".repeat(40)}`;
 const DEVICE_SECRET = `lkd_${"a".repeat(43)}`;
+const POLL_SECRET = `lkp_${"c".repeat(43)}`;
+/** What a pairing's start answers beside its poll secret: the service's own numbers, ten minutes and five seconds. */
+const PAIRING_CODE: Omit<HostPairingStartAnswer, "pollSecret"> = {
+  userCode: "BCDF-GHJK",
+  url: `${SERVICE}/connect/BCDF-GHJK`,
+  expiresInMs: 600_000,
+  intervalMs: 5_000,
+};
+/** Where a pairing stands as a poll answers it. */
+type HostPairingPollStatus =
+  (typeof HOST_PAIRING_POLL_STATUS)[keyof typeof HOST_PAIRING_POLL_STATUS];
 const RUNNER_TOKEN = "sk-ant-oat01-fixture-not-a-real-token";
 const SMOLVM = "/usr/local/bin/smolvm";
-/** The runner's bundle each OS runs: a Linux release's own, and on a Mac the app's, which its VMs mount. */
+/** The Node the daemon runs on, which its runners run on too. */
+const NODE = "/opt/luke-host/node/bin/node";
+/** The runner's bundle each OS runs: a Linux release's own, and on a Mac the app's. */
 const RUNNER_BUNDLE = {
   LINUX: "/opt/luke-host/lib/agent-runner.mjs",
   DARWIN: "/opt/agent-runner/agent-runner.mjs",
@@ -44,15 +67,16 @@ const HTTP = {
 /** A Linux box named fra-01, with no `/dev/kvm`. */
 const FRA_01: HostOs = { ...LINUX_HOST, deviceName: () => "fra-01", nested: () => false };
 
-/** A box's platform on the OS given, as its daemon builds it. */
-const platformOn = (os: HostOs, stateRoot: string) =>
+/** A box's platform on the OS given, as its daemon builds it, running as the user given. */
+const platformOn = (os: HostOs, stateRoot: string, uid = 990) =>
   hostPlatform({
     os,
     installFolder: "/opt/luke-host",
     arch: DEVICE_ARCH.X64,
     stateRoot,
     smolvm: SMOLVM,
-    user: { uid: 990, gid: 990 },
+    node: NODE,
+    user: { uid, gid: uid },
     clis: fakeClis(),
   });
 
@@ -73,25 +97,17 @@ const box = Effect.gen(function* () {
   return { home: `${root}/home`, stateRoot: `${root}/state` };
 });
 
-/** Whether a spawn is the runner, started in its agent's VM. */
+/** Whether a spawn is the runner, started straight on the box on the daemon's own Node. */
 const isRunner = (each: { readonly program: string; readonly args: readonly string[] }) =>
-  each.program === SMOLVM && each.args.some((arg) => RUNNER_BUNDLES.has(arg));
+  each.program === NODE && each.args.some((arg) => RUNNER_BUNDLES.has(arg));
 
-/** What smolvm prints for a machine it has not made. */
-const NOT_FOUND = JSON.stringify({ error: { code: "NOT_FOUND", message: "machine not found" } });
-
-/** The daemon's world: its home and shell, a spawner whose login shell answers a PATH, whose smolvm makes each machine the first time it is started and whose runners run, and the reports it makes. */
+/** The daemon's world: its home and shell, a spawner whose login shell answers a PATH and whose runners run, with no smolvm on the box, and the reports it makes. */
 const world = (home: string, reports: string[]) => {
-  const made = new Set<string>();
   const spawner = scriptedSpawner((program, args) => {
     if (program === "/bin/bash" && args[0] === "-l")
       return { stdout: "/usr/bin:/bin", exitCode: 0 };
-    if (program !== SMOLVM) return undefined;
     if (isRunner({ program, args })) return {};
-    const [, verb, , machine = ""] = args;
-    if (verb === "create") made.add(machine);
-    if (verb === "start" && !made.has(machine)) return { stderr: NOT_FOUND, exitCode: 1 };
-    return { exitCode: 0 };
+    return undefined;
   });
   const layer = Layer.mergeAll(
     NodeFileSystem.layer,
@@ -150,22 +166,24 @@ describe("a host's daemon", () => {
 
   it.effect.each([
     {
-      os: { ...LINUX_HOST, deviceName: () => "fra-01", nested: () => true },
+      os: { ...LINUX_HOST, deviceName: () => "fra-01" },
       name: "fra-01",
       platform: "linux",
-      nested: true,
+      uid: 0,
+      sandboxed: "1",
       runnerBundle: RUNNER_BUNDLE.LINUX,
     },
     {
       os: { ...DARWIN_HOST, deviceName: () => "Studio" },
       name: "Studio",
       platform: "darwin",
-      nested: false,
+      uid: 501,
+      sandboxed: undefined,
       runnerBundle: RUNNER_BUNDLE.DARWIN,
     },
   ])(
-    "registers as its OS ($platform) on its device secret with its version on every call, hands a launch to its VM, nested where its OS allows, with the claim's secrets, and stops its runner and ends once Luke refuses its secret",
-    ({ os, name, platform: devicePlatform, nested, runnerBundle }) =>
+    "registers as its OS ($platform) on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets, and stops its runner's group and ends once Luke refuses its secret",
+    ({ os, name, platform: devicePlatform, uid, sandboxed, runnerBundle }) =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
         const reports: string[] = [];
@@ -212,7 +230,7 @@ describe("a host's daemon", () => {
               return jsonResponse({ done: true });
           }
         });
-        const platform = platformOn(os, stateRoot);
+        const platform = platformOn(os, stateRoot, uid);
 
         const daemon = yield* hostDaemon({
           stateRoot,
@@ -229,6 +247,9 @@ describe("a host's daemon", () => {
           platform: devicePlatform,
           arch: "x64",
           home: home,
+          isolation: "direct",
+          claudeExecutable: fakeClis().paths.claude,
+          codexExecutable: fakeClis().paths.codex,
           signedIn: { claudeCode: false, codex: false },
         });
         expect(new Set(http.requests.map((request) => request.authorization))).toEqual(
@@ -237,31 +258,31 @@ describe("a host's daemon", () => {
         expect(
           new Set(http.requests.map((request) => request.headers.get(HOST_WIRE.VERSION_HEADER))),
         ).toEqual(new Set([VERSION]));
-        const created = spawner.spawned.find(
-          (each) => each.program === SMOLVM && each.args[1] === "create",
-        );
-        expect(created?.args.includes("--nested")).toBe(nested);
+        expect(spawner.spawned.some((each) => each.program === SMOLVM)).toBe(false);
         const launched = spawner.spawned.filter(isRunner);
         expect(launched).toHaveLength(1);
         const [runner] = launched;
         const folder = `${home}/.luke/agents/${AGENT_ID}`;
-        expect(runner?.args.slice(0, 4)).toEqual(["machine", "exec", "--name", `luke-${AGENT_ID}`]);
-        expect(runner?.args).toContain(runnerBundle);
-        expect(runner?.args).toContain(`${folder}/repository`);
-        expect(runner?.args).toContain(`HOME=${folder}/home`);
+        expect(runner?.args).toEqual([runnerBundle]);
+        expect(runner?.cwd).toBe(`${folder}/repository`);
+        expect(runner?.extendEnv).toBe(false);
         expect(runner?.env).toMatchObject({
           CLAUDE_CODE_OAUTH_TOKEN: RUNNER_TOKEN,
           LUKE_RUNNER_PLACE: "host",
+          HOME: `${folder}/home`,
+          XDG_CACHE_HOME: `${folder}/cache`,
+          PNPM_HOME: `${folder}/home/.local/share/pnpm`,
+          NPM_CONFIG_PREFIX: `${folder}/home/.npm-global`,
+          PATH: `${folder}/home/.local/share/pnpm:${folder}/home/.npm-global/bin:/opt/luke/agent-tools:/usr/bin:/bin`,
         });
+        expect(runner?.env?.IS_SANDBOX).toBe(sandboxed);
         expect(reports).toContain("Luke host: Connected to Luke.");
 
         removed = true;
         yield* TestClock.adjust(Duration.seconds(20));
-        // Note that the runner, which never exits here, is signalled in its VM and given its grace before it is ended.
-        yield* settled(() => spawner.spawned.some((each) => each.args.includes("-e")));
-        yield* TestClock.adjust(Duration.seconds(5));
         yield* Fiber.join(daemon);
-        expect(runner?.ended).not.toBe("running");
+        // Note that the runner, which never exits here, has its group ended under the grace it was started with.
+        expect(runner?.ended).toEqual({ killSignal: "SIGTERM", forceKillAfterMillis: 3_000 });
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );
 
@@ -297,9 +318,126 @@ describe("a host's daemon", () => {
 
         const upgrade = reports.filter((line) => line.includes("upgrade needed"));
         expect(upgrade).toEqual([
-          `Luke host: upgrade needed: Luke no longer accepts this version. Rerun the install command to upgrade in place: curl -fsSL ${SERVICE}/install.sh | sudo sh`,
+          `Luke host: upgrade needed: Luke no longer accepts this version. Rerun the install command to upgrade in place: curl -fsSL ${SERVICE}/install.sh | sh`,
         ]);
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
+  );
+});
+
+describe("a host's connect with a code", () => {
+  /** A service that starts a pairing and answers each poll with the next status given, the device's id and secret with an approve. */
+  const pairingService = (statuses: HostPairingPollStatus[]) =>
+    recordingHttpClient((request) => {
+      if (request.pathname === HOSTED_SERVICE_PATH.HOST_PAIRING_START) {
+        return jsonResponse({ pollSecret: POLL_SECRET, ...PAIRING_CODE });
+      }
+      const status = statuses.shift() ?? HOST_PAIRING_POLL_STATUS.PENDING;
+      return jsonResponse(
+        status === HOST_PAIRING_POLL_STATUS.APPROVED
+          ? { status, deviceId: DEVICE_ID, deviceSecret: DEVICE_SECRET }
+          : { status },
+      );
+    });
+
+  /** Yields a few hundred times, so a connect the fake answered reads the answer and goes on to its next wait on the clock. */
+  const drained = Effect.yieldNow.pipe(Effect.repeat({ times: 300 }));
+
+  /** A Linux box's connect to the service given, each code it shows kept. */
+  const connectOn = (stateRoot: string, http: RecordingHttpClient, shown: HostPairingCode[]) =>
+    connectHostDevice({
+      stateRoot,
+      serviceOrigin: SERVICE,
+      name: "fra-01",
+      platform: LINUX_HOST.platform,
+      arch: DEVICE_ARCH.X64,
+      version: VERSION,
+      shown: (code) => Effect.sync(() => shown.push(code)),
+    }).pipe(Effect.provide(http.layer));
+
+  it.effect(
+    "shows the code before it polls, polls at the interval it was given and slower once told to, writes its record readable by its user alone once approved, and pairs nothing once connected",
+    () =>
+      Effect.gen(function* () {
+        const { stateRoot } = yield* box;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const http = pairingService([
+          HOST_PAIRING_POLL_STATUS.SLOW_DOWN,
+          HOST_PAIRING_POLL_STATUS.PENDING,
+          HOST_PAIRING_POLL_STATUS.APPROVED,
+        ]);
+        const shown: HostPairingCode[] = [];
+        const polls = () => at(http.requests, "POST", HOSTED_SERVICE_PATH.HOST_PAIRING_POLL);
+
+        const connecting = yield* Effect.forkScoped(connectOn(stateRoot, http, shown));
+        yield* settled(() => shown.length === 1);
+        expect(shown).toEqual([PAIRING_CODE]);
+        expect(polls()).toHaveLength(0);
+        yield* TestClock.adjust(Duration.seconds(5));
+        yield* settled(() => polls().length === 1);
+        yield* drained;
+        // Note that a slow down adds five seconds to the wait before every poll after it.
+        yield* TestClock.adjust(Duration.seconds(5));
+        yield* drained;
+        expect(polls()).toHaveLength(1);
+        yield* TestClock.adjust(Duration.seconds(5));
+        yield* settled(() => polls().length === 2);
+        yield* drained;
+        yield* TestClock.adjust(Duration.seconds(5));
+        yield* drained;
+        expect(polls()).toHaveLength(2);
+        yield* TestClock.adjust(Duration.seconds(5));
+
+        expect(yield* Fiber.join(connecting)).toEqual({
+          outcome: HOST_CONNECT_OUTCOME.CONNECTED,
+          deviceId: DEVICE_ID,
+        });
+        const [start] = at(http.requests, "POST", HOSTED_SERVICE_PATH.HOST_PAIRING_START);
+        expect(start?.authorization).toBeUndefined();
+        expect(JSON.parse(start?.body ?? "{}")).toEqual({
+          name: "fra-01",
+          platform: "linux",
+          arch: "x64",
+        });
+        expect(new Set(polls().map((poll) => poll.authorization))).toEqual(
+          new Set([`Bearer ${POLL_SECRET}`]),
+        );
+        expect(
+          new Set(http.requests.map((request) => request.headers.get(HOST_WIRE.VERSION_HEADER))),
+        ).toEqual(new Set([VERSION]));
+        expect(Option.getOrUndefined(yield* readHostDevice(stateRoot))).toEqual({
+          deviceId: DEVICE_ID,
+          deviceSecret: DEVICE_SECRET,
+          serviceOrigin: SERVICE,
+        });
+        expect(
+          ((yield* fileSystem.stat(`${stateRoot}/device.json`)).mode & 0o777).toString(8),
+        ).toBe("600");
+
+        const again = yield* connectOn(stateRoot, http, shown);
+        expect(again).toEqual({
+          outcome: HOST_CONNECT_OUTCOME.ALREADY_CONNECTED,
+          serviceOrigin: SERVICE,
+        });
+        expect(http.requests).toHaveLength(4);
+      }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
+  );
+
+  it.effect.each([
+    { status: HOST_PAIRING_POLL_STATUS.DENIED, outcome: HOST_CONNECT_OUTCOME.DENIED },
+    { status: HOST_PAIRING_POLL_STATUS.EXPIRED, outcome: HOST_CONNECT_OUTCOME.EXPIRED },
+  ])("ends $outcome, with no record written, where a poll answers $status", ({ status, outcome }) =>
+    Effect.gen(function* () {
+      const { stateRoot } = yield* box;
+      const http = pairingService([status]);
+      const shown: HostPairingCode[] = [];
+
+      const connecting = yield* Effect.forkScoped(connectOn(stateRoot, http, shown));
+      yield* settled(() => shown.length === 1);
+      yield* TestClock.adjust(Duration.seconds(5));
+
+      expect(yield* Fiber.join(connecting)).toEqual({ outcome });
+      expect(Option.isNone(yield* readHostDevice(stateRoot))).toBe(true);
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );
 });
 

@@ -17,7 +17,7 @@ import type { TaskStandingAgent } from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
-import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
+import { AGENT_STATUS, type AgentStatus, type AgentSummary } from "@luke/features/agent-wire";
 import { Clock, DateTime, Effect, Exit, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
@@ -378,27 +378,61 @@ export const stopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (agent: 
 });
 
 /**
- * Whether every agent stands stopped, read under their conversations' locks
- * as a task's finish holds them (`tasks/task-finish.ts`): none starting, nor
- * running, nor holding a line awaiting the turn it opens, a turn whose Stop
- * is on its way to eve reading as stopped, as `stoppedForGood` reads it.
- * Note that the agents are read by one id list, because the finish's
- * transaction holds one connection and a read per agent only adds trips.
+ * The agents as the sidebar reads them, under their conversations' locks as a
+ * task's finish and its move to Done hold them (`tasks/task-finish.ts`), each
+ * beside its newest turn: a line awaiting the turn it opens reads as running,
+ * and a turn whose Stop is on its way to eve as stopped. Note that the agents
+ * are read by one id list, because the transaction holds one connection and a
+ * read per agent only adds trips.
  */
-export const standsStopped = /* @__PURE__ */ Effect.fnUntraced(function* (
+const standingTurns = /* @__PURE__ */ Effect.fnUntraced(function* (
   agents: readonly TaskStandingAgent[],
 ) {
   const conversationIds = agents.map(({ conversationId }) => conversationId);
   const turns = yield* latestTurnsOfReached(conversationIds);
   const awaiting = yield* awaitingLinesOfReached(conversationIds);
   const now = yield* Clock.currentTimeMillis;
-  return agents.every((agent) => {
-    const status = agentStatusOf(turns.get(agent.conversationId), {
+  return agents.map((agent) => {
+    const turn = turns.get(agent.conversationId);
+    const status = agentStatusOf(turn, {
       createdAt: agent.createdAt,
       now,
       awaitingLineAt: awaiting.get(agent.conversationId),
       blank: agent.blank,
     });
-    return status !== AGENT_STATUS.STARTING && status !== AGENT_STATUS.RUNNING;
+    return { agent, turn, status };
   });
 });
+
+/** Whether a status the sidebar reads is neither starting nor running. */
+const settledStatus = (status: AgentStatus) =>
+  status !== AGENT_STATUS.STARTING && status !== AGENT_STATUS.RUNNING;
+
+/**
+ * Whether every agent stands stopped, as `standingTurns` reads each: none
+ * starting, nor running, nor holding a line awaiting its turn, a turn whose
+ * Stop is on its way to eve reading as stopped, as `stoppedForGood` reads it.
+ */
+export const standsStopped = (agents: readonly TaskStandingAgent[]) =>
+  Effect.map(standingTurns(agents), (read) => read.every(({ status }) => settledStatus(status)));
+
+/**
+ * The ids of the agents idle enough to archive, as `standingTurns` reads
+ * each: stopped, and with no turn of theirs still queued or running, a Stop on
+ * its way included, as the agent tools' archive reads one, since its runner
+ * still holds the folder an archive discards until the turn ends.
+ */
+export const idleStandingAgents = (agents: readonly TaskStandingAgent[]) =>
+  Effect.map(
+    standingTurns(agents),
+    (read): ReadonlySet<string> =>
+      new Set(
+        read
+          .filter(
+            ({ turn, status }) =>
+              settledStatus(status) &&
+              (turn === undefined || !RUNNING_TURN_STATUSES.has(turn.status)),
+          )
+          .map(({ agent }) => agent.id),
+      ),
+  );

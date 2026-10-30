@@ -277,11 +277,11 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * draft, the merge control saying what can happen now, its panel holding
  * GitHub's own sentence and the presses (`merge-box.tsx`), with Preview
  * first where a deployment of its head serves an address, opening it or, for
- * several, a menu of their environments (`PreviewControl`), and Run before
- * it, which runs the shown pull request's branch in a terminal of this Mac in the side
- * panel, where the panel offers one (`onRun`). Open on GitHub
+ * several, a menu of their environments (`PreviewControl`). Open on GitHub
  * and Refresh stand in the side panel's own ⋯ over the tab, which the tab
- * hands them to while it is drawn (`useHandedTabActions`). Under it one
+ * hands them to while it is drawn (`useHandedTabActions`), and Run after
+ * them, which runs the shown pull request's branch in a terminal of this Mac
+ * in the side panel, where the panel offers one (`onRun`). Under it one
  * line, wrapping where it must:
  * its branches, with the stack it stands in beside them
  * (`pull-request-stack.tsx`); who opened it and when, as the Changes tab
@@ -355,7 +355,6 @@ const PULL_REQUEST_WORDS = {
   CHECKS_FAILED: "The checks could not be read.",
   CONVERSATION_FAILED: "The conversation could not be read.",
   NO_PULL_REQUEST: "No pull request yet.",
-  RUN: "Run",
   RUN_LABEL: "Run on this Mac",
   PREVIEW: "Preview",
   PREVIEWS: "Preview deployments",
@@ -561,6 +560,22 @@ function headerPullRequestOf(
   const merged = pullRequest?.merging?.checks;
   const summary = checks === undefined ? (heldChecks ?? merged) : checksSummaryOf(checks.checks);
   return { number, state, url, checks: summary ?? CHECK_SUMMARY.NONE };
+}
+
+/**
+ * Where the header's pill says GitHub's merge queue holds the pull request:
+ * as the overview's merge read says once it lands, and until then as what the
+ * agent published says of that same pull request, place unknown, so the pill
+ * says Queued from the first frame as the tab's own mark does. Unread where
+ * neither says, which Close asks about as it may be queued.
+ */
+function headerQueuedOf(
+  pullRequest: AgentOverviewPullRequest | undefined,
+  published: AgentPullRequest | undefined,
+  number: number,
+): { readonly position?: number } | null | undefined {
+  if (pullRequest !== undefined) return pullRequest.merging?.queued;
+  return published?.number === number && published.queued === true ? {} : undefined;
 }
 
 /**
@@ -2660,7 +2675,7 @@ interface AgentPullRequestTabProps {
   onView: (view: PullRequestView) => void;
   /** Hears what the side panel's toolbar ⋯ offers while the tab is drawn, Open on GitHub and Refresh (`useHandedTabActions`); none where no toolbar draws them. */
   onActions?: HandTabActions | undefined;
-  /** Runs the shown pull request's branch in a terminal of this Mac in the side panel, which the header's Run offers; none where the platform has no Mac terminal or no repository is known. A fork's pull request offers none, whatever this holds. */
+  /** Runs the shown pull request's branch in a terminal of this Mac in the side panel, which the toolbar's ⋯ offers as Run on this Mac; none where the platform has no Mac terminal or no repository is known. A fork's pull request offers none, whatever this holds. */
   onRun?: (() => void) | undefined;
 }
 
@@ -2836,30 +2851,28 @@ function PullRequestTabBody({
         : [pullRequestActions(url, reading, () => refreshAllNow.current())],
     [url, reading],
   );
-  // A phone draws no actions beside the title: its header's ⋯ offers Preview and Run after the
-  // pull request's own, and whatever the view shown hands up, Files changed's bar among them.
+  // The ⋯ offers Run after the pull request's own. A phone draws no actions beside the title, so
+  // its ⋯ offers Preview beside Run, and whatever the view shown hands up, Files changed's bar among them.
   const phone = usePhoneRoom();
   const openLink = useOpenLink();
   const viewActions = useViewActions();
   const checksLanded = landed(parts.checks);
-  // Note that Run waits on the overview as the title's Run does, and a fork's pull request offers none.
+  // Note that Run waits for the overview to say the head is the base repository's own, and a fork's pull request offers none, because a run makes its worktree on the head's branch name in the base repository's clone, where a fork's name could be another branch's.
   const head = landed(parts.pullRequest);
   const runs =
     onRun !== undefined && held !== undefined && head !== undefined && head.headOwner === undefined;
+  const run: MenuAction[] = runs
+    ? [{ label: PULL_REQUEST_WORDS.RUN_LABEL, icon: <PlayIcon />, onSelect: onRun }]
+    : [];
   useHandedTabActions(
     onActions,
-    phone && handed !== undefined
-      ? [
+    handed === undefined
+      ? undefined
+      : [
           ...handed,
-          [
-            ...previewActions(checksLanded, openLink),
-            ...(runs
-              ? [{ label: PULL_REQUEST_WORDS.RUN_LABEL, icon: <PlayIcon />, onSelect: onRun }]
-              : []),
-          ],
-          ...(viewActions.held?.view === view ? viewActions.held.actions : []),
-        ].filter((group) => group.length > 0)
-      : handed,
+          phone ? [...previewActions(checksLanded, openLink), ...run] : run,
+          ...(phone && viewActions.held?.view === view ? viewActions.held.actions : []),
+        ].filter((group) => group.length > 0),
   );
   // Note that the reads Refresh runs run again as the task list's pushed line of the pull request moves (its state, its checks, or its place in the queue), so an open tab and its merge box never go stale.
   usePushedLineMoved(url, shown, () => refreshNow.current());
@@ -2971,7 +2984,7 @@ function PullRequestTabBody({
                       <div className="pull-request-state">
                         <PullRequestStateMenu
                           pullRequest={held}
-                          queued={overview?.merging?.queued}
+                          queued={headerQueuedOf(overview, published, held.number)}
                           shown={shown}
                           writes={writes}
                         />
@@ -2980,21 +2993,6 @@ function PullRequestTabBody({
                     <div className="pull-request-title-actions">
                       {phone ? null : (
                         <PreviewControl checks={landed(parts.checks)} shown={shown} />
-                      )}
-                      {/* Note that Run waits for the overview to say the head is the base repository's own, and a fork's pull request offers none, because a run makes its worktree on the head's branch name in the base repository's clone, where a fork's name could be another branch's. */}
-                      {phone ||
-                      onRun === undefined ||
-                      held === undefined ||
-                      overview === undefined ||
-                      overview.headOwner !== undefined ? null : (
-                        <Button
-                          variant={BUTTON_VARIANT.OUTLINE}
-                          icon={<PlayIcon />}
-                          label={PULL_REQUEST_WORDS.RUN_LABEL}
-                          onClick={onRun}
-                        >
-                          {PULL_REQUEST_WORDS.RUN}
-                        </Button>
                       )}
                       {overview === undefined ? null : (
                         <MergeControl

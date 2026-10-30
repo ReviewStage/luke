@@ -70,7 +70,7 @@ import {
   MESSAGE_SENDER,
 } from "../storage-vocabulary.js";
 import { agentAutomationNameSql, agentGivenNameSql } from "./agent-name.js";
-import { InstantColumnSchema } from "./columns.js";
+import { ArchivedByColumnSchema, InstantColumnSchema } from "./columns.js";
 import { reopenAgentInboxItems, settleAgentInboxItems } from "./inbox-settle.js";
 import {
   awaitingLinesOf,
@@ -489,17 +489,6 @@ const StartedFromColumnSchema = Schema.NullOr(
     steps: Schema.Number,
     totalSteps: Schema.Number,
     branch: Schema.optionalKey(Schema.String),
-  }),
-);
-/** The `archived_by` column as a row holds it. */
-const ArchivedByColumnSchema = Schema.NullOr(
-  Schema.Struct({
-    by: Schema.Literals(Object.values(AGENT_ARCHIVER)),
-    userId: Schema.String,
-    agentId: Schema.optionalKey(Schema.String),
-    agentName: Schema.optionalKey(Schema.String),
-    reason: Schema.optionalKey(Schema.String),
-    withTask: Schema.optionalKey(Schema.Boolean),
   }),
 );
 /** An author as the agent's row holds it. */
