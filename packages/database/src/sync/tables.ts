@@ -20,6 +20,7 @@
 import { agentDelegationTable, agentTable } from "../schemas/agent.js";
 import { agentBrowserTab } from "../schemas/agent-browser-tab.js";
 import { agentPin } from "../schemas/agent-pin.js";
+import { agentQueue } from "../schemas/agent-queue.js";
 import { attachment } from "../schemas/attachment.js";
 import { invitation, member, organization, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
@@ -254,6 +255,11 @@ export const macCommandSync = defineSyncTable(macCommand, {
 const runnerLineSync = defineSyncTable(runnerLine, {
   topics: [{ kind: TOPIC.AGENT, column: runnerLine.agentId }],
   ignore: [runnerLine.acceptedAt],
+});
+
+/** Where an agent's queue stands, moved on by every write to it (`agent-queue-store.ts`), on the agent's topic, which its transcript's held read is woken on. */
+export const agentQueueSync = defineSyncTable(agentQueue, {
+  topics: [{ kind: TOPIC.AGENT, column: agentQueue.agentId }],
 });
 
 /**
@@ -537,6 +543,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   agentPinSync,
   macCommandSync,
   runnerLineSync,
+  agentQueueSync,
   deviceAgentLineSync,
   deviceAgentRequestSync,
   planCommentThreadSync,

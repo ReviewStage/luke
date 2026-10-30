@@ -88,6 +88,8 @@ interface MaintenanceSweeps {
   sweepImageTemplates: (now: number) => SweepRead<TemplateSweepOutcome>;
   /** Deletes the workspaces' repository snapshots past their age, or left unbuilt past their grace. */
   sweepRepositorySnapshots: (now: number) => SweepRead<RepositorySnapshotSweepOutcome>;
+  /** Hands on the coding agents' queues standing unpaused whose agent idles, a sweep's worth, answering how many it looked at. */
+  sweepAgentQueues: (now: number) => SweepRead<number>;
   /** Deletes the device agents' saved state superseded, of an agent gone, or past its retention, and the uploads no commit named, blob then row, a sweep's worth. */
   sweepAgentStates: (now: number) => SweepRead<AgentStateSweepOutcome>;
 }
@@ -144,6 +146,8 @@ interface MaintenanceSweepAnswer {
   imageTemplates: Swept<TemplateSweepOutcome>;
   /** What the sweep over the repository snapshots did. */
   repositorySnapshots: Swept<RepositorySnapshotSweepOutcome>;
+  /** How many coding agents' queues standing unpaused the sweep looked at, each handed on where its agent idled. */
+  agentQueues: Swept<number>;
   /** What the sweep over the device agents' saved state did. */
   agentStates: Swept<AgentStateSweepOutcome>;
 }
@@ -203,6 +207,7 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
       "sweepRepositorySnapshots",
       sweeps.sweepRepositorySnapshots(now),
     ),
+    agentQueues: yield* isolated("sweepAgentQueues", sweeps.sweepAgentQueues(now)),
     agentStates: yield* isolated("sweepAgentStates", sweeps.sweepAgentStates(now)),
   };
 });

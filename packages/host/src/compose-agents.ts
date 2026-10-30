@@ -25,6 +25,7 @@ import {
   type AgentPullRequestAnswerView,
   type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
+  type AgentQueueAnswerView,
   type AgentReviewOptionsAnswerView,
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptPage,
@@ -52,6 +53,7 @@ import {
   agentPullRequestActionParamsSchema,
   agentPullRequestParamsSchema,
   agentPullRequestReadParamsSchema,
+  agentQueueParamsSchema,
   agentRenameParamsSchema,
   agentRewindParamsSchema,
   agentServersParamsSchema,
@@ -202,6 +204,7 @@ export type AgentClient = Pick<
   | "choose"
   | "rename"
   | "switchServers"
+  | "changeQueue"
   | "archive"
   | "pin"
   | "ensureOperator"
@@ -767,6 +770,16 @@ function composed(
           agentWritten(asked(client.switchServers(agentId, request))),
         );
         return carried<AgentAgentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.AGENTS_QUEUE]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, change } = yield* readParams(
+          agentQueueParamsSchema,
+          params,
+          "changing an agent's queue names the agent and the change",
+        );
+        const answer = yield* asked(client.changeQueue(agentId, change));
+        return carried<AgentQueueAnswerView>(answer);
       }),
     [GATEWAY_METHOD.AGENTS_ARCHIVE]: (params) =>
       Effect.gen(function* () {

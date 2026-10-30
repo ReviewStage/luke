@@ -820,13 +820,6 @@
 
 /* A placeholder row in the rail's own list, a chapter's row's height and
    inset, its block where the row's title will stand. */
-.chapter-rail-skeleton-row {
-  display: flex;
-  height: var(--luke-control-height);
-  align-items: center;
-  padding-inline: var(--luke-row-inset);
-}
-
 .chapters-skeleton-reading {
   display: flex;
   flex-direction: column;
@@ -1663,6 +1656,31 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    every element added under it. */
 .is-user[data-undelivered] > :not(.luke-failure-note, .luke-message-line) {
   opacity: 0.6;
+}
+
+/* A queued message's row leads with the queue's glyph, which gives way to the
+   handle it is dragged by while the row is hovered, dragged, or lifted, where
+   it may be dragged at all (`agent-queue-dock.tsx`). */
+.agent-queue-lead {
+  display: inline-flex;
+}
+/* Note that the row sizes only a glyph that is its leading mark itself, so the two inside this one take the same size. */
+.agent-queue-lead > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+.agent-queue-lead > :last-child,
+li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :first-child,
+[data-lifted] .agent-queue-lead[data-queue-handle] > :first-child {
+  display: none;
+}
+li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-child,
+[data-lifted] .agent-queue-lead[data-queue-handle] > :last-child {
+  display: inline-flex;
+  cursor: grab;
+}
+.agent-queue-rows > ul > li[data-dragging="true"] {
+  opacity: 0.4;
 }
 
 /* A finished turn's line (`working-time.tsx`) breaks between how long it

@@ -1,4 +1,5 @@
 import type { AgentChangedFile } from "@luke/features/agent-wire";
+import { formatCount } from "@luke/features/number-format";
 import {
   type Chapter,
   chapterHunks,
@@ -22,6 +23,8 @@ import {
   CHIP_SIZE,
   Checkbox,
   Chip,
+  type CountPart,
+  CountParts,
   EMPTY_STATE_ACTION_LOOK,
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -36,9 +39,12 @@ import {
   IconButton,
   INSET,
   LAYOUT_ELEMENT,
+  linesCount,
   MarkStrip,
   NAV_CURRENT,
+  NAV_ITEM_VARIANT,
   NavItem,
+  NavItemSkeleton,
   OVER_PANE_EDGE,
   OVER_PANE_WIDTH,
   OverPane,
@@ -77,7 +83,6 @@ import {
   type FileReveal,
   type LineComments,
 } from "./agent-changes-tab.js";
-import { LinesChanged } from "./agent-published.js";
 import { typingInto } from "./changes-list.js";
 import { CHANGES_WORDS } from "./changes-model.js";
 import {
@@ -124,9 +129,11 @@ import type { AgentsControl } from "./use-agents.js";
  *
  * Ready, the view is a rail of the chapters on its left, as Files changed's
  * tree stands on its right, and the chapter chosen beside it. Each row of
- * the rail names the chapter, its number and title, its risk as a mark in
- * its colour, the lines it adds and removes, how many review threads stand
- * on its hunks, and a check once it is viewed: every one of its files
+ * the rail names the chapter by its title, on up to two lines, its risk as
+ * a mark in its colour, and a check once it is viewed, and under the title
+ * the lines it adds and removes, summed as Files changed sums them, or how
+ * many files it holds where it counts no line, and how many review threads
+ * stand on its hunks; its number is a reader's alone: every one of its files
  * marked viewed on GitHub, the marks Files changed sets, so a file two
  * chapters hold is shared by both. The rail stands beside the chapter while
  * the panel has room for it, slid in and out by its toggle as the tree is
@@ -190,8 +197,10 @@ const CHAPTERS_WORDS = {
   /** What an arrow's hint says: where it steps, and the chapter it steps to. */
   stepTo: (words: string, chapter: Chapter | undefined) =>
     chapter === undefined ? words : `${words}: ${chapter.title}`,
-  /** How many review threads stand on a chapter's hunks, as its row says to a reader. */
+  /** How many review threads stand on a chapter's hunks, as its row's speech mark says to a reader. */
   threads: "threads",
+  /** How many files a chapter holds, as its row says where it counts no line: a binary file or a pure rename. */
+  files: (count: number) => (count === 1 ? "1 file" : `${formatCount(count)} files`),
   /** A chapter's row, as a reader hears it whole. */
   row: (at: number, title: string, risk: string | undefined, viewed: boolean) =>
     [`${at}. ${title}`, risk, viewed ? "viewed" : undefined]
@@ -234,8 +243,9 @@ const BESIDE_TOGGLE = '.chapter-rail-toggle[data-place="beside"]';
 /** The rail's toggle that floats it over the chapter, which the stylesheet draws only where the panel has no room for it beside. */
 const OVER_TOGGLE = '.chapter-rail-toggle[data-place="over"]';
 
-/** The widths of the blocks standing for the rail's rows, and for the chapter's lines. */
+/** The widths of the blocks standing for the rail's rows, their meta lines, and the chapter's lines. */
 const SKELETON_ROWS = ["80%", "65%", "72%", "50%"] as const;
+const SKELETON_META = "40%";
 const SKELETON_LINES = ["40%", "92%", "86%", "60%"] as const;
 
 /** The chapters' body: the rail, its strip, and the chapter being read, side by side, clipped at its edges as the rail slides. */
@@ -319,8 +329,13 @@ function ChaptersSkeleton({ label }: { label: string }): React.JSX.Element {
       <ChaptersBody>
         <ChapterRailFrame>
           {SKELETON_ROWS.map((width) => (
-            <li key={width} className="chapter-rail-skeleton-row">
-              <Skeleton width={width} />
+            <li key={width}>
+              <NavItemSkeleton
+                variant={NAV_ITEM_VARIANT.STEP}
+                icon={<RiskMark risk={null} />}
+                width={width}
+                detailWidth={SKELETON_META}
+              />
             </li>
           ))}
         </ChapterRailFrame>
@@ -432,8 +447,32 @@ function RiskChip({
 interface ChapterRow {
   readonly chapter: Chapter;
   readonly paths: readonly string[];
-  readonly lines: { readonly additions: number; readonly deletions: number };
+  readonly counts: {
+    readonly additions: number;
+    readonly deletions: number;
+    readonly files: number;
+  };
   readonly threads: number;
+}
+
+/** What a rail row's meta line says: the lines its chapter adds and removes, or its files where it counts no line, then a speech mark and its threads where any stand. */
+function ChapterMeta({ row }: { row: ChapterRow }): React.JSX.Element {
+  const { additions, deletions, files } = row.counts;
+  const lines: readonly CountPart[] =
+    additions + deletions === 0
+      ? [{ text: CHAPTERS_WORDS.files(files) }]
+      : linesCount(additions, deletions);
+  const threads: readonly CountPart[] =
+    row.threads === 0
+      ? []
+      : [
+          {
+            text: formatCount(row.threads),
+            glyph: <GLYPH.COMMENT />,
+            glyphLabel: CHAPTERS_WORDS.threads,
+          },
+        ];
+  return <CountParts parts={[...lines, ...threads]} />;
 }
 
 /** The rail's toggle, drawn for each place the rail can stand, the stylesheet showing the one the panel's width leaves room for, as the tree's is (`TreeToggle`). */
@@ -510,19 +549,14 @@ function ChapterRail({
           <li key={index}>
             <Tooltip label={row.chapter.title}>
               <NavItem
+                variant={NAV_ITEM_VARIANT.STEP}
                 icon={<RiskMark risk={row.chapter.risk} />}
                 current={index === at ? NAV_CURRENT.PAGE : undefined}
-                detail={
-                  stale ? undefined : (
-                    <LinesChanged additions={row.lines.additions} deletions={row.lines.deletions} />
-                  )
-                }
-                count={stale ? undefined : { value: row.threads, noun: CHAPTERS_WORDS.threads }}
+                detail={stale ? undefined : <ChapterMeta row={row} />}
                 mark={done ? <CheckIcon aria-hidden="true" /> : undefined}
                 aria-label={CHAPTERS_WORDS.row(index + 1, row.chapter.title, risk, done)}
                 onClick={() => onChoose(index)}
               >
-                <span className="mr-icon-gap text-muted-foreground tabular-nums">{index + 1}</span>
                 {row.chapter.title}
               </NavItem>
             </Tooltip>
@@ -676,7 +710,7 @@ function ChaptersReading({
         (chapter): ChapterRow => ({
           chapter,
           paths: chapterPaths(chapter, files),
-          lines: chapterLineCounts(chapter, hunks),
+          counts: chapterLineCounts(chapter, files),
           threads: chapterThreadCount(chapter, threads.list, hunks),
         }),
       ),

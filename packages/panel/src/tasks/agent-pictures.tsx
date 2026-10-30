@@ -29,7 +29,11 @@ import { useAct } from "../act.js";
 import { pictureUnread } from "../failure-report.js";
 import { PictureBlock } from "../picture-block.js";
 import { useAddToPlan } from "./add-to-plan.js";
-import { AttachedFileChips, messageFileChips } from "./attached-file-chips.js";
+import {
+  AttachedFileChips,
+  type MessageFileChip,
+  messageFileChips,
+} from "./attached-file-chips.js";
 import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
 
 /**
@@ -564,9 +568,25 @@ export function MessageFileChips({
   /** Whether the line is still on its way, its row not yet read back. */
   sending?: boolean;
 }): ReactNode {
+  return <KeptFileChips files={messageFileChips(message)} sending={sending} />;
+}
+
+/**
+ * Files as a line draws them, each one that names a picture rather than
+ * carrying its bytes read through the agent's pictures, its thumbnail drawn
+ * once they land: a transcript row's (`MessageFileChips`), and a queued
+ * message's, whose files the queue names by the id their bytes are read by.
+ */
+export function KeptFileChips({
+  files,
+  sending = false,
+}: {
+  files: readonly MessageFileChip[];
+  /** Whether the line is still on its way, its row not yet read back. */
+  sending?: boolean;
+}): ReactNode {
   const door = useContext(AgentPicturesContext);
   const [, redraw] = useReducer((count: number) => count + 1, 0);
-  const files = messageFileChips(message);
   const chips = files.map(({ pictureId, ...chip }): FileChip => {
     if (pictureId === undefined || door === undefined) return chip;
     const state = pictureNow(door.owner, pictureId);

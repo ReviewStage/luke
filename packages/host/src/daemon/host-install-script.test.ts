@@ -44,6 +44,12 @@ const LINUX_PROC_VERSION = "Linux version 6.8.0-45-generic (buildd@ubuntu)";
 /** The last line smolvm prints where a VM will not boot, as the fake smolvm prints it. */
 const SMOLVM_FAILURE = "Error: failed to start machine: KVM_CREATE_VM: Operation not permitted";
 
+/**
+ * The origin a run of the whole script is handed, since the script as it
+ * stands here leaves its own to the route that serves it (`@@ORIGIN@@`).
+ */
+const ORIGIN_ARGS = ["--origin", "https://luke.test"] as const;
+
 /** The SHA-256 of the three bytes "abc", from FIPS 180-2's own examples. */
 const ABC_SHA256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 
@@ -219,7 +225,7 @@ describe("the host's install script", () => {
   ] as const) {
     it(`refuses a box whose /dev/kvm ${found}, saying how to check it, before anything is changed`, () => {
       const root = folder();
-      const answer = sh([SCRIPT, "--token", "lkh_fixture"], {
+      const answer = sh([SCRIPT, "--token", "lkh_fixture", ...ORIGIN_ARGS], {
         LUKE_HOST_KVM_DEVICE: make(root),
         PATH: `${linuxUname()}:${process.env.PATH}`,
       });
@@ -288,7 +294,7 @@ describe("the host's install script", () => {
     ["an Intel Mac", "x86_64", "14.5", "Luke does not run agents on Intel Macs."],
   ] as const) {
     it(`${refusal === undefined ? "lets" : "refuses"} ${computer} ${refusal === undefined ? "through, past every check of the computer" : "by name"}, before anything is changed`, () => {
-      const answer = sh([SCRIPT, "--token", "lkh_fixture"], {
+      const answer = sh([SCRIPT, "--token", "lkh_fixture", ...ORIGIN_ARGS], {
         PATH: `${macBin(machine, macos)}:${process.env.PATH}`,
       });
       expect(answer.status).toBe(1);

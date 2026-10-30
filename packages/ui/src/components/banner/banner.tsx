@@ -3,12 +3,15 @@ import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 /**
  * banner.tsx -- the one strip a notice about a place is drawn as: a glyph, its words, and the presses that answer it, which drop beneath the words where the strip is narrow.
  *
- * A notice comes in three looks: a slim strip across a column, its words held
+ * A notice comes in four looks: a slim strip across a column, its words held
  * to one line and fading out at its end where it cuts them short (a stranded
  * repository's); a card over a document, its glyph
  * in a disc (an archived plan's); and a quiet row in the
  * frame its place draws around it (an archived agent's, in its composer's
- * place). Each is in one of a few tones, which tint the strip and the card.
+ * place); and the strip's line set inside a card, with no fill or edge of
+ * its own (a queued message being edited, at its composer's head). Each is
+ * in one of a few tones, which tint the strip and the card and ink the inset
+ * line.
  *
  * They share one layout, so they give way alike: each strip measures its own
  * width, and below a narrow one its presses leave the words' line for a line
@@ -28,7 +31,7 @@ import { type ReactNode, useId } from "react";
 import { Alert, AlertAction, AlertDescription, AlertGlyph, AlertRow } from "../../shadcn/alert.js";
 import { useClipped } from "../../use-clipped.js";
 
-/** How a banner looks; its layout is the same for all three. */
+/** How a banner looks; its layout is the same for all four. */
 export const BANNER_LOOK = {
   /** One slim line across a column, its words held to one line while there is room. */
   STRIP: "strip",
@@ -36,6 +39,8 @@ export const BANNER_LOOK = {
   CARD: "card",
   /** A quiet row, framed by its place. */
   ROW: "row",
+  /** The strip's line inside a card, with no fill or edge of its own, so the card's corners stay its own; its tone inks its glyph and words. */
+  INSET: "inset",
 } as const;
 
 export type BannerLook = (typeof BANNER_LOOK)[keyof typeof BANNER_LOOK];
@@ -66,6 +71,7 @@ export function Banner({
         </AlertGlyph>
         <AlertDescription
           look={look}
+          tone={tone}
           id={wordsId}
           ref={strip ? measured : undefined}
           data-overflow={strip ? String(clipped) : undefined}

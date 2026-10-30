@@ -862,6 +862,7 @@ export function TranscriptWords({
   typed = false,
   asDocument = false,
   streaming = false,
+  line = false,
 }: {
   text: string;
   element?: TranscriptElement | undefined;
@@ -871,6 +872,8 @@ export function TranscriptWords({
   asDocument?: boolean | undefined;
   /** Whether the words are still being written, as a running turn's newest are. */
   streaming?: boolean | undefined;
+  /** Whether the words are drawn on one line, as a queued message's row draws them. */
+  line?: boolean | undefined;
 }): ReactNode {
   const keyTargets = useWordTargets();
   const remarkPlugins = useMemo(
@@ -885,6 +888,7 @@ export function TranscriptWords({
         key={keySerial(keyTargets)}
         words={element === undefined ? text : element.markdown}
         streaming={streaming}
+        line={line}
         components={components}
         remarkPlugins={remarkPlugins}
         allowedTags={allowedTags}

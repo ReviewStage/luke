@@ -8,33 +8,24 @@ import {
 } from "@luke/features/task-wire";
 import { expect, test } from "vitest";
 import {
+  ASSIGNED_TO,
   agentRow,
-  assigneeGroups,
-  type CreatorGroup,
   childTaskCounts,
   createdByOnly,
-  creatorGroups,
-  drawnGrouping,
   drawnTaskRows,
   hiddenStatuses,
   openParentIds,
   type RepositoryGroup,
   repositoryGroups,
   repositoryLabel,
-  shownStatuses,
-  statusesFiltered,
-  TASK_GROUPING,
+  SHOWN_STATUSES,
   TASK_ORDER,
-  TASK_ROW,
-  type TaskOrder,
   type TaskRow,
   taskRow,
   taskRowName,
   taskRowsAssignedTo,
-  taskRowsCreatedBy,
   taskRowsInStatuses,
   taskTime,
-  toggledStatus,
 } from "./task-list-model.js";
 
 const DEAN = "user-dean";
@@ -68,28 +59,12 @@ function task(
   };
 }
 
-/** A creator's name as the wire carries it. */
-const nameOnWire = (task: TaskSummary) => task.createdBy?.name ?? "";
-
 const names = (groups: readonly { rows: readonly TaskRow[] }[]) =>
   groups.map((group) => group.rows.map(taskRowName));
 
 /** The tasks grouped by repository, as their rows are. */
-const groupsByRepository = (
-  tasks: readonly TaskSummary[],
-  order?: TaskOrder,
-): readonly RepositoryGroup[] => repositoryGroups(tasks.map(taskRow), order);
-
-/** The tasks grouped by creator, as their rows are, each named by its plan. */
-const groupsByCreator = (
-  tasks: readonly TaskSummary[],
-  order: TaskOrder,
-  readerId: string | undefined,
-  nameOf: (summary: TaskSummary) => string,
-): readonly CreatorGroup[] =>
-  creatorGroups(tasks.map(taskRow), order, readerId, (row) =>
-    row.kind === TASK_ROW.TASK ? nameOf(row.task) : "",
-  );
+const groupsByRepository = (tasks: readonly TaskSummary[]): readonly RepositoryGroup[] =>
+  repositoryGroups(tasks.map(taskRow));
 
 test("a repository group lists its tasks newest updated first, the time each row shows", () => {
   const groups = groupsByRepository([
@@ -98,36 +73,6 @@ test("a repository group lists its tasks newest updated first, the time each row
     task("new", "acme/relay", 2, 20),
   ]);
   expect(names(groups)).toEqual([["touched", "new", "old"]]);
-});
-
-test("ordered by when they were started, the groups and their rows follow the newest started", () => {
-  const groups = groupsByRepository(
-    [
-      task("relay first started", "acme/relay", 1, 90),
-      task("console newest started", "acme/console", 50, 5),
-      task("relay later started", "acme/relay", 20, 10),
-    ],
-    TASK_ORDER.CREATED,
-  );
-  expect(groups.map((group) => group.repository)).toEqual(["acme/console", "acme/relay"]);
-  expect(names(groups)).toEqual([
-    ["console newest started"],
-    ["relay later started", "relay first started"],
-  ]);
-});
-
-test("ordered by name, the repositories and their tasks run alphabetically, the tasks with none last", () => {
-  const groups = groupsByRepository(
-    [
-      task("Zebra", "acme/relay", 1, 1),
-      task("Notes", null, 1, 99),
-      task("Apple", "acme/relay", 1, 2),
-      task("Billing", "acme/console", 1, 3),
-    ],
-    TASK_ORDER.NAME,
-  );
-  expect(groups.map((group) => group.repository)).toEqual(["acme/console", "acme/relay", null]);
-  expect(names(groups)).toEqual([["Billing"], ["Apple", "Zebra"], ["Notes"]]);
 });
 
 test("a row shows when its task was started under Created, and its last update otherwise", () => {
@@ -143,50 +88,6 @@ test("two repositories sharing a name are told apart by their owners", () => {
   expect(repositoryLabel("labs/site", groupsByRepository([task("b", "labs/site", 1, 1)]))).toBe(
     "site",
   );
-});
-
-test("grouped by creator, the reader's own come first, then each teammate's by their latest, then nobody's", () => {
-  const groups = groupsByCreator(
-    [
-      task("Maya's latest", "acme/relay", 1, 80, MAYA),
-      task("Unnamed", "acme/relay", 1, 99),
-      task("Dean's", "acme/relay", 1, 10, DEAN),
-      task("Charles's", "acme/relay", 1, 50, CHARLES),
-      task("Maya's older", "acme/console", 1, 20, MAYA),
-    ],
-    TASK_ORDER.UPDATED,
-    DEAN,
-    nameOnWire,
-  );
-  expect(groups.map((group) => group.creatorId)).toEqual([DEAN, MAYA, CHARLES, undefined]);
-  expect(names(groups)[1]).toEqual(["Maya's latest", "Maya's older"]);
-});
-
-test("grouped by creator and ordered by name, teammates run by their names after the reader", () => {
-  const groups = groupsByCreator(
-    [
-      task("m", "acme/relay", 1, 1, MAYA),
-      task("c", "acme/relay", 1, 1, CHARLES),
-      task("d", "acme/relay", 1, 1, DEAN),
-    ],
-    TASK_ORDER.NAME,
-    DEAN,
-    nameOnWire,
-  );
-  expect(groups.map((group) => group.creatorId)).toEqual([DEAN, CHARLES, MAYA]);
-});
-
-test("ordered by name, a creator's group sorts by the name its header says, even where the wire names nobody", () => {
-  const older = { ...task("Zoe's older", "acme/relay", 1, 1), ownerId: "user-zoe" };
-  const groups = groupsByCreator(
-    [older, task("Amy's", "acme/relay", 1, 1, MAYA)],
-    TASK_ORDER.NAME,
-    DEAN,
-    (task) => (task.ownerId === "user-zoe" ? "Zoe Quinn" : "Amy Ng"),
-  );
-  expect(
-    groups.map((group) => (group.rows[0] === undefined ? undefined : taskRowName(group.rows[0]))),
-  ).toEqual(["Amy's", "Zoe's older"]);
 });
 
 test("filtered to one creator, the list holds only the tasks they created; filtered to nobody, every task", () => {
@@ -234,25 +135,6 @@ test("an agent's activity older than the plan's own edit leaves the plan's time 
   expect(taskTime(summary, TASK_ORDER.CREATED)).toBe(1);
 });
 
-test("ordered by name, two tasks of one name stand by their later activity, the time each row shows", () => {
-  const edited = task("Deploy", "acme/relay", 1, 500);
-  const worked = {
-    ...task("Deploy", "acme/relay", 2, 100),
-    agents: {
-      total: 1,
-      working: 0,
-      activityAt: 800,
-      agents: [],
-      pullRequestTotal: 0,
-      pullRequests: [],
-    },
-  };
-  const [group] = groupsByRepository([edited, worked], TASK_ORDER.NAME);
-  expect(group?.rows.map((row) => (row.kind === TASK_ROW.TASK ? row.task.createdAt : 0))).toEqual([
-    2, 1,
-  ]);
-});
-
 /** An agent an automation of `starter`'s started with no task, on `repository`, started at `createdAt`, last moving at `activityAt`. */
 function oneOff(
   title: string | null,
@@ -279,7 +161,7 @@ function oneOff(
   });
 }
 
-test("a one-off agent stands among the tasks of its repository by its last activity, and by when it started under Created", () => {
+test("a one-off agent stands among the tasks of its repository by its last activity", () => {
   const rows = [
     taskRow(task("Retry webhooks", "acme/relay", 10, 40)),
     oneOff("Triage overnight issues", "acme/relay", 30, 60, DEAN),
@@ -289,35 +171,6 @@ test("a one-off agent stands among the tasks of its repository by its last activ
   expect(names(repositoryGroups(rows))).toEqual([
     ["Sweep flaky tests"],
     ["Triage overnight issues", "Billing export", "Retry webhooks"],
-  ]);
-  expect(names(repositoryGroups(rows, TASK_ORDER.CREATED))).toEqual([
-    ["Triage overnight issues", "Billing export", "Retry webhooks"],
-    ["Sweep flaky tests"],
-  ]);
-});
-
-test("a one-off agent groups and filters under whoever started it, as a task does under its creator", () => {
-  const rows = [
-    taskRow(task("Charles's task", "acme/relay", 1, 10, CHARLES)),
-    oneOff("Dean's agent", "acme/relay", 1, 30, DEAN),
-    oneOff("Charles's agent", "acme/relay", 1, 20, CHARLES),
-  ];
-  const groups = creatorGroups(rows, TASK_ORDER.UPDATED, DEAN, taskRowName);
-  expect(groups.map((group) => group.creatorId)).toEqual([DEAN, CHARLES]);
-  expect(names(groups)).toEqual([["Dean's agent"], ["Charles's agent", "Charles's task"]]);
-  expect(taskRowsCreatedBy(rows, CHARLES).map(taskRowName)).toEqual([
-    "Charles's task",
-    "Charles's agent",
-  ]);
-});
-
-test("an untitled one-off agent is named by its automation, as its tab names it, and ordered by that name", () => {
-  const rows = [
-    taskRow(task("Zebra notes", "acme/relay", 1, 1)),
-    oneOff(null, "acme/relay", 1, 1, DEAN),
-  ];
-  expect(names(repositoryGroups(rows, TASK_ORDER.NAME))).toEqual([
-    ["Morning Sentry triage", "Zebra notes"],
   ]);
 });
 
@@ -335,7 +188,7 @@ function standing(
   };
 }
 
-test("the list leaves the backlog and the settled out until asked, counting them by status, and keeps a row with no status to leave out by", () => {
+test("the list leaves the backlog and the settled out, counting them by status, and keeps a row with no status to leave out by", () => {
   const rows = [
     standing("Filed", TASK_STATUS.BACKLOG, TASK_PRIORITY.NONE, 1),
     standing("Under way", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH, 2),
@@ -343,50 +196,15 @@ test("the list leaves the backlog and the settled out until asked, counting them
     standing("Also filed", TASK_STATUS.BACKLOG, TASK_PRIORITY.LOW, 4),
     standing("Older service", undefined, undefined, 5),
   ].map(taskRow);
-  const statuses = shownStatuses({ grouping: TASK_GROUPING.NONE, order: TASK_ORDER.UPDATED });
 
-  expect(taskRowsInStatuses(rows, statuses, new Set()).map(taskRowName)).toEqual([
+  expect(taskRowsInStatuses(rows, SHOWN_STATUSES, new Set()).map(taskRowName)).toEqual([
     "Under way",
     "Older service",
   ]);
-  expect(hiddenStatuses(rows, statuses, new Set())).toEqual([
+  expect(hiddenStatuses(rows, SHOWN_STATUSES, new Set())).toEqual([
     { status: TASK_STATUS.BACKLOG, count: 2 },
     { status: TASK_STATUS.DONE, count: 1 },
   ]);
-});
-
-test("a status turned on joins the others in the order work moves through them, and turned off leaves them", () => {
-  const shown = toggledStatus([TASK_STATUS.TODO, TASK_STATUS.IN_PROGRESS], TASK_STATUS.BACKLOG);
-  expect(shown).toEqual([TASK_STATUS.BACKLOG, TASK_STATUS.TODO, TASK_STATUS.IN_PROGRESS]);
-  expect(toggledStatus(shown, TASK_STATUS.TODO)).toEqual([
-    TASK_STATUS.BACKLOG,
-    TASK_STATUS.IN_PROGRESS,
-  ]);
-});
-
-test("a status filter is on once the statuses shown differ from to do and under way, and off again once they are those two", () => {
-  const view = { grouping: TASK_GROUPING.NONE, order: TASK_ORDER.UPDATED };
-  expect(statusesFiltered(view)).toBe(false);
-  const withBacklog = toggledStatus(shownStatuses(view), TASK_STATUS.BACKLOG);
-  expect(statusesFiltered({ ...view, statuses: withBacklog })).toBe(true);
-  expect(statusesFiltered({ ...view, statuses: [TASK_STATUS.TODO] })).toBe(true);
-  expect(
-    statusesFiltered({ ...view, statuses: toggledStatus(withBacklog, TASK_STATUS.BACKLOG) }),
-  ).toBe(false);
-});
-
-test("the rows assigned to one member are the tasks they are on and the one-off agents they started, and every row where nobody is named", () => {
-  const rows = [
-    taskRow({
-      ...task("Dean's on it", "acme/relay", 1, 10, CHARLES),
-      assignee: { userId: DEAN, name: "Dean" },
-    }),
-    taskRow(task("No one's on it", "acme/relay", 1, 20, DEAN)),
-    oneOff("Dean's agent", "acme/relay", 1, 30, DEAN),
-    oneOff("Charles's agent", "acme/relay", 1, 40, CHARLES),
-  ];
-  expect(taskRowsAssignedTo(rows, DEAN).map(taskRowName)).toEqual(["Dean's on it", "Dean's agent"]);
-  expect(taskRowsAssignedTo(rows, undefined)).toHaveLength(4);
 });
 
 /** A task as `task` makes it, assigned to `assignee`. */
@@ -402,55 +220,38 @@ function assigned(
   });
 }
 
-/** An assignee's name as the wire carries it on a row. */
-const assigneeOnWire = (row: TaskRow) =>
-  row.kind === TASK_ROW.TASK ? (row.task.assignee?.name ?? "") : (row.agent.startedBy?.name ?? "");
-
-test("grouped by assignee, the reader's own come first, then each teammate's by name whatever the order, then no one's", () => {
+test("the rows assigned to one member are the tasks they are on and the one-off agents they started, and every row for Anyone", () => {
   const rows = [
-    taskRow(task("No one's latest", "acme/relay", 1, 99, DEAN)),
-    assigned("Maya's latest", 80, MAYA),
-    assigned("Dean's", 10, DEAN, CHARLES),
-    assigned("Charles's", 50, CHARLES),
-    assigned("Maya's older", 20, MAYA),
+    taskRow({
+      ...task("Dean's on it", "acme/relay", 1, 10, CHARLES),
+      assignee: { userId: DEAN, name: "Dean" },
+    }),
+    taskRow(task("No one's on it", "acme/relay", 1, 20, DEAN)),
+    oneOff("Dean's agent", "acme/relay", 1, 30, DEAN),
+    oneOff("Charles's agent", "acme/relay", 1, 40, CHARLES),
   ];
-  const groups = assigneeGroups(rows, TASK_ORDER.UPDATED, DEAN, assigneeOnWire);
-  expect(groups.map((group) => group.assigneeId)).toEqual([DEAN, CHARLES, MAYA, undefined]);
-  expect(names(groups)).toEqual([
-    ["Dean's"],
-    ["Charles's"],
-    ["Maya's latest", "Maya's older"],
-    ["No one's latest"],
+  const member = { kind: ASSIGNED_TO.MEMBER, userId: DEAN } as const;
+  expect(taskRowsAssignedTo(rows, member, CHARLES).map(taskRowName)).toEqual([
+    "Dean's on it",
+    "Dean's agent",
   ]);
+  expect(taskRowsAssignedTo(rows, { kind: ASSIGNED_TO.ANYONE }, DEAN)).toHaveLength(4);
 });
 
-test("grouped by assignee and ordered by name, each group's rows run alphabetically", () => {
-  const rows = [assigned("b", 1, MAYA), assigned("a", 2, MAYA), assigned("c", 3, MAYA)];
-  expect(names(assigneeGroups(rows, TASK_ORDER.NAME, DEAN, assigneeOnWire))).toEqual([
-    ["a", "b", "c"],
-  ]);
-});
-
-test("grouped by assignee, a one-off agent stands under whoever started it, a task under its assignee rather than its creator", () => {
+test("Me holds the reader's tasks, their one-off agents, and the tasks no one is on that they created, but not a teammate's unassigned task or one they made for someone else", () => {
   const rows = [
-    assigned("Charles made it, Maya's on it", 10, MAYA, CHARLES),
-    oneOff("Charles's agent", "acme/relay", 1, 20, CHARLES),
-    taskRow(task("Charles made it, no one's on it", "acme/relay", 1, 30, CHARLES)),
+    assigned("Charles made it, Dean's on it", 10, DEAN, CHARLES),
+    taskRow(task("Dean made it, no one's on it", "acme/relay", 1, 20, DEAN)),
+    assigned("Dean made it, Maya's on it", 30, MAYA, DEAN),
+    taskRow(task("Charles made it, no one's on it", "acme/relay", 1, 40, CHARLES)),
+    oneOff("Dean's agent", "acme/relay", 1, 50, DEAN),
+    oneOff("Charles's agent", "acme/relay", 1, 60, CHARLES),
   ];
-  const groups = assigneeGroups(rows, TASK_ORDER.UPDATED, DEAN, assigneeOnWire);
-  expect(groups.map((group) => group.assigneeId)).toEqual([CHARLES, MAYA, undefined]);
-  expect(names(groups)).toEqual([
-    ["Charles's agent"],
-    ["Charles made it, Maya's on it"],
-    ["Charles made it, no one's on it"],
+  expect(taskRowsAssignedTo(rows, { kind: ASSIGNED_TO.ME }, DEAN).map(taskRowName)).toEqual([
+    "Charles made it, Dean's on it",
+    "Dean made it, no one's on it",
+    "Dean's agent",
   ]);
-});
-
-test("a grouping by person kept for a workspace nobody shares is drawn by repository, and kept as chosen where it is shared", () => {
-  expect(drawnGrouping(TASK_GROUPING.ASSIGNEE, false)).toBe(TASK_GROUPING.REPOSITORY);
-  expect(drawnGrouping(TASK_GROUPING.CREATOR, false)).toBe(TASK_GROUPING.REPOSITORY);
-  expect(drawnGrouping(TASK_GROUPING.NONE, false)).toBe(TASK_GROUPING.NONE);
-  expect(drawnGrouping(TASK_GROUPING.ASSIGNEE, true)).toBe(TASK_GROUPING.ASSIGNEE);
 });
 
 /** A task on acme/relay under `parent`, where one is named, updated at `updatedAt`. */
@@ -548,15 +349,14 @@ test("a parent stays in the list, uncounted as hidden, while the view shows any 
     withStatus("filed child", "cut parent", TASK_STATUS.BACKLOG),
   ];
   const rows = tasks.map(taskRow);
-  const statuses = shownStatuses({ grouping: TASK_GROUPING.NONE, order: TASK_ORDER.UPDATED });
-  const open = openParentIds(tasks, statuses);
+  const open = openParentIds(tasks, SHOWN_STATUSES);
 
-  expect(taskRowsInStatuses(rows, statuses, open).map(taskRowName)).toEqual([
+  expect(taskRowsInStatuses(rows, SHOWN_STATUSES, open).map(taskRowName)).toEqual([
     "shipped parent",
     "shipped child",
     "waiting grandchild",
   ]);
-  expect(hiddenStatuses(rows, statuses, open)).toEqual([
+  expect(hiddenStatuses(rows, SHOWN_STATUSES, open)).toEqual([
     { status: TASK_STATUS.BACKLOG, count: 1 },
     { status: TASK_STATUS.CANCELED, count: 1 },
   ]);

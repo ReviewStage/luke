@@ -48,8 +48,8 @@ interface RowSpec<Field extends string, Id extends AppSettingId> {
   field: Field;
   id: Id;
   label: string;
-  /** What the row cannot say for itself, drawn under its label. */
-  detail?: string;
+  /** What the row cannot say for itself, drawn under its label; worded by the settings as they stand where it follows the choice. */
+  detail?: string | ((settings: AppSettingReader) => string);
   page: SettingsPage;
   section?: SettingSection;
   order: number;
@@ -96,7 +96,9 @@ function rowEntry<Field extends string, Id extends AppSettingId>(
     describe: (settings) => ({
       id: spec.id,
       label: spec.label,
-      ...(spec.detail === undefined ? undefined : { detail: spec.detail }),
+      ...(spec.detail === undefined
+        ? undefined
+        : { detail: typeof spec.detail === "string" ? spec.detail : spec.detail(settings) }),
       kind,
       value: value(settings),
     }),

@@ -831,6 +831,39 @@ test("an answer the service refuses brings its item back as it was, needing you,
   );
 });
 
+test("an answer no reply came back for is taken as sent once its thread holds a message under its key: its box empties and says nothing", async () => {
+  const { page } = mount([], { chosen: ON_THRESHOLD });
+  await settle();
+  const { answer, sent } = gatedAnswers();
+  answerWithNote(page, "Use 90%");
+  await settle();
+  await act(async () => answer({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
+  await settle();
+  assert.equal(composerEditor(itemPane(page)).textContent, "Use 90%");
+
+  // A message in the same words under no key of this send's is not its answer, which may not have landed.
+  const [reply, ...rest] = THRESHOLD_ANSWERED.thread ?? [];
+  const lookalike = rest.at(-1) ?? assert.fail("the answered item ends with its answer");
+  world.main.push(
+    { kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id },
+    { items: [THRESHOLD_ANSWERED, RETRY] },
+  );
+  await settle();
+  assert.equal(composerEditor(itemPane(page)).textContent, "Use 90%");
+
+  // The service wrote the answer and handed it on all the same, and the plan's push names it by its key.
+  const clientKey = sent[0]?.clientKey ?? assert.fail("the answer went under a key");
+  const landed: InboxItem = {
+    ...THRESHOLD_ANSWERED,
+    thread: [...(reply === undefined ? [] : [reply]), { ...lookalike, clientKey }],
+  };
+  world.main.push({ kind: INBOX_SCOPE_KIND.PLAN, id: BILLING.id }, { items: [landed, RETRY] });
+  await settle();
+  const pane = itemPane(page);
+  assert.equal(composerEditor(pane).textContent, "", "the words that went back are let go");
+  assert.equal(pane.querySelector('.agent-composer [role="alert"]'), null);
+});
+
 test("a nod on a notice the agent posted over first is not taken: the notice stands open again, and the box says so", async () => {
   const notice: InboxItem = { ...noticeOf(THRESHOLD), startedBy: TEAMMATE };
   world.inboxes.set(BILLING.id, [notice, RETRY]);

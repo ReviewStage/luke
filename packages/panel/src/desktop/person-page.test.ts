@@ -588,23 +588,16 @@ test("the reader's own page lists no question of an agent with no task, whose st
 });
 
 /** The sidebar's views as this Mac keeps them, by workspace. */
-function keptViews(): Record<string, { createdBy?: string; assignedTo?: string }> {
+function keptViews(): Record<string, { assignee?: unknown }> {
   return JSON.parse(window.localStorage.getItem("luke.sidebarTaskViews") ?? "{}");
 }
 
-test("Show their tasks in the sidebar lists every task assigned to them, letting go of a filter by creator", async () => {
-  window.localStorage.setItem(
-    "luke.sidebarTaskViews",
-    JSON.stringify({
-      [ACME.id]: { grouping: "repository", order: "updated", createdBy: DEAN.userId },
-    }),
-  );
+test("Show their tasks in the sidebar lists the tasks assigned to them", async () => {
   const { page } = mount(CHARLES.userId);
   await settle();
 
   button(page, "Show their tasks in the sidebar").click();
-  const kept = keptViews()[ACME.id];
-  assert.deepEqual([kept?.assignedTo, kept?.createdBy], [CHARLES.userId, undefined]);
+  assert.deepEqual(keptViews()[ACME.id]?.assignee, { kind: "member", userId: CHARLES.userId });
 });
 
 test("a person's tasks assigned to them stand above those they created, a task both listed once as assigned, and its foot counts the two it leaves out and lists every one assigned in the sidebar", async () => {
@@ -631,7 +624,7 @@ test("a person's tasks assigned to them stand above those they created, a task b
   assert.equal(page.querySelector('section[aria-label="Assigned"] .actor-mark'), null);
 
   button(page, "Show 2 more").click();
-  assert.equal(keptViews()[ACME.id]?.assignedTo, CHARLES.userId);
+  assert.deepEqual(keptViews()[ACME.id]?.assignee, { kind: "member", userId: CHARLES.userId });
 });
 
 test("a person's task leads with its glyph as its sidebar row does, keeps its repository as context, and hangs its card where its time raises no pill", async () => {

@@ -473,6 +473,18 @@ function railRows(tab: HTMLElement): string[] {
     .map((each) => each.getAttribute("aria-label") ?? "");
 }
 
+/** What a row draws, word by word, a glyph by the words it carries. */
+function drawnWords(node: Node): string {
+  if (node instanceof Element && node.getAttribute("role") === "img") {
+    return node.getAttribute("aria-label") ?? "";
+  }
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent?.trim() ?? "";
+  return [...node.childNodes]
+    .map(drawnWords)
+    .filter((words) => words !== "")
+    .join(" ");
+}
+
 /** The chapter shown, by the title its bar leads with. */
 function heading(tab: HTMLElement): string {
   return tab.querySelector(".chapter-reading .luke-pane-bar-title")?.textContent ?? "";
@@ -556,7 +568,7 @@ test("a chapter's diff is Files changed's list handed only its hunks, and its ra
     [...tab.querySelectorAll<HTMLButtonElement>(".chapter-rail button")].find((each) =>
       each.getAttribute("aria-label")?.startsWith("2."),
     ) ?? assert.fail("the sweep's row stands");
-  assert.match(sweepRow.textContent ?? "", /1 threads/u, "the thread on the write is the sweep's");
+  assert.match(drawnWords(sweepRow), /threads 1$/u, "the thread on the write is the sweep's");
 
   act(() => sweepRow.click());
   await settle();
@@ -707,7 +719,7 @@ test("chapters made for an older head stand under a line saying new commits came
     [...tab.querySelectorAll<HTMLButtonElement>(".chapter-rail button")].find((each) =>
       each.getAttribute("aria-label")?.startsWith("2."),
     ) ?? assert.fail("the sweep's row stands");
-  assert.doesNotMatch(sweepRow.textContent ?? "", /threads|\+/u, "no lines or threads are counted");
+  assert.doesNotMatch(drawnWords(sweepRow), /threads|\+/u, "no lines or threads are counted");
   assert.equal(tab.querySelector(".chapter-viewed"), null, "no Viewed box stands");
   assert.equal(
     [...tab.querySelectorAll("button")].some((each) => each.textContent === "src/store.ts · L1–2"),
