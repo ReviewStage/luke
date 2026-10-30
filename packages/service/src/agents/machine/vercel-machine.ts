@@ -196,7 +196,10 @@ const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const
  * user Luke reads as (`SHARED_FILES_DIRECTORY`), then the runner in
  * place of the shell as `agent`, every capability dropped. `$1` is the
  * digest; the secrets are in the environment the API hands the command, and
- * `exec` hands them on to the runner alone.
+ * `exec` hands them on to the runner alone. Note that the checkout's git
+ * config is written only where it does not already say so, because a
+ * `config.lock` an agent's git left behind when its runner was killed would
+ * otherwise fail every relaunch after it.
  */
 const LAUNCH_SCRIPT = [
   "set -euo pipefail",
@@ -205,7 +208,7 @@ const LAUNCH_SCRIPT = [
   `echo "$1  ${RUNNER_PATH.INSTALLED}" | sha256sum --check --status`,
   `if [ -d ${NATIVE_SKILLS_PATH.UPLOAD} ]; then rm -rf ${NATIVE_SKILLS_PATH.INSTALLED} && mkdir -p $(dirname ${NATIVE_SKILLS_PATH.INSTALLED}) && mv ${NATIVE_SKILLS_PATH.UPLOAD} ${NATIVE_SKILLS_PATH.INSTALLED} && chown -R root:root ${NATIVE_SKILLS_PATH.INSTALLED} && chmod -R u=rwX,go=rX ${NATIVE_SKILLS_PATH.INSTALLED}; fi`,
   `git config --system --get-all safe.directory 2>/dev/null | grep -Fxq ${CODER.CHECKOUT_PATH} || git config --system --add safe.directory ${CODER.CHECKOUT_PATH}`,
-  `if [ -d ${CODER.CHECKOUT_PATH}/.git ]; then git -C ${CODER.CHECKOUT_PATH} config core.sharedRepository group; fi`,
+  `if [ -d ${CODER.CHECKOUT_PATH}/.git ] && ! git -C ${CODER.CHECKOUT_PATH} config --get core.sharedRepository | grep -Fxq group; then git -C ${CODER.CHECKOUT_PATH} config core.sharedRepository group; fi`,
   `chmod -R g+rwX ${CODER.CHECKOUT_PATH}`,
   `find ${CODER.CHECKOUT_PATH} -type d -exec chmod g+s {} +`,
   `install -d -o ${AGENT_USER} -g ${AGENT_USER} -m 0755 ${SHARED_FILES_DIRECTORY}`,
