@@ -483,6 +483,13 @@ export const DesktopInbox = memo(function DesktopInbox({
       // Another item is chosen in this Inbox, as a link opens one in it from elsewhere.
       case THING.INBOX_ITEM: {
         const { itemId, taskId: holder, agentId } = thing;
+        // Note that the Inbox lists the listed workspace's tasks alone, so an item of a task listed
+        // elsewhere is the window's, which lists that task's workspace before opening it.
+        const listed =
+          holder === undefined ||
+          holder === taskId ||
+          tasks.tasks.some((each) => each.id === holder);
+        if (!listed) return false;
         const choice: InboxChoice | undefined =
           holder !== undefined
             ? {
