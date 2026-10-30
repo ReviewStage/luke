@@ -177,7 +177,8 @@ it.layer(getTestDB())("an inbox item settling with its task", (it) => {
       });
       const notice = yield* openInboxItem(dean, workspace, taskId, agentId, false);
 
-      assert.equal(yield* finishTaskWork(dean, taskId, () => Effect.succeed(true)), true);
+      const finished = yield* finishTaskWork(dean, taskId, () => Effect.succeed(true));
+      assert.equal(Option.isSome(finished), true);
       yield* assertOpen([notice]);
     }),
   );

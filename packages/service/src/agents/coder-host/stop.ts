@@ -378,21 +378,22 @@ export const stopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (agent: 
 });
 
 /**
- * Whether every agent stands stopped, read under their conversations' locks
- * as a task's finish holds them (`tasks/task-finish.ts`): none starting, nor
- * running, nor holding a line awaiting the turn it opens, a turn whose Stop
- * is on its way to eve reading as stopped, as `stoppedForGood` reads it.
- * Note that the agents are read by one id list, because the finish's
- * transaction holds one connection and a read per agent only adds trips.
+ * The ids of the agents that stand stopped, read under their conversations'
+ * locks as a task's finish and its move to Done hold them
+ * (`tasks/task-finish.ts`): neither starting, nor running, nor holding a line
+ * awaiting the turn it opens, a turn whose Stop is on its way to eve reading
+ * as stopped, as `stoppedForGood` reads it. Note that the agents are read by
+ * one id list, because the transaction holds one connection and a read per
+ * agent only adds trips.
  */
-export const standsStopped = /* @__PURE__ */ Effect.fnUntraced(function* (
+export const idleStandingAgents = /* @__PURE__ */ Effect.fnUntraced(function* (
   agents: readonly TaskStandingAgent[],
 ) {
   const conversationIds = agents.map(({ conversationId }) => conversationId);
   const turns = yield* latestTurnsOfReached(conversationIds);
   const awaiting = yield* awaitingLinesOfReached(conversationIds);
   const now = yield* Clock.currentTimeMillis;
-  return agents.every((agent) => {
+  const idle = agents.filter((agent) => {
     const status = agentStatusOf(turns.get(agent.conversationId), {
       createdAt: agent.createdAt,
       now,
@@ -401,4 +402,9 @@ export const standsStopped = /* @__PURE__ */ Effect.fnUntraced(function* (
     });
     return status !== AGENT_STATUS.STARTING && status !== AGENT_STATUS.RUNNING;
   });
+  return new Set(idle.map(({ id }) => id));
 });
+
+/** Whether every agent stands stopped, as `idleStandingAgents` reads each. */
+export const standsStopped = (agents: readonly TaskStandingAgent[]) =>
+  Effect.map(idleStandingAgents(agents), (idle) => idle.size === agents.length);

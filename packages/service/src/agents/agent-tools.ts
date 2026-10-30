@@ -34,9 +34,10 @@ import {
   readTask,
   type StoredTask,
   setTaskParent,
+  type TaskArchivedAgent,
   type TaskChanges,
   taskHoldsOpenQuestion,
-  updateTask,
+  updateTaskCommitted,
 } from "@luke/database/models/task-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import type { StoredArchive } from "@luke/database/schemas/agent";
@@ -138,7 +139,11 @@ import {
   lineAwaitsTurn,
   startedBlank,
 } from "./coder-host/status.js";
-import { cancelledTurn, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
+import {
+  cancelledTurn,
+  idleStandingAgents,
+  standingsOf as turnStandingsOf,
+} from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { discardedOrLogged } from "./device-discard.js";
 import type { AgentSessions } from "./eve-host/eve-sessions.js";
@@ -2122,7 +2127,10 @@ export const reachedRepository = (
  * that member's standing, both to hold it to the caller's workspace and to
  * tell a change already standing, which the store keeps as it stood; that an
  * operator is refused a teammate's task under Steward (`../steward.ts`); and
- * that the caller never archives the task it works on.
+ * that the caller never archives the task it works on. A move to Done
+ * archives the task's idle agents with it as the caller, for its member, and
+ * lets each go on its device; one still at work, the caller among them where
+ * the task is its own, is archived as its turn ends (`tasks/task-finish.ts`).
  */
 export function runUpdateTask(
   call: AgentCall,
@@ -2230,10 +2238,15 @@ export function runUpdateTask(
       // refused, its section deleted meanwhile, a parent refused, or a block refused takes the change back with it.
       const writing = Effect.gen(function* () {
         if (locking.length > 0) yield* lockTasksForBlocks(userId, locking);
-        const task =
+        // A move to Done archives the task's idle agents with it, as this agent for its member.
+        const updated =
           Object.keys(asWritten).length === 0
-            ? Option.some(read.value.task)
-            : yield* updateTask(userId, taskId, asWritten);
+            ? Option.some({ task: read.value.task, archived: [] })
+            : yield* updateTaskCommitted(userId, taskId, asWritten, undefined, {
+                archivedBy: archiverOf(caller, undefined),
+                idle: idleStandingAgents,
+              });
+        const task = Option.map(updated, (written) => written.task);
         if (Option.isSome(task) && placing !== undefined && !placing.success.stands) {
           // The sidebar's own write puts it in the section named, or in none, as the developer's drag does.
           const placed = yield* writeTaskSections(userId, {
@@ -2259,6 +2272,10 @@ export function runUpdateTask(
           task: parented === undefined ? task : Option.map(parented, (written) => written.task),
           parentChanged: parented !== undefined && Option.getOrThrow(parented).txid !== undefined,
           blocksChanged,
+          doneArchived: Option.match(updated, {
+            onNone: () => [],
+            onSome: (written) => written.archived,
+          }),
         };
       });
       const changed = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -2272,6 +2289,7 @@ export function runUpdateTask(
               task: Option.Option<StoredTask["task"]>;
               parentChanged: boolean;
               blocksChanged: boolean;
+              doneArchived: readonly TaskArchivedAgent[];
             },
             string
           > => Result.succeed(written),
@@ -2300,7 +2318,9 @@ export function runUpdateTask(
         ),
       );
       if (Result.isFailure(changed)) return agentToolRejected(changed.failure);
-      const { task, parentChanged, blocksChanged } = changed.success;
+      const { task, parentChanged, blocksChanged, doneArchived } = changed.success;
+      // The agents its Done archived are let go of on their devices once it commits, as an agent's archive lets one go.
+      yield* Effect.forEach(doneArchived, discardedOrLogged, { discard: true });
       if (Option.isNone(task)) return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
       return yield* taskUpdateAnswer(userId, task.value, {
         already: stands && !parentChanged && !blocksChanged,

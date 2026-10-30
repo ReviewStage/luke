@@ -321,7 +321,7 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
         yield* Deferred.succeed(held.release, undefined);
         yield* Fiber.join(sending);
 
-        assert.equal(finished, false);
+        assert.equal(Option.isSome(finished), false);
       }),
   );
 
