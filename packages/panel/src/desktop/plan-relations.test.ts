@@ -140,6 +140,12 @@ test("a relation stands while the list does not hold its task, and picking anoth
   assert.equal(container.querySelector("ul[aria-label='Sub-tasks']"), null);
   // Note that a task the list does not hold yet still stands, so a list still read hides no relation.
   assert.deepEqual(rowIds(container, "Relations"), ["t-5", "t-9"]);
+  const unlisted = container.querySelector("li[data-task-id='t-9']");
+  assert.equal(
+    unlisted?.querySelector("[data-cell='status'] button"),
+    null,
+    "a task not listed yet offers no status to change",
+  );
   const pill = () =>
     container.querySelector<HTMLButtonElement>("button[aria-label='Relation: Blocked by']");
 

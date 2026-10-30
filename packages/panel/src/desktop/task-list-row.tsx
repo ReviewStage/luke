@@ -119,6 +119,7 @@ export function TaskListRow({
   fold,
   settled,
   menuGroups = [],
+  unlisted = false,
 }: {
   tasks: TasksControl;
   task: TaskSummary;
@@ -145,6 +146,8 @@ export function TaskListRow({
   settled?: boolean | undefined;
   /** Its list's own groups, ahead of the task's menu: a related task's relation to change. */
   menuGroups?: readonly (readonly MenuEntry[])[] | undefined;
+  /** Whether the window does not list the task yet, so only its name, its list's own cells, and its list's own menu groups stand, none of what its standing would say or change. */
+  unlisted?: boolean | undefined;
 }): React.JSX.Element {
   const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
@@ -161,11 +164,14 @@ export function TaskListRow({
     task.repository === null
       ? undefined
       : (repositoryName ?? repositoryLabel(task.repository, [{ repository: task.repository }]));
-  const own = {
-    ...rowMenu("Task", [...menuGroups, ...actions.groups()], tasks.shown),
-    footer: actions.footer,
-    subject: taskSubject(task, repository, key),
-  };
+  // Note that a task not listed yet offers only its list's groups, because the task's own acts read the listed task, which is not there to read.
+  const own = unlisted
+    ? rowMenu("Task", menuGroups, tasks.shown)
+    : {
+        ...rowMenu("Task", [...menuGroups, ...actions.groups()], tasks.shown),
+        footer: actions.footer,
+        subject: taskSubject(task, repository, key),
+      };
   const menu = rename.editing
     ? undefined
     : chosen === undefined
@@ -176,7 +182,7 @@ export function TaskListRow({
   // Note that the marks before the name are a control and decoration to a screen reader, so the key and status are said in the press, and left out of find, which finds them drawn.
   const spoken = [
     drawn(TASK_ROW_CELL.KEY) ? key : undefined,
-    drawn(TASK_ROW_CELL.STATUS) ? TASK_STATUS_WORDS[statusOf(task)] : undefined,
+    drawn(TASK_ROW_CELL.STATUS) && !unlisted ? TASK_STATUS_WORDS[statusOf(task)] : undefined,
     task.blocked === true ? BLOCKED_WORDS : undefined,
   ]
     .filter((each) => each !== undefined)
@@ -193,33 +199,37 @@ export function TaskListRow({
       }
       beside={task.blocked === true ? <BlockedMark aria-hidden="true" /> : undefined}
       cells={cells}
-      content={{
-        // Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo.
-        [TASK_ROW_CELL.PRIORITY]: (
-          <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
-        ),
-        [TASK_ROW_CELL.KEY]: (
-          <TaskKey workspaceName={workspaceName} number={task.number} decorative />
-        ),
-        [TASK_ROW_CELL.STATUS]: (
-          <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
-        ),
-        [TASK_ROW_CELL.ASSIGNEE]: assigneeHeld ? null : (
-          <AssigneeChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
-        ),
-        [TASK_ROW_CELL.PULL_REQUESTS]: drawn(TASK_ROW_CELL.PULL_REQUESTS) ? (
-          <OpenPullRequests task={task} />
-        ) : null,
-        [TASK_ROW_CELL.SUB_TASKS]:
-          subTasks === undefined ? null : (
-            <ListRowCount
-              settled={subTasks.finished}
-              total={subTasks.total}
-              label={`${subTasks.finished} of ${subTasks.total} sub-tasks finished`}
-            />
-          ),
-        ...content,
-      }}
+      content={
+        unlisted
+          ? { ...content }
+          : {
+              // Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo.
+              [TASK_ROW_CELL.PRIORITY]: (
+                <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+              ),
+              [TASK_ROW_CELL.KEY]: (
+                <TaskKey workspaceName={workspaceName} number={task.number} decorative />
+              ),
+              [TASK_ROW_CELL.STATUS]: (
+                <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+              ),
+              [TASK_ROW_CELL.ASSIGNEE]: assigneeHeld ? null : (
+                <AssigneeChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+              ),
+              [TASK_ROW_CELL.PULL_REQUESTS]: drawn(TASK_ROW_CELL.PULL_REQUESTS) ? (
+                <OpenPullRequests task={task} />
+              ) : null,
+              [TASK_ROW_CELL.SUB_TASKS]:
+                subTasks === undefined ? null : (
+                  <ListRowCount
+                    settled={subTasks.finished}
+                    total={subTasks.total}
+                    label={`${subTasks.finished} of ${subTasks.total} sub-tasks finished`}
+                  />
+                ),
+              ...content,
+            }
+      }
       editor={
         rename.editing ? (
           <InlineEdit

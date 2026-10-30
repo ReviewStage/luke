@@ -339,29 +339,38 @@ function subTaskRows(
   return rows;
 }
 
+/** A task a block names, and whether the list holds it. */
+interface BlockTask {
+  readonly task: TaskSummary;
+  readonly listed: boolean;
+}
+
 /**
  * The tasks a side of the task's blocks names, as the list holds them. Note
  * that one the list does not hold yet, while it is still read or after a
  * read failed, still stands, named "Task" in the task's own workspace until
  * the list names it, because the open document is read apart from the list
- * and a relation it holds must not vanish meanwhile.
+ * and a relation it holds must not vanish meanwhile; its row draws only
+ * what acts on the relation, since its standing is not known.
  */
 function blockTasks(
   task: Task,
   byId: ReadonlyMap<string, TaskSummary>,
   ids: readonly string[] | undefined,
-): readonly TaskSummary[] {
-  return (ids ?? []).map(
-    (id) =>
-      byId.get(id) ?? {
-        id,
-        workspaceId: task.workspaceId,
-        name: UNLISTED_TASK_NAME,
-        repository: null,
-        createdAt: 0,
-        updatedAt: 0,
-      },
-  );
+): readonly BlockTask[] {
+  return (ids ?? []).map((id) => {
+    const listed = byId.get(id);
+    if (listed !== undefined) return { task: listed, listed: true };
+    const unlisted: TaskSummary = {
+      id,
+      workspaceId: task.workspaceId,
+      name: UNLISTED_TASK_NAME,
+      repository: null,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    return { task: unlisted, listed: false };
+  });
 }
 
 /**
@@ -398,8 +407,8 @@ export function PlanRelations({
     { kind: TASK_RELATION_KIND.BLOCKS, related: blockTasks(task, byId, task.blocks) },
   ] as const;
   const relations: RelatedTaskRow[] = sides.flatMap(({ kind, related }) =>
-    related.map((other) => {
-      const settled = taskFinished(other);
+    related.map(({ task: other, listed }) => {
+      const settled = listed && taskFinished(other);
       const blocker = kind === TASK_RELATION_KIND.BLOCKED_BY;
       const doors = doorsOf(other, kind);
       return {
@@ -407,6 +416,7 @@ export function PlanRelations({
         end: <RelationKindPill kind={kind} open={blocker && !settled} doors={doors} />,
         settled: blocker && settled,
         menu: relationMenu(kind, doors),
+        unlisted: !listed,
       };
     }),
   );

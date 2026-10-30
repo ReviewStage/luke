@@ -47,6 +47,8 @@ export interface RelatedTaskRow {
   readonly settled?: boolean;
   /** Groups leading its menu, ahead of the task's own: its relation to change or take away. */
   readonly menu?: readonly (readonly MenuEntry[])[];
+  /** Whether the window does not list the task yet, so the row draws its name, its end, and its menu's groups alone. */
+  readonly unlisted?: boolean;
 }
 
 /** The room, in CSS pixels, each cell of a related task's that is none of the List's columns takes at its widest, the gap before it included. */
@@ -124,7 +126,7 @@ export function RelatedTasks({
         cells={cells}
         selection={{ selected: selection.selected, onChange: selection.onChange }}
       >
-        {rows.map(({ task, end, depth, fold, settled, menu }) => (
+        {rows.map(({ task, end, depth, fold, settled, menu, unlisted }) => (
           <TaskListRow
             key={task.id}
             tasks={tasks}
@@ -140,6 +142,7 @@ export function RelatedTasks({
             fold={fold}
             settled={settled}
             menuGroups={menu}
+            unlisted={unlisted}
           />
         ))}
       </TaskRows>
