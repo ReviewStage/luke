@@ -24,7 +24,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
-import { automation } from "./automation.js";
+import { automation, automationRun } from "./automation.js";
 import { device } from "./device.js";
 import { conversations } from "./storage.js";
 import { task } from "./task.js";
@@ -85,6 +85,10 @@ import { task } from "./task.js";
  * kept as it stood when the run started (`StoredAutomationOrigin`), so the
  * agent still names its automation once that automation is deleted and
  * `automation_id` goes null; null for an agent started by hand.
+ * `automation_run_id` is the run of an automation the agent belongs to: the
+ * run that started it, or the run that started the agent that started it,
+ * so a run reads every agent it made; null for an agent no run owns, and
+ * once that run's row is gone.
  * `started_from` is the agent of the same plan this one was started from
  * (`StoredStartedFrom`): the one it continues, or forks at one of its
  * messages, with how many of that agent's steps its first message replayed
@@ -247,6 +251,10 @@ export const agentTable = pgTable(
     automationId: uuid("automation_id").references((): AnyPgColumn => automation.id, {
       onDelete: "set null",
     }),
+    /** The run of an automation the agent belongs to; null for one no run owns, and once that run is deleted. */
+    automationRunId: uuid("automation_run_id").references((): AnyPgColumn => automationRun.id, {
+      onDelete: "set null",
+    }),
     /** The run of an automation that started the agent, as it stood then; null for one started by hand. */
     automationOrigin: jsonb("automation_origin").$type<StoredAutomationOrigin>(),
     /** The agent of the same plan this one was started from, with its replay's counts; null for one started afresh. */
@@ -336,6 +344,10 @@ export const agentTable = pgTable(
     index("agent_org_taskless_created")
       .on(table.organizationId, table.createdAt)
       .where(sql`${table.taskId} is null`),
+    // A run reads the agents it made, by the run's id; most agents belong to no run.
+    index("agent_automation_run")
+      .on(table.automationRunId)
+      .where(sql`${table.automationRunId} is not null`),
     // An agent's summary names the agents started from it, read by the source's id.
     index("agent_started_from_agent").on(sql`(${table.startedFrom}->>'agentId')`),
     // Luke's MCP server and the events route find the agent a runner's bearer stands for by the
