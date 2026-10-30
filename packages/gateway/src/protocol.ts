@@ -42,6 +42,10 @@ export const GATEWAY_METHOD = {
   TASKS_MOVE: "tasks.move",
   /** One block of a task added or taken away on the service; the open document takes the task it answered without reading it again. */
   TASKS_BLOCK: "tasks.block",
+  /** One task's parent set or cleared on the service; the list and the open document take the task it answered without reading either again. */
+  TASKS_SET_PARENT: "tasks.setParent",
+  /** One relation of a task moved to another kind on the service, in one call; the list and the open document take the task it answered without reading either again. */
+  TASKS_CHANGE_RELATION: "tasks.changeRelation",
   /** The developer's edit of a task's document saved on the service; the open document takes the task it answered, and a conflict leaves it unchanged. */
   TASKS_EDIT: "tasks.edit",
   /** A window of a file of one task's repository, read from GitHub through the service as it stands now and coloured here; answered to the caller, never held in the view. */
@@ -213,6 +217,7 @@ export const GATEWAY_METHOD = {
   AGENTS_RENAME: "agents.rename",
   /** One agent's MCP servers switched, the whole list of those off, for its next turn on; the agent as it then stands, or why it is unchanged. */
   AGENTS_SERVERS: "agents.servers",
+  AGENTS_QUEUE: "agents.queue",
   /** One agent stopped; the agent as it then stands, or why it was not. */
   AGENTS_STOP: "agents.stop",
   /** One agent taken back to just before one of the developer's lines, stopped first where it still works; the agent as it then stands, or why it was not. */

@@ -405,14 +405,26 @@ export function threadInChapter(
   });
 }
 
-/** The lines a chapter's hunks add and remove, each hunk counted once. */
-export function chapterLineCounts(chapter: Chapter, hunks: readonly ChapterHunk[]): LineCounts {
-  const counts = chapterOwnHunks(chapter, indexHunks(hunks)).flatMap(({ hunk }) =>
-    hunk === null ? [] : [hunkCounts(hunk)],
-  );
+/** How many files a chapter draws, and the lines they add and remove. */
+interface ChapterCounts extends LineCounts {
+  readonly files: number;
+}
+
+/**
+ * The files a chapter draws and the lines they add and remove, summed as
+ * Files changed sums them, each hunk counted once: a file with no hunks,
+ * binary, renamed, or its patch left out, counts what GitHub says it
+ * changes, since no hunk of it can be counted here.
+ */
+export function chapterLineCounts(
+  chapter: Chapter,
+  files: readonly AgentChangedFile[],
+): ChapterCounts {
+  const drawn = chapterPatches(chapter, files);
   return {
-    additions: counts.reduce((sum, each) => sum + each.additions, 0),
-    deletions: counts.reduce((sum, each) => sum + each.deletions, 0),
+    additions: drawn.reduce((sum, file) => sum + file.additions, 0),
+    deletions: drawn.reduce((sum, file) => sum + file.deletions, 0),
+    files: drawn.length,
   };
 }
 

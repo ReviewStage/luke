@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { LINK_OPEN } from "@luke/features/link-open";
 import { test } from "vitest";
+import { AGENT_ENTER } from "./agent-enter.js";
 import {
   type AccountPreferences,
   accountPreferencesParts,
@@ -77,6 +78,7 @@ test("the snapshot's preferences part carries only the keys v0.18.0 reads, whate
   // it is given a value, so a preference added to the shared part is caught below.
   const everything = {
     linkOpen: LINK_OPEN.MAC_APP,
+    agentEnter: AGENT_ENTER.QUEUE,
   } satisfies Required<AccountPreferences>;
   const shared = Object.keys(accountPreferencesParts(everything).preferences);
   assert.deepEqual(

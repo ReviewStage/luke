@@ -122,6 +122,7 @@ import { SWITCHES_EXAMPLE } from "./examples/switches";
 import { TAB_NOTICES_EXAMPLE } from "./examples/tab-notices";
 import { TABS_EXAMPLE } from "./examples/tabs";
 import { TASK_MARKS_EXAMPLE } from "./examples/task-marks";
+import { TASK_ROWS_EXAMPLE } from "./examples/task-rows";
 import { TEXT_BUTTONS_EXAMPLE } from "./examples/text-buttons";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
 import { TEXT_LINKS_EXAMPLE } from "./examples/text-links";
@@ -160,6 +161,7 @@ export const EXAMPLES: readonly Example[] = [
   ATTACHMENT_CHIPS_EXAMPLE,
   AVATARS_EXAMPLE,
   TASK_MARKS_EXAMPLE,
+  TASK_ROWS_EXAMPLE,
   BACK_BUTTONS_EXAMPLE,
   BADGES_EXAMPLE,
   COUNT_PARTS_EXAMPLE,

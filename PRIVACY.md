@@ -573,6 +573,19 @@ place of it only on HTTPS requests to GitHub. The token is never logged and
 never written to the conversation's record. As on This Mac, a Claude Code agent's plan
 token or key is handed into its machine, where a command it runs can read it.
 
+**Connecting a host with a code.** A host can also join your account with a
+code rather than an install token. The box asks our service for a code with no
+credential, and our service keeps, beside the code, the name, operating
+system, and processor the box gives, its version of Luke's host program, and
+the IP address it asked from, for the code's ten minutes. Anyone signed in to
+Luke who opens the code's link is shown them, so you can tell whether the box
+is yours before you approve it. Approving it adds the box to your hosts under
+that name; denying it, or letting the code lapse, adds nothing. What was kept
+with the code, its IP address included, is deleted once the box collects its
+secret, or within a few minutes of the code lapsing. To stop codes being
+guessed, our service also counts, for 15 minutes at a time, how many codes
+your account named that matched none.
+
 **An agent that runs on Claude Code.** For the accounts in the early
 test of Claude plans, an agent your Claude plan pays for runs on
 Anthropic's Claude Code, and so does a Claude agent your own Anthropic
@@ -990,8 +1003,8 @@ and asks Vercel Connect to revoke the grant; what agents already sent or
 changed in Slack, and the record of it, stays, and a grant Vercel Connect
 could not revoke stays until you remove Luke in Slack's own settings.
 
-**Granola, Mercury, Neon, PostHog, Supabase, Vercel, and Y Combinator, if you
-connect them.** Connecting one signs you in to it in your browser through
+**Granola, Mercury, Neon, PostHog, Stripe, Supabase, Vercel, and Y Combinator,
+if you connect them.** Connecting one signs you in to it in your browser through
 Vercel Connect, which stores its token for your account, encrypted, and renews
 it. Our service handles each token as it does Linear's, and keeps the same
 record of your connection. While you are connected, the agents, as for
@@ -1002,7 +1015,11 @@ cards, recipients, and statements, with account and routing numbers,
 categorize and annotate transactions, and request payments and transfers,
 which an approver still confirms in Mercury; manage your Neon and Supabase
 projects and databases and run SQL on them; query and change your PostHog
-analytics, feature flags, and experiments; manage your Vercel projects,
+analytics, feature flags, and experiments; read and change your Stripe
+customers, payments, subscriptions, invoices, products, prices, and payment
+links in the accounts and sandboxes you grant on Stripe's consent page, and
+request refunds and movements of money, which Stripe holds until you approve
+them in its Dashboard; manage your Vercel projects,
 deployments, domains, and environment variables; and use Y Combinator's
 Bookface as your YC account can. What a service answers can include a
 credential it hands out, such as a database connection string or password, a
@@ -1484,8 +1501,8 @@ only when you press Send.
   Executor's token, and our service sends each Executor call, with its input,
   to Executor's MCP server, which keeps it under Executor's own policy and
   passes it on to the app it names.
-- Vercel Connect and Granola, Mercury, Neon, PostHog, Supabase, Vercel, or Y
-  Combinator, for each you connect: Vercel Connect keeps its token, and our
+- Vercel Connect and Granola, Mercury, Neon, PostHog, Stripe, Supabase,
+  Vercel, or Y Combinator, for each you connect: Vercel Connect keeps its token, and our
   service sends each call, with its input, to that service's MCP server,
   which keeps it under that service's own policy.
 - Vercel, which runs our service and the sandboxes, and Neon, which hosts our

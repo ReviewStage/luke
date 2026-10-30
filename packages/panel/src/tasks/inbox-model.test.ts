@@ -36,7 +36,6 @@ import {
   EMPTY_INBOX_DRAFT,
   EVERYONES,
   holderName,
-  INBOX_DIRECTION,
   INBOX_HOLDER,
   INBOX_LINE,
   INBOX_SHOW,
@@ -64,7 +63,6 @@ import {
   listedItems,
   MINE,
   NO_PLACES,
-  nextNeedingYou,
   openItems,
   sentStamp,
   shownTicks,
@@ -516,27 +514,6 @@ test("Open lists only what is open, and the item chosen where one is given, as t
   ]);
 });
 
-test("the next item that needs you follows the chosen one in the list's order, wrapping round to its top, never the chosen one itself, and none where nothing else needs you", () => {
-  const newest = inboxList(TASKS, { show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined });
-  assert.deepEqual(
-    ["retry", "expiry", "threshold", "channel"].map((id) => nextNeedingYou(newest, id)?.item.id),
-    ["expiry", "threshold", "expiry", "expiry"],
-  );
-  const settled = inboxList(
-    [
-      {
-        holder: taskHolder(BILLING),
-        items: [
-          item({ id: "done", status: INBOX_STATUS.ANSWERED }),
-          item({ id: "only", updatedAt: 5 }),
-        ],
-      },
-    ],
-    { show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined },
-  );
-  assert.equal(nextNeedingYou(settled, "only"), undefined);
-});
-
 const ME = { userId: "user-me", name: "Sam Ortiz" };
 const KAI = { userId: "user-kai", name: "Kai Moreno" };
 
@@ -622,7 +599,7 @@ test("an item waits on whoever the service says, its task's assignee, rather tha
   assert.deepEqual(whose({ kind: INBOX_WHOSE.PERSON, ...KAI }), ["older-service"]);
 });
 
-test("a task done or canceled hides none of its items: its open ones need you, Open listing and counting them as any task's, and one is the next, while its unread settled ones are All's", () => {
+test("a task done or canceled hides none of its items: its open ones need you, Open listing and counting them as any task's, while its unread settled ones are All's", () => {
   const finished = [
     {
       holder: taskHolder({ ...BILLING, status: TASK_STATUS.DONE }),
@@ -648,28 +625,6 @@ test("a task done or canceled hides none of its items: its open ones need you, O
     show: INBOX_SHOW.OPEN,
   });
   assert.deepEqual(drawn(open), ["done-open", "canceled-open"]);
-  assert.equal(nextNeedingYou(open, "done-open")?.item.id, "canceled-open");
-});
-
-test("a teammate's open item is never the next that needs you, which goes to the reader's own", () => {
-  const list = inboxList(SHARED, { show: INBOX_SHOW.ALL, readerId: ME.userId, chosen: undefined });
-  assert.deepEqual(
-    ["danas", "mine-invites", "unnamed"].map((id) => nextNeedingYou(list, id)?.item.id),
-    ["mine-invites", "mine", "mine-invites"],
-  );
-});
-
-test("going up, the next item that needs you is the nearest above the chosen one, wrapping round from the list's foot, where going down it is the nearest below", () => {
-  const list = inboxList(SHARED, { show: INBOX_SHOW.ALL, readerId: ME.userId, chosen: undefined });
-  const ids = ["danas-answered", "kais", "mine-invites", "mine", "unnamed"];
-  assert.deepEqual(
-    ids.map((id) => nextNeedingYou(list, id, INBOX_DIRECTION.UP)?.item.id),
-    ["unnamed", "unnamed", "unnamed", "mine-invites", "mine"],
-  );
-  assert.deepEqual(
-    ids.map((id) => nextNeedingYou(list, id, INBOX_DIRECTION.DOWN)?.item.id),
-    ["mine-invites", "mine-invites", "mine", "unnamed", "mine-invites"],
-  );
 });
 
 /**
@@ -716,18 +671,7 @@ test("Open addressed to the reader lists their own open items, read or not, neve
   });
 });
 
-test("the next item reaches the reader's own unread update as it reaches what waits on them, and the item read keeps its place among the steps once Open leaves it out", () => {
-  const all = inboxList(UNREAD_SHARED, {
-    show: INBOX_SHOW.ALL,
-    readerId: ME.userId,
-    chosen: undefined,
-  });
-  assert.equal(nextNeedingYou(all, "danas")?.item.id, "mine-followed");
-  assert.equal(
-    nextNeedingYou(all, "mine-followed")?.item.id,
-    "mine-invites",
-    "a teammate's open item between them is passed over",
-  );
+test("the item read keeps its place among the steps once Open leaves it out", () => {
   // Note that an item read once opened leaves Open's rows but not its steps.
   const read = UNREAD_SHARED.map(({ holder, items }) => ({
     holder,

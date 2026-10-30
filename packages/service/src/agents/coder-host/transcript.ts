@@ -34,6 +34,7 @@ import {
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { type SyncTopic, TOPIC } from "@luke/database/sync/notification";
+import type { AgentQueue } from "@luke/features/agent-queue-wire";
 import {
   AGENT_BOUNDS,
   AGENT_CURSOR_START,
@@ -65,6 +66,7 @@ import {
 } from "../../core.js";
 import { heldUntil } from "../../http/held-read.js";
 import { ModelCatalog, type OfferedModel } from "../../providers/model-catalog.js";
+import { queueOnPage } from "./agent-queue.js";
 import { CODER } from "./bounds.js";
 import { agentContextOf, contextWindowOf } from "./context.js";
 import {
@@ -174,6 +176,8 @@ export interface TranscriptPage {
   readonly subagentTitles?: readonly AgentSubagentTitle[];
   /** Where every one of its workers stands, read from the worker's own session, on its own transcript; absent while it has delegated nothing and on a worker's. */
   readonly subagents?: readonly AgentSubagentStanding[];
+  /** The messages queued behind its turn and the queue's pause, on its own transcript; absent while none is queued and on a worker's. */
+  readonly queue?: AgentQueue;
 }
 
 type TranscriptEffect<A, R = never> = Effect.Effect<
@@ -471,7 +475,7 @@ const withUsage = (
   Effect.gen(function* () {
     const catalog = yield* ModelCatalog;
     // Note that every read here stands apart from the others, so they run at once rather than one round trip after another.
-    const { rows, offered, payer, held, delegations, subagentTitles, subagents } =
+    const { rows, offered, payer, held, delegations, subagentTitles, subagents, queue } =
       yield* Effect.all(
         {
           rows: turnUsagesOf(target.userId, target.conversationId),
@@ -490,6 +494,8 @@ const withUsage = (
             own === undefined
               ? Effect.succeed<readonly AgentSubagentStanding[]>([])
               : subagentStandingsOf(target),
+          // Note that the queue is read after the page's messages, so a message the page lists as sent has left it.
+          queue: own === undefined ? Effect.succeed(undefined) : queueOnPage(own.id),
         },
         { concurrency: CODER.READ_CONCURRENCY },
       );
@@ -505,6 +511,7 @@ const withUsage = (
       ...(delegations.length === 0 ? undefined : { delegations }),
       ...(subagentTitles.length === 0 ? undefined : { subagentTitles }),
       ...(subagents.length === 0 ? undefined : { subagents }),
+      ...(queue === undefined ? undefined : { queue }),
     };
   });
 

@@ -16,7 +16,7 @@
 import type { ErrorMapItem } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { localAgentRefusalSchema, refusedDeviceSchema } from "../agent-wire.js";
-import { hostUpgradeNeededDataSchema } from "../host-wire.js";
+import { hostPairingHeldDataSchema, hostUpgradeNeededDataSchema } from "../host-wire.js";
 import { installedSkillRefusedDataSchema } from "../installed-skill-route-wire.js";
 import { modelProviderSchema } from "../models-wire.js";
 import { repositoryUnreachedSchema } from "../repository-reach-wire.js";
@@ -89,6 +89,11 @@ const hostUpgradeNeededData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(hostUpgradeNeededDataSchema),
 );
 
+/** What a held pairing guess carries beside its slug: when the account's guesses are taken again, which the panel names. */
+const hostPairingHeldData = EffectSchema.toStandardSchemaV1(
+  EffectSchema.flip(hostPairingHeldDataSchema),
+);
+
 /** What a refused install or update carries beside its slug: which skill, and why its files were refused. */
 const installedSkillRefusedData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(installedSkillRefusedDataSchema),
@@ -138,5 +143,7 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.RUNS_ON_LOCKED]: {},
   [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: {},
   [HOSTED_API_ERROR.TASK_BLOCK_CYCLE]: {},
+  [HOSTED_API_ERROR.TASK_PARENT_CYCLE]: {},
   [HOSTED_API_ERROR.AGENT_STATE_STALE]: {},
+  [HOSTED_API_ERROR.HOST_PAIRING_HELD]: { data: hostPairingHeldData },
 } as const satisfies Record<HostedApiError, ErrorMapItem>;

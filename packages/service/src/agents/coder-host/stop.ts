@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { pauseAgentQueue } from "@luke/database/models/agent-queue-store";
 import {
   type Agent,
   type AgentLatestTurn,
@@ -15,6 +16,7 @@ import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
 import type { TaskStandingAgent } from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { StoreWriter } from "@luke/database/models/writer";
+import { QUEUE_PAUSE } from "@luke/features/agent-queue-wire";
 import { AGENT_STATUS, type AgentSummary } from "@luke/features/agent-wire";
 import { Clock, DateTime, Effect, Exit, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
@@ -253,6 +255,10 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   // A native agent's released wait left wakeups with no turn running to name, which a Stop ends
   // as a stopped CLI's own end with it, so they go whether or not a turn stands to cancel.
   yield* hostedStoreOrUnavailable(replaceAgentWakeups(agent.id, []));
+  // Every Stop, the developer's, a Continue's, another agent's, or a rewind's, pauses what is queued behind the
+  // turn, so nothing more goes until Resume. Note that it pauses before the cancel goes out, because the turn's
+  // end may land before eve answers it, and would hand on a queue not yet paused.
+  yield* hostedStoreOrUnavailable(pauseAgentQueue(agent.id, QUEUE_PAUSE.STOPPED));
   const turn = (yield* standingsOf([agent.conversationId]))(agent.conversationId).turn;
   if (!stoppable(turn)) return false;
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));

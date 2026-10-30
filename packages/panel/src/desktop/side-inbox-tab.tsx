@@ -20,8 +20,8 @@ import {
   InboxList,
   InboxListSkeleton,
   InboxPaneEmpty,
+  NOTHING_HERE,
   SearchEmpty,
-  ShowEmpty,
 } from "../tasks/inbox-list.js";
 import {
   EVERYONES,
@@ -29,19 +29,15 @@ import {
   INBOX_SHOW,
   type InboxHolder,
   type InboxListed,
-  inboxCounts,
   listedItems,
-  MINE,
-  NEEDS_YOU,
 } from "../tasks/inbox-model.js";
-import { inboxNext, useInboxPager } from "../tasks/inbox-pager.js";
+import { useInboxPager } from "../tasks/inbox-pager.js";
 import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
 import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
 import { useInboxReadMarks, useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { useInboxItemOpenSpan } from "../tasks/use-inbox-spans.js";
 import type { TaskInboxControl } from "../tasks/use-task-inbox.js";
-import { useTaskInboxShow } from "./folded-groups.js";
 
 /**
  * side-inbox-tab.tsx -- the Inbox tab of a page's side panel: a task's, gathering its agents' items, or an agent's own page's, its one agent's.
@@ -69,16 +65,15 @@ function askedItem(items: readonly InboxItem[], ask: InboxItemAsk): InboxItem | 
   );
 }
 
+/** What a side panel's own Inbox lists: every item its holder holds, open or settled, whoever it is addressed to. */
+const TAB_LISTS = { show: INBOX_SHOW.ALL, whose: EVERYONES } as const;
+
 /**
- * A side panel's own Inbox tab: its holder's items newest first in the window's Inbox's
- * list, under the window's head, whose view's menu offers To do and All
- * alone, kept as a choice of their own (`folded-groups.ts`), and no groups since they are one
+ * A side panel's own Inbox tab: every item its holder holds, newest first, in the window's Inbox's
+ * list, under the window's head with no view's menu, and no groups since they are one
  * holder's, and the chosen item read beside them in the same pane, on the
- * holder's own held read. With nothing chosen, the first item listed that
- * the reader is not done with stands chosen, else the newest; a holder whose read holds nothing
- * says so under the Inbox's glyph, and one whose items its scope leaves out
- * says so in its list and offers All, the item chosen still shown
- * beside it. The pane's holder crumb opens what `doors.onOpenHolder` opens and its agent crumb
+ * holder's own held read. A holder whose read holds nothing says "Nothing
+ * here" under the Inbox's glyph, with no press. The pane's holder crumb opens what `doors.onOpenHolder` opens and its agent crumb
  * the agent. Too narrow for both, it shows its list, however many items
  * it holds, and an item once a row's press or a link opens it, with its way
  * back to the list, as the window's Inbox does (`inbox-columns.ts`). K and J, and the pager where the item stands alone, step
@@ -115,7 +110,6 @@ export function SideInboxTab({
   doors: Pick<InboxPaneDoors, "onOpenHolder" | "taskCard" | "onOpenAgent" | "code">;
 }): React.JSX.Element {
   const [asked, setAsked] = useState<string | undefined>(undefined);
-  const show = useTaskInboxShow();
   const { act } = useAct();
   const closeItem = useInboxCloser({ act, onHeard: agents.onRetryList });
   // Note that the holder's read draws the window's own marks, answers, and messages already, as the host draws them into it (`@luke/host`'s `inbox-collections.ts`).
@@ -123,29 +117,17 @@ export function SideInboxTab({
   // Note that a panel's own Inbox offers no Mark all as read.
   const marks = useInboxReadMarks({ act, workspaceId });
   const items = groups.flatMap((group) => group.items);
-  const counts = inboxCounts(groups, readerId);
   // The list's search, as the window's Inbox holds it, which narrows what it lists, never what it counts.
   const [query, setQuery] = useState("");
   const search = searchTokens(query);
   const searched = search.length > 0 ? query : undefined;
-  const filter = {
-    show: show.show,
-    // Note that a task's own Open is the reader's own, Needs you, as it was before Open listed anyone's.
-    whose: show.show === INBOX_SHOW.OPEN ? MINE : EVERYONES,
-    search,
-    readerId,
-  };
+  const filter = { ...TAB_LISTS, search, readerId };
   // The rows hold what the filter lists and the chosen row they drew, while the steps keep the item the pane shows in its
   // place, both held still while the tab is shown (`use-held-inbox-list.ts`).
   const { list, steps, onPointing } = useHeldInboxList(groups, filter, asked, shown);
   const listed = listedItems(list);
   // Note that nothing is chosen until a row's press or a call's row chooses it, so the pane beside the list stands empty till then.
   const chosen = listedItems(steps).find(({ item }) => item.id === asked);
-  const filteredOut =
-    searched === undefined &&
-    show.show !== INBOX_SHOW.ALL &&
-    listed.length === 0 &&
-    items.length > 0;
   const columns = useInboxColumns(chosen?.item.id, { onClear: () => setAsked(undefined) });
   // The tab's ⋯ copies the open item's link, and none while the list stands alone, since no link names a panel's Inbox whole.
   const linkItem = useCopyLinkItem();
@@ -159,7 +141,7 @@ export function SideInboxTab({
         });
   const choose = ({ item }: InboxListed) => setAsked(item.id);
   const timeOpen = useInboxItemOpenSpan(chosen?.item.id, inbox.read);
-  // A row's press and Next's open their item alike, the keyboard following it.
+  // A row's press opens its item, the keyboard following it.
   const open = (listed: InboxListed) => {
     timeOpen(listed.item.id);
     choose(listed);
@@ -191,10 +173,7 @@ export function SideInboxTab({
     choose(listed);
     columns.onStep();
   };
-  const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, {
-    shown,
-  });
-  const next = inboxNext(steps, chosen, { models: agents.models, readerId }, open, direction);
+  const pager = useInboxPager(steps, list, chosen?.item.id, step, { shown });
   return (
     <section
       ref={columns.ref}
@@ -210,7 +189,6 @@ export function SideInboxTab({
         rows={columns.rows}
         head={{
           shown,
-          show,
           view: undefined,
           search: { query, onQuery: setQuery },
           tab: true,
@@ -234,11 +212,9 @@ export function SideInboxTab({
             </ErrorState>
           ) : inbox.drawn && searched !== undefined && listed.length === 0 ? (
             <SearchEmpty searched={searched} />
-          ) : inbox.drawn && filteredOut ? (
-            <ShowEmpty show={show} counts={counts} onList={columns.onList} />
           ) : inbox.drawn && listed.length === 0 && columns.shown !== INBOX_COLUMNS.BOTH ? (
             // Note that the list standing alone says what the hidden pane would, as the pane says it.
-            <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
+            <EmptyState icon={<InboxIcon />}>{NOTHING_HERE}</EmptyState>
           ) : null
         }
         onChoose={open}
@@ -249,9 +225,9 @@ export function SideInboxTab({
         <section className={INBOX_VIEW_ITEMS} hidden={columns.shown !== INBOX_COLUMNS.BOTH}>
           {/* The empty pane keeps a bar the list's head's height, as the window's Inbox does. */}
           <Toolbar />
-          {/* Note that the list says what its tab or its search left out, so the pane beside it stands bare. */}
-          {inbox.drawn && !filteredOut && searched === undefined ? (
-            <InboxPaneEmpty listed={listed.length} />
+          {/* Note that the list says what its search left out, so the pane beside it stands bare. */}
+          {inbox.drawn && searched === undefined ? (
+            <InboxPaneEmpty listed={listed.length} none={NOTHING_HERE} />
           ) : null}
         </section>
       ) : (
@@ -263,7 +239,6 @@ export function SideInboxTab({
           hidden={columns.shown === INBOX_COLUMNS.LIST}
           onBack={columns.onBack}
           pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
-          next={next}
           doors={{ ...doors, onMark: marks.onMark, onClose: closeItem }}
         />
       )}

@@ -20,6 +20,8 @@ import {
   agentPartAnswerSchema,
   agentPinRequestSchema,
   agentPullRequestAnswerSchema,
+  agentQueueAnswerSchema,
+  agentQueueChangeSchema,
   agentRenameRequestSchema,
   agentReviewOptionsAnswerSchema,
   agentServersRequestSchema,
@@ -341,6 +343,22 @@ export type AgentAgentAnswer = typeof agentAgentAnswerSchema.Type;
 const agentMessageAnswerViewSchema = EffectSchema.Union([agentMessageAnswerSchema, failedReaching]);
 
 export type AgentMessageAnswerView = typeof agentMessageAnswerViewSchema.Type;
+
+/** One change of an agent's queue, as the window asks it: the agent and the change. */
+export const agentQueueParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  change: agentQueueChangeSchema,
+});
+
+export type AgentQueueParams = typeof agentQueueParamsSchema.Type;
+
+/** A change of an agent's queue, as the window hears the service answer it: the queue as it then stands, or why it did not change. */
+export const agentQueueAnswerViewSchema = EffectSchema.Union([
+  agentQueueAnswerSchema,
+  failedReaching,
+]);
+
+export type AgentQueueAnswerView = typeof agentQueueAnswerViewSchema.Type;
 
 /** An agent deleted for good, as the window hears it: that it was, or why it was not. */
 export const agentDeleteAnswerViewSchema = EffectSchema.Union([agentDeleteAnswerSchema, failed]);

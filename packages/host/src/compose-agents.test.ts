@@ -13,6 +13,7 @@ import {
   AGENT_STATUS,
   type AgentNewestAnswer,
   type AgentPage,
+  type AgentStatus,
   type AgentSummary,
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
@@ -388,6 +389,11 @@ function fakeService() {
         asked.push(`servers:${agentId}:${request.disabledServers.join(",")}`);
         return { agent: { ...AGENT, disabledServers: request.disabledServers } };
       }),
+    changeQueue: (agentId, change) =>
+      Effect.sync(() => {
+        asked.push(`queue:${agentId}:${change.change}`);
+        return { queue: { messages: [], revision: 1 } };
+      }),
     stop: (agentId) =>
       Effect.sync(() => {
         asked.push(`stop:${agentId}`);
@@ -739,6 +745,7 @@ const TRANSCRIPT_PARTS = [
   "workers",
   "window",
   "windowParts",
+  "queueRevision",
 ] as const;
 const SCOPE_PARTS = ["items", "messages", "files"] as const;
 const ACCOUNT_PARTS = ["items", "planless", "plans", "automations", "failedRuns"] as const;
@@ -1328,6 +1335,7 @@ function transcriptRows(live: { readonly transcript: TranscriptLive }, seq: numb
     workers: [],
     window: [],
     windowParts: [],
+    queueRevision: [],
   });
 }
 
@@ -1378,7 +1386,7 @@ function windowRow(seq: number, text: string) {
 /** A page the service answers read at once: its messages, its cursor, its status, and whether its held read would have held. */
 function pageNow(
   cursor: string,
-  options: { holds: boolean; text?: string; status?: typeof AGENT_STATUS.RUNNING },
+  options: { holds: boolean; text?: string; status?: AgentStatus },
 ): TranscriptNowAnswer {
   return {
     messages:
@@ -1539,6 +1547,77 @@ it.effect(
       transcriptRows(live, 3, 2);
       yield* nextPoll;
       assert.equal(asked.at(-1), `messages-now:${AGENT_ID}:3:0`);
+    }),
+);
+
+it.effect(
+  "a line of the developer's that lands awaiting its turn after a stopped turn is told with the agent at work, never under the stopped turn's word",
+  () =>
+    Effect.gen(function* () {
+      const { call, pages, sealTranscript, pageNow: script, pageNewest, live } = yield* subject();
+      sealTranscript(LIVE_ANSWERED);
+      pageNewest(newestPage("1:0", "Reading the invites.", "40"));
+      script(
+        pageNow("1:0", {
+          holds: false,
+          text: "Reading the invites.",
+          status: AGENT_STATUS.CANCELLED,
+        }),
+      );
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      transcriptRows(live, 1);
+      yield* nextPoll;
+
+      // A queue's Resume hands on the member's line, which lands before any turn takes it.
+      const line = windowRow(2, "Open the pull request.");
+      live.transcript.set({
+        window: [{ ...line.row, role: "user", turnStatus: null }],
+        windowParts: [line.part],
+      });
+      yield* nextPoll;
+
+      const told = pages().find(
+        (each) =>
+          isRecord(each) &&
+          isRecord(each.page) &&
+          Array.isArray(each.page.messages) &&
+          each.page.messages.some((message) => isRecord(message) && message.id === "m-2"),
+      );
+      assert.ok(isRecord(told) && isRecord(told.page), "the line was told");
+      assert.equal(told.page.status, AGENT_STATUS.RUNNING);
+    }),
+);
+
+it.effect(
+  "a followed transcript reads its page again when only the agent's queue moves, or a line of the developer's lands awaiting its turn, whoever wrote it",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, sealTranscript, pageNow: script, pageNewest, live } = yield* subject();
+      sealTranscript(LIVE_ANSWERED);
+      pageNewest(newestPage("1:0", "Reading the invites.", "40"));
+      script(pageNow("1:0", { holds: false, text: "Reading the invites." }));
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      transcriptRows(live, 1);
+      yield* settled;
+      const reads = () => asked.filter((ask) => ask.startsWith("messages-now")).length;
+
+      // A message queued, edited, sent, or the queue paused: nothing but its revision moves.
+      const beforeQueue = reads();
+      live.transcript.set({ queueRevision: [{ revision: 1 }] });
+      yield* nextPoll;
+      assert.equal(reads(), beforeQueue + 1, "the queue moving reads the page");
+
+      // A queue's hand-off writes the member's line before its turn is opened; the page says the agent runs.
+      const beforeLine = reads();
+      const line = windowRow(2, "Open the pull request.");
+      live.transcript.set({
+        window: [{ ...line.row, role: "user", turnStatus: null }],
+        windowParts: [line.part],
+      });
+      yield* nextPoll;
+      assert.equal(reads(), beforeLine + 1, "a line awaiting its turn reads the page");
     }),
 );
 

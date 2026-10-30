@@ -115,7 +115,6 @@ function mount(
       readerId: undefined,
       head: {
         shown: true,
-        show: { show: "all", onShow: () => undefined } as never,
         view: undefined,
       },
       note: null,

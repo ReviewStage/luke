@@ -93,9 +93,6 @@ import { TASK_CARD_STANDING, TASK_STATUS_WORDS, TaskKey } from "./task-standing.
 import { cardTitle, plainWords } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
 
-/** A row's mark before its words, the next item's, which keeps its own size. */
-export const INBOX_ROW_MARK = "inbox-row-mark flex flex-none";
-
 /**
  * An item that needs the developer wears the attention mark before its time,
  * a size under a row glyph's, as a sidebar plan wears it, so the disc's edge

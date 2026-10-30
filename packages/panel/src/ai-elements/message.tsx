@@ -196,7 +196,10 @@ export const PANEL_MARKDOWN_COMPONENTS: MarkdownComponents = {
   blockquote: ({ children }) => <blockquote className={QUOTE_CLASS}>{children}</blockquote>,
 };
 
-export type MessageResponseProps = Omit<MarkdownProps, "look" | "className">;
+export type MessageResponseProps = Omit<MarkdownProps, "look" | "className"> & {
+  /** Whether the words are drawn on one line, as a queued message's row draws them (`MARKDOWN_LOOK.TRANSCRIPT_LINE`). */
+  line?: boolean | undefined;
+};
 
 /**
  * A reply's markdown, drawn as it streams, in `.transcript-markdown`
@@ -206,10 +209,18 @@ export type MessageResponseProps = Omit<MarkdownProps, "look" | "className">;
  * landed (`markdown-html-parser.ts`), because a reply drawn without it is not
  * the reply drawn with it.
  */
-export const MessageResponse = memo((props: MessageResponseProps): ReactNode => {
-  const parser = useAtomValue(markdownHtmlParserAtom);
-  if (AsyncResult.isInitial(parser)) return null;
-  return <Markdown look={MARKDOWN_LOOK.TRANSCRIPT} className="transcript-markdown" {...props} />;
-});
+export const MessageResponse = memo(
+  ({ line = false, ...props }: MessageResponseProps): ReactNode => {
+    const parser = useAtomValue(markdownHtmlParserAtom);
+    if (AsyncResult.isInitial(parser)) return null;
+    return (
+      <Markdown
+        look={line ? MARKDOWN_LOOK.TRANSCRIPT_LINE : MARKDOWN_LOOK.TRANSCRIPT}
+        className="transcript-markdown"
+        {...props}
+      />
+    );
+  },
+);
 
 MessageResponse.displayName = "MessageResponse";

@@ -159,6 +159,10 @@ export const HOSTED_SERVICE_PATH = {
   DEVICE_AGENT_ENROLL: "/api/device-agents/enroll",
   /** One of the account's own registered devices enrolled on its signed-in session, traded for a device secret answered once (POST). `host-wire.ts` declares the bodies. */
   DEVICE_AGENT_ENROLL_OWN: "/api/device-agents/devices/enroll",
+  /** A box's pairing started with no credential: its poll secret, the code it shows and the link that opens it, how long the code lasts, and how often to poll (POST). `host-wire.ts` declares the bodies. */
+  HOST_PAIRING_START: "/api/device-agents/pairing",
+  /** A pairing box's poll on its poll secret: pending, slow down, denied, expired, or approved with its device secret, answered once (POST). */
+  HOST_PAIRING_POLL: "/api/device-agents/pairing/poll",
   /** The account's enrolled machines, as Settings lists them (GET). `host-wire.ts` declares the bodies. */
   HOSTS: "/api/hosts",
   /** How long ago the account's own devices last beat, read to keep a label's online state true while it is drawn (GET). */
@@ -169,6 +173,12 @@ export const HOSTED_SERVICE_PATH = {
   HOST_INSTALL_TOKENS: "/api/hosts/install-tokens",
   /** One of the account's install tokens revoked, so it enrolls no box again (POST). */
   HOST_INSTALL_TOKEN_REVOKE: "/api/hosts/install-tokens/revoke",
+  /** A pending pairing read by its code, as the approve screen shows it (POST, so the code rides in the body). `host-wire.ts` declares the bodies. */
+  HOST_PAIRING: "/api/hosts/pairing",
+  /** A pending pairing approved by its code, which makes the account's host (POST). */
+  HOST_PAIRING_APPROVE: "/api/hosts/pairing/approve",
+  /** A pending pairing denied by its code, so its box is answered denied (POST). */
+  HOST_PAIRING_DENY: "/api/hosts/pairing/deny",
   /**
    * The shell commands the account's agents asked to run on the developer's
    * Mac: the ones waiting, held open while none is, each claimed for the

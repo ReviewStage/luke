@@ -107,6 +107,18 @@ export class TaskAssigneeNotMember extends Data.TaggedError("TaskAssigneeNotMemb
 /** The change named another repository for a task that has a parent or children, which work in their tree's repository; nothing was written. */
 export class TaskTreeRepositoryLocked extends Data.TaggedError("TaskTreeRepositoryLocked") {}
 
+/** The parent named is none the account reaches in the child's workspace; nothing was written. */
+export class TaskParentUnreached extends Data.TaggedError("TaskParentUnreached") {}
+
+/** The child and the parent named work in two repositories, where a child always works in its parent's; nothing was written. */
+export class TaskParentRepositoryDiffers extends Data.TaggedError("TaskParentRepositoryDiffers")<{
+  /** The parent's repository, which the child does not hold. */
+  readonly repository: string | null;
+}> {}
+
+/** The parent named is the task itself or one of its descendants, under which the task would descend from itself; nothing was written. */
+export class TaskParentCycle extends Data.TaggedError("TaskParentCycle") {}
+
 /** A coding agent stands at work that a delete was not told was stopped: one started on the task, or handed a message, while it or the others were stopped. */
 export class TaskAgentUnstopped extends Data.TaggedError("TaskAgentUnstopped") {}
 
@@ -907,6 +919,12 @@ const hasChildren = SqlSchema.findOneOption({
     ),
 });
 
+/** Whether two repositories are one: GitHub's names match whatever their case, and none matches none. */
+function sameRepository(one: string | null, other: string | null): boolean {
+  if (one === null || other === null) return one === other;
+  return one.toLowerCase() === other.toLowerCase();
+}
+
 /**
  * Refuses a change that names another repository for a task in a tree: one
  * with a parent, or with children, works in its tree's repository, so only
@@ -916,12 +934,53 @@ const treeRepositoryHeld = Effect.fnUntraced(function* (
   locked: Pick<TaskRow, "id" | "repository" | "parentTaskId">,
   asked: string | null,
 ): Effect.fn.Return<void, TaskStoreFailure | TaskTreeRepositoryLocked, DatabaseServices> {
-  const held = locked.repository;
-  if (asked === held) return;
-  if (asked !== null && held !== null && asked.toLowerCase() === held.toLowerCase()) return;
+  if (sameRepository(asked, locked.repository)) return;
   const inTree =
     locked.parentTaskId !== null || Option.isSome(yield* hasChildren({ taskId: locked.id }));
   if (inTree) return yield* new TaskTreeRepositoryLocked();
+});
+
+/**
+ * The child and the parent a parent write names, each where the account
+ * reaches it, under an update lock taken in id order, so two writes joining
+ * the same two tasks never wait on each other crosswise, and neither task
+ * moves to another workspace while the write stands on what it read.
+ */
+const lockTaskPair = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, taskIds: Schema.Array(Schema.String) }),
+  Result: TaskRowSchema,
+  execute: ({ userId, taskIds }) =>
+    Database.use((db) =>
+      db
+        .select(TASK_COLUMNS)
+        .from(task)
+        .where(and(inArray(task.id, taskIds), taskReachableBy(userId)))
+        .orderBy(task.id)
+        .for("update"),
+    ),
+});
+
+/**
+ * The task, where it stands among the proposed parent's ancestors, the
+ * parent itself first. Note that the walk follows every row, a task the
+ * account does not reach among them, because a loop through a hidden task
+ * is a loop still; `union` drops a task already walked, so a walk ends.
+ */
+const findAmongAncestors = SqlSchema.findOneOption({
+  Request: Schema.Struct({ taskId: Schema.String, parentTaskId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ taskId, parentTaskId }) =>
+    Effect.flatMap(
+      SqlClient.SqlClient,
+      (client) => client`
+        with recursive upward(id, parent_task_id) as (
+          select id, parent_task_id from task where id = ${parentTaskId}
+          union
+          select task.id, task.parent_task_id from task
+            join upward on task.id = upward.parent_task_id
+        )
+        select id::text as id from upward where id = ${taskId} limit 1`,
+    ),
 });
 
 /** The task row as it stands, unlocked: what a caller reads to refuse a change before it stops anything. */
@@ -960,6 +1019,7 @@ const TaskColumnChangesSchema = Schema.Struct({
   completedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
   priority: Schema.optionalKey(taskPrioritySchema),
   assigneeId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  parentTaskId: Schema.optionalKey(Schema.NullOr(Schema.String)),
   machine: Schema.optionalKey(MachineSchema),
   deviceId: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
@@ -1529,6 +1589,73 @@ export function updateTaskCommitted<E = never, R = never>(
         }
         const changed = yield* taskOf(userId, row);
         return Option.some(txid === undefined ? { task: changed } : { task: changed, txid });
+      }),
+    ),
+  );
+}
+
+/** The row's parent column written as asked, and the row answered as changed; the row as it stands, with no transaction, where the parent stood so already. */
+const parentWritten = (
+  userId: string,
+  row: TaskRow,
+  parentTaskId: string | null,
+): TaskStoreEffect<TaskCommitted<Task>> =>
+  Effect.gen(function* () {
+    if (row.parentTaskId === parentTaskId) return { task: yield* taskOf(userId, row) };
+    const { txid, ...changed } = yield* applyChanges({ userId, taskId: row.id, parentTaskId }).pipe(
+      // The row is held under this transaction's lock, so an update that missed it is the database breaking its own contract.
+      Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+    );
+    return { task: yield* taskOf(userId, changed), txid };
+  });
+
+/**
+ * Makes the task the child of the parent named, or a task at the top with
+ * null, and answers it as changed with the transaction the change committed
+ * in, none where the parent stood so already; nothing where the account
+ * reaches no such task. The parent must be one the account reaches in the
+ * child's workspace (`TaskParentUnreached`), work in the child's repository
+ * (`TaskParentRepositoryDiffers`), since a child always works in its
+ * parent's, and be neither the task nor one of its descendants
+ * (`TaskParentCycle`); where its agents run stays the child's own. Both
+ * rows are held for update, in id order, and the workspace's parent writes
+ * take turns on the lock its block writes take, so no two writes close a
+ * loop between them. Clearing the parent always lands for a task reached.
+ */
+export function setTaskParent(
+  userId: string,
+  taskId: string,
+  parentTaskId: string | null,
+): Effect.Effect<
+  Option.Option<TaskCommitted<Task>>,
+  TaskStoreFailure | TaskParentUnreached | TaskParentRepositoryDiffers | TaskParentCycle,
+  DatabaseServices
+> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        if (parentTaskId === null) {
+          const locked = yield* lockTask({ userId, taskId });
+          if (Option.isNone(locked)) return Option.none();
+          return Option.some(yield* parentWritten(userId, locked.value, null));
+        }
+        if (parentTaskId === taskId) return yield* new TaskParentCycle();
+        const rows = yield* lockTaskPair({ userId, taskIds: [taskId, parentTaskId] });
+        const child = rows.find((row) => row.id === taskId);
+        if (child === undefined) return Option.none();
+        const parent = rows.find((row) => row.id === parentTaskId);
+        if (parent === undefined || parent.organizationId !== child.organizationId) {
+          return yield* new TaskParentUnreached();
+        }
+        if (!sameRepository(child.repository, parent.repository)) {
+          return yield* new TaskParentRepositoryDiffers({ repository: parent.repository });
+        }
+        // Note that the workspace's parent writes take turns, because two that each close half a loop would each walk past the other's unwritten row.
+        yield* client`select pg_advisory_xact_lock(hashtextextended(${child.organizationId}, 0))`;
+        if (Option.isSome(yield* findAmongAncestors({ taskId, parentTaskId }))) {
+          return yield* new TaskParentCycle();
+        }
+        return Option.some(yield* parentWritten(userId, child, parentTaskId));
       }),
     ),
   );

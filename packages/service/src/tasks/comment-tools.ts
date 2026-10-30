@@ -21,6 +21,7 @@ import { Effect, Option, Result, Schema } from "effect";
 import { AGENT_TOOL } from "../agents/agent-runtime/tools.js";
 import {
   ACTION_RESULT_STATUS,
+  EXCESS_KEYS,
   type UnparsedWireValue,
   type WireRecord,
   wireUuidSchema,
@@ -28,17 +29,20 @@ import {
 import { logStoreFailure } from "../http/store-failure.js";
 
 /**
- * comment-tools.ts -- the plan's comments as Luke and the task's coding agents read and answer them: one implementation of `read_comments`, `reply_to_comment`, `resolve_thread`, and `reopen_thread` for both.
+ * comment-tools.ts -- a plan's comments as the coding agents read and answer them: one implementation of `read_comments`, `reply_to_comment`, `resolve_thread`, and `reopen_thread`.
  *
  * An agent reads the threads for context at any time, but replies only where
  * someone sent a thread to it (`comment-ask.ts`), which its instructions say;
  * resolving and reopening are any agent's, as they are any member's. Every
- * call runs on the plan the service bound, as the member whose turn it is,
- * and is written under the agent that made it: Luke, or the coding agent by
- * its id. A call answers what it did as the model reads it, never a failure.
+ * call names the task whose plan it acts on, the agent's own or any other of
+ * its workspace, which the door holds to that workspace
+ * (`../agents/coder-host/agent-doors.ts`), so an agent on no task answers a
+ * thread too. It runs on the plan the door bound, as the member whose turn
+ * it is, and is written under the agent that made it, by its id. A call
+ * answers what it did as the model reads it, never a failure.
  */
 
-/** Where a call reads and writes: the member whose turn it is, the plan the service bound, and who writes, Luke or a coding agent. */
+/** Where a call reads and writes: the plan the door bound, and who writes, the member whose turn it is and the agent. */
 export interface CommentToolBinding {
   readonly taskId: string;
   readonly writer: PlanCommentWriterRef;
@@ -46,17 +50,29 @@ export interface CommentToolBinding {
 
 /** Why a call took nothing, in the words its result says. */
 export const COMMENT_TOOL_REFUSAL = {
-  TASKLESS: "This agent is on no task, so it has no comments.",
   UNREADABLE: "The input is not one this tool takes.",
+  NO_TASK_NAMED: `Name the task whose plan's comments to act on as taskId, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
   NO_THREAD: "No thread of this plan has that id; read_comments lists them.",
-  NO_TASK: "This task's plan cannot be read now.",
+  NO_TASK: `No task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
   RESOLVED: "The thread is resolved; reopen it before replying.",
   UNAVAILABLE: "The comments could not be reached; try again.",
 } as const;
 
+/** The task a call names, whose plan's comments it acts on. */
+const TASK_ID = describeWire(
+  wireUuidSchema,
+  `The task whose plan's comments to act on, your own or another of your workspace, by the id ${AGENT_TOOL.LIST_TASKS} answered or a mention of it names.`,
+);
+
 const THREAD_ID = describeWire(wireUuidSchema, "The thread's id, as read_comments lists it.");
 
+// The call's other fields stand beside its task, and are read on their own.
+const readCommentedTask = readEither(Schema.Struct({ taskId: wireUuidSchema }), {
+  excess: EXCESS_KEYS.DROP,
+});
+
 const READ_INPUT = Schema.Struct({
+  taskId: TASK_ID,
   status: Schema.optionalKey(
     describeWire(
       Schema.Literals(Object.values(PLAN_COMMENT_STATUS)),
@@ -66,6 +82,7 @@ const READ_INPUT = Schema.Struct({
 });
 
 const REPLY_INPUT = Schema.Struct({
+  taskId: TASK_ID,
   thread: THREAD_ID,
   words: describeWire(
     planCommentWordsSchema,
@@ -73,13 +90,13 @@ const REPLY_INPUT = Schema.Struct({
   ),
 });
 
-const THREAD_INPUT = Schema.Struct({ thread: THREAD_ID });
+const THREAD_INPUT = Schema.Struct({ taskId: TASK_ID, thread: THREAD_ID });
 
 /** `read_comments`: the plan's threads as they stand. */
 export const READ_COMMENTS_TOOL = {
   name: AGENT_TOOL.READ_COMMENTS,
   description:
-    "Read the comment threads on this task's plan: each thread's id, the words of the plan it is on and their section, " +
+    "Read the comment threads on the plan of the task taskId names, your own task or any other of your workspace: each thread's id, the words of the plan it is on and their section, " +
     "whether those words were since deleted, and every comment with who wrote it, when, and the names of the files it carries. Open threads unless you ask " +
     "for resolved ones. Reading asks nothing of you: reply only to a thread someone sent you.",
   inputSchema: READ_INPUT,
@@ -89,7 +106,7 @@ export const READ_COMMENTS_TOOL = {
 export const REPLY_TO_COMMENT_TOOL = {
   name: AGENT_TOOL.REPLY_TO_COMMENT,
   description:
-    "Reply in one comment thread on this task's plan, by its id, as yourself; every member of the workspace sees it beside " +
+    "Reply in one comment thread on the plan of the task taskId names, by the thread's id, as yourself; every member of the workspace sees it beside " +
     "the words it is on. Reply where someone sent you the thread, answering what it asks; your replies send the thread to no one.",
   inputSchema: REPLY_INPUT,
 } as const;
@@ -98,7 +115,7 @@ export const REPLY_TO_COMMENT_TOOL = {
 export const RESOLVE_THREAD_TOOL = {
   name: AGENT_TOOL.RESOLVE_THREAD,
   description:
-    "Resolve one comment thread on this task's plan, by its id, once what it asked is settled; it leaves the plan's margin " +
+    "Resolve one comment thread on the plan of the task taskId names, by the thread's id, once what it asked is settled; it leaves the plan's margin " +
     "and stays in its history.",
   inputSchema: THREAD_INPUT,
 } as const;
@@ -107,7 +124,7 @@ export const RESOLVE_THREAD_TOOL = {
 export const REOPEN_THREAD_TOOL = {
   name: AGENT_TOOL.REOPEN_THREAD,
   description:
-    "Reopen one resolved comment thread on this task's plan, by its id, where what it asked is unsettled again.",
+    "Reopen one resolved comment thread on the plan of the task taskId names, by the thread's id, where what it asked is unsettled again.",
   inputSchema: THREAD_INPUT,
 } as const;
 
@@ -125,6 +142,12 @@ export type CommentToolName = CommentTool["name"];
 /** A call that took nothing, and why. */
 export function commentToolRejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
+}
+
+/** The task a call names, or nothing where it names none that reads, which refuses it whole. */
+export function commentedTaskOf(input: UnparsedWireValue): string | undefined {
+  const read = readCommentedTask(input);
+  return Result.isSuccess(read) ? read.success.taskId : undefined;
 }
 
 /** Who wrote an entry, as an agent reads it. */
@@ -183,7 +206,7 @@ function written(outcome: PlanCommentOutcome): WireRecord {
   return { status: ACTION_RESULT_STATUS.ACCEPTED, ...threadRead(answer.thread) };
 }
 
-/** One call of a comment tool on the plan the service bound, answered as the result the model reads. */
+/** One call of a comment tool on the plan the door bound, answered as the result the model reads. */
 export function runCommentTool(
   name: CommentToolName,
   binding: CommentToolBinding,

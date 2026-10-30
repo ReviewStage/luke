@@ -3130,7 +3130,7 @@ test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its I
 test("an Inbox item is found under All by words its thread says, which its row says beside its task", async () => {
   paletteOverInbox({ items: [PREVIEWS, ROTATE] });
 
-  type("stripe");
+  type("signing");
   await settle();
 
   assert.deepEqual(rows(), [

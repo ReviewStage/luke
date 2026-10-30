@@ -44,6 +44,8 @@ import {
   agentPullRequestReadParamsSchema,
   agentPullRequestViewedAnswerViewSchema,
   agentPullRequestWriteAnswerViewSchema,
+  agentQueueAnswerViewSchema,
+  agentQueueParamsSchema,
   agentRenameParamsSchema,
   agentReviewOptionsAnswerViewSchema,
   agentRewindParamsSchema,
@@ -159,6 +161,9 @@ export const agentActsContract = {
   )
     .input(exactInput(agentServersParamsSchema))
     .output(EffectSchema.flip(agentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.AGENTS_QUEUE]: actProcedure("Could not change the agent's queue on this system.")
+    .input(exactInput(agentQueueParamsSchema))
+    .output(EffectSchema.flip(agentQueueAnswerViewSchema)),
   [AGENT_ACT_KIND.AGENTS_STOP]: actProcedure("Could not stop the agent on this system.")
     .input(exactInput(agentStopParamsSchema))
     .output(EffectSchema.flip(agentAgentAnswerSchema)),

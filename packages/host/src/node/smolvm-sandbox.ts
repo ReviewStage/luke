@@ -15,6 +15,7 @@ import {
   type LocalAgentSandboxCommand,
   LocalAgentSandboxUnavailable,
 } from "../effect/seams.js";
+import { SETUP_FAILURE } from "../local-agent-setup.js";
 import { keptToolBinary, localAgentTool } from "../local-agent-tools.js";
 
 /**
@@ -85,12 +86,6 @@ import { keptToolBinary, localAgentTool } from "../local-agent-tools.js";
  * start a machine, which names no secret: a credential is only ever a
  * reference to its file there.
  */
-
-/** What a Mac says it could not have, as it registers its setup failed: words of Luke's own, never smolvm's. */
-const SETUP_FAILURE = {
-  SMOLVM: "smolvm couldn't be downloaded or didn't pass its check",
-  IMAGE: "the sandbox image couldn't be downloaded",
-} as const;
 
 /** The machine's workload: one that never exits, so `machine exec` always has a running container to run in. */
 const WORKLOAD = ["sh", "-c", "while true; do sleep 3600; done"] as const;

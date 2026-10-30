@@ -17,6 +17,10 @@
       "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/CHANGELOG.md :/PRIVACY.md :/vercel.json",
       "routes": [
         {
+          "src": "/install\\.sh",
+          "dest": "/api/default.js?route=hosts/install-script"
+        },
+        {
           "src": "/api/auth/(.*)",
           "dest": "/api/default.js?route=auth/[...all]&route-path=auth/$1"
         },
@@ -95,6 +99,10 @@
         {
           "src": "/api/github/webhook",
           "dest": "/api/default.js?route=github/webhook"
+        },
+        {
+          "src": "/api/hosts/install-script",
+          "dest": "/api/default.js?route=hosts/install-script"
         },
         {
           "src": "/api/maintenance/provider-keys-rewrap",

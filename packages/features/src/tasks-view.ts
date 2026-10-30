@@ -37,6 +37,7 @@ import {
   workspaceSentryAnswerSchema,
   workspaceSentryDisconnectRequestSchema,
 } from "./sentry-install-wire.js";
+import { wireUuidSchema } from "./service-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
   listedPullRequestSchema,
@@ -55,6 +56,7 @@ import {
   taskFileWindowSchema,
   taskPrioritySchema,
   taskPullRequestsSchema,
+  taskRelationChangeRequestSchema,
   taskRenameRequestSchema,
   taskSchema,
   taskSkillsSchema,
@@ -345,6 +347,22 @@ export const tasksBlockParamsSchema = EffectSchema.Struct({
 
 export type TasksBlockParams = typeof tasksBlockParamsSchema.Type;
 
+/** A task's parent set or cleared, as the window asks it: the task, and the parent the service takes, null for none. */
+export const tasksSetParentParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  parentTaskId: EffectSchema.NullOr(wireUuidSchema),
+});
+
+export type TasksSetParentParams = typeof tasksSetParentParamsSchema.Type;
+
+/** One relation of a task moved to another kind, as the window asks it: the task, and the change the service takes. */
+export const tasksChangeRelationParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  relation: taskRelationChangeRequestSchema,
+});
+
+export type TasksChangeRelationParams = typeof tasksChangeRelationParamsSchema.Type;
+
 /** Why a task call answered nothing a window can draw. */
 export const TASK_CALL_FAILURE = {
   /** The call never reached an answer: no credential, the network, a refusal, a shape not read. */
@@ -449,6 +467,47 @@ export const tasksBlockAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksBlockAnswer = typeof tasksBlockAnswerSchema.Type;
+
+/** Why a parent write wrote nothing a call's other reasons do not say: the task would descend from itself, or the parent works in another repository. */
+export const TASK_PARENT_FAILURE = {
+  CYCLE: "parent-cycle",
+  REPOSITORY_DIFFERS: "parent-repository-differs",
+} as const;
+
+/** Why a parent write wrote nothing: the service did not answer, a task is not the account's or not of the workspace, or the parent's own reasons. */
+const PARENT_CALL_FAILURES = [
+  TASK_CALL_FAILURE.UNANSWERED,
+  TASK_CALL_FAILURE.NOT_FOUND,
+  TASK_PARENT_FAILURE.CYCLE,
+  TASK_PARENT_FAILURE.REPOSITORY_DIFFERS,
+] as const;
+
+export type ParentCallFailure = (typeof PARENT_CALL_FAILURES)[number];
+
+/** A task's parent set or cleared, as the window hears it: the parent as it then stands, null for none, or why it is unchanged. */
+export const tasksSetParentAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ parentTaskId: EffectSchema.NullOr(EffectSchema.String) }),
+  EffectSchema.Struct({ failure: EffectSchema.Literals(PARENT_CALL_FAILURES) }),
+]);
+
+export type TasksSetParentAnswer = typeof tasksSetParentAnswerSchema.Type;
+
+/** Why a relation's move wrote nothing: a block's reasons, or a parent's. */
+const RELATION_CALL_FAILURES = [...BLOCK_CALL_FAILURES, ...PARENT_CALL_FAILURES] as const;
+
+export type RelationCallFailure = (typeof RELATION_CALL_FAILURES)[number];
+
+/** One relation of a task moved, as the window hears it: the task's relations as they then stand, or why they are unchanged. */
+export const tasksChangeRelationAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    blockedBy: EffectSchema.Array(EffectSchema.String),
+    blocks: EffectSchema.Array(EffectSchema.String),
+    parentTaskId: EffectSchema.NullOr(EffectSchema.String),
+  }),
+  EffectSchema.Struct({ failure: EffectSchema.Literals(RELATION_CALL_FAILURES) }),
+]);
+
+export type TasksChangeRelationAnswer = typeof tasksChangeRelationAnswerSchema.Type;
 
 /** The developer's edit of a task's document, as the window asks it saved: the task, and the edit as the service takes it. */
 export const tasksEditParamsSchema = EffectSchema.Struct({

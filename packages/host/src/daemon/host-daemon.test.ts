@@ -11,6 +11,7 @@ import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
 import { Environment, reporterLayer } from "../effect/seams.js";
 import { readHostDevice } from "../host-device-record.js";
+import { fakeClis } from "../testing/fake-sandbox.js";
 import { scriptedSpawner } from "../testing/scripted-spawner.js";
 import { hostDaemon } from "./host-daemon.js";
 import { enrollHostDevice } from "./host-device.js";
@@ -52,6 +53,7 @@ const platformOn = (os: HostOs, stateRoot: string) =>
     stateRoot,
     smolvm: SMOLVM,
     user: { uid: 990, gid: 990 },
+    clis: fakeClis(),
   });
 
 /** Every request the fake saw at the path given. */
