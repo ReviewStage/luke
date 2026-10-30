@@ -1228,7 +1228,10 @@ function useOwnReplyQueue(): ReplyQueue {
     held.current = next(held.current);
     setLines(held.current);
   }, []);
-  return useMemo(() => ({ after, settled, lines, now, change }), [after, settled, lines, now, change]);
+  return useMemo(
+    () => ({ after, settled, lines, now, change }),
+    [after, settled, lines, now, change],
+  );
 }
 
 /** The reply queue the comments' scope holds (`CommentFocusScope`), which every thread's field shares. */
