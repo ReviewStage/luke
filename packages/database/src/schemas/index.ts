@@ -22,6 +22,7 @@ export * from "./github-personal-token.js";
 export * from "./github-rate-hold.js";
 export * from "./github-repository-read.js";
 export * from "./host-install-token.js";
+export * from "./host-pairing.js";
 export * from "./inbox.js";
 export * from "./inbox-item-read.js";
 export * from "./inbox-message.js";

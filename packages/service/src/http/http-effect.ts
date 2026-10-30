@@ -72,6 +72,7 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.TASK_BLOCK_CYCLE]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.TASK_PARENT_CYCLE]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_STATE_STALE]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.HOST_PAIRING_HELD]: HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -88,6 +89,7 @@ export type HostedRefusal = {
   readonly localAgentRefusal?: LocalAgentRefusal;
   readonly refusedDevice?: RefusedDevice;
   readonly minimumVersion?: string;
+  readonly heldUntil?: number;
 };
 
 /**
@@ -187,6 +189,8 @@ export const HOSTED_REFUSAL = {
   TASK_PARENT_CYCLE: { error: HOSTED_API_ERROR.TASK_PARENT_CYCLE },
   /** A device agent's save named a generation no longer its newest; nothing was granted or committed. */
   AGENT_STATE_STALE: { error: HOSTED_API_ERROR.AGENT_STATE_STALE },
+  /** The account named too many pairing codes no pending pairing has (`hostPairingHeld`, which names until when); nothing was read or written. */
+  HOST_PAIRING_HELD: { error: HOSTED_API_ERROR.HOST_PAIRING_HELD },
 } as const satisfies Record<string, HostedRefusal>;
 
 /** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */
@@ -211,6 +215,11 @@ export function localAgentRefused(
 /** A host's daemon below the floor given, named so the daemon can say which version to upgrade to. */
 export function hostUpgradeNeeded(minimumVersion: string): HostedRefusal {
   return { ...HOSTED_REFUSAL.HOST_UPGRADE_NEEDED, minimumVersion };
+}
+
+/** An account's pairing guesses held until the instant given, in epoch milliseconds, named so the words can say when to try again. */
+export function hostPairingHeld(heldUntil: number): HostedRefusal {
+  return { ...HOSTED_REFUSAL.HOST_PAIRING_HELD, heldUntil };
 }
 
 /** No credential of the account's pays for a coding agent on the provider's models, named so the words can say which to connect. */

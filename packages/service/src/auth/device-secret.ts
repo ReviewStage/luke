@@ -1,7 +1,12 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { hostBySecret, recordHostVersion } from "@luke/database/models/host-store";
-import { HOST_WIRE, hostVersionMeets, readHostVersion } from "@luke/features/host-wire";
+import {
+  HOST_USER_CODE,
+  HOST_WIRE,
+  hostVersionMeets,
+  readHostVersion,
+} from "@luke/features/host-wire";
 import { Effect, Option } from "effect";
 import {
   HOSTED_REFUSAL,
@@ -12,7 +17,7 @@ import {
 import { CREDENTIAL_HEADER } from "./session-credential.js";
 
 /**
- * device-secret.ts -- a host's own credentials: minting an install token or a device secret, and reading the host a request's bearer names.
+ * device-secret.ts -- a host's own credentials: minting an install token, a device secret, a pairing's poll secret, or its user code, and reading the host a request's bearer names.
  *
  * A host calls the service on a device secret (`@luke/features/host-wire`),
  * as `Authorization: Bearer lkd_…`, never the desktop's sign-in, and with
@@ -20,7 +25,10 @@ import { CREDENTIAL_HEADER } from "./session-credential.js";
  * the install token a box enrolls with and the secret it is answered are
  * minted here, answered once, and kept by the store only as their SHA-256
  * (`@luke/database/models/host-store`), so a secret is looked up by its
- * hash and a database read never yields one.
+ * hash and a database read never yields one. A pairing box's poll secret
+ * is minted, answered, and kept the same way; its user code is the one
+ * thing a member types or follows a link to, eight letters drawn evenly
+ * from `HOST_USER_CODE.ALPHABET`, about 34 bits.
  *
  * `hostCallerOf` is the one door every host-facing route reads its caller
  * through, the device-agents procedures and the runner token route alike:
@@ -67,6 +75,12 @@ export function mintHostSecret(prefix: string): MintedSecret {
   return { secret, hash: hostSecretHash(secret) };
 }
 
+/** A fresh user code: its eight letters, each drawn evenly from the alphabet, with no dash. */
+export function mintHostUserCode(): string {
+  const { ALPHABET, LENGTH } = HOST_USER_CODE;
+  return Array.from({ length: LENGTH }, () => ALPHABET[randomInt(ALPHABET.length)]).join("");
+}
+
 /** The secret of the prefix given a request's bearer carries, or nothing where it carries another bearer or none. */
 function presentedBearer(request: Request, prefix: string): string | undefined {
   const authorization = request.headers.get(CREDENTIAL_HEADER.AUTHORIZATION)?.trim() ?? "";
@@ -83,6 +97,11 @@ function presentedDeviceSecret(request: Request): string | undefined {
 /** The install token an enroll's bearer carries, or nothing where it carries another bearer or none. */
 export function presentedInstallToken(request: Request): string | undefined {
   return presentedBearer(request, HOST_WIRE.INSTALL_TOKEN_PREFIX);
+}
+
+/** The poll secret a pairing box's poll carries as its bearer, or nothing where it carries another bearer or none. */
+export function presentedPollSecret(request: Request): string | undefined {
+  return presentedBearer(request, HOST_WIRE.POLL_SECRET_PREFIX);
 }
 
 /** The daemon version a request carries, trimmed, or nothing where it carries none. */
