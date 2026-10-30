@@ -22,6 +22,7 @@
  * anywhere else.
  */
 
+import { PRODUCT_PLATFORM } from "@luke/features/analytics";
 import { feedbackDelivery } from "@luke/features/feedback";
 import type { LinkPlatform } from "@luke/features/link-open";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
@@ -175,7 +176,7 @@ function seamLayers(storage: Storage, fixture: RunProfile | undefined) {
   return Layer.mergeAll(
     Layer.succeed(StateRoot, STATE_ROOT),
     Layer.succeed(RunMode, runModeFor({ capture: false, fixture: fixture !== undefined })),
-    Layer.succeed(AppIdentity, { appVersion, packaged: true }),
+    Layer.succeed(AppIdentity, { appVersion, packaged: true, platform: PRODUCT_PLATFORM.WEB }),
     // A tab has no environment to read an override from.
     Layer.succeed(Environment, ConfigProvider.fromEnv({ env: {} })),
     Layer.succeed(IdSource, { create: () => crypto.randomUUID() }),

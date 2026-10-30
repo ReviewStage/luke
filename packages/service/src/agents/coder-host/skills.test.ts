@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { createAgent } from "@luke/database/models/agent-store";
 import {
   type InstalledSkillFileInput,
@@ -11,6 +12,7 @@ import {
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { noNetwork } from "@luke/wire/testing";
 import { sql } from "drizzle-orm";
 import { Effect, Layer, Option } from "effect";
@@ -31,7 +33,8 @@ import { agentSkills, nativeSkills } from "./skills.js";
  * skills, then the member's personal ones, a name offered once by the
  * earliest; installed skills for an agent with no repository too; an
  * installed skill's supporting files handed to eve; a native harness handed
- * the installed skills alone, whole; a skill turned off left out; and an
+ * the installed skills alone, whole; a skill turned off left out; none
+ * installed offered while the member has the Skills experiment off; and an
  * installed read that fails offering the repository's alone.
  *
  * Synthetic accounts, repositories, and skills throughout.
@@ -93,10 +96,11 @@ const install = (
 
 const PERSONAL: InstalledSkillOwner = { scope: INSTALLED_SKILL_SCOPE.PERSONAL };
 
-/** An account with an agent on a task of its own workspace, on acme/relay or on no repository. */
-const startAgent = (repository: string | null) =>
+/** An account with an agent on a task of its own workspace, on acme/relay or on no repository, with the Skills experiment on unless asked otherwise. */
+const startAgent = (repository: string | null, skillsOn = true) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
+    yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.SKILLS]: skillsOn } });
     const task = yield* startTask(userId, {
       name: "Teammate invitations",
       ...(repository === null ? {} : { repository }),
@@ -167,6 +171,22 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a coding agent's skills", (it)
         ["release-notes", "pr-style"],
       );
     }),
+  );
+
+  it.effect(
+    "offers an agent none of its member's installed skills while they have Skills off",
+    () =>
+      Effect.gen(function* () {
+        const { userId, agent, target, workspace } = yield* startAgent(null, false);
+        yield* install(userId, workspace, "release-notes", "The workspace's release notes.");
+        yield* install(userId, PERSONAL, "pr-style", "My pr style.");
+
+        const skills = yield* agentSkills(target, agent).pipe(
+          Effect.provide(repositoryWithSkills([])),
+        );
+
+        assert.deepEqual(skills, []);
+      }),
   );
 
   it.effect(

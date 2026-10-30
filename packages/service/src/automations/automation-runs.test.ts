@@ -69,6 +69,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveMessage,
 } from "../agents/eve-host/eve-sessions.js";
+import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { closeInboxItem, postInboxThread } from "../inbox/inbox-store.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
@@ -157,8 +158,21 @@ function fakeEve() {
   return { opened, sent, eveFor: (account: string) => Effect.succeed(sessions(account)) };
 }
 
-/** What a run reaches beside the store: GitHub reaching the repository, and the catalog. */
-const services = Layer.mergeAll(githubReaching(INSTALLATIONS).layer, modelCatalogOf(CATALOG));
+/** What the runs counted, across the file; a case reads its own owner's. */
+const ANALYTICS = recordingProductAnalytics();
+
+/** The properties of each event of one name the account was counted for, in order. */
+const countedProperties = (userId: string, name: string) =>
+  ANALYTICS.recorded
+    .filter((event) => event.userId === userId && event.name === name)
+    .map((event) => event.properties);
+
+/** What a run reaches beside the store: GitHub reaching the repository, the catalog, and the analytics. */
+const services = Layer.mergeAll(
+  githubReaching(INSTALLATIONS).layer,
+  modelCatalogOf(CATALOG),
+  ANALYTICS.layer,
+);
 
 /** An owner, a task on the repository of its workspace's installation (or none), and an automation on it due a minute ago, on a weekday schedule unless another trigger is named. */
 const openAutomation = (
@@ -362,6 +376,10 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           eve.opened.every((each) => JSON.stringify(each.message).includes("luke://mcp/sentry")),
           "the agent is still told the words the outsider wrote",
         );
+        assert.deepEqual(countedProperties(owner, SERVER_EVENT.AUTOMATION_RUN_START), [
+          { trigger_kind: "webhook" },
+          { trigger_kind: "github" },
+        ]);
       }),
   );
 
@@ -937,6 +955,11 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         reason: AUTOMATION_RUN_REASON.DAILY_CAP,
       });
       assert.equal(eve.opened.length, 2, "only the two started runs opened a session");
+      assert.deepEqual(
+        countedProperties(concurrent.owner, SERVER_EVENT.AUTOMATION_RUN_START),
+        [{ trigger_kind: "manual" }],
+        "the skipped run is not counted as a start",
+      );
     }),
   );
 

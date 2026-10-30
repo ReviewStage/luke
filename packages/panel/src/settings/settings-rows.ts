@@ -50,6 +50,7 @@ const PAGE_CAPABILITY = {
  * while the account has it off, the page is not listed, found, or drawn.
  */
 const PAGE_EXPERIMENT: Partial<Record<SettingsView, Experiment>> = {
+  [SETTINGS_VIEW.SKILLS]: EXPERIMENT.SKILLS,
   [SETTINGS_VIEW.MEMORY]: EXPERIMENT.MEMORY,
 };
 

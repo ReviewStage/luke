@@ -14,12 +14,15 @@ import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "@luke/features/pull-request-
 import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActPayload } from "@luke/host/contract";
+import { EXPERIMENT } from "@luke/settings";
+import { experimentsOn } from "@luke/settings/testing";
 import { ACTION_RESULT_STATUS, type WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import type { ActHandle } from "../act.js";
+import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ToastHost } from "../toast.js";
 import { type AgentsControl, MODELS_READ, useAgents } from "./use-agents.js";
@@ -437,6 +440,7 @@ test("with no plan open, the agent named is read as its page and held as a list 
 });
 
 test("with no plan open, a / reads the agent's own repository's skills through the workspace its page names, there being no plan to read them by", async () => {
+  handState(experimentsOn(EXPERIMENT.SKILLS));
   const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
   tab.answer(ACT_KIND.AGENTS_PAGE, {
     agent: {

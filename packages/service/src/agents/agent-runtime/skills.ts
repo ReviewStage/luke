@@ -17,7 +17,8 @@
  * where the skill stands in the agent's own view of the repository, so the
  * files it names can be found; its body is handed as markdown alone, since
  * the checkout holds its files. An installed skill is read from the store
- * (`installed-skill-store.ts`'s `sessionInstalledSkills`): the enabled ones
+ * (`installed-skill-store.ts`'s `sessionInstalledSkills`), while the member
+ * has the Skills experiment on (`EXPERIMENT.SKILLS`): the enabled ones
  * of the workspace the agent works in, where its member is one of it, and
  * the member's own personal ones, which follow them into every workspace.
  * Its supporting files are handed to eve beside its body, and eve writes
@@ -29,6 +30,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
+import { accountExperimentOn } from "@luke/database/models/account-store";
 import {
   type InstalledSkillWithFiles,
   sessionInstalledSkills,
@@ -37,6 +39,7 @@ import type { ConversationTarget } from "@luke/database/models/writer";
 import { INSTALLED_SKILL_MAIN_FILE } from "@luke/features/installed-skill-wire";
 import { readSkillFile } from "@luke/features/skill-file";
 import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { defineSkill, type SkillDefinition } from "eve/skills";
@@ -160,17 +163,20 @@ function installedAgentSkill(skill: InstalledSkillWithFiles): AgentSkill | undef
  * The enabled skills the member installed into Luke, as eve is handed them:
  * the workspace's, where the agent's workspace is one the member is still
  * in, then the member's own personal ones, each with its supporting files.
- * None where the store could not be read, which is logged, and a skill eve
- * could not take is left out, which is logged too.
+ * None while the member has the Skills experiment off, and none where the
+ * store could not be read, which is logged; a skill eve could not take is
+ * left out, which is logged too.
  */
 export const installedSkills = /* @__PURE__ */ Effect.fn("web/installedSkills")(function* (
   target: ConversationTarget,
   /** The workspace whose skills the session is offered, as the caller reaches it. */
   workspaceOf: WorkspaceOf,
 ): Effect.fn.Return<readonly AgentSkill[], never, DatabaseServices> {
-  const read = Effect.flatMap(workspaceOf, (workspace) =>
-    sessionInstalledSkills(target.userId, Option.getOrNull(workspace)),
-  );
+  const read = Effect.gen(function* () {
+    if (!(yield* accountExperimentOn(target.userId, EXPERIMENT.SKILLS))) return [];
+    const workspace = yield* workspaceOf;
+    return yield* sessionInstalledSkills(target.userId, Option.getOrNull(workspace));
+  });
   const installed = yield* read.pipe(
     Effect.catch((failure) =>
       Effect.as(

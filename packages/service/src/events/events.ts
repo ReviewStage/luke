@@ -4,6 +4,8 @@ import { Clock, Effect, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   PRODUCT_EVENT_MAXIMUM_AGE_MS,
+  PRODUCT_PLATFORM,
+  type ProductClientPlatform,
   type ProductEventBatch,
   type ProductEventBuild,
   productEventBatchFromWire,
@@ -35,8 +37,14 @@ import {
  * copied forward, and no property can hold free text.
  */
 
-/** The `$lib` tag every batch is stamped with: the desktop is the one app that posts them. */
-const PRODUCT_EVENT_LIB = "luke-desktop";
+/** The `$lib` tag a batch is stamped with, by the platform that sent it. */
+const PRODUCT_EVENT_LIB = {
+  [PRODUCT_PLATFORM.DESKTOP]: "luke-desktop",
+  [PRODUCT_PLATFORM.WEB]: "luke-web",
+} as const satisfies Record<ProductClientPlatform, string>;
+
+/** The property every forwarded event names its platform under. */
+const PLATFORM_PROPERTY = "platform";
 
 /** The property every forwarded event names the deployment that recorded it under. */
 const ENVIRONMENT_PROPERTY = "environment";
@@ -97,12 +105,16 @@ export interface EventsOptions {
  * Every event is also stamped with the deployment that recorded it and with
  * what the desktop said about the build the batch came from, so a preview's,
  * a local service's, or a development build's counts can be filtered from
- * production's. They go under the event's own properties, so an event that
+ * production's. A batch that names no platform comes from a build older than
+ * the label, which was the desktop alone, so it reads as desktop. They go under the event's own properties, so an event that
  * names its own `app_version` keeps it.
  */
 function batchDocument(
   events: ProductEventBatch,
-  stamp: ProductEventBuild & { readonly [ENVIRONMENT_PROPERTY]: string },
+  stamp: ProductEventBuild & {
+    readonly [ENVIRONMENT_PROPERTY]: string;
+    readonly [PLATFORM_PROPERTY]: ProductClientPlatform;
+  },
   projectApiKey: string,
   userId: string,
   now: number,
@@ -116,7 +128,7 @@ function batchDocument(
         ...stamp,
         ...event.properties,
         $geoip_disable: true,
-        $lib: PRODUCT_EVENT_LIB,
+        $lib: PRODUCT_EVENT_LIB[stamp.platform],
       };
       return {
         event: event.name,
@@ -156,8 +168,10 @@ export function recordEvents(
     // Note that a batch of nothing but retired names is accepted with nothing
     // to post, because the older build that sent it is not at fault.
     if (events.length === 0) return { accepted: 0 };
+    const build = productEventBuildFromWire(payload);
     const stamp = {
-      ...productEventBuildFromWire(payload),
+      ...build,
+      [PLATFORM_PROPERTY]: build.platform ?? PRODUCT_PLATFORM.DESKTOP,
       [ENVIRONMENT_PROPERTY]: trimmedText(options.deployment) ?? UNNAMED_DEPLOYMENT,
     };
 

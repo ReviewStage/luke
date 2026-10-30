@@ -306,14 +306,13 @@ function press(listed: string): void {
   act(() => row.click());
 }
 
-/** The Settings pages by their names, in the order the palette lists them: Account's own page is Account, and the Workspace page, whose head names the listed workspace, is Workspace here. */
+/** The Settings pages by their names, in the order the palette lists them with no experiment on: Account's own page is Account, and the Workspace page, whose head names the listed workspace, is Workspace here. */
 const SETTINGS_PAGES = [
   "Account",
   "Workspace",
   "Agents",
   "Hosts",
   "Integrations",
-  "Skills",
   "Appearance",
   "This Mac",
   "Experimental",

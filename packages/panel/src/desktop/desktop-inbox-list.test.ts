@@ -14,7 +14,7 @@ import { TASK_STATUS } from "@luke/features/task-wire";
 import type { AppInboxTask, AppInboxTaskHolding } from "@luke/host/app-state";
 import { Effect } from "effect";
 import { act } from "react";
-import { beforeAll, onTestFinished, test, vi } from "vitest";
+import { beforeAll, onTestFinished, test } from "vitest";
 import { SHELL_ROOM } from "../shell-room.js";
 import { FAKE_ANSWER } from "../testing/app-bridge.js";
 import { editorBundleLanded } from "../testing/composer.js";
@@ -1370,55 +1370,6 @@ test("Mark all as read sends one write and asks no task or agent again, since ea
   assert.deepEqual(world.main.asked.slice(followsBefore), [], "nothing is followed again");
   assert.deepEqual(taskReads.slice(tasksBefore), []);
   assert.deepEqual(world.agentReads.slice(agentsBefore), []);
-});
-
-test("a row swiped right marks its item: a long swipe marks an unread item read as it is let go, a short one leaves the row open on an Unread button for a read one, and neither opens the item", async () => {
-  // Note that the unread item is a teammate's, so it is not the item standing chosen, which would read it as it opens.
-  world.inboxes.set(BILLING.id, [THRESHOLD, { ...RETRY, unread: true, startedBy: TEAMMATE }]);
-  const { page } = mount([], { chosen: ON_THRESHOLD });
-  await settle();
-  world.readMarks = [];
-  const retry = "How is a failed email retried?";
-  const item = rowNamed(page, retry).closest("li") ?? assert.fail("the row's item");
-  vi.spyOn(item, "getBoundingClientRect").mockReturnValue(
-    DOMRect.fromRect({ width: 300, height: 56 }),
-  );
-  Object.assign(item, { setPointerCapture: () => undefined });
-  // Note that every event is stamped at one instant, since the swipe reads the hand's speed off the stamps and jsdom's come off the wall clock; never at 0, which React replaces with the wall clock's.
-  const at = (type: string, x: number) =>
-    Object.defineProperty(
-      new PointerEvent(type, { bubbles: true, button: 0, clientX: x, clientY: 10, pointerId: 1 }),
-      "timeStamp",
-      { value: 1 },
-    );
-  const swipe = (to: number) =>
-    act(() => {
-      const press = rowNamed(page, retry);
-      press.dispatchEvent(at("pointerdown", 10));
-      press.dispatchEvent(at("pointermove", 30));
-      press.dispatchEvent(at("pointermove", 10 + to));
-      press.dispatchEvent(at("pointerup", 10 + to));
-      press.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
-    });
-  swipe(220);
-  await settle();
-  assert.deepEqual(world.readMarks, [`read:${RETRY.id}`]);
-  assert.equal(unreadOf(page, retry), false);
-
-  swipe(40);
-  await settle();
-  const button = item.querySelector<HTMLButtonElement>("button[data-swipe-act]");
-  assert.equal(button?.textContent, "Unread");
-  assert.equal(button?.getAttribute("aria-label"), "Mark as unread", "named as the menu names it");
-  act(() => button?.click());
-  await settle();
-  assert.deepEqual(world.readMarks, [`read:${RETRY.id}`, `unread:${RETRY.id}`]);
-  assert.equal(unreadOf(page, retry), true);
-  assert.equal(
-    page.querySelector('[aria-current="page"] .luke-list-row-title')?.textContent,
-    "Alert at 80%?",
-    "a swipe opens nothing",
-  );
 });
 
 /** The chip over the list saying whose items it holds, as a reader meets it: its words and its ×'s name; none where none stands. */

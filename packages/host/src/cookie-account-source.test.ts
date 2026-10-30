@@ -5,7 +5,7 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { accountCall, CALL_FAULT, HOSTED_SERVICE_PATH, NO_CREDENTIAL } from "@luke/features";
-import { PRODUCT_EVENT } from "@luke/features/analytics";
+import { PRODUCT_EVENT, PRODUCT_PLATFORM } from "@luke/features/analytics";
 import { ProductEventSender } from "@luke/features/analytics/sender";
 import { LINK_OPEN } from "@luke/features/link-open";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD } from "@luke/gateway";
@@ -424,6 +424,7 @@ describe("the cookie account source", () => {
         serviceBaseUrl: ORIGIN,
         appVersion: "0.2.0",
         packaged: false,
+        platform: PRODUCT_PLATFORM.DESKTOP,
         sends: true,
         credential: session.credential,
         confirmAccount: session.confirmAccount,
@@ -1045,7 +1046,11 @@ const machineOver = (stateRoot: string, accountSource: Layer.Layer<AccountSource
     ),
     Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
     // Packaged, as a browser tab is, so usage data is shared and the counts are sent.
-    Layer.succeed(AppIdentity, { appVersion: "0.2.0", packaged: true }),
+    Layer.succeed(AppIdentity, {
+      appVersion: "0.2.0",
+      packaged: true,
+      platform: PRODUCT_PLATFORM.DESKTOP,
+    }),
     accountSource,
     NodeFileSystem.layer,
     NodePath.layer,

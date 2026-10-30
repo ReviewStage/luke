@@ -10,6 +10,7 @@ import {
   RUNNER_HARNESS,
 } from "@luke/agent-runner/protocol";
 import { Database, type DatabaseServices } from "@luke/database/core/query";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { queueAgentMessage, readAgentQueue } from "@luke/database/models/agent-queue-store";
 import {
   claimAgentRunnerLease,
@@ -49,6 +50,7 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
@@ -607,6 +609,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
         const { userId, agent } = yield* openAgent;
+        // An installed skill is handed only to a member with the Skills experiment on.
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.SKILLS]: true } });
         const skillFile =
           "---\nname: sentry-triage\ndescription: Triage a Sentry issue.\nallowed-tools: Bash\n---\nRun `scripts/triage.sh`.\n";
         yield* installSkill(userId, {

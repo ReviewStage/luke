@@ -1072,7 +1072,8 @@ email address and the UTC day it was last sent, and only the newest day; it is
 never sent anywhere. Nothing you type
 or say and nothing from a session can appear in one: no titles, branches, file
 paths, prompts, or error text. Each count also carries Luke's version, whether
-it is a released build or a development one, and which deployment of our
+it is a released build or a development one, whether it came from Luke for Mac
+or Luke in a browser tab (`platform`), and which deployment of our
 service recorded it. Settings › Account › "Share usage data" turns these
 counts off (see "Your choices").
 
@@ -1086,10 +1087,23 @@ kind of agent it is), an agent stopped or archived (with what kind of agent
 it is, and whether a task's Running switch stopped its whole tree), a pull
 request an agent opened (as you or as Luke's GitHub App, and whether as a
 draft) and one it opened merged, an Inbox item
-answered, an issue filed, an automation made (with
-what triggers it), an integration connected or disconnected (with which
+answered, an automation made (with
+what triggers it), a message handed to an agent's runner (with which harness it
+runs, how the message reached it, whether a turn was under way, and how long the
+agent had been idle), an integration connected or disconnected (with which
 provider), and a pull request's chapters generated (with how it came out, how
-many chapters and parts of the diff they hold, and how long it took). These counts are event names and values from a fixed list too, and
+many chapters and parts of the diff they hold, and how long it took). It
+counts how a team comes together and sets up the same way, each under the
+account that did it: an account's first sign-in (with whether it was through
+Google or GitHub), an invitation to a workspace sent (with the role it offers)
+and accepted, a post a member made on a thread (with whether it answered an ask
+and whether it carried a picture or a file), a plan a member edited, a comment
+a member wrote on one (with whether it replied on a thread or started one), an
+automation run started (with what fired it: its schedule, GitHub, a webhook, an
+integration, or Run now), counted under the automation's owner, the GitHub App
+connected to a workspace, and a Linux host or this Mac enrolled (with which).
+What an agent writes on a thread or in a plan is not counted among these. These counts are event names and values from a fixed list too, are labelled
+`platform: server`, and
 carry no titles, names, repositories, branches, prompts, messages, or the
 words of any of them. They go from our service to PostHog, so PostHog never
 sees your network address for them, and deleting your account erases them

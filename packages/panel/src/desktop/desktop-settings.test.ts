@@ -45,12 +45,12 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 const ignore = () => undefined;
 const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 
-/** The sidebar's groups and their rows, in the order the approved layout lists them, where no workspace is listed to head the first. */
+/** The sidebar's groups and their rows, in the order the approved layout lists them, where no workspace is listed to head the first and no experiment is on. */
 const PAGE_GROUPS = [
   { heading: "Workspace", rows: ["Workspace"] },
   {
     heading: "Account",
-    rows: ["Account", "Agents", "Hosts", "Integrations", "Skills", "Experimental"],
+    rows: ["Account", "Agents", "Hosts", "Integrations", "Experimental"],
   },
   {
     heading: "This Mac",
@@ -926,7 +926,6 @@ const PAGE_KEEPS = [
   { title: "Workspace", keep: ["Follows your workspace"] },
   { title: "Agents", keep: ["Follows your account"] },
   { title: "Integrations", keep: ["Follows your account"] },
-  { title: "Skills", keep: ["Follows your account"] },
   { title: "Experimental", keep: ["Follows your account"] },
   { title: "Appearance", keep: ["Kept on this Mac"] },
   { title: "This Mac", keep: ["Kept on this Mac"] },

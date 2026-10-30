@@ -3,12 +3,14 @@ import { type SettledAgentTurn, SettledTurnListener } from "@luke/database/model
 import { PULL_REQUEST_CHAPTERS_FAILURE } from "@luke/database/pull-request-chapters-vocabulary";
 import type { ConversationRuntime } from "@luke/database/storage-vocabulary";
 import type { AgentKind, AgentMachineKind } from "@luke/features/agent-wire";
-import type { AutomationTriggerKind } from "@luke/features/automation-wire";
+import type { AutomationFiringKind, AutomationTriggerKind } from "@luke/features/automation-wire";
 import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { TURN_FAILURE } from "@luke/features/turn-run";
+import type { INVITATION_ROLE } from "@luke/features/workspace-invitation-wire";
 import { TURN_STATUS } from "@luke/wire";
 import { Clock, Context, Effect, Layer, Option, Redacted } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
+import { PRODUCT_PLATFORM } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import { afterResponse } from "../http/after-response.js";
 import { type PosthogBatch, postBatchEffect } from "../providers/posthog.js";
@@ -27,6 +29,11 @@ import { type PosthogBatch, postBatchEffect } from "../providers/posthog.js";
  * model, an effort). Nothing typed, nothing a model wrote, and no title, branch,
  * repository, prompt, or row id has a property it could travel in, which the
  * types below enforce at each call site.
+ *
+ * What it counts of a team is the member's own act: a thread post or a plan
+ * edit or comment an agent made, through its own tools, is left out rather
+ * than counted under the member who started the agent, so a count of posts is
+ * a count of people talking, and an agent's work is the agent events'.
  *
  * The events are joined to the same person the desktop's are, by the account's
  * own user id, so PostHog's funnels run from the site's sign-in through the
@@ -50,6 +57,15 @@ export const SERVER_EVENT = {
   AGENT_STOP: "agent:stop",
   AGENT_ARCHIVE: "agent:archive",
   PULL_REQUEST_MERGE: "pull_request:merge",
+  ACCOUNT_SIGN_UP: "account:sign_up",
+  WORKSPACE_INVITE_SEND: "workspace:invite_send",
+  WORKSPACE_INVITE_ACCEPT: "workspace:invite_accept",
+  THREAD_POST: "thread:post",
+  PLAN_EDIT: "plan:edit",
+  PLAN_COMMENT: "plan:comment",
+  AUTOMATION_RUN_START: "automation:run_start",
+  GITHUB_APP_INSTALL: "github:app_install",
+  HOST_INSTALL: "host:install",
 } as const;
 
 type ServerEventName = (typeof SERVER_EVENT)[keyof typeof SERVER_EVENT];
@@ -131,6 +147,19 @@ export const SERVER_CHAPTERS_OUTCOME = {
   ...PULL_REQUEST_CHAPTERS_FAILURE,
 } as const;
 
+/** How an account signed in the first time: the provider's own id, or `unknown` where the request names none of ours. */
+export const SERVER_SIGN_IN_METHOD = {
+  GOOGLE: "google",
+  GITHUB: "github",
+  UNKNOWN: "unknown",
+} as const;
+
+/** What kind of machine first connected: a Linux box on an install token, or the Mac's own desktop. */
+export const SERVER_HOST_KIND = {
+  LUKE_HOST: "luke_host",
+  THIS_MAC: "this_mac",
+} as const;
+
 type Values<T> = T[keyof T];
 
 /**
@@ -139,7 +168,7 @@ type Values<T> = T[keyof T];
  * integration catalog's own id; every other value is a word from this file, or
  * a kind the store's own schema enumerates.
  */
-interface ServerEventProperties {
+export interface ServerEventProperties {
   [SERVER_EVENT.TASK_CREATE]: {
     source: Values<typeof SERVER_TASK_SOURCE>;
   };
@@ -194,6 +223,19 @@ interface ServerEventProperties {
   };
   [SERVER_EVENT.AGENT_ARCHIVE]: { agent_kind: AgentKind };
   [SERVER_EVENT.PULL_REQUEST_MERGE]: Record<string, never>;
+  [SERVER_EVENT.ACCOUNT_SIGN_UP]: { method: Values<typeof SERVER_SIGN_IN_METHOD> };
+  /** The role is the one the invitation offers, which only the plugin's two roles are. */
+  [SERVER_EVENT.WORKSPACE_INVITE_SEND]: { role: Values<typeof INVITATION_ROLE> };
+  [SERVER_EVENT.WORKSPACE_INVITE_ACCEPT]: Record<string, never>;
+  /** A member's post alone: whether it carried the answer to the thread's open ask, and whether it held a picture or a file. */
+  [SERVER_EVENT.THREAD_POST]: { answered_ask: boolean; has_media: boolean };
+  [SERVER_EVENT.PLAN_EDIT]: Record<string, never>;
+  /** A member's comment alone: whether it replied on a thread, or started one. */
+  [SERVER_EVENT.PLAN_COMMENT]: { is_reply: boolean };
+  /** Attributed to the automation's owner, whoever or whatever fired the run. */
+  [SERVER_EVENT.AUTOMATION_RUN_START]: { trigger_kind: AutomationFiringKind };
+  [SERVER_EVENT.GITHUB_APP_INSTALL]: Record<string, never>;
+  [SERVER_EVENT.HOST_INSTALL]: { kind: Values<typeof SERVER_HOST_KIND> };
 }
 
 /** One event as the service records it. */
@@ -228,6 +270,7 @@ function serverEventBatch(event: ServerEvent, projectApiKey: string, now: number
           // Without it an event with no address resolves to the data centre's.
           $geoip_disable: true,
           $lib: SERVER_EVENT_LIB,
+          platform: PRODUCT_PLATFORM.SERVER,
         },
       },
     ],

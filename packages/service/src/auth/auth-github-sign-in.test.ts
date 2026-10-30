@@ -4,6 +4,7 @@ import { memoryAdapter } from "better-auth/adapters/memory";
 import { Schema } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { WireValue } from "../core.js";
+import { authDatabaseHooks, withAuthCounts } from "./auth-counts.js";
 import { ACCOUNT_TOKEN_STORAGE, DISABLED_AUTH_PATHS, GITHUB_SIGN_IN } from "./auth-policy.js";
 
 /**
@@ -74,6 +75,7 @@ function authService() {
     baseURL: BASE_URL,
     secret: "fixture-session-secret-of-enough-length",
     database: memoryAdapter({ user: [], session: [], account: [], verification: [] }),
+    databaseHooks: authDatabaseHooks,
     account: ACCOUNT_TOKEN_STORAGE,
     disabledPaths: [...DISABLED_AUTH_PATHS],
     socialProviders: {
@@ -106,15 +108,21 @@ async function startSignIn(auth: Auth) {
   };
 }
 
-/** A whole GitHub sign-in: the press, GitHub's consent, and the callback landing; answers the session cookie. */
-async function signIn(auth: Auth) {
+/** A whole GitHub sign-in: the press, GitHub's consent, and the callback landing; answers the session cookie and what the hooks counted. */
+async function signInCounted(auth: Auth) {
   const { authorize, cookie } = await startSignIn(auth);
   const callback = new URL(`${BASE_URL}/api/auth/callback/github`);
   callback.searchParams.set("code", "github-code-under-test");
   callback.searchParams.set("state", authorize.searchParams.get("state") ?? "");
-  const landed = await auth.handler(new Request(callback, { headers: { cookie } }));
+  const { answer: landed, counts } = await withAuthCounts(() =>
+    auth.handler(new Request(callback, { headers: { cookie } })),
+  );
   assert.equal(landed.status, 302);
-  return cookiesFrom(landed);
+  return { cookie: cookiesFrom(landed), counts };
+}
+
+async function signIn(auth: Auth) {
+  return (await signInCounted(auth)).cookie;
 }
 
 beforeEach(() => {
@@ -159,4 +167,16 @@ test("the auth service hands no browser the GitHub token: the token endpoints ar
     assert.equal(response.status, 404, path);
     assert.equal((await response.text()).includes(APP_GRANT.access_token), false);
   }
+});
+
+test("a first GitHub sign-in is counted once as a sign-up under the new account, and the same account signing in again is not", async () => {
+  const auth = authService();
+  const first = await signInCounted(auth);
+  const session = await auth.api.getSession({ headers: new Headers({ cookie: first.cookie }) });
+  assert.ok(session);
+
+  assert.deepEqual(first.counts, [
+    { name: "account:sign_up", userId: session.user.id, properties: { method: "github" } },
+  ]);
+  assert.deepEqual((await signInCounted(auth)).counts, []);
 });

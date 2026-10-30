@@ -370,7 +370,7 @@ function heardBoth<E>(
 
 /**
  * The props an element spreads to carry a context menu beside handlers of
- * its own for the same events, as a row's swipe hears the same pointer:
+ * its own for the same events, as a card's press hears the same pointer:
  * each event heard by both, its own first; its own alone where it carries
  * no menu.
  */
