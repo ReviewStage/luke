@@ -2,9 +2,10 @@
    rows not drawn are the spacers before and after those drawn, the block's
    padding, which the component sets as it draws, and each
    row holds its children's margins, so the height it measures is the room
-   it takes. The browser's own scroll anchoring is left out of the run,
-   because the virtualizer holds the reader's place itself, and both would
-   move the scroll twice. */
+   it takes; a run of the caller's own list items sets the gap between them
+   as it sets the gap between its own rows. The browser's own scroll
+   anchoring is left out of the run, because the virtualizer holds the
+   reader's place itself, and both would move the scroll twice. */
 @layer components {
   .luke-virtual-rows {
     overflow-anchor: none;
@@ -14,7 +15,14 @@
     display: flow-root;
   }
 
-  .luke-virtual-row + .luke-virtual-row {
+  .luke-virtual-items {
+    margin: 0;
+    padding-inline: 0;
+    list-style: none;
+  }
+
+  .luke-virtual-row + .luke-virtual-row,
+  .luke-virtual-items > * + * {
     margin-block-start: var(--luke-virtual-gap);
   }
 }
