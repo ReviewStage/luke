@@ -605,33 +605,38 @@ export const DesktopInbox = memo(function DesktopInbox({
   );
   // The panel stands for the chosen item's task, so its links are written under the item's own workspace, as its pane's are.
   // Note that it follows the window's choice, so it stands as last drawn while a choice made here settles (`useChoiceFirst`).
+  // Note that the item's opener stands over the panel as over its pane, but not over the list, whose cards are other tasks'.
   const heldPanel = useHeldWhile(
     settling,
     drawing.panel ? (
-      <LinkWorkspaceProvider value={chosenLinkWorkspace}>
-        <InboxSidePanel
-          tasks={tasks}
-          drawing={{ ...drawing, panel: drawing.panel }}
-          focused={sideFocused}
-          taskId={taskId}
-          panelFor={panelFor}
-          repository={chosenTask?.repository ?? place?.repository ?? agents.agentRepository ?? null}
-          repositoryPlace={
-            taskId === undefined && place !== undefined && place.repository !== null
-              ? { workspaceId: place.workspaceId, repository: place.repository }
-              : undefined
-          }
-          pages={pages}
-          agents={named}
-          views={views}
-          mentions={mentions}
-          phone={
-            room === SHELL_ROOM.NARROW && chosen !== undefined
-              ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
-              : undefined
-          }
-        />
-      </LinkWorkspaceProvider>
+      <OpenHereProvider value={openHere}>
+        <LinkWorkspaceProvider value={chosenLinkWorkspace}>
+          <InboxSidePanel
+            tasks={tasks}
+            drawing={{ ...drawing, panel: drawing.panel }}
+            focused={sideFocused}
+            taskId={taskId}
+            panelFor={panelFor}
+            repository={
+              chosenTask?.repository ?? place?.repository ?? agents.agentRepository ?? null
+            }
+            repositoryPlace={
+              taskId === undefined && place !== undefined && place.repository !== null
+                ? { workspaceId: place.workspaceId, repository: place.repository }
+                : undefined
+            }
+            pages={pages}
+            agents={named}
+            views={views}
+            mentions={mentions}
+            phone={
+              room === SHELL_ROOM.NARROW && chosen !== undefined
+                ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
+                : undefined
+            }
+          />
+        </LinkWorkspaceProvider>
+      </OpenHereProvider>
     ) : null,
   );
   return (
