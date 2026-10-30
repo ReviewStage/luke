@@ -2236,12 +2236,9 @@ export function CommandPalette({
       inboxAsked ? inboxSearch.items.map((listed) => ({ listed, words: inboxWords(listed) })) : [],
     [inboxAsked, inboxSearch.items],
   );
-  // Note that the channels are those the window holds, read again as the palette opens, as the sidebar reads them as it is shown.
+  // Note that the channels are those the host holds for the window, as the sidebar draws them.
   const channelsOn = filters.includes(PALETTE_FILTER.CHANNELS);
-  const channels = useChannels(
-    channelsOn && tasks.signedIn ? tasks.workspace?.id : undefined,
-    open,
-  );
+  const channels = useChannels(channelsOn && tasks.signedIn ? tasks.workspace?.id : undefined);
   // Note that the automations are followed the first time they are searched, on the Inbox's terms.
   const automationsAsked =
     open && tasks.signedIn && (filter === PALETTE_FILTER.AUTOMATIONS || tokens.length > 0);

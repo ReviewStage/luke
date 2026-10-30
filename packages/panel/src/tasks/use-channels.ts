@@ -4,64 +4,41 @@ import {
   type ChannelsView,
 } from "@luke/features/channel-view";
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
+import { LIVE_READ } from "@luke/features/live-wire";
 import { ACT_UNREACHED_WORDS } from "@luke/features/words";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { STATUS_TONE } from "@luke/ui";
-import { keepIdentity } from "@luke/wire";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { askAct, useAct } from "../act.js";
-import { streamFrom } from "../act-stream.js";
-import { TOAST_HOLD, type ToastNotice, useToast } from "../toast.js";
-import { useExperiment } from "../use-app-state.js";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { tellAct, useAct } from "../act.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
+import { APP_SLICE, useAppSlice, useExperiment } from "../use-app-state.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { CHANNEL_SHOWN, channelShown, generalChannel } from "./channels-model.js";
 
 /**
- * use-channels.ts -- a workspace's channels as the window holds them, the channel the Inbox is narrowed to, and its archived channels, each read through the act port (STAG-547).
+ * use-channels.ts -- a workspace's channels as the host holds them, the channel the Inbox is narrowed to, and the writes on them (STAG-547).
  *
- * The channels are held once per workspace for the whole window, so the
- * sidebar that lists them under the Inbox and the Inbox that heads one with
- * its name and purpose draw the same read, and a write made in either, a
- * channel made, edited, archived, or unarchived, or the reader's look,
- * stands in both the moment the service answers it with the workspace's
- * channels as they then stand. They are read as the first surface holding
- * them is drawn, again as the window comes back into view, and followed
- * while any surface draws them in view (`channels.follow`): each time the
- * host tells that channels moved, the channels are read again, and so are
- * the archived ones. Which channel the Inbox is narrowed to, if any, is the
- * window's own while it runs; with none chosen, as at launch, the Inbox
- * lists every channel's items, the reader's to-do list across all of them,
- * and one channel's only once one is chosen. A channel made answers its id,
- * so whoever made it opens it; archiving the channel the window shows moves
- * the window to #general and says so, where an archive by someone else
- * leaves the Inbox to say the channel is gone.
+ * A workspace's channels, open and archived, reach every surface on app
+ * state, held by the host while any surface reads them and a while after
+ * (`useHostRead(LIVE_READ.CHANNELS)`), so the sidebar that lists them under
+ * the Inbox, the Inbox that heads one with its name and purpose, the
+ * palette, and a `#channel` chip draw the same read, a surface drawn again
+ * draws them in its first frame, and nothing here reads them itself. A
+ * write made in any of them, a channel made, edited, archived, or
+ * unarchived, the reader's look, or a thread moved, is drawn by the host
+ * the moment it is asked and stands in all of them at once. Which channel
+ * the Inbox is narrowed to, if any, is the window's own while it runs; with
+ * none chosen, as at launch, the Inbox lists every channel's items, the
+ * reader's to-do list across all of them, and one channel's only once one
+ * is chosen. A channel made answers its id, so whoever made it opens it;
+ * archiving the channel the window shows moves the window to #general and
+ * says so, where an archive by someone else leaves the Inbox to say the
+ * channel is gone.
  */
 
-/** A workspace's channels as last read: none until a read answers, and whether the last read failed. */
-interface HeldChannels {
-  readonly channels: readonly Channel[] | undefined;
-  readonly failed: boolean;
-}
-
-const NOTHING_HELD: HeldChannels = { channels: undefined, failed: false };
-
-/** Each workspace's channels as last read, by its id. */
-const held = new Map<string, HeldChannels>();
-
-/** Each workspace's channels read, by its id, a new map whenever a read is held, which a reader of every workspace's channels draws again by. */
-let heldChannels: ReadonlyMap<string, readonly Channel[]> = new Map();
-
-/** Each workspace's archived channels as last read, by its id, a new map whenever a read is held, so the window's links and history name an archived channel the Inbox is narrowed to. */
-let heldArchived: ReadonlyMap<string, readonly ArchivedChannel[]> = new Map();
-
-/** The window's surfaces drawing any workspace's channels, told of each change. */
+/** The window's surfaces drawing the place, told of each change. */
 const listeners = new Set<() => void>();
-
-/** Each workspace whose channels the window follows, by its id: how many surfaces hold the follow, and its stop. */
-const follows = new Map<string, { readonly holders: number; readonly stop: () => void }>();
-
-/** The surfaces reading the archived channels, told which channels moved. */
-const moveListeners = new Set<(moved: readonly string[]) => void>();
 
 /**
  * The channel the Inbox is narrowed to, none where it lists every channel;
@@ -97,16 +74,6 @@ function placeNow(): ChannelPlace {
   return place;
 }
 
-/** Every workspace's archived channels read, as they stand, which a server's render reads as the window's does. */
-function heldArchivedNow(): ReadonlyMap<string, readonly ArchivedChannel[]> {
-  return heldArchived;
-}
-
-/** Every workspace's channels read, as they stand, which a server's render reads as the window's does. */
-function heldNow(): ReadonlyMap<string, readonly Channel[]> {
-  return heldChannels;
-}
-
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -116,25 +83,12 @@ function told(): void {
   for (const listener of listeners) listener();
 }
 
-/**
- * Holds a workspace's channels as an answer says, a failure keeping what was
- * held. Note that each channel the answer left as it was is kept as the one
- * held, and an answer that changed nothing tells no one, because the
- * channels are read again whenever an item is written anywhere, and every
- * surface drawing them would draw again for nothing.
- */
-function hold(workspaceId: string, view: ChannelsView | undefined): void {
-  const was = held.get(workspaceId);
-  const now: HeldChannels =
-    view === undefined || "failure" in view
-      ? { channels: was?.channels, failed: true }
-      : { channels: keepIdentity(was?.channels, view.channels), failed: false };
-  if (was !== undefined && was.channels === now.channels && was.failed === now.failed) return;
-  held.set(workspaceId, now);
-  heldChannels = new Map(
-    [...held].flatMap(([id, each]) => (each.channels === undefined ? [] : [[id, each.channels]])),
+/** What a write answered, as a surface says it: what refused it, or none where it was written. */
+function written(asked: Promise<ChannelsView>): Promise<string | undefined> {
+  return asked.then(
+    (view) => ("failure" in view ? REFUSAL_WORDS[view.failure] : undefined),
+    () => ACT_UNREACHED_WORDS,
   );
-  told();
 }
 
 /**
@@ -148,48 +102,6 @@ export function listChannelWorkspace(workspaceId: string): void {
   const was = placeWorkspace;
   placeWorkspace = workspaceId;
   if (was !== undefined) moveTo({ channelId: undefined, following: undefined });
-}
-
-/** Reads a workspace's channels again and holds the answer. */
-function readChannels(workspaceId: string): void {
-  askAct(ACT_KIND.CHANNELS_LIST, { workspaceId }).then(
-    (view) => hold(workspaceId, view),
-    () => hold(workspaceId, undefined),
-  );
-}
-
-/**
- * Follows a workspace's channels for one more surface, opening the follow
- * for the first; the stop lets it go, closing it with the last. Each move
- * the host tells reads the channels again and tells every listener which
- * channels moved; a follow the host ended says nothing, and the channels
- * read as they stand when a surface next shows them.
- */
-function holdFollow(workspaceId: string): () => void {
-  const standing = follows.get(workspaceId);
-  if (standing === undefined) {
-    const stop = streamFrom(
-      () => askAct(ACT_KIND.CHANNELS_FOLLOW, { workspaceId }),
-      (heard) => {
-        if ("failure" in heard) return;
-        readChannels(workspaceId);
-        for (const listener of moveListeners) listener(heard.moved);
-      },
-    );
-    follows.set(workspaceId, { holders: 1, stop });
-  } else {
-    follows.set(workspaceId, { ...standing, holders: standing.holders + 1 });
-  }
-  return () => {
-    const now = follows.get(workspaceId);
-    if (now === undefined) return;
-    if (now.holders > 1) {
-      follows.set(workspaceId, { ...now, holders: now.holders - 1 });
-      return;
-    }
-    follows.delete(workspaceId);
-    now.stop();
-  };
 }
 
 /** Moves the window's place, telling every surface drawing it. */
@@ -230,28 +142,6 @@ export function standChannelPlace(channelId: string | undefined): void {
   moveTo({ channelId, following: undefined });
 }
 
-/**
- * Moves the window to #general where it showed the channel just archived,
- * before the channels that leave it out are held, so the Inbox never says
- * the channel it was just showing is gone; and says where it went.
- */
-function leaveArchived(
-  channelId: string,
-  was: readonly Channel[] | undefined,
-  channels: readonly Channel[],
-  toast: (notice: ToastNotice) => void,
-): void {
-  if (place.channelId !== channelId) return;
-  const general = generalChannel(channels);
-  const name = was?.find((channel) => channel.id === channelId)?.name;
-  moveTo({ channelId: general?.id, following: undefined });
-  toast({
-    words: `${name === undefined ? "The channel" : `#${name}`} is archived. You're in #general now.`,
-    tone: STATUS_TONE.COMPLETE,
-    hold: TOAST_HOLD.DONE,
-  });
-}
-
 /** A workspace's channels and the writes on them, as `useChannels` hands them. */
 /** Why a thread did not move: the words the window says, and the answer or error that refused it, which a shown failure reports. */
 export interface MoveRefused {
@@ -260,11 +150,11 @@ export interface MoveRefused {
 }
 
 export interface ChannelsControl {
-  /** The channels, none until first read. */
+  /** The open channels by name, none until first read. */
   readonly channels: readonly Channel[] | undefined;
-  /** Whether the last read failed. */
+  /** Whether the read failed before it ever answered. */
   readonly failed: boolean;
-  /** Reads the channels again. */
+  /** Reads the channels again, as Try again asks. */
   readonly onRefresh: () => void;
   /** Makes a channel; what refused it, or the channel made, which the caller opens. */
   readonly onCreate: (name: string, purpose: string, project: boolean) => Promise<ChannelMade>;
@@ -284,70 +174,60 @@ export interface ChannelsControl {
 }
 
 /**
- * A workspace's channels as the window holds them, read as the first
- * surface holding them is drawn and as `shown` comes back, and followed
- * while it is.
+ * A workspace's channels as the host holds them, held for as long as the
+ * surface reading them stands, and the writes on them.
  */
-export function useChannels(workspaceId: string | undefined, shown: boolean): ChannelsControl {
+export function useChannels(workspaceId: string | undefined): ChannelsControl {
   const { act } = useAct();
   const toast = useToast();
-  const heldHere = () =>
-    workspaceId === undefined ? NOTHING_HELD : (held.get(workspaceId) ?? NOTHING_HELD);
-  const standing = useSyncExternalStore(subscribe, heldHere, heldHere);
-  const onRefresh = useCallback(() => {
-    if (workspaceId !== undefined) readChannels(workspaceId);
-  }, [workspaceId]);
-  useEffect(() => {
-    if (shown) onRefresh();
-  }, [shown, onRefresh]);
-  useEffect(
-    () => (workspaceId === undefined || !shown ? undefined : holdFollow(workspaceId)),
-    [workspaceId, shown],
-  );
-  return useMemo(() => {
-    /** A write whose answer, the channels as they then stand, is held, `before` run on them first; what refused it, or none. */
-    const written = (
-      asked: Promise<ChannelsView>,
-      before: (channels: readonly Channel[]) => void = () => undefined,
-    ): Promise<string | undefined> =>
-      asked.then(
-        (view) => {
-          if ("failure" in view) return REFUSAL_WORDS[view.failure];
-          before(view.channels);
-          if (workspaceId !== undefined) hold(workspaceId, view);
-          return undefined;
-        },
-        () => ACT_UNREACHED_WORDS,
-      );
-    return {
-      channels: standing.channels,
-      failed: standing.failed,
-      onRefresh,
+  const read = useHostRead(LIVE_READ.CHANNELS, workspaceId);
+  const channels = read.rows?.open;
+  const failed = read.status === HOST_READ_STATUS.FAILED;
+  const { retry } = read;
+  return useMemo(
+    () => ({
+      channels,
+      failed,
+      onRefresh: retry,
       onCreate: (name, purpose, project) => {
         if (workspaceId === undefined) return Promise.resolve({ refused: ACT_UNREACHED_WORDS });
-        let made: string | undefined;
         // Note that a channel's name is its workspace's alone, so the made one is found by it among the channels answered.
-        return written(
-          act(ACT_KIND.CHANNELS_CREATE, { workspaceId, name, purpose, project }),
-          (channels) => {
-            made = channels.find((channel) => channel.name === name)?.id;
+        return act(ACT_KIND.CHANNELS_CREATE, { workspaceId, name, purpose, project }).then(
+          (view): ChannelMade => {
+            if ("failure" in view) return { refused: REFUSAL_WORDS[view.failure] };
+            const made = view.channels.find((channel) => channel.name === name)?.id;
+            return made === undefined ? { refused: ACT_UNREACHED_WORDS } : { channelId: made };
           },
-        ).then((refused) =>
-          refused !== undefined || made === undefined
-            ? { refused: refused ?? ACT_UNREACHED_WORDS }
-            : { channelId: made },
+          () => ({ refused: ACT_UNREACHED_WORDS }),
         );
       },
       onEdit: (channelId, edit) =>
         workspaceId === undefined
           ? Promise.resolve(ACT_UNREACHED_WORDS)
           : written(act(ACT_KIND.CHANNELS_EDIT, { workspaceId, channelId, ...edit })),
-      onArchive: (channelId) =>
-        workspaceId === undefined
-          ? Promise.resolve(ACT_UNREACHED_WORDS)
-          : written(act(ACT_KIND.CHANNELS_ARCHIVE, { workspaceId, channelId }), (channels) =>
-              leaveArchived(channelId, standing.channels, channels, toast),
-            ),
+      onArchive: (channelId) => {
+        if (workspaceId === undefined) return Promise.resolve(ACT_UNREACHED_WORDS);
+        const shown = place.channelId === channelId;
+        const general = generalChannel(channels ?? [])?.id;
+        const name = channels?.find((channel) => channel.id === channelId)?.name;
+        // Note that the window leaves the channel before the host draws it archived, so the Inbox never says the channel it was just showing is gone.
+        if (shown) moveTo({ channelId: general, following: undefined });
+        return written(act(ACT_KIND.CHANNELS_ARCHIVE, { workspaceId, channelId })).then(
+          (refused) => {
+            if (!shown) return refused;
+            if (refused !== undefined) {
+              if (place.channelId === general) moveTo({ channelId, following: undefined });
+              return refused;
+            }
+            toast({
+              words: `${name === undefined ? "The channel" : `#${name}`} is archived. You're in #general now.`,
+              tone: STATUS_TONE.COMPLETE,
+              hold: TOAST_HOLD.DONE,
+            });
+            return undefined;
+          },
+        );
+      },
       onUnarchive: (channelId) =>
         workspaceId === undefined
           ? Promise.resolve(ACT_UNREACHED_WORDS)
@@ -358,13 +238,13 @@ export function useChannels(workspaceId: string | undefined, shown: boolean): Ch
             "failure" in view ? { words: REFUSAL_WORDS[view.failure], cause: view } : undefined,
           (cause: unknown) => ({ words: ACT_UNREACHED_WORDS, cause }),
         ),
+      // Note that a look that does not land leaves the New line where it stood, which says nothing wrong.
       onLook: (channelId) => {
-        if (workspaceId === undefined) return;
-        // Note that a look that does not land leaves the New line where it stood, which says nothing wrong.
-        written(act(ACT_KIND.CHANNELS_LOOK, { workspaceId, channelId })).catch(() => undefined);
+        if (workspaceId !== undefined) tellAct(ACT_KIND.CHANNELS_LOOK, { workspaceId, channelId });
       },
-    };
-  }, [act, toast, workspaceId, standing, onRefresh]);
+    }),
+    [act, toast, workspaceId, channels, failed, retry],
+  );
 }
 
 /** The channel the Inbox is narrowed to, and the door that narrows it to another. */
@@ -409,27 +289,34 @@ export function useThreadChannel(
   }, [misplaced, channelId]);
 }
 
-/** Every workspace's channels the window holds, by the workspace's id, which it reads nothing to learn. */
+/** Every workspace's open channels the host holds, by the workspace's id, which it reads nothing to learn. */
 export function useHeldChannels(): ReadonlyMap<string, readonly Channel[]> {
-  return useSyncExternalStore(subscribe, heldNow, heldNow);
+  const held = useAppSlice(APP_SLICE.CHANNELS);
+  return useMemo(
+    () =>
+      new Map(
+        Object.entries(held ?? {}).flatMap(([workspaceId, read]) =>
+          read.rows === undefined ? [] : [[workspaceId, read.rows.open] as const],
+        ),
+      ),
+    [held],
+  );
 }
 
 /**
- * A channel of a workspace as the window holds it, open or archived, which
- * it reads nothing to learn: from the lists the sidebar and the archived
- * channels' surfaces hold; none where neither names it, as for a channel
- * of another workspace.
+ * A channel of a workspace as the host holds it, open or archived, which
+ * it reads nothing to learn; none where the host holds no read naming it,
+ * as for a channel of a workspace no surface reads.
  */
 export function useHeldChannel(
   workspaceId: string | undefined,
   channelId: string,
 ): Channel | ArchivedChannel | undefined {
-  const open = useSyncExternalStore(subscribe, heldNow, heldNow);
-  const archived = useSyncExternalStore(subscribe, heldArchivedNow, heldArchivedNow);
-  if (workspaceId === undefined) return undefined;
+  const held = useAppSlice(APP_SLICE.CHANNELS);
+  const rows = workspaceId === undefined ? undefined : held?.[workspaceId]?.rows;
   return (
-    open.get(workspaceId)?.find((each) => each.id === channelId) ??
-    archived.get(workspaceId)?.find((each) => each.id === channelId)
+    rows?.open.find((each) => each.id === channelId) ??
+    rows?.archived.find((each) => each.id === channelId)
   );
 }
 
@@ -439,22 +326,15 @@ export interface ShownChannel {
 }
 
 /**
- * The channel a workspace's Inbox is narrowed to, as the window holds its
- * channels and its archived ones, which it reads nothing to learn: an
- * archived channel is named once the Inbox that shows it has read the
- * archived channels. None with Channels off, before the channels are
- * read, or where the workspace holds none.
+ * The channel a workspace's Inbox is narrowed to, open or archived, as the
+ * host holds the workspace's channels. None with Channels off, before the
+ * channels are read, or where the workspace holds none.
  */
 export function useShownChannel(workspaceId: string | undefined): ShownChannel | undefined {
   const channelsOn = useExperiment(EXPERIMENT.CHANNELS);
-  const { channels } = useChannels(channelsOn ? workspaceId : undefined, false);
-  const archived = useSyncExternalStore(subscribe, heldArchivedNow, heldArchivedNow);
+  const { rows } = useHostRead(LIVE_READ.CHANNELS, channelsOn ? workspaceId : undefined);
   const { channelId } = useChannelPlace();
-  const shown = channelShown(
-    channels,
-    channelId,
-    workspaceId === undefined ? undefined : archived.get(workspaceId),
-  );
+  const shown = channelShown(rows?.open, channelId, rows?.archived);
   const channel =
     shown.kind === CHANNEL_SHOWN.CHANNEL || shown.kind === CHANNEL_SHOWN.ARCHIVED
       ? shown.channel
@@ -462,52 +342,26 @@ export function useShownChannel(workspaceId: string | undefined): ShownChannel |
   return useMemo(() => (channel === undefined ? undefined : { channel }), [channel]);
 }
 
-/** A workspace's archived channels as last read, the latest archived first, and the door that reads them again. */
+/** A workspace's archived channels, the latest archived first, and Try again. */
 export interface ArchivedChannelsControl {
-  /** The archived channels as last read, none until first read; a read that fails keeps them. */
+  /** The archived channels as the host holds them, none until first read. */
   readonly channels: readonly ArchivedChannel[] | undefined;
-  /** Why the last read failed, none where it answered. */
+  /** Why the read failed before it ever answered, none where it did. */
   readonly failure: ChannelCallFailure | undefined;
   readonly onRefresh: () => void;
 }
 
 /**
- * A workspace's archived channels, read as the surface opens, again on
- * `onRefresh`, and whenever the follow says any channel moved, since an
- * archive or an unarchive moves one. Note that they are held for the
- * window, a failed read keeping what was held, as the open channels are,
- * so an Inbox narrowed to an archived channel and the window's links and
- * history naming it (`useShownChannel`) read the same list.
+ * A workspace's archived channels, from the same read as its open ones, so
+ * an archive or an unarchive drawn by the host moves a channel between the
+ * two at once, and the window's links and history naming an archived
+ * channel (`useShownChannel`) read the same list.
  */
 export function useArchivedChannels(workspaceId: string | undefined): ArchivedChannelsControl {
-  const { act } = useAct();
-  const archived = useSyncExternalStore(subscribe, heldArchivedNow, heldArchivedNow);
-  const [failed, setFailed] = useState<{
-    readonly workspaceId: string;
-    readonly failure: ChannelCallFailure | undefined;
-  }>();
-  const onRefresh = useCallback(() => {
-    if (workspaceId === undefined) return;
-    act(ACT_KIND.CHANNELS_ARCHIVED, { workspaceId }).then(
-      (view) => {
-        if ("failure" in view) return setFailed({ workspaceId, failure: view.failure });
-        setFailed({ workspaceId, failure: undefined });
-        heldArchived = new Map(heldArchived).set(workspaceId, view.channels);
-        told();
-      },
-      () => setFailed({ workspaceId, failure: CHANNEL_CALL_FAILURE.UNANSWERED }),
-    );
-  }, [act, workspaceId]);
-  useEffect(() => onRefresh(), [onRefresh]);
-  useEffect(() => {
-    moveListeners.add(onRefresh);
-    return () => {
-      moveListeners.delete(onRefresh);
-    };
-  }, [onRefresh]);
+  const read = useHostRead(LIVE_READ.CHANNELS, workspaceId);
   return {
-    channels: workspaceId === undefined ? undefined : archived.get(workspaceId),
-    failure: failed?.workspaceId === workspaceId ? failed?.failure : undefined,
-    onRefresh,
+    channels: read.rows?.archived,
+    failure: read.status === HOST_READ_STATUS.FAILED ? CHANNEL_CALL_FAILURE.UNANSWERED : undefined,
+    onRefresh: read.retry,
   };
 }

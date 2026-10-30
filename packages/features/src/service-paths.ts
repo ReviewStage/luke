@@ -121,6 +121,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_WORKSPACE_INVITATIONS: "/api/live/workspace-invitations",
   /** One workspace's channels under `?workspaceId=`, sealed for following over Neon Realtime (GET): its channels and where each one's threads stand, or `not-found`, or their rows inline where polled. */
   LIVE_CHANNELS: "/api/live/channels",
+  /** One workspace's channels list under `?workspaceId=`, sealed for following (GET): every channel, open or archived, how many threads of each the reader may read and when the latest was posted, how many wait on the reader, and when the reader last looked at each; or `not-found`, or their rows inline where polled. */
+  LIVE_WORKSPACE_CHANNELS: "/api/live/workspace-channels",
   /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to

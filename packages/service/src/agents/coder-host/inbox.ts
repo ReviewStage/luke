@@ -1072,7 +1072,8 @@ export function moveAgentThread(
             : CHANNEL_REFUSAL.OTHER_WORKSPACE,
         );
       }
-      const thread = { id: moved.success.id, title: moved.success.title, channel: name };
+      const { id, title } = moved.success.thread;
+      const thread = { id, title, channel: name };
       return { status: ACTION_RESULT_STATUS.ACCEPTED, thread };
     }),
   );

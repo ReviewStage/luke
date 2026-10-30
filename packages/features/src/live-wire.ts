@@ -728,6 +728,8 @@ export const LIVE_READ = {
   INBOX_ITEMS: "inboxItems",
   /** One plan's inbox, or one agent's, by its holder: the service's `taskInbox` or `agentInbox` query, by the holder's kind, held for the windows that chose it and a few they chose lately. */
   HOLDER_INBOX: "holderInbox",
+  /** One workspace's channels, open and archived, as the reader reads them: the service's `workspaceChannels` query, held for the windows that list the workspace and a few they listed lately. */
+  CHANNELS: "workspaceChannels",
 } as const;
 
 export type LiveRead = (typeof LIVE_READ)[keyof typeof LIVE_READ];

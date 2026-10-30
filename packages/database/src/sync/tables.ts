@@ -23,7 +23,7 @@ import { agentPin } from "../schemas/agent-pin.js";
 import { attachment } from "../schemas/attachment.js";
 import { invitation, member, organization, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
-import { channel } from "../schemas/channel.js";
+import { channel, channelLook } from "../schemas/channel.js";
 import { device } from "../schemas/device.js";
 import { deviceAgentLine, deviceAgentRequest } from "../schemas/device-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
@@ -380,6 +380,11 @@ export const channelSync = defineSyncTable(channel, {
   ],
 });
 
+/** A member's last look at a channel, on that member's own topic alone, since only they read it. */
+export const channelLookSync = defineSyncTable(channelLook, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: channelLook.userId }],
+});
+
 /** An automation, on its workspace's topic and its creator's. */
 export const automationSync = defineSyncTable(automation, {
   topics: [
@@ -541,6 +546,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   inboxItemReadSync,
   attachmentSync,
   channelSync,
+  channelLookSync,
   automationSync,
   automationRunSync,
   planRevisionSync,

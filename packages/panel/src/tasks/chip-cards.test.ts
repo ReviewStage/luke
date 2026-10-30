@@ -10,7 +10,6 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import { CHANNEL_CALL_FAILURE } from "@luke/features/channel-view";
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
 import {
   INBOX_ASK,
@@ -333,9 +332,6 @@ const SWEPT: InboxItem = {
   title: "Quarantine the flaky test?",
 };
 
-/** Whether the read of the workspace's open channels is refused, as a service that cannot answer it does. */
-let openChannelsRefused = false;
-
 /** Every act the panel told the main process, in order. */
 const told: AnyAct[] = [];
 
@@ -356,7 +352,6 @@ afterEach(() => {
   told.length = 0;
   automationReads.length = 0;
   agentPageReads.length = 0;
-  openChannelsRefused = false;
   vi.useRealTimers();
 });
 
@@ -390,6 +385,11 @@ const PAGE: TaskMentionsValue = {
   },
 };
 
+/** A workspace's channels as the host holds them, open and archived, the same for every workspace a chip names. */
+const CHANNELS_HELD = {
+  rows: { open: [BILLING, LAUNCH_WEEK, GENERAL_CHANNEL], archived: [PRICING_PAGE] },
+};
+
 /** The words drawn as a transcript draws them on a plan's page, the plan's own unless another is given, in a window holding `STATE`, whose feed holds the plan's items and the agent on no task's, which a chip's glyph and card read, unless another is given. */
 async function drawn(
   text: string,
@@ -404,18 +404,16 @@ async function drawn(
 ): Promise<HTMLElement> {
   fakeAppBridge({
     onAppState: () => () => undefined,
-    requestAppState: () => Promise.resolve({ ...state, [LIVE_READ.INBOX_ITEMS]: feed }),
+    requestAppState: () =>
+      Promise.resolve({
+        ...state,
+        [LIVE_READ.INBOX_ITEMS]: feed,
+        [LIVE_READ.CHANNELS]: { [ACME.id]: CHANNELS_HELD, [BETA.id]: CHANNELS_HELD },
+      }),
   });
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: ({ workspaceId }) =>
       Promise.resolve(workspaceId === BETA.id ? BETA_MEMBERS : MEMBERS),
-    [ACT_KIND.CHANNELS_LIST]: () =>
-      Promise.resolve(
-        openChannelsRefused
-          ? { failure: CHANNEL_CALL_FAILURE.UNANSWERED }
-          : { channels: [BILLING, LAUNCH_WEEK, GENERAL_CHANNEL] },
-      ),
-    [ACT_KIND.CHANNELS_ARCHIVED]: () => Promise.resolve({ channels: [PRICING_PAGE] }),
     [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
       automationReads.push(payload.workspaceId);
       const beta = payload.workspaceId === BETA.id;
@@ -843,12 +841,4 @@ test("an archived project's card says when it was archived in its size's place",
   const card = await channelCard(PRICING_PAGE);
 
   assert.equal(card.sub, "Project · archived Oct 26");
-});
-
-test("an archived channel's chip hangs its card where the read of the open channels was refused", async () => {
-  openChannelsRefused = true;
-
-  const card = await channelCard(PRICING_PAGE);
-
-  assert.deepEqual([card.card, card.sub], ["data-channel-card", "Project · archived Oct 26"]);
 });

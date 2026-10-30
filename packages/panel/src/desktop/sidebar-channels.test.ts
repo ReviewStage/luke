@@ -2,14 +2,14 @@
 
 import assert from "node:assert/strict";
 import type { ArchivedChannel, Channel } from "@luke/features/channel-wire";
-import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import type { ChannelsControl } from "../tasks/use-channels.js";
-import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
+import { FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
+import { handHostReads } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { SidebarChannels } from "./sidebar-channels.js";
 
@@ -60,14 +60,17 @@ beforeEach(() => {
   unarchived = [];
   edits = [];
   fakeActs({
-    act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.CHANNELS_ARCHIVED) {
-        const value = {
-          channels: [archived("c-old", "old-app", false), archived("c-launch", "launch", true)],
-        };
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
-      }
-      return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
+    act: (): Promise<FakeActAnswer> =>
+      Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
+  });
+  handHostReads({
+    channels: {
+      [WORKSPACE_ID]: {
+        rows: {
+          open: [],
+          archived: [archived("c-old", "old-app", false), archived("c-launch", "launch", true)],
+        },
+      },
     },
   });
 });

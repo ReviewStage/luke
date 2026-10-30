@@ -22,7 +22,11 @@ import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import type { AppInboxTask, AppInboxTasklessItem } from "@luke/host/app-state";
+import type {
+  AppInboxTask,
+  AppInboxTasklessItem,
+  AppWorkspaceChannels,
+} from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -1241,57 +1245,31 @@ const APP_CHANNEL: Channel = {
   waiting: 0,
 };
 
-/** A follow of the channels a test pushes on: each word pushed is handed to the window as the host hands it. */
-function channelFollow() {
-  const queue: unknown[] = [];
-  let wake: (() => void) | undefined;
-  let closed = false;
-  const stream: AsyncIterableIterator<unknown> = {
-    [Symbol.asyncIterator]: () => stream,
-    next: async () => {
-      while (queue.length === 0 && !closed) {
-        await new Promise<void>((resolve) => {
-          wake = resolve;
-        });
-      }
-      return closed ? { done: true, value: undefined } : { done: false, value: queue.shift() };
-    },
-    return: async () => {
-      closed = true;
-      wake?.();
-      return { done: true, value: undefined };
-    },
-  };
-  return {
-    stream,
-    push: (word: unknown) => {
-      queue.push(word);
-      wake?.();
-    },
-  };
-}
-
 /**
- * Answers the channels' acts as a test says, every other act as before:
- * the channels listed, a thread moved, and the follow where one is given.
+ * Hands the listed workspace's channels as the host holds them, open and
+ * archived, and answers the channels' writes as the host does: each made,
+ * archived, unarchived, or looked at delivers the channels as they then
+ * stand to the window, and every other act is answered as before.
  */
 function answerChannels(answers: {
   channels?: () => readonly Channel[];
-  follow?: AsyncIterableIterator<unknown>;
   /** A channel made, archived, or unarchived, or a thread moved, before the service answers it. */
   onWrite?: (write: AnyAct) => void;
-  /** The workspace's archived channels, or why their read fails; the read is refused where none are given. */
-  archived?: () => readonly ArchivedChannel[] | { readonly failure: string };
+  archived?: () => readonly ArchivedChannel[];
 }): void {
   const previous = fakeActsAnswer();
+  const workspaceId = world.listedWorkspace?.id ?? ACME.id;
+  const held = (): AppWorkspaceChannels => ({
+    [workspaceId]: {
+      rows: { open: answers.channels?.() ?? [GENERAL], archived: answers.archived?.() ?? [] },
+    },
+  });
+  world.channels = held();
   const done = (value: unknown): Promise<FakeActAnswer> =>
     Promise.resolve({ status: FAKE_ANSWER.DONE, value } as FakeActAnswer);
   fakeActs({
     ...appBridge(),
     act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.CHANNELS_LIST) {
-        return done({ channels: answers.channels?.() ?? [GENERAL] });
-      }
       if (
         request.kind === ACT_KIND.CHANNELS_LOOK ||
         request.kind === ACT_KIND.CHANNELS_CREATE ||
@@ -1299,18 +1277,12 @@ function answerChannels(answers: {
         request.kind === ACT_KIND.CHANNELS_UNARCHIVE
       ) {
         answers.onWrite?.(request);
+        world.deliverChannels(held());
         return done({ channels: answers.channels?.() ?? [GENERAL] });
       }
       if (request.kind === ACT_KIND.CHANNELS_MOVE) {
         answers.onWrite?.(request);
         return done({ thread: { ...THRESHOLD, channelId: request.payload.channelId } });
-      }
-      if (request.kind === ACT_KIND.CHANNELS_ARCHIVED && answers.archived !== undefined) {
-        const archived = answers.archived();
-        return done("failure" in archived ? archived : { channels: archived });
-      }
-      if (request.kind === ACT_KIND.CHANNELS_FOLLOW && answers.follow !== undefined) {
-        return done(answers.follow);
       }
       return previous(request);
     },
@@ -1415,19 +1387,8 @@ test("a scope turned in one channel stands in every channel, and when the reader
 
 test("a channel chosen while the workspace's channels could not be read says so with Retry", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
-  // Note that the window holds each workspace's channels across reads, a failed one keeping them, so this workspace is one no test read before.
   world.listedWorkspace = { ...ACME, id: "workspace-channels-unread" };
-  const previous = fakeActsAnswer();
-  fakeActs({
-    ...appBridge(),
-    act: (request: AnyAct): Promise<FakeActAnswer> =>
-      request.kind === ACT_KIND.CHANNELS_LIST
-        ? Promise.resolve({
-            status: FAKE_ANSWER.DONE,
-            value: { failure: "unanswered" },
-          } as FakeActAnswer)
-        : previous(request),
-  });
+  world.channels = { [world.listedWorkspace.id]: { failed: true } };
   const { page } = mount([], { channels: true });
   await settle();
   const notRead =
@@ -1694,38 +1655,6 @@ test("an archived channel narrows the Inbox under its name and when it was archi
   assert.deepEqual(unarchived, [old.id]);
 });
 
-test("an archived channel shown stays shown when a later read of the archived channels fails", async () => {
-  handState(experimentsOn(EXPERIMENT.CHANNELS));
-  world.listedWorkspace = ACME;
-  const old: ArchivedChannel = {
-    id: "c0ffee00-0000-4000-8000-0000000000ac",
-    name: "old-app",
-    purpose: "The apps, before the split",
-    project: false,
-    createdAt: 1,
-    archivedAt: 2,
-  };
-  let archivedReads = 0;
-  const follow = channelFollow();
-  answerChannels({
-    follow: follow.stream,
-    archived: () => {
-      archivedReads += 1;
-      return archivedReads === 1 ? [old] : { failure: "unanswered" };
-    },
-  });
-  const { page } = mount([], { channels: true });
-  await settle();
-  act(() => chooseChannel(old.id));
-  await settle();
-  assert.equal(headTitle(page), "#old-app");
-
-  act(() => follow.push({ moved: [GENERAL.id] }));
-  await settle();
-  assert.ok(archivedReads > 1, "the archived channels were read again");
-  assert.equal(headTitle(page), "#old-app", "a failed read kept it shown");
-});
-
 test("archiving the channel shown moves the window to #general and says so", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = ACME;
@@ -1790,17 +1719,9 @@ function sidebarRowCount(page: HTMLElement, name: string): number | undefined {
 test("the channels' counts add up to the Inbox's, Luke's question among them, but for one in an archived channel, which has no row, and neither counts another workspace's", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = ACME;
-  const previous = fakeActsAnswer();
-  fakeActs({
-    ...appBridge(),
-    act: (request: AnyAct): Promise<FakeActAnswer> =>
-      request.kind === ACT_KIND.CHANNELS_LIST
-        ? // Note that the service's own tally of each channel is not what a row counts, so it is set wrong here.
-          Promise.resolve({
-            status: FAKE_ANSWER.DONE,
-            value: { channels: [GENERAL, APP_CHANNEL].map((each) => ({ ...each, waiting: 5 })) },
-          } as FakeActAnswer)
-        : previous(request),
+  // Note that the service's own tally of each channel is not what a row counts, so it is set wrong here.
+  answerChannels({
+    channels: () => [GENERAL, APP_CHANNEL].map((each) => ({ ...each, waiting: 5 })),
   });
   world.agentInboxes = new Map([[LUKE_AGENT, [DOMAIN]]]);
   const waiting: readonly AppInboxTask[] = [

@@ -1,5 +1,5 @@
 /**
- * channels-fixture.ts -- the synthetic workspace the `channels` fixture profiles draw: its channels, their threads, and the answers the Channels view reads them by in place of the service's (STAG-547).
+ * channels-fixture.ts -- the synthetic workspace the `channels` fixture profiles draw: its channels, staged on the document as the host holds them, their threads, and the answers the Channels view's writes take in place of the service's (STAG-547).
  *
  * The Inbox fixture's machinery (`inbox-fixture.ts`) over Luke's own kind of
  * work: two people, a handful of tasks across the app, the service, and
@@ -1175,6 +1175,10 @@ export function channelsAppState(state: AppStateSnapshot): AppStateSnapshot {
     account: accountOf(READER),
     inbox: { ...state.inbox, waiting: waiting(), tasks: holdings(), taskless: taskless() },
     [LIVE_READ.INBOX_ITEMS]: { rows: fedItems() },
+    // Note that the channels are staged on every document main delivers, so a write the run answers shows with the next one.
+    [LIVE_READ.CHANNELS]: {
+      [STAGE.id]: { rows: { open: channelsRead(), archived: archivedAnswer().channels } },
+    },
     ...(state.tasks === undefined || state.tasks.workspaces.length > 0
       ? undefined
       : { tasks: { ...state.tasks, workspaces: [STAGE] } }),
@@ -1276,7 +1280,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.AGENTS_INBOX_ATTACHMENT]: () => longRunPicture(),
   [ACT_KIND.TASKS_PULL_REQUEST]: ({ number }) =>
     number === RELEASE_PULL_REQUEST.number ? RELEASE_PULL_REQUEST : null,
-  [ACT_KIND.CHANNELS_LIST]: () => channelsAnswer(),
   [ACT_KIND.CHANNELS_LOOK]: ({ channelId }) => {
     LAST_LOOKED.get(READER.userId)?.set(channelId, Date.now());
     return channelsAnswer();
@@ -1294,8 +1297,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     CHANNELS = [...CHANNELS, made].toSorted((a, b) => a.name.localeCompare(b.name));
     return channelsAnswer();
   },
-  [ACT_KIND.CHANNELS_FOLLOW]: () => pushedOnce({ moved: [] }),
-  [ACT_KIND.CHANNELS_ARCHIVED]: () => archivedAnswer(),
   [ACT_KIND.CHANNELS_UNARCHIVE]: ({ channelId }) => {
     const archived = ARCHIVED.find((channel) => channel.id === channelId);
     if (archived === undefined) return { failure: "not-found" };

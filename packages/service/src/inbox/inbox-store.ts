@@ -30,7 +30,7 @@ import { agentTable } from "@luke/database/schemas/agent";
 import { attachment } from "@luke/database/schemas/attachment";
 import { organization, user } from "@luke/database/schemas/auth";
 import { automation } from "@luke/database/schemas/automation";
-import { channel } from "@luke/database/schemas/channel";
+import { channel, channelLook } from "@luke/database/schemas/channel";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
 import { inboxMessage } from "@luke/database/schemas/inbox-message";
@@ -2393,14 +2393,15 @@ function placeOf(
 
 /**
  * The thread moved into the channel, where that is an open channel of the
- * thread's own workspace; its id, nothing where the channel is no such one.
- * Note that the channel is checked in the statement itself, so one archived
- * since its caller chose it takes nothing, and that a move changes the
- * thread's place alone, neither its last change nor anyone's unread.
+ * thread's own workspace; its id and the transaction it moved in, nothing
+ * where the channel is no such one. Note that the channel is checked in the
+ * statement itself, so one archived since its caller chose it takes
+ * nothing, and that a move changes the thread's place alone, neither its
+ * last change nor anyone's unread.
  */
 const updateItemChannel = SqlSchema.findOneOption({
   Request: Schema.Struct({ itemId: Schema.String, channelId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, txid: Schema.String }),
   execute: ({ itemId, channelId }) =>
     Database.use((db) =>
       db
@@ -2423,7 +2424,7 @@ const updateItemChannel = SqlSchema.findOneOption({
             ),
           ),
         )
-        .returning({ id: inboxItem.id }),
+        .returning({ id: inboxItem.id, txid: TXID }),
     ),
 });
 
@@ -2436,12 +2437,19 @@ const updateItemAddressee = SqlSchema.void({
 
 /**
  * The thread moved into the channel, where that is an open channel of the
- * thread's own workspace; whether it moved. The one move every caller
- * makes, a member's (`moveChannelThread`) and an agent's follow-up alike,
- * once it has reached the thread.
+ * thread's own workspace; the transaction it moved in, nothing where it did
+ * not move. The one move every caller makes, a member's
+ * (`moveChannelThread`) and an agent's follow-up alike, once it has reached
+ * the thread.
  */
-function moveItemToChannel(itemId: string, channelId: string): InboxStoreEffect<boolean> {
-  return Effect.map(updateItemChannel({ itemId, channelId }), Option.isSome);
+function moveItemToChannel(
+  itemId: string,
+  channelId: string,
+): InboxStoreEffect<Option.Option<string>> {
+  return Effect.map(
+    updateItemChannel({ itemId, channelId }),
+    Option.map((moved) => moved.txid),
+  );
 }
 
 /**
@@ -2456,7 +2464,10 @@ function replaceItem(
   place: { readonly channelId: string | null; readonly addresseeId: string | null },
 ): InboxStoreEffect<void> {
   return Effect.gen(function* () {
-    if (place.channelId !== null && !(yield* moveItemToChannel(itemId, place.channelId))) {
+    if (
+      place.channelId !== null &&
+      Option.isNone(yield* moveItemToChannel(itemId, place.channelId))
+    ) {
       return yield* Effect.die(new Error("a channel found open refused a move"));
     }
     if (place.addresseeId !== null) {
@@ -2885,6 +2896,12 @@ export function channelPostTallies(
   );
 }
 
+/** A thread a move left in its channel, and the transaction it moved in. */
+export interface ChannelThreadMoved {
+  readonly thread: ChannelThreadItem;
+  readonly txid: string;
+}
+
 /** Why a member's move of a thread took nothing. Nothing was written. */
 export const CHANNEL_MOVE_REFUSAL = {
   /** No thread the member may read goes by that id. */
@@ -2926,7 +2943,8 @@ const findChannelThread = SqlSchema.findOneOption({
  * The thread the member may read moved into another open channel of its
  * own workspace, as a member moves one or an agent on its starter's
  * behalf, the agent moving its own thread as it acts as itself
- * (`ownAgentId`); the thread as it then stands. Refused where they may not
+ * (`ownAgentId`); the thread as it then stands, and the transaction it
+ * moved in. Refused where they may not
  * read it, or the channel is unknown, archived, or another workspace's.
  */
 export function moveChannelThread(
@@ -2934,13 +2952,12 @@ export function moveChannelThread(
   itemId: string,
   channelId: string,
   ownAgentId: string | null = null,
-): InboxStoreEffect<Result.Result<ChannelThreadItem, ChannelMoveRefusal>> {
+): InboxStoreEffect<Result.Result<ChannelThreadMoved, ChannelMoveRefusal>> {
   return Effect.gen(function* () {
     const standing = yield* findChannelThread({ userId, itemId, ownAgentId });
     if (Option.isNone(standing)) return Result.fail(CHANNEL_MOVE_REFUSAL.NO_THREAD);
-    if (!(yield* moveItemToChannel(itemId, channelId))) {
-      return Result.fail(CHANNEL_MOVE_REFUSAL.NO_CHANNEL);
-    }
+    const txid = yield* moveItemToChannel(itemId, channelId);
+    if (Option.isNone(txid)) return Result.fail(CHANNEL_MOVE_REFUSAL.NO_CHANNEL);
     const moved = Option.getOrElse(
       yield* findChannelThread({ userId, itemId, ownAgentId }),
       () => ({
@@ -2948,11 +2965,12 @@ export function moveChannelThread(
         channelId,
       }),
     );
-    return Result.succeed({
+    const thread: ChannelThreadItem = {
       ...storedItem(moved).item,
       channelId: moved.channelId,
       ...threadAgent(moved),
-    });
+    };
+    return Result.succeed({ thread, txid: txid.value });
   });
 }
 
@@ -3018,6 +3036,81 @@ export function channelsLiveStatements(
     .where(and(eq(inboxItem.organizationId, organizationId), itemVisibleTo(userId)))
     .groupBy(inboxItem.channelId);
   return Option.all({ channels: liveStatementOf(channels), threads: liveStatementOf(threads) });
+}
+
+/** The statements a workspace's channels list is followed by live, one per part of what each channel shows its reader. */
+export interface WorkspaceChannelsLiveStatements {
+  readonly channels: LiveStatement;
+  readonly tallies: LiveStatement;
+  readonly waiting: LiveStatement;
+  readonly looks: LiveStatement;
+}
+
+/**
+ * A workspace's channels list as its reader reads it, written for Luke
+ * Sync, each column under the key `channel-live.ts` reads it by and each
+ * instant in epoch milliseconds: every channel of it, open or archived, as
+ * its row holds it; how many threads of each the reader may read and when
+ * the latest was posted; how many of those hold an ask open that waits on
+ * the reader; and when the reader last looked at each. Note that nothing
+ * here moves with a thread's last change, so an item written that changes
+ * no count, no post, and no ask leaves the read's digest where it stood,
+ * and its held poll answers nobody. The rule of who may read the threads
+ * is the held list's (`itemVisibleTo`). None where a statement names a
+ * value a live statement cannot carry.
+ */
+export function workspaceChannelsLiveStatements(
+  userId: string,
+  organizationId: string,
+): Option.Option<WorkspaceChannelsLiveStatements> {
+  const ofWorkspace = and(
+    eq(channel.organizationId, organizationId),
+    workspaceReachableBy(userId, channel.organizationId),
+  );
+  const channels = queryBuilder
+    .select(
+      liveSelection(
+        {
+          id: channel.id,
+          name: channel.name,
+          purpose: channel.purpose,
+          project: channel.project,
+          createdBy: channel.createdBy,
+        },
+        { createdAt: channel.createdAt, archivedAt: channel.archivedAt },
+      ),
+    )
+    .from(channel)
+    .where(ofWorkspace);
+  const visibleThreads = and(eq(inboxItem.organizationId, organizationId), itemVisibleTo(userId));
+  const tallies = queryBuilder
+    .select({
+      ...liveSelection({ channelId: inboxItem.channelId }),
+      threads: LIVE_COUNT.as("threads"),
+      latestPostedAt: liveLatest(inboxItem.postedAt).as("latestPostedAt"),
+    })
+    .from(inboxItem)
+    .where(visibleThreads)
+    .groupBy(inboxItem.channelId);
+  const waiting = queryBuilder
+    .select({
+      ...liveSelection({ channelId: inboxItem.channelId }),
+      waiting: LIVE_COUNT.as("waiting"),
+    })
+    .from(inboxItem)
+    .where(and(visibleThreads, askingReader(userId)))
+    .groupBy(inboxItem.channelId);
+  const looks = queryBuilder
+    .select(liveSelection({ channelId: channelLook.channelId }, { lookedAt: channelLook.lookedAt }))
+    .from(channelLook)
+    .innerJoin(channel, eq(channel.id, channelLook.channelId))
+    .where(and(eq(channelLook.userId, userId), ofWorkspace));
+  return Option.all({
+    channels: liveStatementOf(channels),
+    tallies: liveStatementOf(tallies),
+    waiting: liveStatementOf(waiting),
+    looks: liveStatementOf(looks),
+  });
 }
 
 /** How many threads of each channel of the workspace hold an ask open that waits on the reader, by channel; a channel where none waits is left out, and every one for a workspace the account is not in. */

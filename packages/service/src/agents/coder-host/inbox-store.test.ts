@@ -2367,7 +2367,7 @@ it.layer(getTestDB())("a thread's channel", (it) => {
         ]);
         assert.deepEqual(unmoved, [item.id]);
         assert.deepEqual(
-          Result.map(moved, (thread) => [thread.id, thread.channelId]),
+          Result.map(moved, ({ thread }) => [thread.id, thread.channelId]),
           Result.succeed([item.id, web]),
         );
         assert.deepEqual([yield* idsIn(app), yield* idsIn(web)], [[], [item.id]]);

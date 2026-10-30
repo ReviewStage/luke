@@ -102,7 +102,10 @@ function entryChanged<Row extends Entry>(
   change: InboxChange,
   entry: Row,
 ): Row | "gone" | undefined {
-  if (!changedIds(change).includes(entry.id)) return undefined;
+  // Note that a thread moved leaves its open item as it stood, since the read lists no channel.
+  if (change.kind === INBOX_CHANGE.MOVED || !changedIds(change).includes(entry.id)) {
+    return undefined;
+  }
   if (change.kind === INBOX_CHANGE.ANSWERED && entry.updatedAt > change.item.updatedAt) {
     return undefined;
   }

@@ -1,4 +1,5 @@
 import type { AgentInboxScope } from "@luke/features/agent-view";
+import type { WorkspaceChannels } from "@luke/features/channel-live";
 import type { InboxItem } from "@luke/features/inbox-wire";
 import { LIVE_READ } from "@luke/features/live-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -19,10 +20,11 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * A read is loading until it first answers, failed where it said it could
  * not answer before it ever had, and ready from its first rows on: one that
  * holds rows never says loading again. A keyed read, a plan's or an agent's
- * own inbox, is held by the surface that reads it: the host follows it
- * while any surface holds it and a while after, so a holder chosen again
- * draws from where its read stands. Nothing else in the panel opens a
- * follow (`anti-slop/no-follow-outside-host-read`).
+ * own inbox, or a workspace's channels, is held by the surface that reads
+ * it: the host follows it while any surface holds it and a while after, so
+ * a holder chosen again, or a surface drawn again, draws from where its read
+ * stands. Nothing else in the panel opens a follow
+ * (`anti-slop/no-follow-outside-host-read`).
  */
 
 export const HOST_READ_STATUS = {
@@ -59,6 +61,17 @@ const holderInboxAtom = Atom.family((kind: InboxHolderKey["kind"]) =>
 /** No holder read, for a surface holding none. */
 const NO_HOLDER: Atom.Atom<AppHolderInbox | undefined> = Atom.make(undefined);
 
+/** One workspace's channels as the host holds them, by its id, told to its readers only as that workspace's read moves. */
+const workspaceChannelsAtom = Atom.family((workspaceId: string) =>
+  Atom.map(
+    APP_SLICE.CHANNELS,
+    (held): AppHostRead<WorkspaceChannels> | undefined => held?.[workspaceId],
+  ),
+);
+
+/** No workspace's channels, for a surface holding none. */
+const NO_WORKSPACE: Atom.Atom<AppHostRead<WorkspaceChannels> | undefined> = Atom.make(undefined);
+
 /** The feed of every item the account reaches, held for the session. */
 function useAccountItems(): HostRead<AppInboxItems> {
   const held = useAppSlice(APP_SLICE.INBOX_ITEMS);
@@ -90,17 +103,50 @@ function useHolderInbox(key: InboxHolderKey | undefined): HostRead<readonly Inbo
   return { rows: held?.rows, status: statusOf(held), retry };
 }
 
+/**
+ * One workspace's channels, open and archived, held by this surface while
+ * `workspaceId` names one: the hold is a stream on the act port, which
+ * carries nothing and which the host keeps the workspace followed for; the
+ * rows arrive on app state.
+ */
+function useWorkspaceChannels(workspaceId: string | undefined): HostRead<WorkspaceChannels> {
+  const held = useAppSlice(
+    workspaceId === undefined ? NO_WORKSPACE : workspaceChannelsAtom(workspaceId),
+  );
+  useEffect(() => {
+    if (workspaceId === undefined) return;
+    return streamFrom(
+      () => askAct(ACT_KIND.CHANNELS_FOLLOW, { workspaceId }),
+      () => undefined,
+    );
+  }, [workspaceId]);
+  const retry = useCallback(() => {
+    if (workspaceId !== undefined) tellAct(ACT_KIND.CHANNELS_RETRY, { workspaceId });
+  }, [workspaceId]);
+  return { rows: held?.rows, status: statusOf(held), retry };
+}
+
 export function useHostRead(read: typeof LIVE_READ.INBOX_ITEMS): HostRead<AppInboxItems>;
 export function useHostRead(
   read: typeof LIVE_READ.HOLDER_INBOX,
   key: InboxHolderKey | undefined,
 ): HostRead<readonly InboxItem[]>;
 export function useHostRead(
-  read: typeof LIVE_READ.INBOX_ITEMS | typeof LIVE_READ.HOLDER_INBOX,
-  key?: InboxHolderKey,
-): HostRead<AppInboxItems> | HostRead<readonly InboxItem[]> {
+  read: typeof LIVE_READ.CHANNELS,
+  workspaceId: string | undefined,
+): HostRead<WorkspaceChannels>;
+export function useHostRead(
+  read: typeof LIVE_READ.INBOX_ITEMS | typeof LIVE_READ.HOLDER_INBOX | typeof LIVE_READ.CHANNELS,
+  key?: InboxHolderKey | string,
+): HostRead<AppInboxItems> | HostRead<readonly InboxItem[]> | HostRead<WorkspaceChannels> {
   // Note that each read is one hook, called in the same order on every render, since the read a surface asks for never changes.
   const items = useAccountItems();
-  const holder = useHolderInbox(read === LIVE_READ.HOLDER_INBOX ? key : undefined);
+  const holder = useHolderInbox(
+    read === LIVE_READ.HOLDER_INBOX && typeof key === "object" ? key : undefined,
+  );
+  const channels = useWorkspaceChannels(
+    read === LIVE_READ.CHANNELS && typeof key === "string" ? key : undefined,
+  );
+  if (read === LIVE_READ.CHANNELS) return channels;
   return read === LIVE_READ.INBOX_ITEMS ? items : holder;
 }
