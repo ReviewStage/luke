@@ -14,7 +14,7 @@ import {
   type InboxReads,
   settles,
 } from "./inbox-collections.js";
-import { answeredCollection, drawRows, rowsOf } from "./live-collection.js";
+import { answeredCollection, rowsOf } from "./live-collection.js";
 import { followTakingRows, LIVE_STATE, restarting, type TxWait } from "./live-follow.js";
 
 /**
@@ -97,12 +97,15 @@ function answersOf(rows: AccountInboxLiveRows): Stream.Stream<AccountInboxAnswer
 /** An open item as the read lists it, a task's or an agent's with no task. */
 type Entry = AccountInboxLiveRows["items"][number] | AccountInboxLiveRows["planless"][number];
 
-/** What a change leaves of an open item: gone where it settles it, its read mark where it flips it, and none where it leaves it alone. */
+/** What a change leaves of an open item: gone where it settles it, its read mark where it flips it, and none where it leaves it alone, as an item changed since the service answered it. */
 function entryChanged<Row extends Entry>(
   change: InboxChange,
   entry: Row,
 ): Row | "gone" | undefined {
   if (!changedIds(change).includes(entry.id)) return undefined;
+  if (change.kind === INBOX_CHANGE.ANSWERED && entry.updatedAt > change.item.updatedAt) {
+    return undefined;
+  }
   if (settles(change)) return "gone";
   const unread =
     change.kind === INBOX_CHANGE.MARKED
@@ -182,26 +185,25 @@ export function accountInboxes(
           plans.answer(rows.plans);
           answered = rows;
         };
-        const shown = (): Changeable => ({
-          // SAFETY: each collection holds only the rows of its own part, which the read answered.
-          items: rowsOf(items.collection) as AccountInboxLiveRows["items"],
-          planless: rowsOf(planless.collection) as AccountInboxLiveRows["planless"],
-          plans: rowsOf(plans.collection),
-        });
+        /** The rows as the read holds them, each write standing drawn over them in turn. */
+        const shown = (): Changeable => {
+          const held: Changeable = {
+            // SAFETY: each collection holds only the rows of its own part, which the read answered.
+            items: rowsOf(items.collection) as AccountInboxLiveRows["items"],
+            planless: rowsOf(planless.collection) as AccountInboxLiveRows["planless"],
+            plans: rowsOf(plans.collection),
+          };
+          return dependencies.reads
+            .standingWrites()
+            .reduce((rows, change) => rowsChanged(rows, change, userId) ?? rows, held);
+        };
         // The answer built again from the rows as they stand each time they move, and as a failed run they carry ages out.
         const standing = yield* Queue.sliding<AccountInboxLiveRows>(1);
         const drawn = Effect.suspend(() =>
           answered === undefined ? Effect.void : Queue.offer(standing, { ...answered, ...shown() }),
         );
         yield* dependencies.reads.stand({
-          draw: (change) => {
-            const next = rowsChanged(shown(), change, userId);
-            if (next === undefined) return false;
-            drawRows(items.collection, next.items);
-            drawRows(planless.collection, next.planless);
-            drawRows(plans.collection, next.plans);
-            return true;
-          },
+          moves: (change) => rowsChanged(shown(), change, userId) !== undefined,
           take: (change) => {
             const next = answered === undefined ? undefined : rowsChanged(answered, change, userId);
             if (answered !== undefined && next !== undefined) taken({ ...answered, ...next });
