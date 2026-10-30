@@ -253,7 +253,8 @@ export function InboxItemCard({
   readerId,
 }: {
   listed: InboxListed;
-  now: number;
+  /** The time its age counts from; the window's minute where none is handed. */
+  now?: number | undefined;
   models: readonly CatalogModel[] | undefined;
   /** The signed-in account's id, whose own agents' cards name no starter, and whose own open items alone need them. */
   readerId: string | undefined;
@@ -575,28 +576,11 @@ function InboxRowMeta({ children }: { children: ReactNode }): React.JSX.Element 
   return <span className={HOME_ROW_META}>{children}</span>;
 }
 
-/**
- * The marks at an item row's end, in the Inbox's own order: the face of the
- * teammate whose agent asks it, the Draft pencil where an answer or message
- * waits unsent in its box and that box is not the one open beside the list,
- * the attention mark where it needs the reader, its task's status, and how
- * long ago it changed. `before` stands ahead of them, as the row's context does, and `after` behind, as a shortcut does.
- * A row that says where its item stands on a line of its own (`standing`
- * off), the Inbox's own, draws neither the attention mark nor the status at
- * its end, a reader still hearing both there.
- */
-export function InboxItemEnd({
-  listed,
-  now,
-  readerId,
-  open = false,
-  face = true,
-  standing = true,
-  before,
-  after,
-}: {
+/** What an item row's end is handed: the item, and how it stands on its row. */
+interface InboxItemEndProps {
   listed: InboxListed;
-  now: number;
+  /** The time its age counts from; the window's minute where none is handed. */
+  now?: number | undefined;
   readerId: string | undefined;
   /** Whether the item's box stands beside the list, so its draft is in sight and unmarked. */
   open?: boolean;
@@ -607,10 +591,43 @@ export function InboxItemEnd({
   before?: ReactNode;
   /** What stands after the time, as a shortcut does. */
   after?: ReactNode;
+}
+
+/**
+ * The marks at an item row's end, in the Inbox's own order: the face of the
+ * teammate whose agent asks it, the Draft pencil where an answer or message
+ * waits unsent in its box and that box is not the one open beside the list,
+ * the attention mark where it needs the reader, its task's status, and how
+ * long ago it changed. `before` stands ahead of them, as the row's context does, and `after` behind, as a shortcut does.
+ * A row that says where its item stands on a line of its own (`standing`
+ * off), the Inbox's own, draws neither the attention mark nor the status at
+ * its end, a reader still hearing both there.
+ */
+export function InboxItemEnd(props: InboxItemEndProps): React.JSX.Element {
+  return <InboxItemMarks {...props} drafted={useInboxItemDrafted(props.listed.item)} />;
+}
+
+/**
+ * An item row's end (`InboxItemEnd`) where its list reads every row's
+ * draft at once (`useInboxRowDrafts`), handed whether the item's box holds
+ * one rather than reading it row by row.
+ */
+export function InboxItemMarks({
+  listed,
+  now,
+  readerId,
+  open = false,
+  face = true,
+  standing = true,
+  drafted,
+  before,
+  after,
+}: InboxItemEndProps & {
+  /** Whether the item's box holds a draft as the item now stands (`rowDrafted`), marked where that box is not the one open. */
+  drafted: boolean;
 }): React.JSX.Element {
   const { holder, item } = listed;
   const { needsYou, starter } = useInboxStanding(listed, readerId);
-  const drafted = useInboxItemDrafted(item) && !open;
   return (
     <InboxRowMeta>
       {before}
@@ -618,7 +635,7 @@ export function InboxItemEnd({
       {starter === undefined || item.status !== INBOX_STATUS.OPEN ? null : (
         <VisuallyHidden>{waitingOn(starter)}</VisuallyHidden>
       )}
-      {drafted ? <DraftMark /> : null}
+      {drafted && !open ? <DraftMark /> : null}
       {needsYou && standing ? (
         <span className={INBOX_ROW_ATTENTION}>
           <AttentionMark />

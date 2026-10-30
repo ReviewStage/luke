@@ -77,6 +77,7 @@ import {
   ON_THRESHOLD,
   openOptions,
   pressKey,
+  pushAgain,
   READER,
   RETRY,
   readTitle,
@@ -260,6 +261,23 @@ test("a close taken lets go of the item's draft, though another item is chosen",
   await confirmClose();
 
   assert.equal(rowDrafted(page, "Alert at 80%?"), false, "the closed item's draft is let go");
+});
+
+test("an item gone from under its open box, as a teammate's delete takes it, lets go of its draft", async () => {
+  const { page } = mount([], { chosen: ON_THRESHOLD });
+  await settle();
+  typeInComposer(itemPane(page), "Use 90% instead");
+  await settle();
+
+  world.inboxes.set(BILLING.id, [RETRY]);
+  act(() => pushAgain());
+  await settle();
+  // Note that the item standing again shows what was kept of its draft, since its row and its box went with it.
+  world.inboxes.set(BILLING.id, [THRESHOLD, RETRY]);
+  act(() => pushAgain());
+  await settle();
+
+  assert.equal(composerEditor(itemPane(page)).textContent, "", "the gone item's draft is let go");
 });
 
 test("a waiting choice wears a Recommended badge at the head of the option its agent recommends and of no other, and a choice recommending nothing wears none", async () => {

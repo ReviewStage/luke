@@ -1,6 +1,7 @@
 import { type InboxItem, type InboxPerson, inboxAddressedTo } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
+import { agoText } from "@luke/features/time-format";
 import { sameShape } from "@luke/features/turn-rows";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
@@ -91,12 +92,27 @@ import {
   UsersIcon,
 } from "@luke/ui/icons";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { memo, type RefObject, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  type RefObject,
+  startTransition,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
 import { useAutomation } from "../automation-directory.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
-import { useInboxItemDraft } from "../composer-drafts.js";
+import {
+  holdsPicks,
+  type InboxRowDraft,
+  rowDrafted,
+  rowPicks,
+  useInboxRowDrafts,
+} from "../composer-drafts.js";
 import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "../desktop/action-menu.js";
 import {
   INBOX_LIST_WIDTH,
@@ -134,7 +150,7 @@ import {
   addressedWords,
   HolderGlyph,
   InboxItemCard,
-  InboxItemEnd,
+  InboxItemMarks,
   inboxLineGlyph,
   useInboxStanding,
 } from "./inbox-item-parts.js";
@@ -348,6 +364,32 @@ function drawnWidth(width: number, alone: boolean): string | undefined {
   return `min(${width}px, max(${INBOX_LIST_WIDTH.MIN}px, 100cqw - ${PANE_RESERVE}px))`;
 }
 
+/** No step ticked, the one list every row ticking none is handed, so its props hold while its draft ticks nothing. */
+const NO_TICKS: readonly number[] = [];
+
+/**
+ * What an item's row shows of its draft as its list read every row's at
+ * once (`useInboxRowDrafts`): whether it wears the pencil, which it does
+ * not while its box stands `open` beside the list, and the steps of its
+ * open to-do the draft ticks. Note that a draft of words alone ticks
+ * nothing, so a word typed in the open box hands its row nothing new.
+ */
+export function inboxRowDraft(
+  draft: InboxRowDraft | undefined,
+  item: InboxItem,
+  open: boolean,
+): { readonly drafted: boolean; readonly ticked: readonly number[] } {
+  const picks = rowPicks(draft, item);
+  const ticks =
+    picks !== undefined &&
+    holdsPicks(picks) &&
+    ((picks.steps ?? []).length > 0 || picks.press !== undefined);
+  return {
+    drafted: !open && rowDrafted(draft, item),
+    ticked: ticks ? inboxShownTicks(item, picks) : NO_TICKS,
+  };
+}
+
 /**
  * One item as a `ListRow` of three lines, as a mail app lists a thread,
  * one thing to a line so nothing is cut short to make room for another:
@@ -387,17 +429,18 @@ function drawnWidth(width: number, alone: boolean): string | undefined {
  * as the last item of its menu. The row is drawn again only where it is
  * handed another prop (`memo`), as ⌘K's rows are: its listed item, which the
  * list keeps while the item and its holder do (`inboxListed`), whether it
- * is chosen, and the minute. Note that this is what keeps a long Inbox quick,
- * because the page above the list draws again on every pointer crossing,
- * choice, and push, and only the rows whose item or state moved need draw
- * with it.
+ * is chosen, and what it shows of its draft as the list read it once for
+ * every row (`inboxRowDraft`); its time counts from the window's minute on
+ * its own (`Time`). Note that this is what keeps a long Inbox quick, because only
+ * the rows whose item or state moved need draw again when the list does.
  */
 export const InboxItemRow = memo(function InboxItemRow({
   listed,
   chosen,
   open = chosen,
   current = chosen,
-  now,
+  drafted = false,
+  ticked = NO_TICKS,
   models,
   readerId,
   face = true,
@@ -415,7 +458,10 @@ export const InboxItemRow = memo(function InboxItemRow({
   open?: boolean;
   /** Whether the row is drawn as the open one: the chosen item's unless said, and none where no item stands open on a screen with no hover, whose open row shows its acts in its time's place. */
   current?: boolean;
-  now: number;
+  /** Whether the row wears the Draft pencil, its item's box holding a draft and standing elsewhere than beside the list (`inboxRowDraft`). */
+  drafted?: boolean;
+  /** The steps of its open to-do its draft ticks (`inboxRowDraft`); none where it ticks none. */
+  ticked?: readonly number[];
   models: readonly CatalogModel[] | undefined;
   /** The signed-in account's id, whose own agents' cards and rows name no starter, and whose own open items alone need them. */
   readerId: string | undefined;
@@ -441,7 +487,6 @@ export const InboxItemRow = memo(function InboxItemRow({
   const directory = useMemberDirectory();
   const _reader = directory.readerId ?? readerId;
   const { nameOf } = useInboxStanding(listed, readerId);
-  const ticked = inboxShownTicks(item, useInboxItemDraft(item));
   const lineKind = inboxLineKind(item);
   const preview = inboxPreview(item, nameOf, ticked);
   const addressedTo = inboxAddressedTo(item);
@@ -454,9 +499,7 @@ export const InboxItemRow = memo(function InboxItemRow({
     keyed: chosen,
   });
   return (
-    <RowHintOptions
-      card={<InboxItemCard listed={listed} now={now} models={models} readerId={readerId} />}
-    >
+    <RowHintOptions card={<InboxItemCard listed={listed} models={models} readerId={readerId} />}>
       <ListRow
         ref={ref}
         motionKey={listed.item.id}
@@ -482,13 +525,13 @@ export const InboxItemRow = memo(function InboxItemRow({
         }}
         leadAt={LIST_ROW_LEAD.ABOVE}
         meta={
-          <InboxItemEnd
+          <InboxItemMarks
             listed={listed}
-            now={now}
             readerId={readerId}
             open={open}
             face={face}
             standing={false}
+            drafted={drafted}
             before={unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
           />
         }
@@ -1017,18 +1060,27 @@ const SEARCH_INBOX = "Search inbox";
  * own, a phone's head's as a desk's: a field always standing, as Settings'
  * search does, so nothing in the head moves or hides as it is used. It
  * narrows the list as it is typed in, and Escape empties it; an empty one
- * leaves Escape to the surface behind it.
+ * leaves Escape to the surface behind it. Note that the field holds its own
+ * words and hands them to the list in a transition, so a key paints in the
+ * field at once and the list is ranked for it a render behind, in a render
+ * the next key may cut short, as ⌘K ranks its rows.
  */
 function ListSearch({ search }: { search: InboxSearchHead }): React.JSX.Element {
+  const [words, setWords] = useState(search.query);
+  const { onQuery } = search;
+  const type = (next: string) => {
+    setWords(next);
+    startTransition(() => onQuery(next));
+  };
   return (
     <search className="inbox-search block px-column-inset pb-row-inset">
       <SearchField
         label={SEARCH_INBOX}
         placeholder={SEARCH_INBOX}
-        value={search.query}
-        onChange={search.onQuery}
-        onClear={() => search.onQuery("")}
-        onEscape={search.query === "" ? undefined : () => search.onQuery("")}
+        value={words}
+        onChange={type}
+        onClear={() => type("")}
+        onEscape={words === "" ? undefined : () => type("")}
       />
     </search>
   );
@@ -1179,13 +1231,15 @@ function ListHead({
       {/* Note that a task's own Inbox is a tab, whose bar is every tab's; the window's Inbox is a page, whose head glides with the sidebar. */}
       {view === undefined ? (
         <PaneBar title={title} actions={options} />
-      ) : (
+      ) : channel?.archivedAt === undefined ? (
         <Toolbar
           title={title}
           detail={channel?.detail}
           actions={options}
           end={TOOLBAR_INSET.COLUMN}
         />
+      ) : (
+        <ArchivedChannelBar title={title} archivedAt={channel.archivedAt} actions={options} />
       )}
       {search}
       <ErrorLine
@@ -1194,6 +1248,30 @@ function ListHead({
       />
       {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
     </>
+  );
+}
+
+/**
+ * The window's Inbox's bar over a channel archived, saying when it was in
+ * its purpose's place, counted from the window's minute, which draws this
+ * bar alone again as it moves.
+ */
+function ArchivedChannelBar({
+  title,
+  archivedAt,
+  actions,
+}: {
+  title: string;
+  archivedAt: number;
+  actions: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <Toolbar
+      title={title}
+      detail={`Archived ${agoText(archivedAt, useMinute())}`}
+      actions={actions}
+      end={TOOLBAR_INSET.COLUMN}
+    />
   );
 }
 
@@ -1354,8 +1432,10 @@ export interface InboxListHead {
 /** A channel heading the Inbox narrowed to it: its name, the words after it, and what its head offers of its own. */
 export interface InboxChannelHead {
   readonly name: string;
-  /** Its purpose, or when it was archived; none where it has neither. */
+  /** Its purpose; none where it has none, or where it is archived, which its head says in its place. */
   readonly detail: string | undefined;
+  /** When it was archived; none on an open one. */
+  readonly archivedAt: number | undefined;
   /** An archived channel's Unarchive, and whether it is under way; none on an open one. */
   readonly unarchive: { readonly busy: boolean; readonly onUnarchive: () => void } | undefined;
   /** What refused the head's action, under the head; none where nothing did. */
@@ -1545,7 +1625,6 @@ export function InboxList({
   /** Told as the pointer comes onto the list and leaves it, while which its rows hold their places (`use-held-inbox-list.ts`); none where nothing holds them. */
   onPointing?: ((pointing: boolean) => void) | undefined;
 }): React.JSX.Element {
-  const now = useMinute();
   const regionId = useId();
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
   const isFolded = (key: string) => head.view?.folds.folded(key) ?? false;
@@ -1556,6 +1635,8 @@ export function InboxList({
   const unpick = () => setPicked(new Set());
   const { width, onResize } = useInboxListWidth();
   const rowFocus = useRowFocusKept(rows);
+  // Note that every row's draft is read here once, rather than by each row, so a word typed in the box beside the list draws no row.
+  const drafts = useInboxRowDrafts();
   // Note that a finger's list standing alone marks no row open, since no item is, and the chosen row would show its acts in its time's place at rest (`list-row.css`).
   const marked = !useCoarsePointer() || columns !== INBOX_COLUMNS.LIST;
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -1593,7 +1674,11 @@ export function InboxList({
       chosen={listed.item.id === chosen}
       open={listed.item.id === chosen && columns === INBOX_COLUMNS.BOTH}
       current={listed.item.id === chosen && marked}
-      now={now}
+      {...inboxRowDraft(
+        drafts.get(listed.item.id),
+        listed.item,
+        listed.item.id === chosen && columns === INBOX_COLUMNS.BOTH,
+      )}
       models={models}
       readerId={readerId}
       face={view.grouping !== INBOX_GROUPING.PERSON}
