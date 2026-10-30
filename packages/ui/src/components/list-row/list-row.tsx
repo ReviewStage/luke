@@ -143,8 +143,8 @@ export type { ListSelection } from "../selection/list-selection.js";
  * open and fold them, as a tree's keys do.
  *
  * A row may carry attachments (`attachments`), what its thing holds drawn
- * small on a line of their own under its description, as a mail app shows
- * a thread's pictures under its preview; they are decoration, the row's
+ * small on a line of their own over its words, as a message's files stand
+ * over its words in the box and the transcript; they are decoration, the row's
  * words saying what it is, unless they are files a reader opens
  * (`attachmentsOpen`), which are read and reached as the row's own.
  *
@@ -551,7 +551,7 @@ export function ListRow({
   lead?: ListRowLead | undefined;
   /** Where the lead stands: a chip before the description, on its line, or a line of its own over the title. */
   leadAt?: ListRowLeadAt | undefined;
-  /** What the row's thing carries, its pictures or pages drawn small, on a line of their own under the description; decoration, since its words say what it is. */
+  /** What the row's thing carries, its pictures or pages drawn small, on a line of their own over its words; decoration, since its words say what it is. */
   attachments?: ReactNode;
   /** Whether the attachments are files a reader opens, so they are announced and reached rather than hidden as decoration. */
   attachmentsOpen?: boolean | undefined;
@@ -752,6 +752,14 @@ export function ListRow({
         </span>
       ) : null}
       <span className="luke-list-row-text col-[text] min-w-0">
+        {said(attachments) ? (
+          <span
+            className="luke-list-row-attachments flex gap-luke-6 overflow-hidden"
+            aria-hidden={attachmentsOpen ? undefined : "true"}
+          >
+            {attachments}
+          </span>
+        ) : null}
         {metaAt === LIST_ROW_META.TITLE ? (
           <span className="luke-list-row-head">
             {firstLine}
@@ -772,14 +780,6 @@ export function ListRow({
               ? LEAD_SEPARATOR
               : null}
             {description}
-          </span>
-        ) : null}
-        {said(attachments) ? (
-          <span
-            className="luke-list-row-attachments flex gap-luke-6 overflow-hidden"
-            aria-hidden={attachmentsOpen ? undefined : "true"}
-          >
-            {attachments}
           </span>
         ) : null}
       </span>

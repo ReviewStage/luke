@@ -180,7 +180,7 @@
     white-space: normal;
   }
 
-  /* A dense row's attachments take a line of their own under its title, as
+  /* A dense row's attachments take a line of their own over its title, as
      a roomier row's do, rather than standing beside it. */
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
   .luke-list-row-text:has(> .luke-list-row-attachments) {
@@ -191,10 +191,10 @@
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
     .luke-list-row-attachments {
     flex-basis: 100%;
-    margin-block-start: 0;
+    margin-block-end: 0;
   }
 
-  /* Its leading mark stands level with the title's line, above them. */
+  /* Its leading mark stands level with the row's first line. */
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
     :has(> .luke-list-row-text > .luke-list-row-attachments)
     > .luke-list-row-leading {
@@ -252,10 +252,10 @@
     gap: var(--luke-space-2);
   }
 
-  /* A row's attachments stand on a line of their own under its words, in a
+  /* A row's attachments stand on a line of their own over its words, in a
      run that is cut at the row's end rather than wrapping. */
   .luke-list-row-attachments {
-    margin-block-start: var(--luke-space-4);
+    margin-block-end: var(--luke-space-4);
   }
 
   .luke-list-row-title,
