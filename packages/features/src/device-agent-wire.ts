@@ -39,12 +39,6 @@ export const DEVICE_AGENT_BOUNDS = {
    * (`SANDBOX_DOOR_MAX_BYTES`), past every bound a tool holds a file to.
    */
   MAX_ANSWER_BYTES: 8 * 1024 * 1024,
-  /**
-   * The most bytes of one agent's saved state, encrypted, as the device
-   * uploads it to the store in one PUT: the store's upload takes no more,
-   * and a commit naming more is refused.
-   */
-  MAX_STATE_BYTES: 500 * 1024 * 1024,
 } as const;
 
 /** What one line to a local runner is. */
@@ -85,16 +79,18 @@ export type DeviceAgentRequestKind =
 export const DEVICE_CAPABILITY = {
   /** It takes a discard line (`DEVICE_AGENT_LINE_KIND.DISCARD`). */
   DISCARD: "discard",
-  /**
-   * It saves each of its agents' state at its turn's end
-   * (`deviceAgentStateSaveRequestSchema`) and restores the newest at a cold
-   * launch, so its launch's secrets carry that state
-   * (`deviceAgentLaunchStateSchema`) and its payload names its generation.
-   */
-  AGENT_STATE: "agent-state",
 } as const;
 
 export type DeviceCapability = (typeof DEVICE_CAPABILITY)[keyof typeof DEVICE_CAPABILITY];
+
+/**
+ * The capabilities named that this build knows, in `DEVICE_CAPABILITY`'s
+ * order: a newer follower's register, and a device row a build since
+ * retired a capability from, pass over the rest rather than fail on them.
+ */
+export function knownDeviceCapabilities(named: readonly string[]): DeviceCapability[] {
+  return Object.values(DEVICE_CAPABILITY).filter((capability) => named.includes(capability));
+}
 
 /** The capability a device must have registered to be queued a line of the kind, for each kind that needs one. */
 export const DEVICE_AGENT_LINE_CAPABILITY: Partial<Record<DeviceAgentLineKind, DeviceCapability>> =
@@ -266,13 +262,6 @@ export const deviceAgentLaunchPayloadSchema = EffectSchema.Struct({
    * repository, and from a service before the field, whose launch sets none.
    */
   identity: EffectSchema.optionalKey(checkoutIdentitySchema),
-  /**
-   * The generation of the agent's saved state the launch restores, whose
-   * read and key its secrets carry (`deviceAgentLaunchStateSchema`); absent
-   * where the agent has none, and for a device that did not register
-   * `DEVICE_CAPABILITY.AGENT_STATE`, whose launch carries no state.
-   */
-  stateGeneration: EffectSchema.optionalKey(EffectSchema.Int),
 });
 
 export type DeviceAgentLaunchPayload = typeof deviceAgentLaunchPayloadSchema.Type;
@@ -294,52 +283,16 @@ export const deviceAgentFilesPayloadSchema = EffectSchema.Struct({
 
 export type DeviceAgentFilesPayload = typeof deviceAgentFilesPayloadSchema.Type;
 
-/** Lowercase hex of a SHA-256, as a saved bundle's digest is named. */
-const sha256Schema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{64}$/u));
-
-/** A git commit's id, SHA-1 or SHA-256, in lowercase hex. */
-const commitIdSchema = EffectSchema.String.check(
-  EffectSchema.isPattern(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u),
-);
-
-/** A generation of an agent's saved state, which rises by one from 1 with each commit. */
-const stateGenerationSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
-
-/**
- * The saved state a launch restores, carried in its secrets alone: the
- * generation, a URL its bundle is read from by a plain GET until
- * `expiresAt` (epoch milliseconds), which needs no credential beside it and
- * is one, the bundle's size and digest as committed, which the device
- * checks before it decrypts, the commit its work applies to, null for an
- * agent with no repository, and the agent's state key the bundle is
- * encrypted under, as standard base64 of its 32 bytes. None of it is ever
- * written to a file, an argument, or a log.
- */
-const deviceAgentLaunchStateSchema = EffectSchema.Struct({
-  generation: stateGenerationSchema,
-  url: EffectSchema.String,
-  expiresAt: EffectSchema.Int,
-  bytes: EffectSchema.Int,
-  sha256: sha256Schema,
-  baseCommit: EffectSchema.NullOr(EffectSchema.String),
-  key: EffectSchema.String,
-});
-
-export type DeviceAgentLaunchState = typeof deviceAgentLaunchStateSchema.Type;
-
 /**
  * A launch's secrets, as the claim of its line hands them over once: the
  * runner's environment, every value secret (its bearer and its harness's
  * credential), set on the runner's process alone and never written to a
  * file, an argument, or a log; its first lines, written to its stdin
- * before anything else; and, for a device that registered
- * `DEVICE_CAPABILITY.AGENT_STATE`, the agent's newest saved state, absent
- * where it has none.
+ * before anything else.
  */
 export const deviceAgentLaunchSecretsSchema = EffectSchema.Struct({
   env: EffectSchema.Record(EffectSchema.String, EffectSchema.String),
   stdin: EffectSchema.String,
-  state: EffectSchema.optionalKey(deviceAgentLaunchStateSchema),
 });
 
 export type DeviceAgentLaunchSecrets = typeof deviceAgentLaunchSecretsSchema.Type;
@@ -482,8 +435,6 @@ export const deviceAgentClaimRequestSchema = EffectSchema.Struct({
 export const DEVICE_LAUNCH_REFUSAL = {
   /** The agent ran directly on the device before Luke kept each agent's repository and sessions in its own folder, on the developer's own logins, so its session cannot be reached again there. */
   RAN_DIRECTLY: "ran-directly",
-  /** The agent's saved state could not be brought back onto a device that held none of it; nothing was deleted, and its next launch tries again. */
-  STATE_NOT_RESTORED: "state-not-restored",
 } as const;
 
 export type DeviceLaunchRefusal =
@@ -509,69 +460,6 @@ export const deviceAgentAnswerRequestSchema = EffectSchema.Struct({
       ),
     ),
   }),
-});
-
-/**
- * A device's ask to save one of its agents' state, at the end of the
- * agent's turn: the agent, and the generation its state was restored from
- * or last committed as, null where it has none. The service refuses it as
- * stale where that is no longer the agent's newest, before the device
- * uploads anything.
- */
-export const deviceAgentStateSaveRequestSchema = EffectSchema.Struct({
-  ...deviceField,
-  agentId: wireUuidSchema,
-  fromGeneration: EffectSchema.NullOr(stateGenerationSchema),
-});
-
-/**
- * What a save is granted: the fresh path its bundle goes to, which its
- * commit names; one upload to that path, the bundle's bytes sent as the
- * body of a PUT to `upload.url` with `upload.headers` until
- * `upload.expiresAt` (epoch milliseconds), at most `upload.maxBytes` and
- * never over a blob already there, which needs no credential beside it and
- * is one; and the agent's state key the bundle is encrypted under, as
- * standard base64 of its 32 bytes, the same on every save of the agent's.
- * None of it is ever written to a file, an argument, or a log.
- */
-export const deviceAgentStateSaveAnswerSchema = EffectSchema.Struct({
-  path: EffectSchema.String,
-  upload: EffectSchema.Struct({
-    url: EffectSchema.String,
-    headers: EffectSchema.Record(EffectSchema.String, EffectSchema.String),
-    expiresAt: EffectSchema.Int,
-    maxBytes: EffectSchema.Int,
-  }),
-  key: EffectSchema.String,
-});
-
-export type DeviceAgentStateSaveAnswer = typeof deviceAgentStateSaveAnswerSchema.Type;
-
-/**
- * A save the device uploaded, committed: the agent, the generation the save
- * started from, as its ask named it, the path it was granted, the bundle's
- * size and digest as uploaded, and the commit its work applies to, null for
- * an agent with no repository. The service keeps it as the agent's next
- * generation only where the generation it started from is still the
- * newest, and refuses it as stale otherwise.
- */
-export const deviceAgentStateCommitRequestSchema = EffectSchema.Struct({
-  ...deviceField,
-  agentId: wireUuidSchema,
-  fromGeneration: EffectSchema.NullOr(stateGenerationSchema),
-  path: EffectSchema.String.check(EffectSchema.isMinLength(1), EffectSchema.isMaxLength(256)),
-  bytes: EffectSchema.Int.check(
-    EffectSchema.isBetween({ minimum: 1, maximum: DEVICE_AGENT_BOUNDS.MAX_STATE_BYTES }),
-  ),
-  sha256: sha256Schema,
-  baseCommit: EffectSchema.NullOr(commitIdSchema),
-});
-
-export type DeviceAgentStateCommitRequest = typeof deviceAgentStateCommitRequestSchema.Type;
-
-/** The generation a commit was kept as. */
-export const deviceAgentStateCommitAnswerSchema = EffectSchema.Struct({
-  generation: stateGenerationSchema,
 });
 
 /** That the service kept what the Mac said. */

@@ -70,7 +70,6 @@ interface Recorded {
   tokenPullRequests: number[];
   imageTemplates: number[];
   repositorySnapshots: number[];
-  agentStates: number[];
   hostPairings: number[];
 }
 
@@ -93,7 +92,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     tokenPullRequests: [],
     imageTemplates: [],
     repositorySnapshots: [],
-    agentStates: [],
     hostPairings: [],
   };
   const options: MaintenanceSweepOptions = {
@@ -186,11 +184,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         return { listed: 3, deleted: 1 };
       }),
     sweepAgentQueues: () => Effect.succeed(0),
-    sweepAgentStates: (now) =>
-      Effect.sync(() => {
-        recorded.agentStates.push(now);
-        return { deleted: 2, abandoned: 1, full: false };
-      }),
     sweepHostPairings: (now) =>
       Effect.sync(() => {
         recorded.hostPairings.push(now);
@@ -233,7 +226,6 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       tokenPullRequests: [],
       imageTemplates: [],
       repositorySnapshots: [],
-      agentStates: [],
       hostPairings: [],
     });
   }),
@@ -267,7 +259,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       tokenPullRequests: [],
       imageTemplates: [],
       repositorySnapshots: [],
-      agentStates: [],
       hostPairings: [],
     });
     assert.deepEqual(missing.recorded, {
@@ -288,7 +279,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       tokenPullRequests: [],
       imageTemplates: [],
       repositorySnapshots: [],
-      agentStates: [],
       hostPairings: [],
     });
   }),
@@ -314,7 +304,6 @@ it.effect(
       assert.deepEqual(answer.body.tokenPullRequests, { polled: 2, told: 1 });
       assert.deepEqual(answer.body.imageTemplates, { current: "ready", deleted: 1 });
       assert.deepEqual(answer.body.repositorySnapshots, { listed: 3, deleted: 1 });
-      assert.deepEqual(answer.body.agentStates, { deleted: 2, abandoned: 1, full: false });
       const [instant] = recorded.terminals;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
@@ -335,14 +324,13 @@ it.effect(
         tokenPullRequests: [instant],
         imageTemplates: [instant],
         repositorySnapshots: [instant],
-        agentStates: [instant],
         hostPairings: [instant],
       });
     }),
 );
 
 it.effect(
-  "a sweep that fails, or dies, answers failed in its place, the sweeps after it still run, the saved agent states' last among them, and the run's cron check-in fails",
+  "a sweep that fails, or dies, answers failed in its place, the sweeps after it still run, the hosts' pairings' last among them, and the run's cron check-in fails",
   () =>
     Effect.gen(function* () {
       const checkIns: string[] = [];
@@ -369,7 +357,7 @@ it.effect(
       assert.deepEqual(answer.body.imageTemplates, { current: "ready", deleted: 1 });
       assert.equal(recorded.imageTemplates.length, 1);
       assert.equal(recorded.repositorySnapshots.length, 1);
-      assert.equal(recorded.agentStates.length, 1);
+      assert.equal(recorded.hostPairings.length, 1);
       assert.equal(recorded.pictures.length, 1);
     }),
 );

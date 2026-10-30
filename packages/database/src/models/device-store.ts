@@ -22,9 +22,10 @@ import {
   type DeviceSignedIn,
   deviceSetupSchema,
   deviceSignedInSchema,
+  knownDeviceCapabilities,
 } from "@luke/features/device-agent-wire";
 import { and, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
-import { DateTime, Effect, type Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { device } from "../schemas/device.js";
@@ -227,7 +228,11 @@ const findNamed = SqlSchema.findAll({
 
 const findLayout = SqlSchema.findOneOption({
   Request: DeviceKeySchema,
-  Result: DeviceStandingSchema,
+  // Note that the capabilities are read as any text, because a row may name one a later build retired.
+  Result: Schema.Struct({
+    ...DeviceStandingSchema.fields,
+    capabilities: Schema.Array(Schema.String),
+  }),
   execute: ({ userId, id }) =>
     Database.use((db) =>
       db
@@ -284,12 +289,18 @@ export function registerDevice(
   );
 }
 
-/** The account's Mac's home folder, bundled CLI, isolation, and capabilities, as it last registered them, and which harnesses it last said it is signed in to; nothing where the account holds no such Mac. */
+/** The account's Mac's home folder, bundled CLI, isolation, and the capabilities of its this build knows, as it last registered them, and which harnesses it last said it is signed in to; nothing where the account holds no such Mac. */
 export function deviceLayout(
   userId: string,
   id: string,
 ): DeviceEffect<Option.Option<DeviceStanding>> {
-  return findLayout({ userId, id });
+  return Effect.map(
+    findLayout({ userId, id }),
+    Option.map((standing) => ({
+      ...standing,
+      capabilities: knownDeviceCapabilities(standing.capabilities),
+    })),
+  );
 }
 
 /** Records that the account's Mac is there now, and which harnesses it is signed in to where it says; false where the account holds no such Mac. */

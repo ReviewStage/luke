@@ -1,16 +1,11 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  listEveryAgentStateKeyRow,
-  rewrapAgentStateKeyRow,
-} from "@luke/database/models/agent-state-store";
-import {
   listEveryGitHubTokenRow,
   rewrapGitHubTokenRow,
 } from "@luke/database/models/github-token-store";
 import {
   type KeyRing,
   parseKeyRing,
-  rewrapAgentStateKey,
   rewrapGitHubToken,
   rewrapProviderKey,
 } from "@luke/database/models/provider-key-seal";
@@ -29,7 +24,7 @@ import {
 } from "../http/http.js";
 
 /**
- * provider-key-rewrap.ts -- every stored provider key, GitHub token, and device agent's state key moved onto the ring's current key-encryption key.
+ * provider-key-rewrap.ts -- every stored provider key and GitHub token moved onto the ring's current key-encryption key.
  *
  * The rotation's one step after a new version heads the environment's list:
  * each row wrapped under an older version has its data key unwrapped and
@@ -38,10 +33,8 @@ import {
  * it still holds the seal it was read with, so a key saved meanwhile keeps
  * its own; a row whose wrap does not open is left as it is and counted, and
  * reads unreadable to its account until it is replaced. Running it twice
- * moves nothing the second time. Members' GitHub tokens and device agents'
- * state keys are sealed under the same ring, so the same pass moves them
- * too, counted with the keys; a state key left behind would leave every
- * bundle its agent saved unreadable once its version left the list.
+ * moves nothing the second time. Members' GitHub tokens are sealed under
+ * the same ring, so the same pass moves them too, counted with the keys.
  *
  * It is asked by hand, `POST /api/maintenance/provider-keys-rewrap` under the
  * deployment's own `CRON_SECRET` (`scripts/rewrap-provider-keys.sh`), so it
@@ -68,7 +61,7 @@ export interface ProviderKeyRewrapOptions {
   readonly keys: Redacted.Redacted | undefined;
 }
 
-/** One pass over every stored provider key, GitHub token, and agent state key. */
+/** One pass over every stored provider key and GitHub token. */
 export function rewrapProviderKeys(ring: KeyRing): TaskStoreEffect<ProviderKeyRewrap> {
   return Effect.gen(function* () {
     const counts = { moved: 0, current: 0, changed: 0, unreadable: 0 };
@@ -96,19 +89,6 @@ export function rewrapProviderKeys(ring: KeyRing): TaskStoreEffect<ProviderKeyRe
         continue;
       }
       if (yield* rewrapGitHubTokenRow(row, rewrapped.success)) counts.moved += 1;
-      else counts.changed += 1;
-    }
-    for (const row of yield* listEveryAgentStateKeyRow()) {
-      if (row.keyVersion === ring.current) {
-        counts.current += 1;
-        continue;
-      }
-      const rewrapped = rewrapAgentStateKey(ring, row, row);
-      if (Result.isFailure(rewrapped)) {
-        counts.unreadable += 1;
-        continue;
-      }
-      if (yield* rewrapAgentStateKeyRow(row, rewrapped.success)) counts.moved += 1;
       else counts.changed += 1;
     }
     return counts;

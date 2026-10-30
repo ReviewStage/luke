@@ -50,33 +50,9 @@
  * stands (`@luke/database/models/host-pairing-store`): once a member
  * approved it, the host's id and a device secret minted for it, this once,
  * counted as an install as an enroll is.
- *
- * A save of an agent's state (`POST /api/device-agents/state/save`) is
- * granted one upload to a fresh path of the store (`./agent-state-blobs.ts`),
- * the grant kept, and the agent's state key, minted where it has none, and
- * its commit (`POST /api/device-agents/state/commit`) keeps what the device
- * uploaded as the agent's next generation, through the model's check-and-set
- * (`@luke/database/models/agent-state-store`), then deletes the blob of the
- * generation it replaced, which the sweep deletes in its stead where that
- * fails. Each answers not found for an agent not the account's or not
- * pinned to the device, and refuses as stale a save from a generation no
- * longer the agent's newest; a commit naming a path no upload was granted
- * for its agent is refused as invalid, and one asked again after its
- * answer was lost is answered the generation it was kept as. A deployment without a
- * store or a key ring answers both unavailable. The key travels in the
- * save's answer alone, and no log names more of a save than its generation
- * and its size.
  */
 
 import { isIP } from "node:net";
-import {
-  type AgentStateGeneration,
-  commitAgentState,
-  ensureAgentStateKey,
-  grantAgentStateUpload,
-  newestAgentState,
-  pinnedAgentState,
-} from "@luke/database/models/agent-state-store";
 import {
   answerDeviceAgentRequest,
   claimDeviceAgentRequest,
@@ -96,11 +72,7 @@ import {
   HOST_ENROLL_REFUSAL,
   hostsOf,
 } from "@luke/database/models/host-store";
-import { openAgentStateKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
-import {
-  DEVICE_CAPABILITY,
-  type deviceAgentStateCommitRequestSchema,
-} from "@luke/features/device-agent-wire";
+import { knownDeviceCapabilities } from "@luke/features/device-agent-wire";
 import {
   HOST_PAIRING_POLL_STATUS,
   HOST_WIRE,
@@ -108,7 +80,7 @@ import {
   type OwnDeviceEnrollRequest,
   shownHostUserCode,
 } from "@luke/features/host-wire";
-import { Clock, Duration, Effect, Option, Redacted, Result } from "effect";
+import { Duration, Effect, Option } from "effect";
 import {
   admittedHostVersion,
   hostSecretHash,
@@ -116,11 +88,9 @@ import {
   mintHostUserCode,
   presentedHostVersion,
 } from "../auth/device-secret.js";
-import { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT, SERVER_HOST_KIND } from "../events/server-events.js";
 import {
   HOSTED_REFUSAL,
-  type HostedRefusal,
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
@@ -135,7 +105,6 @@ import {
   pairingHostMiddleware,
   pollSecretMiddleware,
 } from "../orpc/base.js";
-import { AgentStateBlobs, freshAgentStatePath } from "./agent-state-blobs.js";
 import {
   claimedDeviceAgentLine,
   deviceAgentDeviceOf,
@@ -219,59 +188,6 @@ const enrollingMachine = ({ name, platform, arch }: OwnDeviceEnrollRequest) => {
     ? Effect.succeed(undefined)
     : Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
 };
-
-/** The store of agents' saved state, or unavailable where the deployment has none. */
-const stateStore = Effect.gen(function* () {
-  const blobs = yield* AgentStateBlobs;
-  return blobs.configured ? blobs : yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-});
-
-/** The deployment's key ring, which every agent's state key is sealed under; unavailable where it has none. */
-const keyRing = Effect.gen(function* () {
-  const keys = (yield* HostedEnvironment).providerKeyEncryptionKeys;
-  const ring = keys === undefined ? undefined : parseKeyRing(keys);
-  return ring === undefined || Result.isFailure(ring)
-    ? yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)
-    : ring.success;
-});
-
-/** What a commit came to: the generation it was kept as, or the refusal it is answered. */
-type CommitOutcome = Result.Result<AgentStateGeneration, HostedRefusal>;
-
-/**
- * The generation a commit was kept as, through the model's check: a stale
- * one answered the newest where that is this very save, asked again after
- * its answer was lost, since its path was fresh; refused as stale
- * otherwise, and not found for an agent not the account's on this device.
- */
-const committed = (userId: string, commit: typeof deviceAgentStateCommitRequestSchema.Type) =>
-  Effect.gen(function* () {
-    const { agentId, fromGeneration, path, bytes, sha256, baseCommit, deviceId } = commit;
-    const now = new Date(yield* Clock.currentTimeMillis);
-    const kept = { agentId, fromGeneration, path, bytes, sha256, baseCommit, deviceId };
-    const outcome = yield* hostedStoreOrUnavailable(
-      commitAgentState(userId, kept, now).pipe(
-        Effect.map((generation): CommitOutcome => Result.succeed(generation)),
-        Effect.catchTag("AgentStateStale", () =>
-          Effect.succeed<CommitOutcome>(Result.fail(HOSTED_REFUSAL.AGENT_STATE_STALE)),
-        ),
-        Effect.catchTag("AgentStateUnreachable", () =>
-          Effect.succeed<CommitOutcome>(Result.fail(HOSTED_REFUSAL.NOT_FOUND)),
-        ),
-        Effect.catchTag("AgentStateUngranted", () =>
-          Effect.succeed<CommitOutcome>(Result.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
-        ),
-      ),
-    );
-    if (Result.isSuccess(outcome)) return outcome.success;
-    if (outcome.failure !== HOSTED_REFUSAL.AGENT_STATE_STALE) {
-      return yield* Effect.fail(outcome.failure);
-    }
-    const newest = yield* hostedStoreOrUnavailable(newestAgentState(userId, agentId));
-    return Option.isSome(newest) && newest.value.path === path
-      ? newest.value
-      : yield* Effect.fail(HOSTED_REFUSAL.AGENT_STATE_STALE);
-  });
 
 /** Kept, or not found where the account holds no such row. */
 const keptOrNotFound = (kept: boolean) =>
@@ -370,9 +286,7 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       yield* ownDevice(context, input.deviceId);
       const { userId } = context;
       const { deviceId, capabilities, ...device } = input;
-      const known = Object.values(DEVICE_CAPABILITY).filter((capability) =>
-        capabilities?.includes(capability),
-      );
+      const known = knownDeviceCapabilities(capabilities ?? []);
       return yield* keptOrNotFound(
         yield* hostedStoreOrUnavailable(
           registerDevice(userId, { id: deviceId, ...device, capabilities: known }),
@@ -448,71 +362,6 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
           answerDeviceAgentRequest(context.userId, input.deviceId, input.id, input.answer),
         ),
       );
-    }),
-    saveState: deviceAgents.saveState.effect(function* ({ context, input }) {
-      yield* followed(context, input.deviceId);
-      const { userId } = context;
-      const { agentId } = input;
-      const [blobs, ring] = yield* Effect.all([stateStore, keyRing]);
-      const pinned = yield* hostedStoreOrUnavailable(
-        pinnedAgentState(userId, agentId, input.deviceId),
-      );
-      if (Option.isNone(pinned)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      // Note that a stale save is refused before its device uploads, since its commit would be refused after.
-      if (pinned.value.newest !== input.fromGeneration) {
-        return yield* Effect.fail(HOSTED_REFUSAL.AGENT_STATE_STALE);
-      }
-      const sealed = yield* hostedStoreOrUnavailable(ensureAgentStateKey(ring, userId, agentId));
-      if (Option.isNone(sealed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const key = openAgentStateKey(ring, { userId, agentId }, sealed.value);
-      if (Result.isFailure(key)) {
-        yield* Effect.logError("an agent's state key did not open under the key ring");
-        return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      }
-      const path = freshAgentStatePath(agentId);
-      // Note that the grant is kept before the upload is minted, so no upload stands that the sweep could not find.
-      const now = new Date(yield* Clock.currentTimeMillis);
-      const grant = { agentId, deviceId: input.deviceId, path };
-      if (!(yield* hostedStoreOrUnavailable(grantAgentStateUpload(userId, grant, now)))) {
-        return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      }
-      const upload = yield* blobs.mintUpload(path).pipe(
-        Effect.tapError((failure) => Effect.logWarning(failure.message)),
-        Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
-      );
-      return {
-        path,
-        upload: {
-          url: upload.url,
-          headers: upload.headers,
-          expiresAt: upload.expiresAt.getTime(),
-          maxBytes: upload.maxBytes,
-        },
-        key: Redacted.value(key.success),
-      };
-    }),
-    commitState: deviceAgents.commitState.effect(function* ({ context, input }) {
-      yield* followed(context, input.deviceId);
-      const { userId } = context;
-      const { agentId, fromGeneration, path } = input;
-      const blobs = yield* stateStore;
-      // Note that the newest is read before the commit, because once it lands this read answers the commit itself.
-      const replaced = yield* hostedStoreOrUnavailable(newestAgentState(userId, agentId));
-      const kept = yield* committed(userId, input);
-      yield* Effect.logInfo(`kept an agent's state as generation ${kept.generation}`).pipe(
-        Effect.annotateLogs({ generation: kept.generation, bytes: kept.bytes }),
-      );
-      // A blob whose delete fails here is the sweep's to delete, since its generation is superseded.
-      const superseded = Option.filter(
-        replaced,
-        (generation) => generation.generation === fromGeneration && generation.path !== path,
-      );
-      if (Option.isSome(superseded) && kept.generation !== superseded.value.generation) {
-        yield* blobs
-          .remove([superseded.value.path])
-          .pipe(Effect.catch((failure) => Effect.logWarning(failure.message)));
-      }
-      return { generation: kept.generation };
     }),
   };
 }
