@@ -314,6 +314,24 @@ export const GATEWAY_METHOD = {
   AGENTS_PULL_REQUEST_ACTION: "agents.pullRequestAction",
   /** Which of an agent's pull request's files the account marked viewed on GitHub, read by the service on its own GitHub sign-in. */
   AGENTS_PULL_REQUEST_VIEWED: "agents.pullRequestViewed",
+  /** A pull request of a workspace's repository named by its number, no agent's: its branch and pull request as GitHub holds them now. */
+  PULL_REQUESTS_READ: "pullRequests.read",
+  /** That pull request's changed files as GitHub holds them now, each with its patch. */
+  PULL_REQUESTS_CHANGES: "pullRequests.changes",
+  /** That pull request itself as its overview draws it. */
+  PULL_REQUESTS_OVERVIEW_PULL_REQUEST: "pullRequests.overviewPullRequest",
+  /** The checks on that pull request's head, as its overview draws them. */
+  PULL_REQUESTS_OVERVIEW_CHECKS: "pullRequests.overviewChecks",
+  /** That pull request's conversation and where its reviewers stand, as its overview draws them. */
+  PULL_REQUESTS_OVERVIEW_CONVERSATION: "pullRequests.overviewConversation",
+  /** One change to that pull request, made on GitHub by the service as the account on its own GitHub sign-in: how GitHub took it. */
+  PULL_REQUESTS_ACTION: "pullRequests.action",
+  /** Which of that pull request's files the account marked viewed on GitHub, read by the service on its own GitHub sign-in. */
+  PULL_REQUESTS_VIEWED: "pullRequests.viewed",
+  /** The workspace's newest chapters of that pull request; the read generates none. */
+  PULL_REQUESTS_CHAPTERS: "pullRequests.chapters",
+  /** That pull request's chapters generated for its head on Luke's own model key, or the generation already under way, answered as a read of them is. */
+  PULL_REQUESTS_CHAPTERS_GENERATE: "pullRequests.chaptersGenerate",
   /** The account's own provider keys an agent runs on, read from the service now as hints and statuses; never a key. */
   PROVIDER_KEYS_READ: "providerKeys.read",
   /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */

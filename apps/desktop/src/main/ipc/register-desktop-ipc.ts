@@ -217,6 +217,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         installedSkills: { host: operator.host },
         integrations: { host: operator.host },
         macCommands: { host: operator.host },
+        pullRequests: { host: operator.host },
         pushes: windowPushes,
         settings: {
           host: operator.host,

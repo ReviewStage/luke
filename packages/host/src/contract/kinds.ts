@@ -233,6 +233,26 @@ export const CHAPTERS_ACT_KIND = {
 } as const;
 
 /**
+ * A pull request of a workspace's repository named by its repository and
+ * number rather than by an agent, which a Pull request tab no agent opened
+ * reads and changes: the pull request, its changes, its overview's parts,
+ * which of its files the account marked viewed, and its chapters read, or
+ * generated on the developer's press alone; and one change made to it on
+ * GitHub as the account on its own GitHub sign-in.
+ */
+export const PULL_REQUEST_ACT_KIND = {
+  PULL_REQUESTS_READ: "pullRequests.read",
+  PULL_REQUESTS_CHANGES: "pullRequests.changes",
+  PULL_REQUESTS_OVERVIEW_PULL_REQUEST: "pullRequests.overviewPullRequest",
+  PULL_REQUESTS_OVERVIEW_CHECKS: "pullRequests.overviewChecks",
+  PULL_REQUESTS_OVERVIEW_CONVERSATION: "pullRequests.overviewConversation",
+  PULL_REQUESTS_ACTION: "pullRequests.action",
+  PULL_REQUESTS_VIEWED: "pullRequests.viewed",
+  PULL_REQUESTS_CHAPTERS: "pullRequests.chapters",
+  PULL_REQUESTS_CHAPTERS_GENERATE: "pullRequests.chaptersGenerate",
+} as const;
+
+/**
  * Settings' Skills: the skills the account sees in a workspace listed, a
  * pasted `skills add` command or skill text previewed, one of its skills'
  * `SKILL.md` read, and installed for the account or its workspace, and one toggled, checked for an update,
@@ -571,6 +591,7 @@ export const PORT_ACT_KIND = {
   ...INTEGRATION_ACT_KIND,
   ...MAC_COMMAND_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
+  ...PULL_REQUEST_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
   ...TERMINAL_ACT_KIND,
