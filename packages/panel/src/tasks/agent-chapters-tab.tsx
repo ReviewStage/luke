@@ -106,6 +106,9 @@ import {
 } from "./chapters-model.js";
 import type { ChaptersRead } from "./chapters-read.js";
 import { drawnIn, useFloatsOver } from "./drawn-in.js";
+import { FileCard } from "./file-ref.js";
+import { fileName } from "./file-ref-model.js";
+import { FileTypeIcon } from "./file-type-icon.js";
 import type { TreeShown } from "./file-view.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import type { AgentsControl } from "./use-agents.js";
@@ -618,7 +621,7 @@ function ChapterStrip({
   );
 }
 
-/** One change a reviewer should weigh: its words, and the first lines it points at in the chapter's reading order, a press of which brings them into view; named alone where there is no diff to bring them into (`onReveal` none). */
+/** One change a reviewer should weigh: its words, and the first lines it points at in the chapter's reading order, as a pill of the file's type icon, its path, and its lines, whose card names the file whole, as a file is named in place (`file-ref.tsx`), a press of which brings them into view; named alone where there is no diff to bring them into (`onReveal` none). */
 function KeyChangeItem({
   change,
   paths,
@@ -636,7 +639,7 @@ function KeyChangeItem({
       {first === undefined ? null : (
         <InlineRef
           look={INLINE_REF_LOOK.PILL}
-          glyph={<GLYPH.FILE />}
+          glyph={<FileTypeIcon name={fileName(first.path)} />}
           kind={CHAPTERS_WORDS.FILE}
           label={first.path}
           name={INLINE_REF_NAME.PATH}
@@ -647,7 +650,7 @@ function KeyChangeItem({
               {lineRefLines(first)}
             </>
           }
-          hint={false}
+          card={<FileCard path={first.path} note={lineRefLines(first)} />}
           onPress={onReveal === undefined ? undefined : () => onReveal(first)}
           pressLabel={onReveal === undefined ? undefined : CHAPTERS_WORDS.reveal(first)}
         />
