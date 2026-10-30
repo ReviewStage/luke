@@ -27,7 +27,6 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { useAppKeymap } from "../app-commands.js";
-import { installPressIntent } from "../press-intent.js";
 import { useInboxTaskAgents } from "../tasks/use-inbox-task-agents.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
@@ -341,31 +340,6 @@ test("a preview beside the Inbox kept by a double-click stands as a tab of its o
   assert.deepEqual(panelTabs(container), ["#42 Send invitations in batches", "▸ invites.ts"]);
 });
 
-test("a link the item names pressed with ⌘ asks to go to its task, opening what it names there, rather than beside the Inbox", async () => {
-  const stop = installPressIntent(window);
-  try {
-    const { container, left } = await inbox();
-    const chip = [
-      ...container.querySelectorAll<HTMLButtonElement>(
-        "[data-inbox-message-text] [data-mention-ref]",
-      ),
-    ].find((each) =>
-      each.querySelector(".luke-inline-ref-label")?.textContent?.includes("Invite funnel"),
-    );
-    assert.ok(chip);
-    act(() => {
-      chip.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
-      );
-    });
-    await settle();
-    assert.deepEqual(left.went, [`${TASK.id} ${JSON.stringify({ page: FUNNEL.id })}`]);
-    assert.equal(panelTabs(container), undefined, "nothing opened beside the Inbox");
-  } finally {
-    stop();
-  }
-});
-
 test("a page the item names before its plan's pages are read is still the panel's to open, its tab standing once they land", async () => {
   const { container, left } = await inbox({ pages: undefined });
   await pressChip(container, "Invite funnel");
@@ -390,35 +364,7 @@ test("an archived agent's Pull request tab stands beside the Inbox as any other,
   assert.equal(panelTabs(container), undefined, "the panel shut with its last tab");
 });
 
-test("a pull request and a file the item names pressed with ⌘ ask to go to the task on the tab a plain press would open, the file drawn there", async () => {
-  const stop = installPressIntent(window);
-  try {
-    const { container, left } = await inbox();
-    const pressWithCommand = async (name: string) => {
-      const chip = [
-        ...container.querySelectorAll<HTMLButtonElement>(
-          "[data-inbox-message-text] [data-mention-ref]",
-        ),
-      ].find((each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name));
-      assert.ok(chip, `no chip says ${name}`);
-      act(() => {
-        chip.dispatchEvent(
-          new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
-        );
-      });
-      await settle();
-    };
-    await pressWithCommand("relay#42");
-    await pressWithCommand("invites.ts");
-    assert.equal(left.went.length, 2, left.went.join("\n"));
-    assert.match(left.went[0] ?? "", /"changes"/);
-    assert.match(left.went[1] ?? "", /"file"/);
-  } finally {
-    stop();
-  }
-});
-
-test("an agent the item names reads beside the Inbox as the panel's preview, its transcript in the panel, and pressed with ⌘ asks to go to its task on its tab", async () => {
+test("an agent the item names reads beside the Inbox as the panel's preview, its transcript in the panel", async () => {
   const { container, left } = await inbox();
   await pressChip(container, "Batch the invitations");
   const tabs = panelTabs(container);
@@ -432,27 +378,6 @@ test("an agent the item names reads beside the Inbox as the panel's preview, its
     "the agent's transcript stands in the panel",
   );
   assert.equal(left.links.length + left.tasks.length, 0, "nothing left the Inbox");
-
-  const stop = installPressIntent(window);
-  try {
-    const chip = [
-      ...container.querySelectorAll<HTMLButtonElement>(
-        "[data-inbox-message-text] [data-mention-ref]",
-      ),
-    ].find((each) =>
-      each.querySelector(".luke-inline-ref-label")?.textContent?.includes("Batch the invitations"),
-    );
-    assert.ok(chip);
-    act(() => {
-      chip.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
-      );
-    });
-    await settle();
-    assert.deepEqual(left.went, [`${TASK.id} agent ${AGENT.id}`]);
-  } finally {
-    stop();
-  }
 });
 
 test("an agent's tab beside the Inbox hangs the agent's card, as its tab in the task's column does", async () => {

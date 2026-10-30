@@ -118,7 +118,6 @@ import {
   PANEL_SPAN_ATTRIBUTE,
   recordPanelSpan,
 } from "../panel-spans.js";
-import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
@@ -2691,11 +2690,11 @@ export function useTasksTab(input: {
     sidePanel.onShow(taskId, tab);
   };
   // A link to a tab of the task standing opens it as the panel's preview, as
-  // any link pressed there does; one to another task's, or pressed with ⌘,
-  // goes there and opens it as a tab of its own.
+  // any link pressed there does; one to another task's goes there and opens
+  // it as a tab of its own.
   const linkPanelTab = (taskId: string, tab: SidePanelTab) => {
     const here = taskId === tasks.activeTaskId && standIn === undefined && historyFor === undefined;
-    if (here && !pressedWithCommand()) sidePanel.onPreview(tab);
+    if (here) sidePanel.onPreview(tab);
     else showPanelTab(taskId, tab);
   };
 

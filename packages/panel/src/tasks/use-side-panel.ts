@@ -36,7 +36,6 @@ import { Option, Schema } from "effect";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
-import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fileName } from "./file-ref-model.js";
 import {
@@ -2171,13 +2170,8 @@ export function useSidePanel(
       update((held) => withFileAsked(held, ref, commit, drawn, taskId)),
     [update, drawn, taskId],
   );
-  // Note that a link pressed with ⌘ asks for a tab of its own, as a double-click on a preview keeps it.
   const onPreview = useCallback(
     (tab: SidePanelTab) => {
-      if (pressedWithCommand()) {
-        onChoose(tab);
-        return;
-      }
       setAsked(undefined);
       update((held) => ({
         ...withPreview(held, tab, drawn, (from) =>
@@ -2186,22 +2180,17 @@ export function useSidePanel(
         open: true,
       }));
     },
-    [update, drawn, taskId, onChoose],
+    [update, drawn, taskId],
   );
   const onPreviewFile = useCallback(
-    (ref: CodeRef, commit?: string) => {
-      if (pressedWithCommand()) {
-        onOpenFile(ref, commit);
-        return;
-      }
+    (ref: CodeRef, commit?: string) =>
       update((held) => ({
         ...withPreview(held, { file: ref.path }, drawn, (from) =>
           withFileAsked(from, ref, commit, drawn, taskId),
         ),
         open: true,
-      }));
-    },
-    [update, drawn, taskId, onOpenFile],
+      })),
+    [update, drawn, taskId],
   );
   const onKeep = useCallback(
     (tab: SidePanelTab) => {
