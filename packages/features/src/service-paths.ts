@@ -151,8 +151,6 @@ export const HOSTED_SERVICE_PATH = {
   DEVICE_AGENT_REQUEST_CLAIM: "/api/device-agents/requests/claim",
   /** The ids of the account's agents that should still stand on a Mac: pinned to it and not archived (GET). */
   DEVICE_AGENT_LIVE_AGENTS: "/api/device-agents/live-agents",
-  /** A host's enroll: an install token traded for a device of kind host and its device secret, answered once (POST). `host-wire.ts` declares the bodies. */
-  DEVICE_AGENT_ENROLL: "/api/device-agents/enroll",
   /** One of the account's own registered devices enrolled on its signed-in session, traded for a device secret answered once (POST). `host-wire.ts` declares the bodies. */
   DEVICE_AGENT_ENROLL_OWN: "/api/device-agents/devices/enroll",
   /** A box's pairing started with no credential: its poll secret, the code it shows and the link that opens it, how long the code lasts, and how often to poll (POST). `host-wire.ts` declares the bodies. */
@@ -165,10 +163,6 @@ export const HOSTED_SERVICE_PATH = {
   DEVICE_PRESENCE: "/api/hosts/presence",
   /** One of the account's hosts removed, its secret refused at once (POST). */
   HOST_REMOVE: "/api/hosts/remove",
-  /** An install token of the account's kept by its hash, to enroll its hosts (POST). */
-  HOST_INSTALL_TOKENS: "/api/hosts/install-tokens",
-  /** One of the account's install tokens revoked, so it enrolls no box again (POST). */
-  HOST_INSTALL_TOKEN_REVOKE: "/api/hosts/install-tokens/revoke",
   /** A pending pairing read by its code, as the approve screen shows it (POST, so the code rides in the body). `host-wire.ts` declares the bodies. */
   HOST_PAIRING: "/api/hosts/pairing",
   /** A pending pairing approved by its code, which makes the account's host (POST). */

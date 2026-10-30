@@ -17,7 +17,6 @@ import {
   type DeviceSignedIn,
 } from "./device-agent-wire.js";
 import {
-  type HostEnrollRequest,
   type HostPairingPollAnswer,
   type HostPairingStartAnswer,
   type HostPairingStartRequest,
@@ -50,10 +49,9 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
  * and one unanswered, or refused as unavailable, is nothing. A host also
  * asks the runner token route for a GitHub token for one of its agents
  * (`githubToken`), on the same credential, its device secret. A box with
- * no secret yet enrolls on an install token (`enrollHost`), or pairs with
- * a code: it starts a pairing with no credential (`startHostPairing`) and
- * polls on the poll secret it was answered (`pollHostPairing`) until a
- * member approves or denies it.
+ * no secret yet pairs with a code: it starts a pairing with no credential
+ * (`startHostPairing`) and polls on the poll secret it was answered
+ * (`pollHostPairing`) until a member approves or denies it.
  */
 
 /** A read's bytes as the answer's wire spells them. */
@@ -88,78 +86,6 @@ export interface DeviceAgentDevice {
   /** Where its setup stands while it is not ready to take an agent, and why it failed where it did; none once it is ready. */
   readonly setup?: DeviceSetup | undefined;
   readonly setupFailure?: string | undefined;
-}
-
-/** How a host's enroll ended. */
-export const HOST_ENROLL_OUTCOME = {
-  /** The service took the install token and answered the box's device secret, this once. */
-  ENROLLED: "enrolled",
-  /** The box's id is a host of the member's still enrolled, so nothing was written and its secret stands. */
-  STILL_ENROLLED: "still-enrolled",
-  /** The service refused the install token: unknown, revoked, past its 24 hours, or for an id it does not take. */
-  REFUSED: "refused",
-  /** The service refused the daemon's version as below its floor (`HOST_WIRE.VERSION_HEADER`). */
-  UPGRADE_NEEDED: "upgrade-needed",
-  /** No answer could be read: the network, the deadline, or a service answering something else. */
-  UNANSWERED: "unanswered",
-} as const;
-
-export type HostEnrollOutcome =
-  | { readonly outcome: typeof HOST_ENROLL_OUTCOME.ENROLLED; readonly deviceSecret: string }
-  | { readonly outcome: typeof HOST_ENROLL_OUTCOME.STILL_ENROLLED }
-  | { readonly outcome: typeof HOST_ENROLL_OUTCOME.REFUSED }
-  | {
-      readonly outcome: typeof HOST_ENROLL_OUTCOME.UPGRADE_NEEDED;
-      readonly minimumVersion?: string | undefined;
-    }
-  | { readonly outcome: typeof HOST_ENROLL_OUTCOME.UNANSWERED };
-
-/** How a refusal of the enroll reads, by its slug. */
-function enrollRefusal(failed: HostedRefused): HostEnrollOutcome {
-  switch (failed.refusal) {
-    case HOSTED_API_ERROR.HOST_UPGRADE_NEEDED:
-      return {
-        outcome: HOST_ENROLL_OUTCOME.UPGRADE_NEEDED,
-        minimumVersion: failed.data?.minimumVersion,
-      };
-    case HOSTED_API_ERROR.HOST_STILL_ENROLLED:
-      return { outcome: HOST_ENROLL_OUTCOME.STILL_ENROLLED };
-    default:
-      return { outcome: HOST_ENROLL_OUTCOME.REFUSED };
-  }
-}
-
-/**
- * A host's enroll (`contract/device-agents.ts`): the install token, as the
- * call's bearer, traded for the box's device secret under the id given. The
- * daemon's version rides on the caller's own `HttpClient`, as on every call
- * of a host's.
- */
-export function enrollHost(
-  serviceBaseUrl: string,
-  installToken: string,
-  request: HostEnrollRequest,
-): Effect.Effect<HostEnrollOutcome, never, HttpClient.HttpClient> {
-  const bearer = `Bearer ${installToken}`;
-  const hosted = hostedClient({
-    baseUrl: serviceBaseUrl,
-    credential: { authorization: () => Effect.succeed(bearer) },
-  });
-  return askHosted(hosted.deviceAgents.enroll, request).pipe(
-    Effect.map(
-      (answer): HostEnrollOutcome => ({
-        outcome: HOST_ENROLL_OUTCOME.ENROLLED,
-        deviceSecret: answer.deviceSecret,
-      }),
-    ),
-    Effect.catch((failed) =>
-      Effect.succeed(
-        failed._tag === "HostedRefused"
-          ? enrollRefusal(failed)
-          : { outcome: HOST_ENROLL_OUTCOME.UNANSWERED },
-      ),
-    ),
-  );
 }
 
 /** How a pairing's start or poll ended. */

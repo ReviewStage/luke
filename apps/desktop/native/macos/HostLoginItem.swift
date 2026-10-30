@@ -17,7 +17,7 @@ import ServiceManagement
 ///
 /// `service` is what the job runs: the daemon's `run`, with its output
 /// appended to `~/Library/Logs/Luke/luke-host.log`. Every other command is
-/// the daemon's own (`enroll`, `version`, `run`), run in place on the Node
+/// the daemon's own (`version`, `run`), run in place on the Node
 /// the app carries (`Resources/luke-host/node/bin/node`) with its bundle
 /// (`Resources/luke-host/lib/luke-host.mjs`): the same process, so launchd's
 /// stop and its restart after a crash reach the daemon itself.
@@ -142,7 +142,7 @@ enum HostLoginItem {
     static func main() {
         let arguments = Array(CommandLine.arguments.dropFirst())
         guard let command = arguments.first else {
-            fail("usage: luke-host register | unregister | status | service | enroll [--token <token>] | version")
+            fail("usage: luke-host register | unregister | status | service | version")
         }
         switch command {
         case "register", "unregister", "status":

@@ -60,8 +60,6 @@ import {
   devicePresenceAnswerViewSchema,
   hostDoneAnswerViewSchema,
   hostIdParamsSchema,
-  hostInstallTokenAnswerViewSchema,
-  hostInstallTokenParamsSchema,
   hostsAnswerViewSchema,
 } from "@luke/features/agent-view";
 import {
@@ -113,16 +111,6 @@ export const agentActsContract = {
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.flip(devicePresenceAnswerViewSchema)),
   [AGENT_ACT_KIND.HOSTS_REMOVE]: actProcedure("Could not remove the host on this system.")
-    .input(exactInput(hostIdParamsSchema))
-    .output(EffectSchema.flip(hostDoneAnswerViewSchema)),
-  [AGENT_ACT_KIND.HOSTS_KEEP_INSTALL_TOKEN]: actProcedure(
-    "Could not make an install command on this system.",
-  )
-    .input(exactInput(hostInstallTokenParamsSchema))
-    .output(EffectSchema.flip(hostInstallTokenAnswerViewSchema)),
-  [AGENT_ACT_KIND.HOSTS_REVOKE_INSTALL_TOKEN]: actProcedure(
-    "Could not revoke the install command on this system.",
-  )
     .input(exactInput(hostIdParamsSchema))
     .output(EffectSchema.flip(hostDoneAnswerViewSchema)),
   [AGENT_ACT_KIND.HOSTS_PAIRING_READ]: actProcedure("Could not read the code on this system.")

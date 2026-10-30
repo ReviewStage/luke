@@ -23,7 +23,7 @@ import { agentUnsavedWorkScript } from "../node/open-on-mac.js";
 /**
  * host-os.ts -- what a host's daemon does differently on each OS it runs on (`HostOs`): the platform it enrolls and registers as, the architectures it is built for, its default name, which builds of the agent CLIs it keeps, whether agents ran on the developer's own logins on it before, and whether its agents' folders are its own alone.
  *
- * Everything else, the enroll, the follower, and each agent run straight
+ * Everything else, the connect, the follower, and each agent run straight
  * on the box, is the same program on every OS (`hostPlatform`,
  * `hostDaemon`), the check of an agent's folder for unsaved work before a
  * discard among it. A description

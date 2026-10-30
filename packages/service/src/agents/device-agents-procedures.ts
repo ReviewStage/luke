@@ -1,21 +1,15 @@
 /**
  * device-agents-procedures.ts -- a local agent's Mac registers and beats, takes its agents' lines and its tools' requests, and says what came of each; a box pairs with a code.
  *
- * Every procedure but the enrolls reads the device's bearer alone, never a
- * browser's session cookie (`deviceMiddleware`), since a line carries a
- * runner's secrets and an answer is the word of the device that ran it, and
- * names the device's id: the machine's device secret, which acts for its
- * own device alone and answers not found for any other. A desktop's own
- * sign-in, which released desktop builds followed the queue on, is refused
- * there as needing an upgrade.
- * The enroll's bearer is an install token instead (`installTokenMiddleware`),
- * which it trades for a host and the secret it calls on from then on
- * (`@luke/features/host-wire`), answered this once; it refuses an unknown,
- * revoked, or expired token as an invalid token, and the id of one of the
- * token's member's standing hosts as still enrolled. The own enroll's
- * bearer is the desktop's sign-in alone (`bearerOnlyMiddleware`, never a
- * browser's cookie, since it mints a credential), and it converts a device
- * the member's account registered in place under its id, or creates one
+ * Every procedure but the own enroll and the pairing's reads the device's
+ * bearer alone, never a browser's session cookie (`deviceMiddleware`), since
+ * a line carries a runner's secrets and an answer is the word of the device
+ * that ran it, and names the device's id: the machine's device secret, which
+ * acts for its own device alone and answers not found for any other. A
+ * desktop's own sign-in, which released desktop builds followed the queue
+ * on, is refused there as needing an upgrade. The own enroll's bearer is the
+ * desktop's sign-in alone (`bearerOnlyMiddleware`, never a browser's cookie,
+ * since it mints a credential), and it converts a device the member's account registered in place under its id, or creates one
  * under the account with the name, platform and architecture the enroll
  * sends where the account never registered the id, answering its new
  * secret this once; it answers not found for another account's id, and
@@ -23,7 +17,7 @@
  * machine, and refuses an enroll naming only some of the machine's fields
  * as invalid. A host's every call,
  * the enroll's included, is refused as needing an upgrade where its daemon
- * is below the floor (`auth/device-secret.ts`). Every one but the enrolls
+ * is below the floor (`auth/device-secret.ts`). Every one but the enroll
  * and the register answers not found where the account holds no such Mac
  * (`agents/device-agent.ts`); a
  * register under an id another account holds writes nothing and answers
@@ -38,7 +32,7 @@
  * token it first carried answers that line again, and a settle or an answer keeps what the
  * Mac said of a row it claimed.
  *
- * A box may pair with a code instead of a token. Its start
+ * A box pairs with a code. Its start
  * (`POST /api/device-agents/pairing`) reads no credential, only its
  * daemon's version against the floor (`pairingHostMiddleware`), and is
  * braked per address in this instance, since a start costs little and
@@ -49,7 +43,7 @@
  * bearer alone (`pollSecretMiddleware`), and answers where the pairing
  * stands (`@luke/database/models/host-pairing-store`): once a member
  * approved it, the host's id and a device secret minted for it, this once,
- * counted as an install as an enroll is.
+ * counted as an install as an own enroll is.
  */
 
 import { isIP } from "node:net";
@@ -66,12 +60,7 @@ import {
   openHostPairing,
   pollHostPairing,
 } from "@luke/database/models/host-pairing-store";
-import {
-  enrollHost,
-  enrollOwnDevice,
-  HOST_ENROLL_REFUSAL,
-  hostsOf,
-} from "@luke/database/models/host-store";
+import { enrollOwnDevice, hostsOf } from "@luke/database/models/host-store";
 import { knownDeviceCapabilities } from "@luke/features/device-agent-wire";
 import {
   HOST_PAIRING_POLL_STATUS,
@@ -101,7 +90,6 @@ import {
   type DeviceCaller,
   deviceMiddleware,
   hosted,
-  installTokenMiddleware,
   pairingHostMiddleware,
   pollSecretMiddleware,
 } from "../orpc/base.js";
@@ -193,11 +181,10 @@ const enrollingMachine = ({ name, platform, arch }: OwnDeviceEnrollRequest) => {
 const keptOrNotFound = (kept: boolean) =>
   kept ? Effect.succeed(DONE) : Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
 
-/** The device-agents resource: the enroll on an install token, a pairing's start on no credential and its poll on its poll secret, and every other procedure on the device's bearer. */
+/** The device-agents resource: the own enroll on the desktop's sign-in, a pairing's start on no credential and its poll on its poll secret, and every other procedure on the device's bearer. */
 export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
   const deviceAgents = hosted.deviceAgents.use(deviceMiddleware(seams.resolveUserId));
   // Note that each caller middleware is used on the resource rather than its procedure, so it refuses before the input is read, as every procedure's does.
-  const enrolling = hosted.deviceAgents.use(installTokenMiddleware);
   const signedIn = hosted.deviceAgents.use(bearerOnlyMiddleware(seams.resolveUserId));
   const pairing = hosted.deviceAgents.use(pairingHostMiddleware);
   const polling = hosted.deviceAgents.use(pollSecretMiddleware);
@@ -234,30 +221,6 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
         kind: SERVER_HOST_KIND.LUKE_HOST,
       });
       return { status: polled.status, deviceId: polled.deviceId, deviceSecret: minted.secret };
-    }),
-    enroll: enrolling.enroll.effect(function* ({ context, input }) {
-      const { deviceId, ...box } = input;
-      const minted = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
-      const enrolled = yield* hostedStoreOrUnavailable(
-        enrollHost(hostSecretHash(context.installToken), {
-          id: deviceId,
-          ...box,
-          version: context.hostVersion,
-          secretHash: minted.hash,
-        }),
-      );
-      if ("refused" in enrolled) {
-        return yield* Effect.fail(
-          enrolled.refused === HOST_ENROLL_REFUSAL.STILL_ENROLLED
-            ? HOSTED_REFUSAL.HOST_STILL_ENROLLED
-            : HOSTED_REFUSAL.INVALID_TOKEN,
-        );
-      }
-      // Note that a box already enrolled is refused above, so every enroll that gets here is a first connect.
-      yield* recordServerEvent(SERVER_EVENT.HOST_INSTALL, enrolled.userId, {
-        kind: SERVER_HOST_KIND.LUKE_HOST,
-      });
-      return { deviceId, deviceSecret: minted.secret };
     }),
     enrollOwn: signedIn.enrollOwn.effect(function* ({ context, input }) {
       const { userId } = context;

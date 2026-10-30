@@ -5,8 +5,8 @@ import * as FileSystem from "effect/FileSystem";
 /**
  * host-device-record.ts -- a machine's record of the device it enrolled as (`device.json` in `luke-host`'s state): its id, its device secret, the service it enrolled with, and whether that service has since refused the secret.
  *
- * A Linux box's install script writes it through `luke-host enroll`
- * (`daemon/host-device.ts`); on a Mac the desktop app writes it as it turns
+ * A box writes it as `luke-host connect` pairs it with a code
+ * (`daemon/host-pairing.ts`); on a Mac the desktop app writes it as it turns
  * This Mac's `luke-host` on (`compose-this-mac-host.ts`), into the app's own
  * state folder, which is the daemon's there. Either way it is made `0600` in
  * a folder made `0700` before a byte of the secret is written, beside the
@@ -30,7 +30,7 @@ const HostDeviceSchema = Schema.Struct({
     ),
   ),
   serviceOrigin: Schema.String,
-  /** Present once Luke refused the secret: the machine was removed, and comes back only by enrolling again. */
+  /** Present once Luke refused the secret: the machine was removed, and comes back only by joining again. */
   refused: Schema.optionalKey(Schema.Literal(true)),
 });
 

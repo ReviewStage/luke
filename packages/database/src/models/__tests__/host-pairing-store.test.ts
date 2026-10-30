@@ -19,7 +19,7 @@ import {
   readHostPairing,
   sweepHostPairings,
 } from "../host-pairing-store.js";
-import { enrollHost, hostBySecret, hostsOf, mintHostInstallToken } from "../host-store.js";
+import { enrollOwnDevice, hostBySecret, hostsOf } from "../host-store.js";
 
 /**
  * A box's pairings, over a real dialect: once one account approved or
@@ -99,17 +99,13 @@ it.layer(getTestDB())("a box's pairings", (it) => {
   it.effect("an approve under the id of a device that stands fails, and writes nothing", () =>
     Effect.gen(function* () {
       const { owner, other } = yield* openAccounts;
-      const tokenHash = `token-${randomUUID()}`;
-      yield* mintHostInstallToken(other, tokenHash);
       const standing = {
         id: randomUUID(),
-        name: "theirs",
-        platform: DEVICE_PLATFORM.LINUX,
-        arch: DEVICE_ARCH.X64,
         version: "0.1.0",
         secretHash: `secret-${randomUUID()}`,
+        machine: { name: "theirs", platform: DEVICE_PLATFORM.LINUX, arch: DEVICE_ARCH.X64 },
       };
-      yield* enrollHost(tokenHash, standing);
+      yield* enrollOwnDevice(other, standing);
       const pairing = yield* opened;
 
       const taken = yield* Effect.exit(approveHostPairing(owner, pairing.userCode, standing.id));

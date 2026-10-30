@@ -123,15 +123,12 @@ export const AGENT_ACT_KIND = {
   AGENTS_DEFAULT_WRITE: "agents.defaultWrite",
   /**
    * The account's hosts as Settings › Hosts reads and changes
-   * them: listed, the beats of the account's devices read, one removed, an install token kept by its hash alone (the
-   * window that minted the token keeps it and shows it once), and one revoked; and a box's pairing, by the code its
-   * link named, read, approved, or denied.
+   * them: listed, the beats of the account's devices read, and one removed; and a box's pairing, by the code its link
+   * named, read, approved, or denied.
    */
   HOSTS_LIST: "hosts.list",
   HOSTS_PRESENCE: "hosts.presence",
   HOSTS_REMOVE: "hosts.remove",
-  HOSTS_KEEP_INSTALL_TOKEN: "hosts.keepInstallToken",
-  HOSTS_REVOKE_INSTALL_TOKEN: "hosts.revokeInstallToken",
   HOSTS_PAIRING_READ: "hosts.pairingRead",
   HOSTS_PAIRING_APPROVE: "hosts.pairingApprove",
   HOSTS_PAIRING_DENY: "hosts.pairingDeny",

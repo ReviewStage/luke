@@ -9,7 +9,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
  * host-standing.ts -- every call a host's daemon makes to Luke, its version on it, and what Luke's answers say of the host's standing: refused as needing an upgrade, or its secret refused.
  *
  * Every request to the service's origin carries the daemon's version
- * (`HOST_WIRE.VERSION_HEADER`), its enroll and the follower's reads alike,
+ * (`HOST_WIRE.VERSION_HEADER`), its connect and the follower's reads alike,
  * since they all go through the one `HttpClient` the daemon hands them; a
  * request anywhere else, a pinned tool's download, carries nothing of
  * Luke's. The same client hears each answer's status. A 426 is the service

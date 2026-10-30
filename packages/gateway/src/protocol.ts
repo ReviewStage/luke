@@ -186,10 +186,6 @@ export const GATEWAY_METHOD = {
   HOSTS_PRESENCE: "hosts.presence",
   /** One of the account's hosts removed; done, or why not. */
   HOSTS_REMOVE: "hosts.remove",
-  /** An install token kept by its SHA-256 alone, the token itself staying in the window that minted it; its id and expiry, or why not. */
-  HOSTS_KEEP_INSTALL_TOKEN: "hosts.keepInstallToken",
-  /** One of the account's install tokens revoked; done, or why not. */
-  HOSTS_REVOKE_INSTALL_TOKEN: "hosts.revokeInstallToken",
   /** A box's pending pairing read by the code its link named; the box and where its start came from, or why not. */
   HOSTS_PAIRING_READ: "hosts.pairingRead",
   /** A box's pending pairing approved by its code, which makes the account's host; its id, or why not. */

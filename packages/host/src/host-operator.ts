@@ -107,10 +107,8 @@ import {
   type GitHubTokenSaveParams,
   githubTokenAnswerViewSchema,
   type HostDoneAnswerView,
-  type HostInstallTokenAnswerView,
   type HostsAnswerView,
   hostDoneAnswerViewSchema,
-  hostInstallTokenAnswerViewSchema,
   hostsAnswerViewSchema,
   type MemoriesAnswerView,
   type MemoriesReadParams,
@@ -679,10 +677,6 @@ export interface HostOperator {
   hostsPresence(): Effect.Effect<DevicePresenceAnswerView>;
   /** One of the account's hosts removed; done, or why not. */
   hostsRemove(id: string): Effect.Effect<HostDoneAnswerView>;
-  /** An install token kept by its SHA-256 alone; its id and expiry, or why not. */
-  hostsKeepInstallToken(tokenHash: string): Effect.Effect<HostInstallTokenAnswerView>;
-  /** One of the account's install tokens revoked; done, or why not. */
-  hostsRevokeInstallToken(id: string): Effect.Effect<HostDoneAnswerView>;
   /** A box's pending pairing read by the code its link named; the box, or why not. */
   hostsPairingRead(code: string): Effect.Effect<HostPairingView>;
   /** A box's pending pairing approved by its code; the host it made, or why not. */
@@ -1740,16 +1734,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     hostsRemove: (id) =>
       Effect.map(
         client.call(GATEWAY_METHOD.HOSTS_REMOVE, { id }),
-        answerOf(hostDoneAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    hostsKeepInstallToken: (tokenHash) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.HOSTS_KEEP_INSTALL_TOKEN, { tokenHash }),
-        answerOf(hostInstallTokenAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    hostsRevokeInstallToken: (id) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.HOSTS_REVOKE_INSTALL_TOKEN, { id }),
         answerOf(hostDoneAnswerViewSchema, AGENT_UNANSWERED),
       ),
     hostsPairingRead: (code) =>
