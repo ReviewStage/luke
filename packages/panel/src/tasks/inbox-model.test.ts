@@ -37,19 +37,14 @@ import {
   EVERYONES,
   holderName,
   INBOX_DIRECTION,
-  INBOX_GROUPING,
   INBOX_HOLDER,
   INBOX_LINE,
   INBOX_SHOW,
-  INBOX_SORT,
-  INBOX_STATUS_GROUP,
   INBOX_WHOSE,
   type InboxDraft,
   type InboxGroup,
-  type InboxGrouping,
   type InboxListView,
   type InboxShow,
-  type InboxSort,
   type InboxWhose,
   inboxBoard,
   inboxCommentFiles,
@@ -67,6 +62,7 @@ import {
   inboxThreadSend,
   isDone,
   listedItems,
+  MINE,
   NO_PLACES,
   nextNeedingYou,
   openItems,
@@ -433,62 +429,20 @@ const TASKS = [
   { holder: taskHolder(INVITES), items: [item({ id: "expiry", updatedAt: 40 })] },
 ];
 
-/** Each group of a list as its task's name, its person's, You for the reader's own, or its status, and its items' ids, or the one run's ids. */
-function drawn(view: InboxListView): readonly (string | readonly [string, readonly string[]])[] {
-  if (view.grouping === INBOX_GROUPING.TASK) {
-    return view.groups.map(
-      ({ holder, items }) => [holderName(holder), items.map(({ item }) => item.id)] as const,
-    );
-  }
-  if (view.grouping === INBOX_GROUPING.PERSON) {
-    return view.groups.map(
-      ({ person, items }) => [person?.name ?? "You", items.map(({ item }) => item.id)] as const,
-    );
-  }
-  if (view.grouping === INBOX_GROUPING.STATUS) {
-    return view.groups.map(
-      ({ status, items }) => [status, items.map(({ item }) => item.id)] as const,
-    );
-  }
+/** The ids of a list's rows, in the order it draws them. */
+function drawn(view: InboxListView): readonly string[] {
   return view.items.map(({ item }) => item.id);
 }
 
-test("the list holds every item the latest changed first, under its plan, the plan whose item changed latest first, or in one run across plans", () => {
-  const chosen = undefined;
+test("the list holds every item in one run across tasks, the latest changed first", () => {
   assert.deepEqual(
-    drawn(
-      inboxList(TASKS, {
-        grouping: INBOX_GROUPING.TASK,
-        show: INBOX_SHOW.ALL,
-        readerId: undefined,
-        chosen,
-      }),
-    ),
-    [
-      ["Billing alerts", ["retry", "threshold", "channel"]],
-      ["Invites", ["expiry"]],
-    ],
-  );
-  assert.deepEqual(
-    drawn(
-      inboxList(TASKS, {
-        grouping: INBOX_GROUPING.NONE,
-        show: INBOX_SHOW.ALL,
-        readerId: undefined,
-        chosen,
-      }),
-    ),
+    drawn(inboxList(TASKS, { show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined })),
     ["retry", "expiry", "threshold", "channel"],
   );
 });
 
 test("a list drawn again from a task's same items lists each in the object it listed it in before, and groups them in the same group; an item that changed is listed anew, and its task grouped anew", () => {
-  const view = {
-    grouping: INBOX_GROUPING.NONE,
-    show: INBOX_SHOW.ALL,
-    readerId: undefined,
-    chosen: undefined,
-  };
+  const view = { show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined };
   const items = [item({ id: "threshold", updatedAt: 30 }), item({ id: "retry", updatedAt: 50 })];
   const group = inboxGroup(taskHolder(BILLING), items);
   assert.equal(inboxGroup(taskHolder(BILLING), items), group, "the same items, the same group");
@@ -510,57 +464,32 @@ test("a list drawn again from a task's same items lists each in the object it li
   assert.notEqual(listed([after], "retry"), retry, "an item that changed is listed anew");
 });
 
-test("an item whose place is held stands where the list drew it, under the status it stood under, whatever it changed to since, under either sort and every grouping", () => {
-  // The threshold question is answered once the list is drawn, which changes when it changed and where it stands.
+test("an item whose place is held stands where the list drew it, whatever it changed to since", () => {
+  // The threshold question is answered once the list is drawn, which changes when it changed.
   const answered = TASKS.map(({ holder, items }) => ({
     holder,
     items: items.map((each) =>
       each.id === "threshold" ? { ...each, status: INBOX_STATUS.ANSWERED, updatedAt: 60 } : each,
     ),
   }));
-  for (const grouping of Object.values(INBOX_GROUPING)) {
-    for (const sort of Object.values(INBOX_SORT)) {
-      const view = { grouping, sort, show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined };
-      const drawnFirst = inboxList(TASKS, view);
-      const places = inboxPlaces(drawnFirst, NO_PLACES);
-      assert.deepEqual(drawn(inboxList(answered, { ...view, places })), drawn(drawnFirst));
-      assert.notDeepEqual(drawn(inboxList(answered, view)), drawn(drawnFirst), "unheld, it moves");
-    }
-  }
-  const status = {
-    grouping: INBOX_GROUPING.STATUS,
-    show: INBOX_SHOW.ALL,
-    readerId: undefined,
-    chosen: undefined,
-  } as const;
-  assert.deepEqual(
-    drawn(
-      inboxList(answered, { ...status, places: inboxPlaces(inboxList(TASKS, status), NO_PLACES) }),
-    ),
-    [
-      [INBOX_STATUS_GROUP.NEEDS_YOU, ["expiry", "threshold"]],
-      [INBOX_STATUS_GROUP.ANSWERED, ["retry"]],
-      [INBOX_STATUS_GROUP.CLOSED, ["channel"]],
-    ],
-  );
+  const view = { show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined };
+  const drawnFirst = inboxList(TASKS, view);
+  const places = inboxPlaces(drawnFirst, NO_PLACES);
+  assert.deepEqual(drawn(inboxList(answered, { ...view, places })), drawn(drawnFirst));
+  assert.notDeepEqual(drawn(inboxList(answered, view)), drawn(drawnFirst), "unheld, it moves");
 });
 
 test("a list's places are its rows', a held one kept and a new one where it stands now, so an item it no longer draws holds none and one new to it stands where it changed", () => {
-  const all = {
-    grouping: INBOX_GROUPING.NONE,
-    show: INBOX_SHOW.ALL,
-    readerId: undefined,
-    chosen: undefined,
-  } as const;
+  const all = { show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined } as const;
   const held = inboxPlaces(inboxList(TASKS, all), NO_PLACES);
-  const toDo = inboxList(TASKS, { ...all, show: INBOX_SHOW.TO_DO, places: held });
-  const kept = inboxPlaces(toDo, held);
+  const open = inboxList(TASKS, { ...all, show: INBOX_SHOW.OPEN, places: held });
+  const kept = inboxPlaces(open, held);
   assert.deepEqual([...kept.keys()].toSorted(), ["expiry", "threshold"], "the settled items left");
   const fresh = [
     ...TASKS,
     { holder: taskHolder(INVITES), items: [item({ id: "fresh", updatedAt: 35 })] },
   ];
-  assert.deepEqual(drawn(inboxList(fresh, { ...all, show: INBOX_SHOW.TO_DO, places: kept })), [
+  assert.deepEqual(drawn(inboxList(fresh, { ...all, show: INBOX_SHOW.OPEN, places: kept })), [
     "expiry",
     "fresh",
     "threshold",
@@ -574,50 +503,23 @@ test("an item is done with once it is settled, answered or closed, and read; one
   assert.equal(isDone(item({ id: "again", status: INBOX_STATUS.ANSWERED, unread: true })), false);
 });
 
-test("To do lists only what waits, and the item chosen where one is given, as the steps through the list keep it, and a plan with nothing listed has no group", () => {
-  const waiting = {
-    grouping: INBOX_GROUPING.TASK,
-    show: INBOX_SHOW.TO_DO,
-    readerId: undefined,
-  } as const;
-  assert.deepEqual(drawn(inboxList(TASKS, { ...waiting, chosen: undefined })), [
-    ["Invites", ["expiry"]],
-    ["Billing alerts", ["threshold"]],
+test("Open lists only what is open, and the item chosen where one is given, as the steps through the list keep it", () => {
+  const open = { show: INBOX_SHOW.OPEN, readerId: undefined } as const;
+  assert.deepEqual(drawn(inboxList(TASKS, { ...open, chosen: undefined })), [
+    "expiry",
+    "threshold",
   ]);
-  assert.deepEqual(drawn(inboxList(TASKS, { ...waiting, chosen: "retry" })), [
-    ["Billing alerts", ["retry", "threshold"]],
-    ["Invites", ["expiry"]],
+  assert.deepEqual(drawn(inboxList(TASKS, { ...open, chosen: "retry" })), [
+    "retry",
+    "expiry",
+    "threshold",
   ]);
-  assert.deepEqual(
-    drawn(
-      inboxList(
-        [
-          {
-            holder: taskHolder(BILLING),
-            items: [item({ id: "done", status: INBOX_STATUS.ANSWERED })],
-          },
-        ],
-        {
-          ...waiting,
-          chosen: undefined,
-        },
-      ),
-    ),
-    [],
-  );
 });
 
 test("the next item that needs you follows the chosen one in the list's order, wrapping round to its top, never the chosen one itself, and none where nothing else needs you", () => {
-  const newest = inboxList(TASKS, {
-    grouping: INBOX_GROUPING.NONE,
-    show: INBOX_SHOW.ALL,
-    readerId: undefined,
-    chosen: undefined,
-  });
+  const newest = inboxList(TASKS, { show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined });
   assert.deepEqual(
-    ["retry", "expiry", "threshold", "channel"].map(
-      (id) => nextNeedingYou(newest, id, () => false)?.item.id,
-    ),
+    ["retry", "expiry", "threshold", "channel"].map((id) => nextNeedingYou(newest, id)?.item.id),
     ["expiry", "threshold", "expiry", "expiry"],
   );
   const settled = inboxList(
@@ -630,12 +532,9 @@ test("the next item that needs you follows the chosen one in the list's order, w
         ],
       },
     ],
-    { grouping: INBOX_GROUPING.NONE, show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined },
+    { show: INBOX_SHOW.ALL, readerId: undefined, chosen: undefined },
   );
-  assert.equal(
-    nextNeedingYou(settled, "only", () => false),
-    undefined,
-  );
+  assert.equal(nextNeedingYou(settled, "only"), undefined);
 });
 
 const ME = { userId: "user-me", name: "Sam Ortiz" };
@@ -661,24 +560,28 @@ const SHARED = [
   },
 ];
 
-test("only an open item the reader's own agent asks needs them, or one whose starter the service does not name: To do leaves a teammate's out, though the list holds it, and does not count it", () => {
-  const newest = { grouping: INBOX_GROUPING.NONE, chosen: undefined } as const;
+test("only an open item the reader's own agent asks needs them, or one whose starter the service does not name: Open addressed to the reader leaves a teammate's open thread out and does not count it, while Open addressed to anyone lists it", () => {
+  const open = { show: INBOX_SHOW.OPEN, chosen: undefined } as const;
+  assert.deepEqual(drawn(inboxList(SHARED, { ...open, readerId: ME.userId, whose: MINE })), [
+    "mine-invites",
+    "mine",
+    "unnamed",
+  ]);
+  assert.deepEqual(drawn(inboxList(SHARED, { ...open, readerId: ME.userId, whose: EVERYONES })), [
+    "danas",
+    "kais",
+    "mine-invites",
+    "mine",
+    "unnamed",
+  ]);
   assert.deepEqual(
-    drawn(inboxList(SHARED, { ...newest, show: INBOX_SHOW.TO_DO, readerId: ME.userId })),
-    ["mine-invites", "mine", "unnamed"],
-  );
-  assert.deepEqual(
-    drawn(inboxList(SHARED, { ...newest, show: INBOX_SHOW.ALL, readerId: ME.userId })),
-    ["danas-answered", "danas", "kais", "mine-invites", "mine", "unnamed"],
-  );
-  assert.deepEqual(
-    drawn(inboxList(SHARED, { ...newest, show: INBOX_SHOW.TO_DO, readerId: DANA.userId })),
+    drawn(inboxList(SHARED, { ...open, readerId: DANA.userId, whose: MINE })),
     ["danas", "unnamed"],
     "the same list read by the teammate needs them for their own",
   );
   const teammates = [{ holder: taskHolder(BILLING), items: [item({ id: "d", startedBy: DANA })] }];
   const needingYou = (readerId: string | undefined) =>
-    inboxCounts(teammates, readerId)[INBOX_SHOW.TO_DO];
+    inboxCounts(teammates, readerId, MINE)[INBOX_SHOW.OPEN];
   assert.equal(needingYou(ME.userId), 0);
   assert.equal(needingYou(DANA.userId), 1);
   assert.equal(needingYou(undefined), 1, "a reader not known yet is asked everything");
@@ -704,31 +607,22 @@ const ASSIGNED = [
   },
 ];
 
-test("an item waits on whoever the service says, its task's assignee, rather than its agent's starter, and on its starter from a service before it said: Needs you, the count, Whose, and Group by person all go by it", () => {
+test("an item waits on whoever the service says, its task's assignee, rather than its agent's starter, and on its starter from a service before it said: Needs you, the count, and Addressed to all go by it", () => {
   const view = { chosen: undefined, readerId: ME.userId } as const;
-  const none = { ...view, grouping: INBOX_GROUPING.NONE } as const;
-  assert.deepEqual(drawn(inboxList(ASSIGNED, { ...none, show: INBOX_SHOW.TO_DO })), [
+  assert.deepEqual(drawn(inboxList(ASSIGNED, { ...view, show: INBOX_SHOW.OPEN, whose: MINE })), [
     "assigned-to-me",
   ]);
-  assert.equal(inboxCounts(ASSIGNED, ME.userId)[INBOX_SHOW.TO_DO], 1);
-  assert.equal(inboxCounts(ASSIGNED, DANA.userId)[INBOX_SHOW.TO_DO], 1);
-  assert.equal(inboxCounts(ASSIGNED, KAI.userId)[INBOX_SHOW.TO_DO], 1);
+  assert.equal(inboxCounts(ASSIGNED, ME.userId, MINE)[INBOX_SHOW.OPEN], 1);
+  assert.equal(inboxCounts(ASSIGNED, DANA.userId, MINE)[INBOX_SHOW.OPEN], 1);
+  assert.equal(inboxCounts(ASSIGNED, KAI.userId, MINE)[INBOX_SHOW.OPEN], 1);
   const whose = (choice: InboxWhose) =>
-    drawn(inboxList(ASSIGNED, { ...none, show: INBOX_SHOW.ALL, whose: choice }));
-  assert.deepEqual(whose({ kind: INBOX_WHOSE.MINE }), ["assigned-to-me"]);
+    drawn(inboxList(ASSIGNED, { ...view, show: INBOX_SHOW.ALL, whose: choice }));
+  assert.deepEqual(whose(MINE), ["assigned-to-me"]);
   assert.deepEqual(whose({ kind: INBOX_WHOSE.PERSON, ...DANA }), ["assigned-to-dana"]);
   assert.deepEqual(whose({ kind: INBOX_WHOSE.PERSON, ...KAI }), ["older-service"]);
-  assert.deepEqual(
-    drawn(inboxList(ASSIGNED, { ...view, grouping: INBOX_GROUPING.PERSON, show: INBOX_SHOW.ALL })),
-    [
-      ["You", ["assigned-to-me"]],
-      [DANA.name, ["assigned-to-dana"]],
-      [KAI.name, ["older-service"]],
-    ],
-  );
 });
 
-test("a task done or canceled hides none of its items: its open ones need you, To do listing and counting them as any task's, and one is the next, while its unread settled ones are All's", () => {
+test("a task done or canceled hides none of its items: its open ones need you, Open listing and counting them as any task's, and one is the next, while its unread settled ones are All's", () => {
   const finished = [
     {
       holder: taskHolder({ ...BILLING, status: TASK_STATUS.DONE }),
@@ -746,43 +640,34 @@ test("a task done or canceled hides none of its items: its open ones need you, T
     },
   ];
   const counts = inboxCounts(finished, undefined);
-  assert.equal(counts[INBOX_SHOW.TO_DO], 2);
+  assert.equal(counts[INBOX_SHOW.OPEN], 2);
   assert.equal(counts[INBOX_SHOW.ALL], 4);
-  const view = { grouping: INBOX_GROUPING.NONE, readerId: undefined, chosen: undefined } as const;
-  const toDo = inboxList(finished, { ...view, show: INBOX_SHOW.TO_DO });
-  assert.deepEqual(drawn(toDo), ["done-open", "canceled-open"]);
-  assert.equal(nextNeedingYou(toDo, "done-open", () => false)?.item.id, "canceled-open");
+  const open = inboxList(finished, {
+    readerId: undefined,
+    chosen: undefined,
+    show: INBOX_SHOW.OPEN,
+  });
+  assert.deepEqual(drawn(open), ["done-open", "canceled-open"]);
+  assert.equal(nextNeedingYou(open, "done-open")?.item.id, "canceled-open");
 });
 
 test("a teammate's open item is never the next that needs you, which goes to the reader's own", () => {
-  const list = inboxList(SHARED, {
-    grouping: INBOX_GROUPING.NONE,
-    show: INBOX_SHOW.ALL,
-    readerId: ME.userId,
-    chosen: undefined,
-  });
+  const list = inboxList(SHARED, { show: INBOX_SHOW.ALL, readerId: ME.userId, chosen: undefined });
   assert.deepEqual(
-    ["danas", "mine-invites", "unnamed"].map(
-      (id) => nextNeedingYou(list, id, () => false)?.item.id,
-    ),
+    ["danas", "mine-invites", "unnamed"].map((id) => nextNeedingYou(list, id)?.item.id),
     ["mine-invites", "mine", "mine-invites"],
   );
 });
 
 test("going up, the next item that needs you is the nearest above the chosen one, wrapping round from the list's foot, where going down it is the nearest below", () => {
-  const list = inboxList(SHARED, {
-    grouping: INBOX_GROUPING.NONE,
-    show: INBOX_SHOW.ALL,
-    readerId: ME.userId,
-    chosen: undefined,
-  });
+  const list = inboxList(SHARED, { show: INBOX_SHOW.ALL, readerId: ME.userId, chosen: undefined });
   const ids = ["danas-answered", "kais", "mine-invites", "mine", "unnamed"];
   assert.deepEqual(
-    ids.map((id) => nextNeedingYou(list, id, () => false, INBOX_DIRECTION.UP)?.item.id),
+    ids.map((id) => nextNeedingYou(list, id, INBOX_DIRECTION.UP)?.item.id),
     ["unnamed", "unnamed", "unnamed", "mine-invites", "mine"],
   );
   assert.deepEqual(
-    ids.map((id) => nextNeedingYou(list, id, () => false, INBOX_DIRECTION.DOWN)?.item.id),
+    ids.map((id) => nextNeedingYou(list, id, INBOX_DIRECTION.DOWN)?.item.id),
     ["mine-invites", "mine-invites", "mine", "unnamed", "mine-invites"],
   );
 });
@@ -812,18 +697,11 @@ const UNREAD_SHARED = SHARED.map(({ holder, items }) => ({
   ],
 }));
 
-test("To do lists the reader's own open items, read or not, never a settled one however unread nor a teammate's, and All lists every item; each counts its own", () => {
-  const rows = (show: InboxShow) =>
-    drawn(
-      inboxList(UNREAD_SHARED, {
-        grouping: INBOX_GROUPING.NONE,
-        show,
-        readerId: ME.userId,
-        chosen: undefined,
-      }),
-    );
-  assert.deepEqual(rows(INBOX_SHOW.TO_DO), ["mine-invites", "mine", "unnamed"]);
-  assert.deepEqual(rows(INBOX_SHOW.ALL), [
+test("Open addressed to the reader lists their own open items, read or not, never a settled one however unread, and All lists every item; each counts its own", () => {
+  const rows = (show: InboxShow, whose: InboxWhose) =>
+    drawn(inboxList(UNREAD_SHARED, { show, whose, readerId: ME.userId, chosen: undefined }));
+  assert.deepEqual(rows(INBOX_SHOW.OPEN, MINE), ["mine-invites", "mine", "unnamed"]);
+  assert.deepEqual(rows(INBOX_SHOW.ALL, EVERYONES), [
     "danas-answered",
     "danas",
     "mine-followed",
@@ -832,39 +710,38 @@ test("To do lists the reader's own open items, read or not, never a settled one 
     "mine",
     "unnamed",
   ]);
-  assert.deepEqual(inboxCounts(UNREAD_SHARED, ME.userId), {
-    [INBOX_SHOW.TO_DO]: 3,
-    [INBOX_SHOW.ALL]: 7,
+  assert.deepEqual(inboxCounts(UNREAD_SHARED, ME.userId, MINE), {
+    [INBOX_SHOW.OPEN]: 3,
+    [INBOX_SHOW.ALL]: 4,
   });
 });
 
-test("the next item reaches the reader's own unread update as it reaches what waits on them, and the item read keeps its place among the steps once To do leaves it out", () => {
+test("the next item reaches the reader's own unread update as it reaches what waits on them, and the item read keeps its place among the steps once Open leaves it out", () => {
   const all = inboxList(UNREAD_SHARED, {
-    grouping: INBOX_GROUPING.NONE,
     show: INBOX_SHOW.ALL,
     readerId: ME.userId,
     chosen: undefined,
   });
-  assert.equal(nextNeedingYou(all, "danas", () => false)?.item.id, "mine-followed");
+  assert.equal(nextNeedingYou(all, "danas")?.item.id, "mine-followed");
   assert.equal(
-    nextNeedingYou(all, "mine-followed", () => false)?.item.id,
+    nextNeedingYou(all, "mine-followed")?.item.id,
     "mine-invites",
     "a teammate's open item between them is passed over",
   );
-  // Note that an item read once opened leaves To do's rows but not its steps.
+  // Note that an item read once opened leaves Open's rows but not its steps.
   const read = UNREAD_SHARED.map(({ holder, items }) => ({
     holder,
     items: items.map((each) => (each.id === "mine-followed" ? { ...each, unread: false } : each)),
   }));
-  const view = { grouping: INBOX_GROUPING.NONE, show: INBOX_SHOW.TO_DO, readerId: ME.userId };
+  const view = { show: INBOX_SHOW.OPEN, whose: MINE, readerId: ME.userId };
   assert.deepEqual(drawn(inboxList(read, { ...view, chosen: undefined })), [
     "mine-invites",
     "mine",
     "unnamed",
   ]);
   const steps = inboxList(read, { ...view, chosen: "mine-followed" });
-  assert.equal(inboxSteps(steps, "mine-followed", () => false)?.next?.item.id, "mine-invites");
-  assert.equal(inboxSteps(steps, "mine-followed", () => false)?.previous, undefined);
+  assert.equal(inboxSteps(steps, "mine-followed")?.next?.item.id, "mine-invites");
+  assert.equal(inboxSteps(steps, "mine-followed")?.previous, undefined);
 });
 
 test("what waits, as Home and a person's page list it, is every open item, whoever's, a finished task's among them, the latest first, never a settled one however unread", () => {
@@ -878,127 +755,16 @@ test("what waits, as Home and a person's page list it, is every open item, whoev
   );
 });
 
-test("grouped by person, the reader's own items stand first as You, then each teammate's, the one whose item changed latest first, each item keeping the plan that holds it", () => {
-  const view = inboxList(SHARED, {
-    grouping: INBOX_GROUPING.PERSON,
-    show: INBOX_SHOW.ALL,
-    readerId: ME.userId,
-    chosen: undefined,
-  });
-  assert.deepEqual(drawn(view), [
-    ["You", ["mine-invites", "mine", "unnamed"]],
-    ["Dana Reyes", ["danas-answered", "danas"]],
-    ["Kai Moreno", ["kais"]],
-  ]);
-  assert.deepEqual(
-    listedItems(view).map(({ holder }) => holderName(holder)),
-    ["Invites", "Billing alerts", "Billing alerts", "Billing alerts", "Billing alerts", "Invites"],
-  );
-  assert.deepEqual(
-    drawn(
-      inboxList(SHARED, {
-        grouping: INBOX_GROUPING.PERSON,
-        show: INBOX_SHOW.TO_DO,
-        readerId: ME.userId,
-        chosen: "kais",
-      }),
-    ),
-    [
-      ["You", ["mine-invites", "mine", "unnamed"]],
-      ["Kai Moreno", ["kais"]],
-    ],
-    "To do leaves a teammate's group out but for the item chosen",
-  );
-});
-
-test("grouped by status, what needs the reader stands first, then what waits on a teammate, then what is answered or taken back, each in the list's order, a status with nothing in it left out; a folded status's items are stepped past but for the one chosen", () => {
-  const status = (show: InboxShow) =>
-    inboxList(SHARED, {
-      grouping: INBOX_GROUPING.STATUS,
-      show,
-      readerId: ME.userId,
-      chosen: undefined,
-    });
-  assert.deepEqual(drawn(status(INBOX_SHOW.ALL)), [
-    [INBOX_STATUS_GROUP.NEEDS_YOU, ["mine-invites", "mine", "unnamed"]],
-    [INBOX_STATUS_GROUP.WAITING, ["danas", "kais"]],
-    [INBOX_STATUS_GROUP.ANSWERED, ["danas-answered"]],
-  ]);
-  assert.deepEqual(
-    drawn(status(INBOX_SHOW.TO_DO)),
-    [[INBOX_STATUS_GROUP.NEEDS_YOU, ["mine-invites", "mine", "unnamed"]]],
-    "To do holds nothing waiting on a teammate nor answered and read",
-  );
-  const view = status(INBOX_SHOW.ALL);
-  const waiting = view.grouping === INBOX_GROUPING.STATUS ? view.groups[1]?.key : undefined;
-  const folded = (key: string) => key === waiting;
-  assert.equal(inboxSteps(view, "unnamed", folded)?.next?.item.id, "danas-answered");
-  assert.equal(inboxSteps(view, "danas", folded)?.next?.item.id, "danas-answered");
-});
-
-test("sorted oldest first, the item changed longest ago stands first, open or settled, and the tasks in the order their first item stands; latest first is its reverse", () => {
-  const tasks = [
-    {
-      holder: taskHolder(BILLING),
-      items: [
-        item({ id: "fresh", updatedAt: 95 }),
-        item({ id: "settled-late", status: INBOX_STATUS.ANSWERED, updatedAt: 99 }),
-      ],
-    },
-    {
-      holder: taskHolder(INVITES),
-      items: [
-        item({ id: "open-late", updatedAt: 98 }),
-        item({ id: "settled-early", status: INBOX_STATUS.CLOSED, updatedAt: 50 }),
-      ],
-    },
-  ];
-  const sorted = (grouping: InboxGrouping, sort: InboxSort) =>
-    drawn(
-      inboxList(tasks, {
-        grouping,
-        show: INBOX_SHOW.ALL,
-        readerId: undefined,
-        chosen: undefined,
-        sort,
-      }),
-    );
-  assert.deepEqual(sorted(INBOX_GROUPING.NONE, INBOX_SORT.OLDEST), [
-    "settled-early",
-    "fresh",
-    "open-late",
-    "settled-late",
-  ]);
-  assert.deepEqual(sorted(INBOX_GROUPING.TASK, INBOX_SORT.OLDEST), [
-    ["Invites", ["settled-early", "open-late"]],
-    ["Billing alerts", ["fresh", "settled-late"]],
-  ]);
-  assert.deepEqual(sorted(INBOX_GROUPING.NONE, INBOX_SORT.LATEST), [
-    "settled-late",
-    "open-late",
-    "fresh",
-    "settled-early",
-  ]);
-});
-
-test("Whose lists everyone's items, the reader's own, items whose starter the service does not name among them, or one teammate's, and the scopes count only those; the item chosen keeps its place among the steps", () => {
+test("Addressed to lists anyone's items, the reader's own, items whose starter the service does not name among them, or one teammate's, and the scopes count only those; the item chosen keeps its place among the steps", () => {
   const whose = (choice: InboxWhose, chosen?: string) =>
-    drawn(
-      inboxList(SHARED, {
-        grouping: INBOX_GROUPING.NONE,
-        show: INBOX_SHOW.ALL,
-        readerId: ME.userId,
-        chosen,
-        whose: choice,
-      }),
-    );
+    drawn(inboxList(SHARED, { show: INBOX_SHOW.ALL, readerId: ME.userId, chosen, whose: choice }));
   assert.equal(whose(EVERYONES).length, 6);
-  assert.deepEqual(whose({ kind: INBOX_WHOSE.MINE }), ["mine-invites", "mine", "unnamed"]);
+  assert.deepEqual(whose(MINE), ["mine-invites", "mine", "unnamed"]);
   const dana = { kind: INBOX_WHOSE.PERSON, ...DANA } as const;
   assert.deepEqual(whose(dana), ["danas-answered", "danas"]);
   assert.deepEqual(whose(dana, "kais"), ["danas-answered", "danas", "kais"]);
   assert.deepEqual(inboxCounts(SHARED, ME.userId, dana), {
-    [INBOX_SHOW.TO_DO]: 0,
+    [INBOX_SHOW.OPEN]: 1,
     [INBOX_SHOW.ALL]: 2,
   });
 });
@@ -1087,7 +853,7 @@ function waitingTaskless(
   };
 }
 
-test("each item of an agent with no plan is held by its agent, and a list grouped by task stands each agent under the automation that started it, the member's operator under Luke, the unnamed ones together, and only the listed workspace's", () => {
+test("each item of an agent with no plan is held by its agent, named by the automation that started it, the member's operator as Luke, the unnamed ones alike, and only the listed workspace's are listed", () => {
   // An item from a service before workspaces were named, which stands in every workspace's list.
   const { workspaceId: _unnamed, ...unnamedWorkspace } = waitingTaskless("agent-5", {
     automationId: "automation-old",
@@ -1122,30 +888,24 @@ test("each item of an agent with no plan is held by its agent, and a list groupe
     ["agent-6", [item({ id: "six", agentId: "agent-6", updatedAt: 20 })]],
   ]);
   const view = inboxList(agentGroups(waiting, read, "workspace-acme"), {
-    grouping: INBOX_GROUPING.TASK,
     show: INBOX_SHOW.ALL,
     chosen: undefined,
     readerId: undefined,
   });
 
-  assert.deepEqual(drawn(view), [
-    ["Nightly flake sweep", ["one", "two", "settled"]],
-    ["Other agents", ["three"]],
-    ["Old", ["five"]],
-    ["Luke", ["six"]],
-  ]);
   assert.deepEqual(
     listedItems(view).map(({ holder, item }) => [
       item.id,
       holder.kind === INBOX_HOLDER.AGENT ? holder.agent.agentId : undefined,
+      holderName(holder),
     ]),
     [
-      ["one", "agent-1"],
-      ["two", "agent-2"],
-      ["settled", "agent-2"],
-      ["three", "agent-3"],
-      ["five", "agent-5"],
-      ["six", "agent-6"],
+      ["one", "agent-1", "Nightly flake sweep"],
+      ["two", "agent-2", "Nightly flake sweep"],
+      ["three", "agent-3", "Other agents"],
+      ["five", "agent-5", "Old"],
+      ["six", "agent-6", "Luke"],
+      ["settled", "agent-2", "Nightly flake sweep"],
     ],
   );
 });

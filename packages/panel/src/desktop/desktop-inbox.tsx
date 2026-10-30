@@ -244,7 +244,6 @@ export const DesktopInbox = memo(function DesktopInbox({
     view,
     act,
     choices,
-    folds,
     openAutomation,
     failed,
     asked,
@@ -353,14 +352,12 @@ export const DesktopInbox = memo(function DesktopInbox({
   };
   const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, step, {
     shown: tasks.shown,
-    folded: folds.folded,
   });
   const next = inboxNext(
     steps,
     chosen,
     { models: named.models, readerId: tasks.me },
     open,
-    folds.folded,
     direction,
   );
   // Where the chosen item's words are read: its plan's workspace and repository, or, with no plan, its agent's own.
@@ -655,7 +652,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                     head={{
                       shown: tasks.shown,
                       show: choices,
-                      view: { choices, folds },
+                      view: { choices },
                       readAll: {
                         unread,
                         onMarkAll: () => marks.onMarkAll(standingItems),

@@ -1,4 +1,4 @@
-import { type InboxItem, type InboxPerson, inboxAddressedTo } from "@luke/features/inbox-wire";
+import { type InboxItem, inboxAddressedTo } from "@luke/features/inbox-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { agoText } from "@luke/features/time-format";
@@ -6,7 +6,6 @@ import { sameShape } from "@luke/features/turn-rows";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   ANNOUNCE,
-  AttentionMark,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
@@ -14,17 +13,12 @@ import {
   Chip,
   ChipName,
   ComposeIcon,
-  DocumentIcon,
   EMPTY_STATE_ACTION_LOOK,
   EmptyState,
   type EmptyStateAction,
   ERROR_STATE_PLACEMENT,
   ErrorLine,
   ErrorState,
-  GROUP_SURFACE,
-  GroupHeader,
-  HoverCard,
-  HoverCardHead,
   IconButton,
   joinRefs,
   LIST_LEAVING_SELECTOR,
@@ -36,7 +30,6 @@ import {
   List,
   ListMotion,
   ListRow,
-  motionKey,
   motionRows,
   NOTE_LINE_LOOK,
   NoteLine,
@@ -66,26 +59,8 @@ import {
   useResizeEdge,
   useRovingKeys,
 } from "@luke/ui";
-import {
-  ACTOR_KIND,
-  ACTOR_STATE,
-  type Actor,
-  actorName,
-  memberActor,
-  personActor,
-} from "@luke/ui/actor-model";
-import {
-  CheckCheckIcon,
-  ClockArrowDownIcon,
-  ClockArrowUpIcon,
-  GLYPH,
-  HourglassIcon,
-  InboxIcon,
-  ListIcon,
-  SlidersHorizontalIcon,
-  UserIcon,
-  UsersIcon,
-} from "@luke/ui/icons";
+import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
+import { CheckCheckIcon, GLYPH, InboxIcon, SlidersHorizontalIcon, UsersIcon } from "@luke/ui/icons";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
   VIRTUAL_ROWS_ANCHOR,
@@ -104,10 +79,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
-import { useAutomation } from "../automation-directory.js";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
-import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import {
   holdsPicks,
   type InboxRowDraft,
@@ -119,7 +92,6 @@ import { ActionMenu, type MenuAction, type MenuEntry, rowMenu } from "../desktop
 import {
   INBOX_LIST_WIDTH,
   type InboxShowChoice,
-  type InboxTaskFolds,
   type InboxViewChoices,
   type InboxWhoseChoice,
   useInboxListWidth,
@@ -131,7 +103,6 @@ import {
   useAskedMenu,
   useMenuAsk,
 } from "../desktop/phone-head.js";
-import { groupCount, sidebarFold } from "../desktop/sidebar-fold.js";
 import { type TabActionGroups, useTabActions } from "../desktop/strip-tabs.js";
 import { refusedShown, unreadShown } from "../failure-report.js";
 import { useFindOpen } from "../find-in-tab.js";
@@ -139,7 +110,6 @@ import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { PEOPLE_FILTER, PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { TaskChipCard } from "./chip-cards.js";
 import { type InboxCloser, useInboxCloseAsk } from "./inbox-close.js";
 import {
   INBOX_COLUMNS,
@@ -159,25 +129,14 @@ import {
 } from "./inbox-item-parts.js";
 import {
   EVERYONES,
-  holderAutomationId,
   holderName,
-  INBOX_GROUPING,
-  INBOX_HOLDER,
   INBOX_NOT_READ,
   INBOX_SHOW,
-  INBOX_SORT,
-  INBOX_STATUS_GROUP,
   INBOX_WHOSE,
   type InboxCounts,
-  type InboxGrouping,
-  type InboxHolder,
   type InboxListed,
   type InboxListView,
-  type InboxPersonGroup,
   type InboxShow,
-  type InboxSort,
-  type InboxStatusGroup,
-  type InboxStatusGroupKind,
   type InboxWhose,
   inboxLineKind,
   inboxPreview,
@@ -186,22 +145,17 @@ import {
   isDone,
   isUnread,
   listedItems,
+  MINE,
   NEEDS_YOU,
-  needsYou as needsYouOf,
 } from "./inbox-model.js";
 import { type InboxListMark, InboxSelectionBar } from "./inbox-selection.js";
-import { PlanGlyph } from "./tab-look.js";
 import { cardTitle } from "./tool-call-model.js";
 
 /**
- * inbox-list.tsx -- the Inbox's list of items: one row each, under its task's group header or in one run, with what the list shows and how at its head.
+ * inbox-list.tsx -- the Inbox's list of items: one row each, in one run, the latest changed first, with what the list shows at its head.
  *
  * The list is drawn from the sidebar's own pieces, on the Inbox's own ground, so it reads as the
- * sidebar does. A task's items stand under the sidebar's own group header
- * (`GroupHeader`), the task's glyph giving way to its chevron
- * under the pointer, a press folding the group, and each fold kept across
- * launches as a sidebar group's is; an automation's agents stand under its
- * clock tile, which hangs its card. An item is a row of two lines, as a
+ * sidebar does. An item is a row, as a
  * mail app lists a thread: the tile of the agent that posted it
  * (`actor-ref.tsx`), as the task's summary or main's read of an agent with
  * no task names the agent, its title, and how long ago it last changed,
@@ -213,7 +167,7 @@ import { cardTitle } from "./tool-call-model.js";
  * it (`agent-ref.tsx`), and leaves the press to its row, whose pane opens
  * the agent. An item that needs the developer's answer, an open one their
  * own agent asks (`needsReader`), wears the attention mark before its time
- * (`attention-mark.tsx`), in either grouping and filtered or not; a
+ * (`attention-mark.tsx`), filtered or not; a
  * teammate's open item waits on the teammate, whose face stands in that
  * place, and any member may still answer it; an answered one wears
  * neither. Apart from whether it waits, an item is unread where it changed
@@ -222,39 +176,32 @@ import { cardTitle } from "./tool-call-model.js";
  * reads it, and its row, its menu, U, and Mark all as read in the view's
  * menu mark it read or unread (`use-inbox-read-marks.ts`). An item settled
  * and read is done with (`isDone`), and its row stands back, gray, with no
- * word saying so: the chosen row Needs you keeps once it is answered or read,
- * until another is chosen (`use-held-inbox-list.ts`), and every such row All lists. A folded task
- * counts what in it needs the developer, at rest, and says nothing where
- * none does. The head names the Inbox and, at its right, offers the view's
- * menu: first what the list holds, Needs you, the open threads that wait on
- * the developer, a question or an update not yet opened, as the sidebar's
- * Inbox row counts them, or All, every item,
- * the head naming All after the Inbox's name; then Group by, None, one
- * run, by task, by person, or by status (what needs the developer
- * under the attention mark, what waits on others, what is answered, each
- * folding as a task's group does); Order by, the latest
- * change first or the oldest first; Whose, everyone's
- * items, the developer's own, or one teammate's by face and name, which a
- * chip over the list then says, its × listing everyone's again; each
- * choice checked; and under them Mark all as read,
- * which clears the dots alone. Every
- * choice is kept across launches. Grouped by person, each person's items
- * stand under their face, the reader's own first as You. Every row, in
- * any grouping and in a task's own Inbox alike, names its task on its
- * first line, over its title. Where the scope leaves out every
+ * word saying so: the chosen row Open keeps once it is answered or read,
+ * until another is chosen (`use-held-inbox-list.ts`), and every such row All lists.
+ * The head names the Inbox, whatever it lists, and, at its right, offers the view's
+ * menu: first what the list shows, Open, every thread still open, a
+ * question or an update not yet opened, or All, every item; then Addressed
+ * to, the developer's own, anyone's, or one teammate's by face and name,
+ * which a chip over the list then says, its × listing the developer's own
+ * again. Open addressed to the developer is Needs you, the threads the
+ * sidebar's Inbox row counts, where the Inbox opens. Each choice stands
+ * checked, and under them Mark all as read clears the dots alone. Every
+ * choice is kept across launches. Every row, in the window's Inbox and a
+ * task's own alike, names its task on its first line, over its title.
+ * Where the scope leaves out every
  * item listed, the list says so in the Inbox's empty state, offering the
- * scope that holds something, as a mail app's empty unread view does; the
+ * view that holds something, as a mail app's empty unread view does; the
  * item the pane shows keeps its place there, though no row. A task's own
- * Inbox lists one task's items in one run, so its view's menu offers Needs you
- * and All alone, kept apart
- * from the window's, and its list has no groups. Either list
+ * Inbox lists one task's items, its Open the developer's own, so its
+ * view's menu offers Needs you and All alone, kept apart
+ * from the window's. Either list
  * is resized from its right edge as the sidebar is, and keeps one width
  * between them across launches; an Inbox showing one column at a time
  * draws its list the whole Inbox wide, with no edge, and hides it while an
  * item stands in its place (`inbox-columns.ts`). A list on a page chooses
  * rows as a Mac's list does (`SelectionRegion`): ⌘-click one in or out,
- * ⇧-click a run, ⇧↑↓ grow it, ⌘A every row drawn, and Esc none, across
- * every group, while a plain press still opens its item; while any is
+ * ⇧-click a run, ⇧↑↓ grow it, ⌘A every row drawn, and Esc none,
+ * while a plain press still opens its item; while any is
  * chosen, a bar at the list's foot marks them all read or unread, or
  * resolves them, at once (`inbox-selection.tsx`).
  */
@@ -292,30 +239,61 @@ const SKELETON_ROWS = [
 /** How wide a placeholder row's time stands, as wide as a short "2h". */
 const SKELETON_TIME = "20px";
 
-/** What each scope is called, in the view's menu and, but for Needs you, after the Inbox's name at its head, and its glyph in the menu. */
+/** What each scope is called, in the view's menu and after a channel's name at its head, and its glyph in the menu. */
 const SCOPE_WORDS = {
-  [INBOX_SHOW.TO_DO]: { label: NEEDS_YOU.LABEL, icon: <GLYPH.TODOS /> },
+  [INBOX_SHOW.OPEN]: { label: "Open", icon: <GLYPH.TODOS /> },
   [INBOX_SHOW.ALL]: { label: "All", icon: <InboxIcon /> },
 } as const satisfies Record<InboxShow, { label: string; icon: React.JSX.Element }>;
 
-/** The scopes every Inbox's view's menu offers, in its order. */
-const INBOX_SCOPES = [INBOX_SHOW.TO_DO, INBOX_SHOW.ALL] as const satisfies readonly InboxShow[];
+/** What a task's own Inbox calls its scopes, whose Open is the reader's own, Needs you (`side-inbox-tab.tsx`). */
+const TASK_SCOPE_WORDS = {
+  ...SCOPE_WORDS,
+  [INBOX_SHOW.OPEN]: { ...SCOPE_WORDS[INBOX_SHOW.OPEN], label: NEEDS_YOU.LABEL },
+} as const satisfies Record<InboxShow, { label: string; icon: React.JSX.Element }>;
 
-/** The Inbox's name at its head: the scope after it, but for Needs you, where the Inbox opens, since no other control on the head says it. */
-function inboxTitle(show: InboxShow): string {
-  return show === INBOX_SHOW.TO_DO ? "Inbox" : `Inbox · ${SCOPE_WORDS[show].label}`;
+/** The scopes every Inbox's view's menu offers, in its order. */
+const INBOX_SCOPES = [INBOX_SHOW.OPEN, INBOX_SHOW.ALL] as const satisfies readonly InboxShow[];
+
+/** The Inbox's name at its head, whatever it lists, the view's menu saying the rest. */
+const INBOX_TITLE = "Inbox";
+
+/**
+ * Whether the list holds only what needs the reader, Open addressed to
+ * them, as a task's own Inbox lists its Open (`side-inbox-tab.tsx`): its
+ * rows then leave Needs you unsaid (`needsYouShown`), and its region says
+ * it once.
+ */
+function needsYouListed(head: InboxListHead): boolean {
+  return (
+    head.show.show === INBOX_SHOW.OPEN &&
+    (head.view === undefined || head.view.choices.whose.kind === INBOX_WHOSE.MINE)
+  );
+}
+
+/** Whom Addressed to names, in the words a reader hears after the list's region's name. */
+function whoseWords(whose: InboxWhose): string {
+  switch (whose.kind) {
+    case INBOX_WHOSE.EVERYONE:
+      return PEOPLE_FILTER_WORDS.ANYONE;
+    case INBOX_WHOSE.MINE:
+      return PEOPLE_FILTER_WORDS.ME;
+    case INBOX_WHOSE.PERSON:
+      return whose.name;
+  }
 }
 
 /**
- * The list's region's name, Needs you after it only on the window's Inbox
- * on Needs you, whose head names no scope and whose rows leave it unsaid
- * (`needsYouShown`), so a reader hears the scope once; every other head
- * names its scope itself, or names All, where the rows say Needs you.
+ * The list's region's name, saying what it lists, since the head names the
+ * Inbox alone: Needs you where it holds only what needs the reader, whose
+ * rows leave it unsaid (`needsYouShown`), so a reader hears it once; else
+ * the scope and, on the window's Inbox, whom Addressed to names. A
+ * channel's head names its scope itself.
  */
 function regionLabel(head: InboxListHead): string {
-  return head.show.show === INBOX_SHOW.TO_DO && head.channel === undefined
-    ? `${INBOX_ITEMS} · ${NEEDS_YOU.LABEL}`
-    : INBOX_ITEMS;
+  if (head.channel !== undefined) return INBOX_ITEMS;
+  if (needsYouListed(head)) return `${INBOX_ITEMS} · ${NEEDS_YOU.LABEL}`;
+  const scope = `${INBOX_ITEMS} · ${SCOPE_WORDS[head.show.show].label}`;
+  return head.view === undefined ? scope : `${scope} · ${whoseWords(head.view.choices.whose)}`;
 }
 
 /** A channel's name at the head of the Inbox narrowed to it: the scope after it, but for All, where a channel opens. */
@@ -324,43 +302,34 @@ function channelTitle(name: string, show: InboxShow): string {
 }
 
 /**
- * What the list says where its scope leaves out every item it holds.
- * All leaves out only what Whose does.
+ * What the list says where its scope and Addressed to leave out every item
+ * it holds, by whom Addressed to names: the reader's Open is Needs you, and
+ * anyone's Open every thread still open.
  */
 const SHOW_EMPTY = {
-  [INBOX_SHOW.TO_DO]: NEEDS_YOU.NONE,
-  [INBOX_SHOW.ALL]: "Nothing here",
-} as const satisfies Record<InboxShow, string>;
+  [INBOX_WHOSE.MINE]: {
+    [INBOX_SHOW.OPEN]: NEEDS_YOU.NONE,
+    [INBOX_SHOW.ALL]: "Nothing addressed to you",
+  },
+  [INBOX_WHOSE.EVERYONE]: { [INBOX_SHOW.OPEN]: "Nothing open", [INBOX_SHOW.ALL]: "Nothing here" },
+  [INBOX_WHOSE.PERSON]: {
+    [INBOX_SHOW.OPEN]: "Nothing addressed to them",
+    [INBOX_SHOW.ALL]: "Nothing addressed to them",
+  },
+} as const satisfies Record<InboxWhose["kind"], Record<InboxShow, string>>;
 
-/** What the empty state's press says, by the scope it shows instead. */
+/** What the empty state's presses say: All of whom Addressed to names, the reader's own again, or anyone's. */
 const SHOW_INSTEAD = {
-  [INBOX_SHOW.ALL]: "Show all",
+  ALL: "Show all",
+  MINE: "Show what's addressed to me",
+  EVERYONE: "Show anyone's",
 } as const;
 
-/** The scope an empty scope offers instead: All from Needs you where it holds anything; none where nothing is there to show. */
-function insteadOf(show: InboxShow, counts: InboxCounts): keyof typeof SHOW_INSTEAD | undefined {
-  return show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.ALL] > 0 ? INBOX_SHOW.ALL : undefined;
-}
+/** What the view's submenu of whom the items are addressed to is called. */
+const WHOSE = "Addressed to";
 
-/** What All says where Whose, naming the reader or a teammate, leaves out every item, in the words that name whose. */
-const NOTHING_WHOSE = {
-  YOURS: "Nothing in the inbox is yours",
-  THEIRS: "Nothing in the inbox is theirs",
-} as const;
-
-/** What each status group is called, and its glyph, a list grouped by status heading it. */
-const STATUS_WORDS = {
-  [INBOX_STATUS_GROUP.NEEDS_YOU]: NEEDS_YOU.LABEL,
-  [INBOX_STATUS_GROUP.WAITING]: "Waiting on others",
-  [INBOX_STATUS_GROUP.ANSWERED]: "Answered",
-  [INBOX_STATUS_GROUP.CLOSED]: "Closed",
-} as const satisfies Record<InboxStatusGroupKind, string>;
-
-/** What the view's submenu of whose items is called. */
-const WHOSE = "Whose";
-
-/** What the chip over the list says its × does, and the empty state's press where Whose left out every item. */
-const CLEAR_WHOSE = "Show everyone's items";
+/** What the chip over the list says its × does. */
+const CLEAR_WHOSE = SHOW_INSTEAD.MINE;
 
 /**
  * What the list leaves the item beside it, in CSS pixels: the list is
@@ -580,161 +549,7 @@ export const InboxItemRow = memo(function InboxItemRow({
   );
 });
 
-/**
- * What every group head of the list is handed beside its glyph and name: its
- * fold, as the list keeps it, and how many of its items need the reader, which
- * a narrow column counts only while the group is folded or the head is under
- * the pointer, and leaves out at none, since "0 need you" is no news.
- */
-function groupHead(folded: boolean, count: number, onToggle: () => void) {
-  return {
-    fold: sidebarFold(folded, onToggle),
-    count: count === 0 ? undefined : groupCount(count, NEEDS_YOU.COUNT),
-    surface: GROUP_SURFACE.NARROW,
-  };
-}
-
-/**
- * A holder's group header: a task's status's mark and name; for the agents
- * with no task, their automation's clock tile, wearing how its last run
- * went and hanging its card where the window reads the automation, Luke's
- * face for the member's operator, and the automation glyph for the agents
- * no automation names, since that group names no one actor.
- * A press folds the group, which then fades its rows out, as every group
- * header's does.
- */
-function HolderHeader({
-  holder,
-  folded,
-  count,
-  onToggle,
-  children,
-}: {
-  holder: InboxHolder;
-  folded: boolean;
-  count: number;
-  onToggle: () => void;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  const automationId = holderAutomationId(holder);
-  const known = useAutomation(automationId ?? undefined);
-  const shared = { ...groupHead(folded, count, onToggle), children };
-  const name = holderName(holder);
-  if (holder.kind === INBOX_HOLDER.TASK) {
-    const glyph = <PlanGlyph status={holder.task.status} />;
-    const fallback = (
-      <HoverCard data-task-card="">
-        <HoverCardHead glyph={glyph} name={holder.task.name} />
-      </HoverCard>
-    );
-    return (
-      <GroupHeader
-        glyph={glyph}
-        label={holder.task.name}
-        card={<TaskChipCard taskId={holder.task.id} fallback={fallback} />}
-        {...shared}
-      />
-    );
-  }
-  if (automationId === null) {
-    return <GroupHeader glyph={<HolderGlyph holder={holder} />} label={name} {...shared} />;
-  }
-  const actor =
-    known === undefined
-      ? { kind: ACTOR_KIND.AUTOMATION, name, state: ACTOR_STATE.REST }
-      : automationActor(known.automation);
-  return (
-    <GroupHeader
-      glyph={<ActorMark actor={actor} />}
-      label={name}
-      card={known === undefined ? undefined : <AutomationCard {...known} />}
-      {...shared}
-    />
-  );
-}
-
-/** The glyph each status group's header wears. */
-const STATUS_GLYPH = {
-  [INBOX_STATUS_GROUP.NEEDS_YOU]: <AttentionMark />,
-  [INBOX_STATUS_GROUP.WAITING]: <HourglassIcon />,
-  [INBOX_STATUS_GROUP.ANSWERED]: <GLYPH.SETTLED />,
-  [INBOX_STATUS_GROUP.CLOSED]: <GLYPH.DISMISSED />,
-} as const satisfies Record<InboxStatusGroupKind, React.JSX.Element>;
-
-/**
- * A status's group header: Needs you by the attention mark, Waiting on
- * others by the hourglass, Answered by a check, and Closed by the slashed
- * circle a withdrawn ask wears. A press folds the group, which then fades
- * its rows out, as every group header's does.
- */
-function StatusHeader({
-  status,
-  folded,
-  count,
-  onToggle,
-  children,
-}: {
-  status: InboxStatusGroupKind;
-  folded: boolean;
-  count: number;
-  onToggle: () => void;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <GroupHeader
-      glyph={STATUS_GLYPH[status]}
-      label={STATUS_WORDS[status]}
-      {...groupHead(folded, count, onToggle)}
-    >
-      {children}
-    </GroupHeader>
-  );
-}
-
-/**
- * A person's group header: their face and name, the reader's own as You, a
- * member who left on the quiet outline, as the sidebar's group by creator
- * heads its groups, hanging their card as an automation's header hangs its
- * own. A press folds the group, which then fades its rows out, as every
- * group header's does.
- */
-function PersonHeader({
-  person,
-  readerId,
-  folded,
-  count,
-  onToggle,
-  children,
-}: {
-  person: InboxPerson | undefined;
-  readerId: string | undefined;
-  folded: boolean;
-  count: number;
-  onToggle: () => void;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  const { members, former, readerId: known } = useMemberDirectory();
-  const reader = known ?? readerId;
-  const you = members?.find((each) => each.userId === reader);
-  const actor: Actor =
-    person !== undefined
-      ? personActor(person, members, reader, former)
-      : you !== undefined
-        ? memberActor(you, reader)
-        : { kind: ACTOR_KIND.PERSON, userId: reader ?? "", name: "", you: true };
-  return (
-    <GroupHeader
-      glyph={<ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />}
-      label={actorName(actor)}
-      card={person === undefined && you === undefined ? undefined : actorCard(actor)}
-      {...groupHead(folded, count, onToggle)}
-    >
-      {children}
-    </GroupHeader>
-  );
-}
-
-/** Whose's choices, as every filter by person offers them: Anyone, Me, then each teammate, the choice checked. Note that Me stands though the reader's id is unknown, since the reader's own items are read without one (`readersItem`). */
+/** Addressed to's choices, as every filter by person offers them: Anyone, Me, then each teammate, the choice checked. Note that Me stands though the reader's id is unknown, since the reader's own items are read without one (`readersItem`). */
 function whoseEntries(
   whose: InboxWhose,
   onWhose: (whose: InboxWhose) => void,
@@ -755,7 +570,7 @@ function whoseEntries(
         filter.kind === PEOPLE_FILTER.ANYONE
           ? EVERYONES
           : filter.kind === PEOPLE_FILTER.ME
-            ? { kind: INBOX_WHOSE.MINE }
+            ? MINE
             : { kind: INBOX_WHOSE.PERSON, userId: filter.userId, name: filter.name },
       ),
     meWithoutId: true,
@@ -763,11 +578,11 @@ function whoseEntries(
 }
 
 /**
- * The head's button that drops the view's menu: first the scopes the Inbox
- * offers, Needs you and All, the one shown checked;
- * then, on the window's Inbox, Group by and Order by, each a submenu with its
- * choice checked; Whose, Anyone, Me, or a teammate by face and name;
- * and Mark all as read at its foot.
+ * The head's button that drops the view's menu: first what it shows, the
+ * scopes the Inbox offers, Open and All, a task's own calling its Open
+ * Needs you, the one shown checked; then, on the window's Inbox, Addressed to, a submenu of Anyone,
+ * Me, or a teammate by face and name, its choice checked; and Mark all as
+ * read at its foot.
  */
 function ViewOptions({
   shown,
@@ -779,7 +594,7 @@ function ViewOptions({
 }: {
   shown: boolean;
   show: InboxShowChoice;
-  /** The window's Inbox's other choices; none on a task's own, whose menu offers its scopes alone. */
+  /** The window's Inbox's Addressed to; none on a task's own, whose menu offers its scopes alone. */
   choices: InboxViewChoices | undefined;
   readerId: string | undefined;
   readAll: InboxReadAll | undefined;
@@ -789,8 +604,9 @@ function ViewOptions({
   const menu = useMenu(shown);
   useAskedMenu(menu.show, asked?.ask);
   const reader = useMemberDirectory();
+  const words = choices === undefined ? TASK_SCOPE_WORDS : SCOPE_WORDS;
   const scope: MenuEntry[] = INBOX_SCOPES.map((value) => ({
-    ...SCOPE_WORDS[value],
+    ...words[value],
     checked: show.show === value,
     onSelect: () => show.onShow(value),
   }));
@@ -829,88 +645,46 @@ function markAllEntries(readAll: InboxReadAll): MenuEntry[] {
   ];
 }
 
-/** The window's Inbox's own groups of its view's menu, after its scopes: Group by and Order by, and Whose. */
+/** The window's Inbox's own group of its view's menu, after its scopes: Addressed to. */
 function windowEntries(
   choices: InboxViewChoices,
   reader: ReturnType<typeof useMemberDirectory>,
   readerId: string | undefined,
 ): MenuEntry[][] {
-  const groupBy = (label: string, icon: React.JSX.Element, value: InboxGrouping): MenuAction => ({
-    label,
-    icon,
-    checked: choices.grouping === value,
-    onSelect: () => choices.onGrouping(value),
-  });
-  const sortBy = (label: string, icon: React.JSX.Element, value: InboxSort): MenuAction => ({
-    label,
-    icon,
-    checked: choices.sort === value,
-    onSelect: () => choices.onSort(value),
-  });
-  const view: MenuEntry[] = [
-    {
-      ...commandHead(PANEL_COMMAND.GROUP_BY),
-      items: [
-        groupBy("None", <ListIcon />, INBOX_GROUPING.NONE),
-        groupBy("Task", <DocumentIcon />, INBOX_GROUPING.TASK),
-        groupBy("Person", <UsersIcon />, INBOX_GROUPING.PERSON),
-        groupBy("Status", <GLYPH.STATUS />, INBOX_GROUPING.STATUS),
-      ],
-    },
-    {
-      ...commandHead(PANEL_COMMAND.ORDER_BY),
-      items: [
-        sortBy("Latest first", <ClockArrowDownIcon />, INBOX_SORT.LATEST),
-        sortBy("Oldest first", <ClockArrowUpIcon />, INBOX_SORT.OLDEST),
-      ],
-    },
+  return [
+    [
+      {
+        label: WHOSE,
+        icon: <UsersIcon />,
+        items: whoseEntries(choices.whose, choices.onWhose, reader, readerId),
+      },
+    ],
   ];
-  const whose: MenuEntry[] = [
-    {
-      label: WHOSE,
-      icon: <UsersIcon />,
-      items: whoseEntries(choices.whose, choices.onWhose, reader, readerId),
-    },
-  ];
-  return [view, whose];
 }
 
 /** The key the chip over the list is followed by, as it arrives and leaves. */
 const WHOSE_CHIP_KEY = "whose";
 
-/** The chip over the list as last drawn, so it leaves looking as it did: its mark, if the person is known, and its words. */
+/** The chip over the list as last drawn, so it leaves looking as it did: the teammate's mark and their words. */
 interface WhoseChipEntry {
   readonly key: typeof WHOSE_CHIP_KEY;
-  readonly actor: Actor | undefined;
+  readonly actor: Actor;
   readonly words: string;
 }
 
 /** What a press on the chip leaving does, out of reach as it is: nothing. */
 function stays(): void {}
 
-/** The chip Whose calls for, Me by the reader's face, or the teammate's face and name; none while the list holds everyone's. */
+/** The chip Addressed to calls for, the teammate's face and name; none while it names the reader or anyone. */
 function whoseChipEntries(
   chosen: InboxWhoseChoice["whose"],
   directory: ReturnType<typeof useMemberDirectory>,
   readerId: string | undefined,
 ): WhoseChipEntry[] {
-  if (chosen.kind === INBOX_WHOSE.EVERYONE) return [];
+  if (chosen.kind !== INBOX_WHOSE.PERSON) return [];
   const { members, former, readerId: known } = directory;
-  const reader = known ?? readerId;
-  const me = members?.find((member) => member.userId === reader);
-  const actor: Actor | undefined =
-    chosen.kind === INBOX_WHOSE.PERSON
-      ? personActor(chosen, members, reader, former)
-      : me === undefined
-        ? undefined
-        : memberActor(me, reader);
-  const words =
-    chosen.kind === INBOX_WHOSE.MINE
-      ? PEOPLE_FILTER_WORDS.ME
-      : actor === undefined
-        ? chosen.name
-        : actorName(actor);
-  return [{ key: WHOSE_CHIP_KEY, actor, words }];
+  const actor = personActor(chosen, members, known ?? readerId, former);
+  return [{ key: WHOSE_CHIP_KEY, actor, words: actorName(actor) }];
 }
 
 /**
@@ -935,7 +709,7 @@ function WhoseChipLine({
     [chosen, directory, readerId],
   );
   const drawn = useLeaving(listed, (entry) => entry.key);
-  // Note that the box around the row stands hidden while the list holds everyone's, so the row's padding takes no room, and the chip arriving arrives into a row that stands.
+  // Note that the box around the row stands hidden while no teammate is chosen, so the row's padding takes no room, and the chip arriving arrives into a row that stands.
   return (
     <div ref={line} hidden={drawn.length === 0}>
       <div
@@ -948,13 +722,9 @@ function WhoseChipLine({
             motionKey={key}
             look={CHIP_LOOK.FILTER}
             removeLabel={CLEAR_WHOSE}
-            onRemove={leaving ? stays : () => whose.onWhose(EVERYONES)}
+            onRemove={leaving ? stays : () => whose.onWhose(MINE)}
           >
-            {value.actor === undefined ? (
-              <UserIcon />
-            ) : (
-              <ActorMark actor={value.actor} size={ACTOR_SIZE.MARK} />
-            )}
+            <ActorMark actor={value.actor} size={ACTOR_SIZE.MARK} />
             <ChipName>{value.words}</ChipName>
           </Chip>
         ))}
@@ -964,11 +734,11 @@ function WhoseChipLine({
 }
 
 /**
- * The chip over the list while Whose leaves out anyone's items: Me by the
- * reader's face, or the teammate's face and name, and a × that lists
- * everyone's again (`@luke/ui`'s removable filter chip, as the sidebar's
- * Created by stands over its tasks). It scales in as Whose chooses someone
- * and out as the × lifts it, as the Tasks page's filter chips do.
+ * The chip over the list while Addressed to names a teammate: their face
+ * and name, and a × that lists the reader's own again (`@luke/ui`'s
+ * removable filter chip, as the sidebar's Created by stands over its
+ * tasks). It scales in as Addressed to chooses a teammate and out as the ×
+ * lifts it, as the Tasks page's filter chips do.
  */
 function WhoseChip({
   whose,
@@ -985,7 +755,38 @@ function WhoseChip({
   );
 }
 
-/** What the list stands where its scope leaves out every item it holds: that nothing is there, and the press that shows the scope that holds something, which keeps the list standing where the Inbox shows one column. */
+/**
+ * The way on from an empty scope: All of whom Addressed to names where it
+ * holds anything; else back to the reader's own from a teammate's, or to
+ * anyone's from the reader's own; none from anyone's, or on a task's own
+ * Inbox, where nothing else holds anything.
+ */
+function emptyWayOn(
+  show: InboxShowChoice,
+  counts: InboxCounts,
+  whose: InboxWhoseChoice | undefined,
+  onList: () => void,
+): EmptyStateAction | undefined {
+  const turn = (label: string, change: () => void): EmptyStateAction => ({
+    label,
+    onClick: () => {
+      onList();
+      change();
+    },
+  });
+  if (show.show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.ALL] > 0) {
+    return turn(SHOW_INSTEAD.ALL, () => show.onShow(INBOX_SHOW.ALL));
+  }
+  if (whose?.whose.kind === INBOX_WHOSE.PERSON) {
+    return turn(SHOW_INSTEAD.MINE, () => whose.onWhose(MINE));
+  }
+  if (whose?.whose.kind === INBOX_WHOSE.MINE) {
+    return turn(SHOW_INSTEAD.EVERYONE, () => whose.onWhose(EVERYONES));
+  }
+  return undefined;
+}
+
+/** What the list stands where its scope and Addressed to leave out every item it holds: that nothing is there, in the words of whom it names (`SHOW_EMPTY`), and the press that shows what holds something (`emptyWayOn`), which keeps the list standing where the Inbox shows one column. */
 export function ShowEmpty({
   show,
   counts,
@@ -994,45 +795,16 @@ export function ShowEmpty({
 }: {
   show: InboxShowChoice;
   counts: InboxCounts;
-  /** Whose items the window's Inbox lists, which offers everyone's again where no scope holds any of theirs; none on a task's own. */
+  /** Whom the items the window's Inbox lists are addressed to; none on a task's own, whose Open is the reader's own and whose All is anyone's. */
   whose?: InboxWhoseChoice | undefined;
   /** Asks the Inbox for its list, so the item chosen once the rows return does not stand in their place. */
   onList: () => void;
 }): React.JSX.Element {
-  const whoseNames =
-    whose !== undefined && whose.whose.kind !== INBOX_WHOSE.EVERYONE ? whose : undefined;
-  const line =
-    show.show === INBOX_SHOW.ALL && whoseNames !== undefined
-      ? whoseNames.whose.kind === INBOX_WHOSE.MINE
-        ? NOTHING_WHOSE.YOURS
-        : NOTHING_WHOSE.THEIRS
-      : SHOW_EMPTY[show.show];
-  const instead = insteadOf(show.show, counts);
-  const everyone = instead === undefined ? whoseNames : undefined;
+  const kind =
+    whose?.whose.kind ?? (show.show === INBOX_SHOW.OPEN ? INBOX_WHOSE.MINE : INBOX_WHOSE.EVERYONE);
   return (
-    <EmptyState
-      icon={<InboxIcon />}
-      action={
-        instead !== undefined
-          ? {
-              label: SHOW_INSTEAD[instead],
-              onClick: () => {
-                onList();
-                show.onShow(instead);
-              },
-            }
-          : everyone !== undefined
-            ? {
-                label: CLEAR_WHOSE,
-                onClick: () => {
-                  onList();
-                  everyone.onWhose(EVERYONES);
-                },
-              }
-            : undefined
-      }
-    >
-      {line}
+    <EmptyState icon={<InboxIcon />} action={emptyWayOn(show, counts, whose, onList)}>
+      {SHOW_EMPTY[kind][show.show]}
     </EmptyState>
   );
 }
@@ -1112,9 +884,9 @@ function ListSearch({ search }: { search: InboxSearchHead }): React.JSX.Element 
 }
 
 /**
- * The list's head: the Inbox's name, the scope after it where that is not
- * Needs you, and the view's menu at the list's top right, which chooses the
- * scope and, on the window's Inbox, the rest of how it lists; a task's own
+ * The list's head: the Inbox's name, whatever it lists, or a channel's, and
+ * the view's menu at the list's top right, which chooses the scope and, on
+ * the window's Inbox, whom the items are addressed to; a task's own
  * Inbox lists one task's items in one run, so its menu offers its scopes
  * alone. On the window's Inbox its heading and its button glide as the
  * sidebar folds, the name moving to the list's middle, clear of the
@@ -1129,8 +901,7 @@ function ListHead({
   readerId: string | undefined;
 }): React.JSX.Element {
   const { shown, show, view, channel } = head;
-  const title =
-    channel === undefined ? inboxTitle(show.show) : channelTitle(channel.name, show.show);
+  const title = channel === undefined ? INBOX_TITLE : channelTitle(channel.name, show.show);
   const asked = useMenuAsk();
   const search = head.search === undefined ? null : <ListSearch search={head.search} />;
   // A task's own Inbox tab on a phone hands its View options to the task's header, whose title
@@ -1386,7 +1157,7 @@ export function InboxListNote({
   alone: boolean;
   /** Opens New task, the way on from the Inbox's empty state where the list stands alone; none where nothing can start. */
   onNewTask?: (() => void) | undefined;
-  /** The scope shown and whose items, where they leave out every item the Inbox holds, for its empty state to show another. */
+  /** The scope shown and whom the items are addressed to, where they leave out every item the Inbox holds, for its empty state to show another. */
   filteredOut: InboxViewChoices | undefined;
   /** How many items each scope lists, for the empty state to offer one that lists something. */
   counts: InboxCounts;
@@ -1422,14 +1193,14 @@ export function InboxListNote({
   );
 }
 
-/** What the list's head offers: its scopes on every Inbox, and on the window's how it groups its items and which plans are folded. */
+/** What the list's head offers: its scopes on every Inbox, and on the window's whom the items are addressed to. */
 export interface InboxListHead {
   /** Whether the list is on screen, for its menu not to outlive it. */
   readonly shown: boolean;
   /** The scope the list shows, and the choice that shows another. */
   readonly show: InboxShowChoice;
-  /** The window's Inbox's grouping and its plans' folds; none on a task's own, which lists one task's items in one run. */
-  readonly view: { readonly choices: InboxViewChoices; readonly folds: InboxTaskFolds } | undefined;
+  /** The window's Inbox's choices; none on a task's own, whose menu offers its scopes alone. */
+  readonly view: { readonly choices: InboxViewChoices } | undefined;
   /** Mark all as read, in the view's menu, where the list marks its items. */
   readonly readAll?: InboxReadAll | undefined;
   /** The list's search, under its head, on the window's Inbox and a task's own alike; none where the list offers none. */
@@ -1523,56 +1294,24 @@ function useRowFocusKept(rows: InboxRowPresses): RowFocus {
   };
 }
 
-/** The items whose rows the list draws, in their order: every item listed but those of a group folded. */
-function drawnItems(view: InboxListView, folded: (key: string) => boolean): readonly InboxListed[] {
-  if (view.grouping === INBOX_GROUPING.NONE) return view.items;
-  const keyed: readonly { readonly key: string; readonly items: readonly InboxListed[] }[] =
-    view.groups;
-  return keyed.flatMap(({ key, items }) => (folded(key) ? [] : items));
-}
-
-/** No group folded, as a list in one run folds none. */
-const NO_KEYS: readonly string[] = [];
-
-/** The keys of the list's groups folded, in their order; none for a list in one run. */
-function foldedKeys(view: InboxListView, folded: (key: string) => boolean): readonly string[] {
-  if (view.grouping === INBOX_GROUPING.NONE) return NO_KEYS;
-  const keyed: readonly { readonly key: string }[] = view.groups;
-  return keyed.flatMap(({ key }) => (folded(key) ? [key] : []));
-}
-
-/** What stands the list's rows where they are: the items it lists under which heads, and which of its groups are folded. */
-interface LaidOut {
-  readonly view: InboxListView;
-  readonly folded: readonly string[];
-}
+/** How deep two runs of rows are read alike (`sameShape`): each row as the same holder and item. */
+const LAID_OUT_DEPTH = 1;
 
 /**
- * How deep two layouts are read alike (`sameShape`): the layout, its view,
- * each group, and each group's head and rows, a row read as the same listed
- * item (`inboxListed`) and a head as the same holder, person, or status.
+ * The rows as last drawn while a draw leaves them reading alike
+ * (`sameShape`), each row read as the same listed item (`inboxListed`),
+ * else as they are now. Note that this is what the list's motion is
+ * handed, because it measures every row before and after a commit whose
+ * `change` moved, and the list is handed a view built anew on every draw,
+ * though it lists the same rows.
  */
-const LAID_OUT_DEPTH = 4;
-
-/**
- * The rows' layout as last drawn while a draw leaves it reading alike
- * (`sameShape`), else as it is now. Note that this is what the list's
- * motion is handed, because it measures every row before and after a commit
- * whose `change` moved, and the list is handed a view built anew on every
- * draw, though it lists the same rows.
- */
-function useLaidOut(laidOut: LaidOut): LaidOut {
-  const held = useRef(laidOut);
-  const steady = sameShape(held.current, laidOut, LAID_OUT_DEPTH) ? held.current : laidOut;
+function useLaidOut(items: readonly InboxListed[]): readonly InboxListed[] {
+  const held = useRef(items);
+  const steady = sameShape(held.current, items, LAID_OUT_DEPTH) ? held.current : items;
   useLayoutEffect(() => {
     held.current = steady;
   });
   return steady;
-}
-
-/** A group's key, by which it leaves the list (`ListMotion`). */
-function groupKey({ key }: { readonly key: string }): string {
-  return key;
 }
 
 /** How tall a row is taken to be before it is drawn, in pixels: its three lines and its insets. */
@@ -1644,21 +1383,7 @@ function InboxRows({
   );
 }
 
-/** The list's groups, each drawn on after its last row took it out of the list until its exit has played. */
-function InboxGroups<G>({
-  groups,
-  keyOf,
-  group,
-}: {
-  groups: readonly G[];
-  keyOf: (group: G) => string;
-  group: (group: G) => React.ReactNode;
-}): React.JSX.Element {
-  const drawn = useLeaving(groups, keyOf);
-  return <>{drawn.map(({ value }) => group(value))}</>;
-}
-
-/** The list: its head where it has one, then each task's or each person's group of rows, or every row in one run, or a line where nothing is listed. */
+/** The list: its head where it has one, then every row in one run, or a line where nothing is listed. */
 export function InboxList({
   view,
   scene,
@@ -1706,9 +1431,8 @@ export function InboxList({
 }): React.JSX.Element {
   const regionId = useId();
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
-  const isFolded = (key: string) => head.view?.folds.folded(key) ?? false;
-  const drawn = drawnItems(view, isFolded);
-  // Note that only rows drawn stay chosen, so an item gone from the list, filtered out, or folded away is never acted on, and stays unchosen once back.
+  const drawn = view.items;
+  // Note that only rows drawn stay chosen, so an item gone from the list or filtered out is never acted on, and stays unchosen once back.
   const picks = drawn.filter(({ item }) => picked.has(item.id));
   if (picks.length !== picked.size) setPicked(new Set(picks.map(({ item }) => item.id)));
   const unpick = () => setPicked(new Set());
@@ -1761,7 +1485,7 @@ export function InboxList({
     onResize,
   });
   // Note that the motion replays a commit only where the rows stand otherwise, never one that drew them where they stood.
-  const laidOut = useLaidOut({ view, folded: foldedKeys(view, isFolded) });
+  const laidOut = useLaidOut(view.items);
   // Note that the rows are handed doors that stand across draws, each calling the newest the list was handed,
   // because the page hands new ones on every draw and a row handed a new door draws again (`InboxItemRow`).
   const choose = useSteadyDoor(onChoose);
@@ -1773,8 +1497,7 @@ export function InboxList({
     head.shown,
     (itemId) => listedItems(view).find(({ item }) => item.id === itemId)?.item,
   );
-  // Note that a row wears a teammate's face wherever no person's header stands over it.
-  // A row whose item is done with is drawn gray, the chosen row kept on Needs you and every such row on All alike.
+  // Note that a row whose item is done with is drawn gray, the chosen row kept on Needs you and every such row on All alike.
   // A row leaving the list is the list's motion's rather than one of the keyboard's rows (`ListMotion`).
   const row = (listed: InboxListed, leaving: boolean, at?: VirtualRowPlace) => (
     <InboxItemRow
@@ -1791,9 +1514,8 @@ export function InboxList({
       )}
       models={models}
       readerId={readerId}
-      face={view.grouping !== INBOX_GROUPING.PERSON}
       muted={isDone(listed.item)}
-      needsYouShown={head.show.show === INBOX_SHOW.TO_DO}
+      needsYouShown={needsYouListed(head)}
       ref={leaving ? undefined : rows.hold(listed.item.id)}
       selectKey={leaving ? undefined : listed.item.id}
       onChoose={choose}
@@ -1802,41 +1524,7 @@ export function InboxList({
       onAskMove={askMove}
     />
   );
-  const needingYou = (items: readonly InboxListed[]) =>
-    items.filter((listed) => needsYouOf(listed, view.readerId)).length;
-  const statusSection = ({ key, status, items }: InboxStatusGroup) => {
-    const folded = head.view?.folds.folded(key) ?? false;
-    return (
-      <div key={key} className="sidebar-repository" {...motionKey(key)}>
-        <StatusHeader
-          status={status}
-          folded={folded}
-          count={needingYou(items)}
-          onToggle={() => head.view?.folds.toggle(key)}
-        >
-          <InboxRows items={items} place={rowsPlace} row={row} />
-        </StatusHeader>
-      </div>
-    );
-  };
-  const personSection = ({ key, person, items }: InboxPersonGroup) => {
-    const folded = head.view?.folds.folded(key) ?? false;
-    return (
-      <div key={key} className="sidebar-repository" {...motionKey(key)}>
-        <PersonHeader
-          person={person}
-          readerId={readerId}
-          folded={folded}
-          count={needingYou(items)}
-          onToggle={() => head.view?.folds.toggle(key)}
-        >
-          <InboxRows items={items} place={rowsPlace} row={row} />
-        </PersonHeader>
-      </div>
-    );
-  };
-  // Note that each grouping draws its groups anew, keyed by it, so a group of one grouping never leaves into another's;
-  // and so does each scene, so the rows of the channel left go with it rather than leave one by one.
+  // Note that each scene draws its rows anew, so the rows of the channel left go with it rather than leave one by one.
   const body = (
     <div
       {...roving}
@@ -1846,44 +1534,7 @@ export function InboxList({
       {...motionRows()}
     >
       <Fragment key={scene ?? ""}>
-        {view.grouping === INBOX_GROUPING.NONE ? (
-          <InboxRows items={view.items} place={rowsPlace} row={row} />
-        ) : view.grouping === INBOX_GROUPING.PERSON ? (
-          <InboxGroups
-            key={view.grouping}
-            groups={view.groups}
-            keyOf={groupKey}
-            group={personSection}
-          />
-        ) : view.grouping === INBOX_GROUPING.STATUS ? (
-          <InboxGroups
-            key={view.grouping}
-            groups={view.groups}
-            keyOf={groupKey}
-            group={statusSection}
-          />
-        ) : (
-          <InboxGroups
-            key={view.grouping}
-            groups={view.groups}
-            keyOf={groupKey}
-            group={({ key, holder, items }) => {
-              const folded = head.view?.folds.folded(key) ?? false;
-              return (
-                <div key={key} className="sidebar-repository" {...motionKey(key)}>
-                  <HolderHeader
-                    holder={holder}
-                    folded={folded}
-                    count={needingYou(items)}
-                    onToggle={() => head.view?.folds.toggle(key)}
-                  >
-                    <InboxRows items={items} place={rowsPlace} row={row} />
-                  </HolderHeader>
-                </div>
-              );
-            }}
-          />
-        )}
+        <InboxRows items={view.items} place={rowsPlace} row={row} />
       </Fragment>
       {note}
     </div>
