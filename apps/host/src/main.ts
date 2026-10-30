@@ -20,11 +20,7 @@
  * refuses the box's secret, the host removed, when it stops them and exits 0,
  * which the service's `Restart=on-failure` leaves stopped. Every agent runs
  * straight on the box (`hostPlatform`), as a child of this process, on its
- * Node, and as its user, so a box needs neither smolvm nor KVM. The `smolvm`
- * its agents ran their VMs in before, where the install script put one at
- * the path its service names (`LINUX_HOST`'s `smolvm`), or the pinned
- * release a Mac fetched under its state (`DARWIN_HOST`'s), is handed on
- * unasked (`hostSmolvmLeft`), only to delete what those VMs left standing.
+ * Node, and as its user.
  *
  * `enroll` is run once as the box is set up: it reads the install token on stdin,
  * where `--token` gives none, prints the one line the script shows, and
@@ -56,13 +52,11 @@ import {
   enrollHostDevice,
   HOST_CONNECT_OUTCOME,
   type HostPairingCode,
-  type HostPlatformOptions,
   type HostRuntime,
   hostArch,
   hostDaemon,
   hostPlatform,
   hostRuntime,
-  hostSmolvmLeft,
   readHostDevice,
 } from "@luke/host/daemon";
 import { Environment, reporterLayer } from "@luke/host/effect";
@@ -148,8 +142,8 @@ const arch = ({ os: hostOs }: HostRuntime) =>
       : Effect.succeed(read);
   });
 
-/** The daemon on the box's record, or a rest until there is one, the VMs its agents left from before deleted by the `smolvm` given; it ends once Luke refuses the box's secret. */
-const follow = (runtime: HostRuntime, smolvm: HostPlatformOptions["smolvm"]) =>
+/** The daemon on the box's record, or a rest until there is one; it ends once Luke refuses the box's secret. */
+const follow = (runtime: HostRuntime) =>
   Effect.gen(function* () {
     const { stateRoot } = runtime;
     const device = yield* readHostDevice(stateRoot);
@@ -173,7 +167,6 @@ const follow = (runtime: HostRuntime, smolvm: HostPlatformOptions["smolvm"]) =>
       installFolder,
       arch: boxArch,
       stateRoot,
-      smolvm,
       runnerFolder: process.env.LUKE_HOST_RUNNER_FOLDER,
       node: process.execPath,
       // Note that every agent runs as the daemon's user, the member's own or root on a dedicated box.
@@ -190,8 +183,7 @@ const follow = (runtime: HostRuntime, smolvm: HostPlatformOptions["smolvm"]) =>
   }).pipe(Effect.repeat({ until: (removed) => removed }));
 
 /** `luke-host run`: the daemon, until Luke refuses the box's secret. */
-const run = (runtime: HostRuntime) =>
-  Effect.as(follow(runtime, hostSmolvmLeft(runtime.os.smolvm, process.env)), 0);
+const run = (runtime: HostRuntime) => Effect.as(follow(runtime), 0);
 
 /** `luke-host enroll`: the install token traded for the box's secret, and the one line the install script shows. */
 const enroll = (runtime: HostRuntime, token: string, name: string, origin: string) =>

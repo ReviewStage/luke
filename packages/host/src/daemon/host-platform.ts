@@ -1,4 +1,3 @@
-import type { AgentToolPin } from "@luke/agent-runner/pins";
 import { RUNNER_ENV, RUNNER_PLACE } from "@luke/agent-runner/protocol";
 import {
   DEVICE_CAPABILITY,
@@ -9,7 +8,6 @@ import type { LocalAgentClis, LocalAgentPlatformSeam } from "../effect/seams.js"
 import { agentOnBox } from "../local-agent-box.js";
 import { localAgentClis } from "../local-agent-setup.js";
 import { agentWorktreeScript, cloneFolder, worktreesRoot } from "../node/open-on-mac.js";
-import { smolvmSandbox } from "../node/smolvm-sandbox.js";
 import type { HostOs } from "./host-os.js";
 
 /**
@@ -34,9 +32,7 @@ import type { HostOs } from "./host-os.js";
  * Every host keeps its own Claude Code, Codex, and GitHub CLI, the pinned
  * builds for its OS and architecture (`HostOs.agentClis`), fetched under
  * the daemon's state before it registers ready (`clis`), which it registers
- * and its agents run on. Its `smolvm`, where it has one, is kept only to
- * delete the VMs its agents' runs left standing from before they ran on
- * the box (`sandbox`), and none where it has none.
+ * and its agents run on.
  */
 
 /** The runner's bundle, in the folder the host's OS names for it (`HostOs.runnerFolder`). */
@@ -48,7 +44,7 @@ const ROOT = 0;
 /** What tells Claude Code it runs in a sandbox of its own, the one way it skips its permissions as root (its `isRootOutsideDeliberateSandbox`). */
 const CLAUDE_CODE_SANDBOXED = "IS_SANDBOX";
 
-export interface HostPlatformOptions {
+interface HostPlatformOptions {
   /** The OS the host runs on, which names its platform, its name, and its check for unsaved work. */
   readonly os: HostOs;
   /** The folder the host's release is installed in (`/opt/luke-host`), beside or under which the runner's bundle stands (`HostOs.runnerFolder`). */
@@ -60,8 +56,6 @@ export interface HostPlatformOptions {
   readonly arch: DeviceArch;
   /** The daemon's state, under which it keeps the agent CLIs. */
   readonly stateRoot: string;
-  /** The `smolvm` the box ran its agents' VMs with before they ran on it, which deletes what they left standing: a path its service names, or the pinned release a Mac fetched; none where it names none. */
-  readonly smolvm?: string | AgentToolPin | undefined;
   /** The user the host runs as, whose every agent runs as it too: root's tells Claude Code it may skip its permissions. */
   readonly user: { readonly uid: number; readonly gid: number };
   /** The agent CLIs where something other than the OS's pins names them: a suite's own, which fetches nothing. */
@@ -71,13 +65,6 @@ export interface HostPlatformOptions {
 /** A host's local agent platform, for the release installed in the folder given. */
 export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSeam {
   const runnerFolder = options.runnerFolder ?? options.os.runnerFolder(options.installFolder);
-  const vm = smolvmSandbox({
-    smolvm: options.smolvm,
-    stateRoot: options.stateRoot,
-    runnerFolder,
-    user: options.user,
-    nested: options.os.nested(),
-  });
   const clis =
     options.clis ?? localAgentClis(options.stateRoot, options.os.agentClis(options.arch));
   return {
@@ -92,7 +79,6 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
         clis.paths.gh,
       ),
     tools: { node: options.node, claude: clis.paths.claude, codex: clis.paths.codex },
-    sandbox: vm.sandbox,
     clis,
     runnerBundle: `${runnerFolder}/${RUNNER_BUNDLE}`,
     runnerEnv: {

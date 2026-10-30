@@ -3,7 +3,7 @@ import { Effect, Option, Path, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 
 /**
- * local-agent-state.ts -- what a machine keeps of its local agents between runs (`local-agents.json` in its state): the device id each account registered under, the launches no exit has settled yet, how each agent has run there, the agents whose folders a discard kept, and since when, and when each agent was last used there; read and written alike by the follower (`compose-local-agents.ts`) and by This Mac's turn-on (`compose-this-mac-host.ts`). Beside it, which agents' folders and VMs this machine made (`owned-agents`).
+ * local-agent-state.ts -- what a machine keeps of its local agents between runs (`local-agents.json` in its state): the device id each account registered under, the launches no exit has settled yet, how each agent has run there, the agents whose folders a discard kept, and since when, and when each agent was last used there; read and written alike by the follower (`compose-local-agents.ts`) and by This Mac's turn-on (`compose-this-mac-host.ts`). Beside it, which agents' folders this machine made (`owned-agents`).
  *
  * The follower holds the state while it follows and writes it whole; This
  * Mac's turn-on, in the app, reads and changes it in place, never while the
@@ -21,24 +21,23 @@ const STATE_FILE = "local-agents.json";
 
 /**
  * The folder in the machine's state holding an empty file for each agent
- * whose folder and VM this machine made, named for the agent, from its
- * first launch or files, or, for one it last ran before it kept this
- * record, the first time its follower's gate opens after, until a discard
- * removes its folder. The folder and
- * the VM stand in the user's own `~/.luke/agents` and smolvm store, which
- * every Luke install for that user shares, so `luke-host uninstall` reads
- * this to remove its own and no other's (`apps/host/scripts/luke-host.sh`),
- * and the follower to delete the VMs its own runs left standing as its gate
- * opens (`ownedAgents`).
+ * whose folder this machine made, named for the agent, from its first
+ * launch or files, or, for one it last ran before it kept this record, the
+ * first time its follower's gate opens after, until a discard removes its
+ * folder. The folder stands in the user's own `~/.luke/agents`, which every
+ * Luke install for that user shares, so `luke-host uninstall` reads this to
+ * remove its own and no other's (`apps/host/scripts/luke-host.sh`), and the
+ * follower to pass over its own alone (`ownedAgents`).
  */
 const OWNED_FOLDER = "owned-agents";
 
 /**
  * The state: the device id each account registered under, the launches
  * whose runners this device started and the service has not yet taken a
- * settle of, each with the agent whose VM it ran in, absent from a launch
- * kept before it, on a device whose agents may have run directly on it
- * (`formerlyDirect`), how each agent has run here, in a VM or directly,
+ * settle of, each with the agent it ran for, absent from a launch kept
+ * before it, on a device whose agents may have run directly on it
+ * (`formerlyDirect`), how each agent has run here, in a folder of its own
+ * or on the developer's own logins,
  * the agents the service no longer lists whose folders a discard kept for
  * work in them, each with when it was first kept (epoch milliseconds),
  * which the follower never checks again while they stand and lets go of
@@ -134,7 +133,7 @@ export const localAgentLaunchesHanded = (stateRoot: string, userId: string, devi
     ),
   }));
 
-/** The agent given kept as one whose folder and VM this machine made; a write that fails is let go, since the record only serves an uninstall. */
+/** The agent given kept as one whose folder this machine made; a write that fails is let go, since the record only serves an uninstall. */
 export const keepOwnedAgent = (stateRoot: string, agentId: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -144,7 +143,7 @@ export const keepOwnedAgent = (stateRoot: string, agentId: string) =>
     yield* fileSystem.writeFileString(path.join(owned, agentId), "");
   }).pipe(Effect.ignore);
 
-/** The agents kept as ones whose folder and VM this machine made, by id; none where the record cannot be read. */
+/** The agents kept as ones whose folder this machine made, by id; none where the record cannot be read. */
 export const ownedAgents = (stateRoot: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -152,7 +151,7 @@ export const ownedAgents = (stateRoot: string) =>
     return yield* fileSystem.readDirectory(path.join(stateRoot, OWNED_FOLDER));
   }).pipe(Effect.orElseSucceed((): readonly string[] => []));
 
-/** The agent given no longer kept as one whose folder and VM this machine made, once its folder is gone. */
+/** The agent given no longer kept as one whose folder this machine made, once its folder is gone. */
 export const forgetOwnedAgent = (stateRoot: string, agentId: string) =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;

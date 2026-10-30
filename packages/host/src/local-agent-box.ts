@@ -7,8 +7,8 @@ import type { LocalAgentCommand } from "./effect/seams.js";
  * local-agent-box.ts -- a local agent as a host runs it straight on the box: each of its processes started in its own folder as the host's own user, with its home, caches, and pnpm's and npm's global folders inside that folder, the pinned `gh` first on its `PATH`, and its GitHub token where its `git` and `gh` read it, which the host rewrites as it renews.
  *
  * The agent's sessions, caches, and what a global install puts down stay
- * in its folder, as they did in its VM (`HOME`, `XDG_CACHE_HOME`,
- * `PNPM_HOME`, `NPM_CONFIG_PREFIX`), so they go with it and no two agents
+ * in its folder (`HOME`, `XDG_CACHE_HOME`, `PNPM_HOME`,
+ * `NPM_CONFIG_PREFIX`), so they go with it and no two agents
  * share one. Nothing hides the box from it: it runs as the host's user,
  * with full access to whatever that user reaches.
  *

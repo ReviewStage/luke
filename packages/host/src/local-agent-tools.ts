@@ -8,8 +8,8 @@ import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 /**
  * local-agent-tools.ts -- a binary a device's local agents run on, as its pin names it (`@luke/agent-runner/pins`' `AgentToolPin`): the pinned release fetched once, checked, and kept in the device's own folder.
  *
- * One resolver answers every such binary, a Mac's smolvm and every host's
- * Claude Code, Codex, and GitHub CLI among them: the build kept under the
+ * One resolver answers every such binary, every host's Claude Code, Codex,
+ * and GitHub CLI among them: the build kept under the
  * state root, at `agent-tools/<NAME>/<VERSION>`, fetched the first time it
  * is asked for.
  *
@@ -322,8 +322,8 @@ const otherVersionsRemoved = (pin: AgentToolPin, toolFolder: string) =>
 
 /**
  * Where the pin's binary is kept under the state root once fetched, for a
- * caller that names it before it is had, as a Mac's `smolvm` is named in
- * every command of its sandbox's.
+ * caller that names it before it is had, as a device registers and launches
+ * its agents' CLIs from where they will be (`localAgentClis`).
  */
 export function keptToolBinary(stateRoot: string, pin: AgentToolPin): string {
   return [stateRoot, TOOL_FETCH.FOLDER, pin.NAME, pin.VERSION, pin.BINARY].join("/");

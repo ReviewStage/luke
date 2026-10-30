@@ -495,9 +495,7 @@ service hands your Mac, as for a host below, which your Mac writes into `gh`'s
 sign-in in the agent's own folder, where the agent's `git` and `gh` read it
 and any command it runs can too, rewrites as it renews, and deletes as each
 turn ends. No copy of an agent's work goes to Luke: its folder stays on your
-Mac for the agent's life, and each turn goes on from it. A save an earlier
-Luke made of an agent's work is deleted seven days after it was made, or
-sooner with the agent's transcript. An agent you archive or delete loses its
+Mac for the agent's life, and each turn goes on from it. An agent you archive or delete loses its
 folder from your Mac as soon as the archive reaches it, or within minutes of
 your Mac's next being online once our service no longer lists the agent; one
 where your Mac's check finds work that no remote has, or cannot tell, is kept
