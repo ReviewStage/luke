@@ -1494,9 +1494,17 @@ export function useWindowHistory(input: {
         () => tasks.automationsView.onRuns(false),
       ),
     // Note that the Inbox's list is a step of its own wherever the Inbox shows one column, a room wider than a narrow one's included.
+    // Note that the list stepped back to is under the task or the channel the Inbox stands narrowed to, as its step is.
     inbox: () => {
       const stand = () => tasks.inboxView.onClear();
-      if (inboxSingle) upTo({ kind: PLACE_KIND.INBOX, listed: true }, stand);
+      const list = { kind: PLACE_KIND.INBOX, listed: true } as const;
+      const narrowed =
+        inboxTask !== undefined
+          ? { ...list, taskId: inboxTask }
+          : inboxChannel !== undefined
+            ? { ...list, channelId: inboxChannel }
+            : list;
+      if (inboxSingle) upTo(narrowed, stand);
       else stand();
     },
     panel: () => {
