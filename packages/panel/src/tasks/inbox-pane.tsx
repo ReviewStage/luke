@@ -624,7 +624,7 @@ function ReplacedMarker({
 /**
  * Whether a member resolved the item without an answer while that close
  * stands, as its row's card says it (`inboxSettledStanding`), which the
- * thread says in a line of its own after its messages (`ResolvedEvent`).
+ * thread says in a line of its own among its messages (`ResolvedEvent`).
  */
 function resolvedByMember(item: InboxItem): boolean {
   return inboxSettledStanding(item) === INBOX_SETTLED_STANDING.RESOLVED;
@@ -659,12 +659,26 @@ function WithdrawnMarker({
   );
 }
 
+/**
+ * Where the line saying a member resolved the item stands among its
+ * messages: after the last one written by the time of the close, since a
+ * settled item still takes messages, or at the thread's end where that time
+ * is not known; -1 before every message read, and none where no member's
+ * close stands.
+ */
+function resolvedAfter(item: InboxItem, thread: readonly InboxMessage[]): number | undefined {
+  if (!resolvedByMember(item)) return undefined;
+  const settled = item.settledAt;
+  if (settled === undefined) return thread.length - 1;
+  return thread.findLastIndex((message) => message.createdAt <= settled);
+}
+
 /** What a member resolving the item says after their name. */
 const RESOLVED_IT = "resolved this without an answer";
 
 /**
  * A member resolving the item without an answer, as a line of the thread
- * after its messages, drawn as a plan comment's "resolved this" is: their
+ * where they did (`resolvedAfter`), drawn as a plan comment's "resolved this" is: their
  * face on the gutter's line, their name, what they did, and when.
  */
 function ResolvedEvent({ item, now }: { item: InboxItem; now: number }): React.JSX.Element {
@@ -1379,6 +1393,7 @@ export function InboxPane({
   const draft = control.draftOf(item);
   const thread = item.thread ?? NO_MESSAGES;
   const pending = pendingReplyOn(control.pendingReplies, item);
+  const resolved = resolvedAfter(item, thread);
   useOptionNumbers(pane, item, draft, control, open ? numberedPickOf(thread) : undefined);
   const formText: FormTextDoors = {
     self: item.agentId,
@@ -1521,6 +1536,7 @@ export function InboxPane({
                 className={INBOX_THREAD}
                 aria-label="Messages"
               >
+                {resolved === -1 ? <ResolvedEvent item={item} now={now} /> : null}
                 {thread.map((message, at) => (
                   <Fragment key={message.id}>
                     <ThreadMessage
@@ -1536,9 +1552,9 @@ export function InboxPane({
                     {at === 0 && thread.length >= INBOX_BOUNDS.MAX_MESSAGES_READ ? (
                       <EarlierMessages by={by} />
                     ) : null}
+                    {at === resolved ? <ResolvedEvent item={item} now={now} /> : null}
                   </Fragment>
                 ))}
-                {resolvedByMember(item) ? <ResolvedEvent item={item} now={now} /> : null}
                 {pending === undefined ? null : (
                   <PendingReply readerId={readerId} reply={pending} now={now} />
                 )}
