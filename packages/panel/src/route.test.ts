@@ -25,6 +25,8 @@ const OTHER = "5b7d9f1a-3c5e-4a7b-9d1f-2b4c6d8e0f1a";
 const PAGE = "3f8e2a1b-6c4d-4e5f-8a9b-0c1d2e3f4a5b";
 const CALL = "toolu_01";
 const THREAD = "PRRT_kwDOA1";
+const MESSAGE = "4a6c8e0b-2d4f-4b6d-8f0a-1c3e5a7b9d2c";
+const INBOX_ITEM = "6e8a0c2d-4f6b-4d8f-a1c3-5e7a9b1d3f4e";
 const PR = "https://github.com/acme/relay/pull/42";
 const FILE = "https://github.com/acme/relay/blob/HEAD/src/invites.ts";
 const LUKE = "https://tryluke.dev/acme";
@@ -185,6 +187,60 @@ it.each<[string, string, Here, Route]>([
     `${LUKE}/agent/${AGENT}/changes`,
     { ...ITEM, ...ARCHIVED },
     preview({ kind: THING.CHANGES, agentId: AGENT }),
+  ],
+  [
+    "an Inbox item: a message of an agent of its task, its transcript beside it at the message",
+    `${LUKE}/agent/${AGENT}/message/${MESSAGE}`,
+    ITEM,
+    preview({ kind: THING.TRANSCRIPT, agentId: AGENT, messageId: MESSAGE }),
+  ],
+  [
+    "an Inbox item: a message of an archived agent of its task, the window's",
+    `${LUKE}/plan/${TASK}/agent/${AGENT}/message/${MESSAGE}`,
+    { ...ITEM, ...ARCHIVED },
+    NOTHING,
+  ],
+  [
+    "an Inbox item of an agent on no task: a message of that agent, the window's",
+    `${LUKE}/agent/${AGENT}/message/${MESSAGE}`,
+    TASKLESS_ITEM,
+    NOTHING,
+  ],
+  [
+    "an Inbox item: a review thread of an archived agent's pull request, beside it at the thread",
+    `${LUKE}/agent/${AGENT}/changes/conversation/thread/${THREAD}`,
+    { ...ITEM, ...ARCHIVED },
+    preview({ kind: THING.THREAD, agentId: AGENT, threadId: THREAD, view: "conversation" }),
+  ],
+  [
+    "an Inbox item: a review thread of an agent not of its task, the window's",
+    `${LUKE}/agent/${OTHER}/changes/files/thread/${THREAD}`,
+    ITEM,
+    NOTHING,
+  ],
+  [
+    "an Inbox item: another task's Inbox item, chosen in this Inbox",
+    `${LUKE}/plan/${OTHER}/inbox/${INBOX_ITEM}`,
+    ITEM,
+    preview({ kind: THING.INBOX_ITEM, itemId: INBOX_ITEM, taskId: OTHER, agentId: undefined }),
+  ],
+  [
+    "an Inbox item: an Inbox item an agent of its task posted, chosen in this Inbox under the task",
+    `${LUKE}/agent/${AGENT}/inbox/${INBOX_ITEM}`,
+    ITEM,
+    preview({ kind: THING.INBOX_ITEM, itemId: INBOX_ITEM, taskId: TASK, agentId: AGENT }),
+  ],
+  [
+    "an Inbox item: an Inbox item an agent it does not hold posted, the window's to find",
+    `${LUKE}/agent/${OTHER}/inbox/${INBOX_ITEM}`,
+    ITEM,
+    NOTHING,
+  ],
+  [
+    "an Inbox item of an agent on no task: another item of that agent, chosen in this Inbox",
+    `${LUKE}/agent/${AGENT}/inbox/${INBOX_ITEM}`,
+    TASKLESS_ITEM,
+    preview({ kind: THING.INBOX_ITEM, itemId: INBOX_ITEM, taskId: undefined, agentId: AGENT }),
   ],
   [
     "a task: a page under its agent's pull request's, in that agent's own Pull request tab",

@@ -1249,6 +1249,15 @@ export type ToolTarget =
     }
   | { readonly kind: typeof TOOL_TARGET.PULL_REQUEST; readonly url: string };
 
+/** The place in Luke a row naming a task names: the task, or one of its agents where the row names one. */
+export function placeOfTaskTarget(
+  target: Extract<ToolTarget, { readonly kind: typeof TOOL_TARGET.TASK }>,
+): LinkPlace {
+  return target.agent === undefined
+    ? { kind: LINK_PLACE.TASK, planId: target.task }
+    : { kind: LINK_PLACE.AGENT, planId: target.task, agentId: target.agent };
+}
+
 /** What the hover over a row says it opens, by its target's kind. */
 export const TARGET_HINT = {
   [TOOL_TARGET.AGENT]: "Open the agent",

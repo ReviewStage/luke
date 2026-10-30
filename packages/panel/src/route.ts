@@ -1,6 +1,7 @@
 import {
   LINK_PLACE,
   type LinkPlace,
+  type PullRequestThreadView,
   pullRequestAddressOf,
   type ReadLink,
   readLink,
@@ -39,9 +40,12 @@ import {
  * - An Inbox item previews beside it what the panel standing for what holds
  *   it draws: a file of its repository, a page of its task or of the agent on
  *   no task that holds it, an archived agent's Changes, one of its task's
- *   agents' transcripts, and a pull request one of its agents opened, or
- *   another of its task's repository by its number. An agent of its task the
- *   panel does not draw, an archived one, goes to the task on its tab.
+ *   agents' transcripts, at a message of it where the link names one, a
+ *   review thread of one of its agents' pull requests, and a pull request
+ *   one of its agents opened, or another of its task's repository by its
+ *   number. An agent of its task the panel does not draw, an archived one,
+ *   goes to the task on its tab. Another Inbox item is chosen in the Inbox
+ *   the item stands in, rather than in its task's Inbox tab.
  * - A task's page and an agent's page preview a pull request one of their
  *   agents opened, an archived one's among them, in its Pull request tab, and
  *   any other of their repository by its number in their first agent's.
@@ -147,18 +151,22 @@ export type Here =
       readonly taskId: string | undefined;
     };
 
-/** The things a press opens beside a surface, in the panel there. */
+/** The things a press opens beside a surface, in the panel there, or, an Inbox item, in the Inbox the surface stands in. */
 export const THING = {
   FILE: "file",
   PAGE: "page",
   /** An agent's Changes, its Pull request tab, as a Luke link names it. */
   CHANGES: "changes",
-  /** An agent's transcript. */
+  /** An agent's transcript, at one of its messages where the link names one. */
   TRANSCRIPT: "transcript",
   /** An agent's Pull request tab on its Conversation, as the pull request's page on GitHub names it. */
   PULL_REQUEST: "pull-request",
+  /** One review thread of an agent's pull request, in its Pull request tab, on the view the link names. */
+  THREAD: "thread",
   /** One of an agent's workers. */
   WORKER: "worker",
+  /** An Inbox item, chosen in the Inbox. */
+  INBOX_ITEM: "inbox-item",
 } as const;
 
 /** A thing a press opens beside a surface. */
@@ -170,14 +178,33 @@ export type Thing =
     }
   | { readonly kind: typeof THING.PAGE; readonly pageId: string }
   | { readonly kind: typeof THING.CHANGES; readonly agentId: string }
-  | { readonly kind: typeof THING.TRANSCRIPT; readonly agentId: string }
+  | {
+      readonly kind: typeof THING.TRANSCRIPT;
+      readonly agentId: string;
+      /** The message brought into view; none for the transcript as it stands. */
+      readonly messageId?: string;
+    }
   | {
       readonly kind: typeof THING.PULL_REQUEST;
       readonly agentId: string;
       /** The pull request's number, where it is another of the repository's than the one the agent opened. */
       readonly number?: number;
     }
-  | { readonly kind: typeof THING.WORKER; readonly agentId: string; readonly callId: string };
+  | {
+      readonly kind: typeof THING.THREAD;
+      readonly agentId: string;
+      readonly threadId: string;
+      readonly view: PullRequestThreadView;
+    }
+  | { readonly kind: typeof THING.WORKER; readonly agentId: string; readonly callId: string }
+  | {
+      readonly kind: typeof THING.INBOX_ITEM;
+      readonly itemId: string;
+      /** The task that holds it; none for an item of an agent on no task. */
+      readonly taskId: string | undefined;
+      /** The agent that posted it, where the link names it under its agent. */
+      readonly agentId: string | undefined;
+    };
 
 /** What a press does. */
 export const ROUTE = {
@@ -237,7 +264,27 @@ function holdsAgent(
   return at.planId === undefined ? agentIds?.includes(at.agentId) === true : at.planId === taskId;
 }
 
-/** A place in Luke pressed on an Inbox item: a page, an agent's Changes, or an agent of what holds it opens beside it, and any other place is the window's. */
+/** An Inbox item a link names, chosen in the Inbox an item stands in: one under its task, or one under an agent the item's task holds or the agent on no task that holds the item; any other the window finds by its agent. */
+function itemOfInbox(
+  at: Extract<LinkPlace, { readonly kind: typeof LINK_PLACE.INBOX_ITEM }>,
+  here: InboxItemHere,
+): Route {
+  const { itemId } = at;
+  if ("planId" in at) {
+    return preview({ kind: THING.INBOX_ITEM, itemId, taskId: at.planId, agentId: undefined });
+  }
+  const { agentId } = at;
+  if (here.taskId !== undefined) {
+    return (here.heldIds ?? here.agentIds)?.includes(agentId) === true
+      ? preview({ kind: THING.INBOX_ITEM, itemId, taskId: here.taskId, agentId })
+      : NOTHING;
+  }
+  return agentId === here.agentId
+    ? preview({ kind: THING.INBOX_ITEM, itemId, taskId: undefined, agentId })
+    : NOTHING;
+}
+
+/** A place in Luke pressed on an Inbox item: a page, an agent's Changes or a review thread of its pull request, an agent of what holds it or one of its messages, opens beside it, another Inbox item is chosen in its Inbox, and any other place is the window's. */
 function itemPlace(link: ReadLink, here: InboxItemHere): Route {
   const at = link.place;
   switch (at.kind) {
@@ -254,6 +301,25 @@ function itemPlace(link: ReadLink, here: InboxItemHere): Route {
       return holdsAgent(at, here.taskId, here.heldIds ?? here.agentIds)
         ? preview({ kind: THING.CHANGES, agentId: at.agentId })
         : NOTHING;
+    // A review thread of an agent's pull request opens beside the item as its Changes does.
+    case LINK_PLACE.PULL_REQUEST_THREAD:
+      return holdsAgent(at, here.taskId, here.heldIds ?? here.agentIds)
+        ? preview({
+            kind: THING.THREAD,
+            agentId: at.agentId,
+            threadId: at.threadId,
+            view: at.view,
+          })
+        : NOTHING;
+    // A message of an agent of the item's own task the panel draws reads beside it, at the message; an archived one's, which its task alone draws, is the window's to open.
+    case LINK_PLACE.MESSAGE:
+      return here.taskId !== undefined &&
+        holdsAgent(at, here.taskId, here.agentIds) &&
+        here.agentIds?.includes(at.agentId) === true
+        ? preview({ kind: THING.TRANSCRIPT, agentId: at.agentId, messageId: at.messageId })
+        : NOTHING;
+    case LINK_PLACE.INBOX_ITEM:
+      return itemOfInbox(at, here);
     // An agent of the item's own task reads beside it; one on no task, or another task's, is the window's to open.
     case LINK_PLACE.AGENT: {
       if (here.taskId === undefined || !holdsAgent(at, here.taskId, here.agentIds)) return NOTHING;
