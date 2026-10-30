@@ -140,14 +140,14 @@ export const PANEL_COMMAND = {
   CHANGE_REPOSITORY: unkeyed("Change repository", <GLYPH.REPOSITORY />),
   MOVE_TO_WORKSPACE: unkeyed("Move to workspace", <GLYPH.MOVE />),
   NEW_CHILD_TASK: unkeyed("New sub-task", <GLYPH.ADD />),
-  ADD_SUB_TASK: unkeyed("Add sub-task…", <TaskRelationIcon kind={TASK_RELATION_KIND.SUB_TASK} />),
-  SET_PARENT: unkeyed("Set parent…", <TaskRelationIcon kind={TASK_RELATION_KIND.PARENT} />),
+  ADD_SUB_TASK: unkeyed("Add sub-task", <TaskRelationIcon kind={TASK_RELATION_KIND.SUB_TASK} />),
+  SET_PARENT: unkeyed("Set parent", <TaskRelationIcon kind={TASK_RELATION_KIND.PARENT} />),
   MARK_BLOCKED_BY: unkeyed(
-    "Mark as blocked by…",
+    "Mark as blocked by",
     <TaskRelationIcon kind={TASK_RELATION_KIND.BLOCKED_BY} />,
   ),
   MARK_BLOCKING: unkeyed(
-    "Mark as blocking…",
+    "Mark as blocking",
     <TaskRelationIcon kind={TASK_RELATION_KIND.BLOCKS} />,
   ),
   REMOVE_PARENT: unkeyed("Remove parent", <UnlinkIcon />),

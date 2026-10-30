@@ -124,7 +124,7 @@ test("a pick on Parent sets the task's parent to it, and on Sub-task sets its pa
   ]);
 });
 
-test("on Sub-task a task above this one or in another repository says why and takes no pick, and New sub-task… opens the composer", () => {
+test("on Sub-task a task above this one or in another repository says why and takes no pick, and New sub-task opens the composer", () => {
   let composed = 0;
   const parents: string[] = [];
   const ask = head({
@@ -144,8 +144,8 @@ test("on Sub-task a task above this one or in another repository says why and ta
   assert.deepEqual(parents, []);
   const create =
     [...document.querySelectorAll<HTMLElement>('[data-steered="true"]')].find(
-      (each) => each.textContent === "New sub-task…",
-    ) ?? assert.fail("no New sub-task… row");
+      (each) => each.textContent === "New sub-task",
+    ) ?? assert.fail("no New sub-task row");
   act(() => create.click());
   assert.equal(composed, 1);
 });

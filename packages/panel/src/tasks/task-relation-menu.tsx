@@ -37,7 +37,7 @@ import { useEffect, useId, useRef, useState } from "react";
  * their search. A task that cannot take the kind stays listed, dimmed, with
  * why at its end: already related that way, a loop the service would
  * refuse, or, for a sub-task or a parent, another repository, since a tree
- * works in one. On Sub-task, New sub-task… is pinned above the kind and
+ * works in one. On Sub-task, New sub-task is pinned above the kind and
  * opens the child composer. A pick is sent through the door: a block as the
  * blocks' change, a sub-task or a parent as a parent set, the service's
  * answer being what the head goes on drawing. The task's ⋯ menu, its
@@ -215,7 +215,7 @@ function kindOf(id: string): TaskRelationKind | undefined {
 
 /**
  * The add menu, opened on `kind`: the tasks for the kind chosen now, and
- * pinned under them New sub-task… on Sub-task and the kind's submenu. A
+ * pinned under them New sub-task on Sub-task and the kind's submenu. A
  * pick of a task is sent and closes the menu; a kind switched keeps the
  * search. Its owner holds it open and hangs it from a box of its own.
  */
@@ -249,7 +249,7 @@ export function TaskRelationMenu({
       ? [
           {
             id: FOOT_ID.NEW_SUB_TASK,
-            label: "New sub-task…",
+            label: "New sub-task",
             icon: <GLYPH.ADD />,
             onPress: () => {
               onClose();

@@ -657,7 +657,7 @@ test("a section's Mark all as read stands while a task in it is unread, and mark
   act(() => item("Mark all as read").click());
   const marks = ["Invite expiry", "Retry audit"].map((name) => {
     openRowMenu(sidebar, name);
-    const offered = menuLabels().filter((label) => label.startsWith("Mark as"));
+    const offered = menuLabels().filter((label) => /^Mark as (un)?read/u.test(label));
     act(() => {
       document.activeElement?.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),

@@ -148,8 +148,8 @@ import { ChosenTasksContext, chosenRowMenu } from "./tasks-selection.js";
  * opens the plan's versions over the whole window, opening the task first
  * where it is not the open one, the one item that moves it. New sub-task
  * opens New task's card for a child of the task, in its workspace and
- * repository (`new-task-composer.tsx`). Add sub-task…, Set parent…, Mark as
- * blocked by…, and Mark as blocking… open the add menu on their kind from
+ * repository (`new-task-composer.tsx`). Add sub-task, Set parent, Mark as
+ * blocked by, and Mark as blocking open the add menu on their kind from
  * the task's head (`task-relation-menu.tsx`), opening the task first as
  * Change repository does, and Remove parent takes it out from under its
  * parent at once, with Undo. Pin moves the
@@ -396,7 +396,7 @@ export type TaskMenuSurface = (typeof TASK_MENU_SURFACE)[keyof typeof TASK_MENU_
  * apply to it now, for the surface that offers them. A row's menu holds
  * Copy link; then Rename, Version history, and Mark as unread or read; then
  * Status, Priority, and Assignee; then New sub-task, the four relations
- * (Add sub-task…, Set parent…, Mark as blocked by…, Mark as blocking…), and
+ * (Add sub-task, Set parent, Mark as blocked by, Mark as blocking), and
  * Remove parent where the task has one; then Pin, Move to section, and Move to
  * workspace where the task may be moved; then the repository changed from
  * any row and Open on GitHub where it has one. The Plan tab's document
