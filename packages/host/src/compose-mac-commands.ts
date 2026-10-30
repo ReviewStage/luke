@@ -69,7 +69,7 @@ import type { RunMode } from "./run-mode.js";
  * the follow nor another ask: the asks waiting are told as
  * `MAC_COMMAND_ASKS_CHANGED` each time one is asked or answered, the panel
  * draws them, and its answer comes back as `MAC_COMMAND_ANSWER` by the
- * ask's id. Allow once runs the command; Always allow writes the setting to
+ * ask's id. Allow once runs the command; Allow all commands writes the setting to
  * Always allow and runs it; Deny, or no answer before the command's own
  * timeout has passed since it was asked, answers the call as not run, in
  * words the agent can act on, through the same refusal a command of a kind
@@ -136,7 +136,7 @@ export interface MacCommandsDependencies {
   accountId: () => string | undefined;
   /** How Settings lets agents run commands on this Mac, read as each follow begins, on every beat, and as each claimed command is about to run. */
   mode: Effect.Effect<MacCommandMode>;
-  /** Writes the setting to Always allow, answering whether the write landed: the prompt's Always allow, which also runs the command asked. */
+  /** Writes the setting to Always allow, answering whether the write landed: the prompt's Allow all commands, which also runs the command asked. */
   allowAlways: Effect.Effect<boolean>;
   client: MacCommandClient;
 }

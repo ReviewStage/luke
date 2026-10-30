@@ -1,17 +1,22 @@
-import { useRef } from "react";
+import { useId, useRef } from "react";
 import { BUTTON_VARIANT, Button } from "../button/button.js";
-import { DIALOG_ROLE, Dialog } from "../dialog/dialog.js";
+import { DIALOG_ROLE, DIALOG_SIZE, Dialog } from "../dialog/dialog.js";
 import { FILE_TEXT_EXTENT, FileText } from "../file-text/file-text.js";
+import { TEXT_TONE, Text } from "../text/text.js";
 
 /**
- * command-ask.tsx -- a command an agent asks to run on this Mac, put to the developer as a modal over the window: the command as written, then Deny, Always allow, and Allow once.
+ * command-ask.tsx -- a command an agent asks to run on this Mac, put to the developer as a modal over the window: the command as written, then Deny, Allow all commands, and Allow once.
  *
  * The window asks the way a permission prompt does: it dims, a card asks
  * its question over the exact command, mono and whole, scrolling past a
  * few lines so a long one never fills the card, and the three answers sit
- * at its foot, the safe one first. The command is not the card's
- * description, since a payload of thousands of characters would be read
- * out before the answers; it stands as its own named region instead.
+ * at its foot, the safe one first. Allow all commands is not a wider
+ * once: it sets This Mac's setting to Always allow, so a line above the
+ * answers says what it lets through and where it is undone, and that line,
+ * not the command, is the card's description, since a payload of thousands
+ * of characters would be read out before the answers; the command stands as
+ * its own named region instead. The card is a wide one, since a question's
+ * measure has no room for the three answers in the web's type.
  * Focus lands on Deny, so a key already pressed runs nothing; Escape and a
  * press on the dimmed window deny too, since a prompt waved away must not
  * run the command.
@@ -25,6 +30,12 @@ const TITLE = "Run this command on your Mac?";
 
 /** The label a reader is given for the command's region. */
 const COMMAND_LABEL = "The command";
+
+/** The answer that lets every later command through, which the line below names as its button does. */
+const ALLOW_ALL = "Allow all commands";
+
+/** What the card says Allow all commands does, and where it is undone. */
+const ALLOW_ALL_LINE = `${ALLOW_ALL} lets every agent run commands on this Mac without asking. You can change it in Settings › This Mac.`;
 
 export function CommandAsk({
   open,
@@ -48,11 +59,14 @@ export function CommandAsk({
   onExited?: (() => void) | undefined;
 }): React.JSX.Element {
   const deny = useRef<HTMLButtonElement | null>(null);
+  const lineId = useId();
   return (
     <Dialog
       open={open}
       role={DIALOG_ROLE.ALERT_DIALOG}
+      size={DIALOG_SIZE.WIDE}
       title={TITLE}
+      describedBy={lineId}
       initialFocus={deny}
       onDismiss={onDeny}
       onExited={onExited}
@@ -62,7 +76,7 @@ export function CommandAsk({
             Deny
           </Button>
           <Button variant={BUTTON_VARIANT.OUTLINE} onClick={onAllowAlways}>
-            Always allow
+            {ALLOW_ALL}
           </Button>
           <Button variant={BUTTON_VARIANT.PRIMARY} onClick={onAllowOnce}>
             Allow once
@@ -71,6 +85,9 @@ export function CommandAsk({
       }
     >
       <FileText text={command} label={COMMAND_LABEL} extent={FILE_TEXT_EXTENT.BRIEF} />
+      <Text id={lineId} tone={TEXT_TONE.MUTED}>
+        {ALLOW_ALL_LINE}
+      </Text>
     </Dialog>
   );
 }
