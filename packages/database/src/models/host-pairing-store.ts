@@ -456,8 +456,10 @@ export function openHostPairing(opening: HostPairingOpening): PairingEffect<Opti
  * nothing; pending until its code lapses, expired after that, or where no
  * pairing stands under the hash (never one, swept, or already handed over);
  * denied where a member denied it, or removed the host its approve made
- * before the box collected it; approved once, which keys that host with
- * the secret and deletes the pairing, so another poll is answered expired.
+ * before the box collected it; approved once, before its stand lapses
+ * (`HOST_PAIRING.COLLECT_GRACE`), which keys that host with the secret and
+ * deletes the pairing, so another poll is answered expired; expired where
+ * the box polls after that, handed nothing.
  */
 export function pollHostPairing(
   pollSecretHash: string,
@@ -483,6 +485,9 @@ export function pollHostPairing(
         case HOST_PAIRING_STATUS.DENIED:
           return { status: HOST_PAIRING_POLL_STATUS.DENIED } as const;
         case HOST_PAIRING_STATUS.APPROVED: {
+          // Note that a box past its collect grace is handed nothing, and the sweep deletes the host it never collected.
+          if (pairing.expiresAt <= now)
+            return { status: HOST_PAIRING_POLL_STATUS.EXPIRED } as const;
           // Note that the stamp above holds the row's lock, so a poll racing this one waits and finds it gone.
           const handed = yield* deleteApproved({ id: pairing.id });
           if (Option.isNone(handed)) return { status: HOST_PAIRING_POLL_STATUS.EXPIRED } as const;

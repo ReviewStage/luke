@@ -25,9 +25,10 @@ import { enrollHost, hostBySecret, hostsOf, mintHostInstallToken } from "../host
  * A box's pairings, over a real dialect: once one account approved or
  * denied a code, no account reads, approves, or denies it again, and the
  * approve made one host, listed under its approver alone; an approve never
- * takes over a device that stands; and the sweep deletes a lapsed pairing,
- * the address it kept with it, and a host whose box never collected its
- * secret, while a host keyed by its poll stays.
+ * takes over a device that stands; a box that polls past its collect
+ * grace is handed no secret; and the sweep deletes a lapsed pairing, the
+ * address it kept with it, and a host whose box never collected its secret,
+ * while a host keyed by its poll stays.
  * Synthetic accounts, codes, hashes, addresses, and boxes throughout.
  */
 
@@ -139,9 +140,11 @@ it.layer(getTestDB())("a box's pairings", (it) => {
         const listedBefore = (yield* hostsOf(owner)).map((host) => host.id).sort();
 
         yield* TestClock.adjust("11 minutes");
+        const late = yield* pollHostPairing(uncollected.pollSecretHash, `secret-${randomUUID()}`);
         yield* sweepHostPairings(new Date(yield* Clock.currentTimeMillis));
 
         assert.equal(polled.status, HOST_PAIRING_POLL_STATUS.APPROVED);
+        assert.equal(late.status, HOST_PAIRING_POLL_STATUS.EXPIRED, "past its grace, no secret");
         assert.deepEqual(listedBefore, [collectedId, uncollectedId].sort());
         assert.deepEqual(
           (yield* hostsOf(owner)).map((host) => host.id),
