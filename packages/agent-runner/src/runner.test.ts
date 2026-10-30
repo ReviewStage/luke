@@ -42,6 +42,7 @@ import {
   RUNNER_LINES,
   RUNNER_PLACE,
   RUNNER_RELEASE,
+  RUNNER_UNANSWERED,
   RUNNER_WARM,
   type RunnerConfig,
   type RunnerEvent,
@@ -58,6 +59,9 @@ import {
   SHORT_TURN,
   STOPPED_COMMAND,
   STOPPED_TURN,
+  STRAY_RESULT,
+  STRAY_RESULT_THEN_SILENCE,
+  STRAY_RESULT_THEN_TURN,
   type Step,
   TURN_DONE,
   WAKEUP,
@@ -357,6 +361,44 @@ it.effect("keeps the CLI up for a message sent during a turn until a turn answer
       RUNNER_EVENT.END,
     ]);
   }),
+);
+
+it.effect(
+  "keeps the CLI up past a result that names no prompt until the turn that answers Luke's message",
+  () =>
+    Effect.gen(function* () {
+      const luke = fakeLuke();
+      const { write, run } = yield* launch(STRAY_RESULT_THEN_TURN, luke);
+      yield* write(CONFIG);
+      yield* write(FIRST_MESSAGE);
+
+      assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+      assert.deepEqual(kinds(luke.applied), [
+        "system/init",
+        "result/success",
+        "assistant",
+        "result/success",
+        RUNNER_EVENT.END,
+      ]);
+    }),
+);
+
+it.effect(
+  "ends as failed a launch whose CLI says nothing of the message a stray result left, once its bound passes",
+  () =>
+    Effect.gen(function* () {
+      const luke = fakeLuke([], STRAY_RESULT.uuid);
+      const { cli, write, run } = yield* launch(STRAY_RESULT_THEN_SILENCE, luke);
+      yield* write(CONFIG);
+      yield* write(FIRST_MESSAGE);
+      yield* luke.seen;
+
+      yield* TestClock.adjust(RUNNER_UNANSWERED.SILENCE_MS - 1);
+      assert.equal(run.pollUnsafe(), undefined);
+      yield* TestClock.adjust(1);
+      assert.equal(yield* Fiber.join(run), RUNNER_END.FAILED);
+      assert.equal(cli.closed, true);
+    }),
 );
 
 /** How many IDLE events Luke has taken. */

@@ -1476,7 +1476,7 @@ test("with Channels on, a row's ⋯ moves its thread to the channel picked", asy
       new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
     );
   });
-  act(() => menuItem("Move to channel…").click());
+  act(() => menuItem("Move to channel").click());
   await settle();
   act(() => buttonSaying("Move to #app").click());
   await settle();
@@ -1502,7 +1502,7 @@ test("the sidebar lists the channels under the Inbox's row, each with what waits
   const { page } = mount([], { withSidebar: true, waiting });
   await settle();
 
-  assert.deepEqual(sidebarChannels(page), ["general2 need you", "app", "launch", "Add channel"]);
+  assert.deepEqual(sidebarChannels(page), ["general2 need you", "app", "launch"]);
   act(() =>
     (
       [...page.querySelectorAll<HTMLButtonElement>('[aria-label="Channels"] .luke-nav-item')].find(
@@ -1514,7 +1514,7 @@ test("the sidebar lists the channels under the Inbox's row, each with what waits
   assert.equal(headTitle(page), "#app");
 });
 
-test("a channel made from the sidebar's Add channel narrows the Inbox to it once the service has made it", async () => {
+test("a channel made from the Inbox row's ⋯ narrows the Inbox to it once the service has made it", async () => {
   handState(experimentsOn(EXPERIMENT.CHANNELS));
   world.listedWorkspace = ACME;
   let standing: readonly Channel[] = [GENERAL];
@@ -1526,7 +1526,12 @@ test("a channel made from the sidebar's Add channel narrows the Inbox to it once
   });
   const { page } = mount([], { withSidebar: true });
   await settle();
-  act(() => buttonSaying("Add channel").click());
+  act(() =>
+    (
+      document.querySelector<HTMLButtonElement>('[aria-label="Inbox actions"]') ??
+      assert.fail("the Inbox's row wears its ⋯")
+    ).click(),
+  );
   act(() => menuItem("New channel").click());
   const dialog = document.querySelector('[role="dialog"]') ?? assert.fail("the dialog stands");
   const [name, purpose] = dialog.querySelectorAll<HTMLInputElement>("input");

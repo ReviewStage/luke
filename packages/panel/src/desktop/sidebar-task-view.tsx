@@ -1,6 +1,7 @@
 import type { TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BUTTON_SIZE,
   CHIP_LOOK,
   Chip,
   ChipName,
@@ -161,6 +162,7 @@ export function TaskViewOptions({
         <IconButton
           icon={<SlidersHorizontalIcon />}
           label={VIEW_OPTIONS}
+          size={BUTTON_SIZE.COMPACT}
           aria-description={filtered ? FILTERED : undefined}
           {...menu.trigger()}
         />

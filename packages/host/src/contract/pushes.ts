@@ -10,7 +10,7 @@
  * the guards are the declaration the pushes have.
  */
 
-import { isLinkPlace, type ReadLink } from "@luke/features/link-grammar";
+import { isAccountPlace, isLinkPlace, type ShownLink } from "@luke/features/link-grammar";
 import { type AppCommand, isAppCommand } from "@luke/settings/shortcuts";
 import { isRecord, isWireString } from "@luke/wire";
 import { wireResult as result, type WireGuard, type WireGuardValue } from "@luke/wire/wire-guard";
@@ -46,11 +46,15 @@ export const PUSH_GUARD = {
   [PUSH.MENU_COMMAND]: result<AppCommand>(isAppCommand),
   /**
    * A Luke link the system handed the app: the panel is to open the place it
-   * names, in the workspace it was written under. An event, as a click is,
-   * because it is an ask the window answers once.
+   * names, in the workspace it was written under, or one of the account's
+   * own, which names none. An event, as a click is, because it is an ask the
+   * window answers once.
    */
-  [PUSH.SHOW_LINK]: result<ReadLink>(
-    (value) => isRecord(value) && isWireString(value.workspace) && isLinkPlace(value.place),
+  [PUSH.SHOW_LINK]: result<ShownLink>(
+    (value) =>
+      isRecord(value) &&
+      ((isWireString(value.workspace) && isLinkPlace(value.place)) ||
+        (value.workspace === undefined && isAccountPlace(value.place))),
   ),
 } as const satisfies { readonly [Name in PushName]: WireGuard<unknown> };
 

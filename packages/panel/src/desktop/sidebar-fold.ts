@@ -1,4 +1,4 @@
-import { type GroupFold, NAV_COUNT_SHOWN, type NavCount } from "@luke/ui";
+import { type DisclosureControl, NAV_COUNT_SHOWN, type NavCount } from "@luke/ui";
 
 /**
  * sidebar-fold.ts -- how the sidebar's heads hand `GroupHeader` the fold and the count they keep.
@@ -32,7 +32,7 @@ export function groupCount(count: number, noun: CountNoun = TASK_NOUN): NavCount
 }
 
 /** A group folded as the sidebar keeps it, open unless `folded`, asking `onToggle` for each change. */
-export function sidebarFold(folded: boolean, onToggle: () => void): GroupFold {
+export function sidebarFold(folded: boolean, onToggle: () => void): DisclosureControl {
   return {
     open: !folded,
     onOpenChange: (open) => {

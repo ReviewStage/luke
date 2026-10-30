@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, KeyboardEvent, MouseEvent, ReactNode, Ref } from "react";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { STATUS_TONE } from "../../status-tone.js";
+import { DisclosureChevron, type DisclosureState } from "../disclosure/disclosure.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 import { rovingItem } from "../roving-keys/roving-keys.js";
@@ -49,10 +50,22 @@ import { Skeleton } from "../skeleton/skeleton.js";
  * its own takes their ⋯ as `actions`, which stands beside the press rather
  * than inside it, over the row's end: hidden at rest, it comes in while the
  * row is hovered, holds the keyboard, or the menu it dropped stands, and
- * takes the count's and the mark's place then, as a task row's ⋯ does. It takes an app's hint's
+ * takes the count's and the mark's place then, as a task row's ⋯ does; a
+ * right-click on the ⋯ opens the row's menu as one on the row does. A
+ * row with both a chord and a ⋯ draws the chord beside the ⋯ rather than
+ * under it, so a hover shows the row's chord and its acts together. It takes an app's hint's
  * handlers and chord as a Button does, and keeps the focus where it is
  * under a pointer's press (`keepFocus`) as a Button does too. It takes no
  * class or style; its outer spacing is its column's.
+ *
+ * A row heading rows that fold under it, as the Inbox heads its channels,
+ * takes that fold (`fold`): its glyph gives way to the fold's chevron while
+ * the row is hovered or holds the keyboard, as a group's head's does
+ * (`group-header.tsx`), and a press on the chevron folds or unfolds the rows
+ * while a press on the rest of the row still goes to its place. The chevron
+ * is a press of its own beside the row's, named for what it folds and saying
+ * whether it stands open, and on a screen with no hover it stands in the
+ * glyph's place at rest.
  *
  * A NavItemSkeleton stands a row while the places it lists are read: the
  * row's own box, its glyph's cell holding the glyph every row of the list
@@ -82,9 +95,9 @@ const STEP_NAME = "luke-nav-item-name min-w-0 line-clamp-2 wrap-break-word";
 /** A step's name and its meta line, one over the other in the room the glyph and the end leave. */
 const STEP_WORDS = "luke-nav-item-words flex min-w-0 flex-1 flex-col";
 
-/** A menu's chevron at the end is the small, muted one a chip's is. */
+/** A menu's chevron at the end is the small, muted one a chip's is, centred in a glyph's room so it stands on the column the row ends' glyphs share. */
 const MARK =
-  "luke-nav-item-mark inline-flex [&>svg.settings-chevron]:size-luke-12 [&>svg.settings-chevron]:text-muted-foreground";
+  "luke-nav-item-mark inline-flex [&>svg.settings-chevron]:mx-luke-2 [&>svg.settings-chevron]:size-luke-12 [&>svg.settings-chevron]:text-muted-foreground";
 
 /** What a nav item is: a place, or who or where. A fold's head is `GroupHeader`. */
 export const NAV_ITEM_VARIANT = {
@@ -136,6 +149,15 @@ export interface NavMenuTrigger {
   readonly onClick: (event: MouseEvent<HTMLElement>) => void;
 }
 
+/** The rows a row heads that fold under it: the fold's state (`useDisclosureFold`), and what it folds as a reader hears it. */
+export interface NavFold {
+  readonly state: DisclosureState;
+  /** What the chevron folds, "Channels", which names it. */
+  readonly label: string;
+  /** The id of the rows it folds, while they are drawn. */
+  readonly controls?: string | undefined;
+}
+
 /** What an app's hint hands the item it wraps: when to show and go, and the chord it names. */
 type HintProps = Pick<
   ButtonHTMLAttributes<HTMLButtonElement>,
@@ -167,6 +189,8 @@ export type NavItemProps = HintProps & {
   contextMenu?: ContextMenuProps | undefined;
   /** Its place's own acts, a `MoreButton`, standing over its end while it is hovered or reached for. */
   actions?: ReactNode;
+  /** The rows it heads that fold under it, whose chevron takes its glyph's place while it is hovered or reached for. */
+  fold?: NavFold | undefined;
   onKeyDown?: ((event: KeyboardEvent<HTMLButtonElement>) => void) | undefined;
   disabled?: boolean | undefined;
   /** Whether a pointer's press leaves the focus where it is. */
@@ -232,6 +256,33 @@ function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined 
         </span>
       ) : null}
     </span>
+  );
+}
+
+/**
+ * The fold's chevron, standing over the glyph's cell and the row's inset
+ * before it, so the whole lead of the row is the press that folds. Note that
+ * it is the row's sibling, never inside it, because a press inside a press
+ * is no control a reader can reach.
+ */
+const FOLD =
+  "luke-nav-item-fold absolute inset-y-0 start-0 m-0 flex cursor-press items-center border-0 bg-transparent p-0 ps-row-inset pe-icon-gap";
+
+/** The chevron that folds and unfolds the rows a row heads. */
+function FoldToggle({ fold }: { fold: NavFold }): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className={FOLD}
+      aria-label={fold.label}
+      aria-expanded={fold.state.open}
+      aria-controls={fold.controls}
+      // Note that a pointer's press leaves the focus where it was, so the chevron and the ⋯ go with the pointer rather than standing on a focus the press left behind.
+      onMouseDown={preventFocusMove}
+      onClick={pulseOnPress(fold.state.toggle, PRESS_PULSE.QUIET)}
+    >
+      <DisclosureChevron open={fold.state.open} />
+    </button>
   );
 }
 
@@ -352,8 +403,11 @@ export function NavItem({
   keepFocus,
   roving,
   actions,
+  fold,
   ...props
 }: NavItemProps): React.JSX.Element {
+  // Note that a row standing in a frame beside its ⋯ or its chevron carries its menu on the frame, so a right-click on either opens it too.
+  const framed = said(actions) || fold !== undefined;
   const press = (
     <button
       type="button"
@@ -376,7 +430,9 @@ export function NavItem({
       onFocus={props.onFocus}
       onBlur={props.onBlur}
       onClick={pulseOnPress(menu?.onClick ?? onClick, PRESS_PULSE.QUIET)}
-      {...withContextMenu(props.contextMenu, { onPointerDown: props.onPointerDown })}
+      {...withContextMenu(framed ? undefined : props.contextMenu, {
+        onPointerDown: props.onPointerDown,
+      })}
       onKeyDown={props.onKeyDown}
       {...(roving === true ? rovingItem() : undefined)}
     >
@@ -393,13 +449,21 @@ export function NavItem({
       {said(shortcut) ? <span className="luke-nav-item-shortcut ml-auto">{shortcut}</span> : null}
     </button>
   );
-  if (!said(actions)) return press;
+  if (!framed) return press;
   return (
-    <div className="luke-nav-item-frame relative flex min-w-0">
+    <div
+      className="luke-nav-item-frame relative flex min-w-0"
+      data-folds={fold === undefined ? undefined : "true"}
+      data-actions={said(actions) ? "true" : undefined}
+      {...withContextMenu<HTMLDivElement>(props.contextMenu, {})}
+    >
       {press}
-      <span className="luke-nav-item-actions absolute inset-y-0 end-luke-4 flex items-center">
-        {actions}
-      </span>
+      {fold === undefined ? null : <FoldToggle fold={fold} />}
+      {said(actions) ? (
+        <span className="luke-nav-item-actions absolute inset-y-0 end-luke-4 flex items-center">
+          {actions}
+        </span>
+      ) : null}
     </div>
   );
 }

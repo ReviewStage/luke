@@ -11,19 +11,9 @@ import {
 import { PULL_REQUEST_CHAPTERS_FAILURE_KIND } from "@luke/features/pull-request-chapters-wire";
 import { FAILURE_SURFACE } from "@luke/features/shown-failure";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import {
-  CHAPTERS_KEY,
-  CHAPTERS_SHORTCUTS,
-  chaptersKeyFor,
-  type ShortcutChord,
-} from "@luke/settings/shortcuts";
+import { CHAPTERS_KEY, CHAPTERS_SHORTCUTS, chaptersKeyFor } from "@luke/settings/shortcuts";
 import {
   Button,
-  CARD_CORNER,
-  CARD_ELEMENT,
-  CARD_LOOK,
-  CARD_PADDING,
-  Card,
   CHIP_LOOK,
   CHIP_SIZE,
   Checkbox,
@@ -37,8 +27,6 @@ import {
   FILL_ELEMENT,
   FILL_FLOW,
   Fill,
-  FoldingButton,
-  type FoldingButtonHint,
   GAP,
   HoverCard,
   HoverCardHead,
@@ -55,6 +43,8 @@ import {
   OVER_PANE_EDGE,
   OVER_PANE_WIDTH,
   OverPane,
+  PAGER_AXIS,
+  Pager,
   PaneBar,
   SCROLL_FADE,
   SCROLL_OVERSCROLL,
@@ -76,34 +66,20 @@ import {
   Time,
   Tooltip,
 } from "@luke/ui";
-import {
-  CheckIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  GLYPH,
-  PanelLeftIcon,
-  RotateCwIcon,
-  SparklesIcon,
-} from "@luke/ui/icons";
-import {
-  createContext,
-  type ReactNode,
-  type RefObject,
-  useContext,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { CheckIcon, GLYPH, PanelLeftIcon, RotateCwIcon, SparklesIcon } from "@luke/ui/icons";
+import { type ReactNode, type RefObject, useMemo, useRef, useState } from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { SettingsPageLink } from "../open-settings.js";
 import {
   AgentChangesTab,
+  type ChangesBarHost,
   type ChangesReads,
   type ChangesThreads,
   type FileReveal,
   type LineComments,
 } from "./agent-changes-tab.js";
+import { Section } from "./agent-pull-request-tab.js";
 import { typingInto } from "./changes-list.js";
 import { CHANGES_WORDS } from "./changes-model.js";
 import {
@@ -163,21 +139,29 @@ import type { AgentsControl } from "./use-agents.js";
  * by a choice in it or Escape. "Other changes" bears no risk and is always
  * last.
  *
- * The chapter leads with its title, its risk as a chip whose card says
- * why, its Viewed box, which marks or unmarks every file in it, and its
- * summary in Markdown as the transcript draws words; then What to review,
- * each change a reviewer should weigh with the first lines it points at,
- * a press of which brings that file into view in the list. Under it, the
+ * The chapter leads with its title, its number left to its rail row and
+ * to a reader, its risk as a chip whose card says why, then at the bar's
+ * end its Viewed box, which counts its files viewed, "Viewed 1/14", stands
+ * mixed while only some are, and marks or unmarks every file in it; its
+ * place, "1 of 8", and the arrows to the chapters either side (`Pager`), as
+ * ← and → step; its list's diff settings, Collapse all, and tree toggle
+ * (`ChangesBarHost`); and its ⋯, which offers Regenerate where chapters can
+ * be made, the tab's head holding the one Refresh and the list's bar
+ * nothing that acts on the whole pull request inside a chapter. The model
+ * that told the chapters is named at the rail's foot. Under the bar its summary in Markdown as the
+ * transcript draws words; then What to review, each change a reviewer
+ * should weigh with the first lines it points at, a press of which brings
+ * that file into view in the list. Under it, the
  * chapter's diff is Files changed itself (`AgentChangesTab`) fed only the
  * chapter's hunks (`chapterPatches`) and the review threads on them, over
  * the Pull request tab's own read of the files and the member's viewed
  * marks, so comments, threads, the review, and Viewed work as they do
- * there; its own tree starts hidden, the rail standing in its room. Its
- * foot steps to the previous and the next chapter, as ← and → do, and ⇧V
- * marks the chapter viewed (`CHAPTERS_SHORTCUTS`), each answering only
- * past the list's own keys, none of which they share. Every word here is the
- * repository's or a model's about it, so the view stands inside the tab's
- * `ph-no-capture`.
+ * there, under the chapter's bar alone; its own tree starts hidden, leaving
+ * no strip, the rail standing in its room. ← and
+ * → step to the previous and the next chapter, and ⇧V marks the chapter
+ * viewed (`CHAPTERS_SHORTCUTS`), each answering only past the list's own
+ * keys, none of which they share. Every word here is the repository's or
+ * a model's about it, so the view stands inside the tab's `ph-no-capture`.
  */
 
 /** The view's own words. */
@@ -193,17 +177,18 @@ const CHAPTERS_WORDS = {
   ELSEWHERE: "Chapters are being generated",
   REFRESH: "Refresh",
   REFRESHING: "Refreshing",
-  REFRESH_CHAPTERS: "Refresh chapters",
   REGENERATE: "Regenerate",
   REGENERATE_CHAPTERS: "Regenerate chapters",
   NOTHING: "This pull request has nothing to chapter.",
   NO_FILES: "None of this chapter's changes are in the pull request now.",
   STALE_DIFF: "Regenerate the chapters to see this chapter's changes.",
-  /** Which model told the chapters, as quiet meta text above them. */
-  madeBy: (model: string) => `Made by ${model}`,
+  /** Which model told the chapters, as quiet caption text at the rail's foot. */
+  credit: (model: string) => `Chapters by ${model}`,
   STALE: "New commits since these chapters",
+  BRIEF: "Summary",
   WHAT_TO_REVIEW: "What to review",
-  VIEWED: "Viewed",
+  /** How many of a chapter's files are viewed, as its Viewed box says it. */
+  viewed: (seen: number, count: number) => `Viewed ${seen}/${count}`,
   MARK_VIEWED: "Mark chapter viewed",
   UNMARK_VIEWED: "Mark chapter not viewed",
   PREVIOUS: "Previous chapter",
@@ -213,9 +198,9 @@ const CHAPTERS_WORDS = {
   RAIL: "Chapters",
   ACTIONS_THING: "Chapters",
   RISK_REASONS: "Why",
-  /** A chapter's place among them, as its foot says it: its first word, which a foot too narrow for it leaves to a reader, then the place. */
-  PLACE_NOUN: "Chapter",
-  of: (at: number, count: number) => `${at} of ${count}`,
+  /** What an arrow's hint says: where it steps, and the chapter it steps to. */
+  stepTo: (words: string, chapter: Chapter | undefined) =>
+    chapter === undefined ? words : `${words}: ${chapter.title}`,
   /** How many review threads stand on a chapter's hunks, as its row's speech mark says to a reader. */
   threads: "threads",
   /** How many files a chapter holds, as its row says where it counts no line: a binary file or a pure rename. */
@@ -292,14 +277,27 @@ function ChapterRailList({ children }: { children: ReactNode }): React.JSX.Eleme
   );
 }
 
-/** The rail's own pane beside the chapter, which the chapters' rows and their placeholder rows both stand in. */
+/** Which model told the chapters, as muted caption text at the rail's foot, under its rows. */
+function ChaptersCredit({ model }: { model: string }): React.JSX.Element {
+  return (
+    <div className="chapter-rail-credit">
+      <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} truncate>
+        {CHAPTERS_WORDS.credit(chaptersModelLabel(model))}
+      </Text>
+    </div>
+  );
+}
+
+/** The rail's own pane beside the chapter, which the chapters' rows and their placeholder rows both stand in, over its foot where it has one. */
 function ChapterRailFrame({
   pane,
   leaving = false,
+  foot,
   children,
 }: {
   pane?: React.Ref<HTMLElement> | undefined;
   leaving?: boolean;
+  foot?: ReactNode;
   children: ReactNode;
 }): React.JSX.Element {
   return (
@@ -311,6 +309,7 @@ function ChapterRailFrame({
       inert={leaving}
     >
       <ChapterRailList>{children}</ChapterRailList>
+      {foot}
     </nav>
   );
 }
@@ -537,7 +536,7 @@ function RailToggle({
   );
 }
 
-/** The rail: a row for each chapter, the one shown marked; a press shows it. */
+/** The rail: a row for each chapter, the one shown marked; a press shows it; and its foot under them. */
 function ChapterRail({
   rows,
   at,
@@ -546,6 +545,7 @@ function ChapterRail({
   pane,
   leaving,
   over,
+  foot,
   onChoose,
 }: {
   rows: readonly ChapterRow[];
@@ -557,6 +557,8 @@ function ChapterRail({
   leaving: boolean;
   /** What the rail floating over the chapter is handed; none draws it beside the chapter. */
   over: RailOver | undefined;
+  /** What stands under the rows: which model told the chapters. */
+  foot: ReactNode;
   onChoose: (at: number) => void;
 }): React.JSX.Element {
   const list = (
@@ -586,7 +588,7 @@ function ChapterRail({
   );
   if (over === undefined) {
     return (
-      <ChapterRailFrame pane={pane} leaving={leaving}>
+      <ChapterRailFrame pane={pane} leaving={leaving} foot={foot}>
         {list}
       </ChapterRailFrame>
     );
@@ -601,6 +603,7 @@ function ChapterRail({
       width={OVER_PANE_WIDTH.COLUMN}
     >
       <ChapterRailList>{list}</ChapterRailList>
+      {foot}
     </OverPane>
   );
 }
@@ -647,76 +650,21 @@ function KeyChangeItem({
 }): React.JSX.Element {
   const first = firstLineRef(change.lineRefs, paths);
   return (
-    <Card
-      as={CARD_ELEMENT.LI}
-      look={CARD_LOOK.OUTLINE}
-      corner={CARD_CORNER.CONTROL}
-      padding={CARD_PADDING.NONE}
-      className="chapter-key-change"
-    >
-      <div className="self-stretch">
-        <TranscriptWords text={change.content} />
-      </div>
+    <li>
+      <TranscriptWords text={change.content} />
       {first === undefined ? null : onReveal === undefined ? (
         <span className="text-muted-foreground">{lineRefLabel(first)}</span>
       ) : (
         <TextButton onClick={() => onReveal(first)}>{lineRefLabel(first)}</TextButton>
       )}
-    </Card>
+    </li>
   );
 }
 
 /** No review thread, for a view handed none. */
 const NO_THREADS: ChangesThreads = { list: [], draw: () => null };
 
-/** The chapter a foot button steps to and the keys that step to it, which its hint names, read by `StepHint` since a hint is a component of its own. */
-const StepContext = createContext<{
-  readonly neighbour: Chapter | undefined;
-  readonly chord: ShortcutChord | undefined;
-}>({ neighbour: undefined, chord: undefined });
-
-/** The hint of a foot button: the chapter it steps to and its keys, after its words where they are folded. */
-const StepHint: FoldingButtonHint = ({ label, children }) => {
-  const { neighbour, chord } = useContext(StepContext);
-  const title = neighbour?.title;
-  return (
-    <Tooltip
-      label={label === undefined || title === undefined ? (title ?? label) : `${label}: ${title}`}
-      chord={chord}
-    >
-      {children}
-    </Tooltip>
-  );
-};
-
-/** The foot's button to the previous or the next chapter, its words folding away where the foot has no room for them beside its place. */
-function StepButton({
-  words,
-  icon,
-  neighbour,
-  chord,
-  onStep,
-}: {
-  words: string;
-  icon: ReactNode;
-  neighbour: Chapter | undefined;
-  chord: ShortcutChord | undefined;
-  onStep: () => void;
-}): React.JSX.Element {
-  return (
-    <StepContext.Provider value={{ neighbour, chord }}>
-      <FoldingButton
-        label={words}
-        icon={icon}
-        hint={StepHint}
-        disabled={neighbour === undefined}
-        onClick={onStep}
-      />
-    </StepContext.Provider>
-  );
-}
-
-/** The chapters ready: the rail, the chapter chosen, its diff, and its foot. */
+/** The chapters ready: the rail, the chapter chosen, and its diff. */
 function ChaptersReading({
   agentId,
   control,
@@ -757,6 +705,7 @@ function ChaptersReading({
   const slide = usePaneSlide(beside, PANE_EDGE.LEFT);
   // The chapter's own tree starts hidden, the rail standing in its room; its width is the panel's for every tree.
   const [filesOpen, setFilesOpen] = useState(false);
+  const [briefOpen, setBriefOpen] = useState(true);
   const filesTree: TreeShown = {
     open: filesOpen,
     onToggle: () => setFilesOpen((was) => !was),
@@ -765,6 +714,9 @@ function ChaptersReading({
   const [reveal, setReveal] = useState<FileReveal | undefined>(undefined);
   const asks = useRef(0);
   const [root, setRoot] = useState<HTMLElement | null>(null);
+  // The box in the chapter's bar its list's own tools are drawn into, the list drawing no bar of its own.
+  const [tools, setTools] = useState<HTMLElement | null>(null);
+  const host: ChangesBarHost = { tools, view: root };
   const overBox = useRef<HTMLSpanElement | null>(null);
   const stripBox = useRef<HTMLDivElement | null>(null);
   // Note that the rail floats over the chapter wherever the stylesheet draws its over toggle, and then only.
@@ -841,6 +793,7 @@ function ChaptersReading({
     return <EmptyState icon={<GLYPH.PULL_REQUEST_CHAPTERS />}>{CHAPTERS_WORDS.NOTHING}</EmptyState>;
   }
   const done = viewed(row.paths);
+  const seen = marks === undefined ? 0 : row.paths.filter(marks.viewed).length;
   const previous = chapters[at - 1];
   const next = chapters[at + 1];
   return (
@@ -862,11 +815,6 @@ function ChaptersReading({
           ) : null}
         </TabNotice>
       ) : null}
-      <p className="chapters-made-by m-0 border-b border-border px-list-inset py-tight-gap">
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {CHAPTERS_WORDS.madeBy(chaptersModelLabel(model))}
-        </Text>
-      </p>
       <ChaptersBody>
         <ChapterRail
           rows={rows}
@@ -880,6 +828,7 @@ function ChaptersReading({
               ? undefined
               : { open: over, onClose: () => setOver(false), toggle: [overBox, stripBox] }
           }
+          foot={<ChaptersCredit model={model} />}
           onChoose={choose}
         />
         <ChapterStrip rows={rows} at={at} viewed={viewed} box={stripBox} onOpen={toggleRail} />
@@ -894,48 +843,64 @@ function ChaptersReading({
                 onOver={() => setOver((was) => !was)}
               />
             }
-            title={`${at + 1}. ${chapter.title}`}
+            title={chapter.title}
             detail={
               chapter.risk === null ? undefined : (
-                <RiskChip risk={chapter.risk} reasons={chapter.riskReasons} />
+                // A phone's bar folds the chip away, the rail's row marking the risk in its colour and saying it to a reader.
+                <span className="chapter-risk flex">
+                  <RiskChip risk={chapter.risk} reasons={chapter.riskReasons} />
+                </span>
               )
             }
             actions={
-              marks === undefined ? null : (
-                <Tooltip
-                  label={done ? CHAPTERS_WORDS.UNMARK_VIEWED : CHAPTERS_WORDS.MARK_VIEWED}
-                  chord={CHAPTERS_SHORTCUTS[CHAPTERS_KEY.MARK_CHAPTER_VIEWED].chord}
-                >
-                  <span className="chapter-viewed flex items-center text-caption-inline text-muted-foreground">
-                    <Checkbox checked={done} onChange={markChapter}>
-                      {CHAPTERS_WORDS.VIEWED}
-                    </Checkbox>
-                  </span>
-                </Tooltip>
-              )
+              <>
+                {marks === undefined ? null : (
+                  <Tooltip
+                    label={done ? CHAPTERS_WORDS.UNMARK_VIEWED : CHAPTERS_WORDS.MARK_VIEWED}
+                    chord={CHAPTERS_SHORTCUTS[CHAPTERS_KEY.MARK_CHAPTER_VIEWED].chord}
+                  >
+                    <span className="chapter-viewed flex items-center whitespace-nowrap text-caption-inline text-muted-foreground tabular-nums">
+                      <Checkbox checked={done} mixed={seen > 0 && !done} onChange={markChapter}>
+                        {CHAPTERS_WORDS.viewed(seen, row.paths.length)}
+                      </Checkbox>
+                    </span>
+                  </Tooltip>
+                )}
+                <Pager
+                  axis={PAGER_AXIS.HORIZONTAL}
+                  place={{ at: at + 1, total: chapters.length }}
+                  previous={{
+                    label: CHAPTERS_WORDS.PREVIOUS,
+                    hint: CHAPTERS_WORDS.stepTo(CHAPTERS_WORDS.PREVIOUS, previous),
+                    chord: CHAPTERS_SHORTCUTS[CHAPTERS_KEY.PREVIOUS_CHAPTER].chord,
+                    onStep: previous === undefined ? undefined : () => step(-1),
+                  }}
+                  next={{
+                    label: CHAPTERS_WORDS.NEXT,
+                    hint: CHAPTERS_WORDS.stepTo(CHAPTERS_WORDS.NEXT, next),
+                    chord: CHAPTERS_SHORTCUTS[CHAPTERS_KEY.NEXT_CHAPTER].chord,
+                    onStep: next === undefined ? undefined : () => step(1),
+                  }}
+                />
+                <span ref={setTools} className="chapter-list-tools" />
+              </>
             }
-            menu={{
-              thing: CHAPTERS_WORDS.ACTIONS_THING,
-              groups: [
-                [
-                  {
-                    label: CHAPTERS_WORDS.REFRESH_CHAPTERS,
-                    icon: <RotateCwIcon aria-hidden="true" />,
-                    disabled: read.out,
-                    onSelect: read.ask,
-                  },
-                  ...(generatable
-                    ? [
+            menu={
+              generatable
+                ? {
+                    thing: CHAPTERS_WORDS.ACTIONS_THING,
+                    groups: [
+                      [
                         {
                           label: CHAPTERS_WORDS.REGENERATE_CHAPTERS,
                           icon: <SparklesIcon aria-hidden="true" />,
                           onSelect: read.generate,
                         },
-                      ]
-                    : []),
-                ],
-              ],
-            }}
+                      ],
+                    ],
+                  }
+                : undefined
+            }
           />
           <div className="flex max-h-1/2 min-h-0 flex-initial flex-col border-b border-border">
             {/* Note that a brief cut short by its share fades at the cut, never slicing a line through its letters, and a swipe past its end scrolls the Pull request tab, which a short window scrolls to the foot. */}
@@ -944,44 +909,46 @@ function ChaptersReading({
               fade={SCROLL_FADE.BOTH}
               overscroll={SCROLL_OVERSCROLL.CHAIN}
             >
-              <div className="flex flex-col gap-control-gap px-column-inset pt-row-inset pb-list-inset">
-                <div className="px-row-inset">
-                  <TranscriptWords text={chapter.summary} />
-                </div>
-                {chapter.keyChanges.length === 0 ? null : (
-                  <section
-                    className="px-row-inset [&>ul]:mt-tight-gap"
-                    aria-label={CHAPTERS_WORDS.WHAT_TO_REVIEW}
-                  >
-                    <Text as={TEXT_ELEMENT.H4} variant={TEXT_VARIANT.CAPTION}>
-                      {CHAPTERS_WORDS.WHAT_TO_REVIEW}
-                    </Text>
-                    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.CONTROL}>
-                      {chapter.keyChanges.map((change, index) => (
-                        <KeyChangeItem
-                          key={index}
-                          change={change}
-                          paths={row?.paths ?? []}
-                          onReveal={
-                            stale
-                              ? undefined
-                              : (ref) => {
-                                  asks.current += 1;
-                                  setReveal({
-                                    path: ref.path,
-                                    ask: asks.current,
-                                    lines: drawnLines(
-                                      chapterFiles.find((file) => file.path === ref.path),
-                                      ref,
-                                    ),
-                                  });
-                                }
-                          }
-                        />
-                      ))}
-                    </Stack>
-                  </section>
-                )}
+              <div className="max-w-page-measure px-column-inset pb-list-inset">
+                <Section
+                  title={CHAPTERS_WORDS.BRIEF}
+                  fold={{ open: briefOpen, onOpenChange: setBriefOpen }}
+                >
+                  <div className="flex flex-col gap-control-gap px-row-inset">
+                    <TranscriptWords text={chapter.summary} />
+                    {chapter.keyChanges.length === 0 ? null : (
+                      <section aria-label={CHAPTERS_WORDS.WHAT_TO_REVIEW}>
+                        <Text as={TEXT_ELEMENT.H4} variant={TEXT_VARIANT.CAPTION}>
+                          {CHAPTERS_WORDS.WHAT_TO_REVIEW}
+                        </Text>
+                        <ul className="mt-tight-gap flex list-disc flex-col gap-control-gap pl-column-inset">
+                          {chapter.keyChanges.map((change, index) => (
+                            <KeyChangeItem
+                              key={index}
+                              change={change}
+                              paths={row?.paths ?? []}
+                              onReveal={
+                                stale
+                                  ? undefined
+                                  : (ref) => {
+                                      asks.current += 1;
+                                      setReveal({
+                                        path: ref.path,
+                                        ask: asks.current,
+                                        lines: drawnLines(
+                                          chapterFiles.find((file) => file.path === ref.path),
+                                          ref,
+                                        ),
+                                      });
+                                    }
+                              }
+                            />
+                          ))}
+                        </ul>
+                      </section>
+                    )}
+                  </div>
+                </Section>
               </div>
             </ScrollArea>
           </div>
@@ -1006,34 +973,9 @@ function ChaptersReading({
               files={chapterFiles}
               fileReveal={reveal}
               overscroll={SCROLL_OVERSCROLL.CHAIN}
+              host={host}
             />
           )}
-          <PaneBar
-            middle={
-              <span className="chapter-place flex-none whitespace-nowrap pl-row-inset text-foreground">
-                <span className="chapter-place-noun">{CHAPTERS_WORDS.PLACE_NOUN} </span>
-                {CHAPTERS_WORDS.of(at + 1, chapters.length)}
-              </span>
-            }
-            actions={
-              <>
-                <StepButton
-                  words={CHAPTERS_WORDS.PREVIOUS}
-                  icon={<ChevronLeftIcon aria-hidden="true" />}
-                  neighbour={previous}
-                  chord={CHAPTERS_SHORTCUTS[CHAPTERS_KEY.PREVIOUS_CHAPTER].chord}
-                  onStep={() => step(-1)}
-                />
-                <StepButton
-                  words={CHAPTERS_WORDS.NEXT}
-                  icon={<ChevronRightIcon aria-hidden="true" />}
-                  neighbour={next}
-                  chord={CHAPTERS_SHORTCUTS[CHAPTERS_KEY.NEXT_CHAPTER].chord}
-                  onStep={() => step(1)}
-                />
-              </>
-            }
-          />
         </ChapterReading>
       </ChaptersBody>
     </Fill>

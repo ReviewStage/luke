@@ -19,13 +19,14 @@ import { CatalogSection } from "../section";
 /**
  * task-marks.tsx -- a task's status as its mark, each of the five, its
  * priority as its mark, each of the five, and the one icon of how its agents
- * stand, each of the six it can wear, every one beside the word it stands for.
+ * stand, each of the seven it can wear, every one beside the word it stands for.
  */
 
-/** A task's agents at rest, with `counts` and a pull request standing in `state` where one is given. */
+/** A task's agents at rest, with `counts` and a pull request standing in `state` where one is given, in the merge queue where `queued`. */
 function agents(
   counts: Partial<Pick<TaskAgentsSummary, "working" | "failed">>,
   state?: (typeof PULL_REQUEST_STATE)[keyof typeof PULL_REQUEST_STATE],
+  queued?: true,
 ): TaskAgentsSummary {
   const pullRequests =
     state === undefined
@@ -38,6 +39,7 @@ function agents(
             checks: CHECK_SUMMARY.NONE,
             additions: 1,
             deletions: 1,
+            ...(queued === undefined ? undefined : { queued }),
           },
         ];
   return {
@@ -55,6 +57,7 @@ const AGENTS_STATUSES = [
   ["failed", agents({ failed: 1 })],
   ["working", agents({ working: 1 })],
   ["open", agents({}, PULL_REQUEST_STATE.OPEN)],
+  ["queued", agents({}, PULL_REQUEST_STATE.OPEN, true)],
   ["draft", agents({}, PULL_REQUEST_STATE.DRAFT)],
   ["merged", agents({}, PULL_REQUEST_STATE.MERGED)],
   ["closed", agents({}, PULL_REQUEST_STATE.CLOSED)],

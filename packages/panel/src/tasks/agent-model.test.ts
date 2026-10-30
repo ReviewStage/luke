@@ -26,6 +26,7 @@ import {
   agentListCallIds,
   agentParts,
   agentWorkingPhase,
+  agentWorkingSince,
   checkoutCommand,
   choiceLabel,
   choiceModelId,
@@ -141,6 +142,37 @@ function developer(id: string, text: string): AgentTranscriptMessage {
   return { id, role: "user", parts: [{ type: "text", text }] };
 }
 
+test("a line after a turn still open is placed in that turn, unless it did not go, when it stands where the order puts it", () => {
+  const ask = developer("m-1", "Add invitations.");
+  const open: AgentTranscriptMessage = {
+    id: "m-2",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: "step-start" }],
+    startedAt: 1_000,
+  };
+  const steer = developer("m-3", "Use the mailer.");
+  const placed = (unsent: (id: string) => boolean) =>
+    placedMessages([ask, open, steer], false, unsent).map((each) => [
+      each.message.id,
+      each.arrived.map((line) => line.id),
+    ]);
+  assert.deepEqual(
+    placed(() => false),
+    [
+      ["m-1", []],
+      ["m-2", ["m-3"]],
+    ],
+  );
+  assert.deepEqual(
+    placed((id) => id === "m-3"),
+    [
+      ["m-1", []],
+      ["m-2", []],
+      ["m-3", []],
+    ],
+  );
+});
+
 test("an operator's heartbeat that found nothing draws no reply, a line it took in stands in order, and a reply that says more, or any other agent's, is drawn", () => {
   const heartbeat = developer("m-1", "Your heartbeat: look over the developer's open work.");
   const quiet: AgentTranscriptMessage = {
@@ -190,6 +222,7 @@ function sentUnder(clientKey: string, text: string): SentLine {
     text,
     attachments: [],
     steers: false,
+    sentAt: 0,
     state: SENT_LINE_STATE.PENDING,
   };
 }
@@ -572,6 +605,27 @@ test("a working agent is starting until its turn opens, thinking until the turn 
   assert.equal(agentWorkingPhase([task, closed], false), "working");
   assert.equal(agentWorkingPhase([task, calling, line], false), "working");
   assert.equal(agentWorkingPhase([task, opened, line], false), "thinking");
+});
+
+test("the working line counts from the press of the line that opened the turn, through the turn and a line steering it", () => {
+  const said = (id: string, text: string, sentAt: number): AgentTranscriptMessage => ({
+    id,
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: AGENT_PART.TEXT, text }],
+    sentAt,
+  });
+  const ask = said("m-ask", "Add invitations.", 500);
+  const opened: AgentTranscriptMessage = {
+    id: "m-turn",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: AGENT_PART.STEP_START }],
+    startedAt: 1_000,
+  };
+  const steer = said("m-steer", "Use the mailer.", 4_000);
+  assert.equal(agentWorkingSince([ask]), 500, "a line awaiting the first turn");
+  assert.equal(agentWorkingSince([ask, opened]), 500);
+  assert.equal(agentWorkingSince([ask, opened, steer]), 500, "a steer awaiting its place");
+  assert.equal(agentWorkingSince([opened]), 1_000, "a turn no line opened counts from its start");
 });
 
 test("a planning transcript's raw parts read as the agent tab reads them: eve's own worker call is a delegation, and a start names the agent it began once it answered one", () => {

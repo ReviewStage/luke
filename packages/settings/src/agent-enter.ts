@@ -1,9 +1,9 @@
 /**
  * agent-enter.ts -- what Enter does in an agent's message box while its turn runs: steer the turn, or queue the message behind it.
  *
- * ⌘↩ (Ctrl+↩ elsewhere) does the other, holding ⌘ turns Send into the other's
- * button, and the chevron beside Send offers both. With no turn running,
- * either key just sends, opening a turn.
+ * ⌘↩ (Ctrl+↩ elsewhere) does the other, holding ⌘ turns Send into the
+ * other's button, and a touch held on Send sends the other way. With no turn
+ * running, either key just sends, opening a turn.
  */
 
 import type { UnparsedWireValue } from "@luke/wire";
@@ -28,8 +28,8 @@ export const AGENT_ENTER_LABEL = {
 
 /** What the row says under its name for each choice: what ⌘↩ does instead. */
 export const AGENT_ENTER_DETAIL = {
-  [AGENT_ENTER.STEER]: "Use ⌘ Enter to queue.",
-  [AGENT_ENTER.QUEUE]: "Use ⌘ Enter to steer.",
+  [AGENT_ENTER.STEER]: "Use ⌘ Enter to queue. On a touch screen, press and hold Send.",
+  [AGENT_ENTER.QUEUE]: "Use ⌘ Enter to steer. On a touch screen, press and hold Send.",
 } as const satisfies Record<AgentEnter, string>;
 
 const readsAgentEnter = Schema.is(Schema.Literals(AGENT_ENTER_LIST));

@@ -270,7 +270,7 @@ const DATES_DETAIL = "A day, a time, or a range";
 /** The row of a list narrowed to dates that opens the date picker, to write the day picked there. */
 const PICK_DATE_ROW: MentionRow = {
   picksDate: true,
-  name: "Pick a date…",
+  name: "Pick a date",
   detail: undefined,
   terms: "Pick a date",
 };

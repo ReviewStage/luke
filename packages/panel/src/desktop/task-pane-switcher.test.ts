@@ -340,7 +340,7 @@ test("on a phone Agents shuts the panel by its own toggle, and Activity opens a 
   assert.deepEqual(shut.told, ["toggle"]);
 });
 
-test("on a phone ⌘K's Change repository clears the Activity list standing over the plan, and the repository chip opens its menu only once the plan is in sight", async () => {
+test("on a phone ⌘K's Change repository clears the Activity list standing over the plan, and the repository crumb opens its menu only once the plan is in sight", async () => {
   const page = mount(SHELL_ROOM.NARROW);
   page.choose("Activity");
   assert.deepEqual(page.rows(), ["Inbox", "Comments"]);
@@ -349,7 +349,7 @@ test("on a phone ⌘K's Change repository clears the Activity list standing over
   await act(async () => undefined);
   assert.deepEqual(page.rows(), [], "the list gives way to the plan");
   const chip = [
-    ...page.container.querySelectorAll<HTMLButtonElement>(".plan-task-standing button"),
+    ...page.container.querySelectorAll<HTMLButtonElement>(".plan-task-path button"),
   ].find((each) => each.textContent?.includes("Choose a repository"));
   assert.equal(chip?.getAttribute("aria-expanded"), "true", "the chip's menu opens for the ask");
 });

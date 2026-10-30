@@ -41,6 +41,7 @@
   .luke-list-row {
     --luke-list-row-inset-block: var(--luke-row-inset);
     --luke-list-row-inset-inline: var(--luke-list-inset);
+    --luke-list-row-acts-inset: var(--luke-list-row-inset-inline);
 
     border-radius: var(--luke-control-radius);
   }
@@ -136,6 +137,18 @@
     --luke-list-row-inset-inline: var(--luke-row-inset);
 
     contain: layout style;
+  }
+
+  /* A compact or dense row whose acts come in on hover holds compact icon
+     buttons in its metadata's place, each a step wider either side than its
+     glyph, so they end that step past the row's end inset: the last glyph
+     ends where the metadata's words end, on the column a group head's acts
+     and a nav row's ⋯ stand on. */
+  :is(
+    .luke-list:is([data-density="compact"], [data-density="dense"]) > .luke-list-row,
+    .luke-list-row:is([data-density="compact"], [data-density="dense"])
+  )[data-actions="hover"] {
+    --luke-list-row-acts-inset: calc(var(--luke-row-inset) - var(--luke-space-4));
   }
 
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
@@ -466,7 +479,7 @@
   .luke-list-row-actions {
     grid-column: acts;
     margin-inline-start: var(--luke-control-gap);
-    padding-inline-end: var(--luke-list-row-inset-inline);
+    padding-inline-end: var(--luke-list-row-acts-inset);
   }
 
   /* A row's ⋯ stands last, in its own track, as far in from the row's end
@@ -478,7 +491,7 @@
   .luke-list-row-more {
     grid-column: more;
     margin-inline-start: var(--luke-control-gap);
-    padding-inline-end: var(--luke-list-row-inset-inline);
+    padding-inline-end: var(--luke-list-row-acts-inset);
     opacity: 0;
     transition: opacity var(--luke-duration-hover) var(--luke-motion-exit);
   }
@@ -687,7 +700,7 @@
 
     .luke-list-row[data-actions="hover"]:has(.luke-list-row-actions + .luke-list-row-more) {
       --luke-list-row-acts-clear: calc(
-        var(--luke-list-row-inset-inline) +
+        var(--luke-list-row-acts-inset) +
         var(--luke-list-row-more-size) +
         var(--luke-space-4)
       );
@@ -700,7 +713,7 @@
     .luke-list-row[data-actions="hover"] .luke-list-row-more {
       grid-column: end;
       justify-self: end;
-      margin-inline: 0 var(--luke-list-row-inset-inline);
+      margin-inline: 0 var(--luke-list-row-acts-inset);
       padding-inline-end: 0;
     }
 

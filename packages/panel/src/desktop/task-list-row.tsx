@@ -8,15 +8,18 @@ import {
 import { taskKey } from "@luke/features/workspace-key";
 import {
   ANNOUNCE,
+  BLOCKED_WORDS,
+  BlockedMark,
   CHIP_LOOK,
   InlineEdit,
+  ListRowCount,
   type ListRowFold,
   TASK_ROW_CELL,
   TaskRow,
   type TaskRowCell,
   VisuallyHidden,
 } from "@luke/ui";
-import { repositoryLabel } from "@luke/ui/task-list-model";
+import { type ChildTaskCount, repositoryLabel } from "@luke/ui/task-list-model";
 import { RENAME_FAILED_NOTE } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { type ReactNode, useRef } from "react";
@@ -47,7 +50,10 @@ import { type ChosenTasks, chosenRowMenu } from "./tasks-selection.js";
  * (`use-open-link.ts`). The rest of a list's cells are the list's own
  * (`content`): the Tasks page's what waits on the reader, its repository,
  * its creator, its agents, and its time; a related task's kind at its end.
- * Each cell stands only where the row's list draws it (`cells`).
+ * Each cell stands only where the row's list draws it (`cells`). Beside its
+ * name stands the stop sign of a task blocked by another (`BlockedMark`),
+ * which the press says after the status, and in its own cell how many of
+ * its sub-tasks are finished, "1/3", as the sidebar's row says it.
  *
  * Its menu is the task's own, whose Rename makes its name its field until
  * the edit ends; chosen among several, its ⋯, right-click, and menu key
@@ -99,6 +105,7 @@ export function TaskListRow({
   content,
   repositoryName,
   assigneeHeld = false,
+  subTasks,
   chosen,
   onOpen,
   onStanding,
@@ -116,6 +123,8 @@ export function TaskListRow({
   repositoryName?: string | undefined;
   /** Whether its group's head says who it is assigned to, so its own assignee's cell stands empty. */
   assigneeHeld?: boolean | undefined;
+  /** How many of its sub-tasks are finished, of all of them, in the cell that says it; none where it has none. */
+  subTasks?: ChildTaskCount | undefined;
   /** The selection it stands in, where it is one of several chosen: how many, and what the bar does to them all. */
   chosen: ChosenTasks | undefined;
   onOpen: () => void;
@@ -156,6 +165,7 @@ export function TaskListRow({
   const spoken = [
     drawn(TASK_ROW_CELL.KEY) ? key : undefined,
     drawn(TASK_ROW_CELL.STATUS) ? TASK_STATUS_WORDS[statusOf(task)] : undefined,
+    task.blocked === true ? BLOCKED_WORDS : undefined,
   ]
     .filter((each) => each !== undefined)
     .map((each) => `, ${each}`)
@@ -169,6 +179,7 @@ export function TaskListRow({
           <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>{spoken}</VisuallyHidden>
         )
       }
+      beside={task.blocked === true ? <BlockedMark aria-hidden="true" /> : undefined}
       cells={cells}
       content={{
         // Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo.
@@ -187,6 +198,14 @@ export function TaskListRow({
         [TASK_ROW_CELL.PULL_REQUESTS]: drawn(TASK_ROW_CELL.PULL_REQUESTS) ? (
           <OpenPullRequests task={task} />
         ) : null,
+        [TASK_ROW_CELL.SUB_TASKS]:
+          subTasks === undefined ? null : (
+            <ListRowCount
+              settled={subTasks.finished}
+              total={subTasks.total}
+              label={`${subTasks.finished} of ${subTasks.total} sub-tasks finished`}
+            />
+          ),
         ...content,
       }}
       editor={

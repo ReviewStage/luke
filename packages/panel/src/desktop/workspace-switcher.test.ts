@@ -120,7 +120,7 @@ test("the menu offers the workspaces, the listed one checked, New workspace, and
   assert.deepEqual(offered, [
     ["Personal", "false"],
     ["acme", "true"],
-    ["New workspace…", null],
+    ["New workspace", null],
     ["Workspace settings", null],
   ]);
   assert.deepEqual(pressed, [`choose:${PERSONAL.id}`, "settings"]);
@@ -165,7 +165,7 @@ test("a member of a team is offered the same three kinds of item as its admin", 
   assert.deepEqual(menuItems().map(labelOf), [
     "Personal",
     "acme",
-    "New workspace…",
+    "New workspace",
     "Workspace settings",
   ]);
 });
@@ -184,7 +184,7 @@ test("New workspace asks a name and creates it, and a refusal is said on the car
 
   open(page.switcher());
   const offered = menuItems().map(labelOf);
-  choose("New workspace…");
+  choose("New workspace");
   const field = nameInput() ?? assert.fail("no name field");
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
@@ -205,7 +205,7 @@ test("New workspace asks a name and creates it, and a refusal is said on the car
   assert.ok(create, "the card offers Create workspace");
   await act(async () => create.click());
 
-  assert.deepEqual(offered, ["Personal", "New workspace…", "Workspace settings"]);
+  assert.deepEqual(offered, ["Personal", "New workspace", "Workspace settings"]);
   assert.deepEqual(asked, ["Platform", "Platform"]);
   assert.equal(refused, "Could not make that workspace on this system.");
   assert.equal(document.querySelector('[role="dialog"]'), null, "a workspace made closes the card");
@@ -240,7 +240,7 @@ function nameInput(): HTMLInputElement | null {
 /** Opens New workspace and types `name` into its field, which it answers. */
 function nameWorkspace(page: { switcher: () => HTMLButtonElement | null }, name: string) {
   open(page.switcher());
-  choose("New workspace…");
+  choose("New workspace");
   const field = nameInput() ?? assert.fail("no name field");
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
@@ -297,7 +297,7 @@ test("New workspace opens on an empty name each time, so a cancelled name is not
   act(() => cancel.click());
 
   open(page.switcher());
-  choose("New workspace…");
+  choose("New workspace");
 
   assert.equal(nameInput()?.value, "");
 });

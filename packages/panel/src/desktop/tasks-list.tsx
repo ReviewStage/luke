@@ -52,6 +52,7 @@ import {
   TASK_AGENTS_MARK_SIZE,
   TaskAgentsMark,
   TaskPriorityMark,
+  type TaskRowCell,
   TaskRowDraft,
   TaskStatusMark,
   TEXT_ELEMENT,
@@ -66,7 +67,13 @@ import {
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { FolderXIcon, GLYPH, ICON_SIZE, ListTodoIcon, PinIcon, UserXIcon } from "@luke/ui/icons";
-import { repositoryLabel, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
+import {
+  type ChildTaskCount,
+  childTaskCounts,
+  repositoryLabel,
+  TASK_ORDER,
+  taskTime,
+} from "@luke/ui/task-list-model";
 import {
   placeWrites,
   restoreWrites,
@@ -78,7 +85,9 @@ import {
 import { TASK_MARK } from "@luke/ui/tasks-model";
 import {
   COMPLETED_WINDOW,
+  LIST_COLUMN,
   LIST_FOLD_ORDER,
+  type ListColumn,
   listPropertiesFitting,
   TASK_PROPERTY,
   TASKS_GROUP,
@@ -579,6 +588,7 @@ function TasksPageRow({
   now,
   properties,
   assigneeHeld,
+  subTasks,
   chosen,
   onOpen,
   onStanding,
@@ -591,9 +601,11 @@ function TasksPageRow({
   /** How many of its questions wait on the reader, as the Inbox counts them (`useTasksWaiting`). */
   waiting: number;
   now: number;
-  properties: readonly TaskProperty[];
+  properties: readonly TaskRowCell[];
   /** Whether its group's head says who it is assigned to, so its own assignee's cell stands empty. */
   assigneeHeld: boolean;
+  /** How many of its sub-tasks are finished, of all of them; none where it has none. */
+  subTasks: ChildTaskCount | undefined;
   /** The selection it stands in, where it is one of several chosen: how many, and what the bar does to them all. */
   chosen: ChosenTasks | undefined;
   onOpen: () => void;
@@ -608,6 +620,7 @@ function TasksPageRow({
       cells={properties}
       repositoryName={repositoryName}
       assigneeHeld={assigneeHeld}
+      subTasks={subTasks}
       chosen={chosen}
       onOpen={onOpen}
       onStanding={onStanding}
@@ -664,7 +677,7 @@ function TasksPageRow({
 const DRAFT_CELLS = [TASK_PROPERTY.PRIORITY, TASK_PROPERTY.STATUS, TASK_PROPERTY.ASSIGNEE] as const;
 
 /** The draft's chip for a property, where it has one. */
-function draftChip(draft: DraftParts, property: TaskProperty): ReactNode {
+function draftChip(draft: DraftParts, property: TaskRowCell): ReactNode {
   if (property === TASK_PROPERTY.PRIORITY) return draft.priority;
   if (property === TASK_PROPERTY.STATUS) return draft.status;
   if (property === TASK_PROPERTY.ASSIGNEE) return draft.assignee;
@@ -680,7 +693,7 @@ function draftChip(draft: DraftParts, property: TaskProperty): ReactNode {
  * stays in reach. An add still out stands as its row, its name muted, and
  * why one was refused in the name's cell.
  */
-function listQuickAddLine(properties: readonly TaskProperty[]): QuickAddLine {
+function listQuickAddLine(properties: readonly TaskRowCell[]): QuickAddLine {
   return ({ draft, pending, refused }) => (
     <TaskRowDraft
       cells={properties}
@@ -737,8 +750,8 @@ function TasksListGroup({
   /** Shows every settled task, as the group's "+ N older" line asks. */
   onShowOlder: () => void;
   tasks: TasksControl;
-  /** The properties the rows draw, which a quick add's line stands its cells on. */
-  properties: readonly TaskProperty[];
+  /** The cells the rows draw, which a quick add's line stands its own on. */
+  properties: readonly TaskRowCell[];
   /** Draws a task's row. */
   row: (task: TaskSummary) => ReactNode;
 }): React.JSX.Element {
@@ -835,13 +848,14 @@ function LeavingTasksGroups({
 }
 
 /** Whether two runs of properties are the same, in the same order. */
-function sameProperties(one: readonly TaskProperty[], other: readonly TaskProperty[]): boolean {
+function sameProperties(one: readonly ListColumn[], other: readonly ListColumn[]): boolean {
   return one.length === other.length && one.every((property, at) => property === other[at]);
 }
 
 /**
- * The properties the List draws of those its display chose, at its own
- * width rather than the window's: those `listPropertiesFitting` folds away
+ * The columns the List draws of those its display chose, and the sub-tasks'
+ * count beside them where any task has sub-tasks, at its own width rather
+ * than the window's: those `listPropertiesFitting` folds away
  * for the room the list stands in, measured as it resizes, and on a phone
  * every property that folds. Only what is folded is state, never the width,
  * so a window being dragged draws the rows again only where a column comes
@@ -851,10 +865,15 @@ function sameProperties(one: readonly TaskProperty[], other: readonly TaskProper
  */
 function useFittedProperties(
   list: HTMLElement | null,
-  properties: readonly TaskProperty[],
+  chosen: readonly TaskProperty[],
+  subTasks: boolean,
   narrow: boolean,
-): readonly TaskProperty[] {
-  const [folded, setFolded] = useState<readonly TaskProperty[]>([]);
+): readonly ListColumn[] {
+  const properties = useMemo(
+    () => (subTasks ? [...chosen, LIST_COLUMN.SUB_TASKS] : chosen),
+    [chosen, subTasks],
+  );
+  const [folded, setFolded] = useState<readonly ListColumn[]>([]);
   useLayoutEffect(() => {
     if (list === null || narrow) return undefined;
     const measure = () => {
@@ -891,7 +910,13 @@ export function TasksList({
   const waitingOn = useTasksWaiting(tasks);
   const narrow = room === SHELL_ROOM.NARROW;
   const [listElement, setListElement] = useState<HTMLDivElement | null>(null);
-  const properties = useFittedProperties(listElement, display.properties, narrow);
+  const subTaskCounts = useMemo(() => childTaskCounts(tasks.listed.tasks), [tasks.listed.tasks]);
+  const properties = useFittedProperties(
+    listElement,
+    display.properties,
+    subTaskCounts.size > 0,
+    narrow,
+  );
   const listed = tasks.listed.tasks;
   const pinned = inPinOrder(
     listed.filter((task) => task.pinnedAt !== undefined),
@@ -1044,6 +1069,7 @@ export function TasksList({
                           group.head.kind === TASKS_GROUP.ASSIGNEE &&
                           group.head.assigneeId === (task.assignee?.userId ?? null)
                         }
+                        subTasks={subTaskCounts.get(task.id)}
                         chosen={selection.chosenOf(task.id)}
                         onOpen={() => tasks.onSelect(task.id)}
                         onStanding={(standing) => setStanding(task, standing)}

@@ -157,7 +157,7 @@ import { opensAsLink } from "./use-open-link.js";
 import {
   type InboxImageReads,
   type PendingInboxReply,
-  pendingReplyOn,
+  pendingRepliesOn,
   type TaskInboxControl,
 } from "./use-task-inbox.js";
 
@@ -366,10 +366,11 @@ function DraftReply({
 const SENDING = "Sending";
 
 /**
- * The reader's plain reply on its way, as the thread's last message before
- * the draft reply: drawn as the reader's own message is, its files going
- * up, and "Sending" at its head's end, until the item holds it, when the
- * message it became stands in its place.
+ * One of the reader's plain replies on their way, which stand as the
+ * thread's last messages before the draft reply, in the order sent: drawn
+ * as the reader's own message is, its files going up, and "Sending" at its
+ * head's end, until the item holds it, when the message it became stands in
+ * its place.
  */
 function PendingReply({
   readerId,
@@ -986,7 +987,7 @@ const ITEM_THING = "Inbox item";
  * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
  * agent's tab end theirs, offering what the item's row's menu offers in the
  * same order (`inbox-item-actions.tsx`): Copy link, the item's link under its
- * agent; Mark as read or unread, naming U; Move to channel…; and, while the
+ * agent; Mark as read or unread, naming U; Move to channel; and, while the
  * item is open, Resolve without answering, asked first. It is keyed by its
  * item where it is drawn, so a question asked on one item never closes the
  * next, and the menu and the question go with the pane once it is hidden.
@@ -1347,9 +1348,9 @@ function PhoneHolder({
 /**
  * One item at reading size, as a comment thread: under the pane's crumbs,
  * the item's title alone as the thread's subject, then every message of
- * its thread, oldest first, a plain reply of the reader's on its way after
- * them (`PendingReply`), and the reader's draft reply at its end, the
- * open ask's controls standing in it.
+ * its thread, oldest first, the reader's plain replies on their way after
+ * them, in the order sent (`PendingReply`), and the reader's draft reply at
+ * its end, the open ask's controls standing in it.
  * Where the item stands alone, the whole Inbox wide, the crumbs follow a
  * way back to the list (`inbox-columns.ts`), its tooltip naming Back's
  * chord, which goes back as Escape does, and the bar ends in the pager,
@@ -1432,7 +1433,7 @@ export function InboxPane({
   const open = item.status === INBOX_STATUS.OPEN;
   const draft = control.draftOf(item);
   const thread = item.thread ?? NO_MESSAGES;
-  const pending = pendingReplyOn(control.pendingReplies, item);
+  const pending = pendingRepliesOn(control.pendingReplies, item);
   const resolved = resolvedAfter(item, thread);
   useOptionNumbers(pane, item, draft, control, open ? numberedPickOf(thread) : undefined);
   const formText: FormTextDoors = {
@@ -1593,9 +1594,9 @@ export function InboxPane({
                     {at === resolved ? <ResolvedEvent item={item} now={now} /> : null}
                   </Fragment>
                 ))}
-                {pending === undefined ? null : (
-                  <PendingReply readerId={readerId} reply={pending} now={now} />
-                )}
+                {pending.map((reply) => (
+                  <PendingReply key={reply.key} readerId={readerId} reply={reply} now={now} />
+                ))}
                 {draftReply}
               </Stack>
             </ItemWords>

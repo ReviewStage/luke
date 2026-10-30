@@ -590,6 +590,11 @@ export const RUNNER_CONTROL = {
   ANSWER_MS: 5 * 1_000,
 } as const;
 
+/** How long a launch holds a message a `result` naming no prompt left unanswered, for the CLI to take it up (`runner.ts`'s `watchUnheard`): five minutes, past the CLI's own retries of a failed model call, which put out no turn output. */
+export const RUNNER_UNANSWERED = {
+  SILENCE_MS: 5 * 60 * 1_000,
+} as const;
+
 /** The END event; `detail` is the CLI's failure, with the launch's secrets taken out, where it failed, and `wakeups` what a released wait left to deliver. */
 export interface RunnerEndEvent {
   readonly type: typeof RUNNER_EVENT.END;

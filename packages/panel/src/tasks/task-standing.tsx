@@ -15,7 +15,11 @@ import { taskKey } from "@luke/features/workspace-key";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BREADCRUMB_POPUP,
+  Breadcrumbs,
+  CHIP_LOOK,
   CHIP_WIDTH,
+  type Crumb,
   ErrorState,
   FailureNote,
   GAP,
@@ -31,7 +35,7 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { failureShown, unreadShown } from "../failure-report.js";
@@ -39,31 +43,33 @@ import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { memberRows } from "../member-rows.js";
 import { Highlighted } from "../search-field.js";
 import { Picker } from "../settings/picker-row.js";
-import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip.js";
-import { TaskRunsOnChip } from "./runs-on.js";
+import { useTaskCard } from "./chip-cards.js";
+import { type RepositoryChooser, useRepositoryMenu } from "./repository-chip.js";
 import { TaskBlockAdd, TaskBlockLines, type TaskBlocksDoor } from "./task-blocks.js";
 
 /**
- * task-standing.tsx -- a task's key over its name, and the chips under it that say and change where it stands, how much it matters, which repository it is about, and where its agents run.
+ * task-standing.tsx -- a task's head over its plan: the path to it, then the chips that say and change where it stands, how much it matters, and who is on it.
  *
- * The key is the task's workspace prefix and its number (`ACME-42`), drawn
- * small in monospace above the title, as the task's own page names it. Under
- * the title stand three chips, each dropping the window's own menu
- * (`picker-row.tsx`): the status, each of the five with its mark, the
- * priority, each with its bars, and the assignee, each member of the
- * workspace by face and name, the reader first, and No assignee on the
- * dashed unassigned mark; then, where the page hands its doors, the
- * repository's chip (`repository-chip.tsx`), the owner's picture and
- * `owner/name`, or Choose a repository while the task has none, which drops
- * the search over every repository the workspace reaches, and which ⌘K's
- * Change repository opens the same way; and a fifth for where its agents
- * run (`runs-on.tsx`); and last, where the page hands their door,
- * Add relation, with the task's blocks on a line of their own under the chips
- * (`task-blocks.tsx`). A pick is handed back for the page to send;
- * without a door to send it, as on an archived task, the chips only say.
- * S, pressed while not typing, opens the status chip's menu, as Linear's S
- * does, and a task row's menu lists what each chip lists
- * (`standing-submenus.tsx`).
+ * Over the title stands the task's path (`TaskPath`), a caption-size
+ * `Breadcrumbs`: its repository, the owner's picture and `owner/name`, or
+ * Choose a repository while the task has none, which drops the search over
+ * every repository the workspace reaches (`repository-chip.tsx`), and which
+ * ⌘K's Change repository opens the same way; then the task it is a child
+ * of, where it has one, by its status mark, key and name, which opens it
+ * and hangs its card; then its own key (`ACME-42`), where the reader stands.
+ * Under the title stand three chips on one line, each a toolbar's chip,
+ * quiet until the pointer is on it or its menu is open, dropping the
+ * window's own menu (`picker-row.tsx`): the status, each of the five with
+ * its mark, the priority, each with its bars, and the assignee, each member
+ * of the workspace by face and name, the reader first, and No assignee on
+ * the dashed unassigned mark; then, where the page hands their door, Add
+ * relation, until the task's menu adds a block instead, with the task's
+ * blocks on lines of their own under the chips (`task-blocks.tsx`). A pick
+ * is handed back for the page to send; without a door to send it, as on an
+ * archived task, the chips only say. S, pressed while not typing, opens the
+ * status chip's menu, as Linear's S does, and a task row's menu lists what
+ * each chip lists (`standing-submenus.tsx`). Where its agents run is said
+ * on each agent's row instead (`plan-agents.tsx`).
  * A task from a service before statuses has no key and no chips.
  */
 
@@ -211,6 +217,7 @@ function TaskAssigneePicker({
       }
       align={POPOVER_ALIGN.START}
       width={CHIP_WIDTH.AUTO}
+      look={CHIP_LOOK.TOOLBAR}
       disabled={onPick === undefined}
       onPick={(id) => {
         const picked = id === NO_ASSIGNEE ? null : id;
@@ -220,24 +227,28 @@ function TaskAssigneePicker({
   );
 }
 
-/** The repository chip's doors, as the page hands them: what its menu offers, where a pick is sent, the asks from elsewhere to open its menu, and why the service refused the last pick, said beside it. */
+/** The repository crumb's doors, as the page hands them: what its menu offers, where a pick is sent, the asks from elsewhere to open its menu, and why the service refused the last pick, said beside it. */
 export interface TaskRepositoryDoor {
   readonly chooser: RepositoryChooser;
   readonly onChoose: (repository: string) => void;
   /** Counts the asks from elsewhere to open the menu, ⌘K's Change repository, each opening it. */
   readonly openRequest?: number | undefined;
-  /** Hears each ask the chip opened its menu for, so the page lets it go. */
+  /** Hears each ask the crumb opened its menu for, so the page lets it go. */
   readonly onAsked?: ((request: number) => void) | undefined;
   /** Why the service refused the last pick; none once one is kept. */
   readonly note?: string | undefined;
 }
 
-/** What the page hands the task's head: its workspace's name, which the key is drawn from, the door a pick is sent through, none where the task takes no change, and the repository chip's doors, none where the task's repository is not changed from here. */
+/** What the page hands the task's head: its workspace's name, which the keys are drawn from, the door a pick is sent through, none where the task takes no change, the repository crumb's doors, none where the task's repository is not changed from here, and the workspace's tasks, which name its parent. */
 export interface TaskStandingDoor {
   readonly workspaceName: string;
   /** Settles once the service has answered, where the page waits on it. */
   readonly onSet?: ((standing: TaskStanding) => void | Promise<void>) | undefined;
   readonly repository?: TaskRepositoryDoor | undefined;
+  /** The workspace's tasks, which name the task's parent in its path; none where it is not named. */
+  readonly tasks?: readonly TaskSummary[] | undefined;
+  /** Opens a task, as a press on the parent's crumb does; none where it opens nothing. */
+  readonly onOpenTask?: ((taskId: string) => void) | undefined;
   /** The task's blocks' door: the tasks they name, where a press opens one, and where a change is sent; none where they are not drawn. */
   readonly blocks?: TaskBlocksDoor | undefined;
   /** Whether the plan is in sight, which S's ask waits on, so it never opens a menu behind another tab; in sight where unsaid. */
@@ -286,19 +297,136 @@ export function TaskKey({
   );
 }
 
-/** The task's key over its title (`TaskKey`); nothing for a task from a service before keys. */
-export function TaskKeyLine({
+/** What the path is named for a reader moving between landmarks. */
+const PATH_LABEL = "Task path";
+
+/**
+ * The task the open one is a child of, as the workspace's tasks list it: by
+ * the open task's own row's parent where the list holds it, else by the
+ * plan's; none for a task at the top, or one whose parent the list does not
+ * hold yet.
+ */
+function parentOf(task: Task, tasks: readonly TaskSummary[]): TaskSummary | undefined {
+  const parentId = tasks.find((each) => each.id === task.id)?.parentTaskId ?? task.parentTaskId;
+  return parentId === undefined ? undefined : tasks.find((each) => each.id === parentId);
+}
+
+/** The parent's crumb: its status mark, then its key and name, which opens it and hangs its card. */
+function useParentCrumb(
+  parent: TaskSummary | undefined,
+  workspaceName: string,
+  onOpen: ((taskId: string) => void) | undefined,
+): Crumb | undefined {
+  const card = useTaskCard(parent?.id);
+  if (parent === undefined) return undefined;
+  const key = parent.number === undefined ? undefined : taskKey(workspaceName, parent.number);
+  return {
+    label: key === undefined ? parent.name : `${key} ${parent.name}`,
+    glyph: parent.status === undefined ? undefined : <TaskStatusMark status={parent.status} />,
+    hint: parent.name,
+    card,
+    onPress: onOpen === undefined ? undefined : () => onOpen(parent.id),
+  };
+}
+
+/** The key's crumb, where the reader stands, kept whole however narrow the path; none for a task from a service before keys. */
+function keyCrumb(task: Task, workspaceName: string): Crumb | undefined {
+  if (task.number === undefined) return undefined;
+  return { label: taskKey(workspaceName, task.number), current: true, fixed: true };
+}
+
+/** The path's line: its crumbs, the menu a crumb drops hung from the line's own box, and the refusal of the last pick under it. */
+function PathLine({
+  crumbs,
+  room,
+  menu,
+  note,
+}: {
+  crumbs: readonly (Crumb | undefined)[];
+  room?: React.RefObject<HTMLDivElement | null> | undefined;
+  menu?: ReactNode;
+  note?: string | undefined;
+}): React.JSX.Element | null {
+  const drawn = crumbs.filter((crumb) => crumb !== undefined);
+  if (drawn.length === 0) return null;
+  // Note that the menu hangs from the line rather than from its crumb, because the path clips what stands inside it,
+  // and that the line is pulled back by a crumb's inset, so its first mark stands on the title's edge.
+  return (
+    <div className="plan-task-path mb-luke-4">
+      <div className="relative -ms-breadcrumb-pill-inline flex min-w-0" ref={room}>
+        <Breadcrumbs label={PATH_LABEL} crumbs={drawn} />
+        {menu}
+      </div>
+      {note === undefined ? null : (
+        <FailureNote
+          failure={failureShown({
+            surface: FAILURE_SURFACE.REPOSITORY_PIN,
+            cause: FAILURE_CONDITION.REFUSED,
+            refused: true,
+          })}
+        >
+          {note}
+        </FailureNote>
+      )}
+    </div>
+  );
+}
+
+/** The path led by the task's repository, whose crumb drops the repository's menu (`useRepositoryMenu`). */
+function RepositoryPath({
   task,
-  workspaceName,
+  door,
+  rest,
 }: {
   task: Task;
-  workspaceName: string;
+  door: TaskRepositoryDoor;
+  rest: readonly (Crumb | undefined)[];
 }): React.JSX.Element | null {
-  if (task.number === undefined) return null;
+  const menu = useRepositoryMenu({
+    value: task.repository,
+    chooser: door.chooser,
+    onChoose: door.onChoose,
+    openRequest: door.openRequest,
+    onAsked: door.onAsked,
+    align: POPOVER_ALIGN.START,
+  });
+  const repository: Crumb = {
+    label: menu.label,
+    glyph: menu.glyph,
+    hint: menu.open ? undefined : (task.repository ?? undefined),
+    card: menu.card,
+    popup: BREADCRUMB_POPUP.DIALOG,
+    expanded: menu.open,
+    onPress: menu.press,
+  };
   return (
-    <div className="plan-task-key">
-      <TaskKey workspaceName={workspaceName} number={task.number} />
-    </div>
+    <PathLine crumbs={[repository, ...rest]} room={menu.room} menu={menu.menu} note={door.note} />
+  );
+}
+
+/**
+ * The task's path over its title: its repository's crumb where the page
+ * hands the repository's doors, its parent's where it has one, and its own
+ * key, current; nothing where none of them stands.
+ */
+export function TaskPath({
+  task,
+  door,
+}: {
+  task: Task;
+  door: TaskStandingDoor;
+}): React.JSX.Element | null {
+  const parent = useParentCrumb(
+    parentOf(task, door.tasks ?? []),
+    door.workspaceName,
+    door.onOpenTask,
+  );
+  const rest = [parent, keyCrumb(task, door.workspaceName)];
+  return door.repository === undefined ? (
+    <PathLine crumbs={rest} />
+  ) : (
+    // Keyed by the task, so another task starts the crumb's menu afresh and the same task keeps it.
+    <RepositoryPath key={task.id} task={task} door={door.repository} rest={rest} />
   );
 }
 
@@ -330,6 +458,7 @@ function TaskStatusPicker({
       noMatch="No statuses match"
       align={POPOVER_ALIGN.START}
       width={CHIP_WIDTH.AUTO}
+      look={CHIP_LOOK.TOOLBAR}
       disabled={onPick === undefined}
       openRequest={openRequest}
       onPick={(id) => {
@@ -341,24 +470,20 @@ function TaskStatusPicker({
 }
 
 /**
- * The task's status, priority, and assignee chips, under its title, its
- * repository's where the page hands the chip's doors, with the service's
- * refusal of the last pick beside it, and where its agents run. A task
- * from a service before statuses draws none of the
- * standing chips, and still its repository's, which does not wait on them,
- * since the plan's menu leaves Change repository to the chip.
+ * The task's status, priority, and assignee chips on one line under its
+ * title, each a toolbar's chip, then Add relation, and under them the
+ * task's blocks, where the page hands their door. A task from a service before statuses draws no
+ * chips, and still its blocks.
  */
 export function TaskStandingChips({
   task,
   onSet,
-  repository,
   blocks,
   inSight = true,
 }: {
   task: Task;
   /** Where a pick is sent, settling once the service has answered where the page waits on it; without one the chips only say. */
   onSet: ((standing: TaskStanding) => void | Promise<void>) | undefined;
-  repository?: TaskRepositoryDoor | undefined;
   /** The task's blocks' door; without it no block is drawn. */
   blocks?: TaskBlocksDoor | undefined;
   /** Whether the plan is in sight, which S waits on, so it never opens a menu behind another tab. */
@@ -374,69 +499,42 @@ export function TaskStandingChips({
       ? () => setStatusAsks((asks) => asks + 1)
       : undefined,
   );
-  if (!standing && repository === undefined) return null;
+  const lines = blocks === undefined ? null : <TaskBlockLines task={task} door={blocks} />;
+  if (status === undefined || priority === undefined) return lines;
   return (
     <div className="plan-task-standing">
-      <Inline gap={GAP.CONTROL}>
-        {status === undefined || priority === undefined ? null : (
-          <>
-            <TaskStatusPicker
-              status={status}
-              openRequest={statusAsks}
-              onPick={onSet === undefined ? undefined : (picked) => onSet({ status: picked })}
-            />
-            <Picker
-              label="Priority"
-              value={priority}
-              valueLabel={TASK_PRIORITY_WORDS[priority]}
-              valueIcon={<TaskPriorityMark priority={priority} />}
-              rows={PRIORITY_ROWS}
-              noMatch="No priorities match"
-              align={POPOVER_ALIGN.START}
-              width={CHIP_WIDTH.AUTO}
-              disabled={onSet === undefined}
-              onPick={(id) => {
-                const picked = priorityOf(id);
-                if (picked !== undefined && picked !== priority) onSet?.({ priority: picked });
-              }}
-            />
-            <TaskAssigneePicker
-              assignee={task.assignee}
-              onPick={onSet === undefined ? undefined : (assigneeId) => onSet({ assigneeId })}
-            />
-          </>
-        )}
-        {repository === undefined ? null : (
-          // Keyed by the task, so another task starts the chip and its menu afresh and the same task keeps them.
-          <RepositoryChip
-            key={task.id}
-            place={CHIP_PLACE.FIELD}
-            value={task.repository}
-            chooser={repository.chooser}
-            onChoose={repository.onChoose}
-            openRequest={repository.openRequest}
-            onAsked={repository.onAsked}
-            align={POPOVER_ALIGN.START}
-            width={CHIP_WIDTH.AUTO}
-          />
-        )}
-        {repository?.note === undefined ? null : (
-          <FailureNote
-            failure={failureShown({
-              surface: FAILURE_SURFACE.REPOSITORY_PIN,
-              cause: FAILURE_CONDITION.REFUSED,
-              refused: true,
-            })}
-          >
-            {repository.note}
-          </FailureNote>
-        )}
-        {standing ? <TaskRunsOnChip runsOn={task.runsOn} /> : null}
+      {/* Note that the line is pulled back by a chip's inset, so the status's mark stands on the title's edge. */}
+      <Inline gap={GAP.TIGHT} className="-ms-chip-lead">
+        <TaskStatusPicker
+          status={status}
+          openRequest={statusAsks}
+          onPick={onSet === undefined ? undefined : (picked) => onSet({ status: picked })}
+        />
+        <Picker
+          label="Priority"
+          value={priority}
+          valueLabel={TASK_PRIORITY_WORDS[priority]}
+          valueIcon={<TaskPriorityMark priority={priority} />}
+          rows={PRIORITY_ROWS}
+          noMatch="No priorities match"
+          align={POPOVER_ALIGN.START}
+          width={CHIP_WIDTH.AUTO}
+          look={CHIP_LOOK.TOOLBAR}
+          disabled={onSet === undefined}
+          onPick={(id) => {
+            const picked = priorityOf(id);
+            if (picked !== undefined && picked !== priority) onSet?.({ priority: picked });
+          }}
+        />
+        <TaskAssigneePicker
+          assignee={task.assignee}
+          onPick={onSet === undefined ? undefined : (assigneeId) => onSet({ assigneeId })}
+        />
         {blocks?.onChange === undefined ? null : (
           <TaskBlockAdd task={task} door={blocks} onChange={blocks.onChange} />
         )}
       </Inline>
-      {blocks === undefined ? null : <TaskBlockLines task={task} door={blocks} />}
+      {lines}
     </div>
   );
 }

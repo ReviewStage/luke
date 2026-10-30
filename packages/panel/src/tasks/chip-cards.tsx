@@ -121,9 +121,17 @@ export function TaskChipCard({
   focus?: TaskFocus | undefined;
   fallback: ReactNode;
 }): ReactNode {
+  return useTaskCard(taskId, focus) ?? fallback;
+}
+
+/** A plan's card, with the place within it the card is hung for, as `TaskChipCard` hangs it; none for no plan, or where the window lists no such plan. */
+export function useTaskCard(
+  taskId: string | undefined,
+  focus?: TaskFocus | undefined,
+): ReactNode | undefined {
   const place = useContext(ChipCardsContext);
   const now = useMinute();
-  return place?.taskCard(taskId, now, focus) ?? fallback;
+  return taskId === undefined ? undefined : place?.taskCard(taskId, now, focus);
 }
 
 /** A section's card: its plan's card's head, and the heading the anchor names, or the name it was written with; where the plan no longer holds it, that said. */

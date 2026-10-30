@@ -168,6 +168,15 @@ import {
   channelThreadsViewSchema,
 } from "@luke/features/channel-view";
 import {
+  HOST_PAIRING_CALL_FAILURE,
+  type HostPairingApproveView,
+  type HostPairingDenyView,
+  type HostPairingView,
+  hostPairingApproveViewSchema,
+  hostPairingDenyViewSchema,
+  hostPairingViewSchema,
+} from "@luke/features/host-pairing-view";
+import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillContentView,
   type InstalledSkillIdParams,
@@ -674,6 +683,12 @@ export interface HostOperator {
   hostsKeepInstallToken(tokenHash: string): Effect.Effect<HostInstallTokenAnswerView>;
   /** One of the account's install tokens revoked; done, or why not. */
   hostsRevokeInstallToken(id: string): Effect.Effect<HostDoneAnswerView>;
+  /** A box's pending pairing read by the code its link named; the box, or why not. */
+  hostsPairingRead(code: string): Effect.Effect<HostPairingView>;
+  /** A box's pending pairing approved by its code; the host it made, or why not. */
+  hostsPairingApprove(code: string): Effect.Effect<HostPairingApproveView>;
+  /** A box's pending pairing denied by its code; done, or why not. */
+  hostsPairingDeny(code: string): Effect.Effect<HostPairingDenyView>;
   /** One task's coding agents with their status; or why there is no list. */
   agentList(params: AgentListParams): Effect.Effect<AgentListAnswer>;
   /** One workspace's coding agents, newest started first, on one repository where one is named; or why there is no list. */
@@ -1021,6 +1036,9 @@ function transcriptParams(transcript: AgentTranscriptKey): WireRecord {
 }
 
 const AGENT_UNANSWERED = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
+
+/** A pairing's read, approve, or deny that reached no answer, as each of them answers one. */
+const PAIRING_UNANSWERED = { failure: HOST_PAIRING_CALL_FAILURE.UNANSWERED } as const;
 
 /** An automation call that reached no answer, as every automation method answers one. */
 const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
@@ -1733,6 +1751,21 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.HOSTS_REVOKE_INSTALL_TOKEN, { id }),
         answerOf(hostDoneAnswerViewSchema, AGENT_UNANSWERED),
+      ),
+    hostsPairingRead: (code) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.HOSTS_PAIRING_READ, { code }),
+        answerOf(hostPairingViewSchema, PAIRING_UNANSWERED),
+      ),
+    hostsPairingApprove: (code) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.HOSTS_PAIRING_APPROVE, { code }),
+        answerOf(hostPairingApproveViewSchema, PAIRING_UNANSWERED),
+      ),
+    hostsPairingDeny: (code) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.HOSTS_PAIRING_DENY, { code }),
+        answerOf(hostPairingDenyViewSchema, PAIRING_UNANSWERED),
       ),
     agentWorkspaceList: (params) =>
       Effect.map(

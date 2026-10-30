@@ -124,13 +124,17 @@ export const AGENT_ACT_KIND = {
   /**
    * The account's hosts as Settings › Hosts reads and changes
    * them: listed, the beats of the account's devices read, one removed, an install token kept by its hash alone (the
-   * window that minted the token keeps it and shows it once), and one revoked.
+   * window that minted the token keeps it and shows it once), and one revoked; and a box's pairing, by the code its
+   * link named, read, approved, or denied.
    */
   HOSTS_LIST: "hosts.list",
   HOSTS_PRESENCE: "hosts.presence",
   HOSTS_REMOVE: "hosts.remove",
   HOSTS_KEEP_INSTALL_TOKEN: "hosts.keepInstallToken",
   HOSTS_REVOKE_INSTALL_TOKEN: "hosts.revokeInstallToken",
+  HOSTS_PAIRING_READ: "hosts.pairingRead",
+  HOSTS_PAIRING_APPROVE: "hosts.pairingApprove",
+  HOSTS_PAIRING_DENY: "hosts.pairingDeny",
   AGENTS_LIST: "agents.list",
   /** One workspace's agents, newest started first: what an automation's Same agent is chosen from. */
   AGENTS_WORKSPACE_LIST: "agents.workspaceList",

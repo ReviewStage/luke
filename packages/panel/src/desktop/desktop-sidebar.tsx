@@ -39,7 +39,6 @@ import {
   motionKey,
   motionRows,
   NAV_COUNT_SHOWN,
-  NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
   NOTE_LINE_LOOK,
@@ -71,14 +70,7 @@ import {
   useRovingKeys,
   VisuallyHidden,
 } from "@luke/ui";
-import {
-  FolderPlusIcon,
-  FolderXIcon,
-  InboxIcon,
-  ListTodoIcon,
-  ShieldUserIcon,
-  ZapIcon,
-} from "@luke/ui/icons";
+import { FolderPlusIcon, FolderXIcon, ListTodoIcon, ShieldUserIcon, ZapIcon } from "@luke/ui/icons";
 import { isAgentTab, sameTab } from "@luke/ui/tab-strip-model";
 import {
   ASSIGNED_TO,
@@ -140,7 +132,6 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { agentName } from "../tasks/agent-model.js";
 import { CHANNEL_SHOWN, channelShown } from "../tasks/channels-model.js";
-import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { useChannelPlace, useChannels, useInboxNarrowed } from "../tasks/use-channels.js";
 import { useHeldOrder } from "../tasks/use-held-order.js";
 import {
@@ -171,14 +162,17 @@ import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SidebarChannels } from "./sidebar-channels.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
-import { type CountNoun, foldedCount, groupCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
+import { type CountNoun, foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { SidebarFoot } from "./sidebar-foot.js";
+import { SidebarInboxRow } from "./sidebar-inbox-row.js";
 import { SidebarLuke } from "./sidebar-luke.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
-import { ReadAllMenu, type SidebarReadAll, useSidebarReadAll } from "./sidebar-read-all.js";
+import { useSidebarReadAll } from "./sidebar-read-all.js";
 import {
   type DrawnSection,
   moveToSectionEntry,
+  NEW_SECTION,
+  newSectionAction,
   PINNED_DROP_ZONE,
   rowMember,
   SidebarSections,
@@ -1427,66 +1421,6 @@ function ListSkeleton(): React.JSX.Element {
   );
 }
 
-/**
- * The Inbox's row, last of the rows heading the list and drawn as they are:
- * the tray, its name, and how many threads Needs you lists at its end
- * (`useInboxWaiting`), in even figures and the unread dot's blue, and
- * nothing at none. Its chord takes the count's place
- * while the row is hovered or reached from the keyboard, as New task's and
- * Search's show theirs. A press opens the window's Inbox
- * (`desktop-inbox.tsx`), and the row is the place shown while it stands. A
- * right-click, a long press, or the menu key opens its menu, Mark all as
- * read, which marks every unread thread of the listed workspace read
- * (`sidebar-read-all.tsx`).
- */
-function SidebarInboxRow({
-  waiting,
-  current,
-  disabled,
-  shown,
-  readAll,
-  onOpen,
-}: {
-  waiting: number;
-  current: boolean;
-  disabled: boolean;
-  /** Whether the sidebar is in sight, which its menu closes with. */
-  shown: boolean;
-  readAll: SidebarReadAll;
-  onOpen: () => void;
-}): React.JSX.Element {
-  const menu = useMenu(shown && !disabled);
-  return (
-    <>
-      <NavItem
-        icon={<InboxIcon />}
-        current={current ? NAV_CURRENT.PAGE : undefined}
-        count={{
-          ...groupCount(waiting, NEEDS_YOU.COUNT),
-          tone: NAV_COUNT_TONE.UNREAD,
-        }}
-        aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
-        shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
-        disabled={disabled}
-        contextMenu={disabled ? undefined : menu.contextMenu()}
-        onKeyDown={disabled ? undefined : menu.keyMenu}
-        onClick={onOpen}
-      >
-        Inbox
-      </NavItem>
-      {menu.drawn === undefined ? null : (
-        <ReadAllMenu
-          readAll={readAll}
-          label="Inbox actions"
-          menu={menu.drawn}
-          groups={(markAll) => [[markAll]]}
-          onClose={menu.close}
-        />
-      )}
-    </>
-  );
-}
-
 /** What the sidebar is drawn with while it floats, or could. */
 interface FloatingSidebar extends HoverPane {
   /** Whether the sidebar is on screen: pinned, or floating over the work. */
@@ -1902,9 +1836,9 @@ function SidebarColumn({
   };
   const folds = useFoldedGroups(sidebar.staged);
   const taskView = useTaskListView(tasks.workspace?.id, sidebar.staged);
-  // The Tasks head's menu, which offers New section, from its ⋯, a right-click, and a long press.
+  // The Tasks head's New section, pressed on its button, or offered on a right-click and a long press.
   const tasksHeadMenu = useMenu(tasks.shown && overlay.inSight);
-  const tasksHeadEllipsis = useRef<HTMLButtonElement | null>(null);
+  const newSectionButton = useRef<HTMLButtonElement | null>(null);
   const reader = useMemberDirectory();
   // Only a workspace somebody shares has people to filter by, so one nobody shares lists every task.
   const { memberCount } = tasks.workspace ?? {};
@@ -2024,22 +1958,13 @@ function SidebarColumn({
   const { chosen } = overlay;
   // The reader's own tasks, which the list holds until the reader chooses otherwise, and the chip's × lists again.
   const mine: AssignedTo = { kind: ASSIGNED_TO.ME };
-  // New section stands in the Tasks head's menu while the account keeps sections.
+  // New section stands on the Tasks head while the account keeps sections.
+  const askNewSection = chosen(() => {
+    const { workspace } = tasks;
+    if (workspace !== undefined) sectionDialogs.askNew(workspace.id);
+  });
   const tasksHeadGroups: MenuAction[][] =
-    sectionsShown && tasks.workspace !== undefined
-      ? [
-          [
-            {
-              label: "New section…",
-              icon: <FolderPlusIcon />,
-              onSelect: chosen(() => {
-                const { workspace } = tasks;
-                if (workspace !== undefined) sectionDialogs.askNew(workspace.id);
-              }),
-            },
-          ],
-        ]
-      : [];
+    sectionsShown && tasks.workspace !== undefined ? [[newSectionAction(askNewSection)]] : [];
   // Note that the count reads every listed task, not the rows the view draws, which hides the finished ones by default.
   const childCounts = useMemo(() => childTaskCounts(tasks.listed.tasks), [tasks.listed.tasks]);
   const context: RowContext = {
@@ -2230,15 +2155,7 @@ function SidebarColumn({
         >
           Search
         </NavItem>
-        <SidebarInboxRow
-          waiting={waiting}
-          current={inInbox && !narrowed}
-          disabled={!tasks.signedIn}
-          shown={tasks.shown && overlay.inSight}
-          readAll={readAll}
-          onOpen={chosen(openInbox)}
-        />
-        {/* With Channels on, the workspace's channels stand under the Inbox's row as its filters. */}
+        {/* With Channels on, the workspace's channels stand under the Inbox's row as its filters, the row heading them. */}
         {channelsOn && tasks.signedIn ? (
           <SidebarChannels
             workspaceId={tasks.workspace?.id}
@@ -2247,9 +2164,31 @@ function SidebarColumn({
             currentId={shownChannelId}
             shown={tasks.shown && overlay.inSight}
             readAll={readAll}
+            folded={folds.channelsFolded}
+            onFold={folds.toggleChannels}
+            inbox={(head) => (
+              <SidebarInboxRow
+                waiting={waiting}
+                current={inInbox && !narrowed}
+                disabled={!tasks.signedIn}
+                shown={tasks.shown && overlay.inSight}
+                readAll={readAll}
+                channels={head}
+                onOpen={chosen(openInbox)}
+              />
+            )}
             onOpen={chosen(openChannel)}
           />
-        ) : null}
+        ) : (
+          <SidebarInboxRow
+            waiting={waiting}
+            current={inInbox && !narrowed}
+            disabled={!tasks.signedIn}
+            shown={tasks.shown && overlay.inSight}
+            readAll={readAll}
+            onOpen={chosen(openInbox)}
+          />
+        )}
         <SidebarTasksRow current={inBoard} disabled={!tasks.signedIn} onOpen={chosen(openBoard)} />
         <SidebarAutomationsRow
           current={inAutomations}
@@ -2407,17 +2346,20 @@ function SidebarColumn({
                         contextMenu={
                           tasksHeadGroups.length === 0
                             ? undefined
-                            : tasksHeadMenu.contextMenu(tasksHeadEllipsis)
+                            : tasksHeadMenu.contextMenu(newSectionButton)
                         }
                         actions={
                           <>
                             {tasksHeadGroups.length === 0 ? null : (
-                              <MoreButton
-                                ref={tasksHeadEllipsis}
-                                thing="Tasks"
-                                size={BUTTON_SIZE.COMPACT}
-                                {...tasksHeadMenu.trigger()}
-                              />
+                              <Tooltip label={NEW_SECTION}>
+                                <IconButton
+                                  ref={newSectionButton}
+                                  icon={<FolderPlusIcon />}
+                                  label={NEW_SECTION}
+                                  size={BUTTON_SIZE.COMPACT}
+                                  onClick={askNewSection}
+                                />
+                              </Tooltip>
                             )}
                             <TaskViewOptions
                               shown={tasks.shown && overlay.inSight}

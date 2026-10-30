@@ -10,6 +10,7 @@ import { sentLineId } from "@luke/wire/host-ids";
 import { useEffect, useRef, useState } from "react";
 import type { AgentActAnswer } from "../act.js";
 import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
+import { useSendQueue } from "../send-queue.js";
 import {
   closesComposer,
   heldSentLines,
@@ -38,7 +39,7 @@ import {
  * Messages go one at a time, in the order they were sent: the service writes
  * a line and hands it to eve under the conversation's lock, so two sends out
  * at once would take it in either order, and a line sent while one is out
- * waits for its answer here.
+ * waits for its answer here, under the agent's key (`../send-queue.ts`).
  *
  * A message that did not go says why under the box, with Retry, which sends
  * it again under the same key, so a send whose answer was lost reaches the
@@ -262,7 +263,7 @@ export function useAgentComposer(input: {
   const latest = useRef(input);
   latest.current = input;
   // Each agent's sends as one queue, the next going once the one before it answered.
-  const queues = useRef(new Map<string, Promise<void>>());
+  const queue = useSendQueue();
 
   // A line the transcript has read back is drawn as its row, and let go once the service took it too.
   const sent = unreadSentLines(held.sent, messages);
@@ -291,8 +292,7 @@ export function useAgentComposer(input: {
     );
   /** Sends one line once every line before it has answered, and takes its answer. */
   const deliver = (line: SentLine) => {
-    const before = queues.current.get(agentId) ?? Promise.resolve();
-    const going = before.then(async () => {
+    queue.after(agentId, async () => {
       const now = heldNow.current;
       // A line behind one refused for good is refused with it, as the service would refuse it.
       if (now.agentId === agentId && now.closed !== undefined) {
@@ -378,7 +378,6 @@ export function useAgentComposer(input: {
             ),
       }));
     });
-    queues.current.set(agentId, going);
   };
 
   const sendDraft = (clientKey: string = crypto.randomUUID()) => {
@@ -391,6 +390,7 @@ export function useAgentComposer(input: {
       text,
       attachments,
       steers: input.running === true,
+      sentAt: Date.now(),
       state: SENT_LINE_STATE.PENDING,
     };
     update(() => EMPTY_DRAFT);
@@ -403,6 +403,7 @@ export function useAgentComposer(input: {
     const text = words.trim();
     if (!hasWordsOrFiles(text, attachments) || held.closed !== undefined) return;
     const clientKey = crypto.randomUUID();
+    const rewoundAt = Date.now();
     const line: SentLine = {
       id: sentLineId(clientKey),
       clientKey,
@@ -410,10 +411,10 @@ export function useAgentComposer(input: {
       attachments,
       // Note that a line in place of another stops the turn under way rather than steering it.
       steers: false,
+      sentAt: rewoundAt,
       state: SENT_LINE_STATE.PENDING,
       rewinds: messageId,
     };
-    const rewoundAt = Date.now();
     setHeld((was) => ({
       ...was,
       revertFailed: undefined,
@@ -436,8 +437,7 @@ export function useAgentComposer(input: {
       rewoundAt,
       cut: cutFrom(messages, messageId),
     }));
-    const before = queues.current.get(agentId) ?? Promise.resolve();
-    const going = before.then(async () => {
+    queue.after(agentId, async () => {
       const answer = await rewindTo(agentId, messageId);
       if (latest.current.agentId !== agentId) return;
       if (!("failure" in answer)) {
@@ -452,19 +452,20 @@ export function useAgentComposer(input: {
         revertFailed: { messageId, note },
       }));
     });
-    queues.current.set(agentId, going);
   };
 
   /** Sends a line marked as not sent again, under its key, where it stands. */
   const resend = (id: string) => {
     const line = held.sent.find((each) => each.id === id);
     if (line?.state !== SENT_LINE_STATE.FAILED || held.closed !== undefined) return;
+    // Note that a Retry is a send of its own, so the line is stamped again and the working line counts from it.
+    const again = { ...line, sentAt: Date.now(), state: SENT_LINE_STATE.PENDING };
     setHeld((was) => ({
       ...was,
       failed: was.failed?.lineId === id ? undefined : was.failed,
-      sent: marked(was.sent, id, SENT_LINE_STATE.PENDING),
+      sent: was.sent.map((each) => (each.id === id ? again : each)),
     }));
-    deliver({ ...line, state: SENT_LINE_STATE.PENDING });
+    deliver(again);
   };
 
   // Note that a closed box draws none of its words, because they stand in the transcript as the
@@ -514,7 +515,6 @@ export function useAgentComposer(input: {
     revert,
     cut: held.cut,
     going: new Set(held.sent.filter((line) => line.taken !== true).map((line) => line.id)),
-    sendsSettled: () =>
-      (queues.current.get(latest.current.agentId) ?? Promise.resolve()).catch(() => undefined),
+    sendsSettled: () => queue.settled(latest.current.agentId),
   };
 }

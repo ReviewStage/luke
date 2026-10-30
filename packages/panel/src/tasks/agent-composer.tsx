@@ -66,7 +66,6 @@ import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import { MENTION_MENU_SIDE, type MentionMenuSide } from "./mention-picker.js";
 import { ComposerQuoteView } from "./reply-to-selection.js";
 import { useRepositoryRemedy } from "./repository-remedy.js";
-import { SendOptions } from "./send-options.js";
 import type { SkillSource } from "./skill-picker.js";
 import { useMentionBox } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
@@ -751,17 +750,22 @@ export function AgentComposer({
     if (queuesNow) return sentBy(queueing.onQueue);
     steer();
   };
+  /** The other way than a send that queues where `pressQueues` says, which ⌘↩ and a touch held on Send take: an edit steered, or the message steered or queued. */
+  const sendOtherWay = (pressQueues: boolean) => {
+    if (editingQueued) return sentBy(queueing.onSteer);
+    if (pressQueues) return steer();
+    if (queueing !== undefined) sentBy(queueing.onQueue);
+  };
   /** A key the queue takes: ⌘↩ steers an edit, or sends the other way than Enter, held where Send is. */
   const queueKey = (event: KeyboardEvent): boolean => {
     if (queueing === undefined) return false;
     if (!modEnterSends(event)) return false;
     if (editingQueued) {
-      if (!sendHeld) sentBy(queueing.onSteer);
+      if (!sendHeld) sendOtherWay(false);
       return true;
     }
     if (!queues || !sendable) return false;
-    if (queueing.enterQueues) steer();
-    else sentBy(queueing.onQueue);
+    sendOtherWay(queueing.enterQueues);
     return true;
   };
   // Send says what a send does while it is other than steering, as its glyph alone in the round send's place:
@@ -938,14 +942,6 @@ export function AgentComposer({
               <DictateButton dictation={dictation} disabled={held || module === undefined} />
               <ComposerMore card={card} offers={offers} />
               {beforeSend?.(folds(FOLD_WIDTH.ACTIONS))}
-              {queues ? (
-                <SendOptions
-                  enterQueues={queueing.enterQueues}
-                  disabled={!sendable}
-                  onSteer={steer}
-                  onQueue={() => sentBy(queueing.onQueue)}
-                />
-              ) : null}
             </ComposerActions>
           }
           strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
@@ -953,6 +949,8 @@ export function AgentComposer({
             label: sendWay?.label ?? sendLabel,
             ...(sendWay === undefined ? undefined : { icon: sendWay.icon }),
             chord: wording?.chord,
+            // Note that a hold takes the other way than Send as it reads, which a held ⌘ may already have turned.
+            onHold: queues || editingQueued ? () => sendOtherWay(queuesNow === true) : undefined,
             empty,
             held: sendHeld,
             busy: composer.sending,

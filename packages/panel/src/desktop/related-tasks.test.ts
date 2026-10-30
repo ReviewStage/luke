@@ -131,3 +131,39 @@ test("a related task's row ends with its open pull requests and its owner's end,
   act(() => row.querySelector<HTMLButtonElement>("[data-card-press]")?.click());
   assert.deepEqual(opened, ["t-42"]);
 });
+
+test("a related task's row says it is blocked beside its name and how many of its sub-tasks are finished", () => {
+  const blocked: TaskSummary = { ...TASK, blocked: true };
+  const child = (id: string, status: NonNullable<TaskSummary["status"]>): TaskSummary => ({
+    ...TASK,
+    id,
+    status,
+    parentTaskId: TASK.id,
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const tasks = tasksControl({
+    tasks: [blocked, child("t-43", TASK_STATUS.DONE), child("t-44", TASK_STATUS.TODO)],
+    workspace: ACME,
+    workspaces: [ACME],
+    listRead: true,
+  });
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(RelatedTasks, { tasks, label: "Sub-tasks", rows: [{ task: blocked }] }),
+      ),
+    ),
+  );
+
+  const row = container.querySelector<HTMLElement>("[data-task-id='t-42']");
+  assert.ok(row, "the task's row stands");
+  assert.ok(
+    row.querySelector("[data-cell='name'] .blocked-mark"),
+    "the stop sign stands beside the name",
+  );
+  assert.match(row.querySelector("[data-cell='subTasks']")?.textContent ?? "", /^1\/2/u);
+});

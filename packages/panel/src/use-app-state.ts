@@ -323,11 +323,7 @@ export function useExperimentChoices(): ExperimentChoices {
   return useAtomValue(experimentChoicesAtom);
 }
 
-/**
- * The same answer for a callback that cannot wait a render.
- *
- * @public The door `AGENTS.md`'s "Experiments" names for a gated callback, kept for the next one.
- */
+/** The same answer for a callback that cannot wait a render. */
 export function experimentOnNow(experiment: Experiment): boolean {
   return experimentOn(appStateNow()?.settings?.experiments ?? NO_EXPERIMENTS, experiment);
 }

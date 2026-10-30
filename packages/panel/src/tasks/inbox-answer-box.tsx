@@ -109,11 +109,19 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * (`reply-to-selection.tsx`); a quote goes out as a Markdown blockquote,
  * part of the reply like any other words. The box stands Reply itself,
  * over the thread it is handed, and only while its editor is loaded and
- * takes a quote, never while a send is out or a dictation holds it, since
- * a press lets the selection go.
+ * takes a quote, never while a nod or a thread start holds the box or a
+ * dictation does, since a press lets the selection go.
+ *
+ * A reply leaves the box the moment it is sent and never holds it, as a
+ * message leaves the agent's box: the box takes the next reply at once, and
+ * an item's replies go one at a time in the order sent
+ * (`use-task-inbox.ts`), each standing on the thread meanwhile. Only Got it
+ * and Start thread hold the box, Send busy, until they answer, since each
+ * settles or opens something.
  *
  * Why a reply did not go, a file did not come, or a dictation left
- * nothing, is said under the foot's bar. A send refused because the agent is
+ * nothing, is said under the foot's bar, its words and files back in the
+ * box ahead of whatever was written there meanwhile. A send refused because the agent is
  * archived says so, with Unarchive after it, which brings the agent back and
  * lets the note go, so the words kept in the box are sent again by a press.
  * Once the item is settled, answered or taken back, the same box writes a
@@ -389,7 +397,7 @@ function NewThreadChoice({
 }: {
   offer: AnswerNewThread;
   checked: boolean;
-  /** Whether a send is out, which nothing changes until it lands. */
+  /** Whether a nod or a thread start is out, which nothing changes until it lands; a reply on its way holds nothing. */
   held: boolean;
   onChange: (checked: boolean) => void;
 }): React.JSX.Element {
@@ -485,6 +493,7 @@ function AnswerCard({
   // The draft as it stands now, which a start landing later reads rather than the one it was sent from.
   const standing = useRef(draft);
   standing.current = draft;
+  // Note that only a nod and a thread start hold the box; a reply leaves it at once and the next may follow.
   const sending = control.sending.has(item.id) || starting;
   // Note that the answer waits while files are read, and files read while a message lands on the item land in its box all the same, as its words stand.
   const files = useAttachedFiles({
@@ -602,7 +611,7 @@ function AnswerCard({
       if (emptyBox(standing.current)) control.onDraft(item, { ...standing.current, ...sent });
     });
   };
-  // Note that Reply stands only while the editor stands and takes a quote, and no send is out, since a press lets the selection go.
+  // Note that Reply stands only while the editor stands and takes a quote, and no nod or start is out, since a press lets the selection go.
   const quotes = !sending && !dictating && module !== undefined;
   return (
     <div ref={box} className={COMPOSER_ROOM_CLASS} {...files.drop.target}>

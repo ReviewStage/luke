@@ -557,7 +557,14 @@ test("a chapter's diff is Files changed's list handed only its hunks, and its ra
     controlAnswering({ readChapters: () => Promise.resolve(answering(ready())) }),
   );
 
-  assert.equal(heading(tab), "1. Read the expiry");
+  assert.equal(heading(tab), "Read the expiry");
+  const bars = tab.querySelectorAll(".chapters-view .luke-pane-bar");
+  assert.equal(bars.length, 1, "the chapter's bar is the one bar over its list");
+  assert.notEqual(
+    bars[0]?.querySelector(".chapter-list-tools .file-tree-toggle"),
+    null,
+    "the chapter's bar holds its list's tree toggle",
+  );
   assert.deepEqual(
     listed().map(([path]) => path),
     [STORE.path],
@@ -572,7 +579,7 @@ test("a chapter's diff is Files changed's list handed only its hunks, and its ra
 
   act(() => sweepRow.click());
   await settle();
-  assert.equal(heading(tab), "2. Sweep what expired");
+  assert.equal(heading(tab), "Sweep what expired");
   assert.deepEqual(
     listed()
       .map(([path]) => path)
@@ -587,16 +594,21 @@ test("← and → step through the chapters, held at either end, and a key chang
   );
 
   press(tab, { key: "ArrowLeft" });
-  assert.equal(heading(tab), "1. Read the expiry");
+  assert.equal(heading(tab), "Read the expiry");
   press(tab, { key: "ArrowRight" });
   press(tab, { key: "ArrowRight" });
   await settle();
-  assert.equal(heading(tab), "3. Other changes");
+  assert.equal(heading(tab), "Other changes");
   press(tab, { key: "ArrowRight" });
-  assert.equal(heading(tab), "3. Other changes");
-  act(() => button(tab, "Previous chapter").click());
-  act(() => button(tab, "Previous chapter").click());
+  assert.equal(heading(tab), "Other changes");
+  const previous =
+    tab.querySelector<HTMLButtonElement>(
+      '.chapter-reading button[aria-label="Previous chapter"]',
+    ) ?? assert.fail("the header's pager offers Previous chapter");
+  act(() => previous.click());
+  act(() => previous.click());
   await settle();
+  assert.equal(heading(tab), "Read the expiry");
 
   act(() => button(tab, "src/store.ts · L1–2").click());
   await settle();
@@ -627,7 +639,7 @@ test("a key change's press scrolls to its first lines in the chapter's file orde
   );
   press(tab, { key: "ArrowRight" });
   await settle();
-  assert.equal(heading(tab), "2. Sweep what expired");
+  assert.equal(heading(tab), "Sweep what expired");
 
   act(() => button(tab, "src/sweep.ts · L1").click());
   await settle();
@@ -648,6 +660,14 @@ test("a chapter is viewed once every file it holds is; Mark chapter viewed and �
   assert.doesNotMatch(railRows(tab)[1] ?? "", /viewed/u, "the sweep's new file is not");
 
   press(tab, { key: "ArrowRight" });
+  const viewedBox = () =>
+    tab.querySelector(".chapter-viewed") ?? assert.fail("the chapter's Viewed box stands");
+  assert.equal(viewedBox().textContent, "Viewed 1/2", "the box counts the sweep's files viewed");
+  assert.equal(
+    viewedBox().querySelector('[role="checkbox"]')?.getAttribute("aria-checked"),
+    "mixed",
+    "the box stands mixed while only some of them are",
+  );
   press(tab, { key: "V", shiftKey: true });
   await settle();
   assert.deepEqual(marked, [{ action: PULL_REQUEST_ACTION.MARK_FILE_VIEWED, path: SWEEP.path }]);
@@ -677,17 +697,17 @@ function madeBy(model: string, headSha = HEAD): AgentsControl {
   });
 }
 
-test("the chapters say which model made them, inside the tab's ph-no-capture root", async () => {
+test("the rail's foot says which model made the chapters, inside the tab's ph-no-capture root", async () => {
   const tab = await draw(madeBy("claude-haiku-5-5"));
-  const line = tab.querySelector(".chapters-made-by") ?? assert.fail("the model is named");
-  assert.equal(line.textContent, "Made by Haiku 5.5");
+  const line = tab.querySelector(".chapter-rail-credit") ?? assert.fail("the model is named");
+  assert.equal(line.textContent, "Chapters by Haiku 5.5");
   assert.notEqual(line.closest(".ph-no-capture"), null);
 });
 
 test("stale chapters still say which model made them, and a model Settings does not offer is named by its id", async () => {
   const tab = await draw(madeBy("scripted", OLDER));
   assert.match(tab.querySelector(".luke-tab-notice")?.textContent ?? "", /New commits since/u);
-  assert.equal(tab.querySelector(".chapters-made-by")?.textContent, "Made by scripted");
+  assert.equal(tab.querySelector(".chapter-rail-credit")?.textContent, "Chapters by scripted");
 });
 
 test("chapters made for an older head stand under a line saying new commits came since, with Regenerate, drawing no diff, counts, Viewed, or press to their lines, since their hunks name an older head", async () => {
@@ -706,7 +726,7 @@ test("chapters made for an older head stand under a line saying new commits came
     tab.querySelector(".luke-tab-notice")?.textContent ?? "",
     /New commits since these chapters/u,
   );
-  assert.equal(heading(tab), "1. Read the expiry", "the chapters stand as they were");
+  assert.equal(heading(tab), "Read the expiry", "the chapters stand as they were");
   assert.match(tab.textContent ?? "", /Is the expiry read in the member's time zone\?/u);
   assert.deepEqual(listed(), [], "no diff is drawn for the chapter");
   assert.match(tab.textContent ?? "", /Regenerate the chapters to see this chapter's changes\./u);
@@ -747,7 +767,7 @@ test("chapters a Generate made for a head pushed since the tab read the pull req
 
   act(() => button(tab, "Generate chapters").click());
   await settle();
-  assert.equal(heading(tab), "1. Read the expiry");
+  assert.equal(heading(tab), "Read the expiry");
   assert.doesNotMatch(
     tab.querySelector(".luke-tab-notice")?.textContent ?? "",
     /New commits since/u,
@@ -933,6 +953,6 @@ test("a chapter chosen in the rail floated over the chapter takes the rail down"
     ) ?? assert.fail("the sweep's row stands");
   act(() => sweep.click());
   await settle();
-  assert.equal(heading(tab), "2. Sweep what expired");
+  assert.equal(heading(tab), "Sweep what expired");
   assert.equal(floatedRail(tab)?.getAttribute("data-state"), "leaving");
 });
