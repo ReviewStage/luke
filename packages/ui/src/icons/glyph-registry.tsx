@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   Clock,
   Cloud,
+  CornerDownRight,
   File,
   FileDiff,
   FilePenLine,
@@ -20,9 +21,11 @@ import {
   GitBranch,
   GitPullRequest,
   Globe,
+  GripVertical,
   Hash,
   Layers,
   ListChecks,
+  ListEnd,
   ListTodo,
   MessageSquareHeart,
   MessagesSquare,
@@ -152,6 +155,8 @@ export const GLYPH = {
   DECIDE: lucideGlyph(Split),
   // Word sent back to the makers of Luke, which no comment is.
   FEEDBACK: lucideGlyph(MessageSquareHeart),
+  // A message waiting behind an agent's running turn, to open the next one.
+  QUEUED: lucideGlyph(ListEnd),
 
   // States.
   DONE: MarkDoneIcon,
@@ -181,6 +186,10 @@ export const GLYPH = {
   MOVE: lucideGlyph(FolderInput),
   // Ending a connection to a service, which deletes nothing of it.
   DISCONNECT: lucideGlyph(Unplug),
+  // A queued message sent into the turn under way now, rather than waiting for it to end.
+  STEER: lucideGlyph(CornerDownRight),
+  // What a row is dragged by to put it in another place.
+  DRAG_HANDLE: lucideGlyph(GripVertical),
   OPEN_EXTERNALLY: ExternalIcon,
   OPEN_ON_GITHUB: GitHubMarkGlyph,
 } as const;

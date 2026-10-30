@@ -60,6 +60,8 @@ export const SETTING_SECTION = {
   STARTUP: "startup",
   /** The microphone dictation listens on, a group of its own on This Mac, under the permission that lets Luke listen. */
   MICROPHONE: "microphone",
+  /** How an agent's message box sends while its turn runs, a group of its own on Agents, under the default model. */
+  COMPOSER: "composer",
 } as const;
 
 export type SettingSection = (typeof SETTING_SECTION)[keyof typeof SETTING_SECTION];

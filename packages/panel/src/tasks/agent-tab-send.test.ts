@@ -6,6 +6,7 @@ import {
   AGENT_BRIEF,
   AGENT_RUNTIME,
   AGENT_STATUS,
+  type AgentStatus,
   type AgentSummary,
   type AgentTranscriptMessage,
 } from "@luke/features/agent-wire";
@@ -108,7 +109,12 @@ async function settle(): Promise<void> {
  * The agent's tab, its sends answered only as the test lets it and its
  * transcript pushed with `later` once the test releases it.
  */
-async function drawnTab(later: readonly AgentTranscriptMessage[], agent = AGENT_SUMMARY) {
+async function drawnTab(
+  later: readonly AgentTranscriptMessage[],
+  agent = AGENT_SUMMARY,
+  /** What each page says of the agent: the first, and the one that lands `later`. */
+  statuses: readonly [AgentStatus, AgentStatus] = [AGENT_STATUS.COMPLETED, AGENT_STATUS.COMPLETED],
+) {
   fakeAppBridge({});
   const answers: ((answer: AgentAgentAnswer) => void)[] = [];
   const sent: { text: string; clientKey: string }[] = [];
@@ -116,10 +122,10 @@ async function drawnTab(later: readonly AgentTranscriptMessage[], agent = AGENT_
   const released = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const page = (messages: readonly AgentTranscriptMessage[]) => ({
+  const page = (messages: readonly AgentTranscriptMessage[], status: AgentStatus) => ({
     messages: [...messages],
     cursor: "2:0",
-    status: AGENT_STATUS.COMPLETED,
+    status,
     title: null,
   });
   const control = agentsControl({
@@ -128,10 +134,13 @@ async function drawnTab(later: readonly AgentTranscriptMessage[], agent = AGENT_
       sent.push({ text, clientKey });
       return new Promise((resolve) => answers.push(resolve));
     },
-    transcripts: pushedTranscripts(() => [page(MESSAGES), page([...MESSAGES, ...later])], {
-      page: 1,
-      release: released,
-    }),
+    transcripts: pushedTranscripts(
+      () => [page(MESSAGES, statuses[0]), page([...MESSAGES, ...later], statuses[1])],
+      {
+        page: 1,
+        release: released,
+      },
+    ),
   });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -304,4 +313,30 @@ test("a message refused after the developer wrote on stays where it went, marked
   assert.equal(tab.sent[1]?.clientKey, tab.sent[0]?.clientKey);
   assert.equal(line.querySelector(".luke-failure-note"), null, "the line is on its way again");
   assert.equal(composerEditor(tab.container).textContent, "Then fix CI");
+});
+
+test("a line another hand sent after a stopped turn, its page saying the agent runs, puts the tab to work: no Stopped under it, and the box offers Queue", async () => {
+  const handedOn: AgentTranscriptMessage = {
+    id: "row-queued",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text: "Open the pull request." }],
+    sentAt: 90_000,
+  };
+  // The tab's summary still says the turn was stopped; the page the line lands on says the agent runs.
+  const tab = await drawnTab(
+    [handedOn],
+    { ...AGENT_SUMMARY, status: AGENT_STATUS.CANCELLED, runtime: AGENT_RUNTIME.CLAUDE_CODE },
+    [AGENT_STATUS.CANCELLED, AGENT_STATUS.RUNNING],
+  );
+  assert.match(tab.container.textContent ?? "", /Stopped/u, "the stopped turn ends on Stopped");
+
+  await tab.landRow();
+  typeInComposer(tab.container, "Then run the tests.");
+  await settle();
+
+  assert.doesNotMatch(tab.container.textContent ?? "", /Stopped/u);
+  assert.ok(
+    tab.container.querySelector('button[aria-label="Send options"]'),
+    "the box offers Queue beside Send",
+  );
 });

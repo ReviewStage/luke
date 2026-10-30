@@ -61,6 +61,7 @@ export const FAILURE_SURFACE = {
   AGENT_KEY_REMOVE: "agent_key.remove",
   AGENT_KEY_SAVE: "agent_key.save",
   AGENT_PIN: "agent.pin",
+  AGENT_QUEUE_DELETE: "agent_queue.delete",
   AGENT_RENAME: "agent.rename",
   AGENT_REWIND: "agent.rewind",
   AGENT_SEND: "agent.send",

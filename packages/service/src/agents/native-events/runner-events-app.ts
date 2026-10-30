@@ -240,6 +240,13 @@ export interface RunnerEventsOptions<R = never> {
     target: ConversationTarget,
     agent: Agent,
   ) => Effect.Effect<void, never, DatabaseServices | R>;
+  /**
+   * Told once a batch that ended a turn has landed, after its transaction,
+   * and run after the answer: the agent's queue handed on, or paused where
+   * the turn was stopped or failed (`../coder-host/agent-queue.ts`). Nothing
+   * where left out.
+   */
+  readonly turnEnded?: (agent: Agent) => Effect.Effect<void, never, DatabaseServices | R>;
 }
 
 /**
@@ -654,7 +661,7 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   HostedRefusal,
   HttpServerRequest.HttpServerRequest | DatabaseServices | Scope.Scope | R
 > {
-  const { read, ended, idled, alive, title } = options;
+  const { read, ended, idled, alive, title, turnEnded } = options;
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   if (incoming.method !== HTTP_METHOD.POST) {
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
@@ -734,6 +741,10 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   // Note that the title runs after the answer, kept awake past it, because the runner need not wait on a model.
   if (title !== undefined && (applied.value.turns.started || applied.value.turns.ended)) {
     yield* afterResponse("a coding agent's title", title(target, agent.value));
+  }
+  // Note that the queue is handed on after the answer, because the runner's post need not wait on a send that may wake a sandbox.
+  if (turnEnded !== undefined && applied.value.turns.ended) {
+    yield* afterResponse("a coding agent's queue", turnEnded(agent.value));
   }
   if (alive !== undefined && applied.value.keepsAlive) {
     yield* alive({ target, sessionId: admitted.value.runtimeSessionId });
