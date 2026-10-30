@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { installPressIntent } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
   drawsChanges,
@@ -568,24 +567,6 @@ test("a link to a tab standing as one of its own only chooses it, and a fixed ki
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN);
   assert.deepEqual(panel.control().preview, { changes: OTHER_AGENT });
   assert.equal(panel.control().changes.length, 2);
-});
-
-test("a link pressed with ⌘ opens a tab of its own, as a double-click keeps a preview", () => {
-  const stop = installPressIntent(window);
-  try {
-    const panel = launch({ task: TASK, taskAgents: [AGENT, OTHER_AGENT] });
-    const link = document.body.appendChild(document.createElement("a"));
-    link.addEventListener("click", () => panel.control().onPreview({ changes: AGENT }));
-    act(() => {
-      link.dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }));
-    });
-    assert.deepEqual(panel.control().tab, { changes: AGENT });
-    assert.equal(panel.control().preview, undefined, "⌘ keeps it");
-    act(() => panel.control().onPreview({ changes: OTHER_AGENT }));
-    assert.deepEqual(panel.control().changes, [{ changes: AGENT }, { changes: OTHER_AGENT }]);
-  } finally {
-    stop();
-  }
 });
 
 test("a preview closed lets its preview go, so the same tab opened again by a chosen door stands as a tab of its own", () => {

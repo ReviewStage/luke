@@ -21,7 +21,6 @@ import { unreadShown } from "../failure-report.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
-import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { agentName, messageFailureWords } from "../tasks/agent-model.js";
 import {
@@ -81,7 +80,6 @@ import { AgentPane } from "./main-tabs.js";
 import { NewTaskButton } from "./new-task-button.js";
 import {
   COLUMN,
-  changesTabOf,
   type PanelRepositoryPlace,
   SIDE_PANEL_HOLDER,
   SidePanel,
@@ -395,15 +393,9 @@ export const DesktopInbox = memo(function DesktopInbox({
     : undefined;
   const listedWorkspace = tasks.workspace;
   const { sidePanel } = tasks;
-  // A file the item names opens beside the Inbox as the panel's preview; pressed with ⌘, it goes to the item's task, opened there.
-  const openFile = (ref: CodeRef, commit: string | undefined) => {
-    const going = taskId !== undefined && pressedWithCommand() ? taskId : undefined;
-    if (going === undefined) return sidePanel.onPreviewFile(ref, commit);
-    if (commit !== undefined) return tasks.onShowFile(going, ref, commit);
-    // A file read at no commit is drawn on the task it is browsed on, so it is opened here first, on the item's task, and then shown there.
-    sidePanel.onOpenFile(ref);
-    tasks.onShowPanelTab(going, { file: ref.path });
-  };
+  // A file the item names opens beside the Inbox as the panel's preview.
+  const openFile = (ref: CodeRef, commit: string | undefined) =>
+    sidePanel.onPreviewFile(ref, commit);
   // A file the item's words or box name opens as its code does, in the panel beside the Inbox.
   const openMentionedFile = (path: string, lines: MentionLines | undefined) =>
     openFile(fileRef(path, lines), lines?.commit);
@@ -476,39 +468,28 @@ export const DesktopInbox = memo(function DesktopInbox({
       heldIds,
     });
     if (target === undefined || panelFor === undefined) return false;
-    // A link pressed with ⌘ goes to its task, opening what it names there as a tab of its own, as against a
-    // plain press, which opens it beside the item as the panel's preview, so reading an item leaves no tab
+    // A link opens what it names beside the item as the panel's preview, so reading an item leaves no tab
     // standing on its task but the one last read.
-    const going = taskId !== undefined && pressedWithCommand() ? taskId : undefined;
     switch (target.kind) {
       case INBOX_PANEL_TARGET.FILE:
         openFile(fileRef(target.path, target.lines), target.lines?.commit);
         return true;
       case INBOX_PANEL_TARGET.PAGE:
         // A page an agent showed since the pages were read stands as its change lands, since they are followed as they move.
-        if (going !== undefined) tasks.onShowPanelTab(going, { page: target.pageId });
-        else sidePanel.onPreview({ page: target.pageId });
+        sidePanel.onPreview({ page: target.pageId });
         return true;
       case INBOX_PANEL_TARGET.CHANGES:
-        if (going !== undefined) tasks.onShowPanelTab(going, { changes: target.agentId });
-        else sidePanel.onPreview({ changes: target.agentId });
+        sidePanel.onPreview({ changes: target.agentId });
         return true;
       case INBOX_PANEL_TARGET.AGENT:
-        // An agent of the item's task reads beside the item as the panel's preview; pressed with ⌘, or archived, which its task alone draws, it goes to the task on its tab.
-        if (going === undefined && named.agentIds?.includes(target.agentId) === true) {
+        // An agent of the item's task reads beside the item as the panel's preview; an archived one, which its task alone draws, goes to the task on its tab.
+        if (named.agentIds?.includes(target.agentId) === true) {
           sidePanel.onPreview({ transcript: target.agentId });
           return true;
         }
         if (taskId !== undefined) tasks.onShowAgent(taskId, target.agentId);
         return true;
       case INBOX_PANEL_TARGET.PULL_REQUEST:
-        if (going !== undefined) {
-          // The tab is the one the plain press would open, the pull request's own where it is another than the agent's.
-          const tab = changesTabOf(named, target.agentId, sidePanel.changes, target.number);
-          sidePanel.onPullRequestView(tab, PULL_REQUEST_VIEW.CONVERSATION);
-          tasks.onShowPanelTab(going, tab);
-          return true;
-        }
         showPullRequest(
           sidePanel,
           named,
@@ -830,8 +811,8 @@ function InboxSidePanel({
     }
     if (target.kind === TOOL_TARGET.AGENT) {
       if (taskId === undefined) return tasks.agentView.onOpen(target.agent);
-      // An agent of the item's task reads beside the item as the panel's preview; pressed with ⌘, it goes to the task.
-      if (!pressedWithCommand() && agents.agentIds?.includes(target.agent) === true) {
+      // An agent of the item's task reads beside the item as the panel's preview.
+      if (agents.agentIds?.includes(target.agent) === true) {
         return panel.onPreview({ transcript: target.agent });
       }
       return tasks.onShowAgent(taskId, target.agent);
@@ -957,20 +938,18 @@ function paneDoors(
       onOpenHolder: () => tasks.onShowTask(task.id),
       // Note that the card's times count from the window's minute, so the page reads no clock.
       taskCard: taskCardOf(tasks, task, undefined),
-      // An agent the item names reads beside it, as a link to it does; pressed with ⌘, it goes to the task on its tab.
+      // An agent the item names reads beside it, as a link to it does.
       // Note that an archived agent's transcript is drawn on its task alone, so it goes there.
       onOpenAgent: (agentId) =>
-        seams.panelFor === task.id &&
-        seams.besideAgents?.includes(agentId) === true &&
-        !pressedWithCommand()
+        seams.panelFor === task.id && seams.besideAgents?.includes(agentId) === true
           ? tasks.sidePanel.onPreview({ transcript: agentId })
           : tasks.onShowAgent(task.id, agentId),
       code: {
         repository: task.repository,
         readFile: (window) => seams.act(ACT_KIND.TASKS_FILE, { taskId: task.id, ...window }),
-        // Note that code is a link like any other: beside the item it opens as the panel's preview, and pressed with ⌘ it goes to the task.
+        // Note that code is a link like any other: beside the item it opens as the panel's preview.
         onOpenFile: (ref, commit) =>
-          seams.panelFor === task.id && !pressedWithCommand()
+          seams.panelFor === task.id
             ? tasks.sidePanel.onPreviewFile(ref, commit)
             : tasks.onShowFile(task.id, ref, commit),
       },

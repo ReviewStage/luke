@@ -19,7 +19,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { installPressIntent } from "../press-intent.js";
 import { useInboxTaskAgents } from "../tasks/use-inbox-task-agents.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { useSidePanel } from "../tasks/use-side-panel.js";
@@ -204,20 +203,14 @@ async function inbox() {
   return { container, links, went };
 }
 
-/** Presses the chip of the item's words that says the name given, with ⌘ where asked. */
-async function pressChip(
-  container: HTMLElement,
-  name: string,
-  { command }: { command: boolean } = { command: false },
-): Promise<void> {
+/** Presses the chip of the item's words that says the name given. */
+async function pressChip(container: HTMLElement, name: string): Promise<void> {
   const chip = [
     ...container.querySelectorAll<HTMLElement>("[data-inbox-message-text] [data-mention-ref]"),
   ].find((each) => each.querySelector(".luke-inline-ref-label")?.textContent === name);
   assert.ok(chip, `no chip says ${name}`);
   act(() => {
-    chip.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: command }),
-    );
+    chip.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   });
   await settle();
 }
@@ -240,22 +233,4 @@ test("a file an item of a task names in the older form opens beside the Inbox as
   assert.deepEqual(panelTabs(container), ["▸ invites.ts"]);
   assert.ok(container.querySelector(".inbox-view"), "the Inbox still stands");
   assert.deepEqual([...links, ...went], [], "nothing left the Inbox");
-});
-
-test("a file an item of a task names, pressed with ⌘, goes to the task on its tab, and its lines to the task at their commit", async () => {
-  const stop = installPressIntent(window);
-  try {
-    const { container, links, went } = await inbox();
-
-    await pressChip(container, "invites.ts", { command: true });
-    await pressChip(container, "invites.ts:3–5", { command: true });
-
-    assert.deepEqual(went, [
-      `${TASK.id} ${JSON.stringify({ file: "src/invites.ts" })}`,
-      `${TASK.id} file ${JSON.stringify({ path: "src/invites.ts", startLine: 3, endLine: 5 })} ${COMMIT}`,
-    ]);
-    assert.deepEqual(links, [], "nothing opened as a link");
-  } finally {
-    stop();
-  }
 });
