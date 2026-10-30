@@ -14,7 +14,6 @@
     "apps/dev/sandbox.ts",
     "apps/host/src/main.ts",
     "apps/web/scripts/preview-probe.ts",
-    "apps/web/scripts/sandbox-image.ts",
     "apps/web/server/db/migrate.ts",
     "apps/web/server/orpc-route.ts",
     "apps/web/server/runtime.ts",
