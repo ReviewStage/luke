@@ -2129,8 +2129,9 @@ export const reachedRepository = (
  * operator is refused a teammate's task under Steward (`../steward.ts`); and
  * that the caller never archives the task it works on. A move to Done
  * archives the task's idle agents with it as the caller, for its member, and
- * lets each go on its device; one still at work, the caller among them where
- * the task is its own, is archived as its turn ends (`tasks/task-finish.ts`).
+ * lets each go on its device; one still at work is archived as its turn ends
+ * (`tasks/task-finish.ts`), and the caller, where the task is its own, never
+ * is, since it is still answering whoever asked.
  */
 export function runUpdateTask(
   call: AgentCall,

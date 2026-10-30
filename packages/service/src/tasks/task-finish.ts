@@ -6,7 +6,6 @@ import {
   finishTaskWork,
   type TaskArchivedAgent,
 } from "@luke/database/models/task-store";
-import { AGENT_ARCHIVER } from "@luke/features/agent-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { Effect, Option } from "effect";
 import { idleStandingAgents, standsStopped } from "../agents/coder-host/stop.js";
@@ -35,12 +34,15 @@ import { discardedOrLogged } from "../agents/device-discard.js";
  * reads it (`stop.ts`'s `standsStopped`): a line awaiting its turn reads as
  * running, an agent started blank with no turn as idle.
  *
- * A task's move to Done archives its agents standing idle with it, whoever
- * moves it: the finish as Luke for the account, and a member's or an agent's
- * move as them (`task-store.ts`'s `updateTaskCommitted`). An agent still at
- * work then, a turn whose Stop is on its way among it, since its runner still
- * holds its folder, is not stopped: its turn's end archives it, where its
- * task still stands Done (`settleTaskAfterTurn`). Each agent archived here is let go of on its
+ * The finish archives no agent, since someone may be talking to one: an
+ * agent brought back and messaged on a task Luke finished takes the task up,
+ * and its reply finishes it again. Only a member's or an agent's move to Done
+ * archives the task's agents standing idle with it, as them
+ * (`task-store.ts`'s `updateTaskCommitted`), never the agent that moved it. An
+ * agent still at work then, a turn whose Stop is on its way among it, since
+ * its runner still holds its folder, is not stopped: its turn's end archives
+ * it, as whoever moved the task, where the task still stands Done by their
+ * move (`settleTaskAfterTurn`). Each agent archived here is let go of on its
  * device, its folder removed (`device-discard.ts`), as the agent tools'
  * archive lets one go; its sandbox already stopped as its turn ended.
  *
@@ -68,27 +70,19 @@ function letGo(archived: readonly TaskArchivedAgent[]) {
   return Effect.forEach(archived, discardedOrLogged, { discard: true });
 }
 
-/** The task finished, as `finishTaskWork` finishes it, and the agents it archived let go of. */
-function finishedAndLetGo(userId: string, taskId: string) {
-  return Effect.flatMap(
-    finishTaskWork(userId, taskId, standsStopped, idleStandingAgents),
-    (archived) => letGo(Option.getOrElse(archived, () => [])),
-  );
-}
-
 /** The task moved to done where its work is finished, as the account reaches it; nothing otherwise, and a failure logged. */
 export function settleTaskIfFinished(
   userId: string,
   taskId: string,
 ): Effect.Effect<void, never, DatabaseServices> {
-  return logged("a task's finish", finishedAndLetGo(userId, taskId));
+  return logged("a task's finish", finishTaskWork(userId, taskId, standsStopped));
 }
 
 /**
  * What a coding agent's turn ending asks of its task: moved to done where
- * the turn finished its work, and else, where the task stands Done already,
- * moved there while the agent worked, the agent archived with it as Luke for
- * the account and let go of; each failure logged.
+ * the turn finished its work, and else, where a member or another agent
+ * moved the task to Done while the agent worked, the agent archived with it
+ * as them and let go of; each failure logged.
  */
 export function settleTaskAfterTurn(
   userId: string,
@@ -99,13 +93,7 @@ export function settleTaskAfterTurn(
     settleTaskIfFinished(userId, taskId),
     logged(
       "a done task's agent archive",
-      Effect.flatMap(
-        archiveAgentOfDoneTask(userId, taskId, agentId, {
-          archivedBy: { by: AGENT_ARCHIVER.LUKE, userId },
-          idle: idleStandingAgents,
-        }),
-        letGo,
-      ),
+      Effect.flatMap(archiveAgentOfDoneTask(userId, taskId, agentId, idleStandingAgents), letGo),
     ),
   );
 }
@@ -127,8 +115,8 @@ export function settleAgentTaskIfFinished(
     "a task's finish",
     Effect.flatMap(readAgent(userId, agentId), (agent) =>
       Option.isSome(agent) && agent.value.taskId !== null
-        ? finishedAndLetGo(userId, agent.value.taskId)
-        : Effect.void,
+        ? finishTaskWork(userId, agent.value.taskId, standsStopped)
+        : Effect.succeed(false),
     ),
   );
 }

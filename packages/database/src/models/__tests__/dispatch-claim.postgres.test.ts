@@ -316,14 +316,12 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
         );
         yield* untilBegan(held.began, sending);
         const finished = yield* onAnother(
-          finishTaskWork(target.userId, taskId, idleUnlessAwaiting, () =>
-            Effect.succeed(new Set<string>()),
-          ),
+          finishTaskWork(target.userId, taskId, idleUnlessAwaiting),
         );
         yield* Deferred.succeed(held.release, undefined);
         yield* Fiber.join(sending);
 
-        assert.equal(Option.isSome(finished), false);
+        assert.equal(finished, false);
       }),
   );
 

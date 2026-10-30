@@ -245,4 +245,54 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         assert.equal(yield* archived(userId, stopping.id), true);
       }),
   );
+
+  it.effect(
+    "an agent of a task Luke finished stands, and still stands once messaged, its turn taking the task up and its reply finishing it again",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const agent = yield* openAgent(userId, task.id);
+        yield* recordAgentPublished(userId, agent.id, pullRequestIn(PULL_REQUEST_STATE.MERGED));
+        yield* turnOf(agent, TURN_STATUS.SETTLED);
+
+        // Its pull request merged and its turn ended: Luke finishes the task and leaves the agent standing.
+        yield* settleTaskAfterTurn(userId, task.id, agent.id);
+        assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.DONE);
+        assert.equal(yield* archived(userId, agent.id), false);
+
+        // Messaged, its turn takes the task up, and its reply ends the turn, at whose end Luke finishes it again.
+        yield* reopenTaskForWork(userId, task.id);
+        assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.IN_PROGRESS);
+        yield* turnOf(agent, TURN_STATUS.SETTLED);
+        yield* settleTaskAfterTurn(userId, task.id, agent.id);
+        assert.equal(yield* statusOf(userId, task.id), TASK_STATUS.DONE);
+        assert.equal(yield* archived(userId, agent.id), false);
+      }),
+  );
+
+  it.effect(
+    "an agent moving its own task to Done archives its idle teammate, and stands itself once its turn ends",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const pilot = yield* openAgent(userId, task.id);
+        const teammate = yield* openAgent(userId, task.id);
+        yield* turnOf(teammate, TURN_STATUS.SETTLED);
+        const answering = yield* turnOf(pilot, TURN_STATUS.RUNNING);
+
+        // The pilot's update_task moves the task to Done as the pilot, for its member.
+        yield* updateTask(userId, task.id, { status: TASK_STATUS.DONE }, undefined, {
+          archivedBy: { by: AGENT_ARCHIVER.AGENT, userId, agentId: pilot.id, agentName: "Pilot" },
+          idle: idleStandingAgents,
+        });
+        assert.equal(yield* archived(userId, teammate.id), true);
+        assert.equal(yield* archived(userId, pilot.id), false);
+
+        yield* settle(answering);
+        yield* settleTaskAfterTurn(userId, task.id, pilot.id);
+        assert.equal(yield* archived(userId, pilot.id), false);
+      }),
+  );
 });
