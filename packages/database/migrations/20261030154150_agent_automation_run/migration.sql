@@ -15,9 +15,6 @@ UPDATE "agent" SET "automation_run_id" = "automation_run"."id" FROM "automation_
 -- that comes back on itself must end rather than loop.
 WITH RECURSIVE "owned" ("id", "automation_run_id") AS (SELECT "id", "automation_run_id" FROM "agent" WHERE "automation_run_id" IS NOT NULL UNION SELECT "child"."id", "owned"."automation_run_id" FROM "agent" AS "child" INNER JOIN "owned" ON "child"."started_by_agent_id" = "owned"."id" WHERE "child"."automation_run_id" IS NULL AND "child"."task_id" IS NULL) UPDATE "agent" SET "automation_run_id" = "owned"."automation_run_id" FROM "owned" WHERE "agent"."id" = "owned"."id" AND "agent"."automation_run_id" IS NULL;
 --> statement-breakpoint
--- An agent a run owns names that run's automation too, where it names none yet.
-UPDATE "agent" SET "automation_id" = "automation_run"."automation_id" FROM "automation_run" WHERE "agent"."automation_run_id" = "automation_run"."id" AND "agent"."automation_id" IS NULL;
---> statement-breakpoint
 CREATE OR REPLACE FUNCTION "luke_sync_agent"() RETURNS trigger LANGUAGE plpgsql AS $luke_sync$
 DECLARE
 	sync_topics jsonb := '[]';
