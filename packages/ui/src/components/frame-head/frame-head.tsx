@@ -40,6 +40,9 @@ export interface FrameHeadWaiting {
   readonly onOpen: () => void;
 }
 
+/** The task's key in the chip, in the code face as a branch's name is (`ChipName`'s `mono`), but never cut short: the name gives way instead, since the key tells one task from another. */
+const KEY = "luke-frame-head-key flex-none font-mono text-caption leading-[inherit]";
+
 /** How wide the chip's block stands while the task is read: a settings row's field, about a task's key and a short name. */
 const CHIP_SKELETON_WIDTH = "var(--luke-select-field-width)";
 
@@ -105,7 +108,7 @@ export function FrameHead({
     <FrameHeadFrame
       named={
         <Chip look={CHIP_LOOK.PILL} onClick={onOpen}>
-          {taskKey === undefined ? null : <ChipName mono>{taskKey}</ChipName>}
+          {taskKey === undefined ? null : <span className={KEY}>{taskKey}</span>}
           <ChipName>{name}</ChipName>
         </Chip>
       }
