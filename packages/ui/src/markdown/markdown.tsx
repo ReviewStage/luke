@@ -151,22 +151,28 @@ function wordsArriving(): AnimateOptions | undefined {
   };
 }
 
-/** Whether the blocks a transcript draws now stand as the reader already saw them, which each block reads as it is first drawn. */
+/** Whether the words a transcript draws now stand as the reader already saw them, which each of its blocks reads as it is drawn. */
 const WordsStand = createContext(false);
 
 /**
  * One block of a streaming transcript, as Streamdown draws it, its words
- * marked shown where it is first drawn standing: through the block's own
+ * marked shown wherever it is drawn standing: through the block's own
  * animate step (`setPrevContentLength`), which Streamdown offers a host for
  * words it should take as already drawn, so they stand still and only words
- * landing after fade in. Note that the mark is laid in the render that first
- * draws the block, before Streamdown reads its words, and laid twice, as a
- * strict render does, it marks the same.
+ * landing once the transcript stops standing fade in. Note that the mark is
+ * laid in the render, before Streamdown reads the block's words, and laid
+ * twice, as a strict render does, it marks the same; and that once the draw
+ * lands the mark is settled to what the block last drew (`commit`), as
+ * Streamdown's own block settles it, so a block that drew nothing new keeps
+ * no mark past the draw it was laid for.
  */
 function ArrivingBlock(props: BlockProps): React.JSX.Element {
   const stands = useContext(WordsStand);
   const step = props.animatePlugin;
-  useState(() => (stands ? step?.setPrevContentLength(Number.POSITIVE_INFINITY) : undefined));
+  if (stands) step?.setPrevContentLength(Number.POSITIVE_INFINITY);
+  useLayoutEffect(() => {
+    step?.commit();
+  });
   return <Block {...props} />;
 }
 
@@ -305,7 +311,7 @@ export interface MarkdownProps {
   landed?: boolean | undefined;
   /** Whether a transcript's words are still arriving, read block by block, an unclosed fence or emphasis drawn as written so far, the newest fading in. */
   streaming?: boolean | undefined;
-  /** Whether the words a streaming transcript is first drawn with were written before the reader looked, as a turn's are when its tab opens on it under way, so they stand and only words landing after fade in. */
+  /** Whether the words a streaming transcript draws now were written before the reader looked, as a turn's are while its tab opens on it under way and catches up, so they stand and only words landing after fade in. */
   standing?: boolean | undefined;
   /** The elements the place draws its own way, over the look's own. */
   components?: Components | undefined;
@@ -383,10 +389,10 @@ function WholeWords({
  * settled or not, because reading settled words whole draws a new tree in
  * place of the one on screen, which takes away what the reader selected and
  * cuts off a word still fading in, the last sentence's most of all, since it
- * lands with the turn's end. The words drawn as the fade starts stand where
- * they were there before the reader looked (`standing`), or before the
- * stream began, as a settled reply's are when its agent writes to it again;
- * only the words landing after them fade in.
+ * lands with the turn's end. Words stand while they were written before
+ * the reader looked (`standing`), which the place says draw by draw, and in
+ * the draw the stream starts in, as a settled reply's do when its agent
+ * writes to it again; only words landing while neither holds fade in.
  */
 function useStreamed(
   streaming: boolean,
@@ -394,18 +400,18 @@ function useStreamed(
 ): { streamed: boolean; arriving: AnimateOptions | undefined; stands: boolean } {
   const [streamed, setStreamed] = useState(streaming);
   const [arriving, setArriving] = useState(() => (streaming ? wordsArriving() : undefined));
-  const [stands, setStands] = useState(streaming && standing);
+  const [starting, setStarting] = useState(false);
   // Note that the start is taken in the render that sees it, so the words then drawn are the ones that stand.
   if (streaming && !streamed) {
     setStreamed(true);
     setArriving(wordsArriving());
-    setStands(true);
+    setStarting(true);
   }
-  // Note that the words stand for the one draw that first shows them, so a block drawn after it arrives.
+  // Note that the start stands for the one draw that shows it, so what lands after arrives.
   useLayoutEffect(() => {
-    if (stands) setStands(false);
-  }, [stands]);
-  return { streamed, arriving, stands };
+    if (starting) setStarting(false);
+  }, [starting]);
+  return { streamed, arriving, stands: standing || starting };
 }
 
 /**

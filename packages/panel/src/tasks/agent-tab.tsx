@@ -427,12 +427,14 @@ export interface DelegationDoors {
 const LiveDoors = createContext<Pick<DelegationDoors, "cards"> | undefined>(undefined);
 
 /**
- * The parts of a transcript the reader opened on, as its follow's first page
- * drew them (`standing`), which a text part reads as it is first drawn: words
- * written before the reader looked stand, and only the words written after
- * fade in. Note that the parts are the reads the rows draw (`agentParts`),
- * so a part is looked up as itself, and the set moves only when a follow
- * opens, never with a page. Where a transcript hands none, every part stands.
+ * The parts of a transcript the reader opened on, as its follow drew them
+ * until it caught up (`standing`), which a text part reads as it is drawn:
+ * words written before the reader looked stand, a reply the follow is still
+ * catching up on among them, and only the words written after fade in. Note
+ * that the parts are the reads the rows draw (`agentParts`), so a part is
+ * looked up as itself, a part that grew since being a read of its own, and
+ * the set moves only while a follow catches up, never with a page after.
+ * Where a transcript hands none, every part stands.
  */
 const StandingParts = createContext<ReadonlySet<AgentPart> | undefined>(undefined);
 
@@ -2109,7 +2111,7 @@ function AgentTranscriptView({
   standing,
 }: {
   messages: readonly AgentTranscriptMessage[];
-  /** The messages as the transcript's follow first drew them (`standing`), whose words stand while what is written after fades in; none where nothing streams, when every word stands. */
+  /** The messages as the transcript's follow drew them until it caught up (`standing`), whose words stand while what is written after fades in; none where nothing streams, when every word stands. */
   standing?: readonly AgentTranscriptMessage[] | undefined;
   /** Whether the log waits to draw for what stands around it, saying it is loading meanwhile. */
   holding?: boolean;

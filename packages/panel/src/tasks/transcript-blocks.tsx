@@ -867,7 +867,7 @@ export function TranscriptWords({
   asDocument?: boolean | undefined;
   /** Whether the words are still being written, as a running turn's newest are. */
   streaming?: boolean | undefined;
-  /** Whether the words were written before the reader opened the transcript, so only what is written after fades in. */
+  /** Whether the words drawn now were written before the reader opened the transcript, as a turn's are while its follow catches up, so only what is written after fades in. */
   standing?: boolean | undefined;
 }): ReactNode {
   const keyTargets = useWordTargets();

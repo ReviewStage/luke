@@ -149,22 +149,17 @@ test("a shown tab follows its transcript, joins the pages pushed for it alone, a
   assert.equal(seen.current?.messages.length, 2);
 });
 
-test("a follow's first page is what stands as the reader opened on it, and what later pages add arrives, until the next follow opens", () => {
+test("what a follow reads until it catches up stands as the reader opened on it, the host's held window and the pages read after it alike, and what later pages add arrives", () => {
   const { follower, push } = scriptedFollower();
   const { seen, draw } = drawn(follower);
 
   draw(true);
-  push(AGENT, newestOf(["m-1", "m-2"]));
-  push(AGENT, pageOf("m-2", "Writing the expiry."));
-  push(AGENT, pageOf("m-3", "Opening the pull request."));
-  assert.deepEqual(seen.current?.standing, said(["m-1", "m-2"]));
-
-  draw(false);
-  draw(true);
-  push(AGENT, newestOf(["m-2", "m-3"]));
+  push(AGENT, { ...newestOf(["m-1"]), held: true, caughtUp: true });
+  push(AGENT, { ...pageOf("m-2", "Written while the tab was away."), caughtUp: true });
+  push(AGENT, pageOf("m-3", "Written while the reader watched."));
   assert.deepEqual(
     seen.current?.standing.map((message) => message.id),
-    ["m-1", "m-2", "m-3"],
+    ["m-1", "m-2"],
   );
 });
 
