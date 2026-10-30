@@ -2612,7 +2612,7 @@ function bothHold(
 }
 
 it.effect(
-  "a mark on an item a plan's inbox and the account's items both hold draws in both at once and holds there until each carries its transaction, and a close the agent overtook lands on the service's word in both",
+  "a mark on an item a plan's inbox and the account's items both hold draws in both at once, answers once the service takes it, and holds there until each carries its transaction, and a close the agent overtook lands on the service's word in both",
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
@@ -2638,10 +2638,12 @@ it.effect(
       const unread = (item: InboxItem) => item.unread === true;
 
       commitIn("9200");
-      const marking = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: true }),
-      );
+      const marked = yield* call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, {
+        itemId: ITEM.id,
+        unread: true,
+      });
       yield* settled;
+      assert.deepEqual(marked, { id: ITEM.id, unread: true, txid: "9200" });
       assert.deepEqual(bothHold(harness, unread), [true, true]);
 
       // The account's items carry the mark first, and the plan's inbox answers once more from before it.
@@ -2651,11 +2653,9 @@ it.effect(
       live.scope.set({ items: [ITEM_ROW] });
       yield* nextPoll;
       assert.deepEqual(bothHold(harness, unread), [true, true]);
-      assert.equal(marking.pollUnsafe(), undefined);
 
       live.scope.set({ items: [{ ...ITEM_ROW, unread: true }] }, ["9200"]);
       yield* nextPoll;
-      assert.deepEqual(yield* Fiber.join(marking), { id: ITEM.id, unread: true, txid: "9200" });
       assert.deepEqual(bothHold(harness, unread), [true, true]);
 
       const overtaken = { ...LIVE_ITEM, revision: 3, title: "Push to main instead?" };
@@ -2674,6 +2674,76 @@ it.effect(
         bothHold(harness, (item) => item.status === INBOX_STATUS.OPEN && item.revision === 3),
         [true, true],
       );
+    }),
+);
+
+/** The plan's inbox as one telling of the held inboxes holds it, by id; none where it holds none. */
+function planInboxOf(told: WireValue | undefined): ReadonlyMap<string, InboxItem> {
+  const plans = isRecord(told) ? told[PLAN_SCOPE.kind] : undefined;
+  const read = isRecord(plans) ? plans[PLAN_SCOPE.id] : undefined;
+  const rows = isRecord(read) ? read.rows : undefined;
+  // SAFETY: a telling's rows are inbox items, as the window is told them.
+  return new Map(((Array.isArray(rows) ? rows : []) as InboxItem[]).map((item) => [item.id, item]));
+}
+
+it.effect(
+  "ten marks asked in a row each draw at once and answer once the service takes them, an item arriving meanwhile draws at once, and no mark is taken back on the way to the read carrying them",
+  () =>
+    Effect.gen(function* () {
+      const { call, sealScope, live, commitIn, told } = yield* subject();
+      sealScope(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* settled;
+      const unread = Array.from({ length: 10 }, (_, n) => ({
+        ...ITEM_ROW,
+        id: `${ITEM.id.slice(0, -2)}${String(n).padStart(2, "0")}`,
+        key: `step-${n}`,
+        unread: true,
+        updatedAt: ITEM.updatedAt - n * 1_000,
+      }));
+      const arrived = { ...ITEM_ROW, id: OTHER_ITEM.id, key: OTHER_ITEM.key };
+      // The read is woken by a write once, so it hands a wait for the marks.
+      live.scope.set({ items: unread, messages: [], files: [] }, ["9100"]);
+      yield* toldTimes(told, 1);
+      const toldBefore = told().length;
+
+      commitIn("9200");
+      const marking = yield* Effect.forkChild(
+        Effect.forEach(
+          unread,
+          (item) =>
+            call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, { itemId: item.id, unread: false }),
+          { concurrency: "unbounded" },
+        ),
+      );
+      yield* settled;
+      assert.notEqual(
+        marking.pollUnsafe(),
+        undefined,
+        "every mark answers before the read carries it",
+      );
+
+      // An item arrives while every mark stands, the read still holding them unread.
+      live.scope.set({ items: [...unread, arrived] });
+      yield* nextPoll;
+      const meanwhile = planInboxOf(told().at(-1));
+
+      live.scope.set({ items: [...unread, arrived].map((item) => ({ ...item, unread: false })) }, [
+        "9200",
+      ]);
+      yield* nextPoll;
+
+      assert.equal(meanwhile.has(arrived.id), true, "the arrival draws while the marks stand");
+      assert.equal(planInboxOf(told().at(-1)).has(arrived.id), true);
+      const stillUnread = told()
+        .slice(toldBefore)
+        .map((each) => unread.filter((item) => planInboxOf(each).get(item.id)?.unread).length);
+      assert.deepEqual(
+        stillUnread,
+        [...stillUnread].sort((one, other) => other - one),
+        "no mark is taken back",
+      );
+      assert.equal(stillUnread.at(-1), 0);
     }),
 );
 
@@ -2706,7 +2776,7 @@ it.effect(
 );
 
 it.effect(
-  "a close drops its question from what waits across the account, its task counting one fewer, the moment it is asked and before the account's read carries it",
+  "a close drops its question from what waits across the account, its task counting one fewer, the moment it is asked, answers once the service takes it, and stands over the account's read until it carries it",
   () =>
     Effect.gen(function* () {
       const { call, sealAccount, live, commitIn, accountInboxes } = yield* subject();
@@ -2729,20 +2799,21 @@ it.effect(
       assert.deepEqual(waiting(), { items: 1, toDo: [1] });
 
       commitIn("9300");
-      const closing = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, {
-          itemId: ITEM.id,
-          revision: ITEM.revision,
-          clientKey: "close-1",
-        }),
-      );
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE, {
+        itemId: ITEM.id,
+        revision: ITEM.revision,
+        clientKey: "close-1",
+      });
       yield* settled;
       assert.deepEqual(waiting(), { items: 0, toDo: [0] });
-      assert.equal(closing.pollUnsafe(), undefined);
+
+      // The read answers once more from before the close, which still stands over it.
+      live.account.set({ ...parts, items: [WAITING], plans: [{ ...plan, updatedAt: NOW }] });
+      yield* nextPoll;
+      assert.deepEqual(waiting(), { items: 0, toDo: [0] });
 
       live.account.set({ ...parts, items: [], plans: [{ ...plan, toDo: 0 }] }, ["9300"]);
       yield* nextPoll;
-      yield* Fiber.join(closing);
       assert.deepEqual(waiting(), { items: 0, toDo: [0] });
     }),
 );

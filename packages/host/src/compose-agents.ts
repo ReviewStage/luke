@@ -334,7 +334,7 @@ export function composeAgents(
       accountId: dependencies.accountId,
     });
     const followed = yield* FiberMap.make<TranscriptKey>();
-    const reads = inboxReads();
+    const reads = yield* inboxReads();
     const held = yield* transcriptHeld<TranscriptKey>();
     const inboxes = yield* scopeInboxes({
       seal: (scope, poll, userId, after) =>
@@ -1085,12 +1085,10 @@ function composed(
           params,
           "acknowledging an inbox notice names the item, the revision it acknowledges, the acknowledgement, and the nod's key",
         );
+        // Note that who and when are read once, since the change is drawn again over each answer a read takes while it stands.
+        const [by, at] = [reader(), kernel.now()];
         const answer = yield* reads.write(
-          {
-            kind: INBOX_CHANGE.SETTLED,
-            itemId,
-            item: (item) => acknowledgedNow(item, reader(), kernel.now()),
-          },
+          { kind: INBOX_CHANGE.SETTLED, itemId, item: (item) => acknowledgedNow(item, by, at) },
           asked(client.answerInbox(itemId, request)),
           writtenOf,
         );
@@ -1103,12 +1101,9 @@ function composed(
           params,
           "closing an inbox item names the item, the revision it closes, and the close's key",
         );
+        const [by, at] = [reader(), kernel.now()];
         const answer = yield* reads.write(
-          {
-            kind: INBOX_CHANGE.SETTLED,
-            itemId,
-            item: (item) => closedNow(item, reader(), kernel.now()),
-          },
+          { kind: INBOX_CHANGE.SETTLED, itemId, item: (item) => closedNow(item, by, at) },
           asked(client.closeInbox(itemId, request)),
           writtenOf,
         );
@@ -1123,13 +1118,14 @@ function composed(
         );
         // Note that a reply carrying an answer settles the ask, where a plain one only leaves the item read, its words drawn by the window's own box while they go.
         const { answers, clientKey: key, text } = request;
+        const [by, at] = [reader(), kernel.now()];
         const answer = yield* reads.write(
           answers === undefined
             ? { kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread: false }
             : {
                 kind: INBOX_CHANGE.SETTLED,
                 itemId,
-                item: (item) => answeredNow(item, { key, text, answers }, reader(), kernel.now()),
+                item: (item) => answeredNow(item, { key, text, answers }, by, at),
               },
           asked(client.messageInbox(itemId, request)),
           writtenOf,
