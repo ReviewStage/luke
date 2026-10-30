@@ -51,11 +51,14 @@ import { keptKey, useKept } from "../use-kept.js";
  * on Cloud only where nothing is kept or that device is no longer listed. A
  * kept device that is offline, as a Mac is while Luke restarts on it, or
  * still getting ready or not set up, stays picked and says so, so its start
- * is refused by name rather than sent quietly to the cloud; it stands only
- * while the member has a device to pick. The task's chip stands with its
- * status and priority, saying the device it runs on and whether it is
- * online, or that the device was removed, with no menu, and its hint says it
- * was set when the task was created.
+ * is refused by name rather than sent quietly to the cloud. It stands on
+ * every New task but an automation's or a child's, and lists Cloud alone
+ * where the member has no device, or while the Bring your own host
+ * experiment is off, which lists no device (`new-task-composer.tsx`). The
+ * task's chip stands with its status and priority on every task, saying
+ * Cloud, or the device it runs on and whether it is online, or that the
+ * device was removed, with no menu, and its hint says it was set when the
+ * task was created.
  */
 
 /** What the menu and its chips say. */
@@ -184,10 +187,10 @@ function runsOnRows(devices: readonly MacOffer[], book: PresenceBook): readonly 
  * never be moved back.
  */
 export function useNewTaskRunsOn(
-  devices: readonly MacOffer[] | undefined,
+  devices: readonly MacOffer[],
 ): readonly [MacOffer | undefined, (deviceId: string | undefined) => void, boolean] {
   const [kept, keep] = useKept(KEPT.PICK, CLOUD_ROW);
-  const picked = devices?.find((each) => each.deviceId === kept);
+  const picked = devices.find((each) => each.deviceId === kept);
   return [
     picked,
     (deviceId: string | undefined) => keep(deviceId ?? CLOUD_ROW),

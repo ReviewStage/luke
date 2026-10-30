@@ -747,7 +747,6 @@ function PlanDocument({
     [openedId, repositories, chooseRepository, openRequest, repositoryNote],
   );
   const workspaceName = home?.name ?? "";
-  const { macs: devices } = agents;
   // The task's blocks name and offer the tasks of its own workspace, and a press on one opens it as a list's row would.
   const openedWorkspace = opened?.workspaceId;
   const { tasks: everyTask, onSelect: selectTask, onSetTaskBlock } = tasks;
@@ -769,12 +768,11 @@ function PlanDocument({
     () => ({
       workspaceName,
       onSet: setStanding,
-      devices,
       repository: repositoryDoor,
       blocks,
       inSight: planInSight,
     }),
-    [workspaceName, setStanding, devices, repositoryDoor, blocks, planInSight],
+    [workspaceName, setStanding, repositoryDoor, blocks, planInSight],
   );
   const reveal = revealed?.taskId === openedId ? revealed?.reveal : undefined;
   const { onSectionRevealed } = tasks;
