@@ -13,12 +13,12 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
-  type AgentHeader,
+  type Agent,
   hasRepository,
   readAgentHeaderOfConversation,
   readAgentOfConversation,
 } from "@luke/database/models/agent-store";
-import { readTaskWorkspace } from "@luke/database/models/task-store";
+import { readTaskHeader } from "@luke/database/models/task-store";
 import { PAGE_OWNER, PAGE_SHOWER } from "@luke/features/page-wire";
 import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
 import { Effect, Option, Result } from "effect";
@@ -66,7 +66,7 @@ import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { EVE_MOUNT, eveSessionsComposer } from "../eve-host/eve-sessions.js";
 import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
 import { runListOpenAsks } from "../operator-desk.js";
-import { isOperator, STEWARD_DELETE_REFUSAL } from "../steward.js";
+import { isOperator, STEWARD_DELETE_REFUSAL, stewardTaskRefusal } from "../steward.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
 import { runMessageAgent } from "./agent-message.js";
@@ -176,19 +176,24 @@ function agentHeaderOfConversation(admitted: AdmittedConversation) {
 }
 
 /**
- * Whether a task a call names stands in the agent's own workspace, as the
- * member whose turn this is reaches it. Note that a task of another
- * workspace the member is also in is none of the agent's, as `read_task`
- * reads one, and answers as no task at all.
+ * Why the agent may not change the task a call names, or nothing where it
+ * may: the task must stand in the agent's own workspace, as the member
+ * whose turn this is reaches it, and an operator changes only a task its
+ * own member started (`steward.ts`), as `update_task` holds it. Note that a
+ * task of another workspace the member is also in is none of the agent's,
+ * as `read_task` reads one, and answers as no task at all.
  */
-function inAgentWorkspace(
+function taskChangeRefusal(
   admitted: AdmittedConversation,
-  agent: Pick<AgentHeader, "organizationId">,
+  agent: Pick<Agent, "organizationId" | "kind" | "userId">,
   taskId: string,
 ) {
-  return Effect.map(readTaskWorkspace(admitted.caller, taskId), (owning) =>
-    Option.exists(owning, (workspaceId) => workspaceId === agent.organizationId),
-  );
+  return Effect.map(readTaskHeader(admitted.caller, taskId), (stored) => {
+    if (Option.isNone(stored) || stored.value.workspaceId !== agent.organizationId) {
+      return PLAN_EDIT_REFUSAL.NO_TASK;
+    }
+    return stewardTaskRefusal(agent, stored.value);
+  });
 }
 
 /** Takes one `edit_plan` call's notes into the plan of the task it names, given how many notes the turn has taken already, its pictures read through the sandbox door given. */
@@ -199,13 +204,12 @@ export function runAgentEditPlan(
   sandbox: InboxSandboxDoor,
 ): Effect.Effect<PlanEditResult, never, DatabaseServices> {
   return Effect.gen(function* () {
-    const found = yield* agentHeaderOfConversation(admitted);
+    const found = yield* agentOfConversation(admitted);
     if (Result.isFailure(found)) return planEditRejected(found.failure);
     const taskId = editedTaskOf(input);
     if (taskId === undefined) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK_NAMED);
-    if (!(yield* inAgentWorkspace(admitted, found.success, taskId))) {
-      return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK);
-    }
+    const refusal = yield* taskChangeRefusal(admitted, found.success, taskId);
+    if (refusal !== undefined) return planEditRejected(refusal);
     const agentId = found.success.id;
     // The plan is written as the member whose turn this is, whoever started the agent.
     const binding = { userId: admitted.caller, taskId };

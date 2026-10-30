@@ -104,6 +104,7 @@ import { memoryRelayState } from "../eve-host/relay.js";
 import { runRemember } from "../memory-tools.js";
 import { DESK_LEAD } from "../operator-desk.js";
 import type { RepositorySandbox } from "../repository-shell.js";
+import { STEWARD_ACT } from "../steward.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 import { contextWindowOf } from "./context.js";
 import { type CoderHost, coderHost } from "./host.js";
@@ -1480,7 +1481,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "an agent takes notes on another task of its workspace by its id, the plan naming the agent as its tab names it",
+      "an agent takes notes on another task of its workspace by its id, the plan naming the agent as its tab names it even once the task moves to another workspace",
       () =>
         Effect.gen(function* () {
           const host = yield* hostOverStore();
@@ -1494,6 +1495,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             0,
             noSandbox,
           );
+          yield* updateTask(userId, sibling.id, { organizationId: yield* openWorkspace(userId) });
 
           assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 1 });
           const stored = Option.getOrThrow(yield* readTask(userId, sibling.id));
@@ -1502,6 +1504,39 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
             stored.task.agentEdits?.map((edit) => edit.label),
             [agent.title ?? "Opus 5.5"],
           );
+        }),
+    );
+
+    it.effect(
+      "an operator takes notes on its member's own task, and its notes on a teammate's task are refused and save nothing",
+      () =>
+        Effect.gen(function* () {
+          const host = yield* hostOverStore();
+          const userId = yield* openGithubUser();
+          const teammate = yield* openGithubUser();
+          const own = yield* startTask(userId, { name: "Seat billing" });
+          yield* joinWorkspace(own.workspaceId, teammate);
+          const theirs = yield* createTask(teammate, {
+            name: "Teammate's invites",
+            organizationId: own.workspaceId,
+          });
+          const operator = yield* openOperator(host, userId, own.workspaceId);
+          const before = Option.getOrThrow(yield* readTask(teammate, theirs.id));
+          const notes = [{ kind: "add", section: "Approach", text: "- Ship it." }];
+          const edit = (taskId: string) =>
+            host.editPlan(operator.admitted, unparsedWire({ taskId, notes }), 0, noSandbox);
+
+          const onOwn = yield* edit(own.id);
+          const onTheirs = yield* edit(theirs.id);
+
+          assert.deepEqual(onOwn, { status: ACTION_RESULT_STATUS.ACCEPTED, taken: 1 });
+          assert.equal(onTheirs.status, ACTION_RESULT_STATUS.REJECTED);
+          assert.ok(
+            onTheirs.status === ACTION_RESULT_STATUS.REJECTED &&
+              onTheirs.reason.startsWith(STEWARD_ACT.CHANGE),
+          );
+          const after = Option.getOrThrow(yield* readTask(teammate, theirs.id));
+          assert.equal(after.text, before.text);
         }),
     );
 
