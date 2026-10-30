@@ -1360,7 +1360,7 @@ test("a teammate chosen in Addressed to with nothing in the scope shown says so,
   assert.deepEqual(listEmpty(page), [
     undefined,
     "Nothing addressed to them",
-    "Show what's addressed to me",
+    "Show mine",
   ]);
   const mine = page.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button");
   act(() => mine?.click());

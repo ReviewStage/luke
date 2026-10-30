@@ -308,15 +308,15 @@ const SHOW_EMPTY = {
 /** What the empty state's presses say: All of whom Addressed to names, the reader's own again, or anyone's. */
 const SHOW_INSTEAD = {
   ALL: "Show all",
-  MINE: "Show what's addressed to me",
+  MINE: "Show mine",
   EVERYONE: "Show anyone's",
 } as const;
 
 /** What the view's submenu of whom the items are addressed to is called. */
 const WHOSE = "Addressed to";
 
-/** What the chip over the list says its × does. */
-const CLEAR_WHOSE = SHOW_INSTEAD.MINE;
+/** What the chip over the list says its × does, in full, since a reader hears it apart from the empty state's short press. */
+const CLEAR_WHOSE = "Show what's addressed to me";
 
 /**
  * What the list leaves the item beside it, in CSS pixels: the list is
